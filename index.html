@@ -164,6 +164,12 @@ const map = new maplibregl.Map({
 });
 
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+map.addControl(new maplibregl.GeolocateControl({
+  positionOptions: { enableHighAccuracy: true },
+  trackUserLocation: true,
+  showUserHeading: true,
+  fitBoundsOptions: { maxZoom: 13 },
+}), 'top-right');
 
 function toGeoJSON(sites) {
   return {
