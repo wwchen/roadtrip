@@ -1,4 +1,4 @@
-.PHONY: help run docker-run deploy deploy-local stop
+.PHONY: help run docker-run deploy deploy-local stop check-pushed
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -20,7 +20,14 @@ docker-run:
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml up -d --build app
 	@echo "http://127.0.0.1:$(PORT)"
 
-deploy:
+check-pushed:
+	@git fetch --quiet origin
+	@ahead=$$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0); \
+	 dirty=$$(git status --porcelain); \
+	 if [ "$$ahead" -gt 0 ]; then echo "refusing: $$ahead local commit(s) not pushed to origin"; exit 1; fi; \
+	 if [ -n "$$dirty" ]; then echo "refusing: working tree has uncommitted changes"; git status --short; exit 1; fi
+
+deploy: check-pushed
 	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'export PATH=/usr/local/bin:$$PATH; cd $(DEPLOY_DIR) && git pull --ff-only && docker compose --profile tunnel up -d --build'
 
 deploy-local:
