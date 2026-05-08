@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+samples/
+node_modules/
+data/pricing-cache/
+.DS_Store

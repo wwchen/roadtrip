@@ -1,0 +1,11 @@
+.env
+.env.*
+!.env.example
+samples/
+scripts/
+memory/
+.git/
+.DS_Store
+*.md
+!README.md
+data/pricing-cache/
