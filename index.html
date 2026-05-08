@@ -1,0 +1,953 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#e82127">
+<title>Roadtrip Map</title>
+<link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; -webkit-tap-highlight-color: transparent; }
+  #map { position: absolute; inset: 0; }
+
+  #panel-toggle {
+    display: none;
+    position: absolute; z-index: 2;
+    top: max(10px, env(safe-area-inset-top)); left: 10px;
+    width: 40px; height: 40px; padding: 0;
+    background: #fff; border: none; border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.25);
+    font-size: 20px; cursor: pointer;
+  }
+  #panel {
+    position: absolute; top: 10px; left: 10px; z-index: 1;
+    background: rgba(255,255,255,0.96); padding: 10px 12px; border-radius: 6px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.2); font-size: 13px; line-height: 1.4;
+    max-width: 260px; max-height: calc(100vh - 20px); overflow-y: auto;
+  }
+  #panel h1 { margin: 0 0 6px; font-size: 14px; font-weight: 600; }
+  #panel label { display: block; margin: 2px 0; cursor: pointer; user-select: none; }
+  #panel label input { margin-right: 6px; vertical-align: middle; }
+  #panel .count { color: #666; font-size: 11px; }
+  #panel .status { color: #666; font-size: 11px; margin-top: 6px; }
+
+  @media (max-width: 640px) {
+    #panel-toggle { display: block; }
+    #panel {
+      top: max(10px, env(safe-area-inset-top)); left: 10px; right: 10px;
+      max-width: none; max-height: 75vh;
+      padding: 12px 14px;
+      font-size: 14px; line-height: 1.5;
+      transform: translateY(-110%); transition: transform 0.2s ease;
+    }
+    #panel.open { transform: translateY(0); }
+    #panel label { margin: 8px 0; padding: 2px 0; }
+    #panel label input { width: 18px; height: 18px; margin-right: 10px; }
+    .legend-dot { width: 12px; height: 12px; }
+    #search { font-size: 16px !important; padding: 8px 10px !important; }  /* 16px prevents iOS zoom-on-focus */
+    .sr-item { padding: 10px 8px; font-size: 14px; }
+  }
+  .legend-dot {
+    display: inline-block; width: 10px; height: 10px; border-radius: 50%;
+    margin-right: 6px; vertical-align: middle; border: 1px solid rgba(0,0,0,0.3);
+  }
+  .maplibregl-popup-content { max-width: calc(100vw - 40px) !important; }
+  .popup { font-size: 12px; line-height: 1.45; }
+  @media (max-width: 640px) {
+    .popup { font-size: 13px; line-height: 1.55; }
+  }
+  .popup h3 { margin: 0 0 4px; font-size: 13px; }
+  .popup .meta { color: #555; }
+  .popup .tag {
+    display: inline-block; padding: 1px 5px; border-radius: 3px; margin-right: 4px;
+    background: #eee; font-size: 10px; text-transform: uppercase;
+  }
+  #panel .section-label { font-size: 10px; text-transform: uppercase; color: #888; margin: 8px 0 2px; letter-spacing: 0.5px; }
+  #panel .section-label:first-of-type { margin-top: 0; }
+  #search-wrap { margin-bottom: 8px; position: relative; }
+  #search {
+    width: 100%; box-sizing: border-box; padding: 5px 8px;
+    border: 1px solid #ccc; border-radius: 4px; font-size: 12px;
+    font-family: inherit;
+  }
+  #search:focus { outline: none; border-color: #666; }
+  #search-results {
+    position: absolute; left: 0; right: 0; top: 100%;
+    max-height: 260px; overflow-y: auto;
+    background: #fff; border: 1px solid #ccc; border-top: none; border-radius: 0 0 4px 4px;
+    z-index: 10; display: none;
+  }
+  #search-results.open { display: block; }
+  .sr-item { padding: 5px 8px; cursor: pointer; font-size: 12px; border-top: 1px solid #eee; }
+  .sr-item:first-child { border-top: none; }
+  .sr-item:hover, .sr-item.active { background: #f0f4f8; }
+  .sr-kind { display: inline-block; font-size: 9px; text-transform: uppercase;
+    padding: 1px 4px; border-radius: 2px; margin-right: 5px; color: #fff; vertical-align: middle; }
+  .sr-sub { color: #777; font-size: 11px; }
+  .rates { font-size: 12px; }
+  .rate-row { display: flex; justify-content: space-between; padding: 1px 0; }
+  .rate-header { font-weight: 600; margin-top: 2px; }
+  .rate-tou { color: #666; font-size: 11px; }
+  .rate-label { flex: 1; }
+  .rate-val { font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div id="map"></div>
+<button id="panel-toggle" aria-label="Toggle layers panel">☰</button>
+<div id="panel">
+  <h1>Roadtrip Map</h1>
+  <div id="search-wrap">
+    <input type="search" id="search" placeholder="Search parks, chargers, gyms…" autocomplete="off">
+    <div id="search-results"></div>
+  </div>
+  <div class="section-label">Superchargers</div>
+  <div><label><input type="checkbox" id="f-open" checked><span class="legend-dot" style="background:#e82127"></span>Open <span class="count" id="c-open"></span></label></div>
+  <div><label><input type="checkbox" id="f-construction" checked><span class="legend-dot" style="background:#f5a623"></span>Construction <span class="count" id="c-construction"></span></label></div>
+  <div><label><input type="checkbox" id="f-permit" checked><span class="legend-dot" style="background:#f7d56e"></span>Permit <span class="count" id="c-permit"></span></label></div>
+  <div><label><input type="checkbox" id="f-plan"><span class="legend-dot" style="background:#bfbfbf"></span>Planned <span class="count" id="c-plan"></span></label></div>
+  <div><label><input type="checkbox" id="f-closed"><span class="legend-dot" style="background:#333"></span>Closed <span class="count" id="c-closed"></span></label></div>
+  <div class="status" id="status">Loading…</div>
+  <div class="section-label">Parks</div>
+  <div><label><input type="checkbox" id="f-np" checked><span class="legend-dot" style="background:#2e7d32; border-color:#1b5e20;"></span>National Parks <span class="count" id="c-np"></span></label></div>
+  <div><label><input type="checkbox" id="f-sp"><span class="legend-dot" style="background:#8d6e63; border-color:#5d4037;"></span>State Parks <span class="count" id="c-sp"></span></label></div>
+  <div class="section-label">Campgrounds</div>
+  <div><label><input type="checkbox" id="f-cg-federal" checked><span class="legend-dot" style="background:#2e7d32"></span>Federal <span class="count" id="c-cg-federal"></span></label></div>
+  <div><label><input type="checkbox" id="f-cg-state"><span class="legend-dot" style="background:#558b2f"></span>State <span class="count" id="c-cg-state"></span></label></div>
+  <div><label><input type="checkbox" id="f-cg-local"><span class="legend-dot" style="background:#9ccc65"></span>Local <span class="count" id="c-cg-local"></span></label></div>
+  <div class="section-label">Other</div>
+  <div><label><input type="checkbox" id="f-pf" checked><span class="legend-dot" style="background:#7b4bb5"></span>Planet Fitness <span class="count" id="c-pf"></span></label></div>
+</div>
+
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script>
+const STATUS_COLOR = {
+  OPEN: '#e82127',
+  EXPANDING: '#e82127',
+  CONSTRUCTION: '#f5a623',
+  PERMIT: '#f7d56e',
+  VOTING: '#f7d56e',
+  PLAN: '#bfbfbf',
+  CLOSED_TEMP: '#333',
+  CLOSED_PERM: '#333',
+};
+
+const FILTER_GROUP = {
+  OPEN: 'open', EXPANDING: 'open',
+  CONSTRUCTION: 'construction',
+  PERMIT: 'permit', VOTING: 'permit',
+  PLAN: 'plan',
+  CLOSED_TEMP: 'closed', CLOSED_PERM: 'closed',
+};
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: {
+    version: 8,
+    sources: {
+      osm: {
+        type: 'raster',
+        tiles: [
+          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        ],
+        tileSize: 256,
+        attribution: '&copy; OpenStreetMap contributors',
+      },
+    },
+    layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
+  },
+  center: [-98.5, 39.5],
+  zoom: 3.6,
+});
+
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+
+function toGeoJSON(sites) {
+  return {
+    type: 'FeatureCollection',
+    features: sites.map(s => ({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [s.gps.longitude, s.gps.latitude] },
+      properties: {
+        id: s.id,
+        locationId: s.locationId ?? '',
+        name: s.name,
+        status: s.status,
+        group: FILTER_GROUP[s.status] || 'open',
+        color: STATUS_COLOR[s.status] || '#888',
+        stallCount: s.stallCount ?? null,
+        powerKilowatt: s.powerKilowatt ?? null,
+        v2: s.stalls?.v2 ?? 0,
+        v3: s.stalls?.v3 ?? 0,
+        v4: s.stalls?.v4 ?? 0,
+        nacs: s.plugs?.nacs ?? 0,
+        tpc: s.plugs?.tpc ?? 0,
+        dateOpened: s.dateOpened ?? null,
+        street: s.address?.street ?? '',
+        city: s.address?.city ?? '',
+        state: s.address?.state ?? '',
+        facility: s.facilityName ?? '',
+      },
+    })),
+  };
+}
+
+function updateFilter() {
+  const groups = [];
+  if (document.getElementById('f-open').checked) groups.push('open');
+  if (document.getElementById('f-construction').checked) groups.push('construction');
+  if (document.getElementById('f-permit').checked) groups.push('permit');
+  if (document.getElementById('f-plan').checked) groups.push('plan');
+  if (document.getElementById('f-closed').checked) groups.push('closed');
+  map.setFilter('sc-points', ['in', ['get', 'group'], ['literal', groups]]);
+}
+
+async function loadPricing(slug, elId) {
+  const el = document.getElementById(elId);
+  if (!el) return;
+  try {
+    const r = await fetch('/api/pricing/' + encodeURIComponent(slug));
+    const j = await r.json();
+    if (!r.ok) {
+      el.innerHTML = `<div class="meta">Pricing unavailable (HTTP ${r.status}).${j.error === 'TESLA_COOKIES not set in .env. Paste a Cookie header from DevTools.' ? ' Set TESLA_COOKIES in .env.' : ''}</div>`;
+      return;
+    }
+    el.innerHTML = renderPricing(j);
+  } catch (err) {
+    el.innerHTML = `<div class="meta">Pricing fetch failed: ${err.message}</div>`;
+  }
+}
+
+function renderPricing(resp) {
+  const d = resp?.data?.data;
+  if (!d) return '<div class="meta">No data.</div>';
+  const books = d.effectivePricebooks || [];
+  if (!books.length) return '<div class="meta">No pricing on file.</div>';
+
+  const tslaCharging = books.filter(b => b.feeType === 'CHARGING' && b.vehicleMakeType === 'TSLA');
+  const ntslaCharging = books.filter(b => b.feeType === 'CHARGING' && b.vehicleMakeType === 'NTSLA');
+  const congestion = books.filter(b => b.feeType === 'CONGESTION');
+
+  const rows = [];
+  rows.push(renderRateGroup('Tesla', tslaCharging));
+  if (ntslaCharging.length) rows.push(renderRateGroup('Non-Tesla', ntslaCharging));
+  if (congestion.length) {
+    const c = congestion[0];
+    rows.push(`<div class="rate-row"><span class="rate-label">Idle/congestion</span><span class="rate-val">$${c.rateBase.toFixed(2)}/${c.uom}</span></div>`);
+  }
+  const cache = resp._cache;
+  const cacheNote = cache ? `<div class="meta" style="margin-top:4px; font-size:10px;">${cache.hit ? 'cached ' + formatAge(cache.age_seconds) + ' ago' : 'just fetched'}</div>` : '';
+  return '<div class="rates">' + rows.join('') + '</div>' + cacheNote;
+}
+
+function renderRateGroup(label, books) {
+  if (!books.length) return '';
+  const flat = books.find(b => !b.isTou);
+  const tou = books.filter(b => b.isTou).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+  const lines = [];
+  lines.push(`<div class="rate-row rate-header"><span class="rate-label">${label}</span>${flat ? `<span class="rate-val">$${flat.rateBase.toFixed(2)}/${flat.uom}</span>` : ''}</div>`);
+  for (const b of tou) {
+    const win = `${b.startTime}–${b.endTime === '00:00' ? '24:00' : b.endTime}`;
+    lines.push(`<div class="rate-row rate-tou"><span class="rate-label">&nbsp;&nbsp;${win}</span><span class="rate-val">$${b.rateBase.toFixed(2)}/${b.uom}</span></div>`);
+  }
+  return lines.join('');
+}
+
+function formatAge(s) {
+  if (s < 60) return s + 's';
+  if (s < 3600) return Math.round(s/60) + 'm';
+  if (s < 86400) return Math.round(s/3600) + 'h';
+  return Math.round(s/86400) + 'd';
+}
+
+const searchIndex = []; // { name, sub, kind, color, lng, lat, zoom, onSelect }
+
+// Rough centroid of any GeoJSON geometry via bbox midpoint — good enough for flyTo.
+function geomCenter(geom) {
+  let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
+  const visit = (c) => {
+    if (typeof c[0] === 'number') {
+      if (c[0] < minX) minX = c[0];
+      if (c[0] > maxX) maxX = c[0];
+      if (c[1] < minY) minY = c[1];
+      if (c[1] > maxY) maxY = c[1];
+    } else for (const x of c) visit(x);
+  };
+  visit(geom.coordinates);
+  return [(minX + maxX) / 2, (minY + maxY) / 2, [[minX, minY], [maxX, maxY]]];
+}
+
+function registerSearchItems(items) {
+  searchIndex.push(...items);
+}
+
+// Maps search result kind → one or more filter-toggle ids that must be ON
+// for the destination layer's popup to render (queryRenderedFeatures only sees
+// what's currently visible). For Superchargers, the site's status decides which
+// status-toggle must be on.
+function togglesForItem(item) {
+  switch (item.kind) {
+    case 'NP': return ['f-np'];
+    case 'SP': return ['f-sp'];
+    case 'PF': return ['f-pf'];
+    case 'CG': {
+      const cat = item.cgCategory || 'federal';
+      const id = cat === 'other' ? 'f-cg-federal' : `f-cg-${cat}`;
+      return [id];
+    }
+    case 'SC': {
+      const group = item.scGroup || 'open';
+      return [`f-${group}`];
+    }
+    default: return [];
+  }
+}
+
+function fitAndSelect(item) {
+  // Ensure the destination layer is visible before we flyTo + click it.
+  for (const tid of togglesForItem(item)) {
+    const el = document.getElementById(tid);
+    if (el && !el.checked) {
+      el.checked = true;
+      el.dispatchEvent(new Event('change'));
+    }
+  }
+  const dest = { center: [item.lng, item.lat], zoom: item.zoom ?? 11, speed: 1.6 };
+  map.flyTo(dest);
+  if (item.onSelect) {
+    map.once('moveend', () => item.onSelect());
+  }
+}
+
+function initSearch() {
+  const input = document.getElementById('search');
+  const out = document.getElementById('search-results');
+  let activeIdx = -1;
+  let current = [];
+
+  const render = (items) => {
+    current = items;
+    activeIdx = -1;
+    if (!items.length) { out.classList.remove('open'); out.innerHTML = ''; return; }
+    out.innerHTML = items.map((it, i) =>
+      `<div class="sr-item" data-i="${i}">
+         <span class="sr-kind" style="background:${it.color}">${it.kind}</span>
+         ${it.name}${it.sub ? ` <span class="sr-sub">${it.sub}</span>` : ''}
+       </div>`).join('');
+    out.classList.add('open');
+  };
+
+  const runSearch = () => {
+    const q = input.value.trim().toLowerCase();
+    if (q.length < 2) { render([]); return; }
+    const terms = q.split(/\s+/);
+    const scored = [];
+    for (const it of searchIndex) {
+      const hay = (it.name + ' ' + (it.sub || '')).toLowerCase();
+      if (!terms.every(t => hay.includes(t))) continue;
+      // Score: earlier match in name = better
+      const pos = it.name.toLowerCase().indexOf(q);
+      scored.push({ it, score: pos < 0 ? 500 : pos });
+    }
+    scored.sort((a, b) => a.score - b.score);
+    render(scored.slice(0, 20).map(s => s.it));
+  };
+
+  input.addEventListener('input', runSearch);
+  input.addEventListener('focus', () => { if (input.value.length >= 2) runSearch(); });
+  input.addEventListener('keydown', (e) => {
+    if (!current.length) return;
+    if (e.key === 'ArrowDown') { activeIdx = Math.min(activeIdx + 1, current.length - 1); updateActive(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { activeIdx = Math.max(activeIdx - 1, 0); updateActive(); e.preventDefault(); }
+    else if (e.key === 'Enter') { if (activeIdx >= 0) pick(activeIdx); else if (current.length) pick(0); e.preventDefault(); }
+    else if (e.key === 'Escape') { out.classList.remove('open'); input.blur(); }
+  });
+  out.addEventListener('mousedown', (e) => {
+    const item = e.target.closest('.sr-item');
+    if (item) { pick(Number(item.dataset.i)); e.preventDefault(); }
+  });
+  document.addEventListener('click', (e) => {
+    if (!document.getElementById('search-wrap').contains(e.target)) out.classList.remove('open');
+  });
+
+  function updateActive() {
+    [...out.children].forEach((el, i) => el.classList.toggle('active', i === activeIdx));
+    const el = out.children[activeIdx];
+    if (el) el.scrollIntoView({ block: 'nearest' });
+  }
+  function pick(i) {
+    const item = current[i];
+    out.classList.remove('open');
+    input.value = item.name;
+    fitAndSelect(item);
+  }
+}
+initSearch();
+
+// Mobile panel drawer toggle
+(function initPanelToggle() {
+  const btn = document.getElementById('panel-toggle');
+  const panel = document.getElementById('panel');
+  if (!btn || !panel) return;
+  btn.addEventListener('click', () => {
+    panel.classList.toggle('open');
+    btn.textContent = panel.classList.contains('open') ? '✕' : '☰';
+  });
+  // Tapping map closes drawer on mobile
+  document.getElementById('map').addEventListener('click', () => {
+    if (panel.classList.contains('open')) {
+      panel.classList.remove('open');
+      btn.textContent = '☰';
+    }
+  });
+})();
+
+let mapReady = false;
+const pendingMapCallbacks = [];
+map.on('load', () => {
+  mapReady = true;
+  while (pendingMapCallbacks.length) pendingMapCallbacks.shift()();
+});
+function whenMapLoaded(fn) {
+  if (mapReady) fn();
+  else pendingMapCallbacks.push(fn);
+}
+
+async function load() {
+  const status = document.getElementById('status');
+
+  // Supercharger load (live from supercharge.info)
+  try {
+    status.textContent = 'Fetching supercharge.info…';
+    const resp = await fetch('https://supercharge.info/service/supercharge/allSites');
+    if (!resp.ok) throw new Error('HTTP ' + resp.status);
+    const all = await resp.json();
+    const us = all.filter(s => s?.address?.countryId === 100 && s.gps);
+    const counts = { open: 0, construction: 0, permit: 0, plan: 0, closed: 0 };
+    us.forEach(s => { counts[FILTER_GROUP[s.status] || 'open']++; });
+    for (const [k, v] of Object.entries(counts)) {
+      const el = document.getElementById('c-' + k);
+      if (el) el.textContent = '(' + v.toLocaleString() + ')';
+    }
+    whenMapLoaded(() => addLayer(toGeoJSON(us)));
+    for (const s of us) {
+      if (s.status === 'CLOSED_PERM') continue;
+      const addrParts = [s.address?.city, s.address?.state].filter(Boolean).join(', ');
+      registerSearchItems([{
+        name: s.name,
+        sub: addrParts,
+        kind: 'SC', color: '#e82127',
+        scGroup: FILTER_GROUP[s.status] || 'open',
+        lng: s.gps.longitude, lat: s.gps.latitude, zoom: 13,
+        onSelect: () => synthesizeClick('sc-points', [s.gps.longitude, s.gps.latitude]),
+      }]);
+    }
+    status.textContent = us.length.toLocaleString() + ' US Superchargers';
+  } catch (err) {
+    console.error(err);
+    status.textContent = 'Supercharger load failed: ' + err.message;
+  }
+
+  // Register search items per layer. Each item points to a flyTo target and,
+  // optionally, a callback that synthesizes a click on the correct layer after
+  // the camera settles.
+  function synthesizeClick(layerIds, lngLat) {
+    const ids = Array.isArray(layerIds) ? layerIds : [layerIds];
+    const pt = map.project(lngLat);
+    for (const id of ids) {
+      if (!map.getLayer(id)) continue;
+      const feats = map.queryRenderedFeatures(pt, { layers: [id] });
+      if (feats.length) {
+        map.fire('click', { lngLat: { lng: lngLat[0], lat: lngLat[1] }, point: pt, features: feats, originalEvent: {} });
+        return;
+      }
+    }
+  }
+
+  // State boundary lines (loads fast, draw first so everything sits above it)
+  try {
+    const r = await fetch('/data/us-states.geojson');
+    if (r.ok) {
+      const states = await r.json();
+      whenMapLoaded(() => addStateLinesLayer(states));
+    }
+  } catch (err) {
+    console.error('State lines load failed:', err);
+  }
+
+  // Park polygons (National + State)
+  try {
+    const [npR, spR] = await Promise.all([
+      fetch('/data/national-parks.geojson'),
+      fetch('/data/state-parks.geojson'),
+    ]);
+    if (!npR.ok) throw new Error('NP HTTP ' + npR.status);
+    if (!spR.ok) throw new Error('SP HTTP ' + spR.status);
+    const np = await npR.json();
+    const sp = await spR.json();
+    const npEl = document.getElementById('c-np');
+    const spEl = document.getElementById('c-sp');
+    if (npEl) npEl.textContent = '(' + np.features.length.toLocaleString() + ')';
+    if (spEl) spEl.textContent = '(' + sp.features.length.toLocaleString() + ')';
+    whenMapLoaded(() => addParkLayers(np, sp));
+    for (const f of np.features) {
+      const [lng, lat, bbox] = geomCenter(f.geometry);
+      registerSearchItems([{
+        name: f.properties.Unit_Nm || f.properties.Loc_Nm || 'Park',
+        sub: f.properties.State_Nm || '',
+        kind: 'NP', color: '#2e7d32',
+        lng, lat, zoom: zoomForBbox(bbox),
+        onSelect: () => synthesizeClick(['np-pts', 'np-fill'], [lng, lat]),
+      }]);
+    }
+    for (const f of sp.features) {
+      const [lng, lat, bbox] = geomCenter(f.geometry);
+      registerSearchItems([{
+        name: f.properties.Unit_Nm || f.properties.Loc_Nm || 'Park',
+        sub: f.properties.State_Nm || '',
+        kind: 'SP', color: '#8d6e63',
+        lng, lat, zoom: zoomForBbox(bbox),
+        onSelect: () => synthesizeClick(['sp-pts', 'sp-fill'], [lng, lat]),
+      }]);
+    }
+  } catch (err) {
+    console.error('Park load failed:', err);
+  }
+
+  // Planet Fitness load (static GeoJSON, prebuilt)
+  try {
+    const r = await fetch('/data/planet-fitness.geojson');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const pf = await r.json();
+    const cEl = document.getElementById('c-pf');
+    if (cEl) cEl.textContent = '(' + pf.features.length.toLocaleString() + ')';
+    whenMapLoaded(() => addPFLayer(pf));
+    for (const f of pf.features) {
+      const [lng, lat] = f.geometry.coordinates;
+      const p = f.properties;
+      registerSearchItems([{
+        name: p.name || 'Planet Fitness',
+        sub: [p.city, p.state].filter(Boolean).join(', '),
+        kind: 'PF', color: '#7b4bb5',
+        lng, lat, zoom: 14,
+        onSelect: () => synthesizeClick('pf-points', [lng, lat]),
+      }]);
+    }
+  } catch (err) {
+    console.error('PF load failed:', err);
+  }
+
+  // Campgrounds (static GeoJSON, prebuilt)
+  try {
+    const r = await fetch('/data/campgrounds.geojson');
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const cg = await r.json();
+    const counts = { federal: 0, state: 0, local: 0, other: 0 };
+    cg.features.forEach(f => { counts[f.properties.category] = (counts[f.properties.category] || 0) + 1; });
+    for (const [k, v] of Object.entries(counts)) {
+      const el = document.getElementById('c-cg-' + k);
+      if (el) el.textContent = '(' + v.toLocaleString() + ')';
+    }
+    whenMapLoaded(() => addCGLayer(cg));
+    for (const f of cg.features) {
+      const [lng, lat] = f.geometry.coordinates;
+      const p = f.properties;
+      registerSearchItems([{
+        name: p.name,
+        sub: [p.typeLabel, p.state].filter(Boolean).join(' · '),
+        kind: 'CG', color: '#2e7d32',
+        cgCategory: p.category,
+        lng, lat, zoom: 13,
+        onSelect: () => synthesizeClick('cg-points', [lng, lat]),
+      }]);
+    }
+  } catch (err) {
+    console.error('Campground load failed:', err);
+  }
+}
+
+function zoomForBbox(bbox) {
+  const [[w, s], [e, n]] = bbox;
+  const span = Math.max(e - w, n - s);
+  if (span > 3) return 7;
+  if (span > 1) return 8.5;
+  if (span > 0.3) return 10;
+  if (span > 0.1) return 11;
+  return 12;
+}
+
+const CG_COLOR = { federal: '#2e7d32', state: '#558b2f', local: '#9ccc65', other: '#cddc39' };
+
+function addCGLayer(geojson) {
+  if (map.getSource('cg')) return;
+  map.addSource('cg', { type: 'geojson', data: geojson });
+  // Radius scales with campsite count (sqrt), with a clickable floor. Expression on
+  // sqrt(sites): 1→1, 5→2.2, 15→3.9, 50→7, 200→14, 1100→33. We then interpolate those
+  // linearly per zoom, with min clamped so every dot is clickable even at low zoom.
+  const sizeBySites = ['sqrt', ['coalesce', ['get', 'sites'], 15]];
+  map.addLayer({
+    id: 'cg-points',
+    type: 'circle',
+    source: 'cg',
+    paint: {
+      'circle-radius': [
+        'interpolate', ['linear'], ['zoom'],
+        3,  ['max', 3, ['interpolate', ['linear'], sizeBySites,  1, 3,  5, 3.5, 15, 4,   50, 5,   200, 6.5, 1100, 9]],
+        6,  ['max', 4, ['interpolate', ['linear'], sizeBySites,  1, 4,  5, 4.5, 15, 5.5, 50, 7,   200, 10,  1100, 14]],
+        10, ['max', 5, ['interpolate', ['linear'], sizeBySites,  1, 5,  5, 6,   15, 8,   50, 11,  200, 16,  1100, 24]],
+      ],
+      'circle-color': ['match', ['get', 'category'],
+        'federal', CG_COLOR.federal,
+        'state',   CG_COLOR.state,
+        'local',   CG_COLOR.local,
+        CG_COLOR.other,
+      ],
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 0.8,
+      'circle-opacity': 0.85,
+    },
+  }, 'sc-points'); // insert BELOW supercharger layer so SC stays on top
+
+  const toggles = ['f-cg-federal', 'f-cg-state', 'f-cg-local'];
+  const applyFilter = () => {
+    const cats = [];
+    for (const id of toggles) {
+      const cat = id.replace('f-cg-', '');
+      if (document.getElementById(id).checked) cats.push(cat);
+    }
+    // If nothing checked, hide layer entirely; else filter by category
+    if (cats.length === 0) {
+      map.setLayoutProperty('cg-points', 'visibility', 'none');
+    } else {
+      map.setLayoutProperty('cg-points', 'visibility', 'visible');
+      // Include 'other' with federal since it's mostly National-type entries we didn't classify
+      const filterCats = cats.includes('federal') ? [...cats, 'other'] : cats;
+      map.setFilter('cg-points', ['in', ['get', 'category'], ['literal', filterCats]]);
+    }
+  };
+  applyFilter();
+  for (const id of toggles) document.getElementById(id).addEventListener('change', applyFilter);
+
+  map.on('click', 'cg-points', (e) => {
+    const f = e.features[0];
+    const p = f.properties;
+    let amenities = [];
+    try { amenities = JSON.parse(p.amenities); } catch { amenities = []; }
+    const amenStr = amenities.join(' · ');
+    const html = `
+      <div class="popup">
+        <h3>${p.name}</h3>
+        <div class="meta">${p.typeLabel}${p.state ? ' · ' + p.state : ''}</div>
+        ${p.near ? `<div class="meta">${p.near}</div>` : ''}
+        <div style="margin-top:6px">
+          ${p.sites ? `<span class="tag">${p.sites} sites</span>` : ''}
+          ${p.season ? `<span class="tag">${p.season}</span>` : ''}
+        </div>
+        ${amenStr ? `<div class="meta" style="margin-top:4px">${amenStr}</div>` : ''}
+        ${p.phone ? `<div class="meta" style="margin-top:4px">${p.phone}</div>` : ''}
+        <div class="meta" style="margin-top:4px">${campgroundLinks(p)}</div>
+      </div>`;
+    new maplibregl.Popup({ closeButton: true, maxWidth: '300px' })
+      .setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+  });
+  map.on('mouseenter', 'cg-points', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'cg-points', () => map.getCanvas().style.cursor = '');
+}
+
+function campgroundLinks(p) {
+  const q = encodeURIComponent(`${p.name} ${p.state || ''}`.trim());
+  const links = [];
+  if (p.category === 'federal') {
+    links.push(`<a href="https://www.recreation.gov/search?q=${q}" target="_blank" rel="noreferrer">recreation.gov ↗</a>`);
+  }
+  links.push(`<a href="https://www.google.com/search?q=${q}+campground" target="_blank" rel="noreferrer">search ↗</a>`);
+  return links.join(' · ');
+}
+
+function addStateLinesLayer(states) {
+  if (map.getSource('states')) return;
+  map.addSource('states', { type: 'geojson', data: states });
+  map.addLayer({
+    id: 'state-lines',
+    type: 'line',
+    source: 'states',
+    paint: {
+      'line-color': '#4a4a4a',
+      'line-width': [
+        'interpolate', ['linear'], ['zoom'],
+        3, 0.6,
+        6, 1.0,
+        10, 1.4,
+      ],
+      'line-opacity': 0.55,
+    },
+  });
+}
+
+function addParkLayers(np, sp) {
+  // Anchor = id of the first existing layer, so parks render below every point layer
+  const firstExisting = map.getStyle().layers.find(l => l.id !== 'osm');
+  const anchor = firstExisting ? firstExisting.id : undefined;
+
+  // Build centroid point collections so we can render clickable dots at low zoom.
+  const toPoints = (fc) => ({
+    type: 'FeatureCollection',
+    features: fc.features.map(f => {
+      const [lng, lat] = geomCenter(f.geometry);
+      return { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: f.properties };
+    }),
+  });
+  const npPts = toPoints(np);
+  const spPts = toPoints(sp);
+
+  // State Parks polygons (render first so NP overlays them if overlap)
+  map.addSource('sp', { type: 'geojson', data: sp });
+  map.addLayer({
+    id: 'sp-fill',
+    type: 'fill',
+    source: 'sp',
+    paint: { 'fill-color': '#8d6e63', 'fill-opacity': 0.28 },
+  }, anchor);
+  map.addLayer({
+    id: 'sp-line',
+    type: 'line',
+    source: 'sp',
+    paint: { 'line-color': '#5d4037', 'line-width': 1, 'line-opacity': 0.75 },
+  }, anchor);
+
+  // National Parks polygons
+  map.addSource('np', { type: 'geojson', data: np });
+  map.addLayer({
+    id: 'np-fill',
+    type: 'fill',
+    source: 'np',
+    paint: { 'fill-color': '#2e7d32', 'fill-opacity': 0.32 },
+  }, anchor);
+  map.addLayer({
+    id: 'np-line',
+    type: 'line',
+    source: 'np',
+    paint: { 'line-color': '#1b5e20', 'line-width': 1.2, 'line-opacity': 0.85 },
+  }, anchor);
+
+  // Centroid dots on TOP of the polygon fills but under other POI layers.
+  // Size scales with sqrt(GIS_Acres). Dots fade as you zoom in (polygons take over).
+  // Zoom stops: full size at zoom 4–7, shrinking to 0 by zoom 10.
+  // Park centroid dots — navigation aid only. Small at continental zoom; fade out by zoom 10.
+  // NP dots a touch larger than SP since NPs tend to be huge landmarks.
+  map.addSource('sp-pts', { type: 'geojson', data: spPts });
+  map.addLayer({
+    id: 'sp-pts',
+    type: 'circle',
+    source: 'sp-pts',
+    paint: {
+      'circle-radius': [
+        'interpolate', ['linear'], ['zoom'],
+        3, ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'GIS_Acres'], 100]],   10, 2,   1000, 3.5,  50000, 5],
+        6, ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'GIS_Acres'], 100]],   10, 2.5, 1000, 5,    50000, 7],
+        9, ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'GIS_Acres'], 100]],   10, 1.5, 1000, 3,    50000, 4],
+        10, 0,
+      ],
+      'circle-color': '#8d6e63',
+      'circle-stroke-color': '#5d4037',
+      'circle-stroke-width': 0.8,
+      'circle-opacity': 0.85,
+    },
+  }, anchor);
+
+  map.addSource('np-pts', { type: 'geojson', data: npPts });
+  map.addLayer({
+    id: 'np-pts',
+    type: 'circle',
+    source: 'np-pts',
+    paint: {
+      'circle-radius': [
+        'interpolate', ['linear'], ['zoom'],
+        3, ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'GIS_Acres'], 10000]],  1000, 3,   50000, 4.5, 1000000, 6.5],
+        6, ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'GIS_Acres'], 10000]],  1000, 4,   50000, 6,   1000000, 9],
+        9, ['interpolate', ['linear'], ['sqrt', ['coalesce', ['get', 'GIS_Acres'], 10000]],  1000, 2.5, 50000, 4,   1000000, 6],
+        10, 0,
+      ],
+      'circle-color': '#2e7d32',
+      'circle-stroke-color': '#1b5e20',
+      'circle-stroke-width': 1,
+      'circle-opacity': 0.9,
+    },
+  }, anchor);
+
+  const npToggle = document.getElementById('f-np');
+  const spToggle = document.getElementById('f-sp');
+  const applyVis = () => {
+    const nv = npToggle.checked ? 'visible' : 'none';
+    const sv = spToggle.checked ? 'visible' : 'none';
+    for (const id of ['np-fill', 'np-line', 'np-pts']) map.setLayoutProperty(id, 'visibility', nv);
+    for (const id of ['sp-fill', 'sp-line', 'sp-pts']) map.setLayoutProperty(id, 'visibility', sv);
+  };
+  applyVis();
+  npToggle.addEventListener('change', applyVis);
+  spToggle.addEventListener('change', applyVis);
+
+  const parkClick = (layerId, kind) => (e) => {
+    const f = e.features[0];
+    const p = f.properties;
+    const name = p.Unit_Nm || p.Loc_Nm || 'Park';
+    const state = p.State_Nm || '';
+    const acres = p.GIS_Acres ? Number(p.GIS_Acres).toLocaleString() + ' acres' : '';
+    const mgr = p.Mang_Name || '';
+    const [url, label] = externalParkLink(kind, name, state);
+    const html = `
+      <div class="popup">
+        <h3>${name}</h3>
+        <div class="meta">${kind === 'np' ? 'National Park' : 'State Park'}${state ? ' · ' + state : ''}</div>
+        ${mgr && mgr !== 'National Park Service' ? `<div class="meta">${mgr}</div>` : ''}
+        ${acres ? `<div class="meta">${acres}</div>` : ''}
+        ${url ? `<div class="meta" style="margin-top:4px"><a href="${url}" target="_blank" rel="noreferrer">${label} ↗</a></div>` : ''}
+      </div>`;
+    new maplibregl.Popup({ closeButton: true, maxWidth: '280px' })
+      .setLngLat(e.lngLat).setHTML(html).addTo(map);
+  };
+  map.on('click', 'np-fill', parkClick('np-fill', 'np'));
+  map.on('click', 'sp-fill', parkClick('sp-fill', 'sp'));
+  map.on('click', 'np-pts',  parkClick('np-pts',  'np'));
+  map.on('click', 'sp-pts',  parkClick('sp-pts',  'sp'));
+  for (const id of ['np-fill', 'sp-fill', 'np-pts', 'sp-pts']) {
+    map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
+    map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
+  }
+}
+
+// Build a reasonable external link for a park by name.
+function externalParkLink(kind, name, state) {
+  if (kind === 'np') {
+    // NPS doesn't expose a deterministic slug, so a search URL is reliable.
+    const q = encodeURIComponent(name);
+    return [`https://www.nps.gov/findapark/advanced-search.htm?q=${q}`, 'nps.gov'];
+  }
+  // State Parks — no unified URL; do a Google search scoped to name + state
+  const q = encodeURIComponent(`${name} ${state} state park`);
+  return [`https://www.google.com/search?q=${q}`, 'search'];
+}
+
+function addPFLayer(geojson) {
+  console.log('addPFLayer: features=', geojson?.features?.length);
+  if (map.getSource('pf')) return;
+  try {
+    map.addSource('pf', { type: 'geojson', data: geojson });
+    map.addLayer({
+      id: 'pf-points',
+      type: 'circle',
+      source: 'pf',
+      paint: {
+        'circle-radius': [
+          'interpolate', ['linear'], ['zoom'],
+          3, 3,
+          6, 5,
+          10, 7,
+        ],
+        'circle-color': '#7b4bb5',
+        'circle-stroke-color': '#fff',
+        'circle-stroke-width': 1.5,
+        'circle-opacity': 0.95,
+      },
+    });
+    console.log('addPFLayer: layer added, visibility=', map.getLayoutProperty('pf-points', 'visibility'));
+  } catch (e) {
+    console.error('addPFLayer error:', e);
+    return;
+  }
+
+  const pfToggle = document.getElementById('f-pf');
+  const applyVis = () => map.setLayoutProperty('pf-points', 'visibility', pfToggle.checked ? 'visible' : 'none');
+  applyVis();
+  pfToggle.addEventListener('change', applyVis);
+
+  map.on('click', 'pf-points', (e) => {
+    const f = e.features[0];
+    const p = f.properties;
+    const addr = [p.street, p.city, p.state, p.postcode].filter(Boolean).join(', ');
+    const html = `
+      <div class="popup">
+        <h3>${p.name || 'Planet Fitness'}</h3>
+        ${addr ? `<div class="meta">${addr}</div>` : ''}
+        ${p.phone ? `<div class="meta">${p.phone}</div>` : ''}
+        ${p.opening_hours ? `<div class="meta" style="margin-top:4px">${p.opening_hours}</div>` : ''}
+        <div class="meta" style="margin-top:4px">
+          <a href="${p.website || 'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '))}" target="_blank" rel="noreferrer">planetfitness.com ↗</a>
+        </div>
+      </div>`;
+    new maplibregl.Popup({ closeButton: true, maxWidth: '280px' })
+      .setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+  });
+  map.on('mouseenter', 'pf-points', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'pf-points', () => map.getCanvas().style.cursor = '');
+}
+
+function addLayer(geojson) {
+  map.addSource('sc', { type: 'geojson', data: geojson });
+
+  map.addLayer({
+    id: 'sc-points',
+    type: 'circle',
+    source: 'sc',
+    paint: {
+      'circle-radius': [
+        'interpolate', ['linear'], ['zoom'],
+        3, 3,
+        6, 5,
+        10, 7,
+      ],
+      'circle-color': ['get', 'color'],
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 1,
+      'circle-opacity': 0.9,
+    },
+  });
+
+  updateFilter();
+
+  for (const id of ['f-open','f-construction','f-permit','f-plan','f-closed']) {
+    document.getElementById(id).addEventListener('change', updateFilter);
+  }
+
+  map.on('click', 'sc-points', (e) => {
+    const f = e.features[0];
+    const p = f.properties;
+    const addr = [p.street, p.city, p.state].filter(Boolean).join(', ');
+    const stalls = [p.v2 && `V2×${p.v2}`, p.v3 && `V3×${p.v3}`, p.v4 && `V4×${p.v4}`].filter(Boolean).join(' · ');
+    const plugs = [p.nacs && `NACS×${p.nacs}`, p.tpc && `TPC×${p.tpc}`].filter(Boolean).join(' · ');
+    const priceId = 'price-' + p.id;
+    const html = `
+      <div class="popup">
+        <h3>${p.name}</h3>
+        <div class="meta">${addr}</div>
+        ${p.facility ? `<div class="meta">at ${p.facility}</div>` : ''}
+        <div style="margin-top:6px">
+          <span class="tag" style="background:${p.color};color:#fff">${p.status}</span>
+          ${p.stallCount ? `<span class="tag">${p.stallCount} stalls</span>` : ''}
+          ${p.powerKilowatt ? `<span class="tag">${p.powerKilowatt} kW</span>` : ''}
+        </div>
+        ${stalls ? `<div class="meta" style="margin-top:4px">${stalls}</div>` : ''}
+        ${plugs ? `<div class="meta">${plugs}</div>` : ''}
+        ${p.dateOpened ? `<div class="meta" style="margin-top:4px">Opened ${p.dateOpened}</div>` : ''}
+        ${p.locationId ? `<div class="meta" style="margin-top:4px"><a href="https://www.tesla.com/findus?location=${encodeURIComponent(p.locationId)}&functionType=supercharger" target="_blank" rel="noreferrer">tesla.com ↗</a></div>` : ''}
+        <div id="${priceId}" class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
+          ${p.locationId ? '<span class="meta">Loading pricing…</span>' : '<span class="meta">No pricing available (no locationId)</span>'}
+        </div>
+      </div>`;
+    const popup = new maplibregl.Popup({ closeButton: true, maxWidth: '320px' })
+      .setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+
+    if (p.locationId) loadPricing(p.locationId, priceId);
+  });
+
+  map.on('mouseenter', 'sc-points', () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', 'sc-points', () => map.getCanvas().style.cursor = '');
+}
+
+load();
+</script>
+</body>
+</html>
