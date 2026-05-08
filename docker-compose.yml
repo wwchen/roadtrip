@@ -6,7 +6,10 @@ services:
     volumes:
       # Pricing cache (lazy-populated by user clicks, 30-day TTL)
       - ${CACHE_DIR:-$HOME/.roadtrip-map/pricing-cache}:/app/data/pricing-cache
-    env_file: .env
+      # .env is read by server.py's load_env(). We mount it instead of using
+      # `env_file:` because Compose interpolates $VAR sequences inside env_file
+      # values, which mangles Tesla cookies (e.g. _ga_*=...$o1$g1$t...).
+      - ./.env:/app/.env:ro
     environment:
       - PORT=8765
     # Uncomment to expose locally for debugging. Behind cloudflared, not needed.

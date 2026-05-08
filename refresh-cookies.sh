@@ -83,9 +83,10 @@ PYEOF
   exit 1
 }
 
-# Sanity: Tesla findus cookies always include _abck + ak_bmsc.
-if ! [[ "$cookies" == *"_abck="* && "$cookies" == *"ak_bmsc="* ]]; then
-  echo "warn: pasted cookie string doesn't look like tesla.com's (missing _abck / ak_bmsc)."
+# Sanity: Tesla findus cookies always include Akamai's _abck plus at least
+# one bm_* / ak_bmsc companion cookie. The exact companion varies by session.
+if ! [[ "$cookies" == *"_abck="* ]] || ! [[ "$cookies" == *"ak_bmsc="* || "$cookies" == *"bm_sc="* || "$cookies" == *"bm_sz="* ]]; then
+  echo "warn: pasted cookie string doesn't look like tesla.com's (missing _abck / bm_*)."
   read -r -p "      write it anyway? [y/N] " yn
   [[ "$yn" == "y" || "$yn" == "Y" ]] || exit 1
 fi
