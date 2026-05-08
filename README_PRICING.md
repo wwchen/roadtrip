@@ -4,29 +4,26 @@ Supercharger pricing is fetched lazily from `tesla.com/api/findus/get-charger-de
 through a local proxy. That endpoint is Akamai-gated — every request needs a valid
 `_abck` cookie tied to the calling IP.
 
-## One-time setup
+## One-time setup (or refresh when expired)
 
-1. In Chrome, visit <https://www.tesla.com/findus?functionType=supercharger>. Click any
-   Supercharger. This warms Akamai's cookies.
-2. Open DevTools → Network tab. Find the `get-charger-details?...` request.
-3. Right-click → Copy → Copy as cURL. You only need the `-b '...'` cookie string.
-4. Paste into `.env`:
-   ```
-   TESLA_COOKIES=ak_bmsc=...; _abck=...; bm_sz=...; ...
-   ```
-   (one line, semicolon-separated, no quotes). `.env` is gitignored.
-5. Start the server:
-   ```
-   python3 server.py
-   ```
-6. Open <http://localhost:8765/> and click a Supercharger pin. First click per site
-   hits Tesla; subsequent clicks within 30 days come from `data/pricing-cache/`.
+```sh
+./refresh-cookies.sh
+```
+
+The script walks you through pasting a "Copy as cURL" blob from Chrome DevTools,
+extracts the cookie, writes it to `.env`, smoke-tests against a known
+Supercharger, and offers to restart the local/Docker server to pick it up.
+
+Behind the scenes:
+1. In Chrome, visit <https://www.tesla.com/findus?functionType=supercharger>, click any Supercharger.
+2. DevTools → Network tab → find `get-charger-details?...` → right-click → Copy → Copy as cURL.
+3. Paste into the script's stdin, press Ctrl-D.
 
 ## When cookies expire
 
-Akamai cookies last on the order of a day to a week; they're also IP-bound.
-If pricing stops working, the popup will say `Pricing unavailable (HTTP 403)`.
-Redo steps 1–4.
+Akamai cookies last on the order of a day; they're also IP-bound.
+If pricing stops working, popups show `Pricing unavailable (HTTP 403)`.
+Re-run `./refresh-cookies.sh`.
 
 ## What gets cached
 
