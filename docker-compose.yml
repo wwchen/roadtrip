@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    hostname: app
+    volumes:
+      # Pricing cache (lazy-populated by user clicks, 30-day TTL)
+      - ${CACHE_DIR:-$HOME/.roadtrip-map/pricing-cache}:/app/data/pricing-cache
+    env_file: .env
+    environment:
+      - PORT=8765
+    # Uncomment to expose locally for debugging. Behind cloudflared, not needed.
+    # ports:
+    #   - "8765:8765"
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    depends_on:
+      - app
