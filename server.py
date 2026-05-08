@@ -36,7 +36,13 @@ def load_env():
 
 
 def fetch_tesla_pricing(slug: str) -> tuple[int, dict | str]:
-    """Uses curl (HTTP/2) because Akamai fingerprints on HTTP version — urllib's HTTP/1.1 gets 403."""
+    """Uses curl-impersonate so the TLS/H2 fingerprint matches the browser
+    that minted _abck — stock curl (OpenSSL) produces a different ClientHello
+    than real browsers (BoringSSL/NSS) and Akamai returns 403 even with valid
+    cookies. The wrapper (default curl_safari15_5; set TESLA_CURL=curl_chrome116
+    for Chrome-minted cookies) presets ciphers, extensions, H2 settings, and
+    UA/sec-ch-ua headers. We only add request-specific headers here.
+    """
     cookies = os.environ.get("TESLA_COOKIES", "").strip()
     if not cookies:
         return 503, {"error": "TESLA_COOKIES not set in .env. Paste a Cookie header from DevTools."}
@@ -48,27 +54,26 @@ def fetch_tesla_pricing(slug: str) -> tuple[int, dict | str]:
         "isInHkMoTw": "false",
     })
     url = f"https://www.tesla.com/api/findus/get-charger-details?{qs}"
+    # The impersonation target must match the browser that minted _abck —
+    # Akamai's fingerprint is per-session. Override with TESLA_CURL=curl_chrome116
+    # if cookies came from Chrome.
+    curl_bin = os.environ.get("TESLA_CURL", "curl_safari15_5")
     cmd = [
-        "curl", "-sS", "--http2", "-w", "\n__HTTP_STATUS__%{http_code}", url,
+        curl_bin, "-sS", "-w", "\n__HTTP_STATUS__%{http_code}", url,
         "-H", "accept: application/json, text/plain, */*",
-        "-H", "accept-language: en-US,en;q=0.9",
         "-b", cookies,
         "-H", "priority: u=1, i",
         "-H", f"referer: https://www.tesla.com/findus?location={slug}&functionType=supercharger",
-        "-H", 'sec-ch-ua: "Not/A)Brand";v="99", "Chromium";v="148"',
-        "-H", "sec-ch-ua-mobile: ?0",
-        "-H", 'sec-ch-ua-platform: "macOS"',
         "-H", "sec-fetch-dest: empty",
         "-H", "sec-fetch-mode: cors",
         "-H", "sec-fetch-site: same-origin",
-        "-H", "user-agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
     ]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
     except subprocess.TimeoutExpired:
         return 504, {"error": "curl timeout"}
     except FileNotFoundError:
-        return 500, {"error": "curl not found on PATH"}
+        return 500, {"error": f"{curl_bin} not found on PATH"}
 
     if result.returncode != 0:
         return 502, {"error": f"curl exit {result.returncode}: {result.stderr[:300]}"}
