@@ -12,11 +12,11 @@ services:
       - ./.env:/app/.env:ro
     environment:
       - PORT=8765
-    # Uncomment to expose locally for debugging. Behind cloudflared, not needed.
-    # ports:
-    #   - "8765:8765"
+    # For local port publishing, use docker-compose.local.yml (see Makefile).
 
   cloudflared:
+    # Only runs with `--profile tunnel` (deploy target). Local modes skip it.
+    profiles: [tunnel]
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
     command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
