@@ -22,10 +22,34 @@ Refresh Tesla findus cookies
   4. Find the `get-charger-details?...` request.
   5. Right-click it → Copy → Copy as cURL.
 
-Paste the cURL command below, then press Ctrl-D:
 EOF
 
-curl_input="$(cat)"
+# Reading the cURL blob from a terminal paste is unreliable: macOS's canonical-mode
+# line buffer truncates long lines silently. Prefer the clipboard; fall back to
+# $EDITOR on a temp file so nothing is bounded by terminal line limits.
+curl_input=""
+
+if command -v pbpaste >/dev/null 2>&1; then
+  clip="$(pbpaste)"
+  if [[ "$clip" == *"curl "* && "$clip" == *"tesla.com"* ]]; then
+    echo "Found a tesla.com cURL on the clipboard (${#clip} chars)."
+    read -r -p "Use it? [Y/n] " yn
+    [[ "$yn" != "n" && "$yn" != "N" ]] && curl_input="$clip"
+  fi
+fi
+
+if [[ -z "$curl_input" ]]; then
+  editor="${VISUAL:-${EDITOR:-vi}}"
+  tmp_in="$(mktemp -t tesla-curl).sh"
+  cat > "$tmp_in" <<'HDR'
+# Paste the "Copy as cURL" blob below this line, save, and quit.
+# Lines starting with # are ignored.
+HDR
+  echo "Opening $editor — paste the cURL, save, and quit."
+  "$editor" "$tmp_in"
+  curl_input="$(grep -v '^#' "$tmp_in")"
+  rm -f "$tmp_in"
+fi
 
 if [[ -z "$curl_input" ]]; then
   echo "error: no input" >&2
@@ -37,11 +61,14 @@ cookies="$(
   CURL_INPUT="$curl_input" python3 - <<'PYEOF'
 import os, re, sys
 raw = os.environ["CURL_INPUT"]
+# Chrome's "Copy as cURL" uses `-b '…'`; Safari's uses `-H 'Cookie: …'`.
 patterns = [
     r"-b\s+'((?:[^'\\]|\\.)*)'",
     r'-b\s+"((?:[^"\\]|\\.)*)"',
     r"--cookie\s+'((?:[^'\\]|\\.)*)'",
     r'--cookie\s+"((?:[^"\\]|\\.)*)"',
+    r"-H\s+'[Cc]ookie:\s*((?:[^'\\]|\\.)*)'",
+    r'-H\s+"[Cc]ookie:\s*((?:[^"\\]|\\.)*)"',
 ]
 for p in patterns:
     m = re.search(p, raw)
