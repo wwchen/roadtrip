@@ -3,8 +3,6 @@ services:
     build: .
     restart: unless-stopped
     hostname: app
-    depends_on:
-      - cookie-bot
     volumes:
       # Pricing cache (lazy-populated by user clicks, 30-day TTL)
       - ${CACHE_DIR:-$HOME/.roadtrip-map/pricing-cache}:/app/data/pricing-cache
@@ -14,17 +12,18 @@ services:
       - ./.env:/app/.env:ro
     environment:
       - PORT=8765
-      - COOKIE_BOT_URL=http://cookie-bot:8080
-      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN}
     # For local port publishing, use docker-compose.local.yml (see Makefile).
 
+  # cookie-bot sidecar — kept for future use but not started by default on
+  # aarch64 hosts (see memory: akamai_http2_fingerprinting.md). To enable,
+  # run with `--profile cookie-bot` on an amd64 host (or with a paid-solver
+  # backend), then set COOKIE_BOT_URL=http://cookie-bot:8080 in .env.
   cookie-bot:
+    profiles: [cookie-bot]
     build: ./cookie-bot
     restart: unless-stopped
     hostname: cookie-bot
     volumes:
-      # Persistent Chromium profile + harvested-cookie cache. Survives
-      # container restarts so _abck accumulates history Akamai likes.
       - ${COOKIE_BOT_DATA:-$HOME/.roadtrip-map/cookie-bot}:/var/cache/cookie-bot
     environment:
       - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN}
