@@ -1,0 +1,22 @@
+# Warms _abck + bm_* cookies for tesla.com/api/findus.
+#
+# Strategy: go straight to a URL that Tesla's SPA interprets as "user clicked
+# a specific Supercharger" — the page's own JS then fires get-charger-details,
+# which runs the Akamai sensor script and promotes _abck. No DOM-selector
+# hunting needed. Ashburn is the first US Supercharger (ID 32498); unlikely
+# to ever be decommissioned.
+start_url: https://www.tesla.com/findus?location=ashburnsupercharger&functionType=supercharger
+
+cookie_domains:
+  - .tesla.com
+
+# 30 minutes — Akamai rotates _abck aggressively. Caller requests past this
+# will trigger a re-harvest.
+ttl_seconds: 1800
+
+steps:
+  # Let the initial HTML + challenge script settle.
+  - wait_for: networkidle
+  # Give Tesla's SPA a moment to fire get-charger-details as a side effect.
+  # Akamai promotes _abck on the response to that XHR.
+  - wait_ms: 3000

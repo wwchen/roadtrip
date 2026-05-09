@@ -23,6 +23,13 @@ CACHE_DIR = ROOT / "data" / "pricing-cache"
 CACHE_TTL_SECONDS = 30 * 24 * 3600  # 30 days
 ENV_PATH = ROOT / ".env"
 
+# When COOKIE_BOT_URL is set, we fetch cookies from the sidecar instead of
+# .env. Bot responses are cached in-process to avoid hammering it for every
+# pricing click; the bot has its own TTL but we stay an order of magnitude
+# under it to stay fresh.
+_bot_cache: dict = {}  # {"cookies": str, "fetched_at": float}
+BOT_CACHE_SECONDS = 10 * 60
+
 
 def load_env():
     if not ENV_PATH.exists():
@@ -35,6 +42,34 @@ def load_env():
         os.environ.setdefault(k.strip(), v.strip())
 
 
+def get_tesla_cookies() -> str:
+    """Return a Cookie-header value. Prefer cookie-bot when configured; on
+    any failure fall back to the TESLA_COOKIES env var so manual refresh
+    still works if the bot is down."""
+    bot_url = os.environ.get("COOKIE_BOT_URL", "").strip()
+    profile = os.environ.get("COOKIE_BOT_PROFILE", "tesla-findus").strip()
+    if bot_url:
+        now = time.time()
+        if _bot_cache and now - _bot_cache["fetched_at"] < BOT_CACHE_SECONDS:
+            return _bot_cache["cookies"]
+        try:
+            req = urllib.request.Request(
+                f"{bot_url.rstrip('/')}/cookies/{profile}?format=header",
+                headers={"X-Cookie-Bot-Token": os.environ.get("COOKIE_BOT_TOKEN", "")},
+            )
+            with urllib.request.urlopen(req, timeout=60) as r:
+                data = json.loads(r.read().decode())
+            cookies = data.get("cookie_header", "")
+            if cookies:
+                _bot_cache["cookies"] = cookies
+                _bot_cache["fetched_at"] = now
+                return cookies
+            print(f"cookie-bot returned empty cookie_header for {profile}", file=sys.stderr)
+        except Exception as e:
+            print(f"cookie-bot fetch failed ({e}); falling back to .env", file=sys.stderr)
+    return os.environ.get("TESLA_COOKIES", "").strip()
+
+
 def fetch_tesla_pricing(slug: str) -> tuple[int, dict | str]:
     """Uses curl-impersonate so the TLS/H2 fingerprint matches the browser
     that minted _abck — stock curl (OpenSSL) produces a different ClientHello
@@ -43,9 +78,9 @@ def fetch_tesla_pricing(slug: str) -> tuple[int, dict | str]:
     for Chrome-minted cookies) presets ciphers, extensions, H2 settings, and
     UA/sec-ch-ua headers. We only add request-specific headers here.
     """
-    cookies = os.environ.get("TESLA_COOKIES", "").strip()
+    cookies = get_tesla_cookies()
     if not cookies:
-        return 503, {"error": "TESLA_COOKIES not set in .env. Paste a Cookie header from DevTools."}
+        return 503, {"error": "No cookies available (cookie-bot and TESLA_COOKIES both empty)."}
 
     qs = urllib.parse.urlencode({
         "locationSlug": slug,
@@ -94,6 +129,10 @@ def fetch_tesla_pricing(slug: str) -> tuple[int, dict | str]:
             return 200, json.loads(body)
         except json.JSONDecodeError:
             return 502, {"error": "tesla returned non-JSON on 200", "body_head": body[:300]}
+    # Burned cookies: drop the in-process bot cache so the next call re-fetches
+    # a fresh jar from the sidecar. 429/403 are the signals Akamai uses.
+    if status in (401, 403, 429):
+        _bot_cache.clear()
     return status, {"error": f"tesla upstream HTTP {status}", "body_head": body[:300]}
 
 
@@ -177,8 +216,12 @@ def main():
     print(f"serving at http://{host}:{port}", file=sys.stderr)
     print(f"  pricing proxy  : /api/pricing/<slug>", file=sys.stderr)
     print(f"  cache dir      : {CACHE_DIR}", file=sys.stderr)
+    bot_url = os.environ.get("COOKIE_BOT_URL", "")
     cookies_set = bool(os.environ.get("TESLA_COOKIES"))
-    print(f"  TESLA_COOKIES  : {'set' if cookies_set else 'MISSING — see README_PRICING.md'}", file=sys.stderr)
+    if bot_url:
+        print(f"  cookie source  : cookie-bot ({bot_url})", file=sys.stderr)
+    else:
+        print(f"  cookie source  : .env TESLA_COOKIES ({'set' if cookies_set else 'MISSING'})", file=sys.stderr)
     try:
         srv.serve_forever()
     except KeyboardInterrupt:
