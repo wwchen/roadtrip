@@ -22,13 +22,6 @@ from .profile import Profile
 
 logger = logging.getLogger(__name__)
 
-# Stock Chromium on modern macOS-style UA so sec-ch-ua headers look consistent.
-DEFAULT_UA = (
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-    "AppleWebKit/537.36 (KHTML, like Gecko) "
-    "Chrome/131.0.0.0 Safari/537.36"
-)
-
 INIT_SCRIPT = """
 // navigator.webdriver — patchright already strips this, but harmless to confirm.
 Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
@@ -69,18 +62,18 @@ class BrowserPool:
             return self._context
         self._profile_dir.mkdir(parents=True, exist_ok=True)
         self._playwright = await async_playwright().start()
+        # channel="chrome" uses the real Google Chrome binary patchright
+        # installs via `patchright install chrome`. Patchright docs recommend
+        # it over "chromium" for stealth — real Chrome's TLS fingerprint is
+        # what Akamai whitelists. Passing no_viewport / omitting viewport and
+        # not forcing user_agent lets the binary's own values through
+        # (patchright README calls this out explicitly).
         self._context = await self._playwright.chromium.launch_persistent_context(
             user_data_dir=str(self._profile_dir),
+            channel="chrome",
             headless=os.environ.get("HEADLESS", "true").lower() != "false",
-            user_agent=DEFAULT_UA,
-            viewport={"width": 1280, "height": 900},
-            locale="en-US",
-            timezone_id="America/Los_Angeles",
-            args=[
-                "--disable-blink-features=AutomationControlled",
-                "--no-sandbox",
-            ],
-            ignore_default_args=["--enable-automation"],
+            no_viewport=True,
+            args=["--no-sandbox"],  # required when running as root in container
         )
         await self._context.add_init_script(INIT_SCRIPT)
         return self._context
