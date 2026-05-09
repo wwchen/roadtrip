@@ -120,6 +120,9 @@
   <div><label><input type="checkbox" id="f-cg-local"><span class="legend-dot" style="background:#9ccc65"></span>Local <span class="count" id="c-cg-local"></span></label></div>
   <div class="section-label">Other</div>
   <div><label><input type="checkbox" id="f-pf" checked><span class="legend-dot" style="background:#7b4bb5"></span>Planet Fitness <span class="count" id="c-pf"></span></label></div>
+  <div class="section-label">Basemap</div>
+  <select id="basemap-select" style="width:100%; padding:4px 6px; border:1px solid #ccc; border-radius:4px; font-family:inherit; font-size:12px; background:#fff; margin-bottom:6px;"></select>
+  <div><label><input type="checkbox" id="f-satellite">Satellite overlay</label></div>
 </div>
 
 <script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
@@ -143,22 +146,54 @@ const FILTER_GROUP = {
   CLOSED_TEMP: 'closed', CLOSED_PERM: 'closed',
 };
 
-const map = new maplibregl.Map({
-  container: 'map',
-  style: {
+// Available basemaps. Value passed to map.setStyle() is either a style URL
+// (vector) or a style object (raster). Free and key-less unless noted.
+const BASEMAPS = {
+  'openfreemap-liberty': { name: 'OpenFreeMap Liberty',  style: 'https://tiles.openfreemap.org/styles/liberty' },
+  'openfreemap-bright':  { name: 'OpenFreeMap Bright',   style: 'https://tiles.openfreemap.org/styles/bright' },
+  'openfreemap-positron':{ name: 'OpenFreeMap Positron', style: 'https://tiles.openfreemap.org/styles/positron' },
+  'carto-voyager':       { name: 'Carto Voyager',        style: rasterStyle('voyager') },
+  'carto-positron':      { name: 'Carto Positron',       style: rasterStyle('light_all') },
+  'carto-dark':          { name: 'Carto Dark Matter',    style: rasterStyle('dark_all') },
+  'osm':                 { name: 'OpenStreetMap',        style: osmStyle() },
+};
+const DEFAULT_BASEMAP = 'openfreemap-liberty';
+
+function rasterStyle(cartoVariant) {
+  return {
     version: 8,
     sources: {
-      osm: {
+      basemap: {
         type: 'raster',
-        tiles: [
-          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
-        ],
+        tiles: ['a','b','c','d'].map(s => `https://${s}.basemaps.cartocdn.com/rastertiles/${cartoVariant}/{z}/{x}/{y}@2x.png`),
+        tileSize: 256,
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
+      },
+    },
+    layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+  };
+}
+function osmStyle() {
+  return {
+    version: 8,
+    sources: {
+      basemap: {
+        type: 'raster',
+        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
         tileSize: 256,
         attribution: '&copy; OpenStreetMap contributors',
       },
     },
-    layers: [{ id: 'osm', type: 'raster', source: 'osm' }],
-  },
+    layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
+  };
+}
+
+const savedBasemap = localStorage.getItem('basemap') || DEFAULT_BASEMAP;
+const initialKey = BASEMAPS[savedBasemap] ? savedBasemap : DEFAULT_BASEMAP;
+
+const map = new maplibregl.Map({
+  container: 'map',
+  style: BASEMAPS[initialKey].style,
   center: [-98.5, 39.5],
   zoom: 3.6,
 });
@@ -170,6 +205,45 @@ map.addControl(new maplibregl.GeolocateControl({
   showUserHeading: true,
   fitBoundsOptions: { maxZoom: 13 },
 }), 'top-right');
+
+// Basemap picker
+(function initBasemapPicker() {
+  const sel = document.getElementById('basemap-select');
+  for (const [key, bm] of Object.entries(BASEMAPS)) {
+    const opt = document.createElement('option');
+    opt.value = key; opt.textContent = bm.name;
+    sel.appendChild(opt);
+  }
+  sel.value = initialKey;
+  sel.addEventListener('change', () => {
+    localStorage.setItem('basemap', sel.value);
+    map.setStyle(BASEMAPS[sel.value].style);  // triggers style.load → installOverlays()
+  });
+})();
+
+// Esri World Imagery as an optional underlay. Inserted just above the basemap's
+// background so roads, parks, and labels still draw on top. Free for
+// non-commercial use with attribution per Esri's ToS.
+const SATELLITE_SOURCE = 'esri-imagery';
+const SATELLITE_LAYER = 'esri-imagery-raster';
+function installSatellite() {
+  if (!document.getElementById('f-satellite').checked) return;
+  if (map.getLayer(SATELLITE_LAYER)) return;
+  map.addSource(SATELLITE_SOURCE, {
+    type: 'raster',
+    tiles: ['https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}'],
+    tileSize: 256,
+    maxzoom: 19,
+    attribution: 'Tiles &copy; Esri, Maxar, Earthstar Geographics',
+  });
+  const afterBg = map.getStyle().layers.find(l => l.type !== 'background');
+  map.addLayer({ id: SATELLITE_LAYER, type: 'raster', source: SATELLITE_SOURCE }, afterBg?.id);
+}
+document.getElementById('f-satellite').addEventListener('change', () => {
+  if (!mapReady) return;
+  if (map.getLayer(SATELLITE_LAYER)) map.removeLayer(SATELLITE_LAYER);
+  installSatellite();
+});
 
 function toGeoJSON(sites) {
   return {
@@ -411,168 +485,185 @@ initSearch();
   });
 })();
 
+// Cached overlay data — populated once by load(), re-applied on every style swap.
+const overlayData = { sc: null, states: null, np: null, sp: null, pf: null, cg: null };
+// Per-layer flag tracks whether click/hover handlers have been bound.
+// These handlers survive map.setStyle(), so we must bind exactly once — but on
+// first load the install functions run BEFORE their data arrives (it's async),
+// so a single module-wide "ready" flag doesn't work.
+const bound = { sc: false, np: false, cg: false, pf: false };
 let mapReady = false;
-const pendingMapCallbacks = [];
-map.on('load', () => {
+
+// Fires on first load AND after map.setStyle() — the latter wipes sources/layers,
+// so we reinstall from cached GeoJSON.
+map.on('style.load', () => {
   mapReady = true;
-  while (pendingMapCallbacks.length) pendingMapCallbacks.shift()();
+  installSatellite();
+  if (overlayData.states) installStateLines(overlayData.states);
+  if (overlayData.sp && overlayData.np) installParkLayers(overlayData.np, overlayData.sp);
+  if (overlayData.cg) installCGLayer(overlayData.cg);
+  if (overlayData.pf) installPFLayer(overlayData.pf);
+  if (overlayData.sc) installSCLayer(overlayData.sc);
 });
-function whenMapLoaded(fn) {
-  if (mapReady) fn();
-  else pendingMapCallbacks.push(fn);
+
+// Synthesize a click on the first visible layer at the given coordinate —
+// used by the search results to open the destination popup after flyTo settles.
+// queryRenderedFeatures only sees what's currently visible, so callers must
+// first enable the relevant toggle via togglesForItem().
+function synthesizeClick(layerIds, lngLat) {
+  const ids = Array.isArray(layerIds) ? layerIds : [layerIds];
+  const pt = map.project(lngLat);
+  for (const id of ids) {
+    if (!map.getLayer(id)) continue;
+    const feats = map.queryRenderedFeatures(pt, { layers: [id] });
+    if (feats.length) {
+      map.fire('click', { lngLat: { lng: lngLat[0], lat: lngLat[1] }, point: pt, features: feats, originalEvent: {} });
+      return;
+    }
+  }
 }
+
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`${url}: HTTP ${r.status}`);
+  return r.json();
+}
+
+function setCount(id, n) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = '(' + n.toLocaleString() + ')';
+}
+
+// Trigger installOverlays for any layer whose data has arrived after style.load fired.
+function reinstallOverlays() { if (mapReady) map.fire('style.load'); }
 
 async function load() {
   const status = document.getElementById('status');
 
-  // Supercharger load (live from supercharge.info)
-  try {
-    status.textContent = 'Fetching supercharge.info…';
-    const resp = await fetch('https://supercharge.info/service/supercharge/allSites');
-    if (!resp.ok) throw new Error('HTTP ' + resp.status);
-    const all = await resp.json();
-    const us = all.filter(s => s?.address?.countryId === 100 && s.gps);
-    const counts = { open: 0, construction: 0, permit: 0, plan: 0, closed: 0 };
-    us.forEach(s => { counts[FILTER_GROUP[s.status] || 'open']++; });
-    for (const [k, v] of Object.entries(counts)) {
-      const el = document.getElementById('c-' + k);
-      if (el) el.textContent = '(' + v.toLocaleString() + ')';
-    }
-    whenMapLoaded(() => addLayer(toGeoJSON(us)));
-    for (const s of us) {
-      if (s.status === 'CLOSED_PERM') continue;
-      const addrParts = [s.address?.city, s.address?.state].filter(Boolean).join(', ');
-      registerSearchItems([{
-        name: s.name,
-        sub: addrParts,
-        kind: 'SC', color: '#e82127',
-        scGroup: FILTER_GROUP[s.status] || 'open',
-        lng: s.gps.longitude, lat: s.gps.latitude, zoom: 13,
-        onSelect: () => synthesizeClick('sc-points', [s.gps.longitude, s.gps.latitude]),
-      }]);
-    }
-    status.textContent = us.length.toLocaleString() + ' US Superchargers';
-  } catch (err) {
-    console.error(err);
-    status.textContent = 'Supercharger load failed: ' + err.message;
-  }
-
-  // Register search items per layer. Each item points to a flyTo target and,
-  // optionally, a callback that synthesizes a click on the correct layer after
-  // the camera settles.
-  function synthesizeClick(layerIds, lngLat) {
-    const ids = Array.isArray(layerIds) ? layerIds : [layerIds];
-    const pt = map.project(lngLat);
-    for (const id of ids) {
-      if (!map.getLayer(id)) continue;
-      const feats = map.queryRenderedFeatures(pt, { layers: [id] });
-      if (feats.length) {
-        map.fire('click', { lngLat: { lng: lngLat[0], lat: lngLat[1] }, point: pt, features: feats, originalEvent: {} });
-        return;
+  // Superchargers (live from supercharge.info)
+  (async () => {
+    try {
+      status.textContent = 'Fetching supercharge.info…';
+      const all = await fetchJSON('https://supercharge.info/service/supercharge/allSites');
+      const us = all.filter(s => s?.address?.countryId === 100 && s.gps);
+      const counts = { open: 0, construction: 0, permit: 0, plan: 0, closed: 0 };
+      us.forEach(s => { counts[FILTER_GROUP[s.status] || 'open']++; });
+      for (const [k, v] of Object.entries(counts)) setCount('c-' + k, v);
+      overlayData.sc = toGeoJSON(us);
+      for (const s of us) {
+        if (s.status === 'CLOSED_PERM') continue;
+        registerSearchItems([{
+          name: s.name,
+          sub: [s.address?.city, s.address?.state].filter(Boolean).join(', '),
+          kind: 'SC', color: '#e82127',
+          scGroup: FILTER_GROUP[s.status] || 'open',
+          lng: s.gps.longitude, lat: s.gps.latitude, zoom: 13,
+          onSelect: () => synthesizeClick('sc-points', [s.gps.longitude, s.gps.latitude]),
+        }]);
       }
+      reinstallOverlays();
+      status.textContent = us.length.toLocaleString() + ' US Superchargers';
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Supercharger load failed: ' + err.message;
     }
-  }
+  })();
 
-  // State boundary lines (loads fast, draw first so everything sits above it)
-  try {
-    const r = await fetch('/data/us-states.geojson');
-    if (r.ok) {
-      const states = await r.json();
-      whenMapLoaded(() => addStateLinesLayer(states));
+  // State boundary lines
+  (async () => {
+    try {
+      overlayData.states = await fetchJSON('/data/us-states.geojson');
+      reinstallOverlays();
+    } catch (err) {
+      console.error('State lines load failed:', err);
     }
-  } catch (err) {
-    console.error('State lines load failed:', err);
-  }
+  })();
 
   // Park polygons (National + State)
-  try {
-    const [npR, spR] = await Promise.all([
-      fetch('/data/national-parks.geojson'),
-      fetch('/data/state-parks.geojson'),
-    ]);
-    if (!npR.ok) throw new Error('NP HTTP ' + npR.status);
-    if (!spR.ok) throw new Error('SP HTTP ' + spR.status);
-    const np = await npR.json();
-    const sp = await spR.json();
-    const npEl = document.getElementById('c-np');
-    const spEl = document.getElementById('c-sp');
-    if (npEl) npEl.textContent = '(' + np.features.length.toLocaleString() + ')';
-    if (spEl) spEl.textContent = '(' + sp.features.length.toLocaleString() + ')';
-    whenMapLoaded(() => addParkLayers(np, sp));
-    for (const f of np.features) {
-      const [lng, lat, bbox] = geomCenter(f.geometry);
-      registerSearchItems([{
-        name: f.properties.Unit_Nm || f.properties.Loc_Nm || 'Park',
-        sub: f.properties.State_Nm || '',
-        kind: 'NP', color: '#2e7d32',
-        lng, lat, zoom: zoomForBbox(bbox),
-        onSelect: () => synthesizeClick(['np-pts', 'np-fill'], [lng, lat]),
-      }]);
+  (async () => {
+    try {
+      const [np, sp] = await Promise.all([
+        fetchJSON('/data/national-parks.geojson'),
+        fetchJSON('/data/state-parks.geojson'),
+      ]);
+      setCount('c-np', np.features.length);
+      setCount('c-sp', sp.features.length);
+      overlayData.np = np;
+      overlayData.sp = sp;
+      for (const f of np.features) {
+        const [lng, lat, bbox] = geomCenter(f.geometry);
+        registerSearchItems([{
+          name: f.properties.Unit_Nm || f.properties.Loc_Nm || 'Park',
+          sub: f.properties.State_Nm || '',
+          kind: 'NP', color: '#2e7d32',
+          lng, lat, zoom: zoomForBbox(bbox),
+          onSelect: () => synthesizeClick(['np-pts', 'np-fill'], [lng, lat]),
+        }]);
+      }
+      for (const f of sp.features) {
+        const [lng, lat, bbox] = geomCenter(f.geometry);
+        registerSearchItems([{
+          name: f.properties.Unit_Nm || f.properties.Loc_Nm || 'Park',
+          sub: f.properties.State_Nm || '',
+          kind: 'SP', color: '#8d6e63',
+          lng, lat, zoom: zoomForBbox(bbox),
+          onSelect: () => synthesizeClick(['sp-pts', 'sp-fill'], [lng, lat]),
+        }]);
+      }
+      reinstallOverlays();
+    } catch (err) {
+      console.error('Park load failed:', err);
     }
-    for (const f of sp.features) {
-      const [lng, lat, bbox] = geomCenter(f.geometry);
-      registerSearchItems([{
-        name: f.properties.Unit_Nm || f.properties.Loc_Nm || 'Park',
-        sub: f.properties.State_Nm || '',
-        kind: 'SP', color: '#8d6e63',
-        lng, lat, zoom: zoomForBbox(bbox),
-        onSelect: () => synthesizeClick(['sp-pts', 'sp-fill'], [lng, lat]),
-      }]);
-    }
-  } catch (err) {
-    console.error('Park load failed:', err);
-  }
+  })();
 
-  // Planet Fitness load (static GeoJSON, prebuilt)
-  try {
-    const r = await fetch('/data/planet-fitness.geojson');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const pf = await r.json();
-    const cEl = document.getElementById('c-pf');
-    if (cEl) cEl.textContent = '(' + pf.features.length.toLocaleString() + ')';
-    whenMapLoaded(() => addPFLayer(pf));
-    for (const f of pf.features) {
-      const [lng, lat] = f.geometry.coordinates;
-      const p = f.properties;
-      registerSearchItems([{
-        name: p.name || 'Planet Fitness',
-        sub: [p.city, p.state].filter(Boolean).join(', '),
-        kind: 'PF', color: '#7b4bb5',
-        lng, lat, zoom: 14,
-        onSelect: () => synthesizeClick('pf-points', [lng, lat]),
-      }]);
+  // Planet Fitness
+  (async () => {
+    try {
+      const pf = await fetchJSON('/data/planet-fitness.geojson');
+      setCount('c-pf', pf.features.length);
+      overlayData.pf = pf;
+      for (const f of pf.features) {
+        const [lng, lat] = f.geometry.coordinates;
+        const p = f.properties;
+        registerSearchItems([{
+          name: p.name || 'Planet Fitness',
+          sub: [p.city, p.state].filter(Boolean).join(', '),
+          kind: 'PF', color: '#7b4bb5',
+          lng, lat, zoom: 14,
+          onSelect: () => synthesizeClick('pf-points', [lng, lat]),
+        }]);
+      }
+      reinstallOverlays();
+    } catch (err) {
+      console.error('PF load failed:', err);
     }
-  } catch (err) {
-    console.error('PF load failed:', err);
-  }
+  })();
 
-  // Campgrounds (static GeoJSON, prebuilt)
-  try {
-    const r = await fetch('/data/campgrounds.geojson');
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const cg = await r.json();
-    const counts = { federal: 0, state: 0, local: 0, other: 0 };
-    cg.features.forEach(f => { counts[f.properties.category] = (counts[f.properties.category] || 0) + 1; });
-    for (const [k, v] of Object.entries(counts)) {
-      const el = document.getElementById('c-cg-' + k);
-      if (el) el.textContent = '(' + v.toLocaleString() + ')';
+  // Campgrounds
+  (async () => {
+    try {
+      const cg = await fetchJSON('/data/campgrounds.geojson');
+      const counts = { federal: 0, state: 0, local: 0, other: 0 };
+      cg.features.forEach(f => { counts[f.properties.category] = (counts[f.properties.category] || 0) + 1; });
+      for (const [k, v] of Object.entries(counts)) setCount('c-cg-' + k, v);
+      overlayData.cg = cg;
+      for (const f of cg.features) {
+        const [lng, lat] = f.geometry.coordinates;
+        const p = f.properties;
+        registerSearchItems([{
+          name: p.name,
+          sub: [p.typeLabel, p.state].filter(Boolean).join(' · '),
+          kind: 'CG', color: '#2e7d32',
+          cgCategory: p.category,
+          lng, lat, zoom: 13,
+          onSelect: () => synthesizeClick('cg-points', [lng, lat]),
+        }]);
+      }
+      reinstallOverlays();
+    } catch (err) {
+      console.error('Campground load failed:', err);
     }
-    whenMapLoaded(() => addCGLayer(cg));
-    for (const f of cg.features) {
-      const [lng, lat] = f.geometry.coordinates;
-      const p = f.properties;
-      registerSearchItems([{
-        name: p.name,
-        sub: [p.typeLabel, p.state].filter(Boolean).join(' · '),
-        kind: 'CG', color: '#2e7d32',
-        cgCategory: p.category,
-        lng, lat, zoom: 13,
-        onSelect: () => synthesizeClick('cg-points', [lng, lat]),
-      }]);
-    }
-  } catch (err) {
-    console.error('Campground load failed:', err);
-  }
+  })();
 }
 
 function zoomForBbox(bbox) {
@@ -587,12 +678,11 @@ function zoomForBbox(bbox) {
 
 const CG_COLOR = { federal: '#2e7d32', state: '#558b2f', local: '#9ccc65', other: '#cddc39' };
 
-function addCGLayer(geojson) {
+function installCGLayer(geojson) {
   if (map.getSource('cg')) return;
   map.addSource('cg', { type: 'geojson', data: geojson });
-  // Radius scales with campsite count (sqrt), with a clickable floor. Expression on
-  // sqrt(sites): 1→1, 5→2.2, 15→3.9, 50→7, 200→14, 1100→33. We then interpolate those
-  // linearly per zoom, with min clamped so every dot is clickable even at low zoom.
+  // Radius scales with campsite count (sqrt), with a clickable floor. Per-zoom
+  // stops keep dots clickable even at continental zoom.
   const sizeBySites = ['sqrt', ['coalesce', ['get', 'sites'], 15]];
   map.addLayer({
     id: 'cg-points',
@@ -615,33 +705,33 @@ function addCGLayer(geojson) {
       'circle-stroke-width': 0.8,
       'circle-opacity': 0.85,
     },
-  }, 'sc-points'); // insert BELOW supercharger layer so SC stays on top
+  }, map.getLayer('sc-points') ? 'sc-points' : undefined);
 
-  const toggles = ['f-cg-federal', 'f-cg-state', 'f-cg-local'];
-  const applyFilter = () => {
+  const applyCGFilter = () => {
     const cats = [];
-    for (const id of toggles) {
-      const cat = id.replace('f-cg-', '');
-      if (document.getElementById(id).checked) cats.push(cat);
+    for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local']) {
+      if (document.getElementById(id).checked) cats.push(id.replace('f-cg-', ''));
     }
-    // If nothing checked, hide layer entirely; else filter by category
     if (cats.length === 0) {
       map.setLayoutProperty('cg-points', 'visibility', 'none');
     } else {
       map.setLayoutProperty('cg-points', 'visibility', 'visible');
-      // Include 'other' with federal since it's mostly National-type entries we didn't classify
+      // 'other' is mostly unclassified federal entries; bundle it with federal.
       const filterCats = cats.includes('federal') ? [...cats, 'other'] : cats;
       map.setFilter('cg-points', ['in', ['get', 'category'], ['literal', filterCats]]);
     }
   };
-  applyFilter();
-  for (const id of toggles) document.getElementById(id).addEventListener('change', applyFilter);
+  applyCGFilter();
 
+  if (bound.cg) return;
+  bound.cg = true;
+  for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local']) {
+    document.getElementById(id).addEventListener('change', applyCGFilter);
+  }
   map.on('click', 'cg-points', (e) => {
-    const f = e.features[0];
-    const p = f.properties;
+    const p = e.features[0].properties;
     let amenities = [];
-    try { amenities = JSON.parse(p.amenities); } catch { amenities = []; }
+    try { amenities = JSON.parse(p.amenities); } catch {}
     const amenStr = amenities.join(' · ');
     const html = `
       <div class="popup">
@@ -657,10 +747,14 @@ function addCGLayer(geojson) {
         <div class="meta" style="margin-top:4px">${campgroundLinks(p)}</div>
       </div>`;
     new maplibregl.Popup({ closeButton: true, maxWidth: '300px' })
-      .setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+      .setLngLat(e.features[0].geometry.coordinates).setHTML(html).addTo(map);
   });
-  map.on('mouseenter', 'cg-points', () => map.getCanvas().style.cursor = 'pointer');
-  map.on('mouseleave', 'cg-points', () => map.getCanvas().style.cursor = '');
+  bindCursor('cg-points');
+}
+
+function bindCursor(layerId) {
+  map.on('mouseenter', layerId, () => map.getCanvas().style.cursor = 'pointer');
+  map.on('mouseleave', layerId, () => map.getCanvas().style.cursor = '');
 }
 
 function campgroundLinks(p) {
@@ -673,7 +767,7 @@ function campgroundLinks(p) {
   return links.join(' · ');
 }
 
-function addStateLinesLayer(states) {
+function installStateLines(states) {
   if (map.getSource('states')) return;
   map.addSource('states', { type: 'geojson', data: states });
   map.addLayer({
@@ -682,23 +776,19 @@ function addStateLinesLayer(states) {
     source: 'states',
     paint: {
       'line-color': '#4a4a4a',
-      'line-width': [
-        'interpolate', ['linear'], ['zoom'],
-        3, 0.6,
-        6, 1.0,
-        10, 1.4,
-      ],
+      'line-width': ['interpolate', ['linear'], ['zoom'], 3, 0.6, 6, 1.0, 10, 1.4],
       'line-opacity': 0.55,
     },
   });
 }
 
-function addParkLayers(np, sp) {
-  // Anchor = id of the first existing layer, so parks render below every point layer
-  const firstExisting = map.getStyle().layers.find(l => l.id !== 'osm');
-  const anchor = firstExisting ? firstExisting.id : undefined;
+function installParkLayers(np, sp) {
+  if (map.getSource('sp')) return;
+  // Anchor = first symbol (label) layer, so park fills sit above roads/water
+  // but beneath street/city labels. Works with both raster and vector basemaps.
+  const firstLabel = map.getStyle().layers.find(l => l.type === 'symbol');
+  const anchor = firstLabel ? firstLabel.id : undefined;
 
-  // Build centroid point collections so we can render clickable dots at low zoom.
   const toPoints = (fc) => ({
     type: 'FeatureCollection',
     features: fc.features.map(f => {
@@ -706,49 +796,25 @@ function addParkLayers(np, sp) {
       return { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: f.properties };
     }),
   });
-  const npPts = toPoints(np);
-  const spPts = toPoints(sp);
 
-  // State Parks polygons (render first so NP overlays them if overlap)
+  // State Parks (polygons first so NP overlays them on overlap)
   map.addSource('sp', { type: 'geojson', data: sp });
-  map.addLayer({
-    id: 'sp-fill',
-    type: 'fill',
-    source: 'sp',
-    paint: { 'fill-color': '#8d6e63', 'fill-opacity': 0.28 },
-  }, anchor);
-  map.addLayer({
-    id: 'sp-line',
-    type: 'line',
-    source: 'sp',
-    paint: { 'line-color': '#5d4037', 'line-width': 1, 'line-opacity': 0.75 },
-  }, anchor);
+  map.addLayer({ id: 'sp-fill', type: 'fill', source: 'sp',
+    paint: { 'fill-color': '#8d6e63', 'fill-opacity': 0.28 } }, anchor);
+  map.addLayer({ id: 'sp-line', type: 'line', source: 'sp',
+    paint: { 'line-color': '#5d4037', 'line-width': 1, 'line-opacity': 0.75 } }, anchor);
 
-  // National Parks polygons
+  // National Parks
   map.addSource('np', { type: 'geojson', data: np });
-  map.addLayer({
-    id: 'np-fill',
-    type: 'fill',
-    source: 'np',
-    paint: { 'fill-color': '#2e7d32', 'fill-opacity': 0.32 },
-  }, anchor);
-  map.addLayer({
-    id: 'np-line',
-    type: 'line',
-    source: 'np',
-    paint: { 'line-color': '#1b5e20', 'line-width': 1.2, 'line-opacity': 0.85 },
-  }, anchor);
+  map.addLayer({ id: 'np-fill', type: 'fill', source: 'np',
+    paint: { 'fill-color': '#2e7d32', 'fill-opacity': 0.32 } }, anchor);
+  map.addLayer({ id: 'np-line', type: 'line', source: 'np',
+    paint: { 'line-color': '#1b5e20', 'line-width': 1.2, 'line-opacity': 0.85 } }, anchor);
 
-  // Centroid dots on TOP of the polygon fills but under other POI layers.
-  // Size scales with sqrt(GIS_Acres). Dots fade as you zoom in (polygons take over).
-  // Zoom stops: full size at zoom 4–7, shrinking to 0 by zoom 10.
-  // Park centroid dots — navigation aid only. Small at continental zoom; fade out by zoom 10.
-  // NP dots a touch larger than SP since NPs tend to be huge landmarks.
-  map.addSource('sp-pts', { type: 'geojson', data: spPts });
+  // Centroid dots — navigation aid at continental zoom, fade out by z10 as polygons take over.
+  map.addSource('sp-pts', { type: 'geojson', data: toPoints(sp) });
   map.addLayer({
-    id: 'sp-pts',
-    type: 'circle',
-    source: 'sp-pts',
+    id: 'sp-pts', type: 'circle', source: 'sp-pts',
     paint: {
       'circle-radius': [
         'interpolate', ['linear'], ['zoom'],
@@ -764,11 +830,9 @@ function addParkLayers(np, sp) {
     },
   }, anchor);
 
-  map.addSource('np-pts', { type: 'geojson', data: npPts });
+  map.addSource('np-pts', { type: 'geojson', data: toPoints(np) });
   map.addLayer({
-    id: 'np-pts',
-    type: 'circle',
-    source: 'np-pts',
+    id: 'np-pts', type: 'circle', source: 'np-pts',
     paint: {
       'circle-radius': [
         'interpolate', ['linear'], ['zoom'],
@@ -784,21 +848,21 @@ function addParkLayers(np, sp) {
     },
   }, anchor);
 
-  const npToggle = document.getElementById('f-np');
-  const spToggle = document.getElementById('f-sp');
-  const applyVis = () => {
-    const nv = npToggle.checked ? 'visible' : 'none';
-    const sv = spToggle.checked ? 'visible' : 'none';
+  const applyParkVis = () => {
+    const nv = document.getElementById('f-np').checked ? 'visible' : 'none';
+    const sv = document.getElementById('f-sp').checked ? 'visible' : 'none';
     for (const id of ['np-fill', 'np-line', 'np-pts']) map.setLayoutProperty(id, 'visibility', nv);
     for (const id of ['sp-fill', 'sp-line', 'sp-pts']) map.setLayoutProperty(id, 'visibility', sv);
   };
-  applyVis();
-  npToggle.addEventListener('change', applyVis);
-  spToggle.addEventListener('change', applyVis);
+  applyParkVis();
 
-  const parkClick = (layerId, kind) => (e) => {
-    const f = e.features[0];
-    const p = f.properties;
+  if (bound.np) return;
+  bound.np = true;
+  document.getElementById('f-np').addEventListener('change', applyParkVis);
+  document.getElementById('f-sp').addEventListener('change', applyParkVis);
+
+  const parkClick = (kind) => (e) => {
+    const p = e.features[0].properties;
     const name = p.Unit_Nm || p.Loc_Nm || 'Park';
     const state = p.State_Nm || '';
     const acres = p.GIS_Acres ? Number(p.GIS_Acres).toLocaleString() + ' acres' : '';
@@ -815,14 +879,11 @@ function addParkLayers(np, sp) {
     new maplibregl.Popup({ closeButton: true, maxWidth: '280px' })
       .setLngLat(e.lngLat).setHTML(html).addTo(map);
   };
-  map.on('click', 'np-fill', parkClick('np-fill', 'np'));
-  map.on('click', 'sp-fill', parkClick('sp-fill', 'sp'));
-  map.on('click', 'np-pts',  parkClick('np-pts',  'np'));
-  map.on('click', 'sp-pts',  parkClick('sp-pts',  'sp'));
-  for (const id of ['np-fill', 'sp-fill', 'np-pts', 'sp-pts']) {
-    map.on('mouseenter', id, () => map.getCanvas().style.cursor = 'pointer');
-    map.on('mouseleave', id, () => map.getCanvas().style.cursor = '');
-  }
+  map.on('click', 'np-fill', parkClick('np'));
+  map.on('click', 'sp-fill', parkClick('sp'));
+  map.on('click', 'np-pts',  parkClick('np'));
+  map.on('click', 'sp-pts',  parkClick('sp'));
+  for (const id of ['np-fill', 'sp-fill', 'np-pts', 'sp-pts']) bindCursor(id);
 }
 
 // Build a reasonable external link for a park by name.
@@ -837,87 +898,70 @@ function externalParkLink(kind, name, state) {
   return [`https://www.google.com/search?q=${q}`, 'search'];
 }
 
-function addPFLayer(geojson) {
-  console.log('addPFLayer: features=', geojson?.features?.length);
+function installPFLayer(geojson) {
   if (map.getSource('pf')) return;
-  try {
-    map.addSource('pf', { type: 'geojson', data: geojson });
-    map.addLayer({
-      id: 'pf-points',
-      type: 'circle',
-      source: 'pf',
-      paint: {
-        'circle-radius': [
-          'interpolate', ['linear'], ['zoom'],
-          3, 3,
-          6, 5,
-          10, 7,
-        ],
-        'circle-color': '#7b4bb5',
-        'circle-stroke-color': '#fff',
-        'circle-stroke-width': 1.5,
-        'circle-opacity': 0.95,
-      },
-    });
-    console.log('addPFLayer: layer added, visibility=', map.getLayoutProperty('pf-points', 'visibility'));
-  } catch (e) {
-    console.error('addPFLayer error:', e);
-    return;
-  }
+  map.addSource('pf', { type: 'geojson', data: geojson });
+  map.addLayer({
+    id: 'pf-points',
+    type: 'circle',
+    source: 'pf',
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 3, 6, 5, 10, 7],
+      'circle-color': '#7b4bb5',
+      'circle-stroke-color': '#fff',
+      'circle-stroke-width': 1.5,
+      'circle-opacity': 0.95,
+    },
+  });
 
-  const pfToggle = document.getElementById('f-pf');
-  const applyVis = () => map.setLayoutProperty('pf-points', 'visibility', pfToggle.checked ? 'visible' : 'none');
-  applyVis();
-  pfToggle.addEventListener('change', applyVis);
+  const applyPFVis = () => map.setLayoutProperty('pf-points', 'visibility',
+    document.getElementById('f-pf').checked ? 'visible' : 'none');
+  applyPFVis();
 
+  if (bound.pf) return;
+  bound.pf = true;
+  document.getElementById('f-pf').addEventListener('change', applyPFVis);
   map.on('click', 'pf-points', (e) => {
     const f = e.features[0];
     const p = f.properties;
     const addr = [p.street, p.city, p.state, p.postcode].filter(Boolean).join(', ');
+    const website = p.website || 'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '));
     const html = `
       <div class="popup">
         <h3>${p.name || 'Planet Fitness'}</h3>
         ${addr ? `<div class="meta">${addr}</div>` : ''}
         ${p.phone ? `<div class="meta">${p.phone}</div>` : ''}
         ${p.opening_hours ? `<div class="meta" style="margin-top:4px">${p.opening_hours}</div>` : ''}
-        <div class="meta" style="margin-top:4px">
-          <a href="${p.website || 'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '))}" target="_blank" rel="noreferrer">planetfitness.com ↗</a>
-        </div>
+        <div class="meta" style="margin-top:4px"><a href="${website}" target="_blank" rel="noreferrer">planetfitness.com ↗</a></div>
       </div>`;
     new maplibregl.Popup({ closeButton: true, maxWidth: '280px' })
       .setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
   });
-  map.on('mouseenter', 'pf-points', () => map.getCanvas().style.cursor = 'pointer');
-  map.on('mouseleave', 'pf-points', () => map.getCanvas().style.cursor = '');
+  bindCursor('pf-points');
 }
 
-function addLayer(geojson) {
+function installSCLayer(geojson) {
+  if (map.getSource('sc')) return;
   map.addSource('sc', { type: 'geojson', data: geojson });
-
   map.addLayer({
     id: 'sc-points',
     type: 'circle',
     source: 'sc',
     paint: {
-      'circle-radius': [
-        'interpolate', ['linear'], ['zoom'],
-        3, 3,
-        6, 5,
-        10, 7,
-      ],
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 3, 6, 5, 10, 7],
       'circle-color': ['get', 'color'],
       'circle-stroke-color': '#fff',
       'circle-stroke-width': 1,
       'circle-opacity': 0.9,
     },
   });
-
   updateFilter();
 
+  if (bound.sc) return;
+  bound.sc = true;
   for (const id of ['f-open','f-construction','f-permit','f-plan','f-closed']) {
     document.getElementById(id).addEventListener('change', updateFilter);
   }
-
   map.on('click', 'sc-points', (e) => {
     const f = e.features[0];
     const p = f.properties;
@@ -943,14 +987,11 @@ function addLayer(geojson) {
           ${p.locationId ? '<span class="meta">Loading pricing…</span>' : '<span class="meta">No pricing available (no locationId)</span>'}
         </div>
       </div>`;
-    const popup = new maplibregl.Popup({ closeButton: true, maxWidth: '320px' })
+    new maplibregl.Popup({ closeButton: true, maxWidth: '320px' })
       .setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
-
     if (p.locationId) loadPricing(p.locationId, priceId);
   });
-
-  map.on('mouseenter', 'sc-points', () => map.getCanvas().style.cursor = 'pointer');
-  map.on('mouseleave', 'sc-points', () => map.getCanvas().style.cursor = '');
+  bindCursor('sc-points');
 }
 
 load();
