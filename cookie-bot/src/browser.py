@@ -62,15 +62,15 @@ class BrowserPool:
             return self._context
         self._profile_dir.mkdir(parents=True, exist_ok=True)
         self._playwright = await async_playwright().start()
-        # channel="chrome" uses the real Google Chrome binary patchright
-        # installs via `patchright install chrome`. Patchright docs recommend
-        # it over "chromium" for stealth — real Chrome's TLS fingerprint is
-        # what Akamai whitelists. Passing no_viewport / omitting viewport and
-        # not forcing user_agent lets the binary's own values through
-        # (patchright README calls this out explicitly).
+        # SYSTEM_CHROMIUM points at Debian's /usr/bin/chromium when set by the
+        # Dockerfile — that's a full native-aarch64 Chromium build whose TLS
+        # fingerprint Akamai accepts (the Playwright-bundled headless-shell is
+        # blocked at TLS layer on tesla.com). Falls back to patchright's
+        # bundled binary for local dev.
+        exec_path = os.environ.get("SYSTEM_CHROMIUM") or None
         self._context = await self._playwright.chromium.launch_persistent_context(
             user_data_dir=str(self._profile_dir),
-            channel="chrome",
+            executable_path=exec_path,
             headless=os.environ.get("HEADLESS", "true").lower() != "false",
             no_viewport=True,
             args=["--no-sandbox"],  # required when running as root in container
