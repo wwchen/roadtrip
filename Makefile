@@ -1,4 +1,4 @@
-.PHONY: help run docker-run deploy deploy-local stop check-pushed
+.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -7,11 +7,12 @@ DEPLOY_DIR  ?= ~/workspace/roadtrip
 
 help:
 	@echo "Targets:"
-	@echo "  make run           Run server.py directly on host (hot edit index.html)"
-	@echo "  make docker-run    Build+run the Docker image locally on 127.0.0.1:$(PORT), no tunnel"
-	@echo "  make deploy        SSH to $(DEPLOY_HOST), git pull, docker compose up"
-	@echo "  make deploy-local  Build+run app + cloudflared here (no ssh)"
-	@echo "  make stop          Stop all compose services locally"
+	@echo "  make run              Run server.py directly on host (hot edit index.html)"
+	@echo "  make docker-run       Build+run the Docker image locally on 127.0.0.1:$(PORT), no tunnel"
+	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, docker compose up"
+	@echo "  make deploy-local     Build+run app + cloudflared here (no ssh)"
+	@echo "  make refresh-cookies  Push Tesla cookies from clipboard → $(DEPLOY_HOST) (Tailscale exit node recommended)"
+	@echo "  make stop             Stop all compose services locally"
 
 run:
 	PORT=$(PORT) python3 server.py
@@ -36,3 +37,9 @@ deploy-local:
 stop:
 	- docker compose --profile tunnel down
 	- docker compose -f docker-compose.yml -f docker-compose.local.yml down
+
+# Mint cookies from Safari on this laptop (must be Tailscale-egressing via
+# the mini so Akamai binds _abck to the mini's IP), then push to the mini
+# and restart the app container.
+refresh-cookies:
+	@scripts/refresh-cookies-remote.sh "$(DEPLOY_HOST)" "$(DEPLOY_USER)" "$(DEPLOY_DIR)"
