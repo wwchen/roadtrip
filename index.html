@@ -316,22 +316,33 @@ function renderPricing(resp) {
   if (ntslaCharging.length) rows.push(renderRateGroup('Non-Tesla', ntslaCharging));
   if (congestion.length) {
     const c = congestion[0];
-    rows.push(`<div class="rate-row"><span class="rate-label">Idle/congestion</span><span class="rate-val">$${c.rateBase.toFixed(2)}/${c.uom}</span></div>`);
+    rows.push(`<div class="rate-row"><span class="rate-label">Idle/congestion</span><span class="rate-val">${formatRate(c)}</span></div>`);
   }
   const cache = resp._cache;
   const cacheNote = cache ? `<div class="meta" style="margin-top:4px; font-size:10px;">${cache.hit ? 'cached ' + formatAge(cache.age_seconds) + ' ago' : 'just fetched'}</div>` : '';
   return '<div class="rates">' + rows.join('') + '</div>' + cacheNote;
 }
 
+// Most currencies render fine with Intl.NumberFormat's default symbol. For
+// USD/CAD we strip the locale-prefix ("US$", "CA$", "$") and keep just "$"
+// with a currency-code tag trailing the first Tesla row — cleaner for a popup.
+function formatRate(b) {
+  const cc = b.currencyCode || 'USD';
+  const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: cc, currencyDisplay: 'narrowSymbol' }).format(b.rateBase);
+  return `${amount}/${b.uom}`;
+}
+
 function renderRateGroup(label, books) {
   if (!books.length) return '';
   const flat = books.find(b => !b.isTou);
   const tou = books.filter(b => b.isTou).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+  const cc = books[0].currencyCode;
+  const ccTag = cc && cc !== 'USD' ? ` <span class="meta" style="font-size:10px">${cc}</span>` : '';
   const lines = [];
-  lines.push(`<div class="rate-row rate-header"><span class="rate-label">${label}</span>${flat ? `<span class="rate-val">$${flat.rateBase.toFixed(2)}/${flat.uom}</span>` : ''}</div>`);
+  lines.push(`<div class="rate-row rate-header"><span class="rate-label">${label}${ccTag}</span>${flat ? `<span class="rate-val">${formatRate(flat)}</span>` : ''}</div>`);
   for (const b of tou) {
     const win = `${b.startTime}–${b.endTime === '00:00' ? '24:00' : b.endTime}`;
-    lines.push(`<div class="rate-row rate-tou"><span class="rate-label">&nbsp;&nbsp;${win}</span><span class="rate-val">$${b.rateBase.toFixed(2)}/${b.uom}</span></div>`);
+    lines.push(`<div class="rate-row rate-tou"><span class="rate-label">&nbsp;&nbsp;${win}</span><span class="rate-val">${formatRate(b)}</span></div>`);
   }
   return lines.join('');
 }
@@ -545,12 +556,13 @@ async function load() {
     try {
       status.textContent = 'Fetching supercharge.info…';
       const all = await fetchJSON('https://supercharge.info/service/supercharge/allSites');
-      const us = all.filter(s => s?.address?.countryId === 100 && s.gps);
+      // 100 = US, 101 = Canada (supercharge.info country IDs)
+      const sites = all.filter(s => s?.gps && (s.address?.countryId === 100 || s.address?.countryId === 101));
       const counts = { open: 0, construction: 0, permit: 0, plan: 0, closed: 0 };
-      us.forEach(s => { counts[FILTER_GROUP[s.status] || 'open']++; });
+      sites.forEach(s => { counts[FILTER_GROUP[s.status] || 'open']++; });
       for (const [k, v] of Object.entries(counts)) setCount('c-' + k, v);
-      overlayData.sc = toGeoJSON(us);
-      for (const s of us) {
+      overlayData.sc = toGeoJSON(sites);
+      for (const s of sites) {
         if (s.status === 'CLOSED_PERM') continue;
         registerSearchItems([{
           name: s.name,
@@ -562,7 +574,7 @@ async function load() {
         }]);
       }
       reinstallOverlays();
-      status.textContent = us.length.toLocaleString() + ' US Superchargers';
+      status.textContent = sites.length.toLocaleString() + ' US/Canada Superchargers';
     } catch (err) {
       console.error(err);
       status.textContent = 'Supercharger load failed: ' + err.message;
