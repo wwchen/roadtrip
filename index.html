@@ -770,12 +770,16 @@ function bindCursor(layerId) {
 }
 
 function campgroundLinks(p) {
-  const q = encodeURIComponent(`${p.name} ${p.state || ''}`.trim());
   const links = [];
   if (p.category === 'federal') {
-    links.push(`<a href="https://www.recreation.gov/search?q=${q}" target="_blank" rel="noreferrer">recreation.gov ↗</a>`);
+    // rec.gov's search UI expects `q=<name>` + the camping entity-type filter.
+    // Adding state to the query kills results (name collisions are rare once
+    // inventory_type=camping is applied).
+    const recq = encodeURIComponent(p.name);
+    links.push(`<a href="https://www.recreation.gov/search?q=${recq}&entity_type=campground&inventory_type=camping" target="_blank" rel="noreferrer">recreation.gov ↗</a>`);
   }
-  links.push(`<a href="https://www.google.com/search?q=${q}+campground" target="_blank" rel="noreferrer">search ↗</a>`);
+  const gq = encodeURIComponent(`${p.name} ${p.state || ''}`.trim());
+  links.push(`<a href="https://www.google.com/search?q=${gq}+campground" target="_blank" rel="noreferrer">search ↗</a>`);
   return links.join(' · ');
 }
 
