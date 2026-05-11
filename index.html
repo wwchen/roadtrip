@@ -136,7 +136,7 @@
   <div class="section-label">Parks</div>
   <div><label><input type="checkbox" id="f-np" checked><span class="legend-dot" style="background:#2e7d32; border-color:#1b5e20;"></span>National Parks <span class="count" id="c-np"></span></label></div>
   <div><label><input type="checkbox" id="f-sp"><span class="legend-dot" style="background:#8d6e63; border-color:#5d4037;"></span>State Parks <span class="count" id="c-sp"></span></label></div>
-  <div class="section-label">Campgrounds</div>
+  <div class="section-label">Campgrounds <span id="cg-load-hint" style="text-transform:none; color:#999; letter-spacing:0;">(zoom in to load)</span></div>
   <div><label><input type="checkbox" id="f-cg-federal" checked><span class="legend-dot" style="background:#2e7d32"></span>Federal (US) <span class="count" id="c-cg-federal"></span></label></div>
   <div><label><input type="checkbox" id="f-cg-state"><span class="legend-dot" style="background:#558b2f"></span>State <span class="count" id="c-cg-state"></span></label></div>
   <div><label><input type="checkbox" id="f-cg-provincial" checked><span class="legend-dot" style="background:#2e7d32; border-color:#1b5e20;"></span>BC Provincial <span class="count" id="c-cg-provincial"></span></label></div>
@@ -712,13 +712,26 @@ async function load() {
     }
   })();
 
-  // Campgrounds
-  (async () => {
+  // Campgrounds (deferred: ~12k features, 5.9MB raw). Loaded only once the
+  // user zooms in past z6 — at continental view, 11k dots are noise anyway,
+  // and fetching + parsing on first paint makes initial load feel slow.
+  // Triggered by (a) zoom crossing the threshold, (b) search-box typing
+  // (campgrounds need to be indexed to appear in results).
+  const CG_ZOOM_THRESHOLD = 6;
+  let cgLoadStarted = false;
+  async function loadCampgrounds() {
+    if (cgLoadStarted) return;
+    cgLoadStarted = true;
     try {
       const cg = await fetchJSON('/data/campgrounds.geojson');
-      const counts = { federal: 0, state: 0, local: 0, other: 0 };
-      cg.features.forEach(f => { counts[f.properties.category] = (counts[f.properties.category] || 0) + 1; });
+      const counts = { federal: 0, state: 0, local: 0, provincial: 0, other: 0 };
+      cg.features.forEach(f => {
+        const cat = f.properties.category;
+        counts[cat] = (counts[cat] || 0) + 1;
+      });
       for (const [k, v] of Object.entries(counts)) setCount('c-cg-' + k, v);
+      const hint = document.getElementById('cg-load-hint');
+      if (hint) hint.remove();
       overlayData.cg = cg;
       for (const f of cg.features) {
         const [lng, lat] = f.geometry.coordinates;
@@ -734,9 +747,21 @@ async function load() {
       }
       reinstallOverlays();
     } catch (err) {
+      cgLoadStarted = false;  // allow retry on next trigger
       console.error('Campground load failed:', err);
     }
-  })();
+  }
+  // Trigger 1: user zooms past the threshold
+  const maybeLoadOnZoom = () => {
+    if (map.getZoom() >= CG_ZOOM_THRESHOLD) {
+      loadCampgrounds();
+      map.off('zoomend', maybeLoadOnZoom);
+    }
+  };
+  map.on('zoomend', maybeLoadOnZoom);
+  maybeLoadOnZoom();  // if the user starts zoomed-in (saved URL/state)
+  // Trigger 2: user types in the search box (campgrounds need to be searchable)
+  document.getElementById('search').addEventListener('focus', loadCampgrounds, { once: true });
 }
 
 function zoomForBbox(bbox) {
