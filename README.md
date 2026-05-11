@@ -6,7 +6,7 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 
 - **Tesla Superchargers** — supercharge.info, live fetch; per-site pricing from tesla.com (US + Canada)
 - **Planet Fitness** — OSM Overpass
-- **Campgrounds** — USCampgrounds.info (federal / state / local), with federal sites enriched from recreation.gov (photos, ratings, per-carrier cell coverage, containing unit name)
+- **Campgrounds** — USCampgrounds.info (federal / state / local, US) + BC Parks (BC provincial), with US federal sites enriched from recreation.gov (photos, ratings, per-carrier cell coverage, containing unit name)
 - **National & State Parks** — USGS PAD-US polygons
 - **Basemap picker** — OpenFreeMap (Liberty/Bright/Positron), Carto (Voyager/Positron/Dark), OSM, plus an Esri satellite overlay
 - **Geolocation** — standard geolocate control
@@ -29,8 +29,9 @@ exit node pointing at the mini, then run `make refresh-cookies`.
 
 ```sh
 python3 scripts/fetch_planet_fitness.py   # Overpass — no key
-python3 scripts/fetch_campgrounds.py      # USCampgrounds.info regional CSVs
-python3 scripts/enrich_campgrounds.py     # rec.gov search + rating/review APIs
+python3 scripts/fetch_campgrounds.py      # USCampgrounds.info regional CSVs (US)
+python3 scripts/fetch_bc_parks.py         # BC Parks Strapi API (BC provincial, merges into campgrounds.geojson)
+python3 scripts/enrich_campgrounds.py     # rec.gov search + rating/review APIs (US federal)
 python3 scripts/fetch_parks.py            # PAD-US FeatureServer
 ```
 

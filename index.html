@@ -137,8 +137,9 @@
   <div><label><input type="checkbox" id="f-np" checked><span class="legend-dot" style="background:#2e7d32; border-color:#1b5e20;"></span>National Parks <span class="count" id="c-np"></span></label></div>
   <div><label><input type="checkbox" id="f-sp"><span class="legend-dot" style="background:#8d6e63; border-color:#5d4037;"></span>State Parks <span class="count" id="c-sp"></span></label></div>
   <div class="section-label">Campgrounds</div>
-  <div><label><input type="checkbox" id="f-cg-federal" checked><span class="legend-dot" style="background:#2e7d32"></span>Federal <span class="count" id="c-cg-federal"></span></label></div>
+  <div><label><input type="checkbox" id="f-cg-federal" checked><span class="legend-dot" style="background:#2e7d32"></span>Federal (US) <span class="count" id="c-cg-federal"></span></label></div>
   <div><label><input type="checkbox" id="f-cg-state"><span class="legend-dot" style="background:#558b2f"></span>State <span class="count" id="c-cg-state"></span></label></div>
+  <div><label><input type="checkbox" id="f-cg-provincial" checked><span class="legend-dot" style="background:#2e7d32; border-color:#1b5e20;"></span>BC Provincial <span class="count" id="c-cg-provincial"></span></label></div>
   <div><label><input type="checkbox" id="f-cg-local"><span class="legend-dot" style="background:#9ccc65"></span>Local <span class="count" id="c-cg-local"></span></label></div>
   <div class="section-label">Other</div>
   <div><label><input type="checkbox" id="f-pf" checked><span class="legend-dot" style="background:#7b4bb5"></span>Planet Fitness <span class="count" id="c-pf"></span></label></div>
@@ -748,7 +749,13 @@ function zoomForBbox(bbox) {
   return 12;
 }
 
-const CG_COLOR = { federal: '#2e7d32', state: '#558b2f', local: '#9ccc65', other: '#cddc39' };
+const CG_COLOR = {
+  federal: '#2e7d32',       // dark green — US federal
+  provincial: '#2e7d32',    // same green — BC provincial parks (parallel to US federal)
+  state: '#558b2f',         // medium green — US state
+  local: '#9ccc65',         // light green — US county/municipal
+  other: '#cddc39',         // unclassified
+};
 
 function installCGLayer(geojson) {
   resetOverlay(['cg'], ['cg-points']);
@@ -768,9 +775,10 @@ function installCGLayer(geojson) {
         10, ['max', 5, ['interpolate', ['linear'], sizeBySites,  1, 5,  5, 6,   15, 8,   50, 11,  200, 16,  1100, 24]],
       ],
       'circle-color': ['match', ['get', 'category'],
-        'federal', CG_COLOR.federal,
-        'state',   CG_COLOR.state,
-        'local',   CG_COLOR.local,
+        'federal',    CG_COLOR.federal,
+        'provincial', CG_COLOR.provincial,
+        'state',      CG_COLOR.state,
+        'local',      CG_COLOR.local,
         CG_COLOR.other,
       ],
       'circle-stroke-color': '#fff',
@@ -781,7 +789,7 @@ function installCGLayer(geojson) {
 
   const applyCGFilter = () => {
     const cats = [];
-    for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local']) {
+    for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local', 'f-cg-provincial']) {
       if (document.getElementById(id).checked) cats.push(id.replace('f-cg-', ''));
     }
     if (cats.length === 0) {
@@ -849,9 +857,12 @@ function bindCursor(layerId) {
 
 function campgroundLinks(p) {
   const links = [];
-  if (p.recgov_id) {
-    // Direct link — recgov_id was looked up at build time via the suggest API
-    // and verified to be within a few miles of the source coordinate.
+  if (p.bcparks_url) {
+    // BC Parks have a direct URL from the Strapi API — always available when set.
+    links.push(`<a href="${p.bcparks_url}" target="_blank" rel="noreferrer">bcparks.ca ↗</a>`);
+  } else if (p.recgov_id) {
+    // Direct link — recgov_id was looked up at build time via the search API
+    // and verified to be within a couple of miles of the source coordinate.
     links.push(`<a href="https://www.recreation.gov/camping/campgrounds/${p.recgov_id}" target="_blank" rel="noreferrer">recreation.gov ↗</a>`);
   } else if (p.category === 'federal') {
     // No id on file — fall back to the filtered search page.

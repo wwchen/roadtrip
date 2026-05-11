@@ -8,7 +8,7 @@ Summary of research for each POI category, with the chosen primary/fallback and 
 |---|---|---|---|---|---|
 | Tesla Supercharger | supercharge.info `/service/supercharge/allSites` | Open Charge Map (operator=23) | Source-available, no formal license; community-consumed | Daily via GH Action (or direct browser — CORS enabled) | Prebuilt GeoJSON |
 | Planet Fitness | Overpass (`brand=Planet Fitness`) | One-time scrape of pf.com locator | OSM ODbL | Weekly | Prebuilt GeoJSON |
-| Campgrounds | USCampgrounds.info + recreation.gov API enrichment | Overpass `tourism=camp_site` | CC-BY + ODbL (rec.gov public domain) | Weekly | Prebuilt GeoJSON |
+| Campgrounds | USCampgrounds.info + BC Parks API + recreation.gov enrichment | Overpass `tourism=camp_site` | CC-BY + OGL-BC + rec.gov public domain | Weekly | Prebuilt GeoJSON |
 | Free chargers | NREL AFDC (filtered) | Open Charge Map (`usagetypeid=1`) | US Gov public domain + ODbL | Daily via GH Action | Prebuilt GeoJSON |
 | State parks | USGS PAD-US 4.0 (filter state-managed) | OSM `protect_class` | Public domain | Annual | Prebuilt GeoJSON |
 | Hipcamp | (none — skip for POC) | Manually-curated GeoJSON | n/a | Manual | Prebuilt GeoJSON |
@@ -55,15 +55,27 @@ PF has no open API and their ToS forbids scraping. Two pragmatic options:
 
 ## 3. Campgrounds (general)
 
-Two-stage pipeline: USCampgrounds.info gives us the seed list (name, GPS,
-category), then a recreation.gov enricher attaches rec.gov-specific metadata
-to the federal subset.
+Multi-stage pipeline. USCampgrounds.info seeds US parks (federal/state/local),
+BC Parks' API adds Canadian provincial parks, then a recreation.gov enricher
+attaches rec.gov-specific metadata to the federal subset.
 
-**Base — USCampgrounds.info CSV**
+**Base — USCampgrounds.info CSV (US)**
 - URL: `https://uscampgrounds.info/takeit.html`
-- ~14,000 campgrounds, US + Canada (federal, state, county/local, private).
-- CC-BY licensed, updated ~monthly by the maintainer.
+- ~11,000 US campgrounds (federal, state, county/local, private). CC-BY,
+  updated ~monthly by the maintainer.
 - Fetcher: `scripts/fetch_campgrounds.py`.
+
+**BC Parks — British Columbia provincial parks**
+- API: `https://bcparks.api.gov.bc.ca/api/protected-areas` (Strapi, public,
+  no key). Filter `parkCampingTypes.id.$notNull` to get just parks with
+  camping (~486).
+- One feature per park at `latitude`/`longitude`. Fields:
+  `protectedAreaName`, `url` (bcparks.ca/<slug>/), `parkPhotos[].imageUrl`,
+  `parkActivities[].activityType.activityName`,
+  `parkFacilities[].facilityType.facilityName`.
+- OGL-BC, no rate limits observed.
+- Fetcher: `scripts/fetch_bc_parks.py` (merges into the same GeoJSON with
+  category=`provincial`, state=`BC`, `bcparks_url` set for the popup link).
 
 **Enrichment — recreation.gov (federal only)**
 - `scripts/enrich_campgrounds.py` queries two public-browser endpoints per federal campground:
@@ -138,8 +150,9 @@ Skip for the POC.
 ```
 .github/workflows/refresh-data.yml     # scheduled cron (not yet set up)
   ├─ superchargers (daily)             # live fetch from browser; nothing prebuilt
-  ├─ scripts/fetch_campgrounds.py      # weekly — USCampgrounds.info seed
-  ├─ scripts/enrich_campgrounds.py     # weekly — rec.gov search + rating/review APIs
+  ├─ scripts/fetch_campgrounds.py      # weekly — USCampgrounds.info seed (US)
+  ├─ scripts/fetch_bc_parks.py         # weekly — BC Parks Strapi API (BC)
+  ├─ scripts/enrich_campgrounds.py     # weekly — rec.gov search + rating/review APIs (US federal only)
   ├─ scripts/fetch_planet_fitness.py   # weekly — Overpass
   └─ scripts/fetch_parks.py            # monthly — PAD-US FeatureServer
 commits any changed GeoJSON back to main → deploy server pulls.
