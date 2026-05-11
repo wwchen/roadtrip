@@ -72,6 +72,21 @@
   .popup .rating { color: #333; font-weight: 600; }
   .popup .rating .stars { color: #f5a623; letter-spacing: -1px; }
   .popup .rating .count { color: #777; font-weight: 400; font-size: 11px; margin-left: 3px; }
+  .popup .cell { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
+  .popup .cell-pill {
+    display: inline-flex; align-items: baseline; gap: 3px;
+    padding: 1px 6px; border-radius: 10px;
+    font-size: 10px; font-weight: 600; color: #fff; line-height: 1.5;
+  }
+  .popup .cell-pill .carrier { font-size: 9px; opacity: 0.9; }
+  .popup .cell-pill .val { font-variant-numeric: tabular-nums; }
+  /* 0-4 scale: 0 = none (dark red), 1 = major issues (red), 2 = some (amber),
+     3 = good (green), 4 = excellent (deep green) */
+  .popup .cell-pill[data-bucket="0"] { background: #7a1e1e; }
+  .popup .cell-pill[data-bucket="1"] { background: #c62828; }
+  .popup .cell-pill[data-bucket="2"] { background: #e8a730; }
+  .popup .cell-pill[data-bucket="3"] { background: #2e7d32; }
+  .popup .cell-pill[data-bucket="4"] { background: #1b5e20; }
   #panel .section-label { font-size: 10px; text-transform: uppercase; color: #888; margin: 8px 0 2px; letter-spacing: 0.5px; }
   #panel .section-label:first-of-type { margin-top: 0; }
   #search-wrap { margin-bottom: 8px; position: relative; }
@@ -224,7 +239,12 @@ map.addControl(new maplibregl.GeolocateControl({
   sel.value = initialKey;
   sel.addEventListener('change', () => {
     localStorage.setItem('basemap', sel.value);
-    map.setStyle(BASEMAPS[sel.value].style);  // triggers style.load → installOverlays()
+    // diff:false forces a full style reload, which is what we want — the
+    // default (diff:true) does an incremental merge that keeps our overlay
+    // sources/layers in place but does NOT fire style.load, so our reinstall
+    // hook never runs. Full reload wipes everything cleanly and emits the
+    // event we need.
+    map.setStyle(BASEMAPS[sel.value].style, { diff: false });
   });
 })();
 
@@ -365,6 +385,21 @@ function formatAge(s) {
 function renderStars(v) {
   const full = Math.round(v);
   return '★'.repeat(full) + '☆'.repeat(Math.max(0, 5 - full));
+}
+
+const CARRIER_LABEL = { verizon: 'VZ', att: 'ATT', tmobile: 'TMo', sprint: 'Spr' };
+// Render per-carrier cell signal pills. cc is {verizon: [avg, count], ...}
+// avg is 0–4 (rec.gov's native scale). Sort by signal strength desc.
+function renderCellCoverage(cc) {
+  const entries = Object.entries(cc || {});
+  if (!entries.length) return '';
+  entries.sort((a, b) => b[1][0] - a[1][0]);
+  return '<div class="cell">' + entries.map(([k, v]) => {
+    const [avg, cnt] = v;
+    const bucket = Math.max(0, Math.min(4, Math.round(avg)));
+    const label = CARRIER_LABEL[k] || k;
+    return `<span class="cell-pill" data-bucket="${bucket}" title="${cnt} reports"><span class="carrier">${label}</span><span class="val">${avg.toFixed(1)}</span></span>`;
+  }).join('') + '</div>';
 }
 
 const searchIndex = []; // { name, sub, kind, color, lng, lat, zoom, onSelect }
@@ -529,6 +564,9 @@ let mapReady = false;
 
 // Fires on first load AND after map.setStyle() — the latter wipes sources/layers,
 // so we reinstall from cached GeoJSON.
+// Fires on initial style ready AND after setStyle({diff:false}). We reinstall
+// every overlay from cached GeoJSON because setStyle wipes custom sources,
+// layers, and layer-scoped event handlers.
 map.on('style.load', () => {
   mapReady = true;
   installSatellite();
@@ -768,12 +806,16 @@ function installCGLayer(geojson) {
     // rating_reviews is [stars, count] on hit, null for "no reviews on file"
     let rr = null;
     try { rr = JSON.parse(p.rating_reviews); } catch {}
+    // cell_coverage is {verizon: [avg, count], att: [avg, count], ...}
+    let cc = null;
+    try { cc = JSON.parse(p.cell_coverage); } catch {}
     const html = `
       <div class="popup">
         ${p.photo_url ? `<img class="photo" src="${p.photo_url}" alt="" loading="lazy">` : ''}
         <h3>${p.name}</h3>
         <div class="meta">${p.typeLabel}${p.state ? ' · ' + p.state : ''}</div>
         ${Array.isArray(rr) ? `<div class="rating"><span class="stars">${renderStars(rr[0])}</span> ${rr[0].toFixed(1)}<span class="count">(${rr[1].toLocaleString()})</span></div>` : ''}
+        ${renderCellCoverage(cc)}
         ${p.near ? `<div class="meta">${p.near}</div>` : ''}
         <div style="margin-top:6px">
           ${p.sites ? `<span class="tag">${p.sites} sites</span>` : ''}
