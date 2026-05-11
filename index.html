@@ -857,7 +857,10 @@ function bindCursor(layerId) {
 
 function campgroundLinks(p) {
   const links = [];
-  if (p.bcparks_url) {
+  if (p.parks_canada_url) {
+    // Parks Canada — hand-curated BC campgrounds, direct link to the park page.
+    links.push(`<a href="${p.parks_canada_url}" target="_blank" rel="noreferrer">parks.canada.ca ↗</a>`);
+  } else if (p.bcparks_url) {
     // BC Parks have a direct URL from the Strapi API — always available when set.
     links.push(`<a href="${p.bcparks_url}" target="_blank" rel="noreferrer">bcparks.ca ↗</a>`);
   } else if (p.recgov_id) {

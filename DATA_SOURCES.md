@@ -65,6 +65,17 @@ attaches rec.gov-specific metadata to the federal subset.
   updated ~monthly by the maintainer.
 - Fetcher: `scripts/fetch_campgrounds.py`.
 
+**Parks Canada — BC national-park campgrounds**
+- Source: hand-curated `data/parks-canada-bc.json` scraped from
+  parks.canada.ca/pn-np/bc/<slug>. Parks Canada does not publish an open
+  points dataset for campgrounds, and the reservation API (reservation.pc.gc.ca)
+  is Azure WAF-gated. Coordinates verified via OSM Nominatim where possible.
+- ~20 frontcountry campgrounds across Yoho, Kootenay, Glacier,
+  Mt Revelstoke, Pacific Rim, Gulf Islands NPR.
+- Fetcher: `scripts/fetch_parks_canada.py` (merges into campgrounds.geojson
+  with category=`federal`, country=`CA`, `parks_canada_url` set).
+- Data accuracy should be audited before trusting for navigation.
+
 **BC Parks — British Columbia provincial parks**
 - API: `https://bcparks.api.gov.bc.ca/api/protected-areas` (Strapi, public,
   no key). Filter `parkCampingTypes.id.$notNull` to get just parks with
@@ -152,6 +163,7 @@ Skip for the POC.
   ├─ superchargers (daily)             # live fetch from browser; nothing prebuilt
   ├─ scripts/fetch_campgrounds.py      # weekly — USCampgrounds.info seed (US)
   ├─ scripts/fetch_bc_parks.py         # weekly — BC Parks Strapi API (BC)
+  ├─ scripts/fetch_parks_canada.py     # static — hand-curated Parks Canada BC frontcountry
   ├─ scripts/enrich_campgrounds.py     # weekly — rec.gov search + rating/review APIs (US federal only)
   ├─ scripts/fetch_planet_fitness.py   # weekly — Overpass
   └─ scripts/fetch_parks.py            # monthly — PAD-US FeatureServer
