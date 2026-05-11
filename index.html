@@ -809,11 +809,14 @@ function installCGLayer(geojson) {
     // cell_coverage is {verizon: [avg, count], att: [avg, count], ...}
     let cc = null;
     try { cc = JSON.parse(p.cell_coverage); } catch {}
+    // Prefer rec.gov's containing-unit name (e.g. "Gifford Pinchot National Forest")
+    // over our generic typeLabel ("National Forest") when the enricher matched.
+    const parent = p.parent_name || p.typeLabel;
     const html = `
       <div class="popup">
         ${p.photo_url ? `<img class="photo" src="${p.photo_url}" alt="" loading="lazy">` : ''}
         <h3>${p.name}</h3>
-        <div class="meta">${p.typeLabel}${p.state ? ' · ' + p.state : ''}</div>
+        <div class="meta">${parent}${p.state ? ' · ' + p.state : ''}</div>
         ${Array.isArray(rr) ? `<div class="rating"><span class="stars">${renderStars(rr[0])}</span> ${rr[0].toFixed(1)}<span class="count">(${rr[1].toLocaleString()})</span></div>` : ''}
         ${renderCellCoverage(cc)}
         ${p.near ? `<div class="meta">${p.near}</div>` : ''}

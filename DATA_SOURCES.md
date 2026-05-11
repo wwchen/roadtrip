@@ -8,7 +8,7 @@ Summary of research for each POI category, with the chosen primary/fallback and 
 |---|---|---|---|---|---|
 | Tesla Supercharger | supercharge.info `/service/supercharge/allSites` | Open Charge Map (operator=23) | Source-available, no formal license; community-consumed | Daily via GH Action (or direct browser — CORS enabled) | Prebuilt GeoJSON |
 | Planet Fitness | Overpass (`brand=Planet Fitness`) | One-time scrape of pf.com locator | OSM ODbL | Weekly | Prebuilt GeoJSON |
-| Campgrounds | RIDB (federal) + USCampgrounds.info (public) | Overpass `tourism=camp_site` | Public domain + CC-BY + ODbL | Weekly | Prebuilt GeoJSON |
+| Campgrounds | USCampgrounds.info + recreation.gov API enrichment | Overpass `tourism=camp_site` | CC-BY + ODbL (rec.gov public domain) | Weekly | Prebuilt GeoJSON |
 | Free chargers | NREL AFDC (filtered) | Open Charge Map (`usagetypeid=1`) | US Gov public domain + ODbL | Daily via GH Action | Prebuilt GeoJSON |
 | State parks | USGS PAD-US 4.0 (filter state-managed) | OSM `protect_class` | Public domain | Annual | Prebuilt GeoJSON |
 | Hipcamp | (none — skip for POC) | Manually-curated GeoJSON | n/a | Manual | Prebuilt GeoJSON |
@@ -55,22 +55,46 @@ PF has no open API and their ToS forbids scraping. Two pragmatic options:
 
 ## 3. Campgrounds (general)
 
-No single complete source. Merge two public ones:
+Two-stage pipeline: USCampgrounds.info gives us the seed list (name, GPS,
+category), then a recreation.gov enricher attaches rec.gov-specific metadata
+to the federal subset.
 
-**RIDB (Recreation.gov) — federal**
-- API: `https://ridb.recreation.gov/` (free key at https://ridb.recreation.gov/profile/apikeys)
-- Full nightly JSON dump at `https://ridb.recreation.gov/download`
-- ~4,000+ NPS/USFS/BLM/USACE campgrounds. Public domain.
-- No CORS → prebuild.
-
-**USCampgrounds.info CSV — public (state/county/private)**
+**Base — USCampgrounds.info CSV**
 - URL: `https://uscampgrounds.info/takeit.html`
-- ~14,000 public campgrounds, US + Canada. CC-BY licensed.
-- Updated ~monthly by the maintainer.
+- ~14,000 campgrounds, US + Canada (federal, state, county/local, private).
+- CC-BY licensed, updated ~monthly by the maintainer.
+- Fetcher: `scripts/fetch_campgrounds.py`.
 
-**Optional — Overpass `tourism=camp_site`** for gap-filling / dispersed camping.
+**Enrichment — recreation.gov (federal only)**
+- `scripts/enrich_campgrounds.py` queries two public-browser endpoints per federal campground:
+  - `GET /api/search?lat=..&lng=..&radius=2&entity_type=campground&inventory_type=camping`
+    — rec.gov's map search. Geographic match is far more reliable than name
+    matching. Returns `entity_id`, `parent_name` (e.g. "Gifford Pinchot
+    National Forest"), `preview_image_url`, `activities`, `average_rating`,
+    `number_of_ratings`, `aggregate_cell_coverage`, and more.
+  - `GET /api/ratingreview/aggregate?location_id=<id>&location_type=Campground`
+    — per-carrier cell coverage on rec.gov's 0–4 scale (0 none, 1 major
+    issues, 2 some, 3 good, 4 excellent) for Verizon/AT&T/T-Mobile/Sprint.
+- No API key required. These are the same endpoints the rec.gov SPA uses.
+- Rate-limited: stays at 4 concurrent with 429 exponential backoff; the
+  script is resume-safe via an `enriched: true` flag on each feature.
+- Writes these fields into `campgrounds.geojson` properties:
+  `recgov_id`, `parent_name`, `parent_type`, `photo_url`, `activities`,
+  `rating_reviews` (`[avg, count]`), `cell_coverage` (`{carrier: [avg, count]}`).
 
-**Plan:** weekly GH Action fetches RIDB + USCampgrounds, merges, dedupes by proximity (~100m) and name, writes `data/campgrounds.geojson`.
+**Optional — Overpass `tourism=camp_site`** for gap-filling / dispersed
+camping. Not yet integrated.
+
+**Plan:** weekly GH Action runs both scripts in sequence. Enrichment is
+idempotent (only re-queries features missing `enriched: true`) so reruns
+only hit rec.gov for new or never-matched campgrounds.
+
+**Note on RIDB:** the public Recreation Information Database API
+(`https://ridb.recreation.gov/api/v1/facilities/...`, free key required) was
+evaluated and can return media + activities per facility, but the SPA-backing
+endpoints above return the same data *plus* rating/cell coverage in one
+response without a key. RIDB remains a useful fallback if the SPA endpoints
+ever tighten access.
 
 ## 4. Free chargers (non-Tesla)
 
@@ -112,13 +136,13 @@ Skip for the POC.
 ## Refresh architecture
 
 ```
-.github/workflows/refresh-data.yml   # scheduled cron
-  ├─ scripts/fetch-superchargers.js  # daily  — supercharge.info allSites
-  ├─ scripts/fetch-free-chargers.js  # daily  — NREL AFDC + OCM merge
-  ├─ scripts/fetch-campgrounds.js    # weekly — RIDB + USCampgrounds.info
-  ├─ scripts/fetch-planet-fitness.js # weekly — Overpass
-  └─ scripts/fetch-state-parks.js    # monthly — PAD-US FeatureServer
-commits any changed GeoJSON back to main → Pages redeploys.
+.github/workflows/refresh-data.yml     # scheduled cron (not yet set up)
+  ├─ superchargers (daily)             # live fetch from browser; nothing prebuilt
+  ├─ scripts/fetch_campgrounds.py      # weekly — USCampgrounds.info seed
+  ├─ scripts/enrich_campgrounds.py     # weekly — rec.gov search + rating/review APIs
+  ├─ scripts/fetch_planet_fitness.py   # weekly — Overpass
+  └─ scripts/fetch_parks.py            # monthly — PAD-US FeatureServer
+commits any changed GeoJSON back to main → deploy server pulls.
 ```
 
 This sidesteps:
@@ -127,11 +151,13 @@ This sidesteps:
 - Rate limits (one fetch per source per day, not per pageload)
 - Third-party uptime (site still works if a source is down — just stale)
 
-**API keys needed (all free, store as GH Action secrets):**
-- `NREL_API_KEY` — developer.nrel.gov (1000 req/hr)
-- `OCM_API_KEY` — openchargemap.org
-- `RIDB_API_KEY` — ridb.recreation.gov (DEMO_KEY does NOT work; real key required)
-- supercharge.info, Overpass, PAD-US, USCampgrounds.info — no key needed
+**API keys needed (all free, store as GH Action secrets when refresh runs move to CI):**
+- `NREL_API_KEY` — developer.nrel.gov (1000 req/hr) — for a future free-chargers fetcher
+- `OCM_API_KEY` — openchargemap.org — optional fallback
+- supercharge.info, Overpass, PAD-US, USCampgrounds.info, recreation.gov (search + ratingreview) — no key needed
+
+Tesla pricing proxy (server.py) requires a separately-managed session cookie
+in `.env`; see README_PRICING.md.
 
 ## Open decisions (from REQUIREMENTS.md)
 
