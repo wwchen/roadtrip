@@ -771,10 +771,12 @@ function bindCursor(layerId) {
 
 function campgroundLinks(p) {
   const links = [];
-  if (p.category === 'federal') {
-    // rec.gov's search UI expects `q=<name>` + the camping entity-type filter.
-    // Adding state to the query kills results (name collisions are rare once
-    // inventory_type=camping is applied).
+  if (p.recgov_id) {
+    // Direct link — recgov_id was looked up at build time via the suggest API
+    // and verified to be within a few miles of the source coordinate.
+    links.push(`<a href="https://www.recreation.gov/camping/campgrounds/${p.recgov_id}" target="_blank" rel="noreferrer">recreation.gov ↗</a>`);
+  } else if (p.category === 'federal') {
+    // No id on file — fall back to the filtered search page.
     const recq = encodeURIComponent(p.name);
     links.push(`<a href="https://www.recreation.gov/search?q=${recq}&entity_type=campground&inventory_type=camping" target="_blank" rel="noreferrer">recreation.gov ↗</a>`);
   }

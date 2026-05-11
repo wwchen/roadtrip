@@ -5,3 +5,5 @@ samples/
 node_modules/
 data/pricing-cache/
 .DS_Store
+__pycache__/
+*.pyc
