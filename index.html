@@ -65,6 +65,13 @@
     display: inline-block; padding: 1px 5px; border-radius: 3px; margin-right: 4px;
     background: #eee; font-size: 10px; text-transform: uppercase;
   }
+  .popup .photo {
+    display: block; width: 100%; max-height: 140px; object-fit: cover;
+    border-radius: 4px; margin: 0 0 6px;
+  }
+  .popup .rating { color: #333; font-weight: 600; }
+  .popup .rating .stars { color: #f5a623; letter-spacing: -1px; }
+  .popup .rating .count { color: #777; font-weight: 400; font-size: 11px; margin-left: 3px; }
   #panel .section-label { font-size: 10px; text-transform: uppercase; color: #888; margin: 8px 0 2px; letter-spacing: 0.5px; }
   #panel .section-label:first-of-type { margin-top: 0; }
   #search-wrap { margin-bottom: 8px; position: relative; }
@@ -354,6 +361,12 @@ function formatAge(s) {
   return Math.round(s/86400) + 'd';
 }
 
+// 4.3 → "★★★★☆" — half-stars round down since "½" glyph looks off in many fonts
+function renderStars(v) {
+  const full = Math.round(v);
+  return '★'.repeat(full) + '☆'.repeat(Math.max(0, 5 - full));
+}
+
 const searchIndex = []; // { name, sub, kind, color, lng, lat, zoom, onSelect }
 
 // Rough centroid of any GeoJSON geometry via bbox midpoint — good enough for flyTo.
@@ -498,10 +511,19 @@ initSearch();
 
 // Cached overlay data — populated once by load(), re-applied on every style swap.
 const overlayData = { sc: null, states: null, np: null, sp: null, pf: null, cg: null };
-// Per-layer flag tracks whether click/hover handlers have been bound.
-// These handlers survive map.setStyle(), so we must bind exactly once — but on
-// first load the install functions run BEFORE their data arrives (it's async),
-// so a single module-wide "ready" flag doesn't work.
+
+// Remove a source if present, plus any layers that reference it. Used before
+// re-adding on style.load to avoid "source already exists" errors while still
+// being idempotent.
+function resetOverlay(sourceIds, layerIds) {
+  for (const id of layerIds) if (map.getLayer(id)) map.removeLayer(id);
+  for (const id of sourceIds) if (map.getSource(id)) map.removeSource(id);
+}
+// Per-layer flag tracks whether DOM listeners (input change handlers on panel
+// toggles) have been bound. These live on DOM elements and persist across
+// style swaps, so we bind once. Map-layer-scoped click/hover handlers, by
+// contrast, DO NOT survive setStyle() — MapLibre drops them when the layer
+// is removed — so those get re-bound every style.load inside each install*.
 const bound = { sc: false, np: false, cg: false, pf: false };
 let mapReady = false;
 
@@ -691,7 +713,7 @@ function zoomForBbox(bbox) {
 const CG_COLOR = { federal: '#2e7d32', state: '#558b2f', local: '#9ccc65', other: '#cddc39' };
 
 function installCGLayer(geojson) {
-  if (map.getSource('cg')) return;
+  resetOverlay(['cg'], ['cg-points']);
   map.addSource('cg', { type: 'geojson', data: geojson });
   // Radius scales with campsite count (sqrt), with a clickable floor. Per-zoom
   // stops keep dots clickable even at continental zoom.
@@ -735,26 +757,30 @@ function installCGLayer(geojson) {
   };
   applyCGFilter();
 
-  if (bound.cg) return;
-  bound.cg = true;
-  for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local']) {
-    document.getElementById(id).addEventListener('change', applyCGFilter);
-  }
+  // Layer-scoped map handlers do NOT survive setStyle — always rebind here.
   map.on('click', 'cg-points', (e) => {
     const p = e.features[0].properties;
     let amenities = [];
     try { amenities = JSON.parse(p.amenities); } catch {}
     const amenStr = amenities.join(' · ');
+    let activities = [];
+    try { activities = JSON.parse(p.activities); } catch {}
+    // rating_reviews is [stars, count] on hit, null for "no reviews on file"
+    let rr = null;
+    try { rr = JSON.parse(p.rating_reviews); } catch {}
     const html = `
       <div class="popup">
+        ${p.photo_url ? `<img class="photo" src="${p.photo_url}" alt="" loading="lazy">` : ''}
         <h3>${p.name}</h3>
         <div class="meta">${p.typeLabel}${p.state ? ' · ' + p.state : ''}</div>
+        ${Array.isArray(rr) ? `<div class="rating"><span class="stars">${renderStars(rr[0])}</span> ${rr[0].toFixed(1)}<span class="count">(${rr[1].toLocaleString()})</span></div>` : ''}
         ${p.near ? `<div class="meta">${p.near}</div>` : ''}
         <div style="margin-top:6px">
           ${p.sites ? `<span class="tag">${p.sites} sites</span>` : ''}
           ${p.season ? `<span class="tag">${p.season}</span>` : ''}
         </div>
         ${amenStr ? `<div class="meta" style="margin-top:4px">${amenStr}</div>` : ''}
+        ${activities.length ? `<div class="meta" style="margin-top:4px">${activities.map(a => `<span class="tag">${a}</span>`).join('')}</div>` : ''}
         ${p.phone ? `<div class="meta" style="margin-top:4px">${p.phone}</div>` : ''}
         <div class="meta" style="margin-top:4px">${campgroundLinks(p)}</div>
       </div>`;
@@ -762,6 +788,13 @@ function installCGLayer(geojson) {
       .setLngLat(e.features[0].geometry.coordinates).setHTML(html).addTo(map);
   });
   bindCursor('cg-points');
+
+  if (bound.cg) return;
+  bound.cg = true;
+  // DOM listeners live on checkbox elements — bind once, survive forever.
+  for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local']) {
+    document.getElementById(id).addEventListener('change', applyCGFilter);
+  }
 }
 
 function bindCursor(layerId) {
@@ -786,7 +819,7 @@ function campgroundLinks(p) {
 }
 
 function installStateLines(states) {
-  if (map.getSource('states')) return;
+  resetOverlay(['states'], ['state-lines']);
   map.addSource('states', { type: 'geojson', data: states });
   map.addLayer({
     id: 'state-lines',
@@ -801,7 +834,8 @@ function installStateLines(states) {
 }
 
 function installParkLayers(np, sp) {
-  if (map.getSource('sp')) return;
+  resetOverlay(['np', 'sp', 'np-pts', 'sp-pts'],
+               ['np-fill', 'np-line', 'sp-fill', 'sp-line', 'np-pts', 'sp-pts']);
   // Anchor = first symbol (label) layer, so park fills sit above roads/water
   // but beneath street/city labels. Works with both raster and vector basemaps.
   const firstLabel = map.getStyle().layers.find(l => l.type === 'symbol');
@@ -874,11 +908,6 @@ function installParkLayers(np, sp) {
   };
   applyParkVis();
 
-  if (bound.np) return;
-  bound.np = true;
-  document.getElementById('f-np').addEventListener('change', applyParkVis);
-  document.getElementById('f-sp').addEventListener('change', applyParkVis);
-
   const parkClick = (kind) => (e) => {
     const p = e.features[0].properties;
     const name = p.Unit_Nm || p.Loc_Nm || 'Park';
@@ -902,6 +931,11 @@ function installParkLayers(np, sp) {
   map.on('click', 'np-pts',  parkClick('np'));
   map.on('click', 'sp-pts',  parkClick('sp'));
   for (const id of ['np-fill', 'sp-fill', 'np-pts', 'sp-pts']) bindCursor(id);
+
+  if (bound.np) return;
+  bound.np = true;
+  document.getElementById('f-np').addEventListener('change', applyParkVis);
+  document.getElementById('f-sp').addEventListener('change', applyParkVis);
 }
 
 // Build a reasonable external link for a park by name.
@@ -917,7 +951,7 @@ function externalParkLink(kind, name, state) {
 }
 
 function installPFLayer(geojson) {
-  if (map.getSource('pf')) return;
+  resetOverlay(['pf'], ['pf-points']);
   map.addSource('pf', { type: 'geojson', data: geojson });
   map.addLayer({
     id: 'pf-points',
@@ -936,9 +970,6 @@ function installPFLayer(geojson) {
     document.getElementById('f-pf').checked ? 'visible' : 'none');
   applyPFVis();
 
-  if (bound.pf) return;
-  bound.pf = true;
-  document.getElementById('f-pf').addEventListener('change', applyPFVis);
   map.on('click', 'pf-points', (e) => {
     const f = e.features[0];
     const p = f.properties;
@@ -956,10 +987,14 @@ function installPFLayer(geojson) {
       .setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
   });
   bindCursor('pf-points');
+
+  if (bound.pf) return;
+  bound.pf = true;
+  document.getElementById('f-pf').addEventListener('change', applyPFVis);
 }
 
 function installSCLayer(geojson) {
-  if (map.getSource('sc')) return;
+  resetOverlay(['sc'], ['sc-points']);
   map.addSource('sc', { type: 'geojson', data: geojson });
   map.addLayer({
     id: 'sc-points',
@@ -975,11 +1010,6 @@ function installSCLayer(geojson) {
   });
   updateFilter();
 
-  if (bound.sc) return;
-  bound.sc = true;
-  for (const id of ['f-open','f-construction','f-permit','f-plan','f-closed']) {
-    document.getElementById(id).addEventListener('change', updateFilter);
-  }
   map.on('click', 'sc-points', (e) => {
     const f = e.features[0];
     const p = f.properties;
@@ -1010,6 +1040,12 @@ function installSCLayer(geojson) {
     if (p.locationId) loadPricing(p.locationId, priceId);
   });
   bindCursor('sc-points');
+
+  if (bound.sc) return;
+  bound.sc = true;
+  for (const id of ['f-open','f-construction','f-permit','f-plan','f-closed']) {
+    document.getElementById(id).addEventListener('change', updateFilter);
+  }
 }
 
 load();
