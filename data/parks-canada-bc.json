@@ -9,7 +9,8 @@
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": true,
-      "season": "mid-May to early October"
+      "season": "mid-May to early October",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Monarch Campground",
@@ -17,7 +18,8 @@
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": false,
-      "season": "mid-May to early October"
+      "season": "mid-May to early October",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Hoodoo Creek Campground",
@@ -25,7 +27,8 @@
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": false,
-      "season": "late June to early September"
+      "season": "late June to early September",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Chancellor Peak Campground",
@@ -33,7 +36,8 @@
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": false,
-      "season": "mid-May to early October"
+      "season": "mid-May to early October",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Takakkaw Falls Walk-in Campground",
@@ -41,7 +45,8 @@
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": false,
-      "season": "late June to early October"
+      "season": "late June to early October",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Redstreak Campground",
@@ -49,7 +54,8 @@
       "park": "Kootenay National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/kootenay",
       "reservable": true,
-      "season": "early May to early October"
+      "season": "early May to early October",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "McLeod Meadows Campground",
@@ -57,7 +63,8 @@
       "park": "Kootenay National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/kootenay",
       "reservable": true,
-      "season": "late May to mid-September"
+      "season": "late May to mid-September",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Marble Canyon Campground",
@@ -65,7 +72,8 @@
       "park": "Kootenay National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/kootenay",
       "reservable": false,
-      "season": "late June to early September"
+      "season": "late June to early September",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Illecillewaet Campground",
@@ -73,7 +81,8 @@
       "park": "Glacier National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/glacier",
       "reservable": false,
-      "season": "late June to late September"
+      "season": "late June to late September",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Loop Brook Campground",
@@ -81,7 +90,8 @@
       "park": "Glacier National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/glacier",
       "reservable": false,
-      "season": "late June to late September"
+      "season": "late June to late September",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Mount Sir Donald Campground",
@@ -89,7 +99,8 @@
       "park": "Glacier National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/glacier",
       "reservable": false,
-      "season": "late June to late September"
+      "season": "late June to late September",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Snowforest Campground",
@@ -97,7 +108,8 @@
       "park": "Mount Revelstoke National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/revelstoke",
       "reservable": true,
-      "season": "mid-June to early September"
+      "season": "mid-June to early September",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Green Point Campground",
@@ -105,7 +117,8 @@
       "park": "Pacific Rim National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/pacificrim",
       "reservable": true,
-      "season": "mid-March to mid-October"
+      "season": "mid-March to mid-October",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Smonećten (McDonald) Campground",
@@ -113,7 +126,8 @@
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": true,
-      "season": "mid-May to mid-October"
+      "season": "mid-May to mid-October",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Prior Centennial Campground",
@@ -121,7 +135,8 @@
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": true,
-      "season": "mid-May to mid-October"
+      "season": "mid-May to mid-October",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Sidney Spit Campground",
@@ -129,7 +144,8 @@
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": true,
-      "season": "mid-May to mid-September (boat/ferry access)"
+      "season": "mid-May to mid-September (boat/ferry access)",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Beaumont Marine Provincial Park Campground",
@@ -137,7 +153,8 @@
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": false,
-      "season": "year-round (boat access, South Pender Island)"
+      "season": "year-round (boat access, South Pender Island)",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Prevost Island (James Bay)",
@@ -145,7 +162,8 @@
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": false,
-      "season": "year-round (boat access)"
+      "season": "year-round (boat access)",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "Portland Island (Princess Bay)",
@@ -153,7 +171,8 @@
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": false,
-      "season": "year-round (boat access)"
+      "season": "year-round (boat access)",
+      "last_verified": "2026-05-11"
     },
     {
       "name": "D'Arcy Island",
@@ -161,7 +180,8 @@
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": false,
-      "season": "year-round (boat access)"
+      "season": "year-round (boat access)",
+      "last_verified": "2026-05-11"
     }
   ]
 }

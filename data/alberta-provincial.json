@@ -10,7 +10,8 @@
       "park": "Peter Lougheed Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/peter-lougheed-pp",
       "reservable": true,
-      "season": "mid-May to early October"
+      "season": "mid-May to early October",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Elkwood Campground",
@@ -18,7 +19,8 @@
       "park": "Peter Lougheed Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/peter-lougheed-pp",
       "reservable": true,
-      "season": "mid-May to early October"
+      "season": "mid-May to early October",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Lower Lake Campground",
@@ -26,7 +28,8 @@
       "park": "Peter Lougheed Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/peter-lougheed-pp",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Interlakes Campground",
@@ -34,7 +37,8 @@
       "park": "Peter Lougheed Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/peter-lougheed-pp",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Canyon Campground",
@@ -42,7 +46,8 @@
       "park": "Peter Lougheed Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/peter-lougheed-pp",
       "reservable": true,
-      "season": "late June to early September"
+      "season": "late June to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Mount Sarrail Campground",
@@ -50,7 +55,8 @@
       "park": "Peter Lougheed Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/peter-lougheed-pp",
       "reservable": true,
-      "season": "mid-June to early September; tent-only"
+      "season": "mid-June to early September; tent-only",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -59,7 +65,8 @@
       "park": "Bow Valley Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/bow-valley-pp",
       "reservable": true,
-      "season": "early May to early October"
+      "season": "early May to early October",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Willow Rock Campground",
@@ -67,7 +74,8 @@
       "park": "Bow Valley Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/bow-valley-pp",
       "reservable": true,
-      "season": "year-round"
+      "season": "year-round",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Three Sisters Campground",
@@ -75,7 +83,8 @@
       "park": "Bow Valley Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/bow-valley-pp",
       "reservable": true,
-      "season": "mid-May to early September; group-only"
+      "season": "mid-May to early September; group-only",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -84,7 +93,8 @@
       "park": "Spray Valley Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/spray-valley-pp",
       "reservable": true,
-      "season": "mid-May to mid-September"
+      "season": "mid-May to mid-September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Spray Lake East Campground",
@@ -92,7 +102,8 @@
       "park": "Spray Valley Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/spray-valley-pp",
       "reservable": false,
-      "season": "mid-May to mid-September"
+      "season": "mid-May to mid-September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Driftwood Campground",
@@ -100,7 +111,8 @@
       "park": "Spray Valley Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/spray-valley-pp",
       "reservable": false,
-      "season": "mid-May to mid-September"
+      "season": "mid-May to mid-September",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -109,7 +121,8 @@
       "park": "Kananaskis Country",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/kananaskis-country",
       "reservable": true,
-      "season": "year-round"
+      "season": "year-round",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Sundance Lodges Campground",
@@ -117,7 +130,8 @@
       "park": "Kananaskis Country",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/kananaskis-country",
       "reservable": true,
-      "season": "mid-May to early October"
+      "season": "mid-May to early October",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Eau Claire Campground",
@@ -125,7 +139,8 @@
       "park": "Kananaskis Country",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/kananaskis-country",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Pine Grove Campground",
@@ -133,7 +148,8 @@
       "park": "Kananaskis Country",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/kananaskis-country",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Mount Lorette Campground",
@@ -141,7 +157,8 @@
       "park": "Kananaskis Country",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/kananaskis-country",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "McLean Creek Campground",
@@ -149,7 +166,8 @@
       "park": "Kananaskis Country",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/kananaskis-country",
       "reservable": true,
-      "season": "year-round"
+      "season": "year-round",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Sibbald Lake Campground",
@@ -157,7 +175,8 @@
       "park": "Kananaskis Country",
       "park_url": "https://www.albertaparks.ca/parks/kananaskis/kananaskis-country",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -166,7 +185,8 @@
       "park": "David Thompson Country",
       "park_url": "https://www.albertaparks.ca/parks/central/david-thompson-corridor",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Crescent Falls Campground",
@@ -174,7 +194,8 @@
       "park": "Bighorn Wildland",
       "park_url": "https://www.albertaparks.ca/parks/central/david-thompson-corridor",
       "reservable": false,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -183,7 +204,8 @@
       "park": "Beauvais Lake Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/south/beauvais-lake-pp",
       "reservable": true,
-      "season": "early May to early October"
+      "season": "early May to early October",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Castle Falls Campground",
@@ -191,7 +213,8 @@
       "park": "Castle Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/south/castle-pp",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Beaver Mines Lake Campground",
@@ -199,7 +222,8 @@
       "park": "Castle Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/south/castle-pp",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Castle River Bridge Campground",
@@ -207,7 +231,8 @@
       "park": "Castle Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/south/castle-pp",
       "reservable": false,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -216,7 +241,8 @@
       "park": "Cypress Hills Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/south/cypress-hills-pp",
       "reservable": true,
-      "season": "mid-May to early October"
+      "season": "mid-May to early October",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Cypress Hills Reesor Lake Campground",
@@ -224,7 +250,8 @@
       "park": "Cypress Hills Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/south/cypress-hills-pp",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Battle Park Campground",
@@ -232,7 +259,8 @@
       "park": "Cypress Hills Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/south/cypress-hills-pp",
       "reservable": false,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -241,7 +269,8 @@
       "park": "Aspen Beach Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/central/aspen-beach-pp",
       "reservable": true,
-      "season": "early May to early October"
+      "season": "early May to early October",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -250,7 +279,8 @@
       "park": "Pigeon Lake Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/central/pigeon-lake-pp",
       "reservable": true,
-      "season": "mid-May to early October"
+      "season": "mid-May to early October",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -259,7 +289,8 @@
       "park": "Crimson Lake Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/central/crimson-lake-pp",
       "reservable": true,
-      "season": "early May to early October"
+      "season": "early May to early October",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -268,7 +299,8 @@
       "park": "Dinosaur Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/south/dinosaur-pp",
       "reservable": true,
-      "season": "early May to early October"
+      "season": "early May to early October",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Writing-on-Stone Campground",
@@ -276,7 +308,8 @@
       "park": "Writing-on-Stone Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/south/writing-on-stone-pp",
       "reservable": true,
-      "season": "early May to early October"
+      "season": "early May to early October",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -285,7 +318,8 @@
       "park": "Two Rivers Recreation Area",
       "park_url": "https://www.albertaparks.ca/parks/central/two-rivers-ra",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Long Lake Provincial Park Campground",
@@ -293,7 +327,8 @@
       "park": "Long Lake Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/central/long-lake-pp",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "William A. Switzer Campground",
@@ -301,7 +336,8 @@
       "park": "William A. Switzer Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/central/wm-a-switzer-pp",
       "reservable": true,
-      "season": "early May to early October"
+      "season": "early May to early October",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -310,7 +346,8 @@
       "park": "Carson-Pegasus Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/central/carson-pegasus-pp",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     },
 
     {
@@ -319,7 +356,8 @@
       "park": "Wabamun Lake Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/central/wabamun-lake-pp",
       "reservable": true,
-      "season": "mid-May to early October"
+      "season": "mid-May to early October",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Miquelon Lake Provincial Park Campground",
@@ -327,7 +365,8 @@
       "park": "Miquelon Lake Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/central/miquelon-lake-pp",
       "reservable": true,
-      "season": "early May to early October"
+      "season": "early May to early October",
+      "last_verified": "2026-06-03"
     },
     {
       "name": "Gregoire Lake Campground",
@@ -335,7 +374,8 @@
       "park": "Gregoire Lake Provincial Park",
       "park_url": "https://www.albertaparks.ca/parks/north/gregoire-lake-pp",
       "reservable": true,
-      "season": "mid-May to early September"
+      "season": "mid-May to early September",
+      "last_verified": "2026-06-03"
     }
   ]
 }
