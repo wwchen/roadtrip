@@ -144,6 +144,15 @@ class PoiRoutesTest {
     }
 
     @Test
+    fun `antimeridian-crossing bbox is rejected with 400`() = testApplication {
+        // west=170, east=-170 (the bbox wraps the antimeridian). PostGIS
+        // ST_MakeEnvelope can't express a wrapping envelope without splitting,
+        // so we reject at the API layer instead of returning misleading rows.
+        application { routing { poiRoutes(ctx) } }
+        assertEquals(HttpStatusCode.BadRequest, client.get("/api/pois?bbox=170,-10,-170,10").status)
+    }
+
+    @Test
     fun `health route still serves`() = testApplication {
         application { routing { poiRoutes(ctx) } }
         assertEquals(HttpStatusCode.OK, client.get("/api/pois/health").status)
