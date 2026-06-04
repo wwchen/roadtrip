@@ -1,0 +1,54 @@
+#!/usr/bin/env bash
+#
+# Mirror of refresh-cookies-remote.sh but writes cookies into THIS repo's
+# .env instead of pushing to the mini. Use when iterating on a script that
+# runs in local Docker (e.g. fetch_tesla_superchargers.py smoke tests).
+#
+# Akamai binds _abck to the egress IP that minted it, so cookies captured
+# here only work for fetches that egress from this laptop's IP. That matches
+# `docker run` on the laptop. If you Tailscale-exit through the mini,
+# capture there instead via `make refresh-cookies`.
+#
+# Usage: open tesla.com/findus in Chrome/Safari, click any Supercharger,
+#   DevTools → Network → right-click get-charger-details → Copy as cURL,
+#   then run this script.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+if ! command -v pbpaste >/dev/null 2>&1; then
+  echo "error: pbpaste not found (this script expects macOS)" >&2
+  exit 1
+fi
+
+curl_input="$(pbpaste)"
+if [[ "$curl_input" != *"curl"* ]]; then
+  echo "error: clipboard doesn't look like a cURL blob (no 'curl' token found)." >&2
+  echo "       Open tesla.com/findus → click a Supercharger →" >&2
+  echo "       DevTools Network → right-click get-charger-details → Copy as cURL." >&2
+  exit 1
+fi
+
+cookies="$(printf '%s' "$curl_input" | python3 scripts/extract-cookies.py)" || exit 1
+echo "✓ Extracted cookies (${#cookies} chars)"
+
+if ! [[ "$cookies" == *"_abck="* ]] || \
+   ! [[ "$cookies" == *"ak_bmsc="* || "$cookies" == *"bm_sc="* || "$cookies" == *"bm_sz="* ]]; then
+  echo "⚠  Missing _abck or bm_*/ak_bmsc — this may not be a findus cURL."
+  read -r -p "   Write anyway? [y/N] " yn
+  [[ "$yn" == "y" || "$yn" == "Y" ]] || exit 1
+fi
+
+tmp=$(mktemp)
+grep -v '^TESLA_COOKIES=' .env > "$tmp" || true
+printf 'TESLA_COOKIES=%s\n' "$cookies" >> "$tmp"
+mv "$tmp" .env
+chmod 600 .env
+echo "✓ wrote .env (TESLA_COOKIES=${#cookies} chars)"
+echo
+echo "Test now:"
+echo "  docker run --rm --env-file .env \\"
+echo "    -v \"\$(pwd)/data:/app/data\" -v \"\$(pwd)/scripts:/app/scripts\" \\"
+echo "    -v \"\$(pwd)/server.py:/app/server.py\" \\"
+echo "    roadtrip-map:local python3 /app/scripts/fetch_tesla_superchargers.py --limit 3"

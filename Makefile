@@ -1,4 +1,4 @@
-.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies
+.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -12,6 +12,9 @@ help:
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, docker compose up"
 	@echo "  make deploy-local     Build+run app + cloudflared here (no ssh)"
 	@echo "  make refresh-cookies  Push Tesla cookies from clipboard → $(DEPLOY_HOST) (Tailscale exit node recommended)"
+	@echo "  make refresh-cookies-local  Mint cookies into THIS repo's .env (laptop-only egress)"
+	@echo "  make rebuild-superchargers  Rebuild geojson from cache, no network (~30s)"
+	@echo "  make refresh-superchargers  Full Tesla refresh: bulk feed + per-site (~25 min)"
 	@echo "  make stop             Stop all compose services locally"
 
 run:
@@ -43,3 +46,31 @@ stop:
 # and restart the app container.
 refresh-cookies:
 	@scripts/refresh-cookies-remote.sh "$(DEPLOY_HOST)" "$(DEPLOY_USER)" "$(DEPLOY_DIR)"
+
+# Same flow but writes cookies into THIS repo's .env. Use when iterating on a
+# script that runs in local Docker (e.g. fetch_tesla_superchargers.py). Cookies
+# are bound to this laptop's egress IP so they only work locally — production
+# still needs `make refresh-cookies`.
+refresh-cookies-local:
+	@scripts/refresh-cookies-local.sh
+
+# Cache-first idempotent rebuild of data/tesla-superchargers.geojson. After a
+# full run has populated data/pricing-cache/, this is fast (~30s for ~1300
+# cache hits) and produces a deterministic geojson.
+rebuild-superchargers:
+	docker run --rm --env-file .env \
+	  -v "$(PWD)/data:/app/data" \
+	  -v "$(PWD)/scripts:/app/scripts" \
+	  -v "$(PWD)/server.py:/app/server.py" \
+	  roadtrip-map:local python3 /app/scripts/fetch_tesla_superchargers.py --no-fetch
+
+# Full network refresh of Tesla data — both the bulk get-locations feed and
+# every per-site get-charger-details. Network-bound (~1 req/sec, ~25 min).
+# Re-running is safe: cache hits skip the network entirely. Tomorrow you can
+# just `make refresh-superchargers` and walk away.
+refresh-superchargers:
+	docker run --rm --env-file .env \
+	  -v "$(PWD)/data:/app/data" \
+	  -v "$(PWD)/scripts:/app/scripts" \
+	  -v "$(PWD)/server.py:/app/server.py" \
+	  roadtrip-map:local python3 /app/scripts/fetch_tesla_superchargers.py

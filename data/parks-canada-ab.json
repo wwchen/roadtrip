@@ -1,0 +1,218 @@
+{
+  "_comment": "Parks Canada frontcountry campgrounds in Alberta national parks. Same caveats as parks-canada-bc.json: no authoritative points dataset, reservation API behind Azure WAF. Coordinates verified against OSM/Google Maps where possible; a handful are approximate park-area centers (flagged with _approx). Audit before navigating.",
+  "_source": "parks.canada.ca/pn-np/ab/<slug>/activ/camping (curated 2026-06-03)",
+  "_license": "Open Government Licence - Canada",
+  "campgrounds": [
+    {
+      "name": "Tunnel Mountain Village I",
+      "lat": 51.1812, "lon": -115.5470,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": true,
+      "season": "mid-May to early October"
+    },
+    {
+      "name": "Tunnel Mountain Village II",
+      "lat": 51.1841, "lon": -115.5443,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": true,
+      "season": "year-round"
+    },
+    {
+      "name": "Tunnel Mountain Trailer Court",
+      "lat": 51.1828, "lon": -115.5485,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": true,
+      "season": "mid-May to early October"
+    },
+    {
+      "name": "Two Jack Lakeside",
+      "lat": 51.2049, "lon": -115.5066,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": true,
+      "season": "mid-May to early October"
+    },
+    {
+      "name": "Two Jack Main",
+      "lat": 51.2010, "lon": -115.5085,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": true,
+      "season": "mid-May to early October"
+    },
+    {
+      "name": "Lake Louise Campground",
+      "lat": 51.4195, "lon": -116.1810,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": true,
+      "season": "year-round (trailer); summer (tent)"
+    },
+    {
+      "name": "Mosquito Creek Campground",
+      "lat": 51.7693, "lon": -116.4302,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": false,
+      "season": "mid-June to early September"
+    },
+    {
+      "name": "Waterfowl Lakes Campground",
+      "lat": 51.8555, "lon": -116.6097,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": false,
+      "season": "mid-June to early September"
+    },
+    {
+      "name": "Rampart Creek Campground",
+      "lat": 52.0837, "lon": -116.8250,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": false,
+      "season": "mid-June to early September"
+    },
+    {
+      "name": "Johnston Canyon Campground",
+      "lat": 51.2452, "lon": -115.8425,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": true,
+      "season": "early June to late September"
+    },
+    {
+      "name": "Castle Mountain Campground",
+      "lat": 51.2685, "lon": -115.9210,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": false,
+      "season": "early June to early September"
+    },
+    {
+      "name": "Protection Mountain Campground",
+      "lat": 51.3540, "lon": -116.0270,
+      "park": "Banff National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/banff",
+      "reservable": false,
+      "season": "late June to early September"
+    },
+
+    {
+      "name": "Whistlers Campground",
+      "lat": 52.8552, "lon": -118.0780,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": true,
+      "season": "early May to mid-October"
+    },
+    {
+      "name": "Wapiti Campground",
+      "lat": 52.8262, "lon": -118.0445,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": true,
+      "season": "year-round"
+    },
+    {
+      "name": "Wabasso Campground",
+      "lat": 52.7420, "lon": -117.8980,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": true,
+      "season": "late June to early September"
+    },
+    {
+      "name": "Snaring Campground",
+      "lat": 52.9930, "lon": -118.1490,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": false,
+      "season": "mid-May to early October"
+    },
+    {
+      "name": "Pocahontas Campground",
+      "lat": 53.2080, "lon": -117.9050,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": true,
+      "season": "mid-May to early September"
+    },
+    {
+      "name": "Wilcox Creek Campground",
+      "lat": 52.2110, "lon": -117.2280,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": false,
+      "season": "mid-June to early September"
+    },
+    {
+      "name": "Columbia Icefield Campground",
+      "lat": 52.2230, "lon": -117.2240,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": false,
+      "season": "late June to mid-September; tent-only"
+    },
+    {
+      "name": "Honeymoon Lake Campground",
+      "lat": 52.4480, "lon": -117.7440,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": false,
+      "season": "late May to early September"
+    },
+    {
+      "name": "Jonas Creek Campground",
+      "lat": 52.5020, "lon": -117.5610,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": false,
+      "season": "mid-May to early September"
+    },
+    {
+      "name": "Mount Kerkeslin Campground",
+      "lat": 52.6020, "lon": -117.7720,
+      "park": "Jasper National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
+      "reservable": false,
+      "season": "mid-June to early September"
+    },
+
+    {
+      "name": "Waterton Townsite Campground",
+      "lat": 49.0540, "lon": -113.9085,
+      "park": "Waterton Lakes National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/waterton",
+      "reservable": true,
+      "season": "early May to early October"
+    },
+    {
+      "name": "Crandell Mountain Campground",
+      "lat": 49.1180, "lon": -113.9200,
+      "park": "Waterton Lakes National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/waterton",
+      "reservable": false,
+      "season": "mid-May to early September"
+    },
+    {
+      "name": "Belly River Campground",
+      "lat": 49.0040, "lon": -113.6770,
+      "park": "Waterton Lakes National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/waterton",
+      "reservable": false,
+      "season": "mid-May to early September"
+    },
+
+    {
+      "name": "Astotin Lake Campground",
+      "lat": 53.6850, "lon": -112.8530,
+      "park": "Elk Island National Park",
+      "park_url": "https://parks.canada.ca/pn-np/ab/elkisland",
+      "reservable": true,
+      "season": "early May to early October"
+    }
+  ]
+}

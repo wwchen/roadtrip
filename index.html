@@ -54,16 +54,96 @@
     display: inline-block; width: 10px; height: 10px; border-radius: 50%;
     margin-right: 6px; vertical-align: middle; border: 1px solid rgba(0,0,0,0.3);
   }
-  .maplibregl-popup-content { max-width: calc(100vw - 40px) !important; }
-  .popup { font-size: 12px; line-height: 1.45; }
-  @media (max-width: 640px) {
-    .popup { font-size: 13px; line-height: 1.55; }
+  /* Bottom-right geolocate control: respect home-bar safe area on iPhone. */
+  .maplibregl-ctrl-bottom-right {
+    bottom: max(20px, env(safe-area-inset-bottom));
+    right: max(10px, env(safe-area-inset-right));
   }
-  .popup h3 { margin: 0 0 4px; font-size: 13px; }
+  .maplibregl-ctrl-bottom-right .maplibregl-ctrl-group button {
+    width: 44px; height: 44px;
+  }
+  .geo-banner {
+    position: absolute; left: 50%; transform: translateX(-50%);
+    bottom: calc(max(20px, env(safe-area-inset-bottom)) + 56px);
+    background: rgba(40, 40, 40, 0.92); color: #fff;
+    padding: 8px 14px; border-radius: 18px;
+    font-size: 13px; z-index: 3;
+    max-width: calc(100vw - 32px);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
+  }
+  /* Popup: bottom-sheet style for one-handed iPhone reach. anchor='bottom' is
+     set on the Popup constructor; the CSS just makes it scroll-friendly and
+     bumps the type scale from the prior 12-13px to 14-17px. */
+  .maplibregl-popup-content {
+    max-width: calc(100vw - 24px) !important;
+    max-height: 60vh; overflow-y: auto;
+    touch-action: pan-y; overscroll-behavior: contain;
+    padding: 14px 16px 12px;
+    border-radius: 10px;
+  }
+  .maplibregl-popup-close-button {
+    width: 44px; height: 44px; font-size: 22px;
+    line-height: 44px; padding: 0; right: 0; top: 0;
+  }
+  .popup { font-size: 14px; line-height: 1.45; color: #222; }
+  .popup h3 { margin: 0 0 2px; font-size: 16px; font-weight: 600; line-height: 1.25; padding-right: 32px; }
+  .popup .sub { color: #666; font-size: 13px; margin-bottom: 8px; }
   .popup .meta { color: #555; }
+  .popup .verdict {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 15px; font-weight: 500;
+    margin: 8px 0; padding: 6px 0;
+  }
+  .popup .verdict::before {
+    content: ''; display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: currentColor;
+  }
+  .popup .verdict.open  { color: #1b5e20; }
+  .popup .verdict.closed { color: #b71c1c; }
+  .popup .verdict.fcfs   { color: #5d4037; }
+  .popup .actions { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+  .popup .btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 100%; box-sizing: border-box;
+    padding: 0 14px; height: 48px;
+    border-radius: 8px;
+    font-size: 16px; font-weight: 600;
+    text-decoration: none;
+    -webkit-tap-highlight-color: rgba(0,0,0,0.1);
+  }
+  .popup .btn-primary { background: #1b5e20; color: #fff; }
+  .popup .btn-primary:active { background: #154d18; }
+  .popup .btn-secondary {
+    background: #f5f5f5; color: #222;
+    height: 44px;
+    border: 1px solid #ddd;
+  }
+  .popup .btn-secondary:active { background: #e8e8e8; }
+  .popup .btn-disabled {
+    background: #f5f5f5; color: #999;
+    height: 44px; border: 1px solid #eee;
+    cursor: not-allowed;
+  }
+  .popup .pills {
+    display: flex; flex-wrap: wrap; gap: 4px 6px;
+    margin: 8px 0;
+  }
+  .popup .pill {
+    display: inline-block; padding: 3px 9px;
+    background: #eef1f4; color: #333;
+    border-radius: 12px;
+    font-size: 12px; font-weight: 500;
+  }
+  .popup .footer {
+    margin-top: 8px; padding-top: 8px;
+    border-top: 1px solid #eee;
+    color: #888; font-size: 11px;
+  }
+  .popup .footer.warn { color: #e65100; font-weight: 500; }
   .popup .tag {
     display: inline-block; padding: 1px 5px; border-radius: 3px; margin-right: 4px;
-    background: #eee; font-size: 10px; text-transform: uppercase;
+    background: #eee; font-size: 11px; text-transform: uppercase;
   }
   .popup .photo {
     display: block; width: 100%; max-height: 140px; object-fit: cover;
@@ -71,14 +151,14 @@
   }
   .popup .rating { color: #333; font-weight: 600; }
   .popup .rating .stars { color: #f5a623; letter-spacing: -1px; }
-  .popup .rating .count { color: #777; font-weight: 400; font-size: 11px; margin-left: 3px; }
+  .popup .rating .count { color: #777; font-weight: 400; font-size: 12px; margin-left: 3px; }
   .popup .cell { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
   .popup .cell-pill {
     display: inline-flex; align-items: baseline; gap: 3px;
-    padding: 1px 6px; border-radius: 10px;
-    font-size: 10px; font-weight: 600; color: #fff; line-height: 1.5;
+    padding: 2px 7px; border-radius: 10px;
+    font-size: 11px; font-weight: 600; color: #fff; line-height: 1.5;
   }
-  .popup .cell-pill .carrier { font-size: 9px; opacity: 0.9; }
+  .popup .cell-pill .carrier { font-size: 10px; opacity: 0.9; }
   .popup .cell-pill .val { font-variant-numeric: tabular-nums; }
   /* 0-4 scale: 0 = none (dark red), 1 = major issues (red), 2 = some (amber),
      3 = good (green), 4 = excellent (deep green) */
@@ -96,6 +176,14 @@
     font-family: inherit;
   }
   #search:focus { outline: none; border-color: #666; }
+  #sort-nearest-row {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 4px; font-size: 11px; color: #555;
+  }
+  #sort-nearest-row.disabled { color: #aaa; }
+  #sort-nearest-row label { cursor: pointer; }
+  #sort-nearest-row.disabled label { cursor: default; }
+  .sr-dist { color: #1b5e20; font-size: 11px; margin-left: 4px; font-variant-numeric: tabular-nums; }
   #search-results {
     position: absolute; left: 0; right: 0; top: 100%;
     max-height: 260px; overflow-y: auto;
@@ -125,6 +213,10 @@
   <div id="search-wrap">
     <input type="search" id="search" placeholder="Search parks, chargers, gyms…" autocomplete="off">
     <div id="search-results"></div>
+    <div id="sort-nearest-row" class="disabled">
+      <input type="checkbox" id="sort-nearest" disabled>
+      <label for="sort-nearest">Sort by nearest (location off)</label>
+    </div>
   </div>
   <div class="section-label">Superchargers</div>
   <div><label><input type="checkbox" id="f-open" checked><span class="legend-dot" style="background:#e82127"></span>Open <span class="count" id="c-open"></span></label></div>
@@ -139,7 +231,7 @@
   <div class="section-label">Campgrounds <span id="cg-load-hint" style="text-transform:none; color:#999; letter-spacing:0;">(zoom in to load)</span></div>
   <div><label><input type="checkbox" id="f-cg-federal" checked><span class="legend-dot" style="background:#2e7d32"></span>Federal (US) <span class="count" id="c-cg-federal"></span></label></div>
   <div><label><input type="checkbox" id="f-cg-state"><span class="legend-dot" style="background:#558b2f"></span>State <span class="count" id="c-cg-state"></span></label></div>
-  <div><label><input type="checkbox" id="f-cg-provincial" checked><span class="legend-dot" style="background:#2e7d32; border-color:#1b5e20;"></span>BC Provincial <span class="count" id="c-cg-provincial"></span></label></div>
+  <div><label><input type="checkbox" id="f-cg-provincial" checked><span class="legend-dot" style="background:#2e7d32; border-color:#1b5e20;"></span>BC/AB Provincial <span class="count" id="c-cg-provincial"></span></label></div>
   <div><label><input type="checkbox" id="f-cg-local"><span class="legend-dot" style="background:#9ccc65"></span>Local <span class="count" id="c-cg-local"></span></label></div>
   <div class="section-label">Other</div>
   <div><label><input type="checkbox" id="f-pf" checked><span class="legend-dot" style="background:#7b4bb5"></span>Planet Fitness <span class="count" id="c-pf"></span></label></div>
@@ -222,12 +314,103 @@ const map = new maplibregl.Map({
 });
 
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
-map.addControl(new maplibregl.GeolocateControl({
-  positionOptions: { enableHighAccuracy: true },
-  trackUserLocation: true,
-  showUserHeading: true,
+// enableHighAccuracy:false: at 50km decision scale we don't need GPS warm-up
+// + battery drain. trackUserLocation:false: single fetch, no watchPosition.
+const geolocate = new maplibregl.GeolocateControl({
+  positionOptions: { enableHighAccuracy: false, timeout: 8000 },
+  trackUserLocation: false,
+  showUserHeading: false,
   fitBoundsOptions: { maxZoom: 13 },
-}), 'top-right');
+});
+map.addControl(geolocate, 'bottom-right');
+
+// Only one popup at a time. MapLibre's closeOnClick fires on background-map
+// clicks, but feature-layer clicks are consumed by the layer handler before
+// the popup sees them — without this, tapping dot A then dot B leaves both
+// popups open and overlapping.
+let activePopup = null;
+function openPopup({ lngLat, html, maxWidth = 'min(360px, calc(100vw - 24px))' }) {
+  if (activePopup) { activePopup.remove(); activePopup = null; }
+  const popup = new maplibregl.Popup({
+    closeButton: true,
+    anchor: 'bottom',
+    maxWidth,
+    offset: 12,
+  });
+  popup.on('close', () => { if (activePopup === popup) activePopup = null; });
+  popup.setLngLat(lngLat).setHTML(html).addTo(map);
+  activePopup = popup;
+  return popup;
+}
+
+// Single source of truth for "where am I" — popups read this for distance,
+// search uses it for "sort by nearest". null until first geolocate success.
+let userLocation = null;
+let userLocationMarker = null;
+geolocate.on('geolocate', (e) => {
+  userLocation = { lng: e.coords.longitude, lat: e.coords.latitude };
+  hideGeoBanner();
+  showUserLocationMarker(userLocation.lng, userLocation.lat);
+  if (typeof rerenderSearchResults === 'function') rerenderSearchResults();
+});
+geolocate.on('error', (e) => {
+  userLocation = null;
+  // PERMISSION_DENIED=1; POSITION_UNAVAILABLE=2; TIMEOUT=3
+  const msg = e?.code === 1
+    ? 'Location permission denied — turn on in Settings to use "nearest to me"'
+    : 'Couldn\'t get your location';
+  showGeoBanner(msg);
+  if (typeof rerenderSearchResults === 'function') rerenderSearchResults();
+});
+
+// Custom user-location puck: 14px blue dot, 3px white stroke, 28px halo at
+// 0.18 opacity. We render it ourselves because trackUserLocation:false means
+// MapLibre's built-in puck only flashes briefly during the single fetch.
+function showUserLocationMarker(lng, lat) {
+  if (!userLocationMarker) {
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'position:relative;width:28px;height:28px;pointer-events:none;';
+    wrap.innerHTML =
+      '<div style="position:absolute;inset:0;border-radius:50%;background:#0A84FF;opacity:0.18;"></div>' +
+      '<div style="position:absolute;left:50%;top:50%;width:14px;height:14px;margin:-7px 0 0 -7px;border-radius:50%;background:#0A84FF;border:3px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.3);"></div>';
+    userLocationMarker = new maplibregl.Marker({ element: wrap, anchor: 'center' });
+  }
+  userLocationMarker.setLngLat([lng, lat]).addTo(map);
+}
+
+let geoBannerEl = null;
+let geoBannerTimer = null;
+function showGeoBanner(msg) {
+  if (!geoBannerEl) {
+    geoBannerEl = document.createElement('div');
+    geoBannerEl.className = 'geo-banner';
+    document.body.appendChild(geoBannerEl);
+  }
+  geoBannerEl.textContent = msg;
+  geoBannerEl.style.display = 'block';
+  clearTimeout(geoBannerTimer);
+  geoBannerTimer = setTimeout(hideGeoBanner, 5000);
+}
+function hideGeoBanner() {
+  if (geoBannerEl) geoBannerEl.style.display = 'none';
+}
+
+// Haversine in km. Used for distance-from-me in popups + sort-by-nearest.
+function distanceKm(lat1, lon1, lat2, lon2) {
+  const R = 6371;
+  const toRad = (d) => d * Math.PI / 180;
+  const dLat = toRad(lat2 - lat1);
+  const dLon = toRad(lon2 - lon1);
+  const a = Math.sin(dLat / 2) ** 2 +
+            Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+            Math.sin(dLon / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+function formatDistance(km) {
+  if (km < 1) return Math.round(km * 1000) + ' m away';
+  if (km < 10) return km.toFixed(1) + ' km away';
+  return Math.round(km) + ' km away';
+}
 
 // Basemap picker
 (function initBasemapPicker() {
@@ -465,6 +648,9 @@ function fitAndSelect(item) {
 function initSearch() {
   const input = document.getElementById('search');
   const out = document.getElementById('search-results');
+  const sortRow = document.getElementById('sort-nearest-row');
+  const sortCheckbox = document.getElementById('sort-nearest');
+  const sortLabel = sortRow.querySelector('label');
   let activeIdx = -1;
   let current = [];
 
@@ -472,11 +658,13 @@ function initSearch() {
     current = items;
     activeIdx = -1;
     if (!items.length) { out.classList.remove('open'); out.innerHTML = ''; return; }
-    out.innerHTML = items.map((it, i) =>
-      `<div class="sr-item" data-i="${i}">
+    out.innerHTML = items.map((it, i) => {
+      const distHtml = (it._distKm != null) ? `<span class="sr-dist">${formatDistance(it._distKm)}</span>` : '';
+      return `<div class="sr-item" data-i="${i}">
          <span class="sr-kind" style="background:${it.color}">${it.kind}</span>
-         ${it.name}${it.sub ? ` <span class="sr-sub">${it.sub}</span>` : ''}
-       </div>`).join('');
+         ${it.name}${it.sub ? ` <span class="sr-sub">${it.sub}</span>` : ''}${distHtml}
+       </div>`;
+    }).join('');
     out.classList.add('open');
   };
 
@@ -484,17 +672,54 @@ function initSearch() {
     const q = input.value.trim().toLowerCase();
     if (q.length < 2) { render([]); return; }
     const terms = q.split(/\s+/);
+    const sortByNearest = !!(userLocation && sortCheckbox.checked);
     const scored = [];
     for (const it of searchIndex) {
       const hay = (it.name + ' ' + (it.sub || '')).toLowerCase();
       if (!terms.every(t => hay.includes(t))) continue;
-      // Score: earlier match in name = better
       const pos = it.name.toLowerCase().indexOf(q);
-      scored.push({ it, score: pos < 0 ? 500 : pos });
+      const nameScore = pos < 0 ? 500 : pos;
+      let distKm = null;
+      if (userLocation && Number.isFinite(it.lat) && Number.isFinite(it.lng)) {
+        distKm = distanceKm(userLocation.lat, userLocation.lng, it.lat, it.lng);
+      }
+      scored.push({ it, nameScore, distKm });
     }
-    scored.sort((a, b) => a.score - b.score);
-    render(scored.slice(0, 20).map(s => s.it));
+    if (sortByNearest) {
+      scored.sort((a, b) => {
+        const ad = a.distKm == null ? Infinity : a.distKm;
+        const bd = b.distKm == null ? Infinity : b.distKm;
+        if (ad !== bd) return ad - bd;
+        return a.nameScore - b.nameScore;
+      });
+    } else {
+      scored.sort((a, b) => a.nameScore - b.nameScore);
+    }
+    const items = scored.slice(0, 20).map(s => Object.assign({}, s.it, { _distKm: s.distKm }));
+    render(items);
   };
+
+  // Expose for geolocation handlers — when userLocation arrives/changes, the
+  // currently-open results need to re-sort and show distances.
+  window.rerenderSearchResults = () => {
+    updateSortRowState();
+    if (input.value.trim().length >= 2) runSearch();
+  };
+
+  function updateSortRowState() {
+    if (userLocation) {
+      sortCheckbox.disabled = false;
+      sortRow.classList.remove('disabled');
+      sortLabel.textContent = 'Sort by nearest';
+    } else {
+      sortCheckbox.disabled = true;
+      sortCheckbox.checked = false;
+      sortRow.classList.add('disabled');
+      sortLabel.textContent = 'Sort by nearest (location off)';
+    }
+  }
+  updateSortRowState();
+  sortCheckbox.addEventListener('change', runSearch);
 
   input.addEventListener('input', runSearch);
   input.addEventListener('focus', () => { if (input.value.length >= 2) runSearch(); });
@@ -612,30 +837,47 @@ function reinstallOverlays() { if (mapReady) map.fire('style.load'); }
 async function load() {
   const status = document.getElementById('status');
 
-  // Superchargers (live from supercharge.info)
+  // Superchargers — local feed built from Tesla's official get-locations +
+  // get-charger-details (see scripts/fetch_tesla_superchargers.py). Falls back
+  // to supercharge.info if the local file is missing/empty (smoke-test stage
+  // or first deploy before the bulk fetch has run).
   (async () => {
     try {
-      status.textContent = 'Fetching supercharge.info…';
-      const all = await fetchJSON('https://supercharge.info/service/supercharge/allSites');
-      // 100 = US, 101 = Canada (supercharge.info country IDs)
-      const sites = all.filter(s => s?.gps && (s.address?.countryId === 100 || s.address?.countryId === 101));
+      status.textContent = 'Loading Superchargers…';
+      let fc = null;
+      try {
+        const local = await fetchJSON('/data/tesla-superchargers.geojson');
+        if (local?.features?.length > 100) fc = local;
+      } catch (_) { /* fall through */ }
+
+      if (!fc) {
+        // Supercharge.info legacy path. Schema differs (raw site objects, not
+        // pre-projected GeoJSON), so we run the existing toGeoJSON projection.
+        const all = await fetchJSON('https://supercharge.info/service/supercharge/allSites');
+        const sites = all.filter(s => s?.gps && (s.address?.countryId === 100 || s.address?.countryId === 101));
+        fc = toGeoJSON(sites);
+      }
+
       const counts = { open: 0, construction: 0, permit: 0, plan: 0, closed: 0 };
-      sites.forEach(s => { counts[FILTER_GROUP[s.status] || 'open']++; });
+      fc.features.forEach(f => { counts[f.properties.group || 'open']++; });
       for (const [k, v] of Object.entries(counts)) setCount('c-' + k, v);
-      overlayData.sc = toGeoJSON(sites);
-      for (const s of sites) {
-        if (s.status === 'CLOSED_PERM') continue;
+      overlayData.sc = fc;
+
+      for (const f of fc.features) {
+        const p = f.properties;
+        if (p.status === 'CLOSED_PERM') continue;
+        const [lng, lat] = f.geometry.coordinates;
         registerSearchItems([{
-          name: s.name,
-          sub: [s.address?.city, s.address?.state].filter(Boolean).join(', '),
+          name: p.name || '',
+          sub: [p.city, p.state].filter(Boolean).join(', '),
           kind: 'SC', color: '#e82127',
-          scGroup: FILTER_GROUP[s.status] || 'open',
-          lng: s.gps.longitude, lat: s.gps.latitude, zoom: 13,
-          onSelect: () => synthesizeClick('sc-points', [s.gps.longitude, s.gps.latitude]),
+          scGroup: p.group || 'open',
+          lng, lat, zoom: 13,
+          onSelect: () => synthesizeClick(['sc-points-hit', 'sc-points'], [lng, lat]),
         }]);
       }
       reinstallOverlays();
-      status.textContent = sites.length.toLocaleString() + ' US/Canada Superchargers';
+      status.textContent = fc.features.length.toLocaleString() + ' Superchargers';
     } catch (err) {
       console.error(err);
       status.textContent = 'Supercharger load failed: ' + err.message;
@@ -670,7 +912,7 @@ async function load() {
           sub: f.properties.State_Nm || '',
           kind: 'NP', color: '#2e7d32',
           lng, lat, zoom: zoomForBbox(bbox),
-          onSelect: () => synthesizeClick(['np-pts', 'np-fill'], [lng, lat]),
+          onSelect: () => synthesizeClick(['np-pts-hit', 'np-fill'], [lng, lat]),
         }]);
       }
       for (const f of sp.features) {
@@ -680,7 +922,7 @@ async function load() {
           sub: f.properties.State_Nm || '',
           kind: 'SP', color: '#8d6e63',
           lng, lat, zoom: zoomForBbox(bbox),
-          onSelect: () => synthesizeClick(['sp-pts', 'sp-fill'], [lng, lat]),
+          onSelect: () => synthesizeClick(['sp-pts-hit', 'sp-fill'], [lng, lat]),
         }]);
       }
       reinstallOverlays();
@@ -703,7 +945,7 @@ async function load() {
           sub: [p.city, p.state].filter(Boolean).join(', '),
           kind: 'PF', color: '#7b4bb5',
           lng, lat, zoom: 14,
-          onSelect: () => synthesizeClick('pf-points', [lng, lat]),
+          onSelect: () => synthesizeClick(['pf-points-hit', 'pf-points'], [lng, lat]),
         }]);
       }
       reinstallOverlays();
@@ -742,7 +984,7 @@ async function load() {
           kind: 'CG', color: '#2e7d32',
           cgCategory: p.category,
           lng, lat, zoom: 13,
-          onSelect: () => synthesizeClick('cg-points', [lng, lat]),
+          onSelect: () => synthesizeClick(['cg-points-hit', 'cg-points'], [lng, lat]),
         }]);
       }
       reinstallOverlays();
@@ -783,7 +1025,7 @@ const CG_COLOR = {
 };
 
 function installCGLayer(geojson) {
-  resetOverlay(['cg'], ['cg-points']);
+  resetOverlay(['cg'], ['cg-points', 'cg-points-hit']);
   map.addSource('cg', { type: 'geojson', data: geojson });
   // Radius scales with campsite count (sqrt), with a clickable floor. Per-zoom
   // stops keep dots clickable even at continental zoom.
@@ -812,67 +1054,245 @@ function installCGLayer(geojson) {
     },
   }, map.getLayer('sc-points') ? 'sc-points' : undefined);
 
+  // Transparent hit layer above the visual layer — gives every dot a 36px
+  // (radius 18) target on phones regardless of how small the visual circle
+  // looks. Click + cursor handlers bind to the hit layer; the topmost layer
+  // wins on tap, so visual stays small while target stays generous.
+  map.addLayer({
+    id: 'cg-points-hit',
+    type: 'circle',
+    source: 'cg',
+    paint: {
+      'circle-radius': 18,
+      'circle-opacity': 0,
+    },
+  });
+
   const applyCGFilter = () => {
     const cats = [];
     for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local', 'f-cg-provincial']) {
       if (document.getElementById(id).checked) cats.push(id.replace('f-cg-', ''));
     }
-    if (cats.length === 0) {
-      map.setLayoutProperty('cg-points', 'visibility', 'none');
-    } else {
-      map.setLayoutProperty('cg-points', 'visibility', 'visible');
+    const visibility = cats.length === 0 ? 'none' : 'visible';
+    map.setLayoutProperty('cg-points', 'visibility', visibility);
+    map.setLayoutProperty('cg-points-hit', 'visibility', visibility);
+    if (cats.length > 0) {
       // 'other' is mostly unclassified federal entries; bundle it with federal.
       const filterCats = cats.includes('federal') ? [...cats, 'other'] : cats;
-      map.setFilter('cg-points', ['in', ['get', 'category'], ['literal', filterCats]]);
+      const filter = ['in', ['get', 'category'], ['literal', filterCats]];
+      map.setFilter('cg-points', filter);
+      map.setFilter('cg-points-hit', filter);
     }
   };
   applyCGFilter();
 
   // Layer-scoped map handlers do NOT survive setStyle — always rebind here.
-  map.on('click', 'cg-points', (e) => {
-    const p = e.features[0].properties;
-    let amenities = [];
-    try { amenities = JSON.parse(p.amenities); } catch {}
-    const amenStr = amenities.join(' · ');
-    let activities = [];
-    try { activities = JSON.parse(p.activities); } catch {}
-    // rating_reviews is [stars, count] on hit, null for "no reviews on file"
-    let rr = null;
-    try { rr = JSON.parse(p.rating_reviews); } catch {}
-    // cell_coverage is {verizon: [avg, count], att: [avg, count], ...}
-    let cc = null;
-    try { cc = JSON.parse(p.cell_coverage); } catch {}
-    // Prefer rec.gov's containing-unit name (e.g. "Gifford Pinchot National Forest")
-    // over our generic typeLabel ("National Forest") when the enricher matched.
-    const parent = p.parent_name || p.typeLabel;
-    const html = `
-      <div class="popup">
-        ${p.photo_url ? `<img class="photo" src="${p.photo_url}" alt="" loading="lazy">` : ''}
-        <h3>${p.name}</h3>
-        <div class="meta">${parent}${p.state ? ' · ' + p.state : ''}</div>
-        ${Array.isArray(rr) ? `<div class="rating"><span class="stars">${renderStars(rr[0])}</span> ${rr[0].toFixed(1)}<span class="count">(${rr[1].toLocaleString()})</span></div>` : ''}
-        ${renderCellCoverage(cc)}
-        ${p.near ? `<div class="meta">${p.near}</div>` : ''}
-        <div style="margin-top:6px">
-          ${p.sites ? `<span class="tag">${p.sites} sites</span>` : ''}
-          ${p.season ? `<span class="tag">${p.season}</span>` : ''}
-        </div>
-        ${amenStr ? `<div class="meta" style="margin-top:4px">${amenStr}</div>` : ''}
-        ${activities.length ? `<div class="meta" style="margin-top:4px">${activities.map(a => `<span class="tag">${a}</span>`).join('')}</div>` : ''}
-        ${p.phone ? `<div class="meta" style="margin-top:4px">${p.phone}</div>` : ''}
-        <div class="meta" style="margin-top:4px">${campgroundLinks(p)}</div>
-      </div>`;
-    new maplibregl.Popup({ closeButton: true, maxWidth: '300px' })
-      .setLngLat(e.features[0].geometry.coordinates).setHTML(html).addTo(map);
+  // Bind to the hit layer (transparent, generous radius); MapLibre dispatches
+  // to the topmost matching layer, so the underlying visual layer never sees
+  // the click.
+  map.on('click', 'cg-points-hit', (e) => {
+    const f = e.features[0];
+    openCampgroundPopup(f);
   });
-  bindCursor('cg-points');
+  bindCursor('cg-points-hit');
 
   if (bound.cg) return;
   bound.cg = true;
   // DOM listeners live on checkbox elements — bind once, survive forever.
-  for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local']) {
+  for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local', 'f-cg-provincial']) {
     document.getElementById(id).addEventListener('change', applyCGFilter);
   }
+}
+
+// Render a campground popup from a clicked feature. Pulled out of the click
+// handler so search-result click can call it through synthesizeClick path.
+function openCampgroundPopup(f) {
+  const p = f.properties;
+  const [lng, lat] = f.geometry.coordinates;
+  let amenities = [];
+  try { amenities = JSON.parse(p.amenities); } catch {}
+  let cc = null;
+  try { cc = JSON.parse(p.cell_coverage); } catch {}
+  let rr = null;
+  try { rr = JSON.parse(p.rating_reviews); } catch {}
+
+  const parent = p.parent_name || p.typeLabel || '';
+  const region = p.state || p.country || '';
+  const subline = [parent, region].filter(Boolean).join(' · ');
+  const distLine = userLocation
+    ? formatDistance(distanceKm(userLocation.lat, userLocation.lng, lat, lng))
+    : '';
+  const sub = [subline, distLine].filter(Boolean).join(' · ');
+
+  const verdict = seasonVerdict(p.season, p.reservable);
+  const reserveBtn = reserveButtonHTML(p);
+  const callBtn = p.phone
+    ? `<a class="btn btn-secondary" href="tel:${p.phone}">Call ${p.phone}</a>`
+    : '';
+  const pills = amenities.length
+    ? `<div class="pills">${amenities.map(a => `<span class="pill">${escapeHtml(a)}</span>`).join('')}</div>`
+    : '';
+  const cellPills = renderCellCoverage(cc);
+  const rating = Array.isArray(rr)
+    ? `<div class="rating" style="margin-top:6px"><span class="stars">${renderStars(rr[0])}</span> ${rr[0].toFixed(1)}<span class="count">(${rr[1].toLocaleString()})</span></div>`
+    : '';
+  const sitesTag = p.sites ? `<span class="tag">${p.sites} sites</span>` : '';
+  const footer = lastVerifiedFooter(p);
+
+  const html = `
+    <div class="popup${p.curated ? ' curated' : ''}">
+      <h3>${escapeHtml(p.name)}</h3>
+      ${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}
+      ${verdict}
+      <div class="actions">
+        ${reserveBtn}
+        ${callBtn}
+      </div>
+      ${pills}
+      ${cellPills}
+      ${rating}
+      ${sitesTag ? `<div style="margin-top:6px">${sitesTag}</div>` : ''}
+      ${footer}
+    </div>`;
+  openPopup({ lngLat: [lng, lat], html });
+}
+
+// Compute the season verdict for the verdict line. season is a string like
+// "mid-May to early October" or "year-round (boat access)" or null.
+// Returns the colored verdict line HTML, or '' if no useful info.
+function seasonVerdict(seasonStr, reservable) {
+  if (!seasonStr) {
+    if (reservable === true) return '';        // no info to assert
+    if (reservable === false) {
+      return '<div class="verdict fcfs">First-come, first-served</div>';
+    }
+    return '';
+  }
+  const today = new Date();
+  const range = parseSeasonRange(seasonStr, today.getFullYear());
+  const fcfsHint = reservable === false ? ' · first-come' : '';
+
+  if (range && range.open && range.close) {
+    if (today >= range.open && today <= range.close) {
+      return `<div class="verdict open">Open through ${formatMonthDay(range.close)}${fcfsHint}</div>`;
+    }
+    if (today < range.open) {
+      return `<div class="verdict closed">Closed until ${formatMonthDay(range.open)}${fcfsHint}</div>`;
+    }
+    // Past close — likely re-opens next year.
+    const nextOpen = new Date(range.open);
+    nextOpen.setFullYear(nextOpen.getFullYear() + 1);
+    return `<div class="verdict closed">Closed until ${formatMonthDay(nextOpen)}${fcfsHint}</div>`;
+  }
+  if (/year[\s-]*round/i.test(seasonStr)) {
+    return `<div class="verdict open">Year-round${fcfsHint}</div>`;
+  }
+  // Couldn't parse — show the raw string as neutral info.
+  return `<div class="verdict fcfs">${escapeHtml(seasonStr)}${fcfsHint}</div>`;
+}
+
+const MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, sept:8, oct:9, nov:10, dec:11 };
+const FUZZY_DAY = { early: 5, mid: 15, late: 25 };
+
+// Parse loose season strings: "mid-May to early October", "May 15 to Oct 10",
+// "late June to early September". Returns { open: Date, close: Date } or null.
+function parseSeasonRange(s, year) {
+  const norm = s.toLowerCase().replace(/[–—]/g, '-');
+  // Split on " to " or "-" between two month-y bits.
+  const parts = norm.split(/\s+to\s+|\s*->\s*|\s*through\s+/);
+  if (parts.length < 2) return null;
+  const open = parseDateBit(parts[0], year);
+  const close = parseDateBit(parts[1], year);
+  if (!open || !close) return null;
+  return { open, close };
+}
+function parseDateBit(s, year) {
+  // "mid-May", "May 15", "early October", "Oct 10"
+  const fuzzy = s.match(/(early|mid|late)[\s-]+([a-z]+)/);
+  if (fuzzy) {
+    const month = MONTHS[fuzzy[2].slice(0,4)] ?? MONTHS[fuzzy[2].slice(0,3)];
+    if (month == null) return null;
+    return new Date(year, month, FUZZY_DAY[fuzzy[1]]);
+  }
+  const explicit = s.match(/([a-z]+)\.?\s+(\d{1,2})/);
+  if (explicit) {
+    const month = MONTHS[explicit[1].slice(0,4)] ?? MONTHS[explicit[1].slice(0,3)];
+    if (month == null) return null;
+    return new Date(year, month, parseInt(explicit[2], 10));
+  }
+  return null;
+}
+function formatMonthDay(d) {
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+}
+
+// Decide which Reserve URL to use. Order: parks_canada_url > bcparks_url >
+// rec.gov by id > rec.gov search. Returns full <a class="btn"> HTML.
+function reserveButtonHTML(p) {
+  let url = '';
+  let label = 'Reserve';
+  if (p.reserve_url) {
+    url = p.reserve_url;
+    label = labelForReserveUrl(url);
+  } else if (p.parks_canada_url && p.reservable) {
+    // The /pn-np/ab/banff page is informational; the actual booking flow is
+    // at reservation.pc.gc.ca. Send the user there directly so they don't
+    // have to hunt for the "Reserve" link on the park page.
+    url = 'https://reservation.pc.gc.ca';
+    label = 'Reserve on parks.canada.ca';
+  } else if (p.parks_canada_url) {
+    url = p.parks_canada_url;
+    label = 'Park info on parks.canada.ca';
+  } else if (p.parks_alberta_url && p.reservable) {
+    url = 'https://www.reservecamping.alberta.ca';
+    label = 'Reserve on Alberta Parks';
+  } else if (p.parks_alberta_url) {
+    url = p.parks_alberta_url;
+    label = 'Park info on albertaparks.ca';
+  } else if (p.bcparks_url) {
+    url = p.bcparks_url;
+    label = 'Reserve on bcparks.ca';
+  } else if (p.recgov_id) {
+    url = `https://www.recreation.gov/camping/campgrounds/${p.recgov_id}`;
+    label = 'Reserve on recreation.gov';
+  } else if (p.category === 'federal') {
+    const recq = encodeURIComponent(p.name);
+    url = `https://www.recreation.gov/search?q=${recq}&entity_type=campground&inventory_type=camping`;
+    label = 'Search recreation.gov';
+  } else {
+    const gq = encodeURIComponent(`${p.name} ${p.state || ''}`.trim());
+    url = `https://www.google.com/search?q=${gq}+campground`;
+    label = 'Search Google';
+  }
+  if (p.reservable === false && !p.reserve_url) {
+    return `<span class="btn btn-disabled">First-come, first-served</span>`;
+  }
+  return `<a class="btn btn-primary" href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+}
+function labelForReserveUrl(url) {
+  if (url.includes('reservation.pc.gc.ca')) return 'Reserve on parks.canada.ca';
+  if (url.includes('reserve.albertaparks')) return 'Reserve on Alberta Parks';
+  if (url.includes('camping.bcparks')) return 'Reserve on bcparks.ca';
+  if (url.includes('recreation.gov')) return 'Reserve on recreation.gov';
+  return 'Reserve';
+}
+
+// last_verified is on the curated AB/BC entries. Show a footer with the date,
+// and color it #e65100 if older than 60 days. No footer when missing.
+function lastVerifiedFooter(p) {
+  if (!p.last_verified) return '';
+  const verified = new Date(p.last_verified);
+  if (isNaN(verified)) return '';
+  const ageDays = (Date.now() - verified.getTime()) / 86400000;
+  const cls = ageDays > 60 ? 'footer warn' : 'footer';
+  const stale = ageDays > 60 ? ' · check before booking' : '';
+  return `<div class="${cls}">Verified ${p.last_verified}${stale}</div>`;
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({
+    '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
+  })[c]);
 }
 
 function bindCursor(layerId) {
@@ -883,8 +1303,17 @@ function bindCursor(layerId) {
 function campgroundLinks(p) {
   const links = [];
   if (p.parks_canada_url) {
-    // Parks Canada — hand-curated BC campgrounds, direct link to the park page.
+    // Parks Canada — hand-curated BC/AB federal campgrounds.
     links.push(`<a href="${p.parks_canada_url}" target="_blank" rel="noreferrer">parks.canada.ca ↗</a>`);
+    if (p.reservable) {
+      links.push(`<a href="https://reservation.pc.gc.ca" target="_blank" rel="noreferrer">reservation.pc.gc.ca ↗</a>`);
+    }
+  } else if (p.parks_alberta_url) {
+    // Alberta provincial — direct park page + Alberta's reservation portal.
+    links.push(`<a href="${p.parks_alberta_url}" target="_blank" rel="noreferrer">albertaparks.ca ↗</a>`);
+    if (p.reservable) {
+      links.push(`<a href="https://www.reservecamping.alberta.ca" target="_blank" rel="noreferrer">reservecamping.alberta.ca ↗</a>`);
+    }
   } else if (p.bcparks_url) {
     // BC Parks have a direct URL from the Strapi API — always available when set.
     links.push(`<a href="${p.bcparks_url}" target="_blank" rel="noreferrer">bcparks.ca ↗</a>`);
@@ -919,7 +1348,8 @@ function installStateLines(states) {
 
 function installParkLayers(np, sp) {
   resetOverlay(['np', 'sp', 'np-pts', 'sp-pts'],
-               ['np-fill', 'np-line', 'sp-fill', 'sp-line', 'np-pts', 'sp-pts']);
+               ['np-fill', 'np-line', 'sp-fill', 'sp-line', 'np-pts', 'sp-pts',
+                'np-pts-hit', 'sp-pts-hit']);
   // Anchor = first symbol (label) layer, so park fills sit above roads/water
   // but beneath street/city labels. Works with both raster and vector basemaps.
   const firstLabel = map.getStyle().layers.find(l => l.type === 'symbol');
@@ -940,10 +1370,14 @@ function installParkLayers(np, sp) {
   map.addLayer({ id: 'sp-line', type: 'line', source: 'sp',
     paint: { 'line-color': '#5d4037', 'line-width': 1, 'line-opacity': 0.75 } }, anchor);
 
-  // National Parks
+  // National Parks — fade fill from 0.32 at z<10 down to 0.12 at z>=10 so it
+  // stops competing with campground/Supercharger dots when zoomed in.
   map.addSource('np', { type: 'geojson', data: np });
   map.addLayer({ id: 'np-fill', type: 'fill', source: 'np',
-    paint: { 'fill-color': '#2e7d32', 'fill-opacity': 0.32 } }, anchor);
+    paint: {
+      'fill-color': '#2e7d32',
+      'fill-opacity': ['interpolate', ['linear'], ['zoom'], 8, 0.32, 10, 0.12],
+    } }, anchor);
   map.addLayer({ id: 'np-line', type: 'line', source: 'np',
     paint: { 'line-color': '#1b5e20', 'line-width': 1.2, 'line-opacity': 0.85 } }, anchor);
 
@@ -984,37 +1418,39 @@ function installParkLayers(np, sp) {
     },
   }, anchor);
 
+  // Hit layers for centroid taps. Polygons keep their own (large) hit area;
+  // these only need to match while the centroid dot is rendered (z<10).
+  map.addLayer({
+    id: 'sp-pts-hit', type: 'circle', source: 'sp-pts',
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 14, 9, 18, 10, 0],
+      'circle-opacity': 0,
+    },
+  });
+  map.addLayer({
+    id: 'np-pts-hit', type: 'circle', source: 'np-pts',
+    paint: {
+      'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 14, 9, 18, 10, 0],
+      'circle-opacity': 0,
+    },
+  });
+
   const applyParkVis = () => {
     const nv = document.getElementById('f-np').checked ? 'visible' : 'none';
     const sv = document.getElementById('f-sp').checked ? 'visible' : 'none';
-    for (const id of ['np-fill', 'np-line', 'np-pts']) map.setLayoutProperty(id, 'visibility', nv);
-    for (const id of ['sp-fill', 'sp-line', 'sp-pts']) map.setLayoutProperty(id, 'visibility', sv);
+    for (const id of ['np-fill', 'np-line', 'np-pts', 'np-pts-hit']) map.setLayoutProperty(id, 'visibility', nv);
+    for (const id of ['sp-fill', 'sp-line', 'sp-pts', 'sp-pts-hit']) map.setLayoutProperty(id, 'visibility', sv);
   };
   applyParkVis();
 
   const parkClick = (kind) => (e) => {
-    const p = e.features[0].properties;
-    const name = p.Unit_Nm || p.Loc_Nm || 'Park';
-    const state = p.State_Nm || '';
-    const acres = p.GIS_Acres ? Number(p.GIS_Acres).toLocaleString() + ' acres' : '';
-    const mgr = p.Mang_Name || '';
-    const [url, label] = externalParkLink(kind, name, state);
-    const html = `
-      <div class="popup">
-        <h3>${name}</h3>
-        <div class="meta">${kind === 'np' ? 'National Park' : 'State Park'}${state ? ' · ' + state : ''}</div>
-        ${mgr && mgr !== 'National Park Service' ? `<div class="meta">${mgr}</div>` : ''}
-        ${acres ? `<div class="meta">${acres}</div>` : ''}
-        ${url ? `<div class="meta" style="margin-top:4px"><a href="${url}" target="_blank" rel="noreferrer">${label} ↗</a></div>` : ''}
-      </div>`;
-    new maplibregl.Popup({ closeButton: true, maxWidth: '280px' })
-      .setLngLat(e.lngLat).setHTML(html).addTo(map);
+    openParkPopup(kind, e.features[0], e.lngLat);
   };
   map.on('click', 'np-fill', parkClick('np'));
   map.on('click', 'sp-fill', parkClick('sp'));
-  map.on('click', 'np-pts',  parkClick('np'));
-  map.on('click', 'sp-pts',  parkClick('sp'));
-  for (const id of ['np-fill', 'sp-fill', 'np-pts', 'sp-pts']) bindCursor(id);
+  map.on('click', 'np-pts-hit',  parkClick('np'));
+  map.on('click', 'sp-pts-hit',  parkClick('sp'));
+  for (const id of ['np-fill', 'sp-fill', 'np-pts-hit', 'sp-pts-hit']) bindCursor(id);
 
   if (bound.np) return;
   bound.np = true;
@@ -1034,8 +1470,37 @@ function externalParkLink(kind, name, state) {
   return [`https://www.google.com/search?q=${q}`, 'search'];
 }
 
+function openParkPopup(kind, feature, lngLat) {
+  const p = feature.properties;
+  const name = p.Unit_Nm || p.Loc_Nm || 'Park';
+  const state = p.State_Nm || '';
+  const acres = p.GIS_Acres ? Number(p.GIS_Acres).toLocaleString() + ' acres' : '';
+  const mgr = p.Mang_Name || '';
+  const [url, label] = externalParkLink(kind, name, state);
+  const distLine = userLocation
+    ? formatDistance(distanceKm(userLocation.lat, userLocation.lng, lngLat.lat, lngLat.lng))
+    : '';
+  const subBits = [kind === 'np' ? 'National Park' : 'State Park', state, distLine].filter(Boolean);
+  const sub = subBits.join(' · ');
+  const pills = [
+    mgr && mgr !== 'National Park Service' ? `<span class="pill">${escapeHtml(mgr)}</span>` : '',
+    acres ? `<span class="pill">${escapeHtml(acres)}</span>` : '',
+  ].filter(Boolean).join('');
+  const primaryBtn = url
+    ? `<a class="btn btn-primary" href="${url}" target="_blank" rel="noreferrer">${escapeHtml(label === 'nps.gov' ? 'Open on nps.gov' : 'Search ' + label)}</a>`
+    : '';
+  const html = `
+    <div class="popup">
+      <h3>${escapeHtml(name)}</h3>
+      ${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}
+      ${primaryBtn ? `<div class="actions">${primaryBtn}</div>` : ''}
+      ${pills ? `<div class="pills">${pills}</div>` : ''}
+    </div>`;
+  openPopup({ lngLat, html });
+}
+
 function installPFLayer(geojson) {
-  resetOverlay(['pf'], ['pf-points']);
+  resetOverlay(['pf'], ['pf-points', 'pf-points-hit']);
   map.addSource('pf', { type: 'geojson', data: geojson });
   map.addLayer({
     id: 'pf-points',
@@ -1049,36 +1514,61 @@ function installPFLayer(geojson) {
       'circle-opacity': 0.95,
     },
   });
+  map.addLayer({
+    id: 'pf-points-hit',
+    type: 'circle',
+    source: 'pf',
+    paint: { 'circle-radius': 18, 'circle-opacity': 0 },
+  });
 
-  const applyPFVis = () => map.setLayoutProperty('pf-points', 'visibility',
-    document.getElementById('f-pf').checked ? 'visible' : 'none');
+  const applyPFVis = () => {
+    const v = document.getElementById('f-pf').checked ? 'visible' : 'none';
+    map.setLayoutProperty('pf-points', 'visibility', v);
+    map.setLayoutProperty('pf-points-hit', 'visibility', v);
+  };
   applyPFVis();
 
-  map.on('click', 'pf-points', (e) => {
+  map.on('click', 'pf-points-hit', (e) => {
     const f = e.features[0];
-    const p = f.properties;
-    const addr = [p.street, p.city, p.state, p.postcode].filter(Boolean).join(', ');
-    const website = p.website || 'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '));
-    const html = `
-      <div class="popup">
-        <h3>${p.name || 'Planet Fitness'}</h3>
-        ${addr ? `<div class="meta">${addr}</div>` : ''}
-        ${p.phone ? `<div class="meta">${p.phone}</div>` : ''}
-        ${p.opening_hours ? `<div class="meta" style="margin-top:4px">${p.opening_hours}</div>` : ''}
-        <div class="meta" style="margin-top:4px"><a href="${website}" target="_blank" rel="noreferrer">planetfitness.com ↗</a></div>
-      </div>`;
-    new maplibregl.Popup({ closeButton: true, maxWidth: '280px' })
-      .setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
+    openPlanetFitnessPopup(f);
   });
-  bindCursor('pf-points');
+  bindCursor('pf-points-hit');
 
   if (bound.pf) return;
   bound.pf = true;
   document.getElementById('f-pf').addEventListener('change', applyPFVis);
 }
 
+function openPlanetFitnessPopup(f) {
+  const p = f.properties;
+  const [lng, lat] = f.geometry.coordinates;
+  const addr = [p.street, p.city, p.state, p.postcode].filter(Boolean).join(', ');
+  const website = p.website || 'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '));
+  const distLine = userLocation
+    ? formatDistance(distanceKm(userLocation.lat, userLocation.lng, lat, lng))
+    : '';
+  const sub = [addr, distLine].filter(Boolean).join(' · ');
+  const callBtn = p.phone
+    ? `<a class="btn btn-secondary" href="tel:${p.phone}">Call ${escapeHtml(p.phone)}</a>`
+    : '';
+  const hours = p.opening_hours
+    ? `<div class="pills"><span class="pill">${escapeHtml(p.opening_hours)}</span></div>`
+    : '';
+  const html = `
+    <div class="popup">
+      <h3>${escapeHtml(p.name || 'Planet Fitness')}</h3>
+      ${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}
+      <div class="actions">
+        <a class="btn btn-primary" href="${website}" target="_blank" rel="noreferrer">Open in Planet Fitness</a>
+        ${callBtn}
+      </div>
+      ${hours}
+    </div>`;
+  openPopup({ lngLat: [lng, lat], html });
+}
+
 function installSCLayer(geojson) {
-  resetOverlay(['sc'], ['sc-points']);
+  resetOverlay(['sc'], ['sc-points', 'sc-points-hit']);
   map.addSource('sc', { type: 'geojson', data: geojson });
   map.addLayer({
     id: 'sc-points',
@@ -1092,44 +1582,75 @@ function installSCLayer(geojson) {
       'circle-opacity': 0.9,
     },
   });
+  map.addLayer({
+    id: 'sc-points-hit',
+    type: 'circle',
+    source: 'sc',
+    paint: { 'circle-radius': 18, 'circle-opacity': 0 },
+  });
   updateFilter();
 
-  map.on('click', 'sc-points', (e) => {
-    const f = e.features[0];
-    const p = f.properties;
-    const addr = [p.street, p.city, p.state].filter(Boolean).join(', ');
-    const stalls = [p.v2 && `V2×${p.v2}`, p.v3 && `V3×${p.v3}`, p.v4 && `V4×${p.v4}`].filter(Boolean).join(' · ');
-    const plugs = [p.nacs && `NACS×${p.nacs}`, p.tpc && `TPC×${p.tpc}`].filter(Boolean).join(' · ');
-    const priceId = 'price-' + p.id;
-    const html = `
-      <div class="popup">
-        <h3>${p.name}</h3>
-        <div class="meta">${addr}</div>
-        ${p.facility ? `<div class="meta">at ${p.facility}</div>` : ''}
-        <div style="margin-top:6px">
-          <span class="tag" style="background:${p.color};color:#fff">${p.status}</span>
-          ${p.stallCount ? `<span class="tag">${p.stallCount} stalls</span>` : ''}
-          ${p.powerKilowatt ? `<span class="tag">${p.powerKilowatt} kW</span>` : ''}
-        </div>
-        ${stalls ? `<div class="meta" style="margin-top:4px">${stalls}</div>` : ''}
-        ${plugs ? `<div class="meta">${plugs}</div>` : ''}
-        ${p.dateOpened ? `<div class="meta" style="margin-top:4px">Opened ${p.dateOpened}</div>` : ''}
-        ${p.locationId ? `<div class="meta" style="margin-top:4px"><a href="https://www.tesla.com/findus?location=${encodeURIComponent(p.locationId)}&functionType=supercharger" target="_blank" rel="noreferrer">tesla.com ↗</a></div>` : ''}
-        <div id="${priceId}" class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
-          ${p.locationId ? '<span class="meta">Loading pricing…</span>' : '<span class="meta">No pricing available (no locationId)</span>'}
-        </div>
-      </div>`;
-    new maplibregl.Popup({ closeButton: true, maxWidth: '320px' })
-      .setLngLat(f.geometry.coordinates).setHTML(html).addTo(map);
-    if (p.locationId) loadPricing(p.locationId, priceId);
+  map.on('click', 'sc-points-hit', (e) => {
+    openSuperchargerPopup(e.features[0]);
   });
-  bindCursor('sc-points');
+  bindCursor('sc-points-hit');
 
   if (bound.sc) return;
   bound.sc = true;
   for (const id of ['f-open','f-construction','f-permit','f-plan','f-closed']) {
     document.getElementById(id).addEventListener('change', updateFilter);
   }
+}
+
+function openSuperchargerPopup(f) {
+  const p = f.properties;
+  const [lng, lat] = f.geometry.coordinates;
+  const addr = [p.street, p.city, p.state].filter(Boolean).join(', ');
+  const distLine = userLocation
+    ? formatDistance(distanceKm(userLocation.lat, userLocation.lng, lat, lng))
+    : '';
+  const sub = [addr, distLine].filter(Boolean).join(' · ');
+  const stalls = [p.v2 && `V2×${p.v2}`, p.v3 && `V3×${p.v3}`, p.v4 && `V4×${p.v4}`].filter(Boolean).join(' · ');
+  const plugs = [p.nacs && `NACS×${p.nacs}`, p.tpc && `TPC×${p.tpc}`].filter(Boolean).join(' · ');
+  const priceId = 'price-' + p.id;
+  // tesla.com/findus deeplink. The `bounds` param (north,east,south,west)
+  // is what makes findus actually zoom in on the site — without it the map
+  // opens at a default zoom and the user has to hunt. We mirror the bbox
+  // size Tesla's own UI generates: ±0.44° lat × ±1.86° lng around the site.
+  // Keep rel="noopener" (security) but drop noreferrer — refererless requests
+  // trip Akamai bot detection more often.
+  const teslaBounds = p.locationId
+    ? `${(lat + 0.44).toFixed(6)},${(lng + 1.86).toFixed(6)},${(lat - 0.44).toFixed(6)},${(lng - 1.86).toFixed(6)}`
+    : '';
+  const teslaUrl = p.locationId
+    ? `https://www.tesla.com/findus?bounds=${encodeURIComponent(teslaBounds)}&location=${encodeURIComponent(p.locationId)}&functionType=supercharger`
+    : '';
+  const primaryBtn = teslaUrl
+    ? `<a class="btn btn-primary" href="${teslaUrl}" target="_blank" rel="noopener">Open in Tesla</a>`
+    : `<span class="btn btn-disabled">No Tesla link available</span>`;
+  const tags = [
+    `<span class="tag" style="background:${p.color};color:#fff">${escapeHtml(p.status || '')}</span>`,
+    p.stallCount ? `<span class="tag">${p.stallCount} stalls</span>` : '',
+    p.powerKilowatt ? `<span class="tag">${p.powerKilowatt} kW</span>` : '',
+  ].filter(Boolean).join(' ');
+  const html = `
+    <div class="popup">
+      <h3>${escapeHtml(p.name || '')}</h3>
+      ${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}
+      ${p.facility ? `<div class="sub">at ${escapeHtml(p.facility)}</div>` : ''}
+      <div class="actions">
+        ${primaryBtn}
+      </div>
+      <div style="margin-top:6px">${tags}</div>
+      ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
+      ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}
+      ${p.dateOpened ? `<div class="footer">Opened ${escapeHtml(p.dateOpened)}</div>` : ''}
+      <div id="${priceId}" class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
+        ${p.locationId ? '<span class="meta">Loading pricing…</span>' : '<span class="meta">No pricing available</span>'}
+      </div>
+    </div>`;
+  openPopup({ lngLat: [lng, lat], html });
+  if (p.locationId) loadPricing(p.locationId, priceId);
 }
 
 load();

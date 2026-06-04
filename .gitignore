@@ -7,3 +7,10 @@ data/pricing-cache/
 .DS_Store
 __pycache__/
 *.pyc
+.gstack/
+
+# Tesla's bulk get-locations feed is 12 MB and regenerable from the saved
+# curl in scripts/fetch_tesla_superchargers.py docs. The downstream
+# data/tesla-superchargers.geojson IS checked in.
+data/tesla-locations-us.json
+

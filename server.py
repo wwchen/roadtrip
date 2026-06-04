@@ -7,7 +7,13 @@ Routes:
   everything else              → serves files from the repo root
 
 Cookies for Tesla are read from .env:  TESLA_COOKIES=<raw cookie header from DevTools>
+
+Static responses send gzip (when the client accepts it) for text-ish bodies, an
+ETag derived from mtime+size so reloads return 304, and a per-type Cache-Control:
+data files (geojson/json) live for a day, html/api stay no-cache so deploys land
+without a hard refresh.
 """
+import gzip
 import json
 import os
 import subprocess
@@ -136,6 +142,24 @@ def fetch_tesla_pricing(slug: str) -> tuple[int, dict | str]:
     return status, {"error": f"tesla upstream HTTP {status}", "body_head": body[:300]}
 
 
+def _health_snapshot() -> dict:
+    """One-shot status JSON for /api/health — useful to hit from the phone
+    on the trip to confirm cookies are alive and the cache is warm. We
+    deliberately avoid making any Tesla call here so a hot Cloudflare cache
+    doesn't trigger a needless cookie burn just to answer "are we okay?"."""
+    cache_dir_exists = CACHE_DIR.exists()
+    cache_count = sum(1 for _ in CACHE_DIR.glob("*.json")) if cache_dir_exists else 0
+    cookie_source = "cookie-bot" if os.environ.get("COOKIE_BOT_URL") else "env"
+    cookies_present = bool(get_tesla_cookies())
+    return {
+        "status": "ok" if cookies_present else "degraded",
+        "cookie_source": cookie_source,
+        "cookies_present": cookies_present,
+        "pricing_cache_count": cache_count,
+        "now": int(time.time()),
+    }
+
+
 def get_cached_or_fetch(slug: str) -> tuple[int, dict]:
     CACHE_DIR.mkdir(parents=True, exist_ok=True)
     cache_file = CACHE_DIR / f"{slug}.json"
@@ -168,6 +192,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(status, data)
             return
 
+        if self.path.startswith("/api/health"):
+            self._json(200, _health_snapshot())
+            return
+
         # Static files
         path = urllib.parse.unquote(self.path.split("?", 1)[0])
         if path == "/":
@@ -181,6 +209,24 @@ class Handler(BaseHTTPRequestHandler):
         if not target.is_file():
             self._json(404, {"error": "not found"})
             return
+        self._serve_static(target)
+
+    # Compressible types — geojson is the big payoff (~5x smaller).
+    _GZIPPABLE = {".html", ".js", ".css", ".json", ".geojson", ".svg"}
+    # Long-cache the data files: trip is offline-tolerant once primed, and the
+    # ETag still revalidates so a deploy of new geojson lands within seconds.
+    # index.html stays no-cache so the deploy you just shipped is what loads.
+    _CACHE_CONTROL = {
+        ".html": "no-cache",
+        ".geojson": "public, max-age=86400",
+        ".json": "public, max-age=86400",
+        ".js": "public, max-age=3600",
+        ".css": "public, max-age=3600",
+        ".svg": "public, max-age=86400",
+        ".png": "public, max-age=86400",
+    }
+
+    def _serve_static(self, target: Path):
         ctype = {
             ".html": "text/html; charset=utf-8",
             ".js": "application/javascript",
@@ -190,11 +236,34 @@ class Handler(BaseHTTPRequestHandler):
             ".svg": "image/svg+xml",
             ".png": "image/png",
         }.get(target.suffix, "application/octet-stream")
+
+        st = target.stat()
+        # mtime+size is enough for a static-file ETag — we don't worry about
+        # collisions across deploys since both fields change on rebuild.
+        etag = f'"{int(st.st_mtime)}-{st.st_size}"'
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.send_header("Cache-Control", self._CACHE_CONTROL.get(target.suffix, "no-cache"))
+            self.end_headers()
+            return
+
         body = target.read_bytes()
+        accept_enc = (self.headers.get("Accept-Encoding") or "").lower()
+        gzipped = False
+        # Skip gzip on tiny files — header overhead outweighs the savings.
+        if target.suffix in self._GZIPPABLE and "gzip" in accept_enc and len(body) > 1024:
+            body = gzip.compress(body, compresslevel=6)
+            gzipped = True
+
         self.send_response(200)
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-cache")
+        self.send_header("Cache-Control", self._CACHE_CONTROL.get(target.suffix, "no-cache"))
+        self.send_header("ETag", etag)
+        self.send_header("Vary", "Accept-Encoding")
+        if gzipped:
+            self.send_header("Content-Encoding", "gzip")
         self.end_headers()
         self.wfile.write(body)
 
