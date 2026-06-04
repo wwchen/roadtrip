@@ -32,7 +32,7 @@ run:
 	PORT=$(PORT) python3 server.py
 
 docker-run: backend-build
-	CACHE_DIR=$(PWD)/data/pricing-cache docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build app backend postgres
+	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build app backend postgres
 	@echo "http://127.0.0.1:$(PORT)"
 	@echo "backend (host port-forwarded only via docker-compose.local.yml): backend → 127.0.0.1:8080"
 

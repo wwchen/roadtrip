@@ -4,8 +4,12 @@ services:
     restart: unless-stopped
     hostname: app
     volumes:
-      # Pricing cache (lazy-populated by user clicks, 30-day TTL)
-      - ${CACHE_DIR:-$HOME/.roadtrip-map/pricing-cache}:/app/data/pricing-cache
+      # Pricing cache (lazy-populated by user clicks, 30-day TTL). Mounted
+      # from the repo's data/pricing-cache so a fresh `pois-up` picks up the
+      # 1k+ checked-out cache files; the previous default ($HOME/.roadtrip-map)
+      # was empty on first launch and turned every Supercharger click into a
+      # Tesla 429 when cookies were stale.
+      - ./data/pricing-cache:/app/data/pricing-cache
       # .env is read by server.py's load_env(). We mount it instead of using
       # `env_file:` because Compose interpolates $VAR sequences inside env_file
       # values, which mangles Tesla cookies (e.g. _ga_*=...$o1$g1$t...).
