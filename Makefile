@@ -9,10 +9,10 @@ DEPLOY_DIR  ?= ~/workspace/roadtrip
 
 help:
 	@echo "Targets:"
-	@echo "  make run              Run server.py directly on host (hot edit index.html)"
-	@echo "  make docker-run       Build+run app + postgres + backend locally on 127.0.0.1:$(PORT)"
-	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (3 services + tunnel)"
-	@echo "  make deploy-local     Build+run all services + cloudflared here (no ssh)"
+	@echo "  make run              Build + run backend locally on 127.0.0.1:$(PORT) (serves static + /api)"
+	@echo "  make docker-run       Build+run backend + postgres in Docker on 127.0.0.1:$(PORT)"
+	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
+	@echo "  make deploy-local     Build+run backend + postgres + cloudflared here (no ssh)"
 	@echo "  make refresh-cookies  Push Tesla cookies from clipboard → $(DEPLOY_HOST) (Tailscale exit node recommended)"
 	@echo "  make refresh-cookies-local  Mint cookies into THIS repo's .env (laptop-only egress)"
 	@echo "  make rebuild-superchargers  Rebuild geojson from cache, no network (~30s)"
@@ -20,21 +20,28 @@ help:
 	@echo "  make backend-build    Build the backend fat-jar via gradle shadowJar"
 	@echo "  make backend-run      Build + run backend in Docker against local postgres"
 	@echo "  make backend-shell    Exec into the running backend container"
-	@echo "  make pois-up          Start Postgres+PostGIS on 127.0.0.1:5432 (Phase 2 backend)"
+	@echo "  make pois-up          Start Postgres+PostGIS on 127.0.0.1:5432"
 	@echo "  make pois-down        Stop Postgres"
 	@echo "  make pois-import      Run the Kotlin importer against local Postgres"
 	@echo "  make pois-test        Run backend Testcontainers tests"
 	@echo "  make pois-psql        psql shell into local Postgres"
-	@echo "  make qa               Playwright smoke against local stack (requires server.py + backend up)"
+	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make stop             Stop all compose services locally"
 
-run:
-	PORT=$(PORT) python3 server.py
+# Run the backend on the host, serving static + /api. Postgres still has to
+# be reachable — start it with `make pois-up` first if you don't already
+# have it running. The backend serves index.html, /web/*, /data/* (excluding
+# pricing-cache, which is exposed only via /api/pricing/{slug}), plus all
+# four /api/* routes.
+run: pois-up
+	cd backend && PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
+	  ROADTRIP_DB_URL=jdbc:postgresql://127.0.0.1:5432/roadtrip \
+	  ROADTRIP_DB_USER=roadtrip ROADTRIP_DB_PASSWORD=roadtrip \
+	  gradle run
 
 docker-run: backend-build
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build app backend postgres
+	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build backend postgres
 	@echo "http://127.0.0.1:$(PORT)"
-	@echo "backend (host port-forwarded only via docker-compose.local.yml): backend → 127.0.0.1:8080"
 
 check-pushed:
 	@git fetch --quiet origin
@@ -53,6 +60,12 @@ stop:
 	- docker compose --profile tunnel --profile pois down
 	- docker compose -f docker-compose.yml -f docker-compose.local.yml --profile pois down
 
+# Build the offline-refresh image (curl-impersonate baked in). Needed before
+# refresh-superchargers / rebuild-superchargers. Idempotent — if the image
+# exists, this is a no-op.
+refresh-image:
+	docker build -t roadtrip-refresh:local -f scripts/Dockerfile.refresh scripts/
+
 # Mint cookies from Safari on this laptop (must be Tailscale-egressing via
 # the mini so Akamai binds _abck to the mini's IP), then push to the mini
 # and restart the app container.
@@ -69,23 +82,24 @@ refresh-cookies-local:
 # Cache-first idempotent rebuild of data/tesla-superchargers.geojson. After a
 # full run has populated data/pricing-cache/, this is fast (~30s for ~1300
 # cache hits) and produces a deterministic geojson.
-rebuild-superchargers:
+rebuild-superchargers: refresh-image
 	docker run --rm --env-file .env \
 	  -v "$(PWD)/data:/app/data" \
 	  -v "$(PWD)/scripts:/app/scripts" \
-	  -v "$(PWD)/server.py:/app/server.py" \
-	  roadtrip-map:local python3 /app/scripts/fetch_tesla_superchargers.py --no-fetch
+	  -v "$(PWD)/.env:/app/.env:ro" \
+	  roadtrip-refresh:local python3 /app/scripts/fetch_tesla_superchargers.py --no-fetch
 
 # Full network refresh of Tesla data — both the bulk get-locations feed and
 # every per-site get-charger-details. Network-bound (~1 req/sec, ~25 min).
-# Re-running is safe: cache hits skip the network entirely. Tomorrow you can
-# just `make refresh-superchargers` and walk away.
-refresh-superchargers:
+# Re-running is safe: cache hits skip the network entirely. The Kotlin
+# backend serves whatever this writes to data/pricing-cache/ — Tesla is
+# never called from the user request path.
+refresh-superchargers: refresh-image
 	docker run --rm --env-file .env \
 	  -v "$(PWD)/data:/app/data" \
 	  -v "$(PWD)/scripts:/app/scripts" \
-	  -v "$(PWD)/server.py:/app/server.py" \
-	  roadtrip-map:local python3 /app/scripts/fetch_tesla_superchargers.py
+	  -v "$(PWD)/.env:/app/.env:ro" \
+	  roadtrip-refresh:local python3 /app/scripts/fetch_tesla_superchargers.py
 
 # Phase 2 backend: PostGIS Postgres on 127.0.0.1:5432, importer, tests.
 pois-up:
@@ -114,17 +128,17 @@ backend-build:
 	cd backend && gradle shadowJar
 
 # Build + run the backend in Docker against local postgres on the compose
-# network. backend's port 8080 is exposed to the host via docker-compose.local.yml.
+# network. backend's port 8765 is exposed to the host via docker-compose.local.yml.
 backend-run: backend-build pois-up
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build backend
-	@echo "backend ready on 127.0.0.1:8080"
+	@echo "backend ready on 127.0.0.1:8765"
 
 backend-shell:
 	docker exec -it roadtrip-map-backend-1 sh
 
-# Local-only Playwright smoke. Hits server.py on $(PORT) which proxies /api/pois
-# to the Kotlin backend on 8080. Doesn't boot the stack — bring it up first
-# (e.g. `make backend-run` + `make run` in another shell).
+# Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
+# static + all /api routes). Doesn't boot the stack — bring it up first
+# (e.g. `make backend-run` or `make run`).
 qa:
 	cd qa && npm install --no-audit --no-fund
 	cd qa && npx playwright install chromium

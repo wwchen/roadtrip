@@ -70,6 +70,9 @@ dependencies {
     implementation("io.ktor:ktor-serialization-kotlinx-json:$ktorVersion")
     implementation("io.ktor:ktor-server-call-logging:$ktorVersion")
     implementation("io.ktor:ktor-server-status-pages:$ktorVersion")
+    implementation("io.ktor:ktor-server-compression:$ktorVersion")
+    implementation("io.ktor:ktor-server-caching-headers:$ktorVersion")
+    implementation("io.ktor:ktor-server-conditional-headers:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:1.5.12")
 
     implementation("org.jooq:jooq:$jooqVersion")

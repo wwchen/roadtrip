@@ -1,13 +1,16 @@
+# Offline refresh worker image. Used by `make refresh-superchargers` to
+# crawl tesla.com at ~1rps and populate data/pricing-cache/. The live
+# serving stack (Kotlin backend) does NOT use this — pricing is read from
+# the cache files this worker writes.
+#
+# Akamai Bot Manager on tesla.com fingerprints the TLS ClientHello + HTTP/2
+# SETTINGS frame. Stock Debian curl (OpenSSL) gets 403 even with valid
+# cookies. curl-impersonate-chrome is a curl build linked against Chrome's
+# BoringSSL with matching cipher order, extensions, and H2 settings.
 FROM python:3.12-slim
 
 WORKDIR /app
 
-# Akamai Bot Manager on tesla.com fingerprints the TLS ClientHello + HTTP/2
-# SETTINGS frame (JA3/JA4/Akamai-H2). Stock Debian curl (OpenSSL) produces a
-# different fingerprint than the Chrome session that minted _abck, so it gets
-# 403 even with valid cookies. curl-impersonate-chrome is a curl build linked
-# against Chrome's BoringSSL with matching cipher order, extensions, and H2
-# settings. Keep stock curl too for the smoke-test/debug paths.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends curl ca-certificates wget xz-utils \
     && CURL_IMP_VER=0.6.1 \
@@ -24,15 +27,6 @@ RUN apt-get update \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Copy static site + server
-COPY server.py ./
-COPY index.html ./
-COPY web/ ./web/
-COPY data/ ./data/
-
-ENV PORT=8765
-ENV HOST=0.0.0.0
 ENV PYTHONUNBUFFERED=1
-EXPOSE 8765
-
-CMD ["python3", "server.py"]
+# data/ + scripts/ are bind-mounted at runtime so a fresh-cookie .env on the
+# host is picked up without rebuilding the image.

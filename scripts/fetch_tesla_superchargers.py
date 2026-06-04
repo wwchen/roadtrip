@@ -5,10 +5,11 @@ Two-stage pipeline:
   1. Read the bulk locations file (data/tesla-locations-us.json — Tesla's
      get-locations endpoint dumps the entire global feed in there, despite
      the country=US param). Filter to North America by bbox.
-  2. For each pin, hit get-charger-details via the same path server.py uses
-     for live pricing. Cache to data/pricing-cache/<slug>.json (30-day TTL,
-     resumed across runs). Sleeps SLEEP_SECONDS between calls so Akamai
-     doesn't escalate; tune RATE if needed.
+  2. For each pin, hit get-charger-details via tesla_client.fetch_tesla_pricing.
+     Cache to data/pricing-cache/<slug>.json (30-day TTL, resumed across runs).
+     Sleeps SLEEP_SECONDS between calls so Akamai doesn't escalate. The Kotlin
+     backend serves these cache files directly — Tesla is never called from the
+     user request path.
 
 The output GeoJSON mirrors the property shape index.html's SC layer expects
 (name, status, color, locationId, stallCount, powerKilowatt, address bits)
@@ -27,11 +28,12 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "scripts"))
 
-# Reuse the cookie-loading + curl-impersonate fetch from server.py — same
-# Akamai-evasion machinery the live pricing endpoint uses.
-import server  # noqa: E402
+# Cookie-loading + curl-impersonate fetch. Lives in scripts/ since the live
+# serving stack is now Kotlin and doesn't touch Tesla — this client is only
+# used by the offline refresh worker.
+import tesla_client  # noqa: E402
 
 NA_BBOX = (14, 72, -180, -52)  # min_lat, max_lat, min_lng, max_lng — NA + Caribbean
 LOCATIONS_FILE = ROOT / "data" / "tesla-locations-us.json"
@@ -62,7 +64,7 @@ def fetch_locations_bulk():
     filter by NA_BBOX after). Uses the same curl-impersonate / Akamai-cookie
     machinery as fetch_tesla_pricing — same rate limit, same cookie burn signal.
     """
-    cookies = server.get_tesla_cookies()
+    cookies = tesla_client.get_tesla_cookies()
     if not cookies:
         raise RuntimeError("No Tesla cookies (cookie-bot and TESLA_COOKIES both empty)")
     curl_bin = os.environ.get("TESLA_CURL", "curl_safari15_5")
@@ -134,7 +136,7 @@ def load_pins():
 
 
 def cached_detail(slug):
-    cache_file = server.CACHE_DIR / f"{slug}.json"
+    cache_file = tesla_client.CACHE_DIR / f"{slug}.json"
     if not cache_file.exists():
         return None
     try:
@@ -148,10 +150,10 @@ def fetch_detail(slug):
     cached = cached_detail(slug)
     if cached:
         return cached
-    status, data = server.fetch_tesla_pricing(slug)
+    status, data = tesla_client.fetch_tesla_pricing(slug)
     if status == 200 and isinstance(data, dict):
-        server.CACHE_DIR.mkdir(parents=True, exist_ok=True)
-        (server.CACHE_DIR / f"{slug}.json").write_text(json.dumps(data, indent=2))
+        tesla_client.CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        (tesla_client.CACHE_DIR / f"{slug}.json").write_text(json.dumps(data, indent=2))
         return data
     err = data.get("error") if isinstance(data, dict) else str(data)
     print(f"  fail {slug}: HTTP {status} — {err}", file=sys.stderr)
@@ -212,7 +214,7 @@ def main():
                         help="cache-only — don't hit Tesla, use whatever's cached + leave the rest unenriched")
     args = parser.parse_args()
 
-    server.load_env()
+    tesla_client.load_env()
     pins = load_pins()
     if args.limit:
         pins = pins[:args.limit]

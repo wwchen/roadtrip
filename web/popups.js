@@ -7,7 +7,12 @@ async function loadPricing(slug, elId) {
     const r = await fetch('/api/pricing/' + encodeURIComponent(slug));
     const j = await r.json();
     if (!r.ok) {
-      el.innerHTML = `<div class="meta">Pricing unavailable (HTTP ${r.status}).${j.error === 'TESLA_COOKIES not set in .env. Paste a Cookie header from DevTools.' ? ' Set TESLA_COOKIES in .env.' : ''}</div>`;
+      // 404 means the refresh worker hasn't crawled this site yet. Pricing
+      // is no longer fetched live — see scripts/fetch_tesla_superchargers.py.
+      const msg = r.status === 404
+        ? 'Pricing not yet cached.'
+        : `Pricing unavailable (HTTP ${r.status}).`;
+      el.innerHTML = `<div class="meta">${msg}</div>`;
       return;
     }
     el.innerHTML = renderPricing(j);

@@ -181,8 +181,10 @@ This sidesteps:
 - `OCM_API_KEY` — openchargemap.org — optional fallback
 - supercharge.info, Overpass, PAD-US, USCampgrounds.info, recreation.gov (search + ratingreview) — no key needed
 
-Tesla pricing proxy (server.py) requires a separately-managed session cookie
-in `.env`; see README_PRICING.md.
+Tesla pricing offline refresh worker (`scripts/fetch_tesla_superchargers.py`)
+requires a separately-managed session cookie in `.env`; see README_PRICING.md.
+The Kotlin backend serves the resulting cache from `data/pricing-cache/` and
+never calls Tesla on the user request path.
 
 ## Open decisions (from REQUIREMENTS.md)
 

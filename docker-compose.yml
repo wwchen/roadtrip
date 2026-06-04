@@ -1,33 +1,10 @@
 services:
-  app:
-    build: .
-    restart: unless-stopped
-    hostname: app
-    volumes:
-      # Pricing cache (lazy-populated by user clicks, 30-day TTL). Mounted
-      # from the repo's data/pricing-cache so a fresh `pois-up` picks up the
-      # 1k+ checked-out cache files; the previous default ($HOME/.roadtrip-map)
-      # was empty on first launch and turned every Supercharger click into a
-      # Tesla 429 when cookies were stale.
-      - ./data/pricing-cache:/app/data/pricing-cache
-      # .env is read by server.py's load_env(). We mount it instead of using
-      # `env_file:` because Compose interpolates $VAR sequences inside env_file
-      # values, which mangles Tesla cookies (e.g. _ga_*=...$o1$g1$t...).
-      - ./.env:/app/.env:ro
-    environment:
-      - PORT=8765
-      # /api/pois proxies to the Kotlin backend on the compose network. The
-      # default in server.py (http://127.0.0.1:8080) only works when host and
-      # backend share localhost — inside this container that's a self-loop and
-      # ECONNREFUSEs. Override to the compose service name so app→backend
-      # works in both `make pois-up` (local) and `make deploy` (mini-ca).
-      - ROADTRIP_BACKEND_URL=http://backend:8080
-    # For local port publishing, use docker-compose.local.yml (see Makefile).
-
   # cookie-bot sidecar — kept for future use but not started by default on
   # aarch64 hosts (see memory: akamai_http2_fingerprinting.md). To enable,
   # run with `--profile cookie-bot` on an amd64 host (or with a paid-solver
   # backend), then set COOKIE_BOT_URL=http://cookie-bot:8080 in .env.
+  # Used only by the offline refresh worker (scripts/fetch_tesla_superchargers.py),
+  # not by the live serving stack.
   cookie-bot:
     profiles: [cookie-bot]
     build: ./cookie-bot
@@ -40,9 +17,9 @@ services:
       - HEADLESS=true
       - LOG_LEVEL=INFO
 
-  # Phase 2 backend store. PostGIS image (postgres:16 + postgis 3.4) so the
-  # geom column can be Geometry (Polygon/MultiPolygon, not just Point) and
-  # GIST bbox queries work without an extension install step.
+  # Postgres + PostGIS (postgres:16 + postgis 3.4) so geom can be Geometry
+  # (Polygon/MultiPolygon, not just Point) and GIST bbox queries work
+  # without an extension install step.
   postgres:
     profiles: [pois]
     image: postgis/postgis:16-3.4
@@ -60,27 +37,38 @@ services:
       timeout: 3s
       retries: 10
 
-  # Kotlin/Ktor /api/pois service. Reads from postgres on the compose
-  # network. The fat-jar is built on the host (`make backend-build`) and
-  # baked into this image — see backend/Dockerfile for why.
+  # Kotlin/Ktor backend. Serves the entire site:
+  #   - GET /                       → index.html
+  #   - GET /web/*, /data/*         → static files (data/pricing-cache/ excluded)
+  #   - GET /api/pois               → bbox query against postgres
+  #   - GET /api/pricing/{slug}     → cache-only read of data/pricing-cache/{slug}.json
+  #   - GET /api/health             → status snapshot (cache count + db ping)
+  # Static files come from the repo bind-mount so deploys are git-pull +
+  # docker compose up — no Dockerfile rebuild needed for HTML/JS/data changes.
   backend:
     profiles: [pois]
     build: ./backend
     restart: unless-stopped
     hostname: backend
     environment:
-      - PORT=8080
+      - PORT=8765
+      - ROADTRIP_STATIC_DIR=/app/static
       - ROADTRIP_DB_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
       - ROADTRIP_DB_USER=${POSTGRES_USER:-roadtrip}
       - ROADTRIP_DB_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+    volumes:
+      - ./index.html:/app/static/index.html:ro
+      - ./web:/app/static/web:ro
+      - ./data:/app/static/data:ro
     depends_on:
       postgres:
         condition: service_healthy
 
   cloudflared:
     # Only runs with `--profile tunnel` (deploy target). Local modes skip it.
-    # Mounts a config.yml so path-based routing (/api/pois → backend,
-    # /api/pricing + /* → app) lives in the repo, not the dashboard.
+    # Mounts a config.yml so path-based routing lives in the repo, not the
+    # dashboard. With backend serving everything, the config is now a single
+    # catch-all.
     profiles: [tunnel]
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
@@ -88,4 +76,4 @@ services:
     volumes:
       - ./cloudflared:/etc/cloudflared:ro
     depends_on:
-      - app
+      - backend

@@ -26,8 +26,8 @@ jobs:
 
   smoke:
     # End-to-end: importer hydrates Postgres from data/, backend serves
-    # /api/pois, server.py proxies it, Playwright drives Chromium against the
-    # composed stack. Mirrors the local `make qa` flow.
+    # static site + /api/*, Playwright drives Chromium against it. Mirrors
+    # the local `make qa` flow.
     runs-on: ubuntu-latest
     needs: backend-tests
     services:
@@ -75,25 +75,15 @@ jobs:
       - name: Start backend
         run: |
           jar=$(ls backend/build/libs/roadtrip-backend-*-all.jar | head -1)
-          nohup java -jar "$jar" > backend.log 2>&1 &
+          PORT=8765 ROADTRIP_STATIC_DIR="${{ github.workspace }}" \
+            nohup java -jar "$jar" > backend.log 2>&1 &
           for i in $(seq 1 30); do
-            if curl -sSf http://127.0.0.1:8080/api/pois/health >/dev/null; then
+            if curl -sSf http://127.0.0.1:8765/api/health >/dev/null; then
               echo "backend up"; exit 0
             fi
             sleep 1
           done
           echo "backend failed to start"; tail -100 backend.log; exit 1
-
-      - name: Start static server (server.py)
-        run: |
-          ROADTRIP_BACKEND_URL=http://127.0.0.1:8080 python3 server.py &
-          for i in $(seq 1 20); do
-            if curl -sSf http://127.0.0.1:8765/api/health >/dev/null; then
-              echo "server.py up"; exit 0
-            fi
-            sleep 1
-          done
-          echo "server.py failed to start"; exit 1
 
       - name: Install Playwright + Chromium
         run: |

@@ -48,7 +48,7 @@ chmod 600 .env
 echo "✓ wrote .env (TESLA_COOKIES=${#cookies} chars)"
 echo
 echo "Test now:"
+echo "  make refresh-image"
 echo "  docker run --rm --env-file .env \\"
 echo "    -v \"\$(pwd)/data:/app/data\" -v \"\$(pwd)/scripts:/app/scripts\" \\"
-echo "    -v \"\$(pwd)/server.py:/app/server.py\" \\"
-echo "    roadtrip-map:local python3 /app/scripts/fetch_tesla_superchargers.py --limit 3"
+echo "    roadtrip-refresh:local python3 /app/scripts/fetch_tesla_superchargers.py --limit 3"

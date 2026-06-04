@@ -14,16 +14,20 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 ## Local dev
 
 ```sh
-make run                 # bare python3 server.py, http://127.0.0.1:8765
-make docker-run          # local docker build, port-publishes 8765, no cloudflared
+make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
+make docker-run          # local docker build (backend + postgres), port-publishes 8765
 make deploy              # ssh to the mini, git pull, docker compose up
-make deploy-local        # full stack (app + cloudflared) on this host
-make refresh-cookies     # push Tesla cookies from clipboard → mini
+make deploy-local        # full stack (backend + postgres + cloudflared) on this host
+make refresh-cookies     # push Tesla cookies from clipboard → mini (offline refresh worker only)
 ```
 
-Pricing requires Tesla cookies in `.env` — see `README_PRICING.md`. To refresh
-cookies from a laptop that isn't on the mini's network, turn on the Tailscale
-exit node pointing at the mini, then run `make refresh-cookies`.
+Pricing is served from the on-disk cache (`data/pricing-cache/`). Tesla is
+never called from the user request path — the backend just reads cached JSON
+and 404s with `{"error":"not_cached"}` for sites that haven't been crawled.
+To populate/refresh the cache, run `make refresh-superchargers` (full run,
+~25 min) or `make rebuild-superchargers` (cache-only, ~30s). That worker
+needs Tesla cookies in `.env` — see `README_PRICING.md` and
+`make refresh-cookies` / `make refresh-cookies-local`.
 
 ## Refresh POI data
 
@@ -81,12 +85,17 @@ re-run `make refresh-cookies`.
 
 ## Architecture notes
 
-- **No backend database.** Supercharger data is live from
-  supercharge.info/service/supercharge/allSites; other layers are static
-  GeoJSON committed to the repo.
-- **Pricing proxy** — `server.py` proxies `/api/pricing/<locationSlug>` to
-  `tesla.com/api/findus/get-charger-details`, caches 30 days. Shells out to
-  `curl-impersonate` (Safari/Chrome presets) because Akamai fingerprints TLS
+- **Backend.** Kotlin/Ktor + Netty serves the entire site: `/` →
+  `index.html`, `/web/*` and `/data/*` → static (with `/data/pricing-cache/*`
+  excluded so it's only reachable through `/api/pricing/{slug}`), plus
+  `/api/pois`, `/api/pricing/{slug}`, `/api/health`. Postgres+PostGIS holds
+  the imported POI data; Supercharger geometry is live from
+  supercharge.info/service/supercharge/allSites.
+- **Pricing cache.** `/api/pricing/{slug}` is read-only against
+  `data/pricing-cache/{slug}.json`. Misses return 404 with
+  `{"error":"not_cached"}`. Cache is populated offline by
+  `scripts/fetch_tesla_superchargers.py` (run via `make refresh-superchargers`),
+  which shells out to `curl-impersonate` because Akamai fingerprints TLS
   ClientHello + HTTP/2 SETTINGS — stock OpenSSL curl gets 403.
 - **Map** — MapLibre GL, vector and raster basemaps, runtime style-swap.
   Overlay data is cached in memory and re-installed on every `style.load`

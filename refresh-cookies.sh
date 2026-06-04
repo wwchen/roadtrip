@@ -132,30 +132,9 @@ else
 fi
 rm -f "$tmp_resp"
 
-# If the local server is running, offer to restart so it picks up the new cookies.
-if command -v lsof >/dev/null 2>&1; then
-  pid="$(lsof -i :8765 -sTCP:LISTEN -Pn 2>/dev/null | awk 'NR==2 {print $2}')"
-  if [[ -n "$pid" ]] && ps -p "$pid" -o command= 2>/dev/null | grep -q python; then
-    echo
-    read -r -p "Local server running (pid $pid). Restart to pick up new cookies? [Y/n] " yn
-    if [[ "$yn" != "n" && "$yn" != "N" ]]; then
-      kill "$pid"
-      sleep 0.5
-      nohup python3 server.py > /tmp/roadtrip-server.log 2>&1 &
-      disown
-      echo "✓ server restarted (pid $!)"
-    fi
-  fi
-fi
-
-# Same courtesy for Docker.
-if command -v docker >/dev/null 2>&1 && docker compose ps --services 2>/dev/null | grep -q '^app$'; then
-  echo
-  read -r -p "Docker app container detected. Restart it? [Y/n] " yn
-  if [[ "$yn" != "n" && "$yn" != "N" ]]; then
-    docker compose restart app
-  fi
-fi
+# Cookies live in .env now; the offline refresh worker reads them on next run.
+# No live server picks them up — the Kotlin backend serves cache only.
+echo "✓ cookies written to $ENV_FILE — next \`make refresh-superchargers\` will use them"
 
 echo
 echo "Done. Pricing popups will work until Tesla rotates the cookies (usually within a day)."

@@ -1,12 +1,10 @@
 services:
-  app:
-    ports:
-      - "127.0.0.1:8765:8765"
   # Expose Postgres on the host for the importer + jOOQ codegen, local-only.
   postgres:
     ports:
       - "127.0.0.1:5432:5432"
-  # Expose backend on the host for direct curl/QA against /api/pois.
+  # Backend serves the whole site; bind to 8765 to match historical bookmarks
+  # and Playwright's QA_BASE_URL default.
   backend:
     ports:
-      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8765:8765"

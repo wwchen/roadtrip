@@ -94,8 +94,9 @@ URL: <https://roadtrip.floo.ca>
 
 | Failure | Likely cause | Action |
 | --- | --- | --- |
-| state-parks.geojson size 3.9 MB | gzip middleware not deployed or Cloudflare stripping | Check `server.py` `_GZIPPABLE`; verify `Vary: Accept-Encoding` arrives at the client |
-| Supercharger popup pricing missing or 503 | Tesla cookies burned/expired | `make refresh-cookies` from a Tailscale-exit session |
+| state-parks.geojson size 3.9 MB | gzip middleware not deployed or Cloudflare stripping | Check Ktor `Compression` config in `backend/.../Main.kt`; verify `Vary: Accept-Encoding` arrives at the client |
+| Supercharger popup says "Pricing not yet cached" everywhere | offline refresh hasn't been run / cache empty | `make refresh-superchargers` once cookies are fresh (`make refresh-cookies`) |
+| Supercharger popup pricing missing for one site | site not yet crawled by offline worker | wait for next refresh, or `make refresh-superchargers` to re-run |
 | Tesla button → Access Denied | Akamai bot wall (rare; cookies bound to wrong IP) | `make refresh-cookies` |
 | No popup on tap (zooms instead) | Hit layer above visual layer was stripped by edit | `git diff index.html` for `pf-points-hit`/`sc-points-hit`/`np-pts-hit`/`sp-pts-hit` |
 | Geolocate dot doesn't appear | iOS denied permission silently | iOS Settings → Safari → Location → While Using App |
