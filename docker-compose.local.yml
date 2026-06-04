@@ -2,3 +2,7 @@ services:
   app:
     ports:
       - "127.0.0.1:8765:8765"
+  # Expose Postgres on the host for the importer + jOOQ codegen, local-only.
+  postgres:
+    ports:
+      - "127.0.0.1:5432:5432"

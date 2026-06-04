@@ -39,6 +39,16 @@ application {
     mainClass.set("ca.floo.roadtrip.MainKt")
 }
 
+// Standalone importer entry. Invoke with:
+//   ./gradlew importer --args="uscampgrounds"
+tasks.register<JavaExec>("importer") {
+    group = "application"
+    description = "Run the POI importer."
+    mainClass.set("ca.floo.roadtrip.importer.ImporterKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    standardInput = System.`in`
+}
+
 repositories {
     mavenCentral()
 }
