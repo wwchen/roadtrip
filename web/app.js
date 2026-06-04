@@ -31,6 +31,11 @@ const map = new maplibregl.Map({
 });
 state.map = map;
 
+// QA hooks — referenced by qa/smoke.spec.mjs. Harmless globals (the test is
+// the only consumer); kept unconditional so the smoke doesn't need a flag-flip.
+globalThis.__rtMap = map;
+globalThis.__rtState = state;
+
 map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
 // enableHighAccuracy:false: at 50km decision scale we don't need GPS warm-up
 // + battery drain. trackUserLocation:false: single fetch, no watchPosition.

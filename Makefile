@@ -1,4 +1,4 @@
-.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell
+.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell qa
 
 SOURCE ?= uscampgrounds
 
@@ -25,6 +25,7 @@ help:
 	@echo "  make pois-import      Run the Kotlin importer against local Postgres"
 	@echo "  make pois-test        Run backend Testcontainers tests"
 	@echo "  make pois-psql        psql shell into local Postgres"
+	@echo "  make qa               Playwright smoke against local stack (requires server.py + backend up)"
 	@echo "  make stop             Stop all compose services locally"
 
 run:
@@ -120,3 +121,11 @@ backend-run: backend-build pois-up
 
 backend-shell:
 	docker exec -it roadtrip-map-backend-1 sh
+
+# Local-only Playwright smoke. Hits server.py on $(PORT) which proxies /api/pois
+# to the Kotlin backend on 8080. Doesn't boot the stack — bring it up first
+# (e.g. `make backend-run` + `make run` in another shell).
+qa:
+	cd qa && npm install --no-audit --no-fund
+	cd qa && npx playwright install chromium
+	cd qa && QA_BASE_URL=http://127.0.0.1:$(PORT) npm test

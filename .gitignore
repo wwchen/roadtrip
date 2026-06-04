@@ -19,3 +19,8 @@ data/tesla-locations-us.json
 backend/.gradle/
 backend/build/
 
+# Playwright smoke artifacts. Tests live in qa/, deps + browser cache + run
+# results all stay local.
+qa/test-results/
+qa/playwright-report/
+
