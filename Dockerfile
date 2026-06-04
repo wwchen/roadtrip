@@ -27,6 +27,7 @@ RUN apt-get update \
 # Copy static site + server
 COPY server.py ./
 COPY index.html ./
+COPY web/ ./web/
 COPY data/ ./data/
 
 ENV PORT=8765
