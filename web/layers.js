@@ -168,6 +168,18 @@ export function installStateLines(states) {
   });
 }
 
+// Module-scope so setData helpers can re-derive centroids on bbox updates
+// without re-running installParkLayers (which rebuilds layers + handlers).
+function toPoints(fc) {
+  return {
+    type: 'FeatureCollection',
+    features: fc.features.map(f => {
+      const [lng, lat] = geomCenter(f.geometry);
+      return { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: f.properties };
+    }),
+  };
+}
+
 export function installParkLayers(np, sp) {
   const { map } = state;
   resetOverlay(['np', 'sp', 'np-pts', 'sp-pts'],
@@ -177,14 +189,6 @@ export function installParkLayers(np, sp) {
   // but beneath street/city labels. Works with both raster and vector basemaps.
   const firstLabel = map.getStyle().layers.find(l => l.type === 'symbol');
   const anchor = firstLabel ? firstLabel.id : undefined;
-
-  const toPoints = (fc) => ({
-    type: 'FeatureCollection',
-    features: fc.features.map(f => {
-      const [lng, lat] = geomCenter(f.geometry);
-      return { type: 'Feature', geometry: { type: 'Point', coordinates: [lng, lat] }, properties: f.properties };
-    }),
-  });
 
   // State Parks (polygons first so NP overlays them on overlap)
   map.addSource('sp', { type: 'geojson', data: sp });
@@ -356,6 +360,34 @@ export function installSCLayer(geojson) {
   for (const id of ['f-open','f-construction','f-permit','f-plan','f-closed']) {
     document.getElementById(id).addEventListener('change', updateFilter);
   }
+}
+
+// Update existing source data without rebuilding layers. Used by the bbox
+// loader on moveend — installX layers stay mounted, only the GeoJSON changes.
+// No-ops if the layer hasn't been installed yet (initial load races moveend).
+export function setCGData(geojson) {
+  const src = state.map?.getSource('cg');
+  if (src) src.setData(geojson);
+}
+export function setPFData(geojson) {
+  const src = state.map?.getSource('pf');
+  if (src) src.setData(geojson);
+}
+export function setNPData(geojson) {
+  const m = state.map;
+  if (!m) return;
+  const npSrc = m.getSource('np');
+  const npPtsSrc = m.getSource('np-pts');
+  if (npSrc) npSrc.setData(geojson);
+  if (npPtsSrc) npPtsSrc.setData(toPoints(geojson));
+}
+export function setSPData(geojson) {
+  const m = state.map;
+  if (!m) return;
+  const spSrc = m.getSource('sp');
+  const spPtsSrc = m.getSource('sp-pts');
+  if (spSrc) spSrc.setData(geojson);
+  if (spPtsSrc) spPtsSrc.setData(toPoints(geojson));
 }
 
 // Synthesize a click on the first visible layer at the given coordinate —

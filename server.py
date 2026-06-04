@@ -29,6 +29,12 @@ CACHE_DIR = ROOT / "data" / "pricing-cache"
 CACHE_TTL_SECONDS = 30 * 24 * 3600  # 30 days
 ENV_PATH = ROOT / ".env"
 
+# /api/pois proxy target. In prod, cloudflared splits the route at the edge and
+# this server never sees the path. In `make dev` the user runs both services on
+# localhost — proxying here keeps the webapp talking to a single origin so the
+# AbortController-driven moveend loop doesn't trip CORS.
+BACKEND_URL = os.environ.get("ROADTRIP_BACKEND_URL", "http://127.0.0.1:8080")
+
 # When COOKIE_BOT_URL is set, we fetch cookies from the sidecar instead of
 # .env. Bot responses are cached in-process to avoid hammering it for every
 # pricing click; the bot has its own TTL but we stay an order of magnitude
@@ -196,6 +202,10 @@ class Handler(BaseHTTPRequestHandler):
             self._json(200, _health_snapshot())
             return
 
+        if self.path.startswith("/api/pois"):
+            self._proxy_to_backend()
+            return
+
         # Static files
         path = urllib.parse.unquote(self.path.split("?", 1)[0])
         if path == "/":
@@ -267,6 +277,28 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _proxy_to_backend(self):
+        url = BACKEND_URL.rstrip("/") + self.path
+        try:
+            with urllib.request.urlopen(url, timeout=10) as resp:
+                body = resp.read()
+                ctype = resp.headers.get("Content-Type", "application/json")
+                self.send_response(resp.status)
+                self.send_header("Content-Type", ctype)
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-cache")
+                self.end_headers()
+                self.wfile.write(body)
+        except urllib.error.HTTPError as e:
+            body = e.read() or b'{"error":"backend error"}'
+            self.send_response(e.code)
+            self.send_header("Content-Type", e.headers.get("Content-Type", "application/json"))
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+        except Exception as e:
+            self._json(502, {"error": "backend unreachable", "detail": str(e)})
+
     def _json(self, status: int, data: dict):
         body = json.dumps(data).encode()
         self.send_response(status)
@@ -284,6 +316,7 @@ def main():
     srv = ThreadingHTTPServer((host, port), Handler)
     print(f"serving at http://{host}:{port}", file=sys.stderr)
     print(f"  pricing proxy  : /api/pricing/<slug>", file=sys.stderr)
+    print(f"  pois proxy     : /api/pois -> {BACKEND_URL}", file=sys.stderr)
     print(f"  cache dir      : {CACHE_DIR}", file=sys.stderr)
     bot_url = os.environ.get("COOKIE_BOT_URL", "")
     cookies_set = bool(os.environ.get("TESLA_COOKIES"))
