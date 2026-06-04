@@ -1,14 +1,11 @@
 package ca.floo.roadtrip.importer
 
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
-import java.security.MessageDigest
 import java.time.Instant
 
 // Normalizes data/campgrounds.geojson (~11.9k features) into StagedPoi rows.
@@ -42,7 +39,7 @@ class UsCampgroundsSource(
                     sourceId = sourceIdFor(code, state, name, lat, lon),
                     category = Category.CAMPGROUND,
                     name = name,
-                    geomWkt = "POINT($lon $lat)",
+                    geomGeoJson = pointGeoJson(lon, lat),
                     region = state,
                     unitName = props["parent_name"]?.jsonPrimitive?.contentOrNull(),
                     properties = props,
@@ -56,17 +53,12 @@ class UsCampgroundsSource(
     private fun sourceIdFor(code: String, state: String, name: String, lat: Double, lon: Double): String {
         // Hash uses a stable seed so re-runs produce the same id even when
         // upstream re-orders features. lat/lon at 5dp ≈ 1m precision.
-        val seed = "$name|${"%.5f".format(lat)}|${"%.5f".format(lon)}"
-        val md = MessageDigest.getInstance("SHA-256").digest(seed.toByteArray())
-        val hash8 = md.take(4).joinToString("") { "%02x".format(it) }
+        val hash8 = stableHash8("$name|${"%.5f".format(lat)}|${"%.5f".format(lon)}")
         // Some upstream codes contain parens or non-ASCII (PC-BC parks). The
         // pois.source_id CHECK enforces ^[a-z0-9:_-]+$, so collapse anything
         // outside that set to '_'. The hash suffix preserves uniqueness.
         return "${code.toSlug()}-${state.toSlug()}-$hash8"
     }
-
-    private fun String.toSlug(): String =
-        lowercase().replace(Regex("[^a-z0-9:_-]+"), "_").trim('_')
 
     private fun reserveUrlFor(props: JsonObject): String? {
         val recgovId = props["recgov_id"]?.jsonPrimitive?.contentOrNull() ?: return null
@@ -79,5 +71,3 @@ class UsCampgroundsSource(
     }
 }
 
-private fun JsonElement.contentOrNull(): String? =
-    runCatching { jsonPrimitive.content }.getOrNull()

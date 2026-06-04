@@ -1,4 +1,6 @@
-.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-test pois-psql backend-build backend-run backend-shell
+.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell
+
+SOURCE ?= uscampgrounds
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -93,7 +95,10 @@ pois-down:
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois stop postgres
 
 pois-import: pois-up
-	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data gradle importer --args="uscampgrounds"
+	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data gradle importer --args="$(SOURCE)"
+
+pois-import-all: pois-up
+	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data gradle importer --args="all"
 
 pois-test:
 	cd backend && gradle test

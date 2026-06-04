@@ -208,7 +208,7 @@ class ImporterTest {
         sourceId = sourceId,
         category = Category.CAMPGROUND,
         name = name,
-        geomWkt = "POINT($lon $lat)",
+        geomGeoJson = pointGeoJson(lon, lat),
         region = "AK",
         unitName = null,
         properties = buildJsonObject { put("test", true) },

@@ -80,11 +80,9 @@ class Importer(private val ctx: DSLContext) {
     }
 
     private fun upsert(source: String, poi: StagedPoi, runId: Long) {
-        // jOOQ has no PostGIS bindings here, so geom goes through ST_GeomFromText.
-        // properties uses JSONB.valueOf with the source's raw JsonObject string.
-        val geomExpr = DSL.field("ST_GeomFromText(?, 4326)", Any::class.java, poi.geomWkt)
+        // jOOQ has no PostGIS bindings, so geom goes through ST_GeomFromGeoJSON
+        // wrapped in ST_SetSRID. Polygon/MultiPolygon work the same as Point.
         val fetchedAtTs = OffsetDateTime.ofInstant(poi.fetchedAt, ZoneOffset.UTC)
-        val propsJsonb = JSONB.valueOf(poi.properties.toString())
 
         ctx.execute(
             """
@@ -92,7 +90,7 @@ class Importer(private val ctx: DSLContext) {
               source, source_id, category, name, geom, region, unit_name,
               properties, reserve_url, fetched_at, last_seen_run_id, deleted_at
             )
-            VALUES (?, ?, ?, ?, ST_GeomFromText(?, 4326), ?, ?, ?::jsonb, ?, ?::timestamptz, ?, NULL)
+            VALUES (?, ?, ?, ?, ST_SetSRID(ST_GeomFromGeoJSON(?), 4326), ?, ?, ?::jsonb, ?, ?::timestamptz, ?, NULL)
             ON CONFLICT (source, source_id) DO UPDATE SET
               category         = EXCLUDED.category,
               name             = EXCLUDED.name,
@@ -106,7 +104,7 @@ class Importer(private val ctx: DSLContext) {
               deleted_at       = NULL,
               updated_at       = NOW()
             """.trimIndent(),
-            source, poi.sourceId, poi.category.sql, poi.name, poi.geomWkt,
+            source, poi.sourceId, poi.category.sql, poi.name, poi.geomGeoJson,
             poi.region, poi.unitName, poi.properties.toString(),
             poi.reserveUrl, fetchedAtTs, runId,
         )
@@ -131,28 +129,44 @@ class Importer(private val ctx: DSLContext) {
     }
 }
 
-// Standalone entry: `gradle run --args="uscampgrounds"` or pass a path.
-// In phase 2.7 this gains other source names.
+// Standalone entry: `gradle importer --args="uscampgrounds"` or `--args="all"`.
+// Known source names: uscampgrounds, alberta-provincial, parks-canada,
+// state-parks, national-parks, osm-pf. "all" expands to every known source.
 fun main(args: Array<String>) {
     val log = LoggerFactory.getLogger("Importer")
-    val sources = args.toList().ifEmpty { listOf("uscampgrounds") }
+    val dataDir = System.getenv("ROADTRIP_DATA_DIR")?.let(::File) ?: File("data")
+    val requested = args.toList().ifEmpty { listOf("uscampgrounds") }
+    val sources = if (requested == listOf("all")) {
+        listOf("uscampgrounds", "alberta-provincial", "parks-canada", "state-parks", "national-parks", "osm-pf")
+    } else requested
+
     val ds = dataSourceFor(DbConfig.fromEnv())
     migrate(ds)
     val ctx = dsl(ds)
     val importer = Importer(ctx)
 
     for (s in sources) {
-        val src: Source = when (s) {
-            "uscampgrounds" -> {
-                val path = System.getenv("ROADTRIP_DATA_DIR")?.let { File(it, "campgrounds.geojson") }
-                    ?: File("data/campgrounds.geojson")
-                require(path.exists()) { "missing data file: ${path.absolutePath}" }
-                UsCampgroundsSource(path)
-            }
-            else -> error("unknown source: $s")
-        }
+        val src: Source = sourceFor(s, dataDir)
         val result = importer.run(src)
         log.info("DONE source={} runId={} seen={} swept={}", src.name, result.runId, result.seenCount, result.sweptCount)
     }
     ds.close()
+}
+
+private fun sourceFor(name: String, dataDir: File): Source = when (name) {
+    "uscampgrounds" -> UsCampgroundsSource(required(File(dataDir, "campgrounds.geojson")))
+    "alberta-provincial" -> AlbertaProvincialSource(required(File(dataDir, "alberta-provincial.json")))
+    "parks-canada" -> ParksCanadaSource(listOf(
+        required(File(dataDir, "parks-canada-bc.json")),
+        required(File(dataDir, "parks-canada-ab.json")),
+    ))
+    "state-parks" -> ParksGeoJsonSource(required(File(dataDir, "state-parks.geojson")), "state-parks", Category.STATE_PARK)
+    "national-parks" -> ParksGeoJsonSource(required(File(dataDir, "national-parks.geojson")), "national-parks", Category.NATIONAL_PARK)
+    "osm-pf" -> PlanetFitnessSource(required(File(dataDir, "planet-fitness.geojson")))
+    else -> error("unknown source: $name")
+}
+
+private fun required(f: File): File {
+    require(f.exists()) { "missing data file: ${f.absolutePath}" }
+    return f
 }

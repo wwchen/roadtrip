@@ -2,15 +2,16 @@ package ca.floo.roadtrip.importer
 
 import kotlinx.serialization.json.JsonObject
 
-// One row staged for upsert. The source produces these; the importer's
-// mark-and-sweep loop persists them. geomWkt must be EPSG:4326 WKT — for
-// Points this is "POINT(lon lat)", for state/national parks Polygon or
-// MultiPolygon as appropriate.
+// One row staged for upsert. geomGeoJson is a GeoJSON geometry string —
+// "{\"type\":\"Point\",\"coordinates\":[lon,lat]}" for points, or the full
+// Polygon/MultiPolygon for state/national park shapes. The importer wraps
+// it in ST_SetSRID(ST_GeomFromGeoJSON(?), 4326) at INSERT time so the
+// SRID is consistent regardless of what the upstream JSON declared.
 data class StagedPoi(
     val sourceId: String,            // unique within source; matches ^[a-z0-9:_-]+$
     val category: Category,
     val name: String,
-    val geomWkt: String,
+    val geomGeoJson: String,
     val region: String?,             // US state / Canadian province
     val unitName: String?,           // containing park / forest, if any
     val properties: JsonObject,
