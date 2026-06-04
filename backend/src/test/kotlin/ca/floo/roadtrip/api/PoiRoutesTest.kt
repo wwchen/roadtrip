@@ -97,6 +97,23 @@ class PoiRoutesTest {
     }
 
     @Test
+    fun `bbox over empty water returns empty FeatureCollection with truncated false`() = testApplication {
+        // Mid-Pacific envelope, far from anything seeded. Must come back as a
+        // valid empty FeatureCollection — not an error, not a missing field.
+        seed(listOf(
+            row("vancouver", "Vancouver Park", -123.0, 49.0, Category.CAMPGROUND),
+        ))
+        application { routing { poiRoutes(ctx) } }
+
+        val resp = client.get("/api/pois?bbox=-160,5,-150,15")
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+        assertEquals("FeatureCollection", body["type"]!!.jsonPrimitive.content)
+        assertEquals(false, body["truncated"]!!.jsonPrimitive.boolean)
+        assertEquals(0, body["features"]!!.jsonArray.size)
+    }
+
+    @Test
     fun `category filter narrows the set`() = testApplication {
         seed(listOf(
             row("camp-1", "Camp A", -123.0, 49.0, Category.CAMPGROUND),

@@ -4,7 +4,10 @@ import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
@@ -186,6 +189,81 @@ class ImporterTest {
         assertEquals(6, result.seenCount)
         assertEquals(4, result.sweptCount)
         assertEquals(6, ctx.fetchCount(POIS, POIS.DELETED_AT.isNull))
+    }
+
+    @Test
+    fun `sweep on one source does not touch rows from a different source`() {
+        // Hard-fail safeguard: each source's mark-and-sweep must be scoped by
+        // SOURCE column. If a source lacks a row in its next run, only its own
+        // rows should soft-delete — never another source's.
+        Importer(ctx).run(FakeSource("alpha", listOf(
+            staged("a-1", "Alpha One", -123.0, 49.0),
+            staged("a-2", "Alpha Two", -123.1, 49.1),
+        )))
+        Importer(ctx).run(FakeSource("beta", listOf(
+            staged("b-1", "Beta One", -122.0, 50.0),
+            staged("b-2", "Beta Two", -122.1, 50.1),
+        )))
+        assertEquals(4, ctx.fetchCount(POIS, POIS.DELETED_AT.isNull))
+
+        // Re-run alpha with one row dropped. beta must remain untouched.
+        Importer(ctx).run(FakeSource("alpha", listOf(
+            staged("a-1", "Alpha One", -123.0, 49.0),
+        )))
+
+        val activeAlpha = ctx.fetchCount(POIS, POIS.SOURCE.eq("alpha").and(POIS.DELETED_AT.isNull))
+        val activeBeta = ctx.fetchCount(POIS, POIS.SOURCE.eq("beta").and(POIS.DELETED_AT.isNull))
+        assertEquals(1, activeAlpha)
+        assertEquals(2, activeBeta, "beta rows must remain active after alpha sweep")
+    }
+
+    @Test
+    fun `properties JSONB round-trips and is replaced on re-upsert`() {
+        // The properties column carries source-specific fields like
+        // last_verified, season, amenities. The webapp's flattenPoi() reads
+        // them via raw.*, so the JSON shape must round-trip byte-for-byte.
+        val first = StagedPoi(
+            sourceId = "props-1",
+            category = Category.CAMPGROUND,
+            name = "Tunnel Mountain Village I",
+            geomGeoJson = pointGeoJson(-115.547, 51.1812),
+            region = "AB",
+            unitName = "Banff",
+            properties = buildJsonObject {
+                put("season", "mid-May to early October")
+                put("last_verified", "2026-06-03")
+                put("reservable", true)
+            },
+            reserveUrl = "https://reservation.pc.gc.ca",
+            fetchedAt = Instant.parse("2026-06-01T00:00:00Z"),
+        )
+        Importer(ctx).run(FakeSource("uscampgrounds", listOf(first)))
+
+        val storedJson = ctx.select(POIS.PROPERTIES).from(POIS)
+            .where(POIS.SOURCE_ID.eq("props-1"))
+            .fetchOne()!!.value1()!!.data()
+        val parsed = kotlinx.serialization.json.Json.parseToJsonElement(storedJson).jsonObject
+        assertEquals("mid-May to early October", parsed["season"]!!.jsonPrimitive.content)
+        assertEquals("2026-06-03", parsed["last_verified"]!!.jsonPrimitive.content)
+        assertEquals(true, parsed["reservable"]!!.jsonPrimitive.boolean)
+
+        // Re-import with a corrected last_verified — the JSONB column must be
+        // fully replaced (the source is authoritative; we don't deep-merge).
+        val second = first.copy(
+            properties = buildJsonObject {
+                put("season", "year-round")
+                put("last_verified", "2026-07-01")
+                put("reservable", true)
+            }
+        )
+        Importer(ctx).run(FakeSource("uscampgrounds", listOf(second)))
+
+        val updatedJson = ctx.select(POIS.PROPERTIES).from(POIS)
+            .where(POIS.SOURCE_ID.eq("props-1"))
+            .fetchOne()!!.value1()!!.data()
+        val updated = kotlinx.serialization.json.Json.parseToJsonElement(updatedJson).jsonObject
+        assertEquals("year-round", updated["season"]!!.jsonPrimitive.content)
+        assertEquals("2026-07-01", updated["last_verified"]!!.jsonPrimitive.content)
     }
 
     @Test
