@@ -1,17 +1,21 @@
 package ca.floo.roadtrip
 
+import ca.floo.campsite.recgov.booker.campsiteModule
+import ca.floo.campsite.recgov.booker.campsiteRoutes
 import ca.floo.roadtrip.api.healthRoutes
 import ca.floo.roadtrip.api.poiRoutes
 import ca.floo.roadtrip.api.pricingRoutes
 import ca.floo.roadtrip.importer.DbConfig
 import ca.floo.roadtrip.importer.dataSourceFor
 import ca.floo.roadtrip.importer.dsl
+import ca.floo.roadtrip.importer.migrate
 import io.ktor.http.ContentType
 import io.ktor.http.content.CachingOptions
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticFiles
+import io.ktor.server.http.content.staticResources
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.cachingheaders.CachingHeaders
 import io.ktor.server.plugins.compression.Compression
@@ -29,7 +33,13 @@ fun main() {
 
 fun Application.module() {
     val ds = dataSourceFor(DbConfig.fromEnv())
+    // Run Flyway in-process so the campsite tables (V2__campsite.sql) exist
+    // before campsiteModule reads them. Roadtrip's V1__pois.sql is normally
+    // run by the importer's psql migrate, but baselineOnMigrate keeps this
+    // safe whether the DB was hand-bootstrapped or fresh.
+    migrate(ds)
     val ctx = dsl(ds)
+    val campsite = campsiteModule(ctx)
 
     // ROADTRIP_STATIC_DIR points at the repo checkout when running locally
     // (gradle run) or at /app/static inside the container (bind-mounted from
@@ -92,6 +102,7 @@ fun Application.module() {
         poiRoutes(ctx)
         pricingRoutes(pricingCache)
         healthRoutes(pricingCache)
+        campsiteRoutes(campsite)
         // Static site. /web/* and /data/* (excluding pricing-cache, which is
         // server-private) serve directly from the repo checkout. Root path
         // serves index.html.
@@ -104,6 +115,13 @@ fun Application.module() {
             contentType { f ->
                 if (f.name.endsWith(".geojson")) ContentType("application", "geo+json") else null
             }
+        }
+        // Campsite UI served from the JAR's classpath
+        // (backend/src/main/resources/static/campsite/), separate from
+        // roadtrip's repo-checkout static files. index.html serves at
+        // /campsite/.
+        staticResources("/campsite", "static/campsite") {
+            default("index.html")
         }
         staticFiles("/", staticDir) {
             default("index.html")

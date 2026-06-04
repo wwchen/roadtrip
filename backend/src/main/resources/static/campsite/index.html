@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Campsite Alert</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header>
+    <div class="header-inner">
+      <div class="logo">
+        <span class="logo-icon">⛺</span>
+        <span>Campsite Alert</span>
+      </div>
+      <div class="header-actions">
+        <div class="status-indicators">
+          <span class="status-dot" id="status-recgov" title="rec.gov reachable"></span>
+          <span class="status-label" id="status-recgov-label">rec.gov</span>
+          <span class="status-dot" id="status-login" title="Logged in"></span>
+          <span class="status-label" id="status-login-label">rec.gov OAuth</span>
+          <span id="token-countdown" class="token-countdown hidden"></span>
+          <button class="btn btn-sm btn-ghost token-refresh-btn hidden" id="token-refresh-btn" title="Refresh token">↻</button>
+        </div>
+        <button class="btn btn-sm btn-ghost" id="settings-btn">Settings</button>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <!-- New Alert Panel -->
+    <section class="panel" id="new-alert-panel">
+      <h2>New Alert</h2>
+      <form id="alert-form">
+        <div class="field-row">
+          <div class="field" style="flex:2">
+            <label>Campground</label>
+            <div class="search-wrap">
+              <input type="text" id="campground-search" placeholder="Search campground or national park name…" autocomplete="off">
+              <div id="search-results" class="dropdown hidden"></div>
+            </div>
+            <div id="selected-campgrounds" class="selected-campgrounds"></div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Arrival (earliest)</label>
+            <input type="date" id="start-date" required>
+          </div>
+          <div class="field">
+            <label>Departure (latest)</label>
+            <input type="date" id="end-date" required>
+          </div>
+          <div class="field field-sm">
+            <label>Min nights</label>
+            <input type="number" id="min-nights" value="1" min="1" max="14">
+          </div>
+          <div class="field field-sm">
+            <label>Party size</label>
+            <input type="number" id="max-people" placeholder="Any" min="1" max="100">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Site type <span class="hint">(leave empty for any)</span></label>
+            <div class="checkbox-group" id="campsite-types">
+              <label><input type="checkbox" value="STANDARD NONELECTRIC"> Standard</label>
+              <label><input type="checkbox" value="STANDARD ELECTRIC"> Electric</label>
+              <label><input type="checkbox" value="TENT ONLY NONELECTRIC"> Tent Only</label>
+              <label><input type="checkbox" value="RV NONELECTRIC"> RV (no hookup)</label>
+              <label><input type="checkbox" value="WALK TO NONELECTRIC"> Walk-in</label>
+              <label><input type="checkbox" value="GROUP STANDARD NONELECTRIC"> Group</label>
+            </div>
+          </div>
+          <div class="field">
+            <label>Equipment <span class="hint">(leave empty for any)</span></label>
+            <div class="checkbox-group" id="equipment-types">
+              <label><input type="checkbox" value="Tent"> Tent</label>
+              <label><input type="checkbox" value="Small RV"> Small RV (&lt;20ft)</label>
+              <label><input type="checkbox" value="Large RV"> Large RV (20ft+)</label>
+              <label><input type="checkbox" value="Pickup Camper"> Pickup Camper</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Specific sites <span class="hint">(comma-separated site numbers, e.g. 001,005)</span></label>
+            <input type="text" id="specific-sites" placeholder="Leave empty for any site">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field field-auto">
+            <label class="toggle-label">
+              <input type="checkbox" id="auto-cart" checked>
+              <span class="toggle"></span>
+              Auto-add to cart when found
+            </label>
+            <p class="hint-text">Opens a browser and attempts to add the site to your cart automatically. Requires credentials in Settings.</p>
+          </div>
+          <div class="field field-auto" style="margin-top:10px">
+            <label class="toggle-label">
+              <input type="checkbox" id="stop-after-match" checked>
+              <span class="toggle"></span>
+              Stop after first match
+            </label>
+            <p class="hint-text">Mark alert as done after the first match is found. Uncheck to keep polling for more options.</p>
+          </div>
+          <div class="field field-auto" style="margin-top:10px">
+            <label class="toggle-label">
+              <input type="checkbox" id="notify-slack" checked>
+              <span class="toggle"></span>
+              Notify via Slack
+            </label>
+            <p class="hint-text">Send a Slack message when a match is found. Uses the channel configured in Settings.</p>
+          </div>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="btn btn-primary">Create Alert</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- Active Alerts -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Active Alerts</h2>
+        <span id="alerts-count" class="badge badge-blue">0</span>
+        <div style="display:flex;align-items:center;gap:8px;margin-left:auto">
+          <span class="status-dot checking" id="status-data" title="Waiting for first refresh…"></span>
+          <span id="poll-countdown" class="poll-countdown hidden"></span>
+          <button class="btn btn-sm btn-ghost token-refresh-btn" id="poll-now-btn" title="Poll Now">↻</button>
+        </div>
+      </div>
+      <div id="alerts-list" class="alerts-list">
+        <div class="empty-state">No alerts yet. Create one above.</div>
+      </div>
+    </section>
+
+    <!-- Recent Matches -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Recent Matches</h2>
+        <span id="matches-count" class="badge badge-green">0</span>
+        <div style="display:flex;gap:8px;align-items:center;margin-left:auto">
+          <button class="btn btn-sm btn-secondary" id="auto-refresh-matches-btn" title="Toggle auto-refresh every 30s">Auto-refresh: off</button>
+          <button class="btn btn-sm btn-ghost token-refresh-btn" id="refresh-matches-btn" title="Refresh matches list">↻</button>
+          <button class="btn btn-sm btn-ghost" id="extend-hold-btn" title="Reset the 15-minute cart hold timer">Extend Hold</button>
+        </div>
+      </div>
+      <div id="matches-list" class="matches-list">
+        <div class="empty-state">No matches yet — the poller will find open sites and show them here.</div>
+      </div>
+    </section>
+  </main>
+
+  <!-- Settings Modal -->
+  <div id="settings-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Settings</h3>
+        <button class="btn-close" id="settings-close">✕</button>
+      </div>
+      <form id="settings-form">
+        <div class="settings-section">
+          <h4>Polling</h4>
+          <div class="field">
+            <label>Interval (seconds)</label>
+            <input type="number" name="poll_interval" min="1" max="3600" value="60">
+            <p class="hint-text">Seconds between polls. Recreation.gov is polled this often per alert.</p>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <h4>Recreation.gov</h4>
+          <p class="hint-text">
+            In your browser on recreation.gov while logged in, open the console and run:<br>
+            <code>localStorage.getItem('recaccount')</code><br>
+            Paste the result here for a persistent refresh token that auto-renews.
+          </p>
+          <div class="field">
+            <textarea name="recgov_cookies" id="recgov-cookies-input" rows="4" placeholder="Paste localStorage.getItem('recaccount') output here…" style="background:var(--bg3);border:1px solid var(--border);border-radius:6px;color:var(--text);padding:8px 12px;font-size:11px;font-family:monospace;resize:vertical;width:100%;outline:none;transition:border-color 0.15s"></textarea>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:4px">
+            <button type="button" class="btn btn-sm btn-secondary" id="test-cookies-btn">Test credentials</button>
+            <button type="button" class="btn btn-sm btn-secondary" id="test-chrome-btn">Test browser session</button>
+            <button type="button" class="btn btn-sm btn-ghost" id="clear-session-btn">Clear session</button>
+            <span id="cookies-parse-result" class="hint-text"></span>
+            <span id="chrome-test-result" class="hint-text"></span>
+          </div>
+          <div id="token-status" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
+        </div>
+
+        <div class="settings-section">
+          <h4>Slack Notifications</h4>
+          <p class="hint-text">Bot token (<code>xoxb-…</code>) with <code>chat:write</code> scope, or a user token (<code>xoxp-…</code>).</p>
+          <div class="field">
+            <label>Slack Token</label>
+            <input type="password" name="slack_token" placeholder="xoxb-••••••••">
+          </div>
+          <div class="field">
+            <label>Channel</label>
+            <input type="text" name="slack_channel" placeholder="#camping-alerts or C1234567">
+          </div>
+          <button type="button" class="btn btn-sm btn-secondary" id="test-slack-btn">Send test message</button>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="settings-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit Alert Modal -->
+  <div id="edit-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Edit Alert</h3>
+        <button class="btn-close" id="edit-close">✕</button>
+      </div>
+      <form id="edit-form">
+        <input type="hidden" id="edit-alert-id">
+        <div id="edit-campground-label" class="hint-text" style="margin-bottom:12px"></div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Arrival (earliest)</label>
+            <input type="date" id="edit-start-date" required>
+          </div>
+          <div class="field">
+            <label>Departure (latest)</label>
+            <input type="date" id="edit-end-date" required>
+          </div>
+          <div class="field field-sm">
+            <label>Min nights</label>
+            <input type="number" id="edit-min-nights" value="1" min="1" max="14">
+          </div>
+          <div class="field field-sm">
+            <label>Party size</label>
+            <input type="number" id="edit-max-people" placeholder="Any" min="1" max="100">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Site type <span class="hint">(leave empty for any)</span></label>
+            <div class="checkbox-group" id="edit-campsite-types">
+              <label><input type="checkbox" value="STANDARD NONELECTRIC"> Standard</label>
+              <label><input type="checkbox" value="STANDARD ELECTRIC"> Electric</label>
+              <label><input type="checkbox" value="TENT ONLY NONELECTRIC"> Tent Only</label>
+              <label><input type="checkbox" value="RV NONELECTRIC"> RV (no hookup)</label>
+              <label><input type="checkbox" value="WALK TO NONELECTRIC"> Walk-in</label>
+              <label><input type="checkbox" value="GROUP STANDARD NONELECTRIC"> Group</label>
+            </div>
+          </div>
+          <div class="field">
+            <label>Equipment <span class="hint">(leave empty for any)</span></label>
+            <div class="checkbox-group" id="edit-equipment-types">
+              <label><input type="checkbox" value="Tent"> Tent</label>
+              <label><input type="checkbox" value="Small RV"> Small RV (&lt;20ft)</label>
+              <label><input type="checkbox" value="Large RV"> Large RV (20ft+)</label>
+              <label><input type="checkbox" value="Pickup Camper"> Pickup Camper</label>
+            </div>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field">
+            <label>Specific sites <span class="hint">(comma-separated)</span></label>
+            <input type="text" id="edit-specific-sites" placeholder="Leave empty for any site">
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div class="field field-auto">
+            <label class="toggle-label">
+              <input type="checkbox" id="edit-auto-cart">
+              <span class="toggle"></span>
+              Auto-add to cart when found
+            </label>
+          </div>
+          <div class="field field-auto" style="margin-top:10px">
+            <label class="toggle-label">
+              <input type="checkbox" id="edit-stop-after-match">
+              <span class="toggle"></span>
+              Stop after first match
+            </label>
+            <p class="hint-text">Uncheck to keep polling even after a match is found.</p>
+          </div>
+          <div class="field field-auto" style="margin-top:10px">
+            <label class="toggle-label">
+              <input type="checkbox" id="edit-notify-slack">
+              <span class="toggle"></span>
+              Notify via Slack
+            </label>
+          </div>
+        </div>
+
+        <div class="field-row hidden" id="edit-reactivate-row">
+          <div class="field field-auto">
+            <label class="toggle-label">
+              <input type="checkbox" id="edit-reactivate">
+              <span class="toggle"></span>
+              Re-activate this alert
+            </label>
+            <p class="hint-text">Alert is currently done. Toggle on to resume polling.</p>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" class="btn btn-ghost" id="edit-cancel">Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Changes</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

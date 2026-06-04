@@ -62,6 +62,16 @@ tasks.register<JavaExec>("importer") {
     standardInput = System.`in`
 }
 
+// Legacy data.json → Postgres migration tool (campsite). Invoke with:
+//   ./gradlew campsiteMigrate --args="/path/to/data.json"
+tasks.register<JavaExec>("campsiteMigrate") {
+    group = "application"
+    description = "Migrate legacy campsite data.json into Postgres."
+    mainClass.set("ca.floo.campsite.recgov.booker.tools.MigrateKt")
+    classpath = sourceSets["main"].runtimeClasspath
+    standardInput = System.`in`
+}
+
 // Idempotent Chromium download for SmokeTest. The Playwright JVM driver
 // shells out to `playwright install`, which fetches into ~/Library/Caches
 // /ms-playwright (macOS) or ~/.cache/ms-playwright (Linux). Re-running is a
@@ -94,6 +104,13 @@ dependencies {
     implementation("io.ktor:ktor-server-compression:$ktorVersion")
     implementation("io.ktor:ktor-server-caching-headers:$ktorVersion")
     implementation("io.ktor:ktor-server-conditional-headers:$ktorVersion")
+    // SSE for /api/campsite/events stream.
+    implementation("io.ktor:ktor-server-sse:$ktorVersion")
+    // HttpClient powers AvailabilityClient (rec.gov) and SlackNotifier in the
+    // campsite poller.
+    implementation("io.ktor:ktor-client-core:$ktorVersion")
+    implementation("io.ktor:ktor-client-cio:$ktorVersion")
+    implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:1.5.12")
 
     implementation("org.jooq:jooq:$jooqVersion")
@@ -103,12 +120,14 @@ dependencies {
     implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
 
     jooqGenerator("org.postgresql:postgresql:$postgresVersion")
     jooqGenerator("org.testcontainers:postgresql:$testcontainersVersion")
 
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
+    testImplementation("io.ktor:ktor-client-cio:$ktorVersion")
     testImplementation("org.testcontainers:postgresql:$testcontainersVersion")
     testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
@@ -215,6 +234,14 @@ flyway {
     user = (project.findProperty("flyway.user") as String?) ?: "roadtrip"
     password = (project.findProperty("flyway.password") as String?) ?: "roadtrip"
     locations = arrayOf("filesystem:src/main/resources/db/migration")
+}
+
+tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    // Flyway and other ServiceLoader-based libraries register implementations
+    // via META-INF/services/. Without merging, the last copy wins and Flyway
+    // loses its CoreMigrationTypeResolver, rejecting V_*.sql migrations with
+    // "Unrecognised migration name format" at runtime.
+    mergeServiceFiles()
 }
 
 tasks.test {
