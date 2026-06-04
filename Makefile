@@ -21,7 +21,7 @@ run:
 	PORT=$(PORT) python3 server.py
 
 docker-run:
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml up -d --build app
+	CACHE_DIR=$(PWD)/data/pricing-cache docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml up -d --build app
 	@echo "http://127.0.0.1:$(PORT)"
 
 check-pushed:
