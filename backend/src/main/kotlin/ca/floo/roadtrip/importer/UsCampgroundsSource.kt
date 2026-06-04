@@ -34,6 +34,16 @@ class UsCampgroundsSource(
             val state = props["state"]?.jsonPrimitive?.content ?: continue
             val name = props["name"]?.jsonPrimitive?.content ?: continue
 
+            // The upstream campgrounds.geojson has a long-tail of Canadian
+            // entries (codes prefixed PC-AB / PC-BC / parks-canada-bc-) that
+            // were merged in by an old enrichment pass. Those duplicate the
+            // hand-curated parks-canada source — same lat/lng, no
+            // `last_verified`, and they outrank the curated rows in search
+            // because they appear first in the index. Skip them so
+            // parks-canada is the single source of truth for Canadian parks.
+            if (code.startsWith("PC-AB") || code.startsWith("PC-BC") ||
+                code.startsWith("parks-canada-")) continue
+
             yield(
                 StagedPoi(
                     sourceId = sourceIdFor(code, state, name, lat, lon),

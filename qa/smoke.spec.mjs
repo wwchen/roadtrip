@@ -70,6 +70,11 @@ test('cold load → /api/pois → Banff campground popup', async ({ page }) => {
   const href = await reserveBtn.getAttribute('href');
   expect(href).toMatch(/(reservation\.pc\.gc\.ca|parks\.canada\.ca|recreation\.gov)/);
 
-  // 7. No JS errors during the run.
+  // 7. last_verified footer renders. The curated AB/BC files all carry a
+  // last_verified date and popups.js renders it as `Verified <date>`. If the
+  // field gets dropped from data or the JSONB round-trip, this regresses.
+  await expect(popup.locator('.footer')).toContainText(/Verified \d{4}-\d{2}-\d{2}/);
+
+  // 8. No JS errors during the run.
   expect(pageErrors, `Page errors during smoke: ${pageErrors.join(' | ')}`).toHaveLength(0);
 });

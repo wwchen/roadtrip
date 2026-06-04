@@ -12,6 +12,12 @@ services:
       - ./.env:/app/.env:ro
     environment:
       - PORT=8765
+      # /api/pois proxies to the Kotlin backend on the compose network. The
+      # default in server.py (http://127.0.0.1:8080) only works when host and
+      # backend share localhost — inside this container that's a self-loop and
+      # ECONNREFUSEs. Override to the compose service name so app→backend
+      # works in both `make pois-up` (local) and `make deploy` (mini-ca).
+      - ROADTRIP_BACKEND_URL=http://backend:8080
     # For local port publishing, use docker-compose.local.yml (see Makefile).
 
   # cookie-bot sidecar — kept for future use but not started by default on
