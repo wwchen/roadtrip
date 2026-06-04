@@ -30,6 +30,28 @@ services:
       - HEADLESS=true
       - LOG_LEVEL=INFO
 
+  # Phase 2 backend store. PostGIS image (postgres:16 + postgis 3.4) so the
+  # geom column can be Geometry (Polygon/MultiPolygon, not just Point) and
+  # GIST bbox queries work without an extension install step.
+  # Profile gates it off `make docker-run` / `make deploy-local` until the
+  # Kotlin backend is ready to talk to it.
+  postgres:
+    profiles: [pois]
+    image: postgis/postgis:16-3.4
+    restart: unless-stopped
+    hostname: postgres
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+    volumes:
+      - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-roadtrip} -d $${POSTGRES_DB:-roadtrip}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
   cloudflared:
     # Only runs with `--profile tunnel` (deploy target). Local modes skip it.
     profiles: [tunnel]

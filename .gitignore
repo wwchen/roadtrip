@@ -14,3 +14,8 @@ __pycache__/
 # data/tesla-superchargers.geojson IS checked in.
 data/tesla-locations-us.json
 
+# Backend (Kotlin) build artifacts. jOOQ generated classes are regenerated
+# at build time via Testcontainers + Flyway, so they don't need to be checked in.
+backend/.gradle/
+backend/build/
+
