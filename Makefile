@@ -37,7 +37,7 @@ run: pois-up
 	cd backend && PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
 	  ROADTRIP_DB_URL=jdbc:postgresql://127.0.0.1:5432/roadtrip \
 	  ROADTRIP_DB_USER=roadtrip ROADTRIP_DB_PASSWORD=roadtrip \
-	  gradle run
+	  ./gradlew run
 
 docker-run: backend-build
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build backend postgres
@@ -51,7 +51,7 @@ check-pushed:
 	 if [ -n "$$dirty" ]; then echo "refusing: working tree has uncommitted changes"; git status --short; exit 1; fi
 
 deploy: check-pushed
-	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'export PATH=/usr/local/bin:/opt/homebrew/bin:$$PATH; cd $(DEPLOY_DIR) && git pull --ff-only && (cd backend && gradle shadowJar) && docker compose --profile tunnel --profile pois up -d --build'
+	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && (cd backend && ./gradlew shadowJar) && docker compose --profile tunnel --profile pois up -d --build'
 
 deploy-local: backend-build
 	docker compose --profile tunnel --profile pois up -d --build
@@ -110,13 +110,13 @@ pois-down:
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois stop postgres
 
 pois-import: pois-up
-	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data gradle importer --args="$(SOURCE)"
+	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data ./gradlew importer --args="$(SOURCE)"
 
 pois-import-all: pois-up
-	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data gradle importer --args="all"
+	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data ./gradlew importer --args="all"
 
 pois-test:
-	cd backend && gradle test
+	cd backend && ./gradlew test
 
 pois-psql:
 	docker exec -it roadtrip-map-postgres-1 psql -U roadtrip -d roadtrip
@@ -125,7 +125,7 @@ pois-psql:
 # against PostGIS, so this needs Docker available too. Output:
 # backend/build/libs/roadtrip-backend-*-all.jar (~27 MB).
 backend-build:
-	cd backend && gradle shadowJar
+	cd backend && ./gradlew shadowJar
 
 # Build + run the backend in Docker against local postgres on the compose
 # network. backend's port 8765 is exposed to the host via docker-compose.local.yml.
@@ -142,5 +142,5 @@ backend-shell:
 # backend test suite; QA_BASE_URL gates the SmokeTest so `gradle test` alone
 # stays fast and doesn't pull Chromium.
 qa:
-	cd backend && gradle installPlaywrightBrowsers
-	cd backend && QA_BASE_URL=http://127.0.0.1:$(PORT) gradle test --tests ca.floo.roadtrip.SmokeTest --rerun -x generateJooq
+	cd backend && ./gradlew installPlaywrightBrowsers
+	cd backend && QA_BASE_URL=http://127.0.0.1:$(PORT) ./gradlew test --tests ca.floo.roadtrip.SmokeTest --rerun -x generateJooq

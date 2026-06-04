@@ -26,7 +26,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: ktlint
-        run: gradle ktlintCheck -x generateJooq
+        run: ./gradlew ktlintCheck -x generateJooq
         working-directory: backend
 
   backend-tests:
@@ -43,7 +43,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: Run backend tests
-        run: gradle test
+        run: ./gradlew test
         working-directory: backend
 
   smoke:
@@ -82,7 +82,7 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
 
       - name: Build backend fat-jar
-        run: gradle shadowJar
+        run: ./gradlew shadowJar
         working-directory: backend
 
       # 'all' = uscampgrounds + alberta-provincial + parks-canada + state-parks
@@ -90,7 +90,7 @@ jobs:
       # for the Tunnel Mountain assertion, but importing all keeps the smoke
       # representative of the live data shape.
       - name: Import POI sources
-        run: gradle importer --args=all
+        run: ./gradlew importer --args=all
         working-directory: backend
 
       - name: Start backend
@@ -107,11 +107,11 @@ jobs:
           echo "backend failed to start"; tail -100 backend.log; exit 1
 
       - name: Install Playwright Chromium
-        run: gradle installPlaywrightBrowsers
+        run: ./gradlew installPlaywrightBrowsers
         working-directory: backend
 
       - name: Run smoke
-        run: QA_BASE_URL=http://127.0.0.1:8765 gradle test --tests ca.floo.roadtrip.SmokeTest --rerun -x generateJooq
+        run: QA_BASE_URL=http://127.0.0.1:8765 ./gradlew test --tests ca.floo.roadtrip.SmokeTest --rerun -x generateJooq
         working-directory: backend
 
       - name: Upload test reports on failure
