@@ -53,6 +53,18 @@ tasks.register<JavaExec>("importer") {
     standardInput = System.`in`
 }
 
+// Idempotent Chromium download for SmokeTest. The Playwright JVM driver
+// shells out to `playwright install`, which fetches into ~/Library/Caches
+// /ms-playwright (macOS) or ~/.cache/ms-playwright (Linux). Re-running is a
+// no-op once the browser is present.
+tasks.register<JavaExec>("installPlaywrightBrowsers") {
+    group = "verification"
+    description = "Download Chromium for the Playwright-driven SmokeTest."
+    mainClass.set("com.microsoft.playwright.CLI")
+    classpath = sourceSets["test"].runtimeClasspath
+    args = listOf("install", "chromium")
+}
+
 repositories {
     mavenCentral()
 }
@@ -92,6 +104,9 @@ dependencies {
     testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    // Playwright JVM drives a real Chromium for SmokeTest. Gated on
+    // QA_BASE_URL so normal `gradle test` runs don't pull Chromium.
+    testImplementation("com.microsoft.playwright:playwright:1.50.0")
 }
 
 kotlin {
@@ -198,4 +213,11 @@ tasks.test {
         exceptionFormat = TestExceptionFormat.FULL
         showStandardStreams = false
     }
+    // Pass through QA_BASE_URL so SmokeTest's @EnabledIfEnvironmentVariable
+    // sees it inside the Gradle test worker JVM. Without this Gradle scrubs
+    // env vars and the test silently skips.
+    System.getenv("QA_BASE_URL")?.let { environment("QA_BASE_URL", it) }
+    // Playwright's JSON reader thread parses large evaluate() / page-event
+    // payloads in the worker JVM; default 512m OOMs once the map state grows.
+    maxHeapSize = "2g"
 }

@@ -138,8 +138,9 @@ backend-shell:
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
-# (e.g. `make backend-run` or `make run`).
+# (e.g. `make backend-run` or `make run`). Driven by Playwright JVM in the
+# backend test suite; QA_BASE_URL gates the SmokeTest so `gradle test` alone
+# stays fast and doesn't pull Chromium.
 qa:
-	cd qa && npm install --no-audit --no-fund
-	cd qa && npx playwright install chromium
-	cd qa && QA_BASE_URL=http://127.0.0.1:$(PORT) npm test
+	cd backend && gradle installPlaywrightBrowsers
+	cd backend && QA_BASE_URL=http://127.0.0.1:$(PORT) gradle test --tests ca.floo.roadtrip.SmokeTest --rerun -x generateJooq
