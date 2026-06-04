@@ -101,7 +101,11 @@ jooq {
 
     configurations {
         create("main") {
-            generateSchemaSourceOnCompilation.set(false)
+            // true = compileKotlin depends on generateJooq, so a clean build
+            // (CI, fresh clone) regenerates the classes from the Flyway
+            // migrations. The codegen task already declares the migration
+            // files as inputs, so Gradle skips it when nothing changed.
+            generateSchemaSourceOnCompilation.set(true)
             jooqConfiguration.apply {
                 logging = org.jooq.meta.jaxb.Logging.WARN
                 jdbc.apply {
