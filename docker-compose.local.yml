@@ -6,3 +6,7 @@ services:
   postgres:
     ports:
       - "127.0.0.1:5432:5432"
+  # Expose backend on the host for direct curl/QA against /api/pois.
+  backend:
+    ports:
+      - "127.0.0.1:8080:8080"

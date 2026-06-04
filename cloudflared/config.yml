@@ -1,0 +1,20 @@
+# cloudflared ingress rules. The tunnel itself is identified by the
+# CLOUDFLARE_TUNNEL_TOKEN env var; routing inside the tunnel is configured
+# here. Path-based routing means /api/pois/* hits the Kotlin backend while
+# everything else goes to the Python app (which still owns /api/pricing/*
+# and the static site).
+#
+# IMPORTANT: cloudflared with a tunnel TOKEN runs in "remote-managed" mode
+# and the dashboard configuration takes precedence over this file UNLESS
+# the dashboard's "Public Hostname" config is empty. To use this file:
+#   1. Cloudflare dashboard → Zero Trust → Networks → Tunnels → roadtrip
+#   2. Public Hostname tab → delete any existing rules (they override config.yml)
+#   3. cloudflared will then fall back to /etc/cloudflared/config.yml
+#
+# Cloudflare evaluates ingress rules top-to-bottom — the catch-all
+# entry must be last.
+
+ingress:
+  - path: /api/pois/.*
+    service: http://backend:8080
+  - service: http://app:8765

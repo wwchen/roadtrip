@@ -1,0 +1,13 @@
+# Backend Docker build only needs the fat-jar. Exclude everything else so
+# the build context is tiny and we don't accidentally bake source into the
+# image.
+.gradle/
+build/classes/
+build/generated/
+build/tmp/
+build/reports/
+build/distributions/
+build/test-results/
+src/
+*.gradle.kts
+gradle.properties

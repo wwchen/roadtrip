@@ -1,4 +1,4 @@
-.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-test pois-psql
+.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-test pois-psql backend-build backend-run backend-shell
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -8,13 +8,16 @@ DEPLOY_DIR  ?= ~/workspace/roadtrip
 help:
 	@echo "Targets:"
 	@echo "  make run              Run server.py directly on host (hot edit index.html)"
-	@echo "  make docker-run       Build+run the Docker image locally on 127.0.0.1:$(PORT), no tunnel"
-	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, docker compose up"
-	@echo "  make deploy-local     Build+run app + cloudflared here (no ssh)"
+	@echo "  make docker-run       Build+run app + postgres + backend locally on 127.0.0.1:$(PORT)"
+	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (3 services + tunnel)"
+	@echo "  make deploy-local     Build+run all services + cloudflared here (no ssh)"
 	@echo "  make refresh-cookies  Push Tesla cookies from clipboard → $(DEPLOY_HOST) (Tailscale exit node recommended)"
 	@echo "  make refresh-cookies-local  Mint cookies into THIS repo's .env (laptop-only egress)"
 	@echo "  make rebuild-superchargers  Rebuild geojson from cache, no network (~30s)"
 	@echo "  make refresh-superchargers  Full Tesla refresh: bulk feed + per-site (~25 min)"
+	@echo "  make backend-build    Build the backend fat-jar via gradle shadowJar"
+	@echo "  make backend-run      Build + run backend in Docker against local postgres"
+	@echo "  make backend-shell    Exec into the running backend container"
 	@echo "  make pois-up          Start Postgres+PostGIS on 127.0.0.1:5432 (Phase 2 backend)"
 	@echo "  make pois-down        Stop Postgres"
 	@echo "  make pois-import      Run the Kotlin importer against local Postgres"
@@ -25,9 +28,10 @@ help:
 run:
 	PORT=$(PORT) python3 server.py
 
-docker-run:
-	CACHE_DIR=$(PWD)/data/pricing-cache docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml up -d --build app
+docker-run: backend-build
+	CACHE_DIR=$(PWD)/data/pricing-cache docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build app backend postgres
 	@echo "http://127.0.0.1:$(PORT)"
+	@echo "backend (host port-forwarded only via docker-compose.local.yml): backend → 127.0.0.1:8080"
 
 check-pushed:
 	@git fetch --quiet origin
@@ -37,14 +41,14 @@ check-pushed:
 	 if [ -n "$$dirty" ]; then echo "refusing: working tree has uncommitted changes"; git status --short; exit 1; fi
 
 deploy: check-pushed
-	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'export PATH=/usr/local/bin:$$PATH; cd $(DEPLOY_DIR) && git pull --ff-only && docker compose --profile tunnel up -d --build'
+	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'export PATH=/usr/local/bin:/opt/homebrew/bin:$$PATH; cd $(DEPLOY_DIR) && git pull --ff-only && (cd backend && gradle shadowJar) && docker compose --profile tunnel --profile pois up -d --build'
 
-deploy-local:
-	docker compose --profile tunnel up -d --build
+deploy-local: backend-build
+	docker compose --profile tunnel --profile pois up -d --build
 
 stop:
-	- docker compose --profile tunnel down
-	- docker compose -f docker-compose.yml -f docker-compose.local.yml down
+	- docker compose --profile tunnel --profile pois down
+	- docker compose -f docker-compose.yml -f docker-compose.local.yml --profile pois down
 
 # Mint cookies from Safari on this laptop (must be Tailscale-egressing via
 # the mini so Akamai binds _abck to the mini's IP), then push to the mini
@@ -81,8 +85,6 @@ refresh-superchargers:
 	  roadtrip-map:local python3 /app/scripts/fetch_tesla_superchargers.py
 
 # Phase 2 backend: PostGIS Postgres on 127.0.0.1:5432, importer, tests.
-# The pois profile is gated off the default `make docker-run` so this only
-# fires when you explicitly bring it up.
 pois-up:
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
 	@echo "postgres ready on 127.0.0.1:5432 (db=roadtrip user=roadtrip)"
@@ -98,3 +100,18 @@ pois-test:
 
 pois-psql:
 	docker exec -it roadtrip-map-postgres-1 psql -U roadtrip -d roadtrip
+
+# Build the backend fat-jar on the host. jOOQ codegen runs Testcontainers
+# against PostGIS, so this needs Docker available too. Output:
+# backend/build/libs/roadtrip-backend-*-all.jar (~27 MB).
+backend-build:
+	cd backend && gradle shadowJar
+
+# Build + run the backend in Docker against local postgres on the compose
+# network. backend's port 8080 is exposed to the host via docker-compose.local.yml.
+backend-run: backend-build pois-up
+	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build backend
+	@echo "backend ready on 127.0.0.1:8080"
+
+backend-shell:
+	docker exec -it roadtrip-map-backend-1 sh

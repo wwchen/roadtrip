@@ -33,8 +33,6 @@ services:
   # Phase 2 backend store. PostGIS image (postgres:16 + postgis 3.4) so the
   # geom column can be Geometry (Polygon/MultiPolygon, not just Point) and
   # GIST bbox queries work without an extension install step.
-  # Profile gates it off `make docker-run` / `make deploy-local` until the
-  # Kotlin backend is ready to talk to it.
   postgres:
     profiles: [pois]
     image: postgis/postgis:16-3.4
@@ -52,11 +50,32 @@ services:
       timeout: 3s
       retries: 10
 
+  # Kotlin/Ktor /api/pois service. Reads from postgres on the compose
+  # network. The fat-jar is built on the host (`make backend-build`) and
+  # baked into this image — see backend/Dockerfile for why.
+  backend:
+    profiles: [pois]
+    build: ./backend
+    restart: unless-stopped
+    hostname: backend
+    environment:
+      - PORT=8080
+      - ROADTRIP_DB_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
+      - ROADTRIP_DB_USER=${POSTGRES_USER:-roadtrip}
+      - ROADTRIP_DB_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
   cloudflared:
     # Only runs with `--profile tunnel` (deploy target). Local modes skip it.
+    # Mounts a config.yml so path-based routing (/api/pois → backend,
+    # /api/pricing + /* → app) lives in the repo, not the dashboard.
     profiles: [tunnel]
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    volumes:
+      - ./cloudflared:/etc/cloudflared:ro
     depends_on:
       - app

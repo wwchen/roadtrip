@@ -30,6 +30,10 @@ plugins {
     kotlin("plugin.serialization") version "2.1.0"
     id("org.flywaydb.flyway") version "10.20.1"
     id("nu.studer.jooq") version "9.0"
+    // shadowJar produces a single executable fat-jar with all dependencies
+    // merged in. The Dockerfile uses this so the runtime image is just
+    // eclipse-temurin:21-jre + one .jar.
+    id("com.gradleup.shadow") version "8.3.5"
 }
 
 group = "ca.floo.roadtrip"
