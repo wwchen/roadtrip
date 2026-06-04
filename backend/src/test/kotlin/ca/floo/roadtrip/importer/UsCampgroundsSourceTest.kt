@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.importer
 
-import java.io.File
 import kotlin.io.path.createTempFile
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -13,7 +12,6 @@ import kotlin.test.assertTrue
 // because they appear first in the index. UsCampgroundsSource skips them so
 // parks-canada is the single source of truth for Canadian parks.
 class UsCampgroundsSourceTest {
-
     @Test
     fun `Canadian PC-prefixed codes are skipped`() {
         val tmp = createTempFile(prefix = "campgrounds-", suffix = ".geojson").toFile()
@@ -30,7 +28,7 @@ class UsCampgroundsSourceTest {
               {"type":"Feature","geometry":{"type":"Point","coordinates":[-122.0,47.0]},
                "properties":{"code":"WA-MORAN","state":"WA","name":"Moran State Park CG"}}
             ]}
-            """.trimIndent()
+            """.trimIndent(),
         )
 
         val staged = UsCampgroundsSource(tmp).staged().toList()

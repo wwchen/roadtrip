@@ -8,18 +8,20 @@ import kotlinx.serialization.json.JsonObject
 // it in ST_SetSRID(ST_GeomFromGeoJSON(?), 4326) at INSERT time so the
 // SRID is consistent regardless of what the upstream JSON declared.
 data class StagedPoi(
-    val sourceId: String,            // unique within source; matches ^[a-z0-9:_-]+$
+    val sourceId: String, // unique within source; matches ^[a-z0-9:_-]+$
     val category: Category,
     val name: String,
     val geomGeoJson: String,
-    val region: String?,             // US state / Canadian province
-    val unitName: String?,           // containing park / forest, if any
+    val region: String?, // US state / Canadian province
+    val unitName: String?, // containing park / forest, if any
     val properties: JsonObject,
     val reserveUrl: String?,
     val fetchedAt: java.time.Instant,
 )
 
-enum class Category(val sql: String) {
+enum class Category(
+    val sql: String,
+) {
     CAMPGROUND("campground"),
     STATE_PARK("state-park"),
     NATIONAL_PARK("national-park"),
@@ -31,6 +33,7 @@ enum class Category(val sql: String) {
 // an import_runs row and applying mark-and-sweep semantics — Source is pure
 // extract+transform.
 interface Source {
-    val name: String                 // matches the source column in pois
+    val name: String // matches the source column in pois
+
     fun staged(): Sequence<StagedPoi>
 }

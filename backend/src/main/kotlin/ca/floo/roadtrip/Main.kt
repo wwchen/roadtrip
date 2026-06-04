@@ -59,13 +59,30 @@ fun Application.module() {
             // loads. Data/asset files get a day so the trip is offline-tolerant
             // once primed; ConditionalHeaders still revalidates via Last-Modified.
             when (content.contentType?.withoutParameters()) {
-                ContentType.Text.Html -> CachingOptions(io.ktor.http.CacheControl.NoCache(null))
+                ContentType.Text.Html ->
+                    CachingOptions(
+                        io.ktor.http.CacheControl
+                            .NoCache(null),
+                    )
                 ContentType("application", "geo+json"),
-                ContentType.Application.Json -> CachingOptions(io.ktor.http.CacheControl.MaxAge(86400))
+                ContentType.Application.Json,
+                ->
+                    CachingOptions(
+                        io.ktor.http.CacheControl
+                            .MaxAge(86400),
+                    )
                 ContentType.Application.JavaScript,
-                ContentType.Text.CSS -> CachingOptions(io.ktor.http.CacheControl.MaxAge(3600))
+                ContentType.Text.CSS,
+                ->
+                    CachingOptions(
+                        io.ktor.http.CacheControl
+                            .MaxAge(3600),
+                    )
                 ContentType.Image.SVG, ContentType.Image.PNG ->
-                    CachingOptions(io.ktor.http.CacheControl.MaxAge(86400))
+                    CachingOptions(
+                        io.ktor.http.CacheControl
+                            .MaxAge(86400),
+                    )
                 else -> null
             }
         }

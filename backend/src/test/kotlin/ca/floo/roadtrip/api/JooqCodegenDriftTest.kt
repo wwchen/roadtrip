@@ -21,25 +21,26 @@ import kotlin.test.assertEquals
 // every Flyway migration.
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class JooqCodegenDriftTest {
-
     private lateinit var pg: PostgreSQLContainer<Nothing>
     private lateinit var ds: HikariDataSource
 
     @BeforeAll
     fun start() {
         val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
-        pg = PostgreSQLContainer<Nothing>(image).apply {
-            withDatabaseName("roadtrip_drift")
-            withUsername("test")
-            withPassword("test")
-        }
+        pg =
+            PostgreSQLContainer<Nothing>(image).apply {
+                withDatabaseName("roadtrip_drift")
+                withUsername("test")
+                withPassword("test")
+            }
         pg.start()
-        val cfg = HikariConfig().apply {
-            jdbcUrl = pg.jdbcUrl
-            username = pg.username
-            password = pg.password
-            maximumPoolSize = 2
-        }
+        val cfg =
+            HikariConfig().apply {
+                jdbcUrl = pg.jdbcUrl
+                username = pg.username
+                password = pg.password
+                maximumPoolSize = 2
+            }
         ds = HikariDataSource(cfg)
         migrate(ds)
     }
@@ -52,14 +53,19 @@ class JooqCodegenDriftTest {
 
     @Test
     fun `pois columns in Postgres match the generated jOOQ class`() {
-        val live = ds.connection.use { conn ->
-            conn.metaData.getColumns(null, "public", "pois", null).use { rs ->
-                buildSet {
-                    while (rs.next()) add(rs.getString("COLUMN_NAME"))
+        val live =
+            ds.connection.use { conn ->
+                conn.metaData.getColumns(null, "public", "pois", null).use { rs ->
+                    buildSet {
+                        while (rs.next()) add(rs.getString("COLUMN_NAME"))
+                    }
                 }
             }
-        }
-        val generated = Pois.POIS.fields().map { it.name }.toSet()
+        val generated =
+            Pois.POIS
+                .fields()
+                .map { it.name }
+                .toSet()
         assertEquals(live, generated, "jOOQ codegen drift: regenerate via `gradle generateJooq`")
     }
 }

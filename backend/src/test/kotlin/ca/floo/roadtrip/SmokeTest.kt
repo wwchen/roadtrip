@@ -27,9 +27,10 @@ class SmokeTest {
     @BeforeAll
     fun setUp() {
         playwright = Playwright.create()
-        browser = playwright.chromium().launch(
-            BrowserType.LaunchOptions().setHeadless(true)
-        )
+        browser =
+            playwright.chromium().launch(
+                BrowserType.LaunchOptions().setHeadless(true),
+            )
     }
 
     @AfterAll
@@ -40,11 +41,13 @@ class SmokeTest {
 
     @Test
     fun `cold load - api pois - Banff campground popup`() {
-        val context = browser.newContext(
-            Browser.NewContextOptions()
-                .setBaseURL(baseUrl)
-                .setViewportSize(1280, 800)
-        )
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
         val page = context.newPage()
         val pageErrors = mutableListOf<String>()
         page.onPageError { pageErrors.add(it) }
@@ -61,44 +64,48 @@ class SmokeTest {
                 page.waitForFunction(
                     "() => globalThis.__rtState?.mapReady === true",
                     null,
-                    Page.WaitForFunctionOptions().setTimeout(15_000.0)
+                    Page.WaitForFunctionOptions().setTimeout(15_000.0),
                 )
             } catch (e: Exception) {
-                val diag = page.evaluate(
-                    "() => JSON.stringify({ rt: typeof globalThis.__rtState, " +
-                        "rtMap: typeof globalThis.__rtMap, " +
-                        "title: document.title, " +
-                        "scripts: Array.from(document.scripts).map(s => s.src) })"
-                )
+                val diag =
+                    page.evaluate(
+                        "() => JSON.stringify({ rt: typeof globalThis.__rtState, " +
+                            "rtMap: typeof globalThis.__rtMap, " +
+                            "title: document.title, " +
+                            "scripts: Array.from(document.scripts).map(s => s.src) })",
+                    )
                 throw IllegalStateException("mapReady never fired. Page state: $diag", e)
             }
 
             // 3. Programmatic pan to Banff. Triggers moveend → bbox refresh.
             page.evaluate(
-                "() => globalThis.__rtMap.flyTo({ center: [-115.55, 51.18], zoom: 13, animate: false })"
+                "() => globalThis.__rtMap.flyTo({ center: [-115.55, 51.18], zoom: 13, animate: false })",
             )
 
             // 4. Wait for ≥1 campground in the cg source.
             page.waitForFunction(
                 "() => (globalThis.__rtState?.overlayData?.cg?.features?.length || 0) > 0",
                 null,
-                Page.WaitForFunctionOptions().setTimeout(15_000.0)
+                Page.WaitForFunctionOptions().setTimeout(15_000.0),
             )
 
             // 5. Drive search → result click → synthesizeClick (deterministic
             // popup render, dodges pixel-rounding issues from clicking the dot).
             page.fill("#search", "tunnel mountain village")
             page.locator(".sr-item").first().waitFor(
-                com.microsoft.playwright.Locator.WaitForOptions()
+                com.microsoft.playwright.Locator
+                    .WaitForOptions()
                     .setState(WaitForSelectorState.VISIBLE)
-                    .setTimeout(5_000.0)
+                    .setTimeout(5_000.0),
             )
             page.locator(".sr-item").first().click()
 
             // 6. Popup renders with name + reserve link.
             val popup = page.locator(".maplibregl-popup-content .popup")
             assertThat(popup).isVisible(
-                com.microsoft.playwright.assertions.LocatorAssertions.IsVisibleOptions().setTimeout(10_000.0)
+                com.microsoft.playwright.assertions.LocatorAssertions
+                    .IsVisibleOptions()
+                    .setTimeout(10_000.0),
             )
             assertThat(popup.locator("h3")).containsText("Tunnel Mountain Village")
 
@@ -106,9 +113,11 @@ class SmokeTest {
             assertThat(reserveBtn).isVisible()
             val href = reserveBtn.getAttribute("href") ?: ""
             assertTrue(
-                Pattern.compile("(reservation\\.pc\\.gc\\.ca|parks\\.canada\\.ca|recreation\\.gov)")
-                    .matcher(href).find(),
-                "reserve href didn't match expected hosts: $href"
+                Pattern
+                    .compile("(reservation\\.pc\\.gc\\.ca|parks\\.canada\\.ca|recreation\\.gov)")
+                    .matcher(href)
+                    .find(),
+                "reserve href didn't match expected hosts: $href",
             )
 
             // 7. last_verified footer.
@@ -118,7 +127,7 @@ class SmokeTest {
             // 8. No JS errors during the run.
             assertTrue(
                 pageErrors.isEmpty(),
-                "Page errors during smoke: ${pageErrors.joinToString(" | ")}"
+                "Page errors during smoke: ${pageErrors.joinToString(" | ")}",
             )
         } finally {
             context.close()

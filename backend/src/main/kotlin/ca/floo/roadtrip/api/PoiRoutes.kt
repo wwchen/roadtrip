@@ -32,11 +32,12 @@ fun Route.poiRoutes(ctx: DSLContext) {
             return@get
         }
 
-        val categories = call.request.queryParameters["category"]
-            ?.split(',')
-            ?.map { it.trim() }
-            ?.filter { it.isNotEmpty() }
-            ?.takeIf { it.isNotEmpty() }
+        val categories =
+            call.request.queryParameters["category"]
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.takeIf { it.isNotEmpty() }
 
         val rows = fetchPois(ctx, bbox, categories, POI_LIMIT + 1)
         val truncated = rows.size > POI_LIMIT
@@ -53,7 +54,12 @@ fun Route.poiRoutes(ctx: DSLContext) {
     }
 }
 
-data class Bbox(val west: Double, val south: Double, val east: Double, val north: Double)
+data class Bbox(
+    val west: Double,
+    val south: Double,
+    val east: Double,
+    val north: Double,
+)
 
 internal fun parseBbox(raw: String): Bbox? {
     val parts = raw.split(',')
@@ -79,21 +85,27 @@ internal data class PoiRow(
     val propertiesJson: String,
 )
 
-internal fun fetchPois(ctx: DSLContext, bbox: Bbox, categories: List<String>?, limit: Int): List<PoiRow> {
-    val sql = buildString {
-        append(
-            """
-            SELECT id, source, source_id, category, name, region, unit_name,
-                   reserve_url, ST_AsGeoJSON(geom) AS geom_json,
-                   properties::text AS properties_text
-            FROM pois
-            WHERE deleted_at IS NULL
-              AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
-            """.trimIndent()
-        )
-        if (categories != null) append("\n  AND category = ANY(?)")
-        append("\nLIMIT ?")
-    }
+internal fun fetchPois(
+    ctx: DSLContext,
+    bbox: Bbox,
+    categories: List<String>?,
+    limit: Int,
+): List<PoiRow> {
+    val sql =
+        buildString {
+            append(
+                """
+                SELECT id, source, source_id, category, name, region, unit_name,
+                       reserve_url, ST_AsGeoJSON(geom) AS geom_json,
+                       properties::text AS properties_text
+                FROM pois
+                WHERE deleted_at IS NULL
+                  AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
+                """.trimIndent(),
+            )
+            if (categories != null) append("\n  AND category = ANY(?)")
+            append("\nLIMIT ?")
+        }
 
     val args = mutableListOf<Any>(bbox.west, bbox.south, bbox.east, bbox.north)
     if (categories != null) args.add(categories.toTypedArray())
@@ -115,13 +127,17 @@ internal fun fetchPois(ctx: DSLContext, bbox: Bbox, categories: List<String>?, l
     }
 }
 
-internal fun buildFeatureCollection(rows: List<PoiRow>, truncated: Boolean): String {
+internal fun buildFeatureCollection(
+    rows: List<PoiRow>,
+    truncated: Boolean,
+): String {
     // Hand-built JSON. Properties come in as a JSONB ::text and are merged
     // into the feature's properties object — building this with kotlinx
     // would require parsing+re-serializing the JSONB on every row, and the
     // bbox endpoint is hot.
     val sb = StringBuilder()
-    sb.append("""{"type":"FeatureCollection","truncated":""")
+    sb
+        .append("""{"type":"FeatureCollection","truncated":""")
         .append(truncated)
         .append(""","features":[""")
     for ((i, r) in rows.withIndex()) {

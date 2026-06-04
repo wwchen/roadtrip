@@ -13,9 +13,12 @@ import java.time.Instant
 // NOT call Tesla here — the cache is populated by a separate refresh worker.
 fun Route.healthRoutes(cacheDir: File) {
     get("/api/health") {
-        val cacheCount = if (cacheDir.isDirectory) {
-            cacheDir.listFiles { _, n -> n.endsWith(".json") }?.size ?: 0
-        } else 0
+        val cacheCount =
+            if (cacheDir.isDirectory) {
+                cacheDir.listFiles { _, n -> n.endsWith(".json") }?.size ?: 0
+            } else {
+                0
+            }
         val now = Instant.now().epochSecond
         call.respondText(
             """{"status":"ok","pricing_cache_count":$cacheCount,"now":$now}""",

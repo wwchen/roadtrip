@@ -40,11 +40,12 @@ fun Route.pricingRoutes(cacheDir: File) {
         // `,"_cache":{...}}`. Frontend reads resp._cache for the "cached N
         // ago" footer.
         val body = file.readText().trimEnd()
-        val withCache = if (body.endsWith("}")) {
-            body.dropLast(1) + ""","_cache":{"age_seconds":$ageSeconds,"hit":true}}"""
-        } else {
-            body
-        }
+        val withCache =
+            if (body.endsWith("}")) {
+                body.dropLast(1) + ""","_cache":{"age_seconds":$ageSeconds,"hit":true}}"""
+            } else {
+                body
+            }
         call.respondText(withCache, ContentType.Application.Json, HttpStatusCode.OK)
     }
 }

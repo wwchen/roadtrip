@@ -14,12 +14,14 @@ data class DbConfig(
     val password: String,
 ) {
     companion object {
-        fun fromEnv(): DbConfig = DbConfig(
-            jdbcUrl = System.getenv("ROADTRIP_DB_URL")
-                ?: "jdbc:postgresql://localhost:5432/roadtrip",
-            user = System.getenv("ROADTRIP_DB_USER") ?: "roadtrip",
-            password = System.getenv("ROADTRIP_DB_PASSWORD") ?: "roadtrip",
-        )
+        fun fromEnv(): DbConfig =
+            DbConfig(
+                jdbcUrl =
+                    System.getenv("ROADTRIP_DB_URL")
+                        ?: "jdbc:postgresql://localhost:5432/roadtrip",
+                user = System.getenv("ROADTRIP_DB_USER") ?: "roadtrip",
+                password = System.getenv("ROADTRIP_DB_PASSWORD") ?: "roadtrip",
+            )
     }
 }
 
@@ -27,24 +29,29 @@ data class DbConfig(
 // pool config keeps importer + Ktor server symmetric. maxPoolSize = 4 is
 // enough for the importer's small concurrent load (mark-and-sweep is one
 // transaction).
-fun dataSourceFor(cfg: DbConfig, maxPoolSize: Int = 4): HikariDataSource {
-    val hk = HikariConfig().apply {
-        jdbcUrl = cfg.jdbcUrl
-        username = cfg.user
-        password = cfg.password
-        maximumPoolSize = maxPoolSize
-        // PostGIS adds dozens of objects to public; keep autocommit on for
-        // simple INSERT/UPDATE flows — explicit transactions wrap the
-        // mark-and-sweep critical path.
-        isAutoCommit = true
-    }
+fun dataSourceFor(
+    cfg: DbConfig,
+    maxPoolSize: Int = 4,
+): HikariDataSource {
+    val hk =
+        HikariConfig().apply {
+            jdbcUrl = cfg.jdbcUrl
+            username = cfg.user
+            password = cfg.password
+            maximumPoolSize = maxPoolSize
+            // PostGIS adds dozens of objects to public; keep autocommit on for
+            // simple INSERT/UPDATE flows — explicit transactions wrap the
+            // mark-and-sweep critical path.
+            isAutoCommit = true
+        }
     return HikariDataSource(hk)
 }
 
 fun migrate(ds: DataSource) {
     // baselineOnMigrate handles the case where the DB was hand-bootstrapped
     // (e.g. yesterday's manual psql validation) before Flyway tracked it.
-    Flyway.configure()
+    Flyway
+        .configure()
         .dataSource(ds)
         .locations("classpath:db/migration")
         .baselineOnMigrate(true)

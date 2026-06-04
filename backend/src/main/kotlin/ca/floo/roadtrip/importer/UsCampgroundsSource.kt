@@ -16,51 +16,61 @@ class UsCampgroundsSource(
     private val geojson: File,
     private val fetchedAt: Instant = Instant.ofEpochMilli(geojson.lastModified()),
 ) : Source {
-
     override val name = "uscampgrounds"
 
-    override fun staged(): Sequence<StagedPoi> = sequence {
-        val root = Json.parseToJsonElement(geojson.readText()).jsonObject
-        val features = root["features"]!!.jsonArray
-        for (feat in features) {
-            val obj = feat.jsonObject
-            val geom = obj["geometry"]?.jsonObject ?: continue
-            if (geom["type"]?.jsonPrimitive?.content != "Point") continue
-            val coords = geom["coordinates"]?.jsonArray ?: continue
-            val lon = coords[0].jsonPrimitive.content.toDouble()
-            val lat = coords[1].jsonPrimitive.content.toDouble()
-            val props = obj["properties"]?.jsonObject ?: continue
-            val code = props["code"]?.jsonPrimitive?.content ?: continue
-            val state = props["state"]?.jsonPrimitive?.content ?: continue
-            val name = props["name"]?.jsonPrimitive?.content ?: continue
+    override fun staged(): Sequence<StagedPoi> =
+        sequence {
+            val root = Json.parseToJsonElement(geojson.readText()).jsonObject
+            val features = root["features"]!!.jsonArray
+            for (feat in features) {
+                val obj = feat.jsonObject
+                val geom = obj["geometry"]?.jsonObject ?: continue
+                if (geom["type"]?.jsonPrimitive?.content != "Point") continue
+                val coords = geom["coordinates"]?.jsonArray ?: continue
+                val lon = coords[0].jsonPrimitive.content.toDouble()
+                val lat = coords[1].jsonPrimitive.content.toDouble()
+                val props = obj["properties"]?.jsonObject ?: continue
+                val code = props["code"]?.jsonPrimitive?.content ?: continue
+                val state = props["state"]?.jsonPrimitive?.content ?: continue
+                val name = props["name"]?.jsonPrimitive?.content ?: continue
 
-            // The upstream campgrounds.geojson has a long-tail of Canadian
-            // entries (codes prefixed PC-AB / PC-BC / parks-canada-bc-) that
-            // were merged in by an old enrichment pass. Those duplicate the
-            // hand-curated parks-canada source — same lat/lng, no
-            // `last_verified`, and they outrank the curated rows in search
-            // because they appear first in the index. Skip them so
-            // parks-canada is the single source of truth for Canadian parks.
-            if (code.startsWith("PC-AB") || code.startsWith("PC-BC") ||
-                code.startsWith("parks-canada-")) continue
+                // The upstream campgrounds.geojson has a long-tail of Canadian
+                // entries (codes prefixed PC-AB / PC-BC / parks-canada-bc-) that
+                // were merged in by an old enrichment pass. Those duplicate the
+                // hand-curated parks-canada source — same lat/lng, no
+                // `last_verified`, and they outrank the curated rows in search
+                // because they appear first in the index. Skip them so
+                // parks-canada is the single source of truth for Canadian parks.
+                if (code.startsWith("PC-AB") ||
+                    code.startsWith("PC-BC") ||
+                    code.startsWith("parks-canada-")
+                ) {
+                    continue
+                }
 
-            yield(
-                StagedPoi(
-                    sourceId = sourceIdFor(code, state, name, lat, lon),
-                    category = Category.CAMPGROUND,
-                    name = name,
-                    geomGeoJson = pointGeoJson(lon, lat),
-                    region = state,
-                    unitName = props["parent_name"]?.jsonPrimitive?.contentOrNull(),
-                    properties = props,
-                    reserveUrl = reserveUrlFor(props),
-                    fetchedAt = fetchedAt,
+                yield(
+                    StagedPoi(
+                        sourceId = sourceIdFor(code, state, name, lat, lon),
+                        category = Category.CAMPGROUND,
+                        name = name,
+                        geomGeoJson = pointGeoJson(lon, lat),
+                        region = state,
+                        unitName = props["parent_name"]?.jsonPrimitive?.contentOrNull(),
+                        properties = props,
+                        reserveUrl = reserveUrlFor(props),
+                        fetchedAt = fetchedAt,
+                    ),
                 )
-            )
+            }
         }
-    }
 
-    private fun sourceIdFor(code: String, state: String, name: String, lat: Double, lon: Double): String {
+    private fun sourceIdFor(
+        code: String,
+        state: String,
+        name: String,
+        lat: Double,
+        lon: Double,
+    ): String {
         // Hash uses a stable seed so re-runs produce the same id even when
         // upstream re-orders features. lat/lon at 5dp ≈ 1m precision.
         val hash8 = stableHash8("$name|${"%.5f".format(lat)}|${"%.5f".format(lon)}")
@@ -80,4 +90,3 @@ class UsCampgroundsSource(
         }
     }
 }
-

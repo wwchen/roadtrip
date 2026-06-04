@@ -3,14 +3,14 @@ package ca.floo.roadtrip.importer
 import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import org.jooq.DSLContext
-import org.jooq.JSONB
-import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
-class ImportException(message: String) : RuntimeException(message)
+class ImportException(
+    message: String,
+) : RuntimeException(message)
 
 data class ImportResult(
     val runId: Long,
@@ -26,24 +26,30 @@ data class ImportResult(
 //   4. Sweep: soft-delete any active row from this source whose
 //      last_seen_run_id != current run.
 //   5. Mark run completed.
-class Importer(private val ctx: DSLContext) {
+class Importer(
+    private val ctx: DSLContext,
+) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     fun run(source: Source): ImportResult {
         val now = OffsetDateTime.now(ZoneOffset.UTC)
-        val runId = ctx.insertInto(IMPORT_RUNS)
-            .set(IMPORT_RUNS.SOURCE, source.name)
-            .set(IMPORT_RUNS.STATUS, "started")
-            .set(IMPORT_RUNS.STARTED_AT, now)
-            .returningResult(IMPORT_RUNS.ID)
-            .fetchOne()!!.value1()!!
+        val runId =
+            ctx
+                .insertInto(IMPORT_RUNS)
+                .set(IMPORT_RUNS.SOURCE, source.name)
+                .set(IMPORT_RUNS.STATUS, "started")
+                .set(IMPORT_RUNS.STARTED_AT, now)
+                .returningResult(IMPORT_RUNS.ID)
+                .fetchOne()!!
+                .value1()!!
         log.info("import_runs id={} source={} started", runId, source.name)
 
         try {
-            val existingActive = ctx.fetchCount(
-                POIS,
-                POIS.SOURCE.eq(source.name).and(POIS.DELETED_AT.isNull)
-            )
+            val existingActive =
+                ctx.fetchCount(
+                    POIS,
+                    POIS.SOURCE.eq(source.name).and(POIS.DELETED_AT.isNull),
+                )
 
             var seen = 0
             for (poi in source.staged()) {
@@ -58,14 +64,15 @@ class Importer(private val ctx: DSLContext) {
             if (existingActive > 0 && seen < existingActive / 2) {
                 fail(runId, "tripwire: seen=$seen < existing/2=${existingActive / 2}")
                 throw ImportException(
-                    "Aborted: seen=$seen < existing/2=${existingActive / 2} for source=${source.name}"
+                    "Aborted: seen=$seen < existing/2=${existingActive / 2} for source=${source.name}",
                 )
             }
 
             val swept = sweep(source.name, runId)
             log.info("swept {} rows (soft-deleted) from source={}", swept, source.name)
 
-            ctx.update(IMPORT_RUNS)
+            ctx
+                .update(IMPORT_RUNS)
                 .set(IMPORT_RUNS.STATUS, "completed")
                 .set(IMPORT_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
                 .set(IMPORT_RUNS.SEEN_COUNT, seen)
@@ -79,7 +86,11 @@ class Importer(private val ctx: DSLContext) {
         }
     }
 
-    private fun upsert(source: String, poi: StagedPoi, runId: Long) {
+    private fun upsert(
+        source: String,
+        poi: StagedPoi,
+        runId: Long,
+    ) {
         // jOOQ has no PostGIS bindings, so geom goes through ST_GeomFromGeoJSON
         // wrapped in ST_SetSRID. Polygon/MultiPolygon work the same as Point.
         val fetchedAtTs = OffsetDateTime.ofInstant(poi.fetchedAt, ZoneOffset.UTC)
@@ -104,23 +115,38 @@ class Importer(private val ctx: DSLContext) {
               deleted_at       = NULL,
               updated_at       = NOW()
             """.trimIndent(),
-            source, poi.sourceId, poi.category.sql, poi.name, poi.geomGeoJson,
-            poi.region, poi.unitName, poi.properties.toString(),
-            poi.reserveUrl, fetchedAtTs, runId,
+            source,
+            poi.sourceId,
+            poi.category.sql,
+            poi.name,
+            poi.geomGeoJson,
+            poi.region,
+            poi.unitName,
+            poi.properties.toString(),
+            poi.reserveUrl,
+            fetchedAtTs,
+            runId,
         )
     }
 
-    private fun sweep(source: String, runId: Long): Int {
-        return ctx.update(POIS)
+    private fun sweep(
+        source: String,
+        runId: Long,
+    ): Int =
+        ctx
+            .update(POIS)
             .set(POIS.DELETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
             .where(POIS.SOURCE.eq(source))
             .and(POIS.DELETED_AT.isNull)
             .and(POIS.LAST_SEEN_RUN_ID.ne(runId).or(POIS.LAST_SEEN_RUN_ID.isNull))
             .execute()
-    }
 
-    private fun fail(runId: Long, notes: String) {
-        ctx.update(IMPORT_RUNS)
+    private fun fail(
+        runId: Long,
+        notes: String,
+    ) {
+        ctx
+            .update(IMPORT_RUNS)
             .set(IMPORT_RUNS.STATUS, "failed")
             .set(IMPORT_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
             .set(IMPORT_RUNS.NOTES, notes)
@@ -136,9 +162,12 @@ fun main(args: Array<String>) {
     val log = LoggerFactory.getLogger("Importer")
     val dataDir = System.getenv("ROADTRIP_DATA_DIR")?.let(::File) ?: File("data")
     val requested = args.toList().ifEmpty { listOf("uscampgrounds") }
-    val sources = if (requested == listOf("all")) {
-        listOf("uscampgrounds", "alberta-provincial", "parks-canada", "state-parks", "national-parks", "osm-pf")
-    } else requested
+    val sources =
+        if (requested == listOf("all")) {
+            listOf("uscampgrounds", "alberta-provincial", "parks-canada", "state-parks", "national-parks", "osm-pf")
+        } else {
+            requested
+        }
 
     val ds = dataSourceFor(DbConfig.fromEnv())
     migrate(ds)
@@ -153,18 +182,25 @@ fun main(args: Array<String>) {
     ds.close()
 }
 
-private fun sourceFor(name: String, dataDir: File): Source = when (name) {
-    "uscampgrounds" -> UsCampgroundsSource(required(File(dataDir, "campgrounds.geojson")))
-    "alberta-provincial" -> AlbertaProvincialSource(required(File(dataDir, "alberta-provincial.json")))
-    "parks-canada" -> ParksCanadaSource(listOf(
-        required(File(dataDir, "parks-canada-bc.json")),
-        required(File(dataDir, "parks-canada-ab.json")),
-    ))
-    "state-parks" -> ParksGeoJsonSource(required(File(dataDir, "state-parks.geojson")), "state-parks", Category.STATE_PARK)
-    "national-parks" -> ParksGeoJsonSource(required(File(dataDir, "national-parks.geojson")), "national-parks", Category.NATIONAL_PARK)
-    "osm-pf" -> PlanetFitnessSource(required(File(dataDir, "planet-fitness.geojson")))
-    else -> error("unknown source: $name")
-}
+private fun sourceFor(
+    name: String,
+    dataDir: File,
+): Source =
+    when (name) {
+        "uscampgrounds" -> UsCampgroundsSource(required(File(dataDir, "campgrounds.geojson")))
+        "alberta-provincial" -> AlbertaProvincialSource(required(File(dataDir, "alberta-provincial.json")))
+        "parks-canada" ->
+            ParksCanadaSource(
+                listOf(
+                    required(File(dataDir, "parks-canada-bc.json")),
+                    required(File(dataDir, "parks-canada-ab.json")),
+                ),
+            )
+        "state-parks" -> ParksGeoJsonSource(required(File(dataDir, "state-parks.geojson")), "state-parks", Category.STATE_PARK)
+        "national-parks" -> ParksGeoJsonSource(required(File(dataDir, "national-parks.geojson")), "national-parks", Category.NATIONAL_PARK)
+        "osm-pf" -> PlanetFitnessSource(required(File(dataDir, "planet-fitness.geojson")))
+        else -> error("unknown source: $name")
+    }
 
 private fun required(f: File): File {
     require(f.exists()) { "missing data file: ${f.absolutePath}" }
