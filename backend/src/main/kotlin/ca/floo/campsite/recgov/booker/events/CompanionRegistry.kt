@@ -12,18 +12,28 @@ import java.util.concurrent.ConcurrentHashMap
  * `companion_offline`. The bus emits the event once on the FALSE→TRUE
  * transition so reconnects don't re-spam.
  */
-class CompanionRegistry(val offlineThreshold: Duration = Duration.ofSeconds(90)) {
-    data class Entry(val id: String, var lastSeen: Instant, var offline: Boolean)
+class CompanionRegistry(
+    val offlineThreshold: Duration = Duration.ofSeconds(90),
+) {
+    data class Entry(
+        val id: String,
+        var lastSeen: Instant,
+        var offline: Boolean,
+    )
 
     private val companions = ConcurrentHashMap<String, Entry>()
 
-    fun heartbeat(id: String, now: Instant = Instant.now()): Boolean {
+    fun heartbeat(
+        id: String,
+        now: Instant = Instant.now(),
+    ): Boolean {
         // Returns true if this heartbeat brought a previously-offline companion back online.
-        val entry = companions.compute(id) { _, prev ->
-            (prev ?: Entry(id, now, offline = false)).also {
-                it.lastSeen = now
-            }
-        }!!
+        val entry =
+            companions.compute(id) { _, prev ->
+                (prev ?: Entry(id, now, offline = false)).also {
+                    it.lastSeen = now
+                }
+            }!!
         val cameBack = entry.offline
         entry.offline = false
         return cameBack

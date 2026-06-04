@@ -8,7 +8,10 @@ object Matcher {
     private val AVAILABLE_STATUSES = setOf("Available", "Open")
 
     /** YYYY-MM-01 strings for every month touched by [start, end] inclusive. */
-    fun monthsInRange(start: String, end: String): List<String> {
+    fun monthsInRange(
+        start: String,
+        end: String,
+    ): List<String> {
         val s = YearMonth.from(LocalDate.parse(start))
         val e = YearMonth.from(LocalDate.parse(end))
         val out = mutableListOf<String>()
@@ -33,14 +36,14 @@ object Matcher {
         val start = LocalDate.parse(startDate)
         val end = LocalDate.parse(endDate)
 
-        val days = availabilities.entries
-            .mapNotNull { (k, v) ->
-                if (!AVAILABLE_STATUSES.contains(v)) return@mapNotNull null
-                val day = LocalDate.parse(k.substring(0, 10))
-                if (day < start || !day.isBefore(end)) return@mapNotNull null
-                day
-            }
-            .sorted()
+        val days =
+            availabilities.entries
+                .mapNotNull { (k, v) ->
+                    if (!AVAILABLE_STATUSES.contains(v)) return@mapNotNull null
+                    val day = LocalDate.parse(k.substring(0, 10))
+                    if (day < start || !day.isBefore(end)) return@mapNotNull null
+                    day
+                }.sorted()
 
         if (days.size < minNights) return emptyList()
 

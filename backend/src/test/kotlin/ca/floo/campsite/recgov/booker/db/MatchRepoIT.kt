@@ -32,18 +32,20 @@ class MatchRepoIT {
         // wait-for-readiness probe. V1__pois.sql requires the PostGIS
         // extension, which plain postgres:16 doesn't ship.
         val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
-        pg = PostgreSQLContainer<Nothing>(image).apply {
-            withDatabaseName("campsite_test")
-            withUsername("test")
-            withPassword("test")
-        }
+        pg =
+            PostgreSQLContainer<Nothing>(image).apply {
+                withDatabaseName("campsite_test")
+                withUsername("test")
+                withPassword("test")
+            }
         pg.start()
-        val cfg = HikariConfig().apply {
-            jdbcUrl = pg.jdbcUrl
-            username = pg.username
-            password = pg.password
-            maximumPoolSize = 4
-        }
+        val cfg =
+            HikariConfig().apply {
+                jdbcUrl = pg.jdbcUrl
+                username = pg.username
+                password = pg.password
+                maximumPoolSize = 4
+            }
         ds = HikariDataSource(cfg)
         migrate(ds)
         val ctx = dsl(ds)
@@ -64,24 +66,39 @@ class MatchRepoIT {
     }
 
     private fun seedAlertAndMatch(): Long {
-        val alertId = alerts.create(AlertRepo.CreateInput(
-            campgroundId = "232447", campgroundName = "Upper Pines",
-            parentName = null, parentId = null,
-            startDate = "2026-07-01", endDate = "2026-07-05",
-            minNights = 1,
-            campsiteTypes = emptyList(), equipmentTypes = emptyList(),
-            maxPeople = null, specificSites = emptyList(),
-            notifySlack = false, autoCart = false, stopAfterMatch = false,
-            notes = null,
-        ))
-        return matches.create(MatchRepo.CreateInput(
-            alertId = alertId,
-            campgroundId = "232447",
-            campsiteId = "12345",
-            site = "A12", loop = "Loop A", campsiteType = "STANDARD",
-            availableDates = listOf("2026-07-01"),
-            firstDate = "2026-07-01", nights = 1,
-        ))!!
+        val alertId =
+            alerts.create(
+                AlertRepo.CreateInput(
+                    campgroundId = "232447",
+                    campgroundName = "Upper Pines",
+                    parentName = null,
+                    parentId = null,
+                    startDate = "2026-07-01",
+                    endDate = "2026-07-05",
+                    minNights = 1,
+                    campsiteTypes = emptyList(),
+                    equipmentTypes = emptyList(),
+                    maxPeople = null,
+                    specificSites = emptyList(),
+                    notifySlack = false,
+                    autoCart = false,
+                    stopAfterMatch = false,
+                    notes = null,
+                ),
+            )
+        return matches.create(
+            MatchRepo.CreateInput(
+                alertId = alertId,
+                campgroundId = "232447",
+                campsiteId = "12345",
+                site = "A12",
+                loop = "Loop A",
+                campsiteType = "STANDARD",
+                availableDates = listOf("2026-07-01"),
+                firstDate = "2026-07-01",
+                nights = 1,
+            ),
+        )!!
     }
 
     @Test
@@ -145,13 +162,20 @@ class MatchRepoIT {
     @Test
     fun `create dedups duplicate matches within an hour`() {
         val matchId = seedAlertAndMatch()
-        val dup = matches.create(MatchRepo.CreateInput(
-            alertId = matches.get(matchId)!!.alertId,
-            campgroundId = "232447", campsiteId = "12345",
-            site = "A12", loop = "Loop A", campsiteType = "STANDARD",
-            availableDates = listOf("2026-07-01"),
-            firstDate = "2026-07-01", nights = 1,
-        ))
+        val dup =
+            matches.create(
+                MatchRepo.CreateInput(
+                    alertId = matches.get(matchId)!!.alertId,
+                    campgroundId = "232447",
+                    campsiteId = "12345",
+                    site = "A12",
+                    loop = "Loop A",
+                    campsiteType = "STANDARD",
+                    availableDates = listOf("2026-07-01"),
+                    firstDate = "2026-07-01",
+                    nights = 1,
+                ),
+            )
         assertNull(dup, "duplicate match within 1h must be deduped")
     }
 }

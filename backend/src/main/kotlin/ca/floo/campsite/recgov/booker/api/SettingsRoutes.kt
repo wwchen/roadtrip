@@ -12,18 +12,22 @@ import io.ktor.server.routing.post
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
-fun Route.settingsRoutes(settings: SettingsRepo, slack: SlackNotifier) {
+fun Route.settingsRoutes(
+    settings: SettingsRepo,
+    slack: SlackNotifier,
+) {
     get("/api/campsite/settings") {
         val all = settings.all()
-        val masked = buildJsonObject {
-            for ((k, v) in all) {
-                when (k) {
-                    "slack_token", "recgov_cookies", "recgov_token" ->
-                        if (v.isNotEmpty()) put(k, "••••••••") else put(k, "")
-                    else -> put(k, v)
+        val masked =
+            buildJsonObject {
+                for ((k, v) in all) {
+                    when (k) {
+                        "slack_token", "recgov_cookies", "recgov_token" ->
+                            if (v.isNotEmpty()) put(k, "••••••••") else put(k, "")
+                        else -> put(k, v)
+                    }
                 }
             }
-        }
         call.respondText(masked.toString())
     }
 

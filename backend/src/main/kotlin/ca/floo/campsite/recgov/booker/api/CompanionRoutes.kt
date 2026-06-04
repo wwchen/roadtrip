@@ -12,14 +12,25 @@ import io.ktor.server.routing.post
 
 private val jsonStringRe = Regex("\"([^\"]*)\"\\s*:\\s*\"([^\"]*)\"")
 
-private fun parseField(body: String, key: String): String? =
-    jsonStringRe.findAll(body).firstOrNull { it.groupValues[1] == key }?.groupValues?.get(2)
+private fun parseField(
+    body: String,
+    key: String,
+): String? =
+    jsonStringRe
+        .findAll(body)
+        .firstOrNull { it.groupValues[1] == key }
+        ?.groupValues
+        ?.get(2)
 
-fun Route.companionRoutes(companions: CompanionRegistry, bus: EventBus) {
+fun Route.companionRoutes(
+    companions: CompanionRegistry,
+    bus: EventBus,
+) {
     post("/api/campsite/companion/heartbeat") {
         val body = call.receiveText()
-        val id = parseField(body, "companion_id")
-            ?: return@post call.respond(HttpStatusCode.BadRequest, "missing companion_id")
+        val id =
+            parseField(body, "companion_id")
+                ?: return@post call.respond(HttpStatusCode.BadRequest, "missing companion_id")
         val cameBack = companions.heartbeat(id)
         if (cameBack) {
             bus.publish("companion_online", """{"companionId":"$id"}""")
@@ -28,9 +39,10 @@ fun Route.companionRoutes(companions: CompanionRegistry, bus: EventBus) {
     }
 
     get("/api/campsite/companion/status") {
-        val list = companions.status().joinToString(",") {
-            """{"id":"${it.id}","lastSeen":"${it.lastSeen}","offline":${it.offline}}"""
-        }
+        val list =
+            companions.status().joinToString(",") {
+                """{"id":"${it.id}","lastSeen":"${it.lastSeen}","offline":${it.offline}}"""
+            }
         call.respondText("""{"companions":[$list]}""")
     }
 }

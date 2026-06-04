@@ -1,32 +1,39 @@
 package ca.floo.campsite.recgov.booker.db
 
-import ca.floo.roadtrip.db.generated.tables.references.ALERTS
 import ca.floo.campsite.recgov.booker.domain.Alert
+import ca.floo.roadtrip.db.generated.tables.references.ALERTS
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.jooq.JSONB
 import org.jooq.Record
 import java.time.LocalDate
 import java.time.OffsetDateTime
 
-class AlertRepo(private val ctx: DSLContext) {
+class AlertRepo(
+    private val ctx: DSLContext,
+) {
     fun list(): List<Alert> {
         // status order: active, paused, done, then created_at DESC
         val statusOrder = "CASE status WHEN 'active' THEN 0 WHEN 'paused' THEN 1 WHEN 'done' THEN 2 ELSE 9 END"
-        return ctx.selectFrom(ALERTS)
-            .orderBy(org.jooq.impl.DSL.field(statusOrder), ALERTS.CREATED_AT.desc())
-            .map { it.toDomain() }
+        return ctx
+            .selectFrom(ALERTS)
+            .orderBy(
+                org.jooq.impl.DSL
+                    .field(statusOrder),
+                ALERTS.CREATED_AT.desc(),
+            ).map { it.toDomain() }
     }
 
-    fun listActive(): List<Alert> =
-        ctx.selectFrom(ALERTS).where(ALERTS.STATUS.eq("active")).map { it.toDomain() }
+    fun listActive(): List<Alert> = ctx.selectFrom(ALERTS).where(ALERTS.STATUS.eq("active")).map { it.toDomain() }
 
     fun get(id: Long): Alert? =
-        ctx.selectFrom(ALERTS).where(ALERTS.ID.eq(id)).fetchOne()?.toDomain()
+        ctx
+            .selectFrom(ALERTS)
+            .where(ALERTS.ID.eq(id))
+            .fetchOne()
+            ?.toDomain()
 
     data class CreateInput(
         val campgroundId: String,
@@ -68,7 +75,10 @@ class AlertRepo(private val ctx: DSLContext) {
         return rec.id!!
     }
 
-    fun patch(id: Long, fields: Map<String, Any?>): Boolean {
+    fun patch(
+        id: Long,
+        fields: Map<String, Any?>,
+    ): Boolean {
         val rec = ctx.selectFrom(ALERTS).where(ALERTS.ID.eq(id)).fetchOne() ?: return false
         for ((k, v) in fields) {
             when (k) {
@@ -88,33 +98,50 @@ class AlertRepo(private val ctx: DSLContext) {
         return rec.store() > 0
     }
 
-    fun delete(id: Long): Boolean =
-        ctx.deleteFrom(ALERTS).where(ALERTS.ID.eq(id)).execute() > 0
+    fun delete(id: Long): Boolean = ctx.deleteFrom(ALERTS).where(ALERTS.ID.eq(id)).execute() > 0
 
-    fun markChecked(id: Long, now: OffsetDateTime = OffsetDateTime.now()) {
-        ctx.update(ALERTS).set(ALERTS.LAST_CHECKED, now).where(ALERTS.ID.eq(id)).execute()
+    fun markChecked(
+        id: Long,
+        now: OffsetDateTime = OffsetDateTime.now(),
+    ) {
+        ctx
+            .update(ALERTS)
+            .set(ALERTS.LAST_CHECKED, now)
+            .where(ALERTS.ID.eq(id))
+            .execute()
     }
 
-    fun markLastMatch(id: Long, at: OffsetDateTime = OffsetDateTime.now()) {
-        ctx.update(ALERTS).set(ALERTS.LAST_MATCH, at).where(ALERTS.ID.eq(id)).execute()
+    fun markLastMatch(
+        id: Long,
+        at: OffsetDateTime = OffsetDateTime.now(),
+    ) {
+        ctx
+            .update(ALERTS)
+            .set(ALERTS.LAST_MATCH, at)
+            .where(ALERTS.ID.eq(id))
+            .execute()
     }
 }
 
 internal fun jsonbList(items: List<String>): JSONB =
-    JSONB.valueOf(buildString {
-        append('[')
-        items.forEachIndexed { i, s ->
-            if (i > 0) append(',')
-            append('"').append(s.replace("\\", "\\\\").replace("\"", "\\\"")).append('"')
-        }
-        append(']')
-    })
+    JSONB.valueOf(
+        buildString {
+            append('[')
+            items.forEachIndexed { i, s ->
+                if (i > 0) append(',')
+                append('"').append(s.replace("\\", "\\\\").replace("\"", "\\\"")).append('"')
+            }
+            append(']')
+        },
+    )
 
 internal fun parseStringList(jsonb: JSONB?): List<String> {
     if (jsonb == null) return emptyList()
     return try {
         (Json.parseToJsonElement(jsonb.data()) as JsonArray).map { (it as JsonPrimitive).content }
-    } catch (_: Exception) { emptyList() }
+    } catch (_: Exception) {
+        emptyList()
+    }
 }
 
 private fun Record.toDomain(): Alert {

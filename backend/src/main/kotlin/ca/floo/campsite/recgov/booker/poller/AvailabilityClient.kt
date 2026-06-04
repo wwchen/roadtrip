@@ -14,8 +14,6 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -33,9 +31,13 @@ class AvailabilityClient(
 ) {
     private val log = LoggerFactory.getLogger(AvailabilityClient::class.java)
     private val mutex = Mutex()
+
     @Volatile private var lastCallAt: Long = 0
 
-    suspend fun fetchMonth(campgroundId: String, monthStart: String): Map<String, Campsite> {
+    suspend fun fetchMonth(
+        campgroundId: String,
+        monthStart: String,
+    ): Map<String, Campsite> {
         val isoMonth = URLEncoder.encode("${monthStart}T00:00:00.000Z", StandardCharsets.UTF_8)
         val url = "$AVAIL_BASE/$campgroundId/month?start_date=$isoMonth"
         log.info("Poller: GET availability {}/{}", campgroundId, monthStart)
@@ -67,21 +69,24 @@ class AvailabilityClient(
 
     companion object {
         const val AVAIL_BASE = "https://www.recreation.gov/api/camps/availability/campground"
-        private val UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+        private val UA =
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 " +
+                "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
 
-        fun defaultClient(): HttpClient = HttpClient(CIO) {
-            engine { requestTimeout = 15_000 }
-            defaultRequest {
-                header("User-Agent", UA)
-                header("Accept", "application/json")
-                header("Referer", "https://www.recreation.gov/")
+        fun defaultClient(): HttpClient =
+            HttpClient(CIO) {
+                engine { requestTimeout = 15_000 }
+                defaultRequest {
+                    header("User-Agent", UA)
+                    header("Accept", "application/json")
+                    header("Referer", "https://www.recreation.gov/")
+                }
+                install(HttpRequestRetry) {
+                    retryOnExceptionIf(maxRetries = 2) { _, cause -> cause !is io.ktor.client.plugins.HttpRequestTimeoutException }
+                    exponentialDelay()
+                }
+                expectSuccess = false
             }
-            install(HttpRequestRetry) {
-                retryOnExceptionIf(maxRetries = 2) { _, cause -> cause !is io.ktor.client.plugins.HttpRequestTimeoutException }
-                exponentialDelay()
-            }
-            expectSuccess = false
-        }
     }
 }
 
@@ -102,22 +107,34 @@ private fun parseCampsites(body: String): Map<String, Campsite> {
     for ((id, element) in campsites) {
         val obj = element as? JsonObject ?: continue
         val avail = (obj["availabilities"] as? JsonObject)?.mapValues { (it.value as JsonPrimitive).content } ?: emptyMap()
-        val equip = (obj["equipment_types"] as? kotlinx.serialization.json.JsonArray)
-            ?.map { (it as JsonPrimitive).content } ?: emptyList()
-        out[id] = Campsite(
-            id = id,
-            site = (obj["site"] as? JsonPrimitive)?.contentOrNull(),
-            loop = (obj["loop"] as? JsonPrimitive)?.contentOrNull(),
-            campsiteType = (obj["campsite_type"] as? JsonPrimitive)?.contentOrNull(),
-            maxNumPeople = (obj["max_num_people"] as? JsonPrimitive)?.intOrNull(),
-            equipmentTypes = equip,
-            availabilities = avail,
-        )
+        val equip =
+            (obj["equipment_types"] as? kotlinx.serialization.json.JsonArray)
+                ?.map { (it as JsonPrimitive).content } ?: emptyList()
+        out[id] =
+            Campsite(
+                id = id,
+                site = (obj["site"] as? JsonPrimitive)?.contentOrNull(),
+                loop = (obj["loop"] as? JsonPrimitive)?.contentOrNull(),
+                campsiteType = (obj["campsite_type"] as? JsonPrimitive)?.contentOrNull(),
+                maxNumPeople = (obj["max_num_people"] as? JsonPrimitive)?.intOrNull(),
+                equipmentTypes = equip,
+                availabilities = avail,
+            )
     }
     return out
 }
 
-private fun JsonPrimitive.contentOrNull(): String? = if (this is JsonPrimitive && this.isString) content else if (content == "null") null else content
+private fun JsonPrimitive.contentOrNull(): String? =
+    if (this is JsonPrimitive &&
+        this.isString
+    ) {
+        content
+    } else if (content == "null") {
+        null
+    } else {
+        content
+    }
+
 private fun JsonPrimitive.intOrNull(): Int? = content.toIntOrNull()
 
 private fun HttpStatusCode.isSuccess(): Boolean = value in 200..299

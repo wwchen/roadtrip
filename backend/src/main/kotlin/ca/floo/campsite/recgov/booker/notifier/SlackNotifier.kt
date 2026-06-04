@@ -23,7 +23,10 @@ class SlackNotifier(
     private val log = LoggerFactory.getLogger(SlackNotifier::class.java)
 
     /** Sends one Slack message with all matches for an alert batch. Returns true on success. */
-    suspend fun notifyBatch(alert: Alert, matches: List<Match>): Boolean {
+    suspend fun notifyBatch(
+        alert: Alert,
+        matches: List<Match>,
+    ): Boolean {
         if (!alert.notifySlack) return false
         val token = settings.get("slack_token").orEmpty()
         val channel = settings.get("slack_channel").orEmpty()
@@ -36,11 +39,12 @@ class SlackNotifier(
         val firstUrl = matchUrl(first)
         val text = "⛺ $count campsite${if (count > 1) "s" else ""} available at ${alert.campgroundName}"
 
-        val siteLines = matches.take(10).joinToString("\n") { m ->
-            val loop = if (!m.campsiteLoop.isNullOrEmpty()) " (${m.campsiteLoop})" else ""
-            val type = m.campsiteType ?: "N/A"
-            "• Site *${m.campsiteSite}*$loop — ${m.availableDates.joinToString(", ")} _(${m.nights}n, $type)_"
-        }
+        val siteLines =
+            matches.take(10).joinToString("\n") { m ->
+                val loop = if (!m.campsiteLoop.isNullOrEmpty()) " (${m.campsiteLoop})" else ""
+                val type = m.campsiteType ?: "N/A"
+                "• Site *${m.campsiteSite}*$loop — ${m.availableDates.joinToString(", ")} _(${m.nights}n, $type)_"
+            }
 
         val blocks = """[
             {"type":"header","text":{"type":"plain_text","text":"⛺ Campsites Available!","emoji":true}},
@@ -71,18 +75,25 @@ class SlackNotifier(
         postSlack(token, channel, null, "✅ Campsite Alert test — Slack notifications are working!")
     }
 
-    private suspend fun postSlack(token: String, channel: String, blocks: String?, text: String) {
+    private suspend fun postSlack(
+        token: String,
+        channel: String,
+        blocks: String?,
+        text: String,
+    ) {
         log.info("Slack: POST chat.postMessage to {}", channel)
-        val body = if (blocks != null) {
-            """{"channel":"${esc(channel)}","text":"${esc(text)}","blocks":$blocks}"""
-        } else {
-            """{"channel":"${esc(channel)}","text":"${esc(text)}"}"""
-        }
-        val resp = client.post("https://slack.com/api/chat.postMessage") {
-            header("Authorization", "Bearer $token")
-            contentType(ContentType.Application.Json)
-            setBody(body)
-        }
+        val body =
+            if (blocks != null) {
+                """{"channel":"${esc(channel)}","text":"${esc(text)}","blocks":$blocks}"""
+            } else {
+                """{"channel":"${esc(channel)}","text":"${esc(text)}"}"""
+            }
+        val resp =
+            client.post("https://slack.com/api/chat.postMessage") {
+                header("Authorization", "Bearer $token")
+                contentType(ContentType.Application.Json)
+                setBody(body)
+            }
         val raw = resp.bodyAsText()
         val parsed = Json.parseToJsonElement(raw) as? JsonObject
         val ok = (parsed?.get("ok") as? JsonPrimitive)?.content == "true"
@@ -103,15 +114,21 @@ class SlackNotifier(
 }
 
 internal fun toCheckoutDate(lastNight: String): String =
-    java.time.LocalDate.parse(lastNight).plusDays(1).toString()
+    java.time.LocalDate
+        .parse(lastNight)
+        .plusDays(1)
+        .toString()
 
-private fun esc(s: String): String = buildString(s.length) {
-    for (c in s) when (c) {
-        '"' -> append("\\\"")
-        '\\' -> append("\\\\")
-        '\n' -> append("\\n")
-        '\r' -> append("\\r")
-        '\t' -> append("\\t")
-        else -> if (c.code < 0x20) append("\\u%04x".format(c.code)) else append(c)
+private fun esc(s: String): String =
+    buildString(s.length) {
+        for (c in s) {
+            when (c) {
+                '"' -> append("\\\"")
+                '\\' -> append("\\\\")
+                '\n' -> append("\\n")
+                '\r' -> append("\\r")
+                '\t' -> append("\\t")
+                else -> if (c.code < 0x20) append("\\u%04x".format(c.code)) else append(c)
+            }
+        }
     }
-}

@@ -1,24 +1,21 @@
 package ca.floo.campsite.recgov.booker.tools
 
+import ca.floo.campsite.recgov.booker.db.jsonbList
+import ca.floo.roadtrip.db.generated.tables.references.ALERTS
+import ca.floo.roadtrip.db.generated.tables.references.MATCHES
+import ca.floo.roadtrip.db.generated.tables.references.SETTINGS
 import ca.floo.roadtrip.importer.DbConfig
 import ca.floo.roadtrip.importer.dataSourceFor
 import ca.floo.roadtrip.importer.dsl
 import ca.floo.roadtrip.importer.migrate
-import ca.floo.roadtrip.db.generated.tables.references.ALERTS
-import ca.floo.roadtrip.db.generated.tables.references.MATCHES
-import ca.floo.roadtrip.db.generated.tables.references.SETTINGS
-import ca.floo.campsite.recgov.booker.db.jsonbList
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import java.io.File
 import java.time.LocalDate
@@ -26,18 +23,20 @@ import java.time.OffsetDateTime
 import kotlin.system.exitProcess
 
 // Skip secrets that belong on the companion, not the backend.
-private val SETTING_SKIP = setOf(
-    "recgov_token",
-    "recgov_cookies",
-    "recgov_refresh_creds",
-    "recgov_recaccount",
-)
+private val SETTING_SKIP =
+    setOf(
+        "recgov_token",
+        "recgov_cookies",
+        "recgov_refresh_creds",
+        "recgov_recaccount",
+    )
 
 fun main(args: Array<String>) {
-    val path = args.firstOrNull() ?: run {
-        System.err.println("usage: migrate <path/to/data.json>")
-        exitProcess(2)
-    }
+    val path =
+        args.firstOrNull() ?: run {
+            System.err.println("usage: migrate <path/to/data.json>")
+            exitProcess(2)
+        }
     val file = File(path)
     if (!file.isFile) {
         System.err.println("not a file: $path")
@@ -56,16 +55,22 @@ fun main(args: Array<String>) {
     println("Imported: settings=$settingsCount alerts=$alerts matches=$matches")
 }
 
-private fun importSettings(ctx: DSLContext, settings: JsonObject?): Int {
+private fun importSettings(
+    ctx: DSLContext,
+    settings: JsonObject?,
+): Int {
     if (settings == null) return 0
     var n = 0
     for ((k, v) in settings) {
         if (k in SETTING_SKIP) continue
         val s = (v as? JsonPrimitive)?.contentOrNull ?: continue
-        ctx.insertInto(SETTINGS)
+        ctx
+            .insertInto(SETTINGS)
             .set(SETTINGS.KEY, k)
             .set(SETTINGS.VALUE, s)
-            .onConflict(SETTINGS.KEY).doUpdate().set(SETTINGS.VALUE, s)
+            .onConflict(SETTINGS.KEY)
+            .doUpdate()
+            .set(SETTINGS.VALUE, s)
             .execute()
         n++
     }
@@ -73,7 +78,10 @@ private fun importSettings(ctx: DSLContext, settings: JsonObject?): Int {
 }
 
 /** Returns (count, legacyId → newId). */
-private fun importAlerts(ctx: DSLContext, alerts: JsonArray?): Pair<Int, Map<Long, Long>> {
+private fun importAlerts(
+    ctx: DSLContext,
+    alerts: JsonArray?,
+): Pair<Int, Map<Long, Long>> {
     if (alerts == null) return 0 to emptyMap()
     val idMap = mutableMapOf<Long, Long>()
     var n = 0
@@ -106,12 +114,16 @@ private fun importAlerts(ctx: DSLContext, alerts: JsonArray?): Pair<Int, Map<Lon
     return n to idMap
 }
 
-private fun importMatches(ctx: DSLContext, matches: JsonArray?, idMap: Map<Long, Long>): Int {
+private fun importMatches(
+    ctx: DSLContext,
+    matches: JsonArray?,
+    idMap: Map<Long, Long>,
+): Int {
     if (matches == null) return 0
     var n = 0
     for (m in matches.filterIsInstance<JsonObject>()) {
         val legacyAlertId = m.long("alert_id") ?: continue
-        val newAlertId = idMap[legacyAlertId] ?: continue  // alert was filtered/missing
+        val newAlertId = idMap[legacyAlertId] ?: continue // alert was filtered/missing
         val rec = ctx.newRecord(MATCHES)
         rec.alertId = newAlertId
         rec.campgroundId = m.string("campground_id") ?: continue
@@ -136,11 +148,15 @@ private fun importMatches(ctx: DSLContext, matches: JsonArray?, idMap: Map<Long,
 }
 
 private fun JsonObject.string(k: String): String? =
-    (this[k] as? JsonPrimitive)?.takeIf { !it.isString || it.contentOrNull != null }
-        ?.contentOrNull?.takeIf { it.isNotEmpty() }
+    (this[k] as? JsonPrimitive)
+        ?.takeIf { !it.isString || it.contentOrNull != null }
+        ?.contentOrNull
+        ?.takeIf { it.isNotEmpty() }
 
 private fun JsonObject.int(k: String): Int? = (this[k] as? JsonPrimitive)?.intOrNull
+
 private fun JsonObject.long(k: String): Long? = (this[k] as? JsonPrimitive)?.contentOrNull?.toLongOrNull()
+
 private fun JsonObject.bool(k: String): Boolean? = (this[k] as? JsonPrimitive)?.booleanOrNull
 
 private fun JsonObject.stringList(k: String): List<String> =

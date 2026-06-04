@@ -1,8 +1,8 @@
 package ca.floo.campsite.recgov.booker.db
 
+import ca.floo.campsite.recgov.booker.domain.Match
 import ca.floo.roadtrip.db.generated.tables.references.ALERTS
 import ca.floo.roadtrip.db.generated.tables.references.MATCHES
-import ca.floo.campsite.recgov.booker.domain.Match
 import org.jooq.DSLContext
 import org.jooq.JSONB
 import org.jooq.Record
@@ -10,7 +10,9 @@ import java.time.Duration
 import java.time.LocalDate
 import java.time.OffsetDateTime
 
-class MatchRepo(private val ctx: DSLContext) {
+class MatchRepo(
+    private val ctx: DSLContext,
+) {
     data class CreateInput(
         val alertId: Long,
         val campgroundId: String,
@@ -24,14 +26,19 @@ class MatchRepo(private val ctx: DSLContext) {
     )
 
     /** Returns the new match id, or null if a duplicate exists within the last hour (matches legacy dedup). */
-    fun create(input: CreateInput, now: OffsetDateTime = OffsetDateTime.now()): Long? {
+    fun create(
+        input: CreateInput,
+        now: OffsetDateTime = OffsetDateTime.now(),
+    ): Long? {
         val oneHourAgo = now.minusHours(1)
-        val existing = ctx.selectFrom(MATCHES)
-            .where(MATCHES.ALERT_ID.eq(input.alertId))
-            .and(MATCHES.CAMPSITE_ID.eq(input.campsiteId))
-            .and(MATCHES.FIRST_DATE.eq(LocalDate.parse(input.firstDate)))
-            .and(MATCHES.FOUND_AT.gt(oneHourAgo))
-            .fetchAny()
+        val existing =
+            ctx
+                .selectFrom(MATCHES)
+                .where(MATCHES.ALERT_ID.eq(input.alertId))
+                .and(MATCHES.CAMPSITE_ID.eq(input.campsiteId))
+                .and(MATCHES.FIRST_DATE.eq(LocalDate.parse(input.firstDate)))
+                .and(MATCHES.FOUND_AT.gt(oneHourAgo))
+                .fetchAny()
         if (existing != null) return null
 
         val rec = ctx.newRecord(MATCHES)
@@ -49,66 +56,101 @@ class MatchRepo(private val ctx: DSLContext) {
     }
 
     fun get(id: Long): Match? =
-        ctx.select()
+        ctx
+            .select()
             .from(MATCHES)
-            .leftJoin(ALERTS).on(MATCHES.ALERT_ID.eq(ALERTS.ID))
+            .leftJoin(ALERTS)
+            .on(MATCHES.ALERT_ID.eq(ALERTS.ID))
             .where(MATCHES.ID.eq(id))
             .fetchOne()
             ?.toDomain()
 
-    fun list(limit: Int, alertId: Long?): List<Match> {
-        var q = ctx.select()
-            .from(MATCHES)
-            .leftJoin(ALERTS).on(MATCHES.ALERT_ID.eq(ALERTS.ID))
-            .where(MATCHES.DISMISSED_AT.isNull)
+    fun list(
+        limit: Int,
+        alertId: Long?,
+    ): List<Match> {
+        var q =
+            ctx
+                .select()
+                .from(MATCHES)
+                .leftJoin(ALERTS)
+                .on(MATCHES.ALERT_ID.eq(ALERTS.ID))
+                .where(MATCHES.DISMISSED_AT.isNull)
         if (alertId != null) q = q.and(MATCHES.ALERT_ID.eq(alertId))
         return q.orderBy(MATCHES.FOUND_AT.desc()).limit(limit).map { it.toDomain() }
     }
 
     fun markNotified(id: Long) {
-        ctx.update(MATCHES).set(MATCHES.NOTIFIED, true).where(MATCHES.ID.eq(id)).execute()
+        ctx
+            .update(MATCHES)
+            .set(MATCHES.NOTIFIED, true)
+            .where(MATCHES.ID.eq(id))
+            .execute()
     }
 
-    fun softDelete(id: Long, now: OffsetDateTime = OffsetDateTime.now()) {
-        ctx.update(MATCHES).set(MATCHES.DISMISSED_AT, now).where(MATCHES.ID.eq(id)).execute()
+    fun softDelete(
+        id: Long,
+        now: OffsetDateTime = OffsetDateTime.now(),
+    ) {
+        ctx
+            .update(MATCHES)
+            .set(MATCHES.DISMISSED_AT, now)
+            .where(MATCHES.ID.eq(id))
+            .execute()
     }
 
     /** Returns the updated match if claim succeeded; null if already claimed/dismissed or not found. */
-    fun claim(id: Long, companion: String, leaseDuration: Duration, now: OffsetDateTime = OffsetDateTime.now()): Match? {
+    fun claim(
+        id: Long,
+        companion: String,
+        leaseDuration: Duration,
+        now: OffsetDateTime = OffsetDateTime.now(),
+    ): Match? {
         // Atomic: only succeed if claimed_by IS NULL and not dismissed and not resulted.
-        val updated = ctx.update(MATCHES)
-            .set(MATCHES.CLAIMED_BY, companion)
-            .set(MATCHES.CLAIMED_AT, now)
-            .set(MATCHES.LEASE_EXPIRES, now.plus(leaseDuration))
-            .where(MATCHES.ID.eq(id))
-            .and(MATCHES.CLAIMED_BY.isNull)
-            .and(MATCHES.DISMISSED_AT.isNull)
-            .and(MATCHES.RESULT_AT.isNull)
-            .execute()
+        val updated =
+            ctx
+                .update(MATCHES)
+                .set(MATCHES.CLAIMED_BY, companion)
+                .set(MATCHES.CLAIMED_AT, now)
+                .set(MATCHES.LEASE_EXPIRES, now.plus(leaseDuration))
+                .where(MATCHES.ID.eq(id))
+                .and(MATCHES.CLAIMED_BY.isNull)
+                .and(MATCHES.DISMISSED_AT.isNull)
+                .and(MATCHES.RESULT_AT.isNull)
+                .execute()
         return if (updated > 0) get(id) else null
     }
 
-    fun result(id: Long, cartAdded: Boolean, now: OffsetDateTime = OffsetDateTime.now()): Match? {
-        val updated = ctx.update(MATCHES)
-            .set(MATCHES.CART_ADDED, cartAdded)
-            .set(MATCHES.RESULT_AT, now)
-            .set(MATCHES.LEASE_EXPIRES, null as OffsetDateTime?)
-            .where(MATCHES.ID.eq(id))
-            .and(MATCHES.CLAIMED_BY.isNotNull)
-            .and(MATCHES.RESULT_AT.isNull)
-            .execute()
+    fun result(
+        id: Long,
+        cartAdded: Boolean,
+        now: OffsetDateTime = OffsetDateTime.now(),
+    ): Match? {
+        val updated =
+            ctx
+                .update(MATCHES)
+                .set(MATCHES.CART_ADDED, cartAdded)
+                .set(MATCHES.RESULT_AT, now)
+                .set(MATCHES.LEASE_EXPIRES, null as OffsetDateTime?)
+                .where(MATCHES.ID.eq(id))
+                .and(MATCHES.CLAIMED_BY.isNotNull)
+                .and(MATCHES.RESULT_AT.isNull)
+                .execute()
         return if (updated > 0) get(id) else null
     }
 
     /** Releases leases that expired without a result. Returns the released matches. */
     fun sweepExpiredLeases(now: OffsetDateTime = OffsetDateTime.now()): List<Match> {
-        val expired = ctx.selectFrom(MATCHES)
-            .where(MATCHES.LEASE_EXPIRES.lt(now))
-            .and(MATCHES.RESULT_AT.isNull)
-            .fetch()
+        val expired =
+            ctx
+                .selectFrom(MATCHES)
+                .where(MATCHES.LEASE_EXPIRES.lt(now))
+                .and(MATCHES.RESULT_AT.isNull)
+                .fetch()
         if (expired.isEmpty()) return emptyList()
         val ids = expired.map { it.id!! }
-        ctx.update(MATCHES)
+        ctx
+            .update(MATCHES)
             .set(MATCHES.CLAIMED_BY, null as String?)
             .set(MATCHES.CLAIMED_AT, null as OffsetDateTime?)
             .set(MATCHES.LEASE_EXPIRES, null as OffsetDateTime?)
@@ -140,9 +182,24 @@ private fun Record.toDomain(): Match {
     val dismissedAt = this.get("dismissed_at", OffsetDateTime::class.java)
     // From left-joined alerts table — lookup by aliased column. Field collisions
     // (campground_id appears on both tables) resolve to matches' value first.
-    val alertCampgroundName = try { this.get(ALERTS.CAMPGROUND_NAME) } catch (_: Exception) { null }
-    val alertStart = try { this.get(ALERTS.START_DATE)?.toString() } catch (_: Exception) { null }
-    val alertEnd = try { this.get(ALERTS.END_DATE)?.toString() } catch (_: Exception) { null }
+    val alertCampgroundName =
+        try {
+            this.get(ALERTS.CAMPGROUND_NAME)
+        } catch (_: Exception) {
+            null
+        }
+    val alertStart =
+        try {
+            this.get(ALERTS.START_DATE)?.toString()
+        } catch (_: Exception) {
+            null
+        }
+    val alertEnd =
+        try {
+            this.get(ALERTS.END_DATE)?.toString()
+        } catch (_: Exception) {
+            null
+        }
 
     return Match(
         id = id,

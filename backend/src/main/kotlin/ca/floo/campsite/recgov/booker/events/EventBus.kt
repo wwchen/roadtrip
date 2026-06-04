@@ -28,17 +28,23 @@ data class Envelope(
  * On overflow we DROP_OLDEST — losing the very oldest replay history is
  * preferable to backpressuring the publisher (which would stall the poller).
  */
-class EventBus(private val replay: Int = 256) {
+class EventBus(
+    private val replay: Int = 256,
+) {
     private val seq = AtomicLong(0)
-    private val flow = MutableSharedFlow<Envelope>(
-        replay = replay,
-        extraBufferCapacity = 64,
-        onBufferOverflow = BufferOverflow.DROP_OLDEST,
-    )
+    private val flow =
+        MutableSharedFlow<Envelope>(
+            replay = replay,
+            extraBufferCapacity = 64,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
 
     val events: SharedFlow<Envelope> = flow.asSharedFlow()
 
-    fun publish(type: String, data: String): Envelope {
+    fun publish(
+        type: String,
+        data: String,
+    ): Envelope {
         val env = Envelope(id = seq.incrementAndGet(), type = type, data = data)
         flow.tryEmit(env)
         return env

@@ -14,8 +14,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -40,20 +38,22 @@ class Poller(
 ) {
     private val log = LoggerFactory.getLogger(Poller::class.java)
     private val pollMutex = Mutex()
+
     @Volatile private var lastPollEndAt: OffsetDateTime? = null
     private var loopJob: Job? = null
 
     fun start() {
         if (loopJob != null) return
-        loopJob = scope.launch {
-            // Initial 2s warmup matches legacy server's setTimeout(runPoll, 2000).
-            delay(2_000)
-            while (true) {
-                val intervalSec = (settings.get("poll_interval")?.toLongOrNull() ?: 60L).coerceAtLeast(5)
-                runOnce()
-                delay(intervalSec.seconds)
+        loopJob =
+            scope.launch {
+                // Initial 2s warmup matches legacy server's setTimeout(runPoll, 2000).
+                delay(2_000)
+                while (true) {
+                    val intervalSec = (settings.get("poll_interval")?.toLongOrNull() ?: 60L).coerceAtLeast(5)
+                    runOnce()
+                    delay(intervalSec.seconds)
+                }
             }
-        }
     }
 
     fun stop() {
@@ -104,7 +104,7 @@ class Poller(
         } finally {
             lastPollEndAt = OffsetDateTime.now()
             pollMutex.unlock()
-            bus.publish("poll_done", """{"endedAt":"${lastPollEndAt}"}""")
+            bus.publish("poll_done", """{"endedAt":"$lastPollEndAt"}""")
         }
     }
 
@@ -128,30 +128,34 @@ class Poller(
         }
         val newMatches = mutableListOf<Match>()
         for ((_, cs) in merged) {
-            val passes = Matcher.passesCampsiteFilters(
-                campsiteType = cs.campsiteType,
-                site = cs.site,
-                maxNumPeople = cs.maxNumPeople,
-                equipmentTypes = cs.equipmentTypes,
-                alertCampsiteTypes = alert.campsiteTypes,
-                alertEquipmentTypes = alert.equipmentTypes,
-                alertSpecificSites = alert.specificSites,
-                alertMaxPeople = alert.maxPeople,
-            )
+            val passes =
+                Matcher.passesCampsiteFilters(
+                    campsiteType = cs.campsiteType,
+                    site = cs.site,
+                    maxNumPeople = cs.maxNumPeople,
+                    equipmentTypes = cs.equipmentTypes,
+                    alertCampsiteTypes = alert.campsiteTypes,
+                    alertEquipmentTypes = alert.equipmentTypes,
+                    alertSpecificSites = alert.specificSites,
+                    alertMaxPeople = alert.maxPeople,
+                )
             if (!passes) continue
             val windows = Matcher.findConsecutiveWindows(cs.availabilities, alert.startDate, alert.endDate, alert.minNights)
             for (dates in windows) {
-                val id = matches.create(MatchRepo.CreateInput(
-                    alertId = alert.id,
-                    campgroundId = alert.campgroundId,
-                    campsiteId = cs.id,
-                    site = cs.site,
-                    loop = cs.loop,
-                    campsiteType = cs.campsiteType,
-                    availableDates = dates,
-                    firstDate = dates.first(),
-                    nights = dates.size,
-                ))
+                val id =
+                    matches.create(
+                        MatchRepo.CreateInput(
+                            alertId = alert.id,
+                            campgroundId = alert.campgroundId,
+                            campsiteId = cs.id,
+                            site = cs.site,
+                            loop = cs.loop,
+                            campsiteType = cs.campsiteType,
+                            availableDates = dates,
+                            firstDate = dates.first(),
+                            nights = dates.size,
+                        ),
+                    )
                 if (id != null) {
                     matches.get(id)?.let { newMatches += it }
                 }
@@ -161,18 +165,19 @@ class Poller(
         return newMatches
     }
 
-    private fun matchEnvelope(m: Match): String = buildJsonObject {
-        put("id", m.id)
-        put("alertId", m.alertId)
-        put("campgroundId", m.campgroundId)
-        put("campsiteId", m.campsiteId)
-        put("site", m.campsiteSite ?: "")
-        put("loop", m.campsiteLoop ?: "")
-        put("campsiteType", m.campsiteType ?: "")
-        put("firstDate", m.firstDate)
-        put("nights", m.nights)
-        put("availableDates", JsonArray(m.availableDates.map { JsonPrimitive(it) }))
-        put("foundAt", m.foundAt)
-        put("campgroundName", m.campgroundName ?: "")
-    }.toString()
+    private fun matchEnvelope(m: Match): String =
+        buildJsonObject {
+            put("id", m.id)
+            put("alertId", m.alertId)
+            put("campgroundId", m.campgroundId)
+            put("campsiteId", m.campsiteId)
+            put("site", m.campsiteSite ?: "")
+            put("loop", m.campsiteLoop ?: "")
+            put("campsiteType", m.campsiteType ?: "")
+            put("firstDate", m.firstDate)
+            put("nights", m.nights)
+            put("availableDates", JsonArray(m.availableDates.map { JsonPrimitive(it) }))
+            put("foundAt", m.foundAt)
+            put("campgroundName", m.campgroundName ?: "")
+        }.toString()
 }
