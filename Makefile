@@ -1,4 +1,4 @@
-.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers
+.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-test pois-psql
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -15,6 +15,11 @@ help:
 	@echo "  make refresh-cookies-local  Mint cookies into THIS repo's .env (laptop-only egress)"
 	@echo "  make rebuild-superchargers  Rebuild geojson from cache, no network (~30s)"
 	@echo "  make refresh-superchargers  Full Tesla refresh: bulk feed + per-site (~25 min)"
+	@echo "  make pois-up          Start Postgres+PostGIS on 127.0.0.1:5432 (Phase 2 backend)"
+	@echo "  make pois-down        Stop Postgres"
+	@echo "  make pois-import      Run the Kotlin importer against local Postgres"
+	@echo "  make pois-test        Run backend Testcontainers tests"
+	@echo "  make pois-psql        psql shell into local Postgres"
 	@echo "  make stop             Stop all compose services locally"
 
 run:
@@ -74,3 +79,22 @@ refresh-superchargers:
 	  -v "$(PWD)/scripts:/app/scripts" \
 	  -v "$(PWD)/server.py:/app/server.py" \
 	  roadtrip-map:local python3 /app/scripts/fetch_tesla_superchargers.py
+
+# Phase 2 backend: PostGIS Postgres on 127.0.0.1:5432, importer, tests.
+# The pois profile is gated off the default `make docker-run` so this only
+# fires when you explicitly bring it up.
+pois-up:
+	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
+	@echo "postgres ready on 127.0.0.1:5432 (db=roadtrip user=roadtrip)"
+
+pois-down:
+	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois stop postgres
+
+pois-import: pois-up
+	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data gradle importer --args="uscampgrounds"
+
+pois-test:
+	cd backend && gradle test
+
+pois-psql:
+	docker exec -it roadtrip-map-postgres-1 psql -U roadtrip -d roadtrip
