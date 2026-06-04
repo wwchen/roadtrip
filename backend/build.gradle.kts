@@ -34,6 +34,15 @@ plugins {
     // merged in. The Dockerfile uses this so the runtime image is just
     // eclipse-temurin:21-jre + one .jar.
     id("com.gradleup.shadow") version "8.3.5"
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
+}
+
+ktlint {
+    version.set("1.3.1")
+    // jOOQ generates Kotlin under build/generated/jooq. Lint user code only.
+    filter {
+        exclude { it.file.path.contains("/build/generated/") }
+    }
 }
 
 group = "ca.floo.roadtrip"
@@ -171,15 +180,17 @@ tasks.named<JooqGenerate>("generateJooq") {
         // postgis/postgis is a postgres derivative; Testcontainers won't auto-detect
         // wait-for-readiness without the explicit compatibility hint.
         val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
-        val container = PostgreSQLContainer<Nothing>(image).apply {
-            withDatabaseName("roadtrip_codegen")
-            withUsername("codegen")
-            withPassword("codegen")
-        }
+        val container =
+            PostgreSQLContainer<Nothing>(image).apply {
+                withDatabaseName("roadtrip_codegen")
+                withUsername("codegen")
+                withPassword("codegen")
+            }
         container.start()
         project.extra.set(jooqContainerKey, container)
 
-        Flyway.configure()
+        Flyway
+            .configure()
             .dataSource(container.jdbcUrl, container.username, container.password)
             .locations("filesystem:src/main/resources/db/migration")
             .load()
