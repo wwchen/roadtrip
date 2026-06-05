@@ -39,8 +39,16 @@ export async function getMatch (matchId) {
   return getJson(`/api/campsite/matches/${matchId}`)
 }
 
-export async function getCompanionRecgov () {
-  return getJson('/api/campsite/companion/recgov')
+// Backend owns the recgov token lifecycle as of RFC 0001 / PR 3. Companion
+// asks for a non-expired recaccount-shaped JSON every time it needs to inject
+// auth into a Playwright session. Returns null when the backend has no token
+// saved (paste hasn't happened) or the call fails — companion fails closed.
+export async function fetchFreshRecaccount () {
+  try {
+    const r = await getJson('/api/campsite/recgov/fresh-token')
+    if (r.status !== 200 || !r.json) return null
+    return r.json
+  } catch { return null }
 }
 
 export function backendBase () { return BASE }

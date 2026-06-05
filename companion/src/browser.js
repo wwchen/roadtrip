@@ -135,10 +135,13 @@ export async function injectFingerprintCookie (context, token) {
 }
 
 export async function injectBearerRoute (page, token = null) {
-  const t = token || getSetting('recgov_token') || ''
-  if (!t) return false
+  // Backend owns the token (RFC 0001 / PR 6). Caller must pass it explicitly;
+  // there's no longer a local fallback. Returning false when no token lets
+  // the caller continue without auth (handy for diagnostic flows like
+  // testChromium when the SPA can do a silent Auth0 round-trip).
+  if (!token) return false
   await page.route('https://www.recreation.gov/api/**', async route => {
-    await route.continue({ headers: { ...route.request().headers(), authorization: `Bearer ${t}` } })
+    await route.continue({ headers: { ...route.request().headers(), authorization: `Bearer ${token}` } })
   })
   return true
 }

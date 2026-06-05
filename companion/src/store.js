@@ -1,6 +1,14 @@
-// Local JSON-file store for companion-side secrets (recgov_token, refresh creds).
-// The backend never sees these. Anything else (poll_interval, slack_*) lives in
-// the backend's settings table.
+// Local JSON-file store for companion-side state.
+//
+// As of RFC 0001 / PR 6, the companion no longer stores recgov tokens or
+// refresh creds — the backend's TokenManager owns those, and companion
+// fetches a fresh recaccount via GET /api/campsite/recgov/fresh-token on
+// every Playwright session setup.
+//
+// What still lives here: `recgov_cookies` (paste-derived cookie string used
+// for the Akamai TLS-fingerprint workaround in the Playwright browser
+// context). The cookies must stay local because they're tied to the same
+// browser session that runs ATC.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -36,25 +44,4 @@ export function setSetting (key, value) {
 
 export function getAll () {
   return read()
-}
-
-// Bootstraps recgov auth from RECGOV_RECACCOUNT (full localStorage recaccount JSON).
-// refresh_id is stable so we always overwrite; token is only seeded if missing.
-export function seedFromEnv () {
-  const raw = process.env.RECGOV_RECACCOUNT
-  if (!raw) return
-  try {
-    const ra = JSON.parse(raw)
-    if (ra.refresh_id && ra.account?.account_id) {
-      setSetting('recgov_refresh_creds', JSON.stringify({
-        account_id: ra.account.account_id,
-        refresh_id: ra.refresh_id,
-      }))
-    }
-    if (ra.access_token && !getSetting('recgov_token')) {
-      setSetting('recgov_token', ra.access_token)
-    }
-  } catch (e) {
-    console.warn('RECGOV_RECACCOUNT parse failed:', e.message)
-  }
 }

@@ -25,6 +25,15 @@ before(async () => {
       } else if (req.url.match(/^\/api\/campsite\/matches\/\d+$/)) {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ id: 42, campgroundId: '232447', campsiteId: '12345', firstDate: '2026-07-01', availableDates: ['2026-07-01'], site: 'A12' }))
+      } else if (req.url === '/api/campsite/recgov/fresh-token') {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({
+          access_token: 'fake-jwt',
+          expiration: '2026-06-04T13:00:00Z',
+          account: { account_id: 'A-1', email: 'a@b.c' },
+          is_guest: false,
+          refresh_id: '',
+        }))
       } else {
         res.writeHead(404); res.end()
       }
@@ -75,4 +84,12 @@ test('getMatch returns parsed envelope', async () => {
   assert.equal(r.status, 200)
   assert.equal(r.json.id, 42)
   assert.equal(r.json.campgroundId, '232447')
+})
+
+test('fetchFreshRecaccount returns the recaccount-shaped JSON from backend', async () => {
+  const { fetchFreshRecaccount } = await import('../src/backend.js')
+  const ra = await fetchFreshRecaccount()
+  assert.equal(ra.access_token, 'fake-jwt')
+  assert.equal(ra.account.account_id, 'A-1')
+  assert.equal(ra.is_guest, false)
 })

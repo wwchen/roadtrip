@@ -1,4 +1,4 @@
-// Verifies store.js read/write/seed behavior against a temp dir so we don't
+// Verifies store.js read/write behavior against a temp dir so we don't
 // touch the user's real ~/.campsite-companion.
 
 import { test, before, after } from 'node:test'
@@ -24,32 +24,17 @@ test('setSetting / getSetting roundtrip', async () => {
   assert.equal(getSetting('foo'), null)
 })
 
-test('seedFromEnv extracts refresh_id + account_id from RECGOV_RECACCOUNT', async () => {
-  const { seedFromEnv, getSetting } = await import('../src/store.js')
-  process.env.RECGOV_RECACCOUNT = JSON.stringify({
-    access_token: 'fresh-token',
-    refresh_id: 'R-123',
-    account: { account_id: 'A-456' },
-  })
-  // Ensure starting blank
-  const filePath = path.join(tempDir, 'store.json')
-  if (fs.existsSync(filePath)) fs.unlinkSync(filePath)
-  seedFromEnv()
-  const creds = JSON.parse(getSetting('recgov_refresh_creds'))
-  assert.equal(creds.account_id, 'A-456')
-  assert.equal(creds.refresh_id, 'R-123')
-  // token only seeded when missing — verify it's there now
-  assert.equal(getSetting('recgov_token'), 'fresh-token')
+test('getAll returns the full map', async () => {
+  const { setSetting, getAll } = await import('../src/store.js')
+  setSetting('a', '1')
+  setSetting('b', '2')
+  const all = getAll()
+  assert.equal(all.a, '1')
+  assert.equal(all.b, '2')
 })
 
-test('seedFromEnv does NOT overwrite existing recgov_token', async () => {
-  const { setSetting, seedFromEnv, getSetting } = await import('../src/store.js')
-  setSetting('recgov_token', 'existing')
-  process.env.RECGOV_RECACCOUNT = JSON.stringify({
-    access_token: 'NEW',
-    refresh_id: 'R-X',
-    account: { account_id: 'A-X' },
-  })
-  seedFromEnv()
-  assert.equal(getSetting('recgov_token'), 'existing')
+test('recgov_cookies survives roundtrip (still a local-only setting after PR 6)', async () => {
+  const { setSetting, getSetting } = await import('../src/store.js')
+  setSetting('recgov_cookies', 'foo=1; bar=2')
+  assert.equal(getSetting('recgov_cookies'), 'foo=1; bar=2')
 })
