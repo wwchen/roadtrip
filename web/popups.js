@@ -1,4 +1,14 @@
 import { state, openPopup, distanceKm, formatDistance, escapeHtml } from './core.js';
+import {
+  parseAmenities,
+  parseCellCoverage,
+  parseRatingReviews,
+  amenitiesPillsHTML,
+  cellCoveragePillsHTML,
+  ratingHTML,
+  sitesTagHTML,
+  lastVerifiedFooterHTML,
+} from './campground-card.js';
 
 async function loadPricing(slug, elId) {
   const el = document.getElementById(elId);
@@ -72,27 +82,6 @@ function formatAge(s) {
   if (s < 3600) return Math.round(s/60) + 'm';
   if (s < 86400) return Math.round(s/3600) + 'h';
   return Math.round(s/86400) + 'd';
-}
-
-// 4.3 → "★★★★☆" — half-stars round down since "½" glyph looks off in many fonts
-function renderStars(v) {
-  const full = Math.round(v);
-  return '★'.repeat(full) + '☆'.repeat(Math.max(0, 5 - full));
-}
-
-const CARRIER_LABEL = { verizon: 'VZ', att: 'ATT', tmobile: 'TMo', sprint: 'Spr' };
-// Render per-carrier cell signal pills. cc is {verizon: [avg, count], ...}
-// avg is 0–4 (rec.gov's native scale). Sort by signal strength desc.
-function renderCellCoverage(cc) {
-  const entries = Object.entries(cc || {});
-  if (!entries.length) return '';
-  entries.sort((a, b) => b[1][0] - a[1][0]);
-  return '<div class="cell">' + entries.map(([k, v]) => {
-    const [avg, cnt] = v;
-    const bucket = Math.max(0, Math.min(4, Math.round(avg)));
-    const label = CARRIER_LABEL[k] || k;
-    return `<span class="cell-pill" data-bucket="${bucket}" title="${cnt} reports"><span class="carrier">${label}</span><span class="val">${avg.toFixed(1)}</span></span>`;
-  }).join('') + '</div>';
 }
 
 const MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, sept:8, oct:9, nov:10, dec:11 };
@@ -215,29 +204,18 @@ function labelForReserveUrl(url) {
   return 'Reserve';
 }
 
-// last_verified is on the curated AB/BC entries. Show a footer with the date,
-// and color it #e65100 if older than 60 days. No footer when missing.
-function lastVerifiedFooter(p) {
-  if (!p.last_verified) return '';
-  const verified = new Date(p.last_verified);
-  if (isNaN(verified)) return '';
-  const ageDays = (Date.now() - verified.getTime()) / 86400000;
-  const cls = ageDays > 60 ? 'footer warn' : 'footer';
-  const stale = ageDays > 60 ? ' · check before booking' : '';
-  return `<div class="${cls}">Verified ${p.last_verified}${stale}</div>`;
-}
-
 // Render a campground popup from a clicked feature. Pulled out of the click
 // handler so search-result click can call it through synthesizeClick path.
+//
+// Shared rendering helpers (amenities, cell coverage, rating, sites tag,
+// last_verified footer) live in ./campground-card.js so the drawer path
+// (RFC 0003) reuses them without drift.
 export function openCampgroundPopup(f) {
   const p = f.properties;
   const [lng, lat] = f.geometry.coordinates;
-  let amenities = [];
-  try { amenities = JSON.parse(p.amenities); } catch {}
-  let cc = null;
-  try { cc = JSON.parse(p.cell_coverage); } catch {}
-  let rr = null;
-  try { rr = JSON.parse(p.rating_reviews); } catch {}
+  const amenities = parseAmenities(p);
+  const cc = parseCellCoverage(p);
+  const rr = parseRatingReviews(p);
 
   const parent = p.parent_name || p.typeLabel || '';
   const region = p.state || p.country || '';
@@ -252,15 +230,11 @@ export function openCampgroundPopup(f) {
   const callBtn = p.phone
     ? `<a class="btn btn-secondary" href="tel:${p.phone}">Call ${p.phone}</a>`
     : '';
-  const pills = amenities.length
-    ? `<div class="pills">${amenities.map(a => `<span class="pill">${escapeHtml(a)}</span>`).join('')}</div>`
-    : '';
-  const cellPills = renderCellCoverage(cc);
-  const rating = Array.isArray(rr)
-    ? `<div class="rating" style="margin-top:6px"><span class="stars">${renderStars(rr[0])}</span> ${rr[0].toFixed(1)}<span class="count">(${rr[1].toLocaleString()})</span></div>`
-    : '';
-  const sitesTag = p.sites ? `<span class="tag">${p.sites} sites</span>` : '';
-  const footer = lastVerifiedFooter(p);
+  const pills = amenitiesPillsHTML(amenities);
+  const cellPills = cellCoveragePillsHTML(cc);
+  const rating = ratingHTML(rr);
+  const sitesTag = sitesTagHTML(p);
+  const footer = lastVerifiedFooterHTML(p);
 
   const html = `
     <div class="popup${p.curated ? ' curated' : ''}">
