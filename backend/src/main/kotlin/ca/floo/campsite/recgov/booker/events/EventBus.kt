@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.asSharedFlow
 import java.util.concurrent.atomic.AtomicLong
 
 /**
- * SSE event envelope. `id` is monotonically increasing so Last-Event-ID
+ * Wire envelope for SSE. `id` is monotonically increasing so Last-Event-ID
  * lets a reconnecting client pick up where it dropped off.
  *
  * `type` is the SSE event name (`match`, `claimed`, `result`, `companion_offline`, `tick`).
@@ -20,10 +20,26 @@ data class Envelope(
 )
 
 /**
- * In-memory pub/sub for SSE. The replay buffer keeps the last N events so a
- * client reconnecting with `Last-Event-ID: 42` can replay 43..head before
- * subscribing live. 256 is more than the campsite lifecycle ever needs but
- * cheap.
+ * Internal envelope. Carries the typed event for in-process subscribers, plus
+ * an optional [Envelope] projection when the event is wire-eligible (i.e.
+ * `event.sseType()` is non-null). The same id is used on both sides so SSE
+ * Last-Event-ID semantics line up.
+ */
+data class TypedEnvelope(
+    val id: Long,
+    val event: CampsiteEvent,
+    val wire: Envelope?,
+)
+
+/**
+ * In-memory pub/sub. Two SharedFlows backed by the same id sequence:
+ *
+ *   - [events]: legacy [Envelope] flow used by the SSE endpoint and any
+ *     existing string-typed subscribers. Replays the last N events for
+ *     Last-Event-ID resume.
+ *   - [typedEvents]: [TypedEnvelope] flow consumed by lifecycle managers
+ *     (TokenManager, AvailabilityManager, ...). Includes internal-only
+ *     events that never hit the wire.
  *
  * On overflow we DROP_OLDEST — losing the very oldest replay history is
  * preferable to backpressuring the publisher (which would stall the poller).
@@ -32,24 +48,54 @@ class EventBus(
     private val replay: Int = 256,
 ) {
     private val seq = AtomicLong(0)
-    private val flow =
+
+    private val wireFlow =
         MutableSharedFlow<Envelope>(
             replay = replay,
             extraBufferCapacity = 64,
             onBufferOverflow = BufferOverflow.DROP_OLDEST,
         )
 
-    val events: SharedFlow<Envelope> = flow.asSharedFlow()
+    private val typedFlow =
+        MutableSharedFlow<TypedEnvelope>(
+            replay = replay,
+            extraBufferCapacity = 64,
+            onBufferOverflow = BufferOverflow.DROP_OLDEST,
+        )
 
+    val events: SharedFlow<Envelope> = wireFlow.asSharedFlow()
+    val typedEvents: SharedFlow<TypedEnvelope> = typedFlow.asSharedFlow()
+
+    /**
+     * Typed publish. Internal subscribers always see the [TypedEnvelope];
+     * SSE clients see the wire [Envelope] only when [CampsiteEvent.sseType]
+     * returns non-null.
+     */
+    fun publish(event: CampsiteEvent): TypedEnvelope {
+        val id = seq.incrementAndGet()
+        val wire =
+            event.sseType()?.let { type ->
+                Envelope(id = id, type = type, data = event.sseData())
+            }
+        val typed = TypedEnvelope(id = id, event = event, wire = wire)
+        typedFlow.tryEmit(typed)
+        if (wire != null) wireFlow.tryEmit(wire)
+        return typed
+    }
+
+    /**
+     * Legacy string-typed publish. Wraps in [CampsiteEvent.Legacy] so
+     * lifecycle-manager subscribers can ignore it cleanly. Will be removed
+     * once all callers move to typed events.
+     */
     fun publish(
         type: String,
         data: String,
     ): Envelope {
-        val env = Envelope(id = seq.incrementAndGet(), type = type, data = data)
-        flow.tryEmit(env)
-        return env
+        val typed = publish(CampsiteEvent.Legacy(type, data))
+        return typed.wire!!
     }
 
-    /** Snapshot of the replay buffer. Used to fill the gap after Last-Event-ID. */
-    fun replayBuffer(): List<Envelope> = flow.replayCache
+    /** Snapshot of the wire replay buffer. Used to fill the gap after Last-Event-ID. */
+    fun replayBuffer(): List<Envelope> = wireFlow.replayCache
 }
