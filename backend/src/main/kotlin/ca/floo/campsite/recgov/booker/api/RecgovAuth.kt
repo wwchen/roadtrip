@@ -3,6 +3,7 @@ package ca.floo.campsite.recgov.booker.api
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.header
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -158,5 +159,31 @@ object RecgovAuth {
         HttpClient(CIO) { engine { requestTimeout = 10_000 } }
     }
 }
+
+/**
+ * PATCH rec.gov's shopping-cart expiration endpoint to keep the hold alive.
+ * Mirrors companion/cart.js extendCartHold(). The body is the empty JSON
+ * object — rec.gov resets the timer based on the request alone.
+ *
+ * Returns true on a 2xx response, false otherwise (no token, refused, etc.).
+ */
+suspend fun extendCartHold(
+    token: String,
+    client: HttpClient = HttpClient(CIO) { engine { requestTimeout = 10_000 } },
+): Boolean =
+    runCatching {
+        val resp =
+            client.patch("https://www.recreation.gov/api/cart/shoppingcart/expiration") {
+                header("Authorization", "Bearer $token")
+                contentType(ContentType.Application.Json)
+                setBody("{}")
+            }
+        if (!resp.status.isSuccess()) {
+            log.info("extendCartHold: HTTP ${resp.status} — ${resp.bodyAsText().take(200)}")
+            false
+        } else {
+            true
+        }
+    }.onFailure { log.info("extendCartHold: threw — ${it.message}") }.getOrDefault(false)
 
 private fun kotlinx.serialization.json.JsonElement.jsonPrimitiveContent(): String? = (this as? JsonPrimitive)?.contentOrNull
