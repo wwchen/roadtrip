@@ -20,6 +20,7 @@ import {
   synthesizeClick,
 } from './layers.js';
 import { initSearch, registerSearchItems } from './search.js';
+import { closeDrawer } from './drawer.js';
 
 const initialKey = getInitialBasemapKey();
 
@@ -46,6 +47,20 @@ const geolocate = new maplibregl.GeolocateControl({
   fitBoundsOptions: { maxZoom: 13 },
 });
 map.addControl(geolocate, 'bottom-right');
+
+// Click on empty map → close the drawer. Layer-specific handlers in layers.js
+// fire first; this fallback only runs when the click missed every pin layer.
+// queryRenderedFeatures filtered by the interactive layers tells us cheaply
+// whether anything pickable is under the cursor without subscribing to each.
+const INTERACTIVE_LAYERS = [
+  'cg-points-hit', 'sc-points', 'pf-points-hit',
+  'np-fill', 'sp-fill', 'np-pts-hit', 'sp-pts-hit',
+];
+map.on('click', (e) => {
+  const layers = INTERACTIVE_LAYERS.filter(id => map.getLayer(id));
+  const hits = layers.length ? map.queryRenderedFeatures(e.point, { layers }) : [];
+  if (hits.length === 0) closeDrawer();
+});
 
 // Single source of truth for "where am I" — popups read this for distance,
 // search uses it for "sort by nearest". null until first geolocate success.

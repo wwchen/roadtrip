@@ -83,7 +83,8 @@ export function openCampgroundDrawer(f) {
   attachDragHandlers(root);
 }
 
-function close() {
+/** Public close. Safe to call when the drawer isn't open. */
+export function closeDrawer() {
   if (openController) {
     openController.abort();
     openController = null;
@@ -91,6 +92,7 @@ function close() {
   activeFeature = null;
   const root = document.getElementById(DRAWER_ROOT_ID);
   const backdrop = document.getElementById(BACKDROP_ID);
+  if (!root?.classList.contains('open') && !backdrop?.classList.contains('open')) return;
   root?.classList.remove('open', 'full');
   backdrop?.classList.remove('open');
   setTimeout(() => {
@@ -98,6 +100,8 @@ function close() {
     if (backdrop) backdrop.style.display = 'none';
   }, 220);
 }
+
+const close = closeDrawer;
 
 function show() {
   const root = document.getElementById(DRAWER_ROOT_ID);
