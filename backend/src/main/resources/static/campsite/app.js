@@ -680,11 +680,19 @@ async function openSettings() {
   const form = el('settings-form');
   for (const [k, v] of Object.entries(s)) {
     const field = form.querySelector(`[name="${k}"]`);
-    if (field && v !== null && v !== undefined) field.value = v;
+    if (!field || v === null || v === undefined) continue;
+    if (field.type === 'checkbox') {
+      field.checked = v === 'true' || v === true;
+    } else {
+      field.value = v;
+    }
   }
   // Don't pre-fill the cookie textarea with the masked value — leave blank if already set
   const cookieField = form.querySelector('[name="recgov_cookies"]');
   if (cookieField && s.recgov_cookies === '••••••••') cookieField.value = '';
+  // Slack section visibility tracks the toggle live.
+  const slackToggle = el('settings-slack-enabled');
+  el('settings-slack-fields').classList.toggle('hidden', !slackToggle.checked);
 
   // Show saved Bearer token expiry status
   const tokenEl = el('token-status');
@@ -714,13 +722,20 @@ function closeSettings() {
   el('settings-modal').classList.add('hidden');
 }
 
+el('settings-slack-enabled').addEventListener('change', e => {
+  el('settings-slack-fields').classList.toggle('hidden', !e.target.checked);
+});
+
 el('settings-form').addEventListener('submit', async e => {
   e.preventDefault();
   const data = {};
   new FormData(e.target).forEach((v, k) => { data[k] = v; });
+  // FormData omits unchecked checkboxes; explicit 'false' is needed to persist a toggle off.
+  data.slack_enabled = el('settings-slack-enabled').checked ? 'true' : 'false';
   try {
     await api('POST', '/api/campsite/settings', data);
     showToast('Settings saved', 'success');
+    applySlackEnabledUI(data.slack_enabled === 'true');
     closeSettings();
   } catch (err) {
     showToast(`Error: ${err.message}`, 'error');
@@ -801,8 +816,16 @@ el('test-cookies-btn').addEventListener('click', async () => {
 
 
 el('test-slack-btn').addEventListener('click', async () => {
+  // Send the values currently in the form so user can test without saving first.
+  // Masked sentinel ('••••••••') means "use saved value" — pass empty so backend falls back.
+  const form = el('settings-form');
+  const tokenField = form.querySelector('[name="slack_token"]').value;
+  const channelField = form.querySelector('[name="slack_channel"]').value;
+  const body = {};
+  if (tokenField && tokenField !== '••••••••') body.slack_token = tokenField;
+  if (channelField) body.slack_channel = channelField;
   try {
-    await api('POST', '/api/campsite/settings/test-slack', {});
+    await api('POST', '/api/campsite/settings/test-slack', body);
     showToast('Slack test message sent!', 'success');
   } catch (err) {
     showToast(`Failed: ${err.message}`, 'error');
@@ -1080,6 +1103,259 @@ async function refreshStatus() {
   }
 }
 
+// ---- Slack-enabled UI hide ----
+
+// Toggles every Slack-related UI bit (settings section, alert form toggles).
+// SlackNotifier already no-ops on empty creds, so this is a pure UI hide.
+function applySlackEnabledUI(enabled) {
+  document.querySelectorAll('.slack-only').forEach(elt => {
+    elt.classList.toggle('hidden', !enabled);
+    // Uncheck nested toggles when hiding so new alerts don't carry stale state.
+    if (!enabled) {
+      elt.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.checked = false; });
+    }
+  });
+  const fields = el('settings-slack-fields');
+  if (fields) fields.classList.toggle('hidden', !enabled);
+  const settingsToggle = el('settings-slack-enabled');
+  if (settingsToggle) settingsToggle.checked = enabled;
+}
+
+// ---- Onboarding wizard ----
+
+const onboarding = {
+  step: 1,
+  recgovOk: false,
+  slackChoice: null, // 'yes' | 'no' | null
+  slackOk: false,
+  slackToken: '',
+  slackChannel: '',
+  recgovExpires: null,
+  // Snapshot at open time so re-trigger from a configured state can render
+  // "✓ already connected" UI without prefilling masked sentinels.
+  recgovConfigured: false,
+  slackTokenConfigured: false,
+};
+
+function showOnboardingStep(n) {
+  onboarding.step = n;
+  document.querySelectorAll('#onboarding-modal .onboarding-step').forEach(s => {
+    s.classList.toggle('hidden', parseInt(s.dataset.step, 10) !== n);
+  });
+  document.querySelectorAll('#onboarding-modal .progress-dot').forEach(d => {
+    const step = parseInt(d.dataset.step, 10);
+    d.classList.toggle('active', step === n);
+    d.classList.toggle('done', step < n);
+  });
+}
+
+async function openOnboarding() {
+  // Pull current state to decide whether Step 1 shows "already connected" UI.
+  const s = await api('GET', '/api/campsite/settings').catch(() => ({}));
+  onboarding.recgovConfigured = s.recgov_token === '••••••••';
+  onboarding.slackTokenConfigured = s.slack_token === '••••••••';
+  onboarding.recgovOk = onboarding.recgovConfigured && !s.recgov_token_expired;
+  onboarding.slackChoice = null;
+  onboarding.slackOk = false;
+  onboarding.slackToken = '';
+  onboarding.slackChannel = '';
+  onboarding.recgovExpires = s.recgov_token_expires || null;
+
+  // Step 1 layout: configured-summary OR paste form
+  const configuredEl = el('onboarding-recgov-configured');
+  const inputWrap = el('onboarding-recgov-input-wrap');
+  const input = el('onboarding-recgov-input');
+  const result = el('onboarding-recgov-result');
+  const next1 = el('onboarding-step1-next');
+  input.value = '';
+  result.textContent = '';
+  if (onboarding.recgovConfigured) {
+    configuredEl.classList.remove('hidden');
+    inputWrap.classList.add('hidden');
+    next1.disabled = !onboarding.recgovOk;
+  } else {
+    configuredEl.classList.add('hidden');
+    inputWrap.classList.remove('hidden');
+    next1.disabled = true;
+  }
+
+  // Step 2 layout reset
+  el('onboarding-slack-choice').classList.remove('hidden');
+  el('onboarding-slack-form').classList.add('hidden');
+  el('onboarding-step2-next').classList.add('hidden');
+  el('onboarding-step2-next').disabled = true;
+  el('onboarding-slack-token').value = '';
+  el('onboarding-slack-channel').value = '';
+  el('onboarding-slack-result').textContent = '';
+
+  showOnboardingStep(1);
+  el('onboarding-modal').classList.remove('hidden');
+}
+
+function closeOnboarding() {
+  el('onboarding-modal').classList.add('hidden');
+}
+
+el('onboarding-close').addEventListener('click', closeOnboarding);
+
+el('onboarding-recgov-edit').addEventListener('click', () => {
+  el('onboarding-recgov-configured').classList.add('hidden');
+  el('onboarding-recgov-input-wrap').classList.remove('hidden');
+  onboarding.recgovOk = false;
+  el('onboarding-step1-next').disabled = true;
+});
+
+el('onboarding-recgov-validate').addEventListener('click', async () => {
+  const raw = el('onboarding-recgov-input').value.trim();
+  const result = el('onboarding-recgov-result');
+  const next = el('onboarding-step1-next');
+  if (!raw) {
+    result.textContent = 'Paste the recaccount blob first';
+    result.style.color = 'var(--yellow)';
+    return;
+  }
+  result.textContent = 'Validating…';
+  result.style.color = 'var(--text3)';
+  try {
+    // test-cookies persists what it parses, so a successful validate also saves.
+    const r = await api('POST', '/api/campsite/settings/test-cookies', { raw });
+    if (r.loggedIn) {
+      const exp = r.tokenExpires ? new Date(r.tokenExpires).toLocaleString() : 'unknown';
+      result.textContent = `✓ Connected, token valid until ${exp}`;
+      result.style.color = 'var(--green)';
+      onboarding.recgovOk = true;
+      onboarding.recgovExpires = r.tokenExpires || null;
+      next.disabled = false;
+      refreshStatus();
+      loadTokenExpiry();
+    } else if (r.hasBearer && r.tokenExpired) {
+      result.textContent = '⚠ Token parsed but expired — paste a fresher one';
+      result.style.color = 'var(--yellow)';
+      onboarding.recgovOk = false;
+      next.disabled = true;
+    } else {
+      result.textContent = '✗ Couldn\'t find a token in this paste. Check you copied the full output.';
+      result.style.color = 'var(--red)';
+      onboarding.recgovOk = false;
+      next.disabled = true;
+    }
+  } catch (err) {
+    result.textContent = `✗ ${err.message}`;
+    result.style.color = 'var(--red)';
+    next.disabled = true;
+  }
+});
+
+el('onboarding-step1-next').addEventListener('click', () => {
+  if (!onboarding.recgovOk) return;
+  showOnboardingStep(2);
+});
+
+el('onboarding-step2-back').addEventListener('click', () => {
+  showOnboardingStep(1);
+});
+
+el('onboarding-slack-yes').addEventListener('click', () => {
+  onboarding.slackChoice = 'yes';
+  el('onboarding-slack-choice').classList.add('hidden');
+  el('onboarding-slack-form').classList.remove('hidden');
+  el('onboarding-step2-next').classList.remove('hidden');
+  el('onboarding-step2-next').disabled = true; // gated by test message
+});
+
+el('onboarding-slack-no').addEventListener('click', async () => {
+  onboarding.slackChoice = 'no';
+  // Persist disabled flag and clear any stored creds so notifier truly skips.
+  try {
+    await api('POST', '/api/campsite/settings', {
+      slack_enabled: 'false',
+      slack_token: '',
+      slack_channel: '',
+    });
+    applySlackEnabledUI(false);
+  } catch (err) {
+    showToast(`Couldn't save: ${err.message}`, 'error');
+    return;
+  }
+  buildSummary();
+  showOnboardingStep(3);
+});
+
+el('onboarding-slack-test').addEventListener('click', async () => {
+  const token = el('onboarding-slack-token').value.trim();
+  const channel = el('onboarding-slack-channel').value.trim();
+  const result = el('onboarding-slack-result');
+  if (!token || !channel) {
+    result.textContent = 'Fill in both token and channel';
+    result.style.color = 'var(--yellow)';
+    return;
+  }
+  result.textContent = 'Sending…';
+  result.style.color = 'var(--text3)';
+  try {
+    // test-slack now accepts candidate creds and does NOT persist on its own.
+    await api('POST', '/api/campsite/settings/test-slack', {
+      slack_token: token,
+      slack_channel: channel,
+    });
+    result.textContent = '✓ Test message sent — check your channel.';
+    result.style.color = 'var(--green)';
+    onboarding.slackOk = true;
+    onboarding.slackToken = token;
+    onboarding.slackChannel = channel;
+    el('onboarding-step2-next').disabled = false;
+  } catch (err) {
+    result.textContent = `✗ ${err.message}`;
+    result.style.color = 'var(--red)';
+    onboarding.slackOk = false;
+    el('onboarding-step2-next').disabled = true;
+  }
+});
+
+el('onboarding-step2-next').addEventListener('click', async () => {
+  if (!onboarding.slackOk) return;
+  // Save creds + enable flag now that the test passed.
+  try {
+    await api('POST', '/api/campsite/settings', {
+      slack_enabled: 'true',
+      slack_token: onboarding.slackToken,
+      slack_channel: onboarding.slackChannel,
+    });
+    applySlackEnabledUI(true);
+  } catch (err) {
+    showToast(`Couldn't save: ${err.message}`, 'error');
+    return;
+  }
+  buildSummary();
+  showOnboardingStep(3);
+});
+
+function buildSummary() {
+  const ul = el('onboarding-summary');
+  const recgovLine = onboarding.recgovExpires
+    ? `✓ recreation.gov: connected (expires ${new Date(onboarding.recgovExpires).toLocaleDateString()})`
+    : `✓ recreation.gov: connected`;
+  let slackLine;
+  if (onboarding.slackChoice === 'yes' && onboarding.slackOk) {
+    slackLine = `✓ Slack: ${onboarding.slackChannel}`;
+  } else {
+    slackLine = `— Slack: skipped (you can enable it later in Settings)`;
+  }
+  ul.innerHTML = `<li>${escapeHtml(recgovLine)}</li><li>${escapeHtml(slackLine)}</li>`;
+}
+
+el('onboarding-finish').addEventListener('click', () => {
+  closeOnboarding();
+  const form = el('alert-form');
+  if (form) form.scrollIntoView({ behavior: 'smooth', block: 'start' });
+});
+
+el('settings-rerun-wizard').addEventListener('click', e => {
+  e.preventDefault();
+  closeSettings();
+  openOnboarding();
+});
+
 // ---- Init ----
 
 async function init() {
@@ -1087,9 +1363,17 @@ async function init() {
   connectSSE();
   refreshStatus();
   loadTokenExpiry();
-  api('GET', '/api/campsite/settings').then(s => {
-    if (s.poll_interval) pollIntervalMs = parseInt(s.poll_interval, 10) * 1000;
-  }).catch(() => {});
+  const settingsForInit = await api('GET', '/api/campsite/settings').catch(() => ({}));
+  if (settingsForInit.poll_interval) pollIntervalMs = parseInt(settingsForInit.poll_interval, 10) * 1000;
+
+  // Slack UI hide based on saved flag (default true for backwards compat).
+  const slackEnabled = settingsForInit.slack_enabled !== 'false';
+  applySlackEnabledUI(slackEnabled);
+
+  // First-run wizard: trigger only when rec.gov is unset. Slack state is
+  // irrelevant — the tool can't function without rec.gov auth.
+  const isFirstRun = settingsForInit.recgov_token === '';
+  if (isFirstRun) openOnboarding();
 
   // Tick countdowns every second
   setInterval(() => { updateTokenCountdown(); updatePollCountdown(); }, 1000);

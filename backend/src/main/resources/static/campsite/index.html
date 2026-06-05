@@ -112,7 +112,7 @@
             </label>
             <p class="hint-text">Mark alert as done after the first match is found. Uncheck to keep polling for more options.</p>
           </div>
-          <div class="field field-auto" style="margin-top:10px">
+          <div class="field field-auto slack-only" style="margin-top:10px">
             <label class="toggle-label">
               <input type="checkbox" id="notify-slack" checked>
               <span class="toggle"></span>
@@ -161,6 +161,114 @@
     </section>
   </main>
 
+  <!-- Onboarding Wizard Modal -->
+  <div id="onboarding-modal" class="modal hidden">
+    <div class="modal-backdrop"></div>
+    <div class="modal-content onboarding-content">
+      <div class="modal-header">
+        <h3 id="onboarding-title">Welcome to Campsite Alert</h3>
+        <button class="btn-close" id="onboarding-close" title="Close">✕</button>
+      </div>
+
+      <div class="onboarding-progress">
+        <span class="progress-dot" data-step="1"></span>
+        <span class="progress-line"></span>
+        <span class="progress-dot" data-step="2"></span>
+        <span class="progress-line"></span>
+        <span class="progress-dot" data-step="3"></span>
+      </div>
+
+      <!-- Step 1: rec.gov token -->
+      <div class="onboarding-step" data-step="1">
+        <h4>First, let's connect your recreation.gov account.</h4>
+        <p class="hint-text">
+          The tool polls recreation.gov for campsite openings on your behalf. To do that,
+          it needs your account's auth token.
+        </p>
+        <ol class="onboarding-steps-list">
+          <li>Open <a href="https://www.recreation.gov" target="_blank" rel="noopener">recreation.gov</a> in your browser and log in.</li>
+          <li>Open DevTools (Cmd+Opt+I on Mac, Ctrl+Shift+I elsewhere) → <strong>Console</strong>.</li>
+          <li>Run: <code>localStorage.getItem('recaccount')</code></li>
+          <li>Copy the result and paste it below.</li>
+        </ol>
+
+        <div id="onboarding-recgov-configured" class="onboarding-configured hidden">
+          <span>✓ recreation.gov already connected.</span>
+          <button type="button" class="btn btn-sm btn-ghost" id="onboarding-recgov-edit">Replace token</button>
+        </div>
+
+        <div id="onboarding-recgov-input-wrap">
+          <textarea id="onboarding-recgov-input" rows="4" placeholder="Paste localStorage.getItem('recaccount') output here…"></textarea>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <button type="button" class="btn btn-sm btn-secondary" id="onboarding-recgov-validate">Validate</button>
+            <span id="onboarding-recgov-result" class="hint-text"></span>
+          </div>
+        </div>
+
+        <div class="onboarding-footer">
+          <span></span>
+          <button type="button" class="btn btn-primary" id="onboarding-step1-next" disabled>Next</button>
+        </div>
+      </div>
+
+      <!-- Step 2a: Slack opt-in -->
+      <div class="onboarding-step hidden" data-step="2">
+        <h4>Want a Slack ping when sites open up?</h4>
+        <p class="hint-text">
+          The tool can post to a Slack channel when matches are found. Skip this if
+          you'd rather just check the web page — you can enable it later in Settings.
+        </p>
+
+        <div id="onboarding-slack-choice">
+          <div class="onboarding-choice">
+            <button type="button" class="btn btn-primary" id="onboarding-slack-yes">Yes, set up Slack</button>
+            <button type="button" class="btn btn-secondary" id="onboarding-slack-no">No thanks, hide Slack</button>
+          </div>
+        </div>
+
+        <div id="onboarding-slack-form" class="hidden">
+          <p class="hint-text">
+            <strong>Set up a Slack bot:</strong>
+          </p>
+          <ol class="onboarding-steps-list">
+            <li>Go to <a href="https://api.slack.com/apps" target="_blank" rel="noopener">api.slack.com/apps</a> → Create New App → From scratch.</li>
+            <li>Add the <code>chat:write</code> OAuth scope under "OAuth &amp; Permissions".</li>
+            <li>Install the app to your workspace; copy the Bot User OAuth Token (<code>xoxb-…</code>).</li>
+            <li>Invite the bot to your target channel: <code>/invite @&lt;bot-name&gt;</code> in Slack.</li>
+          </ol>
+
+          <div class="field">
+            <label>Slack Token</label>
+            <input type="password" id="onboarding-slack-token" placeholder="xoxb-…" autocomplete="off">
+          </div>
+          <div class="field">
+            <label>Channel</label>
+            <input type="text" id="onboarding-slack-channel" placeholder="#camping-alerts or C1234567">
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-top:6px">
+            <button type="button" class="btn btn-sm btn-secondary" id="onboarding-slack-test">Send test message</button>
+            <span id="onboarding-slack-result" class="hint-text"></span>
+          </div>
+        </div>
+
+        <div class="onboarding-footer">
+          <button type="button" class="btn btn-ghost" id="onboarding-step2-back">Back</button>
+          <button type="button" class="btn btn-primary hidden" id="onboarding-step2-next" disabled>Next</button>
+        </div>
+      </div>
+
+      <!-- Step 3: Done -->
+      <div class="onboarding-step hidden" data-step="3">
+        <h4>You're set up.</h4>
+        <ul class="onboarding-summary" id="onboarding-summary"></ul>
+        <div class="onboarding-footer">
+          <span></span>
+          <button type="button" class="btn btn-primary" id="onboarding-finish">Create your first alert →</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <!-- Settings Modal -->
   <div id="settings-modal" class="modal hidden">
     <div class="modal-backdrop"></div>
@@ -199,21 +307,29 @@
           <div id="token-status" style="margin-top:8px;font-size:12px;color:var(--text3)"></div>
         </div>
 
-        <div class="settings-section">
+        <div class="settings-section" id="settings-slack-section">
           <h4>Slack Notifications</h4>
-          <p class="hint-text">Bot token (<code>xoxb-…</code>) with <code>chat:write</code> scope, or a user token (<code>xoxp-…</code>).</p>
-          <div class="field">
-            <label>Slack Token</label>
-            <input type="password" name="slack_token" placeholder="xoxb-••••••••">
+          <label class="toggle-label" style="margin-bottom:10px">
+            <input type="checkbox" name="slack_enabled" id="settings-slack-enabled">
+            <span class="toggle"></span>
+            Enable Slack notifications
+          </label>
+          <div id="settings-slack-fields">
+            <p class="hint-text">Bot token (<code>xoxb-…</code>) with <code>chat:write</code> scope, or a user token (<code>xoxp-…</code>).</p>
+            <div class="field">
+              <label>Slack Token</label>
+              <input type="password" name="slack_token" placeholder="xoxb-••••••••">
+            </div>
+            <div class="field">
+              <label>Channel</label>
+              <input type="text" name="slack_channel" placeholder="#camping-alerts or C1234567">
+            </div>
+            <button type="button" class="btn btn-sm btn-secondary" id="test-slack-btn">Send test message</button>
           </div>
-          <div class="field">
-            <label>Channel</label>
-            <input type="text" name="slack_channel" placeholder="#camping-alerts or C1234567">
-          </div>
-          <button type="button" class="btn btn-sm btn-secondary" id="test-slack-btn">Send test message</button>
         </div>
 
         <div class="modal-footer">
+          <a href="#" id="settings-rerun-wizard" class="hint-text" style="margin-right:auto">↻ Re-run setup wizard</a>
           <button type="button" class="btn btn-ghost" id="settings-cancel">Cancel</button>
           <button type="submit" class="btn btn-primary">Save</button>
         </div>
@@ -298,7 +414,7 @@
             </label>
             <p class="hint-text">Uncheck to keep polling even after a match is found.</p>
           </div>
-          <div class="field field-auto" style="margin-top:10px">
+          <div class="field field-auto slack-only" style="margin-top:10px">
             <label class="toggle-label">
               <input type="checkbox" id="edit-notify-slack">
               <span class="toggle"></span>

@@ -59,6 +59,7 @@ open class SettingsRepo(
                 "poll_interval" to (env["POLL_INTERVAL"] ?: "60"),
                 "slack_token" to (env["SLACK_TOKEN"] ?: ""),
                 "slack_channel" to (env["SLACK_CHANNEL"] ?: ""),
+                "slack_enabled" to (env["SLACK_ENABLED"] ?: "true"),
             )
         for ((k, v) in defaults) {
             if (get(k) == null) set(k, v)

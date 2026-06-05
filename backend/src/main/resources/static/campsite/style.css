@@ -715,5 +715,92 @@ input[type="date"]::-webkit-calendar-picker-indicator:hover {
   to { transform: translateX(0); opacity: 1; }
 }
 
+/* ---- Onboarding wizard ---- */
+.onboarding-content { max-width: 560px; }
+
+.onboarding-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 12px 24px 4px;
+}
+.progress-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  transition: background 0.2s, border-color 0.2s;
+}
+.progress-dot.active { background: var(--accent); border-color: var(--accent); }
+.progress-dot.done { background: var(--green); border-color: var(--green); }
+.progress-line { flex: 1; height: 1px; background: var(--border); }
+
+.onboarding-step { padding: 12px 24px 20px; }
+.onboarding-step h4 { margin: 4px 0 8px; font-size: 16px; }
+
+.onboarding-steps-list {
+  margin: 8px 0 12px 18px;
+  padding: 0;
+  font-size: 13px;
+  color: var(--text2, var(--text3));
+  line-height: 1.6;
+}
+.onboarding-steps-list li { margin-bottom: 4px; }
+.onboarding-steps-list code {
+  background: var(--bg3);
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 12px;
+}
+
+#onboarding-recgov-input {
+  width: 100%;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text);
+  padding: 8px 12px;
+  font-size: 11px;
+  font-family: monospace;
+  resize: vertical;
+  outline: none;
+}
+
+.onboarding-configured {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  background: var(--bg3);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+.onboarding-configured span { color: var(--green); font-size: 13px; }
+
+.onboarding-choice {
+  display: flex;
+  gap: 10px;
+  margin: 12px 0 8px;
+}
+
+.onboarding-summary {
+  list-style: none;
+  padding: 0;
+  margin: 12px 0;
+  font-size: 14px;
+}
+.onboarding-summary li { padding: 6px 0; }
+
+.onboarding-footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 18px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+}
+
 /* ---- Misc ---- */
 .hidden { display: none !important; }
