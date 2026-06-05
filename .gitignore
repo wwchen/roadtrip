@@ -25,3 +25,4 @@ qa/test-results/
 qa/playwright-report/
 
 .idea/
+.obsidian/

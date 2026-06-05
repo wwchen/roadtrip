@@ -5,6 +5,26 @@
 - Date: 2026-06-05
 - Related: PR #17 (typed event scaffolding — first step)
 
+## Decision log
+
+Decisions agreed in design discussion. Each entry: **decision** — *rationale*. Add new entries to the bottom; do not edit historical entries (correct via a follow-up entry instead).
+
+| # | Date | Decision | Rationale |
+|---|---|---|---|
+| 1 | 2026-06-05 | **Backend owns the recgov token lifecycle** — companion stops doing its own refresh and reads via `GET /api/campsite/recgov/fresh-token`. | Single source of truth. Eliminates the parallel JS implementation in `companion/src/auth.js` that can drift from `RecgovAuth.kt`. |
+| 2 | 2026-06-05 | **Trigger via events, not timers in managers.** Lifecycle managers (TokenManager, AvailabilityManager, StatusMonitor) subscribe; they don't run their own loops. | Triggers from a scheduler row vs. a UI click vs. a programmatic call all enter the same code path. Adding a new trigger source is one publish call. |
+| 3 | 2026-06-05 | **Scheduler is dumb** — DB rows of `(name, event_type, payload, cadence_sec, enabled)`; one coroutine job per row that just publishes. | Keeps business logic out of scheduling. UI for managing cadence becomes simple CRUD on `schedules`. |
+| 4 | 2026-06-05 | **Per-alert poll cadence** stored on `alerts.cadence_sec`, not in `schedules`. | Cadence is intrinsic to the alert; avoids a JOIN per scheduler tick. `schedules` table holds only system schedules. |
+| 5 | 2026-06-05 | **Keep the existing global rate limiter** (`AvailabilityClient` 1.5s mutex). FIFO is acceptable; revisit when active alert count grows. | Per-alert cadences feed into the same throttle. Priority queue is over-engineered until the FIFO actually backs up — add a `PollDeferred` event when wait >5s as the trigger to revisit. |
+| 6 | 2026-06-05 | **Coroutine-based scheduler**, not Quartz or `ScheduledExecutorService`. | Existing code is already coroutine/SuspendFn/Flow. Quartz brings JDBC tables and cron expressions we don't need. |
+| 7 | 2026-06-05 | **Declarative cadences** (no persisted `next_fire_at`). Restart starts the cycle from now + jitter. | Simpler. We don't have schedules where missing one fire is catastrophic. Token refresh at 240s cadence will fire within seconds of a restart. |
+| 8 | 2026-06-05 | **Typed events** via sealed `CampsiteEvent` interface, replacing stringly-typed `publish(type, data)`. | The event surface is growing meaningfully (15+ types). Compile-time mismatch detection. Dual-publish API in PR 1 lets us migrate one publisher at a time. |
+| 9 | 2026-06-05 | **SSE wire format unchanged.** Wire-eligible events keep their historical names (`match`, `claimed`, `tick`, ...) via `sseType()`. | Frontend untouched. `tick` specifically is the connection heartbeat — breaking it would show phantom "disconnected" UI. |
+| 10 | 2026-06-05 | **Companion fails closed** when backend unreachable — no auto-cart, log error. | Whole point of "backend owns the lifecycle." Stale token + Playwright session is worse than no action. SSE replay buffer + DB query backstop covers reconnect. |
+| 11 | 2026-06-05 | **Race handling**: per-alert mutex `tryLock` + 30s `lastCheckedAt` debounce. | Lets a `UserPolledNow` arriving 200ms after a `PollDue` get cleanly skipped without dropping the user signal entirely. |
+| 12 | 2026-06-05 | **Feature-flag PR 4** (`CAMPSITE_EVENT_DRIVEN=1`) for one release before defaulting on. | Replacing `Poller.kt` is the riskiest step. Old poller stays as a fallback during canary. |
+| 13 | 2026-06-05 | **Tilt orchestrates the dev stack** (postgres → backend → companion). | Companion's dependency on backend is encoded in `Tiltfile` (`resource_deps=['backend']`), reinforcing decision #10 — companion can't even start until backend's `/api/health` is green. New endpoints introduced by this RFC must survive Tilt's live-reload restarts. |
+
 ## Summary
 
 Move the recreation.gov token-refresh, campsite-availability polling, and recgov-health status concerns from their current ad-hoc, time-based, request-driven implementations to a unified event-driven architecture. The backend becomes the single source of truth for these lifecycles. Triggers come from either a **scheduler** (declarative cadence rows in Postgres) or **user actions** (HTTP routes that publish events). Lifecycle managers subscribe to a typed event bus and run the work; they do not own timers.
