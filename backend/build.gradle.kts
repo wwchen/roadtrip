@@ -264,7 +264,22 @@ kover {
                 )
             }
         }
+        // Floor is the current measured number minus a small buffer for flake
+        // / line-count drift. Tighten over time; do NOT loosen without an
+        // accompanying note in the PR. CI runs `koverVerify` so a regression
+        // fails the backend-tests job, not just the coverage upload.
+        verify {
+            rule {
+                minBound(45)
+            }
+        }
     }
+}
+
+// Run koverVerify automatically after `gradle test` in CI so coverage
+// regressions fail the build instead of silently lowering the bar.
+tasks.named("test") {
+    finalizedBy("koverVerify")
 }
 
 tasks.test {
