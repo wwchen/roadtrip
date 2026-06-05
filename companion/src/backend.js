@@ -39,4 +39,8 @@ export async function getMatch (matchId) {
   return getJson(`/api/campsite/matches/${matchId}`)
 }
 
+export async function getCompanionRecgov () {
+  return getJson('/api/campsite/companion/recgov')
+}
+
 export function backendBase () { return BASE }

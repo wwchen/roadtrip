@@ -103,5 +103,5 @@ fun Route.campsiteRoutes(s: CampsiteServices) {
     statusRoutes(s.settings)
     campgroundSearchRoutes()
     pollRoutes(s.poller)
-    companionRoutes(s.companions, s.bus)
+    companionRoutes(s.companions, s.bus, s.settings)
 }
