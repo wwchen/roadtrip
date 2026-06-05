@@ -144,7 +144,12 @@ local_resource(
 )
 
 local_resource(
-    'pois-import',
+    # Default-source import (uscampgrounds). The underlying `make pois-import`
+    # uses SOURCE=uscampgrounds; the SOURCE override lives in the Makefile,
+    # not in Tilt, so this row is intentionally pinned to the default. For a
+    # different single source (parks-canada, state-parks, etc.), run
+    # `SOURCE=parks-canada make pois-import` from a shell.
+    'pois-import-uscampgrounds',
     cmd='make pois-import',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
