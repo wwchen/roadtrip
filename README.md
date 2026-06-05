@@ -32,11 +32,13 @@ host Node process so Playwright can drive a real Chromium. Tilt UI is at
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`): `refresh-superchargers` / `rebuild-superchargers`
 for Tesla pricing, `refresh-tesla-cookies` to mint fresh `_abck` cookies for
-the Tesla scraper into `.env`, `pois-import-uscampgrounds` /
-`pois-import-all` for the Kotlin POI importer (the former is the default
-single-source import; for a custom subset run `make pois-import-pick` from a
-shell — interactive picker, fzf-driven), and `refresh-image` (one-shot prereq
-for the supercharger refreshers). Click the row, watch logs in the right pane.
+the Tesla scraper into `.env`, and `refresh-image` (one-shot prereq for the
+supercharger refreshers). Click the row, watch logs in the right pane.
+
+POI imports are shell-only because `make pois-import` is interactive
+(fzf-driven picker) and Tilt panes don't have a TTY. From a terminal:
+`make pois-import` for the picker, or `make pois-import SOURCE=all` to skip
+it. `SOURCE=uscampgrounds` and the other source names also work.
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
 > backend-owned via `TokenManager` (RFC 0001 / PR #22) — paste a fresh cURL

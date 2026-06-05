@@ -1,6 +1,4 @@
-.PHONY: help run tilt-up tilt-down docker-run deploy deploy-local stop kill check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-import-pick pois-test pois-psql backend-build backend-run backend-shell qa install install-deps install-companion install-hooks install-all companion
-
-SOURCE ?= uscampgrounds
+.PHONY: help run tilt-up tilt-down docker-run deploy deploy-local stop kill check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-test pois-psql backend-build backend-run backend-shell qa install install-deps install-companion install-hooks install-all companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -30,8 +28,7 @@ help:
 	@echo "  make backend-shell    Exec into the running backend container"
 	@echo "  make pois-up          Start Postgres+PostGIS on 127.0.0.1:5432"
 	@echo "  make pois-down        Stop Postgres"
-	@echo "  make pois-import      Run the Kotlin importer against local Postgres (default: uscampgrounds; SOURCE=… to override)"
-	@echo "  make pois-import-pick  Interactive multi-select picker over the 6 known sources"
+	@echo "  make pois-import      Import POI sources (interactive picker by default; SOURCE=uscampgrounds or SOURCE=all to skip the picker)"
 	@echo "  make pois-test        Run backend Testcontainers tests"
 	@echo "  make pois-psql        psql shell into local Postgres"
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
@@ -158,17 +155,20 @@ pois-up:
 pois-down:
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois stop postgres
 
+# Single import entry point. Interactive multi-select picker by default
+# (fzf when available, falls back to bash `select`). To skip the picker —
+# in CI, scripts, or muscle memory — pass SOURCE=…:
+#   make pois-import                    # interactive picker
+#   make pois-import SOURCE=uscampgrounds   # headless single source
+#   make pois-import SOURCE=all             # headless every source
+# See scripts/pois-import-picker.sh for the picker logic and the canonical
+# list of source names.
 pois-import: pois-up
+ifdef SOURCE
 	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data ./gradlew importer --args="$(SOURCE)"
-
-pois-import-all: pois-up
-	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data ./gradlew importer --args="all"
-
-# Interactive multi-select picker over POI sources (fzf when available,
-# falls back to bash `select`). Useful when you want a custom subset that
-# isn't "the default" or "everything." See scripts/pois-import-picker.sh.
-pois-import-pick: pois-up
+else
 	@scripts/pois-import-picker.sh
+endif
 
 pois-test:
 	cd backend && ./gradlew test

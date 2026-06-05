@@ -143,25 +143,7 @@ local_resource(
     labels=['data'],
 )
 
-local_resource(
-    # Default-source import (uscampgrounds). The underlying `make pois-import`
-    # uses SOURCE=uscampgrounds; the SOURCE override lives in the Makefile,
-    # not in Tilt, so this row is intentionally pinned to the default. For a
-    # different single source (parks-canada, state-parks, etc.), run
-    # `SOURCE=parks-canada make pois-import` from a shell.
-    'pois-import-uscampgrounds',
-    cmd='make pois-import',
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    resource_deps=['postgres'],
-    labels=['data'],
-)
-
-local_resource(
-    'pois-import-all',
-    cmd='make pois-import-all',
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    resource_deps=['postgres'],
-    labels=['data'],
-)
+# POI imports stay shell-only — `make pois-import` is interactive (fzf
+# multi-select picker), and Tilt resource panes don't have a TTY to drive
+# fzf or bash `select`. Run from a terminal: `make pois-import` for the
+# picker, `make pois-import SOURCE=all` to skip it.
