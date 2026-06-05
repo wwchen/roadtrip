@@ -1,4 +1,4 @@
-.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell qa install-hooks
+.PHONY: help run tilt-up tilt-down docker-run deploy deploy-local stop kill check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell qa install install-deps install-companion install-hooks install-all companion
 
 SOURCE ?= uscampgrounds
 
@@ -9,7 +9,15 @@ DEPLOY_DIR  ?= ~/workspace/roadtrip
 
 help:
 	@echo "Targets:"
+	@echo "  make tilt-up          Run full dev stack via Tilt (postgres in Docker; backend + companion on host)"
+	@echo "  make tilt-down        Stop Tilt and Postgres"
 	@echo "  make run              Build + run backend locally on 127.0.0.1:$(PORT) (serves static + /api)"
+	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
+	@echo "  make install          List one-time setup commands"
+	@echo "  make install-deps     Install host tooling (tilt, docker, openjdk, node) via Homebrew"
+	@echo "  make install-companion  cd companion && npm install + playwright install chromium"
+	@echo "  make install-hooks    Point this clone's git hooks at .githooks/"
+	@echo "  make install-all      Run install-deps + install-companion + install-hooks"
 	@echo "  make docker-run       Build+run backend + postgres in Docker on 127.0.0.1:$(PORT)"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
 	@echo "  make deploy-local     Build+run backend + postgres + cloudflared here (no ssh)"
@@ -28,6 +36,7 @@ help:
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (one-time, per clone)"
 	@echo "  make stop             Stop all compose services locally"
+	@echo "  make kill             Kill any host process listening on $(PORT) (orphaned ./gradlew run)"
 
 # Run the backend on the host, serving static + /api. Postgres still has to
 # be reachable — start it with `make pois-up` first if you don't already
@@ -39,6 +48,37 @@ run: pois-up
 	  ROADTRIP_DB_URL=jdbc:postgresql://127.0.0.1:5432/roadtrip \
 	  ROADTRIP_DB_USER=roadtrip ROADTRIP_DB_PASSWORD=roadtrip \
 	  ./gradlew run
+
+# Tilt orchestrates the dev stack: postgres in Docker (reused via pois-up),
+# backend + companion on the host with file-watch + auto-restart. Tilt UI
+# is at http://localhost:10350.
+tilt-up:
+	tilt up
+
+tilt-down:
+	- tilt down
+	$(MAKE) pois-down
+
+companion:
+	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) node --experimental-eventsource src/index.js
+
+# `make install` is informational — it echoes the install steps so you can
+# run them piecewise. `make install-all` runs them in sequence.
+install:
+	@echo 'One-time local-dev setup. Run "make install-all" to do everything,'
+	@echo 'or run these individually:'
+	@echo ''
+	@echo '  make install-deps        # tilt, docker, openjdk, node (via Homebrew)'
+	@echo '  make install-companion   # cd companion && npm install + playwright chromium'
+	@echo '  make install-hooks       # git config core.hooksPath .githooks'
+
+install-deps:
+	brew install tilt docker openjdk node
+
+install-companion:
+	cd companion && npm install && npx playwright install chromium
+
+install-all: install-deps install-companion install-hooks
 
 docker-run: backend-build
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build backend postgres
@@ -60,6 +100,13 @@ deploy-local: backend-build
 stop:
 	- docker compose --profile tunnel --profile pois down
 	- docker compose -f docker-compose.yml -f docker-compose.local.yml --profile pois down
+
+# Kill whatever is bound to $(PORT) on the host. Useful when an orphaned
+# `./gradlew run` (e.g. Tilt was killed mid-restart) holds 8765 and the next
+# backend boot dies with `Address already in use`.
+kill:
+	@pid=$$(lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t 2>/dev/null); \
+	 if [ -z "$$pid" ]; then echo "nothing listening on $(PORT)"; else echo "killing pid $$pid on :$(PORT)"; kill $$pid; sleep 1; kill -9 $$pid 2>/dev/null || true; fi
 
 # Build the offline-refresh image (curl-impersonate baked in). Needed before
 # refresh-superchargers / rebuild-superchargers. Idempotent — if the image

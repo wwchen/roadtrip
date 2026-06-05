@@ -14,11 +14,24 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 ## Local dev
 
 ```sh
+make tilt-up             # full dev stack (postgres in Docker, backend + companion on host) via Tilt
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
+make companion           # campsite Playwright companion against the local backend
 make docker-run          # local docker build (backend + postgres), port-publishes 8765
 make deploy              # ssh to the mini, git pull, docker compose up
 make deploy-local        # full stack (backend + postgres + cloudflared) on this host
 make refresh-cookies     # push Tesla cookies from clipboard → mini (offline refresh worker only)
+```
+
+`make tilt-up` is the easiest path for full-stack dev: Tilt reuses the
+existing Docker Postgres (`pois-up`), runs the backend with Gradle on the
+host so Kotlin recompiles are fast, and runs the campsite companion as a
+host Node process so Playwright can drive a real Chromium. Tilt UI is at
+<http://localhost:10350>. First time only:
+
+```sh
+make install        # show one-time setup steps
+make install-all    # run them all (Homebrew deps + companion + git hooks)
 ```
 
 Pricing is served from the on-disk cache (`data/pricing-cache/`). Tesla is
