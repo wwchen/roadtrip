@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Run ktlint against staged Kotlin files. Skip entirely if none are staged so
+# non-backend commits are unaffected. Enable with `make install-hooks`.
+set -euo pipefail
+
+staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^backend/.*\.kts?$' || true)
+[ -z "$staged" ] && exit 0
+
+cd backend
+if ! ./gradlew --quiet ktlintCheck -x generateJooq; then
+  echo
+  echo "ktlint failed. Auto-fix with: (cd backend && ./gradlew ktlintFormat -x generateJooq)"
+  exit 1
+fi

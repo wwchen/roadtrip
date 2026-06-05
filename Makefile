@@ -1,4 +1,4 @@
-.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell qa
+.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell qa install-hooks
 
 SOURCE ?= uscampgrounds
 
@@ -26,6 +26,7 @@ help:
 	@echo "  make pois-test        Run backend Testcontainers tests"
 	@echo "  make pois-psql        psql shell into local Postgres"
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
+	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (one-time, per clone)"
 	@echo "  make stop             Stop all compose services locally"
 
 # Run the backend on the host, serving static + /api. Postgres still has to
@@ -144,3 +145,10 @@ backend-shell:
 qa:
 	cd backend && ./gradlew installPlaywrightBrowsers
 	cd backend && QA_BASE_URL=http://127.0.0.1:$(PORT) ./gradlew test --tests ca.floo.roadtrip.SmokeTest --rerun -x generateJooq
+
+# Point this clone's git at .githooks/ so .githooks/pre-commit runs ktlint on
+# staged backend Kotlin files. Per-clone (core.hooksPath isn't tracked in the
+# repo), so each contributor runs this once.
+install-hooks:
+	git config core.hooksPath .githooks
+	@echo "git hooks installed (.githooks/pre-commit)"
