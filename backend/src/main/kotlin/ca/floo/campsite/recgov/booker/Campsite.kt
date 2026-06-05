@@ -19,6 +19,7 @@ import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.CompanionRegistry
 import ca.floo.campsite.recgov.booker.events.EventBus
+import ca.floo.campsite.recgov.booker.monitoring.StatusMonitor
 import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
 import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import ca.floo.campsite.recgov.booker.poller.Poller
@@ -53,6 +54,7 @@ class CampsiteServices(
     val availability: AvailabilityClient,
     val tokenManager: TokenManager,
     val availabilityManager: AvailabilityManager?,
+    val statusMonitor: StatusMonitor,
     val leaseDuration: Duration,
     val eventDriven: Boolean,
 )
@@ -82,6 +84,7 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
 
     val scheduler = Scheduler(schedules::listEnabled, alerts::listActiveCadences, bus, scope)
     val tokenManager = TokenManager(settings, bus, scope)
+    val statusMonitor = StatusMonitor(bus, scope)
 
     // Feature flag: when CAMPSITE_EVENT_DRIVEN=1, AvailabilityManager subscribes
     // to the scheduler-fired PollDue events and the legacy Poller's tick loop
@@ -100,6 +103,7 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
     if (!eventDriven) poller.start()
     scheduler.start()
     tokenManager.start()
+    statusMonitor.start()
     availabilityManager?.start()
 
     // Subscribe to scheduler-fired events. Each handler used to be a
@@ -149,6 +153,7 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
         availability,
         tokenManager,
         availabilityManager,
+        statusMonitor,
         leaseDuration,
         eventDriven,
     )
@@ -159,7 +164,7 @@ fun Route.campsiteRoutes(s: CampsiteServices) {
     alertRoutes(s.alerts, s.poller, s.scheduler, s.bus, s.eventDriven)
     matchRoutes(s.alerts, s.matches, s.bus, s.availability, s.settings, s.leaseDuration, s.tokenManager)
     settingsRoutes(s.settings, s.slack, s.tokenManager)
-    statusRoutes(s.settings, s.tokenManager)
+    statusRoutes(s.settings, s.tokenManager, s.statusMonitor)
     recgovTokenRoutes(s.tokenManager)
     campgroundSearchRoutes()
     pollRoutes(s.poller, s.bus, s.eventDriven)
