@@ -2,10 +2,6 @@
 // Reports the result back to the backend; the backend persists, the companion does not.
 
 import {
-  jwtExpiry,
-  refreshRecgovSession,
-} from './auth.js'
-import {
   IS_HEADLESS,
   getContext,
   injectStoredCookies,
@@ -17,7 +13,7 @@ import {
   campsiteUrl,
   toCheckoutDate,
 } from './browser.js'
-import { getSetting, setSetting } from './store.js'
+import { fetchFreshRecaccount } from './backend.js'
 
 let lastLoginState = null
 export function getLastLoginState () { return lastLoginState }
@@ -199,27 +195,23 @@ export async function setupAuthPage () {
   const context = await getContext()
   await injectStoredCookies(context)
 
-  const storedToken = getSetting('recgov_token')
-  const tokenMsLeft = storedToken ? (jwtExpiry(storedToken) ?? new Date(0)) - Date.now() : 0
-  const needsRefresh = tokenMsLeft < 5 * 60 * 1000
-
-  let recaccount = null
-  if (needsRefresh) {
-    recaccount = await refreshRecgovSession()
-    if (recaccount) {
-      console.log(`Cart: session refreshed (expires ${recaccount.expiration})`)
-    } else {
-      console.log('Cart: no refresh creds — proceeding without recaccount injection')
-    }
+  // Backend owns the recgov token lifecycle (RFC 0001). Fetch a non-expired
+  // recaccount-shaped JSON from the backend; companion no longer talks to
+  // recreation.gov's refresh endpoint directly. Fail closed: if the backend
+  // is unreachable or has no token saved, the SPA will show logged-out and
+  // we won't be able to ATC, but we won't run with stale creds either.
+  const recaccount = await fetchFreshRecaccount()
+  if (recaccount) {
+    console.log(`Cart: session ready via backend (expires ${recaccount.expiration})`)
   } else {
-    console.log(`Cart: token fresh (${Math.round(tokenMsLeft / 60000)}m left) — skipping refresh`)
+    console.log('Cart: backend returned no recaccount — proceeding without injection (likely will fail to ATC)')
   }
 
   const page = await context.newPage()
 
   if (recaccount) await injectRecaccount(page, recaccount)
   await injectBearerRoute(page, recaccount?.access_token)
-  await injectFingerprintCookie(context, recaccount?.access_token || getSetting('recgov_token'))
+  await injectFingerprintCookie(context, recaccount?.access_token)
 
   return { context, page, recaccount }
 }
@@ -343,52 +335,23 @@ export async function testChromium (rawCookieInput = null) {
   const context = await getContext()
   await injectStoredCookies(context, rawCookieInput)
 
-  const recaccount = await refreshRecgovSession()
-  if (recaccount) {
-    const page = await context.newPage()
-    try {
-      await injectRecaccount(page, recaccount)
-      await injectBearerRoute(page, recaccount.access_token)
-      await page.goto('https://www.recreation.gov/', { waitUntil: 'domcontentloaded', timeout: 20000 })
-      await page.waitForTimeout(2000)
-      const loggedIn = (await isSpaLoggedIn(page)) === true
-      lastLoginState = loggedIn
-      if (loggedIn) console.log(`Logged in to recreation.gov ✓ (token expires ${recaccount.expiration})`)
-      else console.log('Refresh succeeded but SPA still shows logged-out — recaccount may have been rejected')
-      return { ok: true, loggedIn }
-    } finally {
-      await page.close().catch(() => {})
-    }
+  const recaccount = await fetchFreshRecaccount()
+  if (!recaccount) {
+    console.log('testChromium: backend returned no recaccount — paste a fresh cURL in Settings to seed one')
+    lastLoginState = false
+    return { ok: true, loggedIn: false }
   }
 
-  console.log('testChromium: no refresh creds — waiting for SPA silent auth (6s)…')
   const page = await context.newPage()
   try {
-    await injectBearerRoute(page)
+    await injectRecaccount(page, recaccount)
+    await injectBearerRoute(page, recaccount.access_token)
     await page.goto('https://www.recreation.gov/', { waitUntil: 'domcontentloaded', timeout: 20000 })
-    await page.waitForTimeout(6000)
-
-    const captured = await page.evaluate(() => {
-      const raw = localStorage.getItem('recaccount')
-      if (!raw) return null
-      try { return JSON.parse(raw) } catch { return null }
-    })
-
-    if (captured?.refresh_id && captured?.account?.account_id) {
-      setSetting('recgov_refresh_creds', JSON.stringify({
-        account_id: captured.account.account_id,
-        refresh_id: captured.refresh_id,
-      }))
-      setSetting('recgov_token', captured.access_token)
-      console.log(`testChromium: captured refresh_id from browser session (expires ${captured.expiration})`)
-      lastLoginState = true
-      return { ok: true, loggedIn: true }
-    }
-
+    await page.waitForTimeout(2000)
     const loggedIn = (await isSpaLoggedIn(page)) === true
     lastLoginState = loggedIn
-    if (loggedIn) console.log('Logged in to recreation.gov ✓ (no refresh_id captured — session may not persist)')
-    else console.log('Not logged in — browser session has no live Auth0 session; paste a fresh cURL in Settings')
+    if (loggedIn) console.log(`Logged in to recreation.gov ✓ (token expires ${recaccount.expiration})`)
+    else console.log('Backend recaccount injected but SPA still shows logged-out — token may have been rejected')
     return { ok: true, loggedIn }
   } finally {
     await page.close().catch(() => {})

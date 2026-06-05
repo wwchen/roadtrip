@@ -8,7 +8,6 @@
 // Usage: node --experimental-eventsource src/index.js [--id=companion-A]
 
 import { setTimeout as sleep } from 'node:timers/promises'
-import { seedFromEnv } from './store.js'
 import { addToCart } from './cart.js'
 import { claimMatch, reportResult, heartbeat, getMatch, backendBase } from './backend.js'
 
@@ -111,7 +110,6 @@ function subscribe () {
 }
 
 async function main () {
-  seedFromEnv()
   log('config:', { backend: backendBase(), companionId: COMPANION_ID })
   subscribe()
   heartbeatLoop().catch((e) => log('heartbeat loop crashed', e))

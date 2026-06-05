@@ -168,5 +168,5 @@ fun Route.campsiteRoutes(s: CampsiteServices) {
     recgovTokenRoutes(s.tokenManager)
     campgroundSearchRoutes()
     pollRoutes(s.poller, s.bus, s.eventDriven)
-    companionRoutes(s.companions, s.bus, s.settings)
+    companionRoutes(s.companions, s.bus)
 }
