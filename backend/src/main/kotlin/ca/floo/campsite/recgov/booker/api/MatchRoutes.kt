@@ -162,18 +162,23 @@ fun Route.matchRoutes(
         }
 
         val months = m.availableDates.map { LocalDate.parse(it).withDayOfMonth(1).toString() }.toSet()
+        // rec.gov keys availabilities by full ISO timestamp ("2026-06-05T00:00:00Z");
+        // m.availableDates are plain YYYY-MM-DD. Re-key on the date prefix so lookups land.
         val avail = mutableMapOf<String, String>()
         for (month in months) {
             try {
                 val campsites = availability.fetchMonth(m.campgroundId, month)
-                campsites[m.campsiteId]?.availabilities?.let { avail += it }
+                campsites[m.campsiteId]?.availabilities?.forEach { (k, v) ->
+                    avail[k.substring(0, 10)] = v
+                }
             } catch (e: Exception) {
                 matchRoutesLog.info("availability fetch failed for match {} ({}): {}", id, month, e.message)
                 call.respondText("""{"status":"unqueryable"}""")
                 return@get
             }
         }
-        val stillAvailable = m.availableDates.all { (avail[it] ?: "").equals("Available", ignoreCase = true) }
+        val available = setOf("Available", "Open")
+        val stillAvailable = m.availableDates.all { avail[it] in available }
         val status = if (stillAvailable) "available" else "unavailable"
         call.respondText("""{"status":"$status"}""")
     }
