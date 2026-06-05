@@ -28,6 +28,7 @@ private val log = LoggerFactory.getLogger("RecgovAuth")
 private val curlCookieRe = Regex("""(?:-b|--cookie)\s+['"]([^'"]*)['"]""")
 private val curlCookieHeaderRe = Regex("""-H\s+['"][Cc]ookie:\s*([^'"]*)['"]""")
 private val curlBearerRe = Regex("""-H\s+['"][Aa]uthorization:\s+[Bb]earer\s+([A-Za-z0-9._-]+)""")
+
 // curl data quoting: macOS/zsh "Copy as cURL" wraps the JSON body in single
 // quotes, e.g. --data-raw '{"a":"b"}'. Match the JSON body greedily up to the
 // trailing quote — we do not try to handle escaped quotes inside the body
@@ -35,11 +36,18 @@ private val curlBearerRe = Regex("""-H\s+['"][Aa]uthorization:\s+[Bb]earer\s+([A
 private val curlRawDataSingleRe = Regex("""--data-raw\s+'(\{[^']*\})'""")
 private val curlRawDataDoubleRe = Regex("""--data-raw\s+"(\{[^"]*\})"""")
 
-data class RefreshCreds(val accountId: String, val refreshId: String) {
+data class RefreshCreds(
+    val accountId: String,
+    val refreshId: String,
+) {
     fun toJson(): String = """{"account_id":"$accountId","refresh_id":"$refreshId"}"""
 }
 
-data class TokenInfo(val expires: Instant?, val expired: Boolean, val fingerprint: String)
+data class TokenInfo(
+    val expires: Instant?,
+    val expired: Boolean,
+    val fingerprint: String,
+)
 
 object RecgovAuth {
     fun extractCookies(input: String): String {
@@ -50,8 +58,7 @@ object RecgovAuth {
         return s
     }
 
-    fun countCookies(cookieString: String): Int =
-        cookieString.split(';').count { it.contains('=') }
+    fun countCookies(cookieString: String): Int = cookieString.split(';').count { it.contains('=') }
 
     fun extractBearer(input: String): String? = curlBearerRe.find(input)?.groupValues?.get(1)
 
@@ -152,5 +159,4 @@ object RecgovAuth {
     }
 }
 
-private fun kotlinx.serialization.json.JsonElement.jsonPrimitiveContent(): String? =
-    (this as? JsonPrimitive)?.contentOrNull
+private fun kotlinx.serialization.json.JsonElement.jsonPrimitiveContent(): String? = (this as? JsonPrimitive)?.contentOrNull

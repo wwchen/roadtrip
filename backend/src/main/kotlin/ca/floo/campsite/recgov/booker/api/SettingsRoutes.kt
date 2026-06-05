@@ -184,7 +184,10 @@ fun Route.settingsRoutes(
  * whatever recreation.gov auth bits we can extract. Same logic both endpoints
  * use, so write-once paths agree.
  */
-private fun applyCookiePaste(settings: SettingsRepo, raw: String) {
+private fun applyCookiePaste(
+    settings: SettingsRepo,
+    raw: String,
+) {
     val updates = mutableMapOf<String, String>()
     RecgovAuth.extractBearer(raw)?.takeIf { it.isNotEmpty() }?.let {
         updates["recgov_token"] = it
