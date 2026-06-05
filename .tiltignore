@@ -1,0 +1,6 @@
+backend/build/
+backend/.gradle/
+companion/node_modules/
+data/pricing-cache/
+.idea/
+*.log
