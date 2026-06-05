@@ -62,12 +62,14 @@ local_resource(
 )
 
 # --- companion (host Node) ---------------------------------------------------
-# Playwright pulls Chromium (~150MB) on first install. We don't manage that
-# here — first-time setup is `make install-companion`. After that, Tilt
-# restarts the companion whenever src changes.
+# `cmd` runs `make install-companion` (idempotent: `npm install` is a no-op
+# when node_modules is fresh; `playwright install chromium` likewise skips
+# when the browser is already on disk). Re-runs when package.json changes.
+# `serve_cmd` then keeps the Node process attached for log streaming.
 
 local_resource(
     'companion',
+    cmd='make install-companion',
     serve_cmd='cd companion && node --experimental-eventsource src/index.js',
     serve_env={'BACKEND_URL': 'http://127.0.0.1:' + PORT},
     deps=['companion/src', 'companion/package.json'],
