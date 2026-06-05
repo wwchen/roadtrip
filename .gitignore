@@ -24,3 +24,4 @@ backend/build/
 qa/test-results/
 qa/playwright-report/
 
+.idea/
