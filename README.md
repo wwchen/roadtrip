@@ -34,9 +34,9 @@ The Tilt UI also has a `data` cluster of manual-trigger background workers
 for Tesla pricing, `refresh-tesla-cookies` to mint fresh `_abck` cookies for
 the Tesla scraper into `.env`, `pois-import-uscampgrounds` /
 `pois-import-all` for the Kotlin POI importer (the former is the default
-single-source import; for other single sources run `SOURCE=parks-canada make
-pois-import` from a shell), and `refresh-image` (one-shot prereq for the
-supercharger refreshers). Click the row, watch logs in the right pane.
+single-source import; for a custom subset run `make pois-import-pick` from a
+shell — interactive picker, fzf-driven), and `refresh-image` (one-shot prereq
+for the supercharger refreshers). Click the row, watch logs in the right pane.
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
 > backend-owned via `TokenManager` (RFC 0001 / PR #22) — paste a fresh cURL

@@ -1,4 +1,4 @@
-.PHONY: help run tilt-up tilt-down docker-run deploy deploy-local stop kill check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell qa install install-deps install-companion install-hooks install-all companion
+.PHONY: help run tilt-up tilt-down docker-run deploy deploy-local stop kill check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-import-pick pois-test pois-psql backend-build backend-run backend-shell qa install install-deps install-companion install-hooks install-all companion
 
 SOURCE ?= uscampgrounds
 
@@ -30,7 +30,8 @@ help:
 	@echo "  make backend-shell    Exec into the running backend container"
 	@echo "  make pois-up          Start Postgres+PostGIS on 127.0.0.1:5432"
 	@echo "  make pois-down        Stop Postgres"
-	@echo "  make pois-import      Run the Kotlin importer against local Postgres"
+	@echo "  make pois-import      Run the Kotlin importer against local Postgres (default: uscampgrounds; SOURCE=… to override)"
+	@echo "  make pois-import-pick  Interactive multi-select picker over the 6 known sources"
 	@echo "  make pois-test        Run backend Testcontainers tests"
 	@echo "  make pois-psql        psql shell into local Postgres"
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
@@ -162,6 +163,12 @@ pois-import: pois-up
 
 pois-import-all: pois-up
 	cd backend && ROADTRIP_DATA_DIR=$(PWD)/data ./gradlew importer --args="all"
+
+# Interactive multi-select picker over POI sources (fzf when available,
+# falls back to bash `select`). Useful when you want a custom subset that
+# isn't "the default" or "everything." See scripts/pois-import-picker.sh.
+pois-import-pick: pois-up
+	@scripts/pois-import-picker.sh
 
 pois-test:
 	cd backend && ./gradlew test
