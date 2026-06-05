@@ -253,20 +253,6 @@ async function waitForCaptchaIfPresent (page, solveTimeout = 90000) {
   return true
 }
 
-// PATCH cart expiry — extends the hold window after a successful ATC.
-// Without this the reservation expires after ~15 min; with it, calling every 5 min
-// keeps the cart locked for hours.
-export async function extendCartHold (page) {
-  await page.evaluate(async () => {
-    await fetch('https://www.recreation.gov/api/cart/shoppingcart/expiration', {
-      method: 'PATCH',
-      headers: { 'content-type': 'application/json' },
-      credentials: 'include',
-      body: '{}',
-    }).catch(() => {})
-  }).catch(() => {})
-}
-
 // Adds a match to the cart on rec.gov. Returns true if the cart now has the reservation.
 // `match` is the backend Match shape (snake_case fields from /api/campsite/matches).
 export async function addToCart (match) {
@@ -322,7 +308,6 @@ export async function addToCart (match) {
       await waitForCaptchaIfPresent(page)
       await page.waitForTimeout(500)
       const ok = cartAccepted()
-      if (ok) await extendCartHold(page)
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
       return { ok, page }
     }
@@ -334,7 +319,6 @@ export async function addToCart (match) {
         await waitForCaptchaIfPresent(page)
         await page.waitForTimeout(500)
         const ok = cartAccepted()
-        if (ok) await extendCartHold(page)
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
         return { ok, page }
       }
