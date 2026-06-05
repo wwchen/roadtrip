@@ -1,15 +1,15 @@
 // Companion main loop:
 //   1. Subscribes to backend SSE /api/campsite/events (auto-reconnect with Last-Event-ID).
 //   2. On `match` events, fetches the match, attempts to claim, runs Playwright
-//      ATC, and reports the result. On success, kicks off a 5-min interval that
-//      PATCHes the cart-expiry endpoint to keep the hold alive.
+//      ATC, and reports the result. The backend keeps the rec.gov cart hold
+//      alive via a plain PATCH loop — no long-lived browser page needed.
 //   3. Posts a heartbeat every 30s so the backend knows we're alive.
 //
 // Usage: node --experimental-eventsource src/index.js [--id=companion-A]
 
 import { setTimeout as sleep } from 'node:timers/promises'
 import { seedFromEnv } from './store.js'
-import { addToCart, extendCartHold } from './cart.js'
+import { addToCart } from './cart.js'
 import { claimMatch, reportResult, heartbeat, getMatch, backendBase } from './backend.js'
 
 const args = Object.fromEntries(
@@ -21,13 +21,10 @@ const args = Object.fromEntries(
 
 const COMPANION_ID = args.id || process.env.COMPANION_ID || 'companion-A'
 const HEARTBEAT_MS = parseInt(args['heartbeat-ms'] || '30000', 10)
-const CART_EXTEND_MS = 5 * 60 * 1000
 
 let lastId = 0
 let stopRequested = false
 let es
-
-const cartHolds = new Map() // matchId → { page, intervalId }
 
 function log (...xs) { console.log(new Date().toISOString(), '[' + COMPANION_ID + ']', ...xs) }
 
@@ -71,32 +68,9 @@ async function handleMatch (envelopeData) {
   const r = await reportResult(matchId, ok)
   log('result', matchId, ok ? 'cart_added=true' : 'cart_added=false', '→', r.status)
 
-  if (ok && result.page) startCartHold(matchId, result.page)
-  else if (result?.page) await result.page.close().catch(() => {})
-}
-
-function startCartHold (matchId, page) {
-  if (cartHolds.has(matchId)) return
-  log('cart hold extender started for match', matchId, `(every ${CART_EXTEND_MS / 1000}s)`)
-  const intervalId = setInterval(async () => {
-    try {
-      await extendCartHold(page)
-      log('cart hold extended for match', matchId)
-    } catch (e) {
-      log('extendCartHold error for match', matchId, e.message)
-      stopCartHold(matchId)
-    }
-  }, CART_EXTEND_MS)
-  cartHolds.set(matchId, { page, intervalId })
-}
-
-function stopCartHold (matchId) {
-  const h = cartHolds.get(matchId)
-  if (!h) return
-  clearInterval(h.intervalId)
-  h.page.close().catch(() => {})
-  cartHolds.delete(matchId)
-  log('cart hold extender stopped for match', matchId)
+  // Backend keeps the rec.gov cart hold alive on its own 5-min PATCH loop —
+  // close the Playwright page now that ATC is done.
+  if (result?.page) await result.page.close().catch(() => {})
 }
 
 async function heartbeatLoop () {
@@ -146,7 +120,6 @@ async function main () {
     process.on(sig, () => {
       stopRequested = true
       log('shutting down')
-      for (const id of cartHolds.keys()) stopCartHold(id)
       es?.close()
       setTimeout(() => process.exit(0), 100)
     })

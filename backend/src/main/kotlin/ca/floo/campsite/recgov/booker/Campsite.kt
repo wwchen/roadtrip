@@ -4,6 +4,7 @@ import ca.floo.campsite.recgov.booker.api.alertRoutes
 import ca.floo.campsite.recgov.booker.api.campgroundSearchRoutes
 import ca.floo.campsite.recgov.booker.api.companionRoutes
 import ca.floo.campsite.recgov.booker.api.eventsRoutes
+import ca.floo.campsite.recgov.booker.api.extendCartHold
 import ca.floo.campsite.recgov.booker.api.matchRoutes
 import ca.floo.campsite.recgov.booker.api.pollRoutes
 import ca.floo.campsite.recgov.booker.api.settingsRoutes
@@ -81,6 +82,20 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
                 bus.publish("companion_offline", """{"companionId":"${e.id}","lastSeen":"${e.lastSeen}"}""")
             }
             delay(5_000)
+        }
+    }
+
+    // Background: keep the rec.gov cart hold alive. The cart is one-per-account,
+    // so a single PATCH every 5 min extends whatever the operator has in it.
+    // No-op if no token is stored. Plain HTTP works because the cart-expiration
+    // endpoint only checks Bearer + r1s-fingerprint cookie — not Akamai TLS
+    // fingerprinting (which is what makes ATC need a real Chromium).
+    GlobalScope.launch(Dispatchers.Default) {
+        while (true) {
+            delay(5 * 60_000)
+            val token = settings.get("recgov_token").orEmpty()
+            if (token.isEmpty()) continue
+            extendCartHold(token)
         }
     }
 
