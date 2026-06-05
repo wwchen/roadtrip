@@ -95,6 +95,74 @@ gh pr comment <num> --body "lgtm"
 
 If the diff is wrong, just don't comment `lgtm`. Push fixes; the prior approval (if any) is for the prior commit; comment `lgtm` again on the new state.
 
+## Installation
+
+One-time setup for the App and the repo. The workflow file itself lives at
+`.github/workflows/self-approve.yml` and is checked in.
+
+### 1. Register the GitHub App
+
+At https://github.com/settings/apps/new:
+
+- **Name:** any unique name (e.g. `wwchen-self-approve`). This is what shows up as the approving reviewer on every PR — pick something you'll recognize.
+- **Homepage URL:** anything (e.g. the repo URL).
+- **Webhook:** uncheck "Active". The App is a passive identity, not an event handler.
+- **Repository permissions:**
+  - `Contents: Read and write`
+  - `Pull requests: Read and write`
+- **Where can this GitHub App be installed?:** "Only on this account."
+- Create.
+
+### 2. Generate credentials
+
+On the App's settings page after creation:
+
+- Note the **App ID** (numeric, displayed at the top).
+- Click **Generate a private key** → downloads a `.pem` file. The full
+  `-----BEGIN…END-----` block is the value of `SELF_APPROVE_PRIVATEKEY`.
+
+### 3. Install the App on the repo
+
+- Click **Install App** in the App's left sidebar → install on the target repo
+  only (not all repos).
+- After install, the URL is `https://github.com/settings/installations/<id>`.
+  That trailing number is the **installation ID**.
+- Or via API: `gh api /users/<your-username>/installation` returns JSON with the
+  installation `id`.
+
+### 4. Add repo secrets
+
+At `https://github.com/<owner>/<repo>/settings/secrets/actions/new`, create:
+
+| Secret | Value |
+|---|---|
+| `SELF_APPROVE_APPID` | App ID from step 2 |
+| `SELF_APPROVE_PRIVATEKEY` | full contents of the `.pem` from step 2 |
+| `SELF_APPROVE_INSTALLATIONID` | installation ID from step 3 |
+
+Verify with `gh secret list --repo <owner>/<repo>` — all three should appear.
+
+### 5. Configure branch protection on `master`
+
+At `https://github.com/<owner>/<repo>/settings/branch_protection_rules/new`:
+
+- **Require a pull request before merging:** on, with **Require approvals: 1**.
+- **Require status checks to pass:** add the CI jobs (lint, backend-tests, smoke).
+- **Require branches to be up to date before merging:** on.
+- **Require approval of the most recent reviewable push:** on. This is the
+  invariant that forces a fresh `lgtm` after every push.
+
+### 6. Test
+
+Open a throwaway PR, comment `lgtm`, and confirm:
+
+- The `Self-approve` workflow run appears in the Actions tab.
+- A review from the App identity (e.g. `wwchen-self-approve`) appears on the PR.
+- Once CI is green and auto-merge is armed, the PR squash-merges.
+
+If the workflow doesn't fire, check that the workflow file is on the **default
+branch** — `issue_comment` triggers ignore the PR's own copy of the workflow.
+
 ## Why not the alternatives
 
 - **Auto-approve on every push** — defeats the human-gate goal. The original wiring did this; rejected on contact with reality.
