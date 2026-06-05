@@ -9,6 +9,12 @@ import {
   sitesTagHTML,
   lastVerifiedFooterHTML,
 } from './campground-card.js';
+import { openCampgroundDrawer } from './drawer.js';
+
+/** True when ?drawer=1 is in the URL. RFC 0003 ships behind this flag. */
+function drawerFlagOn() {
+  try { return new URLSearchParams(location.search).get('drawer') === '1'; } catch { return false; }
+}
 
 async function loadPricing(slug, elId) {
   const el = document.getElementById(elId);
@@ -210,7 +216,14 @@ function labelForReserveUrl(url) {
 // Shared rendering helpers (amenities, cell coverage, rating, sites tag,
 // last_verified footer) live in ./campground-card.js so the drawer path
 // (RFC 0003) reuses them without drift.
+//
+// Fork: US federal pins with recgov_id AND ?drawer=1 → drawer; everything
+// else → existing popup. This isolates the drawer rollout to opt-in users.
 export function openCampgroundPopup(f) {
+  if (drawerFlagOn() && f.properties?.recgov_id) {
+    openCampgroundDrawer(f);
+    return;
+  }
   const p = f.properties;
   const [lng, lat] = f.geometry.coordinates;
   const amenities = parseAmenities(p);
