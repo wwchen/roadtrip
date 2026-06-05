@@ -533,10 +533,16 @@ window.openMatch = async function (id) {
 };
 
 window.cartMatch = async function (id) {
-  showToast('Opening browser for auto-cart…', 'info');
+  showToast('Queuing add-to-cart for companion…', 'info');
   try {
     const result = await api('POST', `/api/campsite/matches/${id}/cart`, {});
-    showToast(result.cart_added ? 'Added to cart! Complete checkout in browser.' : 'Browser opened — please add to cart manually.', result.cart_added ? 'success' : 'info', 6000);
+    if (result.cart_added) {
+      showToast('Added to cart! Complete checkout in browser.', 'success', 6000);
+    } else if (result.queued) {
+      showToast('Match re-queued — companion will run ATC and report back via the matches list.', 'info', 6000);
+    } else {
+      showToast('Cart request accepted — see matches list for result.', 'info', 6000);
+    }
     loadMatches({ checkAvail: false });
   } catch (err) {
     showToast(`Error: ${err.message}`, 'error');

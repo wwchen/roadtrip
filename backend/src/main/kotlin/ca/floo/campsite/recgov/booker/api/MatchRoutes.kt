@@ -2,8 +2,10 @@ package ca.floo.campsite.recgov.booker.api
 
 import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.db.MatchRepo
+import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.domain.Match
 import ca.floo.campsite.recgov.booker.events.EventBus
+import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
@@ -18,12 +20,18 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.slf4j.LoggerFactory
 import java.time.Duration
+import java.time.LocalDate
+
+private val matchRoutesLog = LoggerFactory.getLogger("MatchRoutes")
 
 fun Route.matchRoutes(
     alerts: AlertRepo,
     matches: MatchRepo,
     bus: EventBus,
+    availability: AvailabilityClient,
+    settings: SettingsRepo,
     leaseDuration: Duration,
 ) {
     /** Spike-only: create an alert + match in one shot so the protocol harness exercises the full DB path. */
@@ -137,6 +145,100 @@ fun Route.matchRoutes(
                 ?: return@delete call.respond(HttpStatusCode.BadRequest, "bad id")
         matches.softDelete(id)
         call.respondText("""{"ok":true}""")
+    }
+
+    // Re-checks rec.gov for the specific campsite/date in a Match. Used by the
+    // UI to colour each match card after a poll cycle. Synchronous: hits
+    // recreation.gov via the shared throttled AvailabilityClient.
+    get("/api/campsite/matches/{id}/availability") {
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@get call.respond(HttpStatusCode.BadRequest, "bad id")
+        val m = matches.get(id) ?: return@get call.respond(HttpStatusCode.NotFound, "no such match")
+
+        if (m.campsiteId.isBlank() || m.campsiteId == "0") {
+            call.respondText("""{"status":"unqueryable"}""")
+            return@get
+        }
+
+        val months = m.availableDates.map { LocalDate.parse(it).withDayOfMonth(1).toString() }.toSet()
+        val avail = mutableMapOf<String, String>()
+        for (month in months) {
+            try {
+                val campsites = availability.fetchMonth(m.campgroundId, month)
+                campsites[m.campsiteId]?.availabilities?.let { avail += it }
+            } catch (e: Exception) {
+                matchRoutesLog.info("availability fetch failed for match {} ({}): {}", id, month, e.message)
+                call.respondText("""{"status":"unqueryable"}""")
+                return@get
+            }
+        }
+        val stillAvailable = m.availableDates.all { (avail[it] ?: "").equals("Available", ignoreCase = true) }
+        val status = if (stillAvailable) "available" else "unavailable"
+        call.respondText("""{"status":"$status"}""")
+    }
+
+    // Triggers add-to-cart for a match. Two modes:
+    //   { "action": "open" } → returns {url} so the UI opens the campsite page in a new tab.
+    //   {} (empty/default)   → republishes a `match` event on the EventBus so a connected
+    //                          companion claims it and runs Playwright ATC. Returns
+    //                          {ok, queued, cart_added:false} synchronously; the actual
+    //                          result lands later via /matches/{id}/result and the SSE
+    //                          stream updates the UI.
+    post("/api/campsite/matches/{id}/cart") {
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@post call.respond(HttpStatusCode.BadRequest, "bad id")
+        val m = matches.get(id) ?: return@post call.respond(HttpStatusCode.NotFound, "no such match")
+        val body = parseJson(call.receiveText())
+        val action = body.string("action")
+
+        if (action == "open") {
+            val url = campsiteOpenUrl(m)
+            call.respondText("""{"ok":true,"url":"$url"}""")
+            return@post
+        }
+
+        // Re-emit the match envelope so any companion currently subscribed to /events
+        // will pick it up and run its ATC flow. Companion will claim, do its work,
+        // then POST /matches/{id}/result; the UI re-renders from the SSE stream.
+        bus.publish("match", matchEnvelope(m))
+        call.respondText("""{"ok":true,"queued":true,"cart_added":false}""")
+    }
+
+    // Extends the rec.gov cart hold by PATCHing the shoppingcart expiration
+    // endpoint with the stored Bearer token. No browser, no SPA — one HTTP
+    // call. Companion does this on a 5-min interval after a successful ATC,
+    // but the UI Extend Hold button calls this for manual extension.
+    post("/api/campsite/cart/extend") {
+        val token = settings.get("recgov_token").orEmpty()
+        if (token.isEmpty()) {
+            call.respond(HttpStatusCode.BadRequest, """{"error":"no recgov token saved"}""")
+            return@post
+        }
+        val info = RecgovAuth.tokenInfo(token)
+        if (info.expired) {
+            call.respond(HttpStatusCode.BadRequest, """{"error":"recgov token expired"}""")
+            return@post
+        }
+        val ok = extendCartHold(token)
+        if (ok) {
+            call.respondText("""{"ok":true}""")
+        } else {
+            call.respond(HttpStatusCode.BadGateway, """{"error":"rec.gov refused cart extend"}""")
+        }
+    }
+}
+
+/** Computes the rec.gov campsite reservation URL for a match. Mirrors browser.js campsiteUrl. */
+private fun campsiteOpenUrl(m: Match): String {
+    val first = m.firstDate
+    val lastNight = m.availableDates.lastOrNull() ?: first
+    val checkout = LocalDate.parse(lastNight).plusDays(1).toString()
+    return if (m.campsiteId.isNotBlank() && m.campsiteId != "0") {
+        "https://www.recreation.gov/camping/campsites/${m.campsiteId}?startDate=$first&endDate=$checkout"
+    } else {
+        "https://www.recreation.gov/camping/campgrounds/${m.campgroundId}?startDate=$first&endDate=$checkout"
     }
 }
 

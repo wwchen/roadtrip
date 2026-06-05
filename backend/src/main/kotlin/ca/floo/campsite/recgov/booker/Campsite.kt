@@ -14,6 +14,7 @@ import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.events.CompanionRegistry
 import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
+import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import ca.floo.campsite.recgov.booker.poller.Poller
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
@@ -38,6 +39,7 @@ class CampsiteServices(
     val companions: CompanionRegistry,
     val slack: SlackNotifier,
     val poller: Poller,
+    val availability: AvailabilityClient,
     val leaseDuration: Duration,
 )
 
@@ -55,7 +57,8 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
     settings.seedDefaults(System.getenv())
     val companions = CompanionRegistry(offlineThreshold)
     val slack = SlackNotifier(settings)
-    val poller = Poller(alerts, matches, settings, bus, slack = slack)
+    val availability = AvailabilityClient()
+    val poller = Poller(alerts, matches, settings, bus, client = availability, slack = slack)
 
     install(SSE)
 
@@ -89,13 +92,13 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
         }
     }
 
-    return CampsiteServices(alerts, matches, settings, bus, companions, slack, poller, leaseDuration)
+    return CampsiteServices(alerts, matches, settings, bus, companions, slack, poller, availability, leaseDuration)
 }
 
 fun Route.campsiteRoutes(s: CampsiteServices) {
     eventsRoutes(s.bus)
     alertRoutes(s.alerts, s.poller)
-    matchRoutes(s.alerts, s.matches, s.bus, s.leaseDuration)
+    matchRoutes(s.alerts, s.matches, s.bus, s.availability, s.settings, s.leaseDuration)
     settingsRoutes(s.settings, s.slack)
     statusRoutes(s.settings)
     campgroundSearchRoutes()
