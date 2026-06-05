@@ -35,6 +35,9 @@ plugins {
     // eclipse-temurin:21-jre + one .jar.
     id("com.gradleup.shadow") version "8.3.5"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
+    // Line/branch coverage. `./gradlew koverXmlReport` produces the XML the
+    // CI job uploads to Codecov.
+    id("org.jetbrains.kotlinx.kover") version "0.8.3"
 }
 
 ktlint {
@@ -242,6 +245,23 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
     // loses its CoreMigrationTypeResolver, rejecting V_*.sql migrations with
     // "Unrecognised migration name format" at runtime.
     mergeServiceFiles()
+}
+
+// Exclude generated jOOQ classes and main entrypoints from coverage so the
+// number reflects code we actually own + can test.
+kover {
+    reports {
+        filters {
+            excludes {
+                packages("ca.floo.roadtrip.db.generated", "ca.floo.roadtrip.db.generated.*")
+                classes(
+                    "ca.floo.roadtrip.MainKt",
+                    "ca.floo.roadtrip.importer.ImporterKt",
+                    "ca.floo.campsite.recgov.booker.tools.*",
+                )
+            }
+        }
+    }
 }
 
 tasks.test {
