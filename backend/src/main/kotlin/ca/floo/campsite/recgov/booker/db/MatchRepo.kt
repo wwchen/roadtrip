@@ -139,6 +139,19 @@ class MatchRepo(
         return if (updated > 0) get(id) else null
     }
 
+    /** Clears claim + result so a match can be re-attempted by ATC. */
+    fun clearClaim(id: Long) {
+        ctx
+            .update(MATCHES)
+            .setNull(MATCHES.CLAIMED_BY)
+            .setNull(MATCHES.CLAIMED_AT)
+            .setNull(MATCHES.LEASE_EXPIRES)
+            .setNull(MATCHES.RESULT_AT)
+            .setNull(MATCHES.CART_ADDED)
+            .where(MATCHES.ID.eq(id))
+            .execute()
+    }
+
     /** Releases leases that expired without a result. Returns the released matches. */
     fun sweepExpiredLeases(now: OffsetDateTime = OffsetDateTime.now()): List<Match> {
         val expired =

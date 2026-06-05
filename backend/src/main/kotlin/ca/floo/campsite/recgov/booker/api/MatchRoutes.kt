@@ -204,10 +204,18 @@ fun Route.matchRoutes(
             return@post
         }
 
+        // If the match was already attempted, reset claim + result so the companion
+        // can claim again. Without this, the companion's claim attempt 409s
+        // ("already_claimed_or_done") and the retry silently dies on its side.
+        if (m.claimedBy != null || m.cartAdded != null) {
+            matches.clearClaim(id)
+        }
+        val refreshed = matches.get(id) ?: m
+
         // Re-emit the match envelope so any companion currently subscribed to /events
         // will pick it up and run its ATC flow. Companion will claim, do its work,
         // then POST /matches/{id}/result; the UI re-renders from the SSE stream.
-        bus.publish("match", matchEnvelope(m))
+        bus.publish("match", matchEnvelope(refreshed))
         call.respondText("""{"ok":true,"queued":true,"cart_added":false}""")
     }
 
