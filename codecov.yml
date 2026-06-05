@@ -13,10 +13,14 @@ coverage:
         threshold: 1%
     patch:
       default:
-        # Lines added in a PR should be covered. Lower than 100% so a small
-        # one-off bypass doesn't fail every PR; raise as the base climbs.
+        # Patch coverage is informational only — surface it in the PR comment
+        # so reviewers see the diff hit-rate, but don't fail the check.
+        # koverVerify in backend/build.gradle.kts is the hard gate, and
+        # patch failures here mostly fire on PRs that are themselves test +
+        # build-config (not new product code) where the metric is noise.
         target: 70%
         threshold: 5%
+        informational: true
 
 comment:
   layout: "diff, files, footer"
