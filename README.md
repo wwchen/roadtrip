@@ -27,7 +27,16 @@ make refresh-cookies     # push Tesla cookies from clipboard → mini (offline r
 existing Docker Postgres (`pois-up`), runs the backend with Gradle on the
 host so Kotlin recompiles are fast, and runs the campsite companion as a
 host Node process so Playwright can drive a real Chromium. Tilt UI is at
-<http://localhost:10350>. First time only:
+<http://localhost:10350>.
+
+The Tilt UI also has a `data` cluster of manual-trigger background workers
+(none auto-run on `tilt up`): `refresh-superchargers` / `rebuild-superchargers`
+for Tesla pricing, `refresh-cookies-local` for Tesla cookies, `pois-import` /
+`pois-import-all` for the Kotlin POI importer, and `refresh-image` (one-shot
+prereq for the supercharger refreshers). Click the row, watch logs in the
+right pane.
+
+First time only:
 
 ```sh
 make install        # show one-time setup steps
