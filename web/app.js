@@ -36,7 +36,7 @@ state.map = map;
 globalThis.__rtMap = map;
 globalThis.__rtState = state;
 
-map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-right');
+map.addControl(new maplibregl.NavigationControl({ showCompass: false }), 'top-left');
 // enableHighAccuracy:false: at 50km decision scale we don't need GPS warm-up
 // + battery drain. trackUserLocation:false: single fetch, no watchPosition.
 const geolocate = new maplibregl.GeolocateControl({
