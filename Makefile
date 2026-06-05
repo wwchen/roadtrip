@@ -1,4 +1,4 @@
-.PHONY: help run tilt-up tilt-down docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell qa install install-deps install-companion install-hooks install-all companion
+.PHONY: help run tilt-up tilt-down docker-run deploy deploy-local stop kill check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-import-all pois-test pois-psql backend-build backend-run backend-shell qa install install-deps install-companion install-hooks install-all companion
 
 SOURCE ?= uscampgrounds
 
@@ -36,6 +36,7 @@ help:
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (one-time, per clone)"
 	@echo "  make stop             Stop all compose services locally"
+	@echo "  make kill             Kill any host process listening on $(PORT) (orphaned ./gradlew run)"
 
 # Run the backend on the host, serving static + /api. Postgres still has to
 # be reachable — start it with `make pois-up` first if you don't already
@@ -99,6 +100,13 @@ deploy-local: backend-build
 stop:
 	- docker compose --profile tunnel --profile pois down
 	- docker compose -f docker-compose.yml -f docker-compose.local.yml --profile pois down
+
+# Kill whatever is bound to $(PORT) on the host. Useful when an orphaned
+# `./gradlew run` (e.g. Tilt was killed mid-restart) holds 8765 and the next
+# backend boot dies with `Address already in use`.
+kill:
+	@pid=$$(lsof -nP -iTCP:$(PORT) -sTCP:LISTEN -t 2>/dev/null); \
+	 if [ -z "$$pid" ]; then echo "nothing listening on $(PORT)"; else echo "killing pid $$pid on :$(PORT)"; kill $$pid; sleep 1; kill -9 $$pid 2>/dev/null || true; fi
 
 # Build the offline-refresh image (curl-impersonate baked in). Needed before
 # refresh-superchargers / rebuild-superchargers. Idempotent — if the image
