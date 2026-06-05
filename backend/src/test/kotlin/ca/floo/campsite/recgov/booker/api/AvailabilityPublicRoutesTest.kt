@@ -243,16 +243,16 @@ class AvailabilityPublicRoutesTest {
         }
 
     @Test
-    fun `per-IP rate limit returns 503 ip_throttled after 10 requests in a minute`() =
+    fun `per-IP rate limit returns 503 ip_throttled after 30 requests in a minute`() =
         testApplication {
             val cache = cacheReturning(mapOf("100" to campsiteWith(mapOf(futureKey(0) to "Available"))))
             application { routing { availabilityPublicRoutes(cache) } }
-            // Burn 10 buckets — all should pass.
-            repeat(10) {
+            // Burn 30 buckets — all should pass.
+            repeat(30) {
                 val r = client.get("/api/campsite/availability/232447?days=1")
                 assertEquals(HttpStatusCode.OK, r.status, "request ${it + 1} should pass")
             }
-            // 11th should throttle.
+            // 31st should throttle.
             val throttled = client.get("/api/campsite/availability/232447?days=1")
             assertEquals(HttpStatusCode.ServiceUnavailable, throttled.status)
             assertTrue(throttled.bodyAsText().contains("ip_throttled"))

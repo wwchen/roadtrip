@@ -42,7 +42,7 @@ private const val MAX_DAYS = 60
  *   - Path param validated as `^[0-9]{1,10}$` — never interpolate raw input
  *     into the outbound rec.gov URL.
  *   - `days` clamped to 1..60 (default 30) — prevent fan-out abuse.
- *   - Per-IP token bucket (10 req/min) — single-user side project but the
+ *   - Per-IP token bucket (30 req/min) — single-user side project but the
  *     URL is public; this stops a botnet from turning the backend into a
  *     rec.gov scraping proxy.
  *   - Month-boundary spanning: a 30-day window starting day 25 of June
@@ -54,7 +54,7 @@ fun Route.availabilityPublicRoutes(
     cache: CachedAvailability,
     knownIds: () -> Set<String> = { emptySet() }, // optional 404 gate when known
 ) {
-    val rateLimit = IpRateLimiter(perMinute = 10)
+    val rateLimit = IpRateLimiter(perMinute = 30)
 
     get("/api/campsite/availability/{recgov_id}") {
         val recgovId = call.parameters["recgov_id"].orEmpty()
