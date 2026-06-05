@@ -31,10 +31,15 @@ host Node process so Playwright can drive a real Chromium. Tilt UI is at
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`): `refresh-superchargers` / `rebuild-superchargers`
-for Tesla pricing, `refresh-cookies-local` for Tesla cookies, `pois-import` /
-`pois-import-all` for the Kotlin POI importer, and `refresh-image` (one-shot
-prereq for the supercharger refreshers). Click the row, watch logs in the
-right pane.
+for Tesla pricing, `refresh-tesla-cookies` to mint fresh `_abck` cookies for
+the Tesla scraper into `.env`, `pois-import` / `pois-import-all` for the
+Kotlin POI importer, and `refresh-image` (one-shot prereq for the supercharger
+refreshers). Click the row, watch logs in the right pane.
+
+> Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
+> backend-owned via `TokenManager` (RFC 0001 / PR #22) — paste a fresh cURL
+> in the campsite Settings UI and the backend handles refresh on its own
+> cadence. Two unrelated systems that both happen to use the word "cookies."
 
 First time only:
 
