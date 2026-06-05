@@ -111,6 +111,29 @@ export async function injectStoredCookies (context, rawInput = null) {
   return cookies.length
 }
 
+// rec.gov pins the JWT's `fingerprint` claim against the `r1s-fingerprint`
+// cookie — sending Bearer with no cookie returns 401 {"error":"bad fingerprint"}
+// from /api/cart/* and /api/camps/reservations/*. Inject it whenever we have
+// a fingerprint claim in the active token.
+export async function injectFingerprintCookie (context, token) {
+  if (!token) return false
+  let fingerprint
+  try {
+    const payload = JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString())
+    fingerprint = payload.fingerprint
+  } catch { return false }
+  if (!fingerprint) return false
+  await context.addCookies([{
+    name: 'r1s-fingerprint',
+    value: fingerprint,
+    domain: '.recreation.gov',
+    path: '/',
+    secure: true,
+    sameSite: 'Lax',
+  }])
+  return true
+}
+
 export async function injectBearerRoute (page, token = null) {
   const t = token || getSetting('recgov_token') || ''
   if (!t) return false
