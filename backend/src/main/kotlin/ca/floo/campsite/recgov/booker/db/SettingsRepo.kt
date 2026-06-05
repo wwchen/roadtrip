@@ -3,10 +3,13 @@ package ca.floo.campsite.recgov.booker.db
 import ca.floo.roadtrip.db.generated.tables.references.SETTINGS
 import org.jooq.DSLContext
 
-class SettingsRepo(
+// Open so tests can extend with an in-memory fake without spinning up Postgres.
+// SettingsRoutes / TokenManager / SlackNotifier all only touch get / all / set /
+// setMany; nothing here is performance-critical, so the virtual dispatch is fine.
+open class SettingsRepo(
     private val ctx: DSLContext,
 ) {
-    fun get(key: String): String? =
+    open fun get(key: String): String? =
         ctx
             .select(SETTINGS.VALUE)
             .from(SETTINGS)
@@ -14,7 +17,7 @@ class SettingsRepo(
             .fetchOne()
             ?.value1()
 
-    fun all(): Map<String, String> =
+    open fun all(): Map<String, String> =
         ctx
             .selectFrom(SETTINGS)
             .fetchMap(SETTINGS.KEY, SETTINGS.VALUE)
@@ -22,7 +25,7 @@ class SettingsRepo(
             .mapKeys { it.key!! }
             .mapValues { it.value ?: "" }
 
-    fun set(
+    open fun set(
         key: String,
         value: String,
     ) {
@@ -35,7 +38,7 @@ class SettingsRepo(
             .execute()
     }
 
-    fun setMany(updates: Map<String, String>) {
+    open fun setMany(updates: Map<String, String>) {
         ctx.transaction { trx ->
             val tx = trx.dsl()
             for ((k, v) in updates) {
