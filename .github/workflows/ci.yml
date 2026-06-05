@@ -42,9 +42,25 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
-      - name: Run backend tests
-        run: ./gradlew test
+      - name: Run backend tests + coverage
+        run: ./gradlew test koverXmlReport
         working-directory: backend
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          files: backend/build/reports/kover/report.xml
+          flags: backend
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: kover-report
+          path: backend/build/reports/kover/
+          retention-days: 7
 
   smoke:
     # End-to-end: importer hydrates Postgres from data/, backend serves
