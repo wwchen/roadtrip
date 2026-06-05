@@ -1,0 +1,16 @@
+name: Self-approve
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+
+jobs:
+  self-approve:
+    runs-on: ubuntu-latest
+    if: github.actor == 'wwchen' && github.event.pull_request.draft == false
+    steps:
+      - uses: nicklegan/github-repo-self-approve-action@v1.0.1
+        with:
+          appid: ${{ secrets.SELF_APPROVE_APPID }}
+          privatekey: ${{ secrets.SELF_APPROVE_PRIVATEKEY }}
+          installationid: ${{ secrets.SELF_APPROVE_INSTALLATIONID }}
