@@ -121,6 +121,27 @@ fun Route.matchRoutes(
                 companionId = updated.claimedBy ?: "",
             ),
         )
+
+        // ATC orchestration: per-alert, one match at a time. On success, mark
+        // the alert done if stop_after_match (the user got their site, no more
+        // ATC needed). On failure, find the next unattempted match for this
+        // alert and re-publish it so the companion can try again.
+        val alert = alerts.get(updated.alertId)
+        if (cartAdded) {
+            if (alert?.stopAfterMatch == true && alert.status == "active") {
+                alerts.patch(alert.id, mapOf("status" to "done"))
+                matchRoutesLog.info("Alert {} marked done after successful ATC of match {}", alert.id, id)
+            }
+        } else if (alert?.autoCart == true && alert.status == "active") {
+            val next = matches.nextUnattemptedForAlert(updated.alertId)
+            if (next != null) {
+                matchRoutesLog.info("Match {} ATC failed; falling through to next match {} for alert {}", id, next.id, alert.id)
+                bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(next)))
+            } else {
+                matchRoutesLog.info("Match {} ATC failed; no more candidates for alert {}", id, alert.id)
+            }
+        }
+
         call.respondText("""{"ok":true}""")
     }
 
@@ -215,6 +236,7 @@ fun Route.matchRoutes(
         // Re-emit the match envelope so any companion currently subscribed to /events
         // will pick it up and run its ATC flow. Companion will claim, do its work,
         // then POST /matches/{id}/result; the UI re-renders from the SSE stream.
+        matchRoutesLog.info("Match {} (alert {}) re-queued for ATC by user", id, refreshed.alertId)
         bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(refreshed)))
         call.respondText("""{"ok":true,"queued":true,"cart_added":false}""")
     }

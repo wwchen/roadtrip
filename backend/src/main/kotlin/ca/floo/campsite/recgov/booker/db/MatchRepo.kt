@@ -139,6 +139,26 @@ class MatchRepo(
         return if (updated > 0) get(id) else null
     }
 
+    /**
+     * Find the oldest unattempted match for this alert: no result yet, not
+     * currently claimed, not dismissed. Used by the result handler to fall
+     * through to the next candidate when ATC fails on the current one.
+     */
+    fun nextUnattemptedForAlert(alertId: Long): Match? =
+        ctx
+            .select()
+            .from(MATCHES)
+            .leftJoin(ALERTS)
+            .on(MATCHES.ALERT_ID.eq(ALERTS.ID))
+            .where(MATCHES.ALERT_ID.eq(alertId))
+            .and(MATCHES.DISMISSED_AT.isNull)
+            .and(MATCHES.RESULT_AT.isNull)
+            .and(MATCHES.CLAIMED_BY.isNull)
+            .orderBy(MATCHES.FOUND_AT.asc())
+            .limit(1)
+            .fetchOne()
+            ?.let { it.toDomain() }
+
     /** Clears claim + result so a match can be re-attempted by ATC. */
     fun clearClaim(id: Long) {
         ctx

@@ -89,15 +89,16 @@ class Poller(
                     val newMatches = checkAlert(alert)
                     if (newMatches.isNotEmpty()) {
                         log.info("MATCH: Alert {} \"{}\" — {} site(s)", alert.id, alert.campgroundName, newMatches.size)
-                        for (m in newMatches) {
-                            bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(m)))
-                        }
+                        // ATC orchestration: only publish the FIRST match for ATC.
+                        // The result handler in MatchRoutes falls through to the
+                        // next unattempted match if ATC fails on this one. The
+                        // user wants one slot grabbed, not all of them.
+                        bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(newMatches.first())))
                         slack?.notifyBatch(alert, newMatches)
                         newMatches.forEach { matches.markNotified(it.id) }
-                        if (alert.stopAfterMatch) {
-                            alerts.patch(alert.id, mapOf("status" to "done"))
-                            log.info("Alert {} marked done", alert.id)
-                        }
+                        // stop_after_match has moved to the result handler — we
+                        // only mark the alert done after a successful ATC, not
+                        // just on finding a candidate.
                         alerts.markLastMatch(alert.id)
                     }
                 } catch (e: Exception) {

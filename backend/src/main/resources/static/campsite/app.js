@@ -359,6 +359,10 @@ el('alert-form').addEventListener('submit', async e => {
     el('stop-after-match').checked = true;
     clearCampground();
     loadAlerts();
+    // Backend triggers an immediate poll on create, so matches can land within
+    // a couple seconds. Schedule a delayed match-list refresh so the user sees
+    // results without waiting for the 30s auto-refresh tick.
+    setTimeout(() => loadMatches({ checkAvail: false }), 4000);
   } catch (err) {
     showToast(`Error: ${err.message}`, 'error');
   }

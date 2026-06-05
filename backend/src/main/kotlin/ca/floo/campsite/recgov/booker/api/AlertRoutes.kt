@@ -19,6 +19,9 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.slf4j.LoggerFactory
+
+private val alertRoutesLog = LoggerFactory.getLogger("AlertRoutes")
 
 fun Route.alertRoutes(
     alerts: AlertRepo,
@@ -64,6 +67,7 @@ fun Route.alertRoutes(
                 ),
             )
         scheduler?.upsertAlert(id)
+        alertRoutesLog.info("Alert {} created (\"{}\") — triggering immediate poll", id, campgroundName)
         if (eventDriven && bus != null) {
             bus.publish(CampsiteEvent.UserPolledNow(alertId = id))
         } else {
