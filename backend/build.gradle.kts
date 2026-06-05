@@ -276,11 +276,11 @@ kover {
     }
 }
 
-// Run koverVerify automatically after `gradle test` in CI so coverage
-// regressions fail the build instead of silently lowering the bar.
-tasks.named("test") {
-    finalizedBy("koverVerify")
-}
+// koverVerify is invoked explicitly by the backend-tests CI step
+// (`./gradlew test koverXmlReport koverVerify`). It is NOT a finalizer of
+// `test` because the smoke CI job runs only Playwright suites with no
+// instrumented coverage, which would (correctly) report 0% and fail the
+// floor — but that's a meaningless signal there.
 
 tasks.test {
     useJUnitPlatform()
