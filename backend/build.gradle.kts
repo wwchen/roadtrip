@@ -131,6 +131,9 @@ dependencies {
     testImplementation(kotlin("test"))
     testImplementation("io.ktor:ktor-server-test-host:$ktorVersion")
     testImplementation("io.ktor:ktor-client-cio:$ktorVersion")
+    // MockEngine lets SlackNotifier / AvailabilityClient tests assert request
+    // shape without hitting the network.
+    testImplementation("io.ktor:ktor-client-mock:$ktorVersion")
     testImplementation("org.testcontainers:postgresql:$testcontainersVersion")
     testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
     testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")

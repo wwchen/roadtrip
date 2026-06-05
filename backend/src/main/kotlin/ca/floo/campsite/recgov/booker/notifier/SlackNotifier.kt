@@ -17,9 +17,14 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 
 class SlackNotifier(
-    private val settings: SettingsRepo,
+    private val getSetting: (String) -> String?,
     private val client: HttpClient = HttpClient(CIO) { engine { requestTimeout = 8_000 } },
 ) {
+    constructor(
+        settings: SettingsRepo,
+        client: HttpClient = HttpClient(CIO) { engine { requestTimeout = 8_000 } },
+    ) : this(settings::get, client)
+
     private val log = LoggerFactory.getLogger(SlackNotifier::class.java)
 
     /** Sends one Slack message with all matches for an alert batch. Returns true on success. */
@@ -28,8 +33,8 @@ class SlackNotifier(
         matches: List<Match>,
     ): Boolean {
         if (!alert.notifySlack) return false
-        val token = settings.get("slack_token").orEmpty()
-        val channel = settings.get("slack_channel").orEmpty()
+        val token = getSetting("slack_token").orEmpty()
+        val channel = getSetting("slack_channel").orEmpty()
         if (token.isEmpty() || channel.isEmpty()) {
             log.warn("Slack not configured — skipping notification")
             return false
@@ -68,8 +73,8 @@ class SlackNotifier(
     }
 
     suspend fun sendTest() {
-        val token = settings.get("slack_token").orEmpty()
-        val channel = settings.get("slack_channel").orEmpty()
+        val token = getSetting("slack_token").orEmpty()
+        val channel = getSetting("slack_channel").orEmpty()
         if (token.isEmpty()) throw IllegalStateException("slack_token not configured")
         if (channel.isEmpty()) throw IllegalStateException("slack_channel not configured")
         postSlack(token, channel, null, "✅ Campsite Alert test — Slack notifications are working!")
