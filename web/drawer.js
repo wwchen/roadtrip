@@ -38,34 +38,48 @@ let openController = null;   // AbortController for inflight fetch on the open c
 let activeFeature = null;    // currently displayed feature
 
 /**
- * Public entry point. The popups.js fork calls this for US federal pins
- * with recgov_id when ?drawer=1 is set.
+ * Generic drawer entry point. Caller provides ready-to-mount HTML; the
+ * drawer module owns shell, animation, dismissal, and pin-reselect plumbing.
+ * Optional onMounted is invoked after the content is in the DOM (use it for
+ * fetches that fill in placeholders — e.g. supercharger pricing).
  */
-export function openCampgroundDrawer(f) {
+export function openDrawer(contentHtml, onMounted) {
   ensureDrawerDOM();
   const root = document.getElementById(DRAWER_ROOT_ID);
   const backdrop = document.getElementById(BACKDROP_ID);
 
-  // Pin reselect path: replace content with a fade, cancel previous fetch.
+  if (openController) openController.abort();
+  openController = new AbortController();
+  activeFeature = null;
+
+  const content = document.querySelector(`#${DRAWER_ROOT_ID} .cg-drawer-content`);
+  content.innerHTML = contentHtml;
+  show();
+  if (typeof onMounted === 'function') onMounted(openController.signal);
+
+  root.querySelector('.cg-drawer-close')?.addEventListener('click', close);
+  attachDragHandlers(root);
+}
+
+/**
+ * Campground-specific drawer. Renders availability for recgov pins and
+ * skips it for everything else.
+ */
+export function openCampgroundDrawer(f) {
+  ensureDrawerDOM();
+  const root = document.getElementById(DRAWER_ROOT_ID);
+
   if (openController) openController.abort();
   openController = new AbortController();
   activeFeature = f;
 
   renderShell(f);
   show();
-  // Only US federal pins with a recgov_id have availability data; everything
-  // else (BC/AB provincial, US state, local) skips the fetch and shows the
-  // metadata-only shell with its existing reserve button.
   if (f.properties?.recgov_id) {
     fetchAvailability(f, openController.signal);
   }
 
-  // Wire up close + drag once.
   root.querySelector('.cg-drawer-close')?.addEventListener('click', close);
-  backdrop?.addEventListener('click', () => {
-    // Backdrop is pointer-events:none for map gestures; keep the click handler
-    // for keyboard/screen-reader users in case CSS is overridden in dev.
-  });
   attachDragHandlers(root);
 }
 
@@ -114,7 +128,7 @@ function ensureDrawerDOM() {
   root.id = DRAWER_ROOT_ID;
   root.className = 'cg-drawer';
   root.setAttribute('role', 'dialog');
-  root.setAttribute('aria-label', 'Campground details');
+  root.setAttribute('aria-label', 'Pin details');
   root.innerHTML = `
     <div class="cg-drawer-handle" aria-hidden="true"></div>
     <button class="cg-drawer-close" aria-label="Close">&times;</button>

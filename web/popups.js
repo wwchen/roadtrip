@@ -1,11 +1,11 @@
-import { state, openPopup, distanceKm, formatDistance, escapeHtml } from './core.js';
-import { openCampgroundDrawer } from './drawer.js';
+import { state, distanceKm, formatDistance, escapeHtml } from './core.js';
+import { openCampgroundDrawer, openDrawer } from './drawer.js';
 
-async function loadPricing(slug, elId) {
+async function loadPricing(slug, elId, signal) {
   const el = document.getElementById(elId);
   if (!el) return;
   try {
-    const r = await fetch('/api/pricing/' + encodeURIComponent(slug));
+    const r = await fetch('/api/pricing/' + encodeURIComponent(slug), { signal });
     const j = await r.json();
     if (!r.ok) {
       // 404 means the refresh worker hasn't crawled this site yet. Pricing
@@ -18,8 +18,31 @@ async function loadPricing(slug, elId) {
     }
     el.innerHTML = renderPricing(j);
   } catch (err) {
+    if (err.name === 'AbortError') return;
     el.innerHTML = `<div class="meta">Pricing fetch failed: ${err.message}</div>`;
   }
+}
+
+/** Compose subline from arbitrary parts: "Loop · State · 2.4 km away". */
+function buildSubline(parts) {
+  return parts.filter(Boolean).join(' · ');
+}
+
+/** Distance string from user to lng/lat, or '' when location is off. */
+function distanceTo(lng, lat) {
+  return state.userLocation
+    ? formatDistance(distanceKm(state.userLocation.lat, state.userLocation.lng, lat, lng))
+    : '';
+}
+
+/** Drawer header: name + subline + optional verdict. cg-* classes match drawer.js. */
+function drawerHeader(name, sub, verdictHtml = '') {
+  return `
+    <header class="cg-drawer-head">
+      <h2>${escapeHtml(name)}</h2>
+      ${sub ? `<div class="cg-sub">${escapeHtml(sub)}</div>` : ''}
+      ${verdictHtml ? `<div class="cg-verdict-row">${verdictHtml}</div>` : ''}
+    </header>`;
 }
 
 function renderPricing(resp) {
@@ -101,26 +124,23 @@ export function openParkPopup(kind, feature, lngLat) {
   const acres = p.GIS_Acres ? Number(p.GIS_Acres).toLocaleString() + ' acres' : '';
   const mgr = p.Mang_Name || '';
   const [url, label] = externalParkLink(kind, name, stateName);
-  const distLine = state.userLocation
-    ? formatDistance(distanceKm(state.userLocation.lat, state.userLocation.lng, lngLat.lat, lngLat.lng))
-    : '';
-  const subBits = [kind === 'np' ? 'National Park' : 'State Park', stateName, distLine].filter(Boolean);
-  const sub = subBits.join(' · ');
+  const sub = buildSubline([
+    kind === 'np' ? 'National Park' : 'State Park',
+    stateName,
+    distanceTo(lngLat.lng, lngLat.lat),
+  ]);
   const pills = [
     mgr && mgr !== 'National Park Service' ? `<span class="pill">${escapeHtml(mgr)}</span>` : '',
     acres ? `<span class="pill">${escapeHtml(acres)}</span>` : '',
   ].filter(Boolean).join('');
   const primaryBtn = url
-    ? `<a class="btn btn-primary" href="${url}" target="_blank" rel="noreferrer">${escapeHtml(label === 'nps.gov' ? 'Open on nps.gov' : 'Search ' + label)}</a>`
+    ? `<a class="cg-btn cg-btn-primary" href="${url}" target="_blank" rel="noreferrer">${escapeHtml(label === 'nps.gov' ? 'Open on nps.gov' : 'Search ' + label)}</a>`
     : '';
-  const html = `
-    <div class="popup">
-      <h3>${escapeHtml(name)}</h3>
-      ${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}
-      ${primaryBtn ? `<div class="actions">${primaryBtn}</div>` : ''}
-      ${pills ? `<div class="pills">${pills}</div>` : ''}
-    </div>`;
-  openPopup({ lngLat, html });
+  openDrawer(`
+    ${drawerHeader(name, sub)}
+    ${primaryBtn ? `<div class="cg-actions">${primaryBtn}</div>` : ''}
+    ${pills ? `<div class="pills">${pills}</div>` : ''}
+  `);
 }
 
 export function openPlanetFitnessPopup(f) {
@@ -128,37 +148,28 @@ export function openPlanetFitnessPopup(f) {
   const [lng, lat] = f.geometry.coordinates;
   const addr = [p.street, p.city, p.state, p.postcode].filter(Boolean).join(', ');
   const website = p.website || 'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '));
-  const distLine = state.userLocation
-    ? formatDistance(distanceKm(state.userLocation.lat, state.userLocation.lng, lat, lng))
-    : '';
-  const sub = [addr, distLine].filter(Boolean).join(' · ');
+  const sub = buildSubline([addr, distanceTo(lng, lat)]);
   const callBtn = p.phone
-    ? `<a class="btn btn-secondary" href="tel:${p.phone}">Call ${escapeHtml(p.phone)}</a>`
+    ? `<a class="cg-btn cg-btn-secondary" href="tel:${p.phone}">Call ${escapeHtml(p.phone)}</a>`
     : '';
   const hours = p.opening_hours
     ? `<div class="pills"><span class="pill">${escapeHtml(p.opening_hours)}</span></div>`
     : '';
-  const html = `
-    <div class="popup">
-      <h3>${escapeHtml(p.name || 'Planet Fitness')}</h3>
-      ${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}
-      <div class="actions">
-        <a class="btn btn-primary" href="${website}" target="_blank" rel="noreferrer">Open in Planet Fitness</a>
-        ${callBtn}
-      </div>
-      ${hours}
-    </div>`;
-  openPopup({ lngLat: [lng, lat], html });
+  openDrawer(`
+    ${drawerHeader(p.name || 'Planet Fitness', sub)}
+    <div class="cg-actions">
+      <a class="cg-btn cg-btn-primary" href="${website}" target="_blank" rel="noreferrer">Open in Planet Fitness</a>
+      ${callBtn}
+    </div>
+    ${hours}
+  `);
 }
 
 export function openSuperchargerPopup(f) {
   const p = f.properties;
   const [lng, lat] = f.geometry.coordinates;
   const addr = [p.street, p.city, p.state].filter(Boolean).join(', ');
-  const distLine = state.userLocation
-    ? formatDistance(distanceKm(state.userLocation.lat, state.userLocation.lng, lat, lng))
-    : '';
-  const sub = [addr, distLine].filter(Boolean).join(' · ');
+  const sub = buildSubline([addr, distanceTo(lng, lat)]);
   const stalls = [p.v2 && `V2×${p.v2}`, p.v3 && `V3×${p.v3}`, p.v4 && `V4×${p.v4}`].filter(Boolean).join(' · ');
   const plugs = [p.nacs && `NACS×${p.nacs}`, p.tpc && `TPC×${p.tpc}`].filter(Boolean).join(' · ');
   const priceId = 'price-' + p.id;
@@ -175,21 +186,18 @@ export function openSuperchargerPopup(f) {
     ? `https://www.tesla.com/findus?bounds=${encodeURIComponent(teslaBounds)}&location=${encodeURIComponent(p.locationId)}&functionType=supercharger`
     : '';
   const primaryBtn = teslaUrl
-    ? `<a class="btn btn-primary" href="${teslaUrl}" target="_blank" rel="noopener">Open in Tesla</a>`
-    : `<span class="btn btn-disabled">No Tesla link available</span>`;
+    ? `<a class="cg-btn cg-btn-primary" href="${teslaUrl}" target="_blank" rel="noopener">Open in Tesla</a>`
+    : `<span class="cg-btn cg-btn-disabled">No Tesla link available</span>`;
   const tags = [
     `<span class="tag" style="background:${p.color};color:#fff">${escapeHtml(p.status || '')}</span>`,
     p.stallCount ? `<span class="tag">${p.stallCount} stalls</span>` : '',
     p.powerKilowatt ? `<span class="tag">${p.powerKilowatt} kW</span>` : '',
   ].filter(Boolean).join(' ');
-  const html = `
-    <div class="popup">
-      <h3>${escapeHtml(p.name || '')}</h3>
-      ${sub ? `<div class="sub">${escapeHtml(sub)}</div>` : ''}
-      ${p.facility ? `<div class="sub">at ${escapeHtml(p.facility)}</div>` : ''}
-      <div class="actions">
-        ${primaryBtn}
-      </div>
+  openDrawer(
+    `
+      ${drawerHeader(p.name || '', sub)}
+      ${p.facility ? `<div class="cg-sub">at ${escapeHtml(p.facility)}</div>` : ''}
+      <div class="cg-actions">${primaryBtn}</div>
       <div style="margin-top:6px">${tags}</div>
       ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
       ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}
@@ -197,7 +205,7 @@ export function openSuperchargerPopup(f) {
       <div id="${priceId}" class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
         ${p.locationId ? '<span class="meta">Loading pricing…</span>' : '<span class="meta">No pricing available</span>'}
       </div>
-    </div>`;
-  openPopup({ lngLat: [lng, lat], html });
-  if (p.locationId) loadPricing(p.locationId, priceId);
+    `,
+    p.locationId ? (signal) => loadPricing(p.locationId, priceId, signal) : undefined,
+  );
 }
