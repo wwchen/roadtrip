@@ -159,6 +159,154 @@ class MatchRepoIT {
         assertTrue(released.isEmpty())
     }
 
+    // ----- nextWorkItem (the planner SQL behind /api/campsite/work/next) -----
+
+    private fun seedAlert(
+        autoCart: Boolean = true,
+        status: String = "active",
+    ): Long {
+        val id =
+            alerts.create(
+                AlertRepo.CreateInput(
+                    campgroundId = "232447",
+                    campgroundName = "Upper Pines",
+                    parentName = null,
+                    parentId = null,
+                    startDate = "2026-07-01",
+                    endDate = "2026-07-05",
+                    minNights = 1,
+                    campsiteTypes = emptyList(),
+                    equipmentTypes = emptyList(),
+                    maxPeople = null,
+                    specificSites = emptyList(),
+                    notifySlack = false,
+                    autoCart = autoCart,
+                    stopAfterMatch = false,
+                    notes = null,
+                ),
+            )
+        if (status != "active") alerts.patch(id, mapOf("status" to status))
+        return id
+    }
+
+    private fun seedMatch(
+        alertId: Long,
+        campsiteId: String = "12345",
+        firstDate: String = "2026-07-01",
+    ): Long =
+        matches.create(
+            MatchRepo.CreateInput(
+                alertId = alertId,
+                campgroundId = "232447",
+                campsiteId = campsiteId,
+                site = "site-$campsiteId",
+                loop = "Loop A",
+                campsiteType = "STANDARD",
+                availableDates = listOf(firstDate),
+                firstDate = firstDate,
+                nights = 1,
+            ),
+        )!!
+
+    @Test
+    fun `nextWorkItem returns oldest pickable match for an active auto_cart alert`() {
+        val alertId = seedAlert(autoCart = true)
+        val first = seedMatch(alertId, campsiteId = "100")
+        val second = seedMatch(alertId, campsiteId = "200")
+        // Both pickable; planner returns the older one (smaller id == earlier found_at).
+        val pick = matches.nextWorkItem()
+        assertNotNull(pick)
+        assertEquals(first, pick.id)
+        // Sanity: not the second.
+        assertEquals(true, pick.id < second)
+    }
+
+    @Test
+    fun `nextWorkItem returns null when alert has an in-flight claim`() {
+        val alertId = seedAlert(autoCart = true)
+        val a = seedMatch(alertId, campsiteId = "100")
+        seedMatch(alertId, campsiteId = "200")
+        // Claim the first; planner must NOT hand out the second while the
+        // alert has an in-flight ATC.
+        matches.claim(a, "companion-A", Duration.ofMinutes(5))
+        assertNull(matches.nextWorkItem())
+    }
+
+    @Test
+    fun `nextWorkItem returns next match for the same alert after a result`() {
+        val alertId = seedAlert(autoCart = true)
+        val a = seedMatch(alertId, campsiteId = "100")
+        val b = seedMatch(alertId, campsiteId = "200")
+        matches.claim(a, "companion-A", Duration.ofMinutes(5))
+        matches.result(a, cartAdded = false)
+        // First is resulted → no longer in-flight; planner falls through to b.
+        val pick = matches.nextWorkItem()
+        assertNotNull(pick)
+        assertEquals(b, pick.id)
+    }
+
+    @Test
+    fun `nextWorkItem skips dismissed matches`() {
+        val alertId = seedAlert(autoCart = true)
+        val a = seedMatch(alertId, campsiteId = "100")
+        val b = seedMatch(alertId, campsiteId = "200")
+        matches.softDelete(a)
+        val pick = matches.nextWorkItem()
+        assertNotNull(pick)
+        assertEquals(b, pick.id)
+    }
+
+    @Test
+    fun `nextWorkItem skips paused alerts`() {
+        val alertId = seedAlert(autoCart = true, status = "paused")
+        seedMatch(alertId)
+        assertNull(matches.nextWorkItem())
+    }
+
+    @Test
+    fun `nextWorkItem skips done alerts`() {
+        val alertId = seedAlert(autoCart = true, status = "done")
+        seedMatch(alertId)
+        assertNull(matches.nextWorkItem())
+    }
+
+    @Test
+    fun `nextWorkItem skips alerts with auto_cart=false`() {
+        val alertId = seedAlert(autoCart = false)
+        seedMatch(alertId)
+        assertNull(matches.nextWorkItem())
+    }
+
+    @Test
+    fun `nextWorkItem returns match for second alert when first is in-flight`() {
+        val a1 = seedAlert(autoCart = true)
+        val a2 = seedAlert(autoCart = true)
+        val m1 = seedMatch(a1, campsiteId = "100")
+        val m2 = seedMatch(a2, campsiteId = "200")
+        matches.claim(m1, "companion-A", Duration.ofMinutes(5))
+        // a1 is in-flight, but a2 is independent → planner returns m2.
+        val pick = matches.nextWorkItem()
+        assertNotNull(pick)
+        assertEquals(m2, pick.id)
+    }
+
+    @Test
+    fun `nextWorkItem treats expired lease as not-in-flight`() {
+        val alertId = seedAlert(autoCart = true)
+        val a = seedMatch(alertId, campsiteId = "100")
+        val b = seedMatch(alertId, campsiteId = "200")
+        // Claim with negative lease so the alert's "in-flight" subquery sees
+        // an expired lease — planner should NOT consider this in-flight.
+        matches.claim(a, "companion-A", Duration.ofSeconds(-1))
+        // a itself is still claimed_by NOT NULL so it isn't pickable; but b
+        // should be.
+        val pick = matches.nextWorkItem()
+        assertNotNull(pick)
+        assertEquals(b, pick.id)
+    }
+
+    // ---------------------------------------------------------------------
+
     @Test
     fun `create dedups duplicate matches within an hour`() {
         val matchId = seedAlertAndMatch()

@@ -52,6 +52,19 @@ sealed interface CampsiteEvent {
 
     data object UserRefreshToken : CampsiteEvent
 
+    /**
+     * Internal-only signal: "the set of pickable matches for this alert may
+     * have changed; companion should re-check via /api/campsite/work/next."
+     * No SSE projection — this is a backend → companion hint that piggybacks
+     * on the existing match/result/lease_expired wire events for wakeup.
+     *
+     * Published when the set of in-flight ATCs changes (a result comes in,
+     * a lease sweep releases a stuck claim).
+     */
+    data class WorkMaybeAvailable(
+        val alertId: Long,
+    ) : CampsiteEvent
+
     // ----- Outcomes (most go on the wire for the frontend / companion) -----
     data class MatchFound(
         val matchJson: String,

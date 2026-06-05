@@ -51,4 +51,12 @@ export async function fetchFreshRecaccount () {
   } catch { return null }
 }
 
+// Backend's planner endpoint. Returns {match: {...}} or {match: null}.
+// Companion calls this on every wakeup signal (match/result/lease_expired
+// SSE event, plus a 30s safety-net interval). The DB is the source of truth
+// for ATC orchestration; this endpoint just reads it.
+export async function getNextWork () {
+  return getJson('/api/campsite/work/next')
+}
+
 export function backendBase () { return BASE }

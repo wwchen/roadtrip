@@ -89,16 +89,20 @@ class Poller(
                     val newMatches = checkAlert(alert)
                     if (newMatches.isNotEmpty()) {
                         log.info("MATCH: Alert {} \"{}\" — {} site(s)", alert.id, alert.campgroundName, newMatches.size)
+                        // Publish per-match for the frontend toast UX. Companion
+                        // ignores the payload and re-queries /api/campsite/work/next
+                        // — the DB is the source of truth for what to ATC.
                         for (m in newMatches) {
                             bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(m)))
                         }
                         slack?.notifyBatch(alert, newMatches)
                         newMatches.forEach { matches.markNotified(it.id) }
-                        if (alert.stopAfterMatch) {
-                            alerts.patch(alert.id, mapOf("status" to "done"))
-                            log.info("Alert {} marked done", alert.id)
-                        }
+                        // stop_after_match has moved to MatchRoutes /result —
+                        // we only mark the alert done after a successful ATC,
+                        // not just on finding a candidate.
                         alerts.markLastMatch(alert.id)
+                        // Wake the companion: new pickable matches in the DB.
+                        bus.publish(CampsiteEvent.WorkMaybeAvailable(alertId = alert.id))
                     }
                 } catch (e: Exception) {
                     log.error("Error checking alert {} \"{}\": {}", alert.id, alert.campgroundName, e.message)

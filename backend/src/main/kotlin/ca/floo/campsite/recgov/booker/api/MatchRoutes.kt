@@ -121,6 +121,22 @@ fun Route.matchRoutes(
                 companionId = updated.claimedBy ?: "",
             ),
         )
+
+        // ATC orchestration (DB is the SSOT — the planner query in
+        // MatchRepo.nextWorkItem decides what's pickable; we just nudge).
+        //
+        // - On success with stop_after_match: mark the alert done so the
+        //   planner stops handing out work for it.
+        // - Always: publish WorkMaybeAvailable so the companion re-queries
+        //   /work/next and either picks the next match for this alert (after
+        //   a failure) or sees null (after success on a done alert).
+        val alert = alerts.get(updated.alertId)
+        if (cartAdded && alert?.stopAfterMatch == true && alert.status == "active") {
+            alerts.patch(alert.id, mapOf("status" to "done"))
+            matchRoutesLog.info("Alert {} marked done after successful ATC of match {}", alert.id, id)
+        }
+        bus.publish(CampsiteEvent.WorkMaybeAvailable(alertId = updated.alertId))
+
         call.respondText("""{"ok":true}""")
     }
 
