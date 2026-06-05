@@ -23,13 +23,16 @@ SOURCES=(
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 
 select_with_fzf() {
-  printf '%s\n' "${SOURCES[@]}" \
+  # "all" is a special row at the top — picking it (with or without other
+  # rows) expands to every source. Saves the user from Tab-toggling six
+  # times when they want everything.
+  printf '%s\n' "all" "${SOURCES[@]}" \
     | fzf --multi \
           --height=40% \
           --reverse \
           --border \
           --prompt='POI sources to import > ' \
-          --header='Tab=toggle, Enter=confirm, Esc=cancel'
+          --header='Tab=toggle, Enter=confirm, Esc=cancel. "all" expands to every source.'
 }
 
 select_with_bash() {
@@ -59,8 +62,14 @@ if [[ -z "${picked:-}" ]]; then
   exit 1
 fi
 
-# Convert newline-separated to space-separated for gradle --args.
-sources_arg=$(echo "$picked" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+# "all" wins: if the user picked it (alone or with others), pass "all" to the
+# importer so it expands once on the backend side instead of us listing
+# every source. Otherwise pass the picked names verbatim.
+if echo "$picked" | grep -qx 'all'; then
+  sources_arg='all'
+else
+  sources_arg=$(echo "$picked" | tr '\n' ' ' | sed 's/[[:space:]]*$//')
+fi
 
 echo ">>> running importer with sources: $sources_arg" >&2
 cd "$ROOT/backend"
