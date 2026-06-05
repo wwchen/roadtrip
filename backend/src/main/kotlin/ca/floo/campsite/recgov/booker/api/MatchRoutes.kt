@@ -33,6 +33,7 @@ fun Route.matchRoutes(
     availability: AvailabilityClient,
     settings: SettingsRepo,
     leaseDuration: Duration,
+    tokenManager: ca.floo.campsite.recgov.booker.auth.TokenManager? = null,
 ) {
     /** Spike-only: create an alert + match in one shot so the protocol harness exercises the full DB path. */
     post("/api/campsite/spike/synth-match") {
@@ -224,7 +225,12 @@ fun Route.matchRoutes(
     // call. Companion does this on a 5-min interval after a successful ATC,
     // but the UI Extend Hold button calls this for manual extension.
     post("/api/campsite/cart/extend") {
-        val token = settings.get("recgov_token").orEmpty()
+        // Cart extend needs a token that's actually valid right now — use
+        // getFreshToken so a near-expiry token gets refreshed in-line. Falls
+        // back to settings-direct read when TokenManager isn't wired (tests).
+        val token =
+            tokenManager?.getFreshToken()
+                ?: settings.get("recgov_token").orEmpty()
         if (token.isEmpty()) {
             call.respond(HttpStatusCode.BadRequest, """{"error":"no recgov token saved"}""")
             return@post

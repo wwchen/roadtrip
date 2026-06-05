@@ -13,8 +13,10 @@ import io.ktor.http.isSuccess
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.util.Base64
@@ -131,7 +133,19 @@ object RecgovAuth {
         token: String,
         creds: RefreshCreds,
         client: HttpClient = sharedClient,
-    ): String? {
+    ): String? = refreshRecaccount(token, creds, client)?.get("access_token")?.jsonPrimitiveContent()
+
+    /**
+     * Variant of [refreshAccessToken] that returns the full recaccount-shaped
+     * response JSON (`{access_token, expiration, account: {...}, ...}`) instead
+     * of just the bearer string. Used by the companion-facing
+     * `/api/campsite/recgov/fresh-token` endpoint and TokenManager's cache.
+     */
+    suspend fun refreshRecaccount(
+        token: String,
+        creds: RefreshCreds,
+        client: HttpClient = sharedClient,
+    ): JsonObject? {
         val fingerprint = tokenInfo(token).fingerprint
         return runCatching {
             val resp =
@@ -145,9 +159,43 @@ object RecgovAuth {
                 log.info("RecgovAuth: refresh HTTP ${resp.status} — ${resp.bodyAsText().take(200)}")
                 return@runCatching null
             }
-            val body = Json.parseToJsonElement(resp.bodyAsText()) as? JsonObject
-            body?.get("access_token")?.jsonPrimitiveContent()
+            Json.parseToJsonElement(resp.bodyAsText()) as? JsonObject
         }.onFailure { log.info("RecgovAuth: refresh threw — ${it.message}") }.getOrNull()
+    }
+
+    /**
+     * Build a recaccount-shaped object directly from a JWT, when no refresh has
+     * happened yet (or refresh creds are missing). Mirrors
+     * companion/auth.js buildRecaccountFromToken — used as a fallback so the
+     * `/recgov/fresh-token` endpoint always returns a usable shape if there's
+     * any non-expired token at all.
+     */
+    fun buildRecaccountFromToken(token: String): JsonObject? {
+        val payload = decodeJwt(token) ?: return null
+        val expSec = (payload["exp"] as? JsonPrimitive)?.content?.toLongOrNull()
+        val expIso =
+            expSec
+                ?.let { Instant.ofEpochSecond(it).toString() }
+                ?: Instant.now().plusSeconds(30 * 60).toString()
+        val acct = payload["acct"] as? JsonObject
+        val accountId =
+            acct?.get("account_id")?.jsonPrimitiveContent()
+                ?: payload["sub"]?.jsonPrimitiveContent().orEmpty()
+        return buildJsonObject {
+            put("access_token", token)
+            put("expiration", expIso)
+            put(
+                "account",
+                buildJsonObject {
+                    put("account_id", accountId)
+                    put("email", acct?.get("email")?.jsonPrimitiveContent().orEmpty())
+                    put("first_name", acct?.get("first_name")?.jsonPrimitiveContent().orEmpty())
+                    put("last_name", acct?.get("last_name")?.jsonPrimitiveContent().orEmpty())
+                },
+            )
+            put("is_guest", false)
+            put("refresh_id", "")
+        }
     }
 
     private fun padBase64Url(s: String): String {

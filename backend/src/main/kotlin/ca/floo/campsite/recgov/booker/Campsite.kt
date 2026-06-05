@@ -7,8 +7,10 @@ import ca.floo.campsite.recgov.booker.api.eventsRoutes
 import ca.floo.campsite.recgov.booker.api.extendCartHold
 import ca.floo.campsite.recgov.booker.api.matchRoutes
 import ca.floo.campsite.recgov.booker.api.pollRoutes
+import ca.floo.campsite.recgov.booker.api.recgovTokenRoutes
 import ca.floo.campsite.recgov.booker.api.settingsRoutes
 import ca.floo.campsite.recgov.booker.api.statusRoutes
+import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.db.MatchRepo
 import ca.floo.campsite.recgov.booker.db.ScheduleRepo
@@ -48,6 +50,7 @@ class CampsiteServices(
     val poller: Poller,
     val scheduler: Scheduler,
     val availability: AvailabilityClient,
+    val tokenManager: TokenManager,
     val leaseDuration: Duration,
 )
 
@@ -75,11 +78,13 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     val scheduler = Scheduler(schedules::listEnabled, alerts::listActiveCadences, bus, scope)
+    val tokenManager = TokenManager(settings, bus, scope)
 
     install(SSE)
 
     poller.start()
     scheduler.start()
+    tokenManager.start()
 
     // Subscribe to scheduler-fired events. Each handler used to be a
     // dedicated `GlobalScope.launch` loop with its own delay() — now all
@@ -126,6 +131,7 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
         poller,
         scheduler,
         availability,
+        tokenManager,
         leaseDuration,
     )
 }
@@ -133,9 +139,10 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
 fun Route.campsiteRoutes(s: CampsiteServices) {
     eventsRoutes(s.bus)
     alertRoutes(s.alerts, s.poller, s.scheduler)
-    matchRoutes(s.alerts, s.matches, s.bus, s.availability, s.settings, s.leaseDuration)
-    settingsRoutes(s.settings, s.slack)
-    statusRoutes(s.settings)
+    matchRoutes(s.alerts, s.matches, s.bus, s.availability, s.settings, s.leaseDuration, s.tokenManager)
+    settingsRoutes(s.settings, s.slack, s.tokenManager)
+    statusRoutes(s.settings, s.tokenManager)
+    recgovTokenRoutes(s.tokenManager)
     campgroundSearchRoutes()
     pollRoutes(s.poller)
     companionRoutes(s.companions, s.bus, s.settings)
