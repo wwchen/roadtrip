@@ -87,3 +87,73 @@ local_resource(
     labels=['links'],
     links=['http://127.0.0.1:' + PORT, 'http://127.0.0.1:' + PORT + '/campsite'],
 )
+
+# --- background workers (manual-trigger) -------------------------------------
+# Data-refresh and import jobs. None of these run on `tilt up`; click the row
+# in the Tilt UI to fire one. Tilt shows last-run timestamp + status + log
+# tail per resource — much friendlier than remembering Make targets in a
+# separate shell.
+#
+# Notes:
+# - 'refresh-image' builds the Dockerized Python runtime that the supercharger
+#   refreshers use. It's a one-shot prereq; subsequent runs are a no-op until
+#   scripts/Dockerfile.refresh changes.
+# - 'refresh-cookies-local' mints Tesla cookies into THIS repo's .env. The
+#   prod equivalent ('make refresh-cookies', remote-host) intentionally is
+#   not surfaced here — it's a deploy-machine concern.
+# - 'pois-import' / 'pois-import-all' run the Kotlin importer against local
+#   Postgres. Upstream Python fetchers (scripts/fetch_*.py) generate the
+#   data/*.json the importer reads — those are still Make-only because they
+#   run rarely and require source-specific cookies/keys.
+
+local_resource(
+    'refresh-image',
+    cmd='make refresh-image',
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    labels=['data'],
+)
+
+local_resource(
+    'refresh-superchargers',
+    cmd='make refresh-superchargers',
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    resource_deps=['refresh-image'],
+    labels=['data'],
+)
+
+local_resource(
+    'rebuild-superchargers',
+    cmd='make rebuild-superchargers',
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    resource_deps=['refresh-image'],
+    labels=['data'],
+)
+
+local_resource(
+    'refresh-cookies-local',
+    cmd='make refresh-cookies-local',
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    labels=['data'],
+)
+
+local_resource(
+    'pois-import',
+    cmd='make pois-import',
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    resource_deps=['postgres'],
+    labels=['data'],
+)
+
+local_resource(
+    'pois-import-all',
+    cmd='make pois-import-all',
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    resource_deps=['postgres'],
+    labels=['data'],
+)
