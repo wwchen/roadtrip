@@ -9,6 +9,7 @@ import {
   IS_HEADLESS,
   getContext,
   injectStoredCookies,
+  injectFingerprintCookie,
   injectBearerRoute,
   injectRecaccount,
   isSpaLoggedIn,
@@ -218,6 +219,7 @@ export async function setupAuthPage () {
 
   if (recaccount) await injectRecaccount(page, recaccount)
   await injectBearerRoute(page, recaccount?.access_token)
+  await injectFingerprintCookie(context, recaccount?.access_token || getSetting('recgov_token'))
 
   return { context, page, recaccount }
 }
@@ -284,11 +286,21 @@ export async function addToCart (match) {
   const captured = []
   page.on('response', r => {
     if (/api.*(cart|reserv|booking|order)/i.test(r.url())) {
+      const path = r.url().replace('https://www.recreation.gov', '').slice(0, 80)
+      const entry = { status: r.status(), path, line: '' }
+      captured.push(entry)
       r.json()
-        .then(b => captured.push(`${r.status()} ${r.url().replace('https://www.recreation.gov', '').slice(0, 60)} → ${JSON.stringify(b).slice(0, 100)}`))
-        .catch(() => captured.push(`${r.status()} ${r.url().slice(0, 80)}`))
+        .then(b => { entry.line = `${entry.status} ${path} → ${JSON.stringify(b).slice(0, 100)}` })
+        .catch(() => { entry.line = `${entry.status} ${path}` })
     }
   })
+
+  // Returns true if any captured cart/reservation API call returned 2xx.
+  // Click-the-button succeeded does not mean the cart actually accepted —
+  // 401 'bad fingerprint' / 4xx still leaves the SPA in a "Reserved!"
+  // momentary state on some flows.
+  const cartAccepted = () => captured.some(e => e.status >= 200 && e.status < 300 &&
+    /\/api\/(cart|camps\/reservations)/.test(e.path))
 
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
@@ -308,9 +320,11 @@ export async function addToCart (match) {
 
     if (await clickReserveButton(page)) {
       await waitForCaptchaIfPresent(page)
-      await extendCartHold(page)
-      if (captured.length) console.log(`Cart: API responses:\n  ${captured.join('\n  ')}`)
-      return { ok: true, page }
+      await page.waitForTimeout(500)
+      const ok = cartAccepted()
+      if (ok) await extendCartHold(page)
+      if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
+      return { ok, page }
     }
 
     if (await page.locator(ENTER_DATES_SEL).first().isVisible().catch(() => false)) {
@@ -318,9 +332,11 @@ export async function addToCart (match) {
       await page.waitForSelector(RESERVE_COMBINED, { timeout: 12000 }).catch(() => {})
       if (await clickReserveButton(page)) {
         await waitForCaptchaIfPresent(page)
-        await extendCartHold(page)
-        if (captured.length) console.log(`Cart: API responses:\n  ${captured.join('\n  ')}`)
-        return { ok: true, page }
+        await page.waitForTimeout(500)
+        const ok = cartAccepted()
+        if (ok) await extendCartHold(page)
+        if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
+        return { ok, page }
       }
     }
 

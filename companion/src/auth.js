@@ -2,6 +2,7 @@
 // Pure ESM; no Playwright dependency.
 
 import { getSetting, setSetting } from './store.js'
+import { getCompanionRecgov } from './backend.js'
 
 export function jwtExpiry (token) {
   try {
@@ -68,7 +69,31 @@ export function buildRecaccountFromToken (token) {
   } catch { return null }
 }
 
+// Pull the latest token + refresh creds from the backend's settings table
+// (whatever the operator pasted into Settings → Recreation.gov in the UI)
+// and write them into the companion's local store. The companion file store
+// is still the source of truth for offline operation; this just keeps it in
+// sync. No-op if the backend is unreachable or has nothing saved.
+export async function syncRecgovFromBackend () {
+  try {
+    const r = await getCompanionRecgov()
+    if (r.status !== 200 || !r.json) return false
+    const { recgov_token: token, recgov_refresh_creds: creds } = r.json
+    let changed = false
+    if (token && getSetting('recgov_token') !== token) {
+      setSetting('recgov_token', token)
+      changed = true
+    }
+    if (creds && getSetting('recgov_refresh_creds') !== creds) {
+      setSetting('recgov_refresh_creds', creds)
+      changed = true
+    }
+    return changed
+  } catch { return false }
+}
+
 export async function refreshRecgovSession () {
+  await syncRecgovFromBackend()
   const token = getSetting('recgov_token') || ''
   const credsStr = getSetting('recgov_refresh_creds') || ''
   if (!token) return null

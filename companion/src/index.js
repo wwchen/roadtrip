@@ -117,7 +117,15 @@ function subscribe () {
   es = new EventSource(url)
 
   es.addEventListener('open', () => log('SSE open'))
-  es.addEventListener('error', (e) => log('SSE error', e?.message || '(no message)'))
+  es.addEventListener('error', (e) => {
+    const parts = []
+    if (e?.message) parts.push(e.message)
+    if (e?.code) parts.push('code=' + e.code)
+    if (e?.status) parts.push('status=' + e.status)
+    if (e?.error) parts.push('error=' + (e.error.message || e.error.code || e.error))
+    if (es?.readyState !== undefined) parts.push('readyState=' + es.readyState)
+    log('SSE error', parts.length ? parts.join(' ') : '(no detail)', e)
+  })
 
   for (const name of ['connected', 'tick', 'match', 'claimed', 'result', 'lease_expired', 'companion_offline', 'companion_online']) {
     es.addEventListener(name, (ev) => {

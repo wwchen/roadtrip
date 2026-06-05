@@ -162,18 +162,23 @@ fun Route.matchRoutes(
         }
 
         val months = m.availableDates.map { LocalDate.parse(it).withDayOfMonth(1).toString() }.toSet()
+        // rec.gov keys availabilities by full ISO timestamp ("2026-06-05T00:00:00Z");
+        // m.availableDates are plain YYYY-MM-DD. Re-key on the date prefix so lookups land.
         val avail = mutableMapOf<String, String>()
         for (month in months) {
             try {
                 val campsites = availability.fetchMonth(m.campgroundId, month)
-                campsites[m.campsiteId]?.availabilities?.let { avail += it }
+                campsites[m.campsiteId]?.availabilities?.forEach { (k, v) ->
+                    avail[k.substring(0, 10)] = v
+                }
             } catch (e: Exception) {
                 matchRoutesLog.info("availability fetch failed for match {} ({}): {}", id, month, e.message)
                 call.respondText("""{"status":"unqueryable"}""")
                 return@get
             }
         }
-        val stillAvailable = m.availableDates.all { (avail[it] ?: "").equals("Available", ignoreCase = true) }
+        val available = setOf("Available", "Open")
+        val stillAvailable = m.availableDates.all { avail[it] in available }
         val status = if (stillAvailable) "available" else "unavailable"
         call.respondText("""{"status":"$status"}""")
     }
@@ -199,10 +204,18 @@ fun Route.matchRoutes(
             return@post
         }
 
+        // If the match was already attempted, reset claim + result so the companion
+        // can claim again. Without this, the companion's claim attempt 409s
+        // ("already_claimed_or_done") and the retry silently dies on its side.
+        if (m.claimedBy != null || m.cartAdded != null) {
+            matches.clearClaim(id)
+        }
+        val refreshed = matches.get(id) ?: m
+
         // Re-emit the match envelope so any companion currently subscribed to /events
         // will pick it up and run its ATC flow. Companion will claim, do its work,
         // then POST /matches/{id}/result; the UI re-renders from the SSE stream.
-        bus.publish("match", matchEnvelope(m))
+        bus.publish("match", matchEnvelope(refreshed))
         call.respondText("""{"ok":true,"queued":true,"cart_added":false}""")
     }
 
