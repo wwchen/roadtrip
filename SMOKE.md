@@ -12,17 +12,18 @@ URL: <https://roadtrip.floo.ca>
 ## 0. Health (sanity check before everything else)
 
 - [ ] `curl https://roadtrip.floo.ca/api/health` returns
-      `{"status":"ok", "cookies_present":true, "pricing_cache_count": >1000}`.
-      If `status:"degraded"`, cookies are missing — run `make refresh-cookies`
-      before going further.
+      `{"status":"ok","pricing_cache_count":<N>,"now":<epoch>}` with
+      `pricing_cache_count` >1000. (Cookie freshness is *not* surfaced here —
+      the live backend never calls Tesla; cache health is the only signal.)
 
 ## 1. Cold load
 
 - [ ] Open in fresh tab (close previous, swipe up). Map tiles render within 3 s.
 - [ ] No JavaScript errors in remote Web Inspector console (Mac → Develop → iPhone).
-- [ ] DevTools Network tab: `state-parks.geojson` and `campgrounds.geojson`
-      responses show `Content-Encoding: gzip`. Sizes are ~900 KB and ~1.2 MB
-      respectively (not 3.9 MB / 5.7 MB).
+- [ ] DevTools Network tab: `/api/pois?bbox=…` responses show
+      `Content-Encoding: gzip` and `Content-Type: application/geo+json` (or
+      `application/json`). Static `state-parks.geojson` (PAD-US polygons,
+      still served from `/data/`) is also gzipped — body ~900 KB, not 3.9 MB.
 - [ ] Layer toggles in the legend respond on first tap (not the second).
 
 ## 2. Geolocation + nearest-to-me
@@ -80,8 +81,8 @@ URL: <https://roadtrip.floo.ca>
 
 - [ ] Toggle Airplane Mode after the map fully loads. Pan a region you've
       already visited — tiles + dots stay rendered (browser cache).
-- [ ] Disable Airplane Mode. Tap a Supercharger pin: pricing loads from the
-      proxy (cache hit) within 1 s.
+- [ ] Disable Airplane Mode. Tap a Supercharger pin: pricing loads from
+      `/api/pricing/{slug}` (cache hit) within 1 s.
 
 ## 7. Battery / heat
 
@@ -94,7 +95,7 @@ URL: <https://roadtrip.floo.ca>
 
 | Failure | Likely cause | Action |
 | --- | --- | --- |
-| state-parks.geojson size 3.9 MB | gzip middleware not deployed or Cloudflare stripping | Check Ktor `Compression` config in `backend/.../Main.kt`; verify `Vary: Accept-Encoding` arrives at the client |
+| `/api/pois` or state-parks.geojson served uncompressed | gzip middleware not deployed or Cloudflare stripping | Check Ktor `Compression` config in `backend/.../Main.kt`; verify `Vary: Accept-Encoding` arrives at the client |
 | Supercharger popup says "Pricing not yet cached" everywhere | offline refresh hasn't been run / cache empty | `make refresh-superchargers` once cookies are fresh (`make refresh-cookies`) |
 | Supercharger popup pricing missing for one site | site not yet crawled by offline worker | wait for next refresh, or `make refresh-superchargers` to re-run |
 | Tesla button → Access Denied | Akamai bot wall (rare; cookies bound to wrong IP) | `make refresh-cookies` |
