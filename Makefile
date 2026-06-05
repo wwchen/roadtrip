@@ -198,7 +198,7 @@ backend-shell:
 # stays fast and doesn't pull Chromium.
 qa:
 	cd backend && ./gradlew installPlaywrightBrowsers
-	cd backend && QA_BASE_URL=http://127.0.0.1:$(PORT) ./gradlew test --tests ca.floo.roadtrip.SmokeTest --rerun -x generateJooq
+	cd backend && QA_BASE_URL=http://127.0.0.1:$(PORT) ./gradlew test --tests ca.floo.roadtrip.SmokeTest --tests ca.floo.campsite.CampsiteSmokeTest --rerun -x generateJooq
 
 # Point this clone's git at .githooks/ so .githooks/pre-commit runs ktlint on
 # staged backend Kotlin files. Per-clone (core.hooksPath isn't tracked in the

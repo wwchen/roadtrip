@@ -127,7 +127,7 @@ jobs:
         working-directory: backend
 
       - name: Run smoke
-        run: QA_BASE_URL=http://127.0.0.1:8765 ./gradlew test --tests ca.floo.roadtrip.SmokeTest --rerun -x generateJooq
+        run: QA_BASE_URL=http://127.0.0.1:8765 ./gradlew test --tests ca.floo.roadtrip.SmokeTest --tests ca.floo.campsite.CampsiteSmokeTest --rerun -x generateJooq
         working-directory: backend
 
       - name: Upload test reports on failure
