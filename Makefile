@@ -1,4 +1,4 @@
-.PHONY: help run tilt-up tilt-down docker-run deploy deploy-local stop kill check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-test pois-psql backend-build backend-run backend-shell qa install install-deps install-companion install-hooks install-all companion
+.PHONY: help run tilt-up tilt-down docker-run deploy deploy-local stop kill check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-test pois-psql backend-build backend-run backend-shell qa install install-deps install-companion install-hooks install-all setup clean companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -7,6 +7,8 @@ DEPLOY_DIR  ?= ~/workspace/roadtrip
 
 help:
 	@echo "Targets:"
+	@echo "  make setup            One-shot: install deps + companion + hooks + start postgres + import all POIs"
+	@echo "  make clean            Tear down dev stack and wipe local DB + build artifacts"
 	@echo "  make tilt-up          Run full dev stack via Tilt (postgres in Docker; backend + companion on host)"
 	@echo "  make tilt-down        Stop Tilt and Postgres"
 	@echo "  make run              Build + run backend locally on 127.0.0.1:$(PORT) (serves static + /api)"
@@ -77,6 +79,27 @@ install-companion:
 	cd companion && npm install && npx playwright install chromium
 
 install-all: install-deps install-companion install-hooks
+
+# One-shot fresh-clone bootstrap. Re-runnable: each step is idempotent.
+# `pois-import` boots Flyway in-process (importer/Db.kt) so it creates the
+# schema and populates POIs in one pass. SOURCE=all skips the fzf picker.
+setup: install-all
+	$(MAKE) pois-import SOURCE=all
+	@echo ''
+	@echo 'Setup done. Next: `make tilt-up` (or `make run`).'
+
+# Wipe local dev state. Stops Tilt + compose, removes the postgres container,
+# deletes its data dir, and drops companion node_modules + backend build/.
+# Does NOT touch .env, data/*.json, or pricing-cache (those take real work to
+# regenerate). Re-bootstrap with `make setup`.
+clean:
+	- tilt down 2>/dev/null
+	- docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois down -v
+	rm -rf $(HOME)/.roadtrip-map/postgres
+	rm -rf companion/node_modules
+	rm -rf backend/build backend/.gradle
+	@echo ''
+	@echo 'Clean done. Run `make setup` to bootstrap from scratch.'
 
 docker-run: backend-build
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build backend postgres
