@@ -253,28 +253,6 @@ async function waitForCaptchaIfPresent (page, solveTimeout = 90000) {
   return true
 }
 
-// PATCH cart expiry — extends the hold window after a successful ATC.
-// Without this the reservation expires after ~15 min; with it, calling every 5 min
-// keeps the cart locked for hours. Throws on non-2xx so the caller can stop the
-// extender loop instead of silently logging "extended" forever.
-export async function extendCartHold (page) {
-  const result = await page.evaluate(async () => {
-    try {
-      const r = await fetch('https://www.recreation.gov/api/cart/shoppingcart/expiration', {
-        method: 'PATCH',
-        headers: { 'content-type': 'application/json' },
-        credentials: 'include',
-        body: '{}',
-      })
-      const body = await r.text().catch(() => '')
-      return { status: r.status, body: body.slice(0, 200) }
-    } catch (e) { return { status: 0, body: e.message } }
-  })
-  if (result.status < 200 || result.status >= 300) {
-    throw new Error(`PATCH /shoppingcart/expiration → ${result.status} ${result.body}`)
-  }
-}
-
 // Adds a match to the cart on rec.gov. Returns true if the cart now has the reservation.
 // `match` is the backend Match shape (snake_case fields from /api/campsite/matches).
 export async function addToCart (match) {
@@ -330,7 +308,6 @@ export async function addToCart (match) {
       await waitForCaptchaIfPresent(page)
       await page.waitForTimeout(500)
       const ok = cartAccepted()
-      if (ok) await extendCartHold(page)
       if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
       return { ok, page }
     }
@@ -342,7 +319,6 @@ export async function addToCart (match) {
         await waitForCaptchaIfPresent(page)
         await page.waitForTimeout(500)
         const ok = cartAccepted()
-        if (ok) await extendCartHold(page)
         if (captured.length) console.log(`Cart: API responses:\n  ${captured.map(e => e.line || `${e.status} ${e.path}`).join('\n  ')}`)
         return { ok, page }
       }

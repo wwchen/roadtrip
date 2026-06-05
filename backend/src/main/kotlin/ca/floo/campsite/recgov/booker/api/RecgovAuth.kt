@@ -162,19 +162,25 @@ object RecgovAuth {
 
 /**
  * PATCH rec.gov's shopping-cart expiration endpoint to keep the hold alive.
- * Mirrors companion/cart.js extendCartHold(). The body is the empty JSON
- * object — rec.gov resets the timer based on the request alone.
+ * Empty JSON body — rec.gov resets the timer from the request alone.
  *
- * Returns true on a 2xx response, false otherwise (no token, refused, etc.).
+ * Sends both the Bearer token and the matching r1s-fingerprint cookie. rec.gov
+ * pins the JWT's `fingerprint` claim against the cookie; without the cookie,
+ * the cart endpoints return 401 {"error":"bad fingerprint"}. Not full Akamai
+ * TLS fingerprinting (like supercharger pricing), so a plain HTTP client works.
+ *
+ * Returns true on a 2xx response, false otherwise.
  */
 suspend fun extendCartHold(
     token: String,
     client: HttpClient = HttpClient(CIO) { engine { requestTimeout = 10_000 } },
 ): Boolean =
     runCatching {
+        val fingerprint = RecgovAuth.tokenInfo(token).fingerprint
         val resp =
             client.patch("https://www.recreation.gov/api/cart/shoppingcart/expiration") {
                 header("Authorization", "Bearer $token")
+                if (fingerprint.isNotEmpty()) header("Cookie", "r1s-fingerprint=$fingerprint")
                 contentType(ContentType.Application.Json)
                 setBody("{}")
             }
