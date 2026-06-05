@@ -43,7 +43,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: Run backend tests + coverage
-        run: ./gradlew test koverXmlReport
+        run: ./gradlew test koverXmlReport koverVerify
         working-directory: backend
 
       - name: Upload coverage to Codecov
