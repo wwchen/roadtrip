@@ -72,9 +72,12 @@ class SlackNotifier(
             .isSuccess
     }
 
-    suspend fun sendTest() {
-        val token = getSetting("slack_token").orEmpty()
-        val channel = getSetting("slack_channel").orEmpty()
+    suspend fun sendTest(
+        candidateToken: String? = null,
+        candidateChannel: String? = null,
+    ) {
+        val token = candidateToken?.takeIf { it.isNotEmpty() } ?: getSetting("slack_token").orEmpty()
+        val channel = candidateChannel?.takeIf { it.isNotEmpty() } ?: getSetting("slack_channel").orEmpty()
         if (token.isEmpty()) throw IllegalStateException("slack_token not configured")
         if (channel.isEmpty()) throw IllegalStateException("slack_channel not configured")
         postSlack(token, channel, null, "✅ Campsite Alert test — Slack notifications are working!")

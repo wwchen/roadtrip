@@ -43,7 +43,7 @@ fun Route.settingsRoutes(
 
     post("/api/campsite/settings") {
         val body = parseJson(call.receiveText())
-        val allowed = setOf("poll_interval", "slack_token", "slack_channel", "ridb_api_key")
+        val allowed = setOf("poll_interval", "slack_token", "slack_channel", "slack_enabled", "ridb_api_key")
         val updates = mutableMapOf<String, String>()
         for (key in allowed) {
             val v = body.string(key) ?: continue
@@ -62,8 +62,14 @@ fun Route.settingsRoutes(
     }
 
     post("/api/campsite/settings/test-slack") {
+        // Accepts optional {slack_token, slack_channel} in the body so the
+        // onboarding wizard can prove credentials before persisting them.
+        // Empty body falls back to saved settings (existing Settings-modal flow).
+        val body = parseJson(call.receiveText())
+        val candidateToken = body.string("slack_token")?.takeIf { it.isNotEmpty() && it != MASK }
+        val candidateChannel = body.string("slack_channel")?.takeIf { it.isNotEmpty() }
         try {
-            slack.sendTest()
+            slack.sendTest(candidateToken, candidateChannel)
             call.respondText("""{"ok":true}""")
         } catch (e: Exception) {
             call.respond(HttpStatusCode.InternalServerError, """{"error":"${e.message}"}""")
