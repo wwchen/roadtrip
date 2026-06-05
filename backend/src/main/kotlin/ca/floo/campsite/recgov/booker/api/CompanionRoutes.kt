@@ -1,5 +1,6 @@
 package ca.floo.campsite.recgov.booker.api
 
+import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.CompanionRegistry
 import ca.floo.campsite.recgov.booker.events.EventBus
 import io.ktor.http.HttpStatusCode
@@ -33,7 +34,7 @@ fun Route.companionRoutes(
                 ?: return@post call.respond(HttpStatusCode.BadRequest, "missing companion_id")
         val cameBack = companions.heartbeat(id)
         if (cameBack) {
-            bus.publish("companion_online", """{"companionId":"$id"}""")
+            bus.publish(CampsiteEvent.CompanionOnline(companionId = id))
         }
         call.respondText("""{"ok":true}""")
     }

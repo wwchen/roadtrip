@@ -5,6 +5,7 @@ import ca.floo.campsite.recgov.booker.db.MatchRepo
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.domain.Alert
 import ca.floo.campsite.recgov.booker.domain.Match
+import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.matching.Matcher
 import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
@@ -73,11 +74,13 @@ class Poller(
             return
         }
         try {
-            bus.publish("poll_start", "{}")
+            bus.publish(CampsiteEvent.PollStart)
             val active = alerts.listActive()
             if (active.isEmpty()) {
                 lastPollEndAt = OffsetDateTime.now()
-                bus.publish("poll_done", """{"nextAt":null}""")
+                bus.publish(
+                    CampsiteEvent.PollDone(alertId = null, success = true, endedAt = lastPollEndAt!!.toString()),
+                )
                 return
             }
             log.info("Polling {} active alert(s)...", active.size)
@@ -87,7 +90,7 @@ class Poller(
                     if (newMatches.isNotEmpty()) {
                         log.info("MATCH: Alert {} \"{}\" — {} site(s)", alert.id, alert.campgroundName, newMatches.size)
                         for (m in newMatches) {
-                            bus.publish("match", matchEnvelope(m))
+                            bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(m)))
                         }
                         slack?.notifyBatch(alert, newMatches)
                         newMatches.forEach { matches.markNotified(it.id) }
@@ -104,7 +107,9 @@ class Poller(
         } finally {
             lastPollEndAt = OffsetDateTime.now()
             pollMutex.unlock()
-            bus.publish("poll_done", """{"endedAt":"$lastPollEndAt"}""")
+            bus.publish(
+                CampsiteEvent.PollDone(alertId = null, success = true, endedAt = lastPollEndAt!!.toString()),
+            )
         }
     }
 
