@@ -60,6 +60,12 @@ services:
       - ./index.html:/app/static/index.html:ro
       - ./web:/app/static/web:ro
       - ./data:/app/static/data:ro
+    networks:
+      default:
+        # Cloudflare tunnel's dashboard ingress still points at the legacy
+        # service name `app`. Alias keeps it routable without a dashboard edit.
+        aliases:
+          - app
     depends_on:
       postgres:
         condition: service_healthy
