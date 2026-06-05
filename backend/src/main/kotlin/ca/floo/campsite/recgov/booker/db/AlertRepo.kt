@@ -28,6 +28,14 @@ class AlertRepo(
 
     fun listActive(): List<Alert> = ctx.selectFrom(ALERTS).where(ALERTS.STATUS.eq("active")).map { it.toDomain() }
 
+    /** (alertId, cadenceSec) for every active alert. Used by [Scheduler] to spin up per-alert poll jobs. */
+    fun listActiveCadences(): List<Pair<Long, Int>> =
+        ctx
+            .select(ALERTS.ID, ALERTS.CADENCE_SEC)
+            .from(ALERTS)
+            .where(ALERTS.STATUS.eq("active"))
+            .map { it.value1()!! to (it.value2() ?: 60) }
+
     fun get(id: Long): Alert? =
         ctx
             .selectFrom(ALERTS)

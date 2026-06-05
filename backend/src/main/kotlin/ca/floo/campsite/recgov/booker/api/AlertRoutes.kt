@@ -3,6 +3,7 @@ package ca.floo.campsite.recgov.booker.api
 import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.domain.Alert
 import ca.floo.campsite.recgov.booker.poller.Poller
+import ca.floo.campsite.recgov.booker.scheduler.Scheduler
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
@@ -20,6 +21,7 @@ import kotlinx.serialization.json.put
 fun Route.alertRoutes(
     alerts: AlertRepo,
     poller: Poller?,
+    scheduler: Scheduler? = null,
 ) {
     get("/api/campsite/alerts") {
         call.respondText(JsonArray(alerts.list().map { alertJson(it) }).toString())
@@ -57,6 +59,7 @@ fun Route.alertRoutes(
                     notes = body.string("notes"),
                 ),
             )
+        scheduler?.upsertAlert(id)
         poller?.triggerNow()
         call.respondText("""{"id":$id}""")
     }
@@ -84,6 +87,9 @@ fun Route.alertRoutes(
         body.bool("auto_cart")?.let { updates["auto_cart"] = it }
         body.bool("stop_after_match")?.let { updates["stop_after_match"] = it }
         alerts.patch(id, updates)
+        // Status changes (active ↔ paused/done) require Scheduler to start/stop
+        // the per-alert poll job. Calling upsertAlert is cheap and idempotent.
+        if (updates.containsKey("status")) scheduler?.upsertAlert(id)
         call.respondText("""{"ok":true}""")
     }
 
@@ -92,6 +98,7 @@ fun Route.alertRoutes(
             call.parameters["id"]?.toLongOrNull()
                 ?: return@delete call.respond(HttpStatusCode.BadRequest, "bad id")
         alerts.delete(id)
+        scheduler?.removeAlert(id)
         call.respondText("""{"ok":true}""")
     }
 }
