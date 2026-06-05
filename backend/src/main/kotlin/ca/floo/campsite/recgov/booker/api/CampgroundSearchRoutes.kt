@@ -10,6 +10,7 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -141,7 +142,11 @@ private fun List<JsonObject>.mapCampground() =
             put("parent_id", (r["parent_entity_id"] as? JsonPrimitive)?.content ?: "")
             put("city", (addr?.get("city") as? JsonPrimitive)?.content ?: "")
             put("state", (addr?.get("state") as? JsonPrimitive)?.content ?: "")
-            put("rating", (r["average_rating"] as? JsonPrimitive)?.content ?: "")
+            // rec.gov returns average_rating as either a number or a numeric
+            // string. Coerce to a JSON number (or null) so the frontend can
+            // call .toFixed() on it.
+            val rating = (r["average_rating"] as? JsonPrimitive)?.content?.toDoubleOrNull()
+            if (rating != null) put("rating", rating) else put("rating", JsonNull)
             put("reviews", (r["number_of_ratings"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0)
         }
     }
