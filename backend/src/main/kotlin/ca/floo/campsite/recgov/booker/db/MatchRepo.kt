@@ -152,6 +152,50 @@ class MatchRepo(
             .execute()
     }
 
+    /**
+     * The single planner query for ATC orchestration. Returns the next match
+     * that should be ATC'd, or null. Encodes every rule:
+     *
+     *   - alert.status = 'active' (not paused/done)
+     *   - alert.auto_cart = true (user opted into automation)
+     *   - match has not been dismissed, has not been resulted, is not currently claimed
+     *   - the alert has no other in-flight ATC (claimed but not resulted, lease unexpired)
+     *   - oldest match first (FIFO by found_at)
+     *
+     * Read-only — does not mutate. Companion still calls /claim separately to
+     * atomically lock the row before running ATC.
+     *
+     * The NOT EXISTS subquery is what enforces "one ATC at a time per alert" —
+     * it prevents handing out work for an alert that already has a worker on
+     * it. When the worker finishes (result or lease expiry), the in-flight
+     * row falls out of the NOT EXISTS set and the next match becomes pickable.
+     */
+    fun nextWorkItem(now: OffsetDateTime = OffsetDateTime.now()): Match? {
+        val m2 = MATCHES.`as`("m2")
+        val sql =
+            ctx
+                .select()
+                .from(MATCHES)
+                .leftJoin(ALERTS)
+                .on(MATCHES.ALERT_ID.eq(ALERTS.ID))
+                .where(ALERTS.STATUS.eq("active"))
+                .and(ALERTS.AUTO_CART.eq(true))
+                .and(MATCHES.DISMISSED_AT.isNull)
+                .and(MATCHES.RESULT_AT.isNull)
+                .and(MATCHES.CLAIMED_BY.isNull)
+                .andNotExists(
+                    org.jooq.impl.DSL
+                        .selectOne()
+                        .from(m2)
+                        .where(m2.ALERT_ID.eq(MATCHES.ALERT_ID))
+                        .and(m2.CLAIMED_BY.isNotNull)
+                        .and(m2.RESULT_AT.isNull)
+                        .and(m2.LEASE_EXPIRES.isNull.or(m2.LEASE_EXPIRES.gt(now))),
+                ).orderBy(MATCHES.FOUND_AT.asc())
+                .limit(1)
+        return sql.fetchOne()?.toDomain()
+    }
+
     /** Releases leases that expired without a result. Returns the released matches. */
     fun sweepExpiredLeases(now: OffsetDateTime = OffsetDateTime.now()): List<Match> {
         val expired =

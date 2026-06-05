@@ -10,6 +10,7 @@ import ca.floo.campsite.recgov.booker.api.pollRoutes
 import ca.floo.campsite.recgov.booker.api.recgovTokenRoutes
 import ca.floo.campsite.recgov.booker.api.settingsRoutes
 import ca.floo.campsite.recgov.booker.api.statusRoutes
+import ca.floo.campsite.recgov.booker.api.workRoutes
 import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.availability.AvailabilityManager
 import ca.floo.campsite.recgov.booker.db.AlertRepo
@@ -112,10 +113,15 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
     scope.launch {
         bus.typedEvents.collect { env ->
             when (env.event) {
-                is CampsiteEvent.LeaseSweepDue ->
-                    matches.sweepExpiredLeases().forEach {
-                        bus.publish(CampsiteEvent.LeaseExpired(matchId = it.id))
+                is CampsiteEvent.LeaseSweepDue -> {
+                    val released = matches.sweepExpiredLeases()
+                    released.forEach { bus.publish(CampsiteEvent.LeaseExpired(matchId = it.id)) }
+                    // The sweep just freed some claims — wake the companion so
+                    // it re-queries /work/next and picks up the orphaned matches.
+                    released.map { it.alertId }.distinct().forEach {
+                        bus.publish(CampsiteEvent.WorkMaybeAvailable(alertId = it))
                     }
+                }
                 is CampsiteEvent.CompanionSweepDue ->
                     companions.sweepOffline().forEach {
                         bus.publish(CampsiteEvent.CompanionOffline(companionId = it.id, lastSeen = it.lastSeen.toString()))
@@ -166,6 +172,7 @@ fun Route.campsiteRoutes(s: CampsiteServices) {
     settingsRoutes(s.settings, s.slack, s.tokenManager)
     statusRoutes(s.settings, s.tokenManager, s.statusMonitor)
     recgovTokenRoutes(s.tokenManager)
+    workRoutes(s.matches)
     campgroundSearchRoutes()
     pollRoutes(s.poller, s.bus, s.eventDriven)
     companionRoutes(s.companions, s.bus)

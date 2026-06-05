@@ -25,6 +25,11 @@ before(async () => {
       } else if (req.url.match(/^\/api\/campsite\/matches\/\d+$/)) {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ id: 42, campgroundId: '232447', campsiteId: '12345', firstDate: '2026-07-01', availableDates: ['2026-07-01'], site: 'A12' }))
+      } else if (req.url === '/api/campsite/work/next') {
+        res.writeHead(200, { 'content-type': 'application/json' })
+        res.end(JSON.stringify({
+          match: { id: 7, alertId: 1, campgroundId: '232447', campsiteId: '100', firstDate: '2026-07-01', availableDates: ['2026-07-01'], site: 'A12' },
+        }))
       } else if (req.url === '/api/campsite/recgov/fresh-token') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({
@@ -92,4 +97,13 @@ test('fetchFreshRecaccount returns the recaccount-shaped JSON from backend', asy
   assert.equal(ra.access_token, 'fake-jwt')
   assert.equal(ra.account.account_id, 'A-1')
   assert.equal(ra.is_guest, false)
+})
+
+test('getNextWork returns the planner-picked match', async () => {
+  const { getNextWork } = await import('../src/backend.js')
+  const r = await getNextWork()
+  assert.equal(r.status, 200)
+  assert.equal(r.json.match.id, 7)
+  assert.equal(r.json.match.alertId, 1)
+  assert.equal(r.json.match.campsiteId, '100')
 })
