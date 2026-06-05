@@ -27,6 +27,8 @@ import {
   ratingHTML,
   sitesTagHTML,
   lastVerifiedFooterHTML,
+  seasonVerdictHTML,
+  reserveButtonHTML,
 } from './campground-card.js';
 
 const DRAWER_ROOT_ID = 'cg-drawer';
@@ -51,7 +53,12 @@ export function openCampgroundDrawer(f) {
 
   renderShell(f);
   show();
-  fetchAvailability(f, openController.signal);
+  // Only US federal pins with a recgov_id have availability data; everything
+  // else (BC/AB provincial, US state, local) skips the fetch and shows the
+  // metadata-only shell with its existing reserve button.
+  if (f.properties?.recgov_id) {
+    fetchAvailability(f, openController.signal);
+  }
 
   // Wire up close + drag once.
   root.querySelector('.cg-drawer-close')?.addEventListener('click', close);
@@ -142,9 +149,6 @@ function renderShell(f) {
     : '';
   const sub = [subline, distLine].filter(Boolean).join(' · ');
 
-  const recgovUrl = `https://www.recreation.gov/camping/campgrounds/${encodeURIComponent(p.recgov_id)}`;
-  const campsiteDeeplink = `/campsite?campground=${encodeURIComponent(p.recgov_id)}`;
-
   const amenities = parseAmenities(p);
   const cc = parseCellCoverage(p);
   const rr = parseRatingReviews(p);
@@ -154,29 +158,49 @@ function renderShell(f) {
   const sitesTag = sitesTagHTML(p);
   const footer = lastVerifiedFooterHTML(p);
 
+  const verdict = seasonVerdictHTML(p.season, p.reservable);
+  const callBtn = p.phone
+    ? `<a class="cg-btn cg-btn-secondary" href="tel:${p.phone}">Call ${escapeHtml(p.phone)}</a>`
+    : '';
+
+  // Recgov pins get the availability-first treatment: heat-strip, /campsite
+  // deeplink for alerts, rec.gov as secondary. Non-recgov pins skip
+  // availability entirely and just surface the existing reserve button.
+  const availabilitySection = p.recgov_id
+    ? `
+      <section class="cg-availability" aria-live="polite">
+        <div class="cg-summary">Checking availability…</div>
+        <div class="cg-freshness">&nbsp;</div>
+        <div class="cg-strip" aria-hidden="true">
+          ${'<div class="cg-cell skeleton"></div>'.repeat(30)}
+        </div>
+        <div class="cg-day-labels"><span>Today</span><span></span></div>
+      </section>`
+    : '';
+
+  const actions = p.recgov_id
+    ? `
+      <div class="cg-actions">
+        <a class="cg-btn cg-btn-primary" href="/campsite?campground=${encodeURIComponent(p.recgov_id)}" data-cta="watch">Watch for openings</a>
+        <a class="cg-btn cg-btn-secondary" href="https://www.recreation.gov/camping/campgrounds/${encodeURIComponent(p.recgov_id)}" target="_blank" rel="noreferrer" data-cta="reserve">Reserve on rec.gov</a>
+        ${callBtn}
+      </div>`
+    : `
+      <div class="cg-actions">
+        ${reserveButtonHTML(p, 'cg-btn')}
+        ${callBtn}
+      </div>`;
+
   const content = document.querySelector(`#${DRAWER_ROOT_ID} .cg-drawer-content`);
   content.innerHTML = `
     <header class="cg-drawer-head">
       <h2>${escapeHtml(p.name)}</h2>
       ${sub ? `<div class="cg-sub">${escapeHtml(sub)}</div>` : ''}
-      <div class="cg-verdict-row">
-        ${seasonVerdictPill(p.season, p.reservable)}
-      </div>
+      ${verdict ? `<div class="cg-verdict-row">${verdict}</div>` : ''}
     </header>
 
-    <section class="cg-availability" aria-live="polite">
-      <div class="cg-summary">Checking availability…</div>
-      <div class="cg-freshness">&nbsp;</div>
-      <div class="cg-strip" aria-hidden="true">
-        ${'<div class="cg-cell skeleton"></div>'.repeat(30)}
-      </div>
-      <div class="cg-day-labels"><span>Today</span><span></span></div>
-    </section>
-
-    <div class="cg-actions">
-      <a class="cg-btn cg-btn-primary" href="${campsiteDeeplink}" data-cta="watch">Watch for openings</a>
-      <a class="cg-btn cg-btn-secondary" href="${recgovUrl}" target="_blank" rel="noreferrer" data-cta="reserve">Reserve on rec.gov</a>
-    </div>
+    ${availabilitySection}
+    ${actions}
 
     <details class="cg-details" open>
       <summary>Details</summary>
@@ -187,16 +211,6 @@ function renderShell(f) {
       ${footer}
     </details>
   `;
-}
-
-/** Render verdict pill — small badge near the top showing season/reservable hint. */
-function seasonVerdictPill(season, reservable) {
-  if (!season) {
-    if (reservable === false) return '<span class="cg-pill cg-pill-fcfs">First-come, first-served</span>';
-    return '';
-  }
-  if (/year[\s-]*round/i.test(season)) return '<span class="cg-pill cg-pill-open">Year-round</span>';
-  return `<span class="cg-pill cg-pill-open">${escapeHtml(season)}</span>`;
 }
 
 async function fetchAvailability(f, signal) {

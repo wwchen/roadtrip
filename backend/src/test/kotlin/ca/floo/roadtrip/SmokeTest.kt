@@ -100,16 +100,19 @@ class SmokeTest {
             )
             page.locator(".sr-item").first().click()
 
-            // 6. Popup renders with name + reserve link.
-            val popup = page.locator(".maplibregl-popup-content .popup")
-            assertThat(popup).isVisible(
+            // 6. Drawer renders with name + reserve link. (Tunnel Mountain is
+            // a Parks Canada pin — no recgov_id — so the drawer skips the
+            // availability section and shows reserveButtonHTML's parks_canada
+            // branch.)
+            val drawer = page.locator("#cg-drawer.open")
+            assertThat(drawer).isVisible(
                 com.microsoft.playwright.assertions.LocatorAssertions
                     .IsVisibleOptions()
                     .setTimeout(10_000.0),
             )
-            assertThat(popup.locator("h3")).containsText("Tunnel Mountain Village")
+            assertThat(drawer.locator("h2")).containsText("Tunnel Mountain Village")
 
-            val reserveBtn = popup.locator("a.btn-primary")
+            val reserveBtn = drawer.locator("a.cg-btn-primary")
             assertThat(reserveBtn).isVisible()
             val href = reserveBtn.getAttribute("href") ?: ""
             assertTrue(
@@ -121,7 +124,7 @@ class SmokeTest {
             )
 
             // 7. last_verified footer.
-            assertThat(popup.locator(".footer"))
+            assertThat(drawer.locator(".footer"))
                 .containsText(Pattern.compile("Verified \\d{4}-\\d{2}-\\d{2}"))
 
             // 8. No JS errors during the run.

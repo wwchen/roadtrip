@@ -82,3 +82,121 @@ export function lastVerifiedFooterHTML(p) {
   const stale = ageDays > 60 ? ' · check before booking' : '';
   return `<div class="${cls}">Verified ${p.last_verified}${stale}</div>`;
 }
+
+const MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, sept:8, oct:9, nov:10, dec:11 };
+const FUZZY_DAY = { early: 5, mid: 15, late: 25 };
+
+function parseSeasonRange(s, year) {
+  const norm = s.toLowerCase().replace(/[–—]/g, '-');
+  const parts = norm.split(/\s+to\s+|\s*->\s*|\s*through\s+/);
+  if (parts.length < 2) return null;
+  const open = parseDateBit(parts[0], year);
+  const close = parseDateBit(parts[1], year);
+  if (!open || !close) return null;
+  return { open, close };
+}
+function parseDateBit(s, year) {
+  const fuzzy = s.match(/(early|mid|late)[\s-]+([a-z]+)/);
+  if (fuzzy) {
+    const month = MONTHS[fuzzy[2].slice(0,4)] ?? MONTHS[fuzzy[2].slice(0,3)];
+    if (month == null) return null;
+    return new Date(year, month, FUZZY_DAY[fuzzy[1]]);
+  }
+  const explicit = s.match(/([a-z]+)\.?\s+(\d{1,2})/);
+  if (explicit) {
+    const month = MONTHS[explicit[1].slice(0,4)] ?? MONTHS[explicit[1].slice(0,3)];
+    if (month == null) return null;
+    return new Date(year, month, parseInt(explicit[2], 10));
+  }
+  return null;
+}
+function formatMonthDay(d) {
+  return d.toLocaleString('en-US', { month: 'short', day: 'numeric' });
+}
+
+/**
+ * Season verdict line. `seasonStr` is loose ("mid-May to early October",
+ * "year-round (boat access)") and may be null. Returns colored verdict HTML
+ * or '' when nothing useful to assert.
+ */
+export function seasonVerdictHTML(seasonStr, reservable) {
+  if (!seasonStr) {
+    if (reservable === false) return '<div class="verdict fcfs">First-come, first-served</div>';
+    return '';
+  }
+  const today = new Date();
+  const range = parseSeasonRange(seasonStr, today.getFullYear());
+  const fcfsHint = reservable === false ? ' · first-come' : '';
+
+  if (range && range.open && range.close) {
+    if (today >= range.open && today <= range.close) {
+      return `<div class="verdict open">Open through ${formatMonthDay(range.close)}${fcfsHint}</div>`;
+    }
+    if (today < range.open) {
+      return `<div class="verdict closed">Closed until ${formatMonthDay(range.open)}${fcfsHint}</div>`;
+    }
+    const nextOpen = new Date(range.open);
+    nextOpen.setFullYear(nextOpen.getFullYear() + 1);
+    return `<div class="verdict closed">Closed until ${formatMonthDay(nextOpen)}${fcfsHint}</div>`;
+  }
+  if (/year[\s-]*round/i.test(seasonStr)) {
+    return `<div class="verdict open">Year-round${fcfsHint}</div>`;
+  }
+  return `<div class="verdict fcfs">${escapeHtml(seasonStr)}${fcfsHint}</div>`;
+}
+
+/**
+ * Reserve button — picks the right vendor URL by precedence: explicit
+ * reserve_url, parks_canada, parks_alberta, bcparks, recgov_id, federal
+ * search, Google. `btnClass` is the CSS class prefix the caller wants
+ * (popup uses "btn", drawer uses "cg-btn"). Returns full <a> HTML or a
+ * disabled span for first-come-first-served pins.
+ */
+export function reserveButtonHTML(p, btnClass = 'btn') {
+  let url = '';
+  let label = 'Reserve';
+  if (p.reserve_url) {
+    url = p.reserve_url;
+    label = labelForReserveUrl(url);
+  } else if (p.parks_canada_url && p.reservable) {
+    // The parks.canada.ca pages are informational; reservation.pc.gc.ca is
+    // where booking actually happens. Skip the hunt.
+    url = 'https://reservation.pc.gc.ca';
+    label = 'Reserve on parks.canada.ca';
+  } else if (p.parks_canada_url) {
+    url = p.parks_canada_url;
+    label = 'Park info on parks.canada.ca';
+  } else if (p.parks_alberta_url && p.reservable) {
+    url = 'https://www.reservecamping.alberta.ca';
+    label = 'Reserve on Alberta Parks';
+  } else if (p.parks_alberta_url) {
+    url = p.parks_alberta_url;
+    label = 'Park info on albertaparks.ca';
+  } else if (p.bcparks_url) {
+    url = p.bcparks_url;
+    label = 'Reserve on bcparks.ca';
+  } else if (p.recgov_id) {
+    url = `https://www.recreation.gov/camping/campgrounds/${p.recgov_id}`;
+    label = 'Reserve on recreation.gov';
+  } else if (p.category === 'federal') {
+    const recq = encodeURIComponent(p.name);
+    url = `https://www.recreation.gov/search?q=${recq}&entity_type=campground&inventory_type=camping`;
+    label = 'Search recreation.gov';
+  } else {
+    const gq = encodeURIComponent(`${p.name} ${p.state || ''}`.trim());
+    url = `https://www.google.com/search?q=${gq}+campground`;
+    label = 'Search Google';
+  }
+  if (p.reservable === false && !p.reserve_url) {
+    return `<span class="${btnClass} ${btnClass}-disabled">First-come, first-served</span>`;
+  }
+  return `<a class="${btnClass} ${btnClass}-primary" href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+}
+
+function labelForReserveUrl(url) {
+  if (url.includes('reservation.pc.gc.ca')) return 'Reserve on parks.canada.ca';
+  if (url.includes('reserve.albertaparks')) return 'Reserve on Alberta Parks';
+  if (url.includes('camping.bcparks')) return 'Reserve on bcparks.ca';
+  if (url.includes('recreation.gov')) return 'Reserve on recreation.gov';
+  return 'Reserve';
+}
