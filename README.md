@@ -100,3 +100,42 @@ re-run `make refresh-cookies`.
 - **Map** — MapLibre GL, vector and raster basemaps, runtime style-swap.
   Overlay data is cached in memory and re-installed on every `style.load`
   so basemap swaps don't wipe POIs.
+
+## Campsite alert tool (`/campsite/`)
+
+The campsite sub-app polls recreation.gov for matching availability against
+operator-defined alerts and (optionally) auto-claims matches by adding them
+to a real recreation.gov shopping cart. **The cart-add path requires a
+separate companion process** — recreation.gov sits behind Akamai, which
+flags datacenter IPs and headless Chromium, so a real Chromium running on
+the operator's machine is the only thing that lands cart adds reliably. The
+backend never touches a browser; it only polls the public availability API,
+emits SSE `match` events, and tracks lease state.
+
+- **`companion/`** — Node 20+ Playwright client. Subscribes to the backend
+  SSE stream at `/api/campsite/events`, claims matches via
+  `POST /api/campsite/matches/{id}/claim`, drives Chromium to add the site
+  to the operator's rec.gov cart, reports the result, then PATCHes the
+  cart-extend endpoint every 5 minutes to hold the reservation. Heartbeats
+  to `/api/campsite/companion/heartbeat` every 30 s.
+  ```sh
+  cd companion
+  npm install
+  BACKEND_URL=http://127.0.0.1:8765 \
+    RECGOV_RECACCOUNT='{"refresh_id":"…","account_id":"…"}' \
+    node --experimental-eventsource src/index.js
+  ```
+- **`RECGOV_RECACCOUNT`** seeds the companion's persisted refresh token on
+  first run (subsequent runs reuse the DB-backed token). To get it: log in
+  on recreation.gov in your browser, open DevTools console, run
+  `localStorage.getItem('recaccount')`, and paste the JSON blob into the
+  env var (or into Settings → Recreation.gov in the `/campsite/` UI, which
+  writes it to the `campsite_settings` table via the same path).
+- **Slack notifications** are optional. Create a Slack app with the
+  `chat:write` scope, install it to the workspace, and paste the bot
+  token (`xoxb-…`) plus a channel name (`#camping-alerts`) or channel ID
+  into Settings → Slack. The backend posts via `chat.postMessage`.
+- **Without the companion**, alerts still fire and Slack still posts —
+  every "Auto-add to cart" toggle and the "Test browser session" /
+  "Test credentials" buttons in Settings just no-op (`SettingsRoutes`
+  returns `not_implemented` for the Chromium-dependent endpoints).
