@@ -2,6 +2,8 @@ package ca.floo.campsite.recgov.booker.api
 
 import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.domain.Alert
+import ca.floo.campsite.recgov.booker.events.CampsiteEvent
+import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.poller.Poller
 import ca.floo.campsite.recgov.booker.scheduler.Scheduler
 import io.ktor.http.HttpStatusCode
@@ -22,6 +24,8 @@ fun Route.alertRoutes(
     alerts: AlertRepo,
     poller: Poller?,
     scheduler: Scheduler? = null,
+    bus: EventBus? = null,
+    eventDriven: Boolean = false,
 ) {
     get("/api/campsite/alerts") {
         call.respondText(JsonArray(alerts.list().map { alertJson(it) }).toString())
@@ -60,7 +64,11 @@ fun Route.alertRoutes(
                 ),
             )
         scheduler?.upsertAlert(id)
-        poller?.triggerNow()
+        if (eventDriven && bus != null) {
+            bus.publish(CampsiteEvent.UserPolledNow(alertId = id))
+        } else {
+            poller?.triggerNow()
+        }
         call.respondText("""{"id":$id}""")
     }
 

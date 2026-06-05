@@ -11,6 +11,7 @@ import ca.floo.campsite.recgov.booker.api.recgovTokenRoutes
 import ca.floo.campsite.recgov.booker.api.settingsRoutes
 import ca.floo.campsite.recgov.booker.api.statusRoutes
 import ca.floo.campsite.recgov.booker.auth.TokenManager
+import ca.floo.campsite.recgov.booker.availability.AvailabilityManager
 import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.db.MatchRepo
 import ca.floo.campsite.recgov.booker.db.ScheduleRepo
@@ -51,7 +52,9 @@ class CampsiteServices(
     val scheduler: Scheduler,
     val availability: AvailabilityClient,
     val tokenManager: TokenManager,
+    val availabilityManager: AvailabilityManager?,
     val leaseDuration: Duration,
+    val eventDriven: Boolean,
 )
 
 fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
@@ -80,11 +83,24 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
     val scheduler = Scheduler(schedules::listEnabled, alerts::listActiveCadences, bus, scope)
     val tokenManager = TokenManager(settings, bus, scope)
 
+    // Feature flag: when CAMPSITE_EVENT_DRIVEN=1, AvailabilityManager subscribes
+    // to the scheduler-fired PollDue events and the legacy Poller's tick loop
+    // is suppressed. When unset (default), Poller runs as before — gives us a
+    // rollback path for one release before defaulting on.
+    val eventDriven = System.getenv("CAMPSITE_EVENT_DRIVEN") == "1"
+    val availabilityManager =
+        if (eventDriven) {
+            AvailabilityManager.production(alerts, matches, availability, bus, scope, slack)
+        } else {
+            null
+        }
+
     install(SSE)
 
-    poller.start()
+    if (!eventDriven) poller.start()
     scheduler.start()
     tokenManager.start()
+    availabilityManager?.start()
 
     // Subscribe to scheduler-fired events. Each handler used to be a
     // dedicated `GlobalScope.launch` loop with its own delay() — now all
@@ -132,18 +148,20 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
         scheduler,
         availability,
         tokenManager,
+        availabilityManager,
         leaseDuration,
+        eventDriven,
     )
 }
 
 fun Route.campsiteRoutes(s: CampsiteServices) {
     eventsRoutes(s.bus)
-    alertRoutes(s.alerts, s.poller, s.scheduler)
+    alertRoutes(s.alerts, s.poller, s.scheduler, s.bus, s.eventDriven)
     matchRoutes(s.alerts, s.matches, s.bus, s.availability, s.settings, s.leaseDuration, s.tokenManager)
     settingsRoutes(s.settings, s.slack, s.tokenManager)
     statusRoutes(s.settings, s.tokenManager)
     recgovTokenRoutes(s.tokenManager)
     campgroundSearchRoutes()
-    pollRoutes(s.poller)
+    pollRoutes(s.poller, s.bus, s.eventDriven)
     companionRoutes(s.companions, s.bus, s.settings)
 }
