@@ -771,13 +771,14 @@ el('test-cookies-btn').addEventListener('click', async () => {
   try {
     const result = await api('POST', '/api/campsite/settings/test-cookies', { raw });
     const tokenStatus = result.hasBearer
-      ? (result.tokenExpired ? ' · ⚠ Bearer token expired' : ` · Bearer token expires ${new Date(result.tokenExpires).toLocaleString()}`)
-      : ' · no Bearer token found';
+      ? (result.tokenExpired ? '⚠ Bearer token expired' : `Bearer token expires ${new Date(result.tokenExpires).toLocaleString()}`)
+      : 'no Bearer token found';
+    const cookiePart = result.count > 0 ? `${result.count} cookies · ` : '';
     if (result.loggedIn) {
-      resultEl.textContent = `✓ Logged in (${result.count} cookies${tokenStatus})`;
+      resultEl.textContent = `✓ Logged in (${cookiePart}${tokenStatus})`;
       resultEl.style.color = 'var(--green)';
     } else {
-      resultEl.textContent = `✗ Not logged in — cookies may be expired${tokenStatus}`;
+      resultEl.textContent = `✗ Not logged in — ${tokenStatus}`;
       resultEl.style.color = 'var(--red)';
     }
     // Save immediately so the Bearer token is stored
@@ -816,22 +817,28 @@ el('clear-session-btn').addEventListener('click', async () => {
 
 el('test-chrome-btn').addEventListener('click', async () => {
   const resultEl = el('chrome-test-result');
-  resultEl.textContent = 'Opening browser…';
+  resultEl.textContent = 'Validating token…';
   try {
     const result = await api('POST', '/api/campsite/settings/test-chrome', {});
     if (result.loggedIn) {
-      resultEl.textContent = '✓ Browser works, logged in to recreation.gov';
+      const exp = result.tokenExpires ? ` (expires ${new Date(result.tokenExpires).toLocaleString()})` : '';
+      resultEl.textContent = result.refreshed
+        ? `✓ Token refreshed${exp}`
+        : `✓ Token valid${exp}`;
       resultEl.style.color = 'var(--green)';
+      showToast(result.refreshed ? 'Token refreshed ✓' : 'Token valid ✓', 'success');
     } else {
-      resultEl.textContent = '⚠ Browser works but not logged in — log in manually in the browser that opened';
+      const msg = result.error || 'token expired or missing — paste a fresh recaccount above and Save';
+      resultEl.textContent = `⚠ ${msg}`;
       resultEl.style.color = 'var(--yellow)';
+      showToast(msg, 'info', 6000);
     }
-    showToast(result.loggedIn ? 'Logged in ✓' : 'Browser opened — log in to save session', result.loggedIn ? 'success' : 'info', 6000);
     refreshStatus(); // update header status dots
+    loadTokenExpiry();
   } catch (err) {
     resultEl.textContent = `✗ ${err.message}`;
     resultEl.style.color = 'var(--red)';
-    showToast(`Chrome test failed: ${err.message}`, 'error');
+    showToast(`Token validation failed: ${err.message}`, 'error');
   }
 });
 
