@@ -1,16 +1,25 @@
 name: Self-approve
 
 on:
-  pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+  issue_comment:
+    types: [created]
 
 jobs:
   self-approve:
+    if: >
+      github.event.issue.pull_request != null &&
+      github.event.comment.user.login == 'wwchen' &&
+      github.event.comment.body == 'lgtm'
     runs-on: ubuntu-latest
-    if: github.actor == 'wwchen' && github.event.pull_request.draft == false
     steps:
-      - uses: nicklegan/github-repo-self-approve-action@v1.0.1
+      - uses: actions/create-github-app-token@v1
+        id: app-token
         with:
-          appid: ${{ secrets.SELF_APPROVE_APPID }}
-          privatekey: ${{ secrets.SELF_APPROVE_PRIVATEKEY }}
-          installationid: ${{ secrets.SELF_APPROVE_INSTALLATIONID }}
+          app-id: ${{ secrets.SELF_APPROVE_APPID }}
+          private-key: ${{ secrets.SELF_APPROVE_PRIVATEKEY }}
+
+      - env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          PR_NUMBER: ${{ github.event.issue.number }}
+          REPO: ${{ github.repository }}
+        run: gh pr review "$PR_NUMBER" --repo "$REPO" --approve
