@@ -1,6 +1,7 @@
 package ca.floo.campsite.recgov.booker
 
 import ca.floo.campsite.recgov.booker.api.alertRoutes
+import ca.floo.campsite.recgov.booker.api.availabilityPublicRoutes
 import ca.floo.campsite.recgov.booker.api.campgroundSearchRoutes
 import ca.floo.campsite.recgov.booker.api.companionRoutes
 import ca.floo.campsite.recgov.booker.api.eventsRoutes
@@ -13,6 +14,7 @@ import ca.floo.campsite.recgov.booker.api.statusRoutes
 import ca.floo.campsite.recgov.booker.api.workRoutes
 import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.availability.AvailabilityManager
+import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.db.MatchRepo
 import ca.floo.campsite.recgov.booker.db.ScheduleRepo
@@ -53,6 +55,7 @@ class CampsiteServices(
     val poller: Poller,
     val scheduler: Scheduler,
     val availability: AvailabilityClient,
+    val cachedAvailability: CachedAvailability,
     val tokenManager: TokenManager,
     val availabilityManager: AvailabilityManager?,
     val statusMonitor: StatusMonitor,
@@ -75,6 +78,10 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
     val companions = CompanionRegistry(offlineThreshold)
     val slack = SlackNotifier(settings)
     val availability = AvailabilityClient()
+    // Public-route cache layer over rec.gov availability (RFC 0003). Wraps,
+    // doesn't modify the underlying client — the poller continues calling
+    // availability directly with its own freshness semantics.
+    val cachedAvailability = CachedAvailability(availability)
     val poller = Poller(alerts, matches, settings, bus, client = availability, slack = slack)
 
     // Single supervisor scope for all in-process background work (scheduler
@@ -157,6 +164,7 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
         poller,
         scheduler,
         availability,
+        cachedAvailability,
         tokenManager,
         availabilityManager,
         statusMonitor,
@@ -173,6 +181,7 @@ fun Route.campsiteRoutes(s: CampsiteServices) {
     statusRoutes(s.settings, s.tokenManager, s.statusMonitor)
     recgovTokenRoutes(s.tokenManager)
     workRoutes(s.matches)
+    availabilityPublicRoutes(s.cachedAvailability)
     campgroundSearchRoutes()
     pollRoutes(s.poller, s.bus, s.eventDriven)
     companionRoutes(s.companions, s.bus)
