@@ -4,6 +4,7 @@ import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.db.MatchRepo
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.domain.Match
+import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import io.ktor.http.HttpStatusCode
@@ -77,7 +78,7 @@ fun Route.matchRoutes(
                 ),
             ) ?: return@post call.respond(HttpStatusCode.Conflict, """{"error":"duplicate match"}""")
         val m = matches.get(matchId)!!
-        bus.publish("match", matchEnvelope(m))
+        bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(m)))
         call.respondText("""{"ok":true,"id":$matchId}""")
     }
 
@@ -93,12 +94,11 @@ fun Route.matchRoutes(
             matches.claim(id, companion, leaseDuration)
                 ?: return@post call.respond(HttpStatusCode.Conflict, """{"ok":false,"reason":"already_claimed_or_done"}""")
         bus.publish(
-            "claimed",
-            buildJsonObject {
-                put("id", claimed.id)
-                put("companionId", claimed.claimedBy ?: "")
-                put("leaseExpires", claimed.leaseExpires ?: "")
-            }.toString(),
+            CampsiteEvent.Claimed(
+                matchId = claimed.id,
+                companionId = claimed.claimedBy ?: "",
+                leaseExpires = claimed.leaseExpires ?: "",
+            ),
         )
         call.respondText("""{"ok":true,"leaseExpires":"${claimed.leaseExpires}"}""")
     }
@@ -115,12 +115,11 @@ fun Route.matchRoutes(
             matches.result(id, cartAdded)
                 ?: return@post call.respond(HttpStatusCode.Conflict, """{"ok":false,"reason":"not_claimed"}""")
         bus.publish(
-            "result",
-            buildJsonObject {
-                put("id", updated.id)
-                put("cartAdded", updated.cartAdded ?: false)
-                put("companionId", updated.claimedBy ?: "")
-            }.toString(),
+            CampsiteEvent.Result(
+                matchId = updated.id,
+                cartAdded = updated.cartAdded ?: false,
+                companionId = updated.claimedBy ?: "",
+            ),
         )
         call.respondText("""{"ok":true}""")
     }
@@ -216,7 +215,7 @@ fun Route.matchRoutes(
         // Re-emit the match envelope so any companion currently subscribed to /events
         // will pick it up and run its ATC flow. Companion will claim, do its work,
         // then POST /matches/{id}/result; the UI re-renders from the SSE stream.
-        bus.publish("match", matchEnvelope(refreshed))
+        bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(refreshed)))
         call.respondText("""{"ok":true,"queued":true,"cart_added":false}""")
     }
 

@@ -34,12 +34,11 @@ data class TypedEnvelope(
 /**
  * In-memory pub/sub. Two SharedFlows backed by the same id sequence:
  *
- *   - [events]: legacy [Envelope] flow used by the SSE endpoint and any
- *     existing string-typed subscribers. Replays the last N events for
- *     Last-Event-ID resume.
+ *   - [events]: wire [Envelope] flow consumed by the SSE endpoint. Replays
+ *     the last N events so reconnecting clients can resume via Last-Event-ID.
  *   - [typedEvents]: [TypedEnvelope] flow consumed by lifecycle managers
  *     (TokenManager, AvailabilityManager, ...). Includes internal-only
- *     events that never hit the wire.
+ *     events (e.g. PollDue, UserPolledNow) that never hit the wire.
  *
  * On overflow we DROP_OLDEST — losing the very oldest replay history is
  * preferable to backpressuring the publisher (which would stall the poller).
@@ -81,19 +80,6 @@ class EventBus(
         typedFlow.tryEmit(typed)
         if (wire != null) wireFlow.tryEmit(wire)
         return typed
-    }
-
-    /**
-     * Legacy string-typed publish. Wraps in [CampsiteEvent.Legacy] so
-     * lifecycle-manager subscribers can ignore it cleanly. Will be removed
-     * once all callers move to typed events.
-     */
-    fun publish(
-        type: String,
-        data: String,
-    ): Envelope {
-        val typed = publish(CampsiteEvent.Legacy(type, data))
-        return typed.wire!!
     }
 
     /** Snapshot of the wire replay buffer. Used to fill the gap after Last-Event-ID. */

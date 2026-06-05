@@ -172,18 +172,4 @@ sealed interface CampsiteEvent {
 
         override fun sseData() = """{"checkedAt":"$checkedAt"}"""
     }
-
-    /**
-     * Escape hatch for legacy `publish(type, data)` callers during the
-     * type-migration. Carries a wire envelope only — internal subscribers
-     * pattern-matching on typed events should ignore it.
-     */
-    data class Legacy(
-        val type: String,
-        val data: String,
-    ) : CampsiteEvent {
-        override fun sseType() = type
-
-        override fun sseData() = data
-    }
 }

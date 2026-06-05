@@ -1,7 +1,5 @@
 package ca.floo.campsite.recgov.booker.events
 
-import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -12,19 +10,20 @@ class EventBusTest {
     @Test
     fun `ids are monotonic across publishes`() {
         val bus = EventBus(replay = 16)
-        val a = bus.publish("match", """{"id":1}""")
-        val b = bus.publish("match", """{"id":2}""")
-        val c = bus.publish("claimed", """{"id":1,"by":"A"}""")
+        val a = bus.publish(CampsiteEvent.MatchFound(matchJson = """{"id":1}"""))
+        val b = bus.publish(CampsiteEvent.MatchFound(matchJson = """{"id":2}"""))
+        val c = bus.publish(CampsiteEvent.Claimed(matchId = 1, companionId = "A", leaseExpires = "x"))
         assertTrue(b.id > a.id)
         assertTrue(c.id > b.id)
-        assertEquals("match", a.type)
-        assertEquals("claimed", c.type)
+        assertEquals("match", a.wire?.type)
+        assertEquals("claimed", c.wire?.type)
     }
 
     @Test
-    fun `replay buffer holds last N envelopes for resume`() {
+    fun `replay buffer holds last N wire envelopes for resume`() {
         val bus = EventBus(replay = 4)
-        repeat(10) { bus.publish("tick", """{"i":$it}""") }
+        // LivenessTick is the canonical wire-only event; pump 10 of them.
+        repeat(10) { bus.publish(CampsiteEvent.LivenessTick) }
         val replay = bus.replayBuffer()
         assertEquals(4, replay.size)
         // Latest 4 ids retained
@@ -33,7 +32,7 @@ class EventBusTest {
     }
 
     @Test
-    fun `typed publish projects wire envelope when sseType is set`() {
+    fun `wire-eligible events project an Envelope and seed replay`() {
         val bus = EventBus(replay = 16)
         val typed = bus.publish(CampsiteEvent.Claimed(matchId = 42, companionId = "cmp-A", leaseExpires = "2026-06-04T22:00:00Z"))
         assertNotNull(typed.wire)
@@ -41,7 +40,6 @@ class EventBusTest {
         assertTrue(typed.wire.data.contains("\"id\":42"))
         assertTrue(typed.wire.data.contains("\"companionId\":\"cmp-A\""))
         assertEquals(typed.id, typed.wire.id)
-        // Also visible in the replay buffer for SSE resume
         assertEquals(listOf(typed.wire), bus.replayBuffer())
     }
 
@@ -50,23 +48,8 @@ class EventBusTest {
         val bus = EventBus(replay = 16)
         val typed = bus.publish(CampsiteEvent.PollDue(alertId = 7))
         assertNull(typed.wire)
-        // Wire replay buffer is empty
         assertEquals(emptyList(), bus.replayBuffer())
     }
-
-    @Test
-    fun `legacy string publish surfaces as Legacy event on typed flow`() =
-        runBlocking {
-            val bus = EventBus(replay = 16)
-            // Subscribe to the typed flow first by collecting from replay after publish
-            bus.publish("match", """{"id":99}""")
-            val first: TypedEnvelope = bus.typedEvents.first()
-            val ev = first.event
-            assertTrue(ev is CampsiteEvent.Legacy, "expected Legacy, got $ev")
-            assertEquals("match", (ev as CampsiteEvent.Legacy).type)
-            assertNotNull(first.wire)
-            assertEquals("match", first.wire!!.type)
-        }
 
     @Test
     fun `typed replay carries scheduler-only events alongside wire-eligible ones`() {
