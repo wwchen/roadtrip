@@ -133,7 +133,10 @@ local_resource(
 )
 
 local_resource(
-    'refresh-cookies-local',
+    # Tesla-specific cookie refresh, NOT recreation.gov. Recgov auth lives in
+    # the backend's TokenManager (see RFC 0001 / PR #22). This row mints fresh
+    # _abck cookies for the Tesla supercharger scraper into this repo's .env.
+    'refresh-tesla-cookies',
     cmd='make refresh-cookies-local',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
