@@ -1,29 +1,34 @@
 # Pricing setup
 
-Supercharger pricing is fetched lazily from `tesla.com/api/findus/get-charger-details`
-through a local proxy. That endpoint is Akamai-gated — every request needs a valid
-`_abck` cookie tied to the calling IP.
+Supercharger pricing is served read-only from `data/pricing-cache/{slug}.json`.
+The cache is populated **offline** by `scripts/fetch_tesla_superchargers.py`
+(run via `make refresh-superchargers` / `make rebuild-superchargers`); the
+Kotlin backend never calls Tesla on the request path. Misses on
+`/api/pricing/{slug}` return HTTP 404 with `{"error":"not_cached"}`.
+
+The offline refresh worker hits `tesla.com/api/findus/get-charger-details`
+through `curl-impersonate` (Akamai fingerprints TLS ClientHello + HTTP/2
+SETTINGS) and needs a valid `_abck` cookie tied to the calling IP. Cookies
+live in `.env` as `TESLA_COOKIES=…`.
 
 ## One-time setup (or refresh when expired)
 
 ```sh
-./refresh-cookies.sh
+make refresh-cookies         # mint cookies on this laptop, push them to the deploy host
+make refresh-cookies-local   # mint cookies into THIS repo's .env (laptop-only egress)
 ```
 
-The script walks you through pasting a "Copy as cURL" blob from Chrome DevTools,
-extracts the cookie, writes it to `.env`, smoke-tests against a known
-Supercharger, and offers to restart the local/Docker server to pick it up.
-
-Behind the scenes:
-1. In Chrome, visit <https://www.tesla.com/findus?functionType=supercharger>, click any Supercharger.
-2. DevTools → Network tab → find `get-charger-details?...` → right-click → Copy → Copy as cURL.
-3. Paste into the script's stdin, press Ctrl-D.
+Both flows mint cookies from Safari on the laptop and smoke-test them. The
+remote variant pushes the cookie to `$DEPLOY_HOST` and restarts the deployed
+backend; the local variant just writes `.env` here for iterating on the
+fetcher script in local Docker.
 
 ## When cookies expire
 
 Akamai cookies last on the order of a day; they're also IP-bound.
-If pricing stops working, popups show `Pricing unavailable (HTTP 403)`.
-Re-run `./refresh-cookies.sh`.
+If a refresh run starts returning 403/429, re-run `make refresh-cookies`.
+(The user-facing site is unaffected — it serves the existing cache; only the
+*next* refresh is blocked.)
 
 ## What gets cached
 

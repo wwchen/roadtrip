@@ -1,5 +1,14 @@
 # Roadtrip Map — Requirements
 
+> **Status (2026-06):** this is the original POC scoping doc, kept for
+> context. What actually shipped diverges in a few load-bearing ways:
+> there's now a Kotlin/Ktor backend + Postgres+PostGIS deployed via Docker
+> behind a Cloudflare tunnel (not a static GH Pages site); coverage extends
+> into Canada (BC Parks, Parks Canada, AB); and a recreation.gov campsite
+> alert sub-app is mounted at `/campsite/`. The "no backend required",
+> "continental US only", "deployable to GitHub Pages" framing below is
+> historical. See `README.md` and `DATA_SOURCES.md` for the current state.
+
 ## Goal
 A personal web-based map showing points of interest useful for roadtripping in a Tesla: charging, overnight stays, and workout/shower stops. The aim is a clean, filterable map — not a route planner replacement for the Tesla nav.
 

@@ -91,6 +91,12 @@ re-run `make refresh-cookies`.
   `/api/pois`, `/api/pricing/{slug}`, `/api/health`. Postgres+PostGIS holds
   the imported POI data; Supercharger geometry is live from
   supercharge.info/service/supercharge/allSites.
+- **Campsite alert sub-app.** A separate recreation.gov polling/booking tool
+  is mounted at `/campsite/` (UI served from the JAR's classpath at
+  `backend/src/main/resources/static/campsite/`) with its own API surface
+  under `/api/campsite/*` (alerts, matches, settings, status, events SSE,
+  poll, companion, campgrounds/search). Shares the same Postgres instance;
+  Flyway migrates both schemas on startup.
 - **Pricing cache.** `/api/pricing/{slug}` is read-only against
   `data/pricing-cache/{slug}.json`. Misses return 404 with
   `{"error":"not_cached"}`. Cache is populated offline by

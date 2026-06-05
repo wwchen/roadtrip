@@ -6,11 +6,11 @@ Summary of research for each POI category, with the chosen primary/fallback and 
 
 | Category | Primary source | Fallback | License | Refresh | Runtime access |
 |---|---|---|---|---|---|
-| Tesla Supercharger | supercharge.info `/service/supercharge/allSites` | Open Charge Map (operator=23) | Source-available, no formal license; community-consumed | Daily via GH Action (or direct browser — CORS enabled) | Prebuilt GeoJSON |
-| Planet Fitness | Overpass (`brand=Planet Fitness`) | One-time scrape of pf.com locator | OSM ODbL | Weekly | Prebuilt GeoJSON |
-| Campgrounds | USCampgrounds.info + BC Parks API + recreation.gov enrichment | Overpass `tourism=camp_site` | CC-BY + OGL-BC + rec.gov public domain | Weekly | Prebuilt GeoJSON |
-| Free chargers | NREL AFDC (filtered) | Open Charge Map (`usagetypeid=1`) | US Gov public domain + ODbL | Daily via GH Action | Prebuilt GeoJSON |
-| State parks | USGS PAD-US 4.0 (filter state-managed) | OSM `protect_class` | Public domain | Annual | Prebuilt GeoJSON |
+| Tesla Supercharger | supercharge.info `/service/supercharge/allSites` | Open Charge Map (operator=23) | Source-available, no formal license; community-consumed | Daily via GH Action (or direct browser — CORS enabled) | Live fetch from supercharge.info (CORS) + per-site pricing from `/api/pricing/{slug}` (cache-only) |
+| Planet Fitness | Overpass (`brand=Planet Fitness`) | One-time scrape of pf.com locator | OSM ODbL | Weekly | `/api/pois` bbox query (PostGIS) |
+| Campgrounds | USCampgrounds.info + BC Parks API + recreation.gov enrichment | Overpass `tourism=camp_site` | CC-BY + OGL-BC + rec.gov public domain | Weekly | `/api/pois` bbox query (PostGIS) |
+| Free chargers | NREL AFDC (filtered) | Open Charge Map (`usagetypeid=1`) | US Gov public domain + ODbL | Daily via GH Action | Prebuilt GeoJSON (not yet wired) |
+| State parks | USGS PAD-US 4.0 (filter state-managed) | OSM `protect_class` | Public domain | Annual | Prebuilt GeoJSON polygons under `/data/` |
 | Hipcamp | (none — skip for POC) | Manually-curated GeoJSON | n/a | Manual | Prebuilt GeoJSON |
 
 ---
@@ -169,6 +169,13 @@ Skip for the POC.
   └─ scripts/fetch_parks.py            # monthly — PAD-US FeatureServer
 commits any changed GeoJSON back to main → deploy server pulls.
 ```
+
+The fetcher scripts above produce GeoJSON inputs. The Kotlin importer
+(`make pois-import-all`, or `make pois-import SOURCE=<name>`) ingests those
+GeoJSON files into Postgres+PostGIS, and the Ktor backend serves them via
+the bbox-keyed `/api/pois` endpoint at runtime. Static parks polygons and
+Supercharger geometry remain file-served (`/data/*` and a live fetch from
+supercharge.info, respectively).
 
 This sidesteps:
 - CORS (no runtime cross-origin calls — though supercharge.info, Overpass, OCM, NREL AFDC, PAD-US all support CORS and could be fetched live if we wanted)
