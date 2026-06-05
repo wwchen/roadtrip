@@ -1,5 +1,6 @@
 package ca.floo.campsite.recgov.booker.api
 
+import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
@@ -24,7 +25,10 @@ private data class CachedStatus(
 private val cache = AtomicReference<CachedStatus?>(null)
 private const val CACHE_MS = 60_000L
 
-fun Route.statusRoutes(settings: SettingsRepo) {
+fun Route.statusRoutes(
+    settings: SettingsRepo,
+    tokenManager: TokenManager? = null,
+) {
     get("/api/campsite/status") {
         val now = OffsetDateTime.now()
         val cur = cache.get()
@@ -48,7 +52,10 @@ fun Route.statusRoutes(settings: SettingsRepo) {
                 cache.set(CachedStatus(ok, now))
                 ok
             }
-        val token = settings.get("recgov_token").orEmpty()
+        // Prefer TokenManager.peek so we get the cached recaccount when the
+        // token has been refreshed since the persisted setting was last
+        // touched. Falls back to settings for tests.
+        val token = tokenManager?.peek() ?: settings.get("recgov_token").orEmpty()
         val loggedIn = token.isNotEmpty() && !RecgovAuth.tokenInfo(token).expired
         call.respondText("""{"recgovReachable":$recgovReachable,"loggedIn":$loggedIn,"checkedAt":"$now"}""")
     }

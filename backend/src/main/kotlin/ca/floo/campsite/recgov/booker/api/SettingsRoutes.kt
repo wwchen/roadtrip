@@ -1,5 +1,6 @@
 package ca.floo.campsite.recgov.booker.api
 
+import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
 import io.ktor.http.HttpStatusCode
@@ -17,6 +18,7 @@ private const val MASK = "••••••••"
 fun Route.settingsRoutes(
     settings: SettingsRepo,
     slack: SlackNotifier,
+    tokenManager: TokenManager? = null,
 ) {
     get("/api/campsite/settings") {
         val all = settings.all()
@@ -53,6 +55,7 @@ fun Route.settingsRoutes(
         // the extracted token + refresh creds, never the raw paste.
         body.string("recgov_cookies")?.takeIf { it.isNotEmpty() && it != MASK }?.let { raw ->
             applyCookiePaste(settings, raw)
+            tokenManager?.reloadFromSettings()
         }
         if (updates.isNotEmpty()) settings.setMany(updates)
         call.respondText("""{"ok":true}""")
@@ -80,6 +83,7 @@ fun Route.settingsRoutes(
         }
 
         applyCookiePaste(settings, raw)
+        tokenManager?.reloadFromSettings()
 
         val token = settings.get("recgov_token").orEmpty()
         val info = RecgovAuth.tokenInfo(token)
@@ -100,9 +104,9 @@ fun Route.settingsRoutes(
 
     // "Test browser session" — repurposed: validate the stored token, and if
     // it's expired but we have refresh creds, mint a fresh one. No browser.
+    // Delegates to TokenManager so all refresh paths share one mutex.
     post("/api/campsite/settings/test-chrome") {
         val token = settings.get("recgov_token").orEmpty()
-        val credsStr = settings.get("recgov_refresh_creds").orEmpty()
         if (token.isEmpty()) {
             call.respondText("""{"loggedIn":false,"error":"no token saved"}""")
             return@post
@@ -120,51 +124,59 @@ fun Route.settingsRoutes(
             return@post
         }
 
-        // Token expired — try the refresh path
-        val creds = credsStr.takeIf { it.isNotEmpty() }?.let { RecgovAuth.extractRefreshCreds(it) }
-        if (creds == null) {
-            call.respondText("""{"loggedIn":false,"tokenExpired":true,"error":"token expired and no refresh creds saved"}""")
+        val mgr = tokenManager
+        if (mgr == null) {
+            call.respondText("""{"loggedIn":false,"tokenExpired":true,"error":"token manager not wired"}""")
             return@post
         }
-
-        val refreshed = RecgovAuth.refreshAccessToken(token, creds)
-        if (refreshed.isNullOrEmpty()) {
-            call.respondText("""{"loggedIn":false,"tokenExpired":true,"error":"refresh failed"}""")
-            return@post
-        }
-        settings.set("recgov_token", refreshed)
-        val newInfo = RecgovAuth.tokenInfo(refreshed)
-        val resp =
-            buildJsonObject {
-                put("loggedIn", true)
-                newInfo.expires?.let { put("tokenExpires", it.toString()) }
-                put("tokenExpired", false)
-                put("refreshed", true)
+        when (val r = mgr.refreshNow()) {
+            is TokenManager.RefreshResult.Ok -> {
+                val resp =
+                    buildJsonObject {
+                        put("loggedIn", true)
+                        (r.recaccount["expiration"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.let {
+                            put("tokenExpires", it)
+                        }
+                        put("tokenExpired", false)
+                        put("refreshed", true)
+                    }
+                call.respondText(resp.toString())
             }
-        call.respondText(resp.toString())
+            is TokenManager.RefreshResult.NoCreds ->
+                call.respondText("""{"loggedIn":false,"tokenExpired":true,"error":"token expired and no refresh creds saved"}""")
+            is TokenManager.RefreshResult.NoToken ->
+                call.respondText("""{"loggedIn":false,"error":"no token saved"}""")
+            is TokenManager.RefreshResult.Failed ->
+                call.respondText("""{"loggedIn":false,"tokenExpired":true,"error":"${r.reason}"}""")
+        }
     }
 
     post("/api/campsite/settings/refresh-token") {
-        val token = settings.get("recgov_token").orEmpty()
-        val credsStr = settings.get("recgov_refresh_creds").orEmpty()
-        val creds = credsStr.takeIf { it.isNotEmpty() }?.let { RecgovAuth.extractRefreshCreds(it) }
-        if (token.isEmpty() || creds == null) {
-            call.respond(HttpStatusCode.BadRequest, """{"error":"no token or refresh creds saved"}""")
+        // Delegates to TokenManager so SettingsRoutes and the scheduler-fired
+        // TokenRefreshDue handler share one mutex'd refresh path. Returns
+        // synchronously — the UI button needs the answer.
+        val mgr = tokenManager
+        if (mgr == null) {
+            call.respond(HttpStatusCode.InternalServerError, """{"error":"token manager not wired"}""")
             return@post
         }
-        val refreshed = RecgovAuth.refreshAccessToken(token, creds)
-        if (refreshed.isNullOrEmpty()) {
-            call.respond(HttpStatusCode.BadGateway, """{"error":"refresh failed"}""")
-            return@post
-        }
-        settings.set("recgov_token", refreshed)
-        val info = RecgovAuth.tokenInfo(refreshed)
-        val resp =
-            buildJsonObject {
-                put("ok", true)
-                info.expires?.let { put("expires", it.toString()) }
+        when (val r = mgr.refreshNow()) {
+            is TokenManager.RefreshResult.Ok -> {
+                val resp =
+                    buildJsonObject {
+                        put("ok", true)
+                        (r.recaccount["expiration"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.let {
+                            put("expires", it)
+                        }
+                    }
+                call.respondText(resp.toString())
             }
-        call.respondText(resp.toString())
+            is TokenManager.RefreshResult.NoToken,
+            is TokenManager.RefreshResult.NoCreds,
+            -> call.respond(HttpStatusCode.BadRequest, """{"error":"no token or refresh creds saved"}""")
+            is TokenManager.RefreshResult.Failed ->
+                call.respond(HttpStatusCode.BadGateway, """{"error":"${r.reason}"}""")
+        }
     }
 
     post("/api/campsite/settings/clear-session") {
@@ -175,6 +187,7 @@ fun Route.settingsRoutes(
                 "recgov_cookies" to "",
             ),
         )
+        tokenManager?.clearCache()
         call.respondText("""{"ok":true}""")
     }
 }
