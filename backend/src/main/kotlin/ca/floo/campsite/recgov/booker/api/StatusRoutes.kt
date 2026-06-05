@@ -1,5 +1,6 @@
 package ca.floo.campsite.recgov.booker.api
 
+import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
@@ -23,7 +24,7 @@ private data class CachedStatus(
 private val cache = AtomicReference<CachedStatus?>(null)
 private const val CACHE_MS = 60_000L
 
-fun Route.statusRoutes() {
+fun Route.statusRoutes(settings: SettingsRepo) {
     get("/api/campsite/status") {
         val now = OffsetDateTime.now()
         val cur = cache.get()
@@ -47,7 +48,8 @@ fun Route.statusRoutes() {
                 cache.set(CachedStatus(ok, now))
                 ok
             }
-        // No more browser-side login state — companion owns auth. Backend reports reachability only.
-        call.respondText("""{"recgovReachable":$recgovReachable,"loggedIn":null,"checkedAt":"$now"}""")
+        val token = settings.get("recgov_token").orEmpty()
+        val loggedIn = token.isNotEmpty() && !RecgovAuth.tokenInfo(token).expired
+        call.respondText("""{"recgovReachable":$recgovReachable,"loggedIn":$loggedIn,"checkedAt":"$now"}""")
     }
 }

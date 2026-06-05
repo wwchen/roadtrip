@@ -97,7 +97,7 @@ fun Route.campsiteRoutes(s: CampsiteServices) {
     alertRoutes(s.alerts, s.poller)
     matchRoutes(s.alerts, s.matches, s.bus, s.leaseDuration)
     settingsRoutes(s.settings, s.slack)
-    statusRoutes()
+    statusRoutes(s.settings)
     campgroundSearchRoutes()
     pollRoutes(s.poller)
     companionRoutes(s.companions, s.bus)
