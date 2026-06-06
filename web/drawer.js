@@ -17,7 +17,7 @@
 // Pin reselect while drawer open: opacity-only fade (~150ms), DOM stable,
 // skeleton overlay during fetch. Inflight fetch is cancelled.
 
-import { state, distanceKm, formatDistance, escapeHtml } from './core.js';
+import { state, distanceKm, formatDistance, escapeHtml, callButtonsHTML } from './core.js';
 import {
   parseAmenities,
   parseCellCoverage,
@@ -177,9 +177,7 @@ function renderShell(f) {
   const footer = lastVerifiedFooterHTML(p);
 
   const verdict = seasonVerdictHTML(p.season, p.reservable);
-  const callBtn = p.phone
-    ? `<a class="cg-btn cg-btn-secondary" href="tel:${p.phone}">Call ${escapeHtml(p.phone)}</a>`
-    : '';
+  const callBtns = callButtonsHTML(p.phone);
 
   // Hero photo lands flush against the top edges when present. Falls back
   // to extra header padding when missing (drawer-head's first-child rule).
@@ -215,12 +213,12 @@ function renderShell(f) {
       <div class="cg-actions">
         <a class="cg-btn cg-btn-primary" href="/campsite?campground=${encodeURIComponent(p.recgov_id)}" data-cta="watch">Watch for openings</a>
         <a class="cg-btn cg-btn-secondary" href="https://www.recreation.gov/camping/campgrounds/${encodeURIComponent(p.recgov_id)}" target="_blank" rel="noreferrer" data-cta="reserve">Reserve on rec.gov</a>
-        ${callBtn}
+        ${callBtns}
       </div>`
     : `
       <div class="cg-actions">
         ${reserveButtonHTML(p, 'cg-btn')}
-        ${callBtn}
+        ${callBtns}
       </div>`;
 
   const detailsBody = [pills, cellPills, rating,

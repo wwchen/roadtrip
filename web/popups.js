@@ -1,4 +1,4 @@
-import { state, distanceKm, formatDistance, escapeHtml } from './core.js';
+import { state, distanceKm, formatDistance, escapeHtml, callButtonsHTML } from './core.js';
 import { openCampgroundDrawer, openDrawer } from './drawer.js';
 
 async function loadPricing(slug, elId, signal) {
@@ -149,9 +149,7 @@ export function openPlanetFitnessPopup(f) {
   const addr = [p.street, p.city, p.state, p.postcode].filter(Boolean).join(', ');
   const website = p.website || 'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '));
   const sub = buildSubline([addr, distanceTo(lng, lat)]);
-  const callBtn = p.phone
-    ? `<a class="cg-btn cg-btn-secondary" href="tel:${p.phone}">Call ${escapeHtml(p.phone)}</a>`
-    : '';
+  const callBtns = callButtonsHTML(p.phone);
   const hours = p.opening_hours
     ? `<div class="pills"><span class="pill">${escapeHtml(p.opening_hours)}</span></div>`
     : '';
@@ -159,7 +157,7 @@ export function openPlanetFitnessPopup(f) {
     ${drawerHeader(p.name || 'Planet Fitness', sub)}
     <div class="cg-actions">
       <a class="cg-btn cg-btn-primary" href="${website}" target="_blank" rel="noreferrer">Open in Planet Fitness</a>
-      ${callBtn}
+      ${callBtns}
     </div>
     ${hours}
   `);

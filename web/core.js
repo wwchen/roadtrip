@@ -58,6 +58,36 @@ export function formatDistance(km) {
   return Math.round(km) + ' km away';
 }
 
+/**
+ * Render one or more `Call ...` tertiary buttons from a phone field that
+ * may be a single number, slash-delimited, or comma-delimited (e.g.
+ * "530.336.5521/530.257.2151" → two buttons). US numbers (10 digits) are
+ * formatted as (XXX) XXX-XXXX; others are echoed raw. tel: href strips
+ * everything except digits and a leading +.
+ */
+export function callButtonsHTML(phoneRaw, btnClass = 'cg-btn cg-btn-tertiary') {
+  if (!phoneRaw) return '';
+  const numbers = String(phoneRaw).split(/[\/,;]/).map(s => s.trim()).filter(Boolean);
+  return numbers.map(n => {
+    const digits = n.replace(/[^\d+]/g, '');
+    const display = formatPhone(n);
+    const safe = escapeHtml(display);
+    return `<a class="${btnClass}" href="tel:${escapeHtml(digits)}">Call ${safe}</a>`;
+  }).join('');
+}
+
+/** US 10-digit numbers → "(XXX) XXX-XXXX"; everything else passes through. */
+export function formatPhone(s) {
+  const digits = String(s).replace(/\D/g, '');
+  if (digits.length === 10) {
+    return `(${digits.slice(0,3)}) ${digits.slice(3,6)}-${digits.slice(6)}`;
+  }
+  if (digits.length === 11 && digits.startsWith('1')) {
+    return `(${digits.slice(1,4)}) ${digits.slice(4,7)}-${digits.slice(7)}`;
+  }
+  return s;
+}
+
 export function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({
     '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;'
