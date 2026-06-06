@@ -17,17 +17,23 @@
 CREATE TABLE ingest_runs (
     id              BIGSERIAL PRIMARY KEY,
     target          TEXT        NOT NULL,        -- 'campgrounds', 'planet-fitness', ...
-    phase           TEXT        NOT NULL,        -- 'target' for parent rows, otherwise the phase label
-    phase_kind      TEXT        NOT NULL,        -- 'target' | 'shell' | 'kotlin'
+    -- For parent rows: 'fetch' or 'import' (the kind of run).
+    -- For phase rows: the phase label (e.g. 'fetch_planet_fitness.py', 'import:osm-pf').
+    phase           TEXT        NOT NULL,
+    -- 'target' on parent rows; 'fetch' or 'import' on phase rows. The parent's
+    -- 'phase' column carries the run kind, so phase_kind on parents stays
+    -- 'target' for "this is the parent row" — the leaf rows tell you which
+    -- kind of phase they were.
+    phase_kind      TEXT        NOT NULL,
     parent_run_id   BIGINT REFERENCES ingest_runs(id) ON DELETE CASCADE,
     status          TEXT        NOT NULL,        -- 'started' | 'completed' | 'failed' | 'aborted'
     started_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     completed_at    TIMESTAMPTZ,
-    exit_code       INT,                         -- shell phases only
+    exit_code       INT,                         -- fetch phases only
     counts          JSONB       NOT NULL DEFAULT '{}'::jsonb,  -- {seen, swept, import_run_id, ...}
     notes           TEXT,                        -- failure reason, stderr tail (last 4kb)
     triggered_by    TEXT        NOT NULL,        -- 'admin-api' | 'tilt' | 'cli' | 'cron' | 'boot-recovery'
-    CONSTRAINT ingest_runs_phase_kind_check CHECK (phase_kind IN ('target', 'shell', 'kotlin')),
+    CONSTRAINT ingest_runs_phase_kind_check CHECK (phase_kind IN ('target', 'fetch', 'import')),
     CONSTRAINT ingest_runs_status_check     CHECK (status     IN ('started', 'completed', 'failed', 'aborted'))
 );
 

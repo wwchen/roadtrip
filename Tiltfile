@@ -104,10 +104,10 @@ local_resource(
 # - 'refresh-cookies-local' mints Tesla cookies into THIS repo's .env. The
 #   prod equivalent ('make refresh-cookies', remote-host) intentionally is
 #   not surfaced here — it's a deploy-machine concern.
-# - 'pois-import' (with SOURCE=all or SOURCE=<name>) runs the Kotlin importer against local
-#   Postgres. Upstream Python fetchers (scripts/fetch_*.py) generate the
-#   data/*.json the importer reads — those are still Make-only because they
-#   run rarely and require source-specific cookies/keys.
+# - 'data-fetch' / 'data-import' POST to the backend's RFC 0004 admin API.
+#   Two-step refresh: fetch upstream into data/*.{json,geojson}, then import
+#   into Postgres. Both fan out across every target; per-target mutex keeps
+#   them ordered.
 
 local_resource(
     'refresh-image',
@@ -146,30 +146,31 @@ local_resource(
     labels=['data'],
 )
 
-# --- Ingest targets (RFC 0004 / issue #44) -----------------------------------
-# Each row POSTs to the backend's admin API, which runs the same Python
-# fetchers + Kotlin importer the human runs by hand — but records every
-# phase to ingest_runs. Pass/fail is the curl exit code; logs stream into
-# the resource pane.
+# --- Data refresh (RFC 0004 / issue #44) -------------------------------------
+# Two buttons. data-fetch pulls upstream JSON/GeoJSON into data/<target>.*
+# (Python scripts run as subprocesses by the backend's admin API). data-import
+# loads those files into Postgres via the Kotlin importer. Both fan out across
+# every known target sequentially. Per-target mutex serializes fetch + import
+# on the same target.
 #
-# These replace the carve-out for `make pois-import` (interactive fzf picker
-# can't run inside a Tilt pane). The picker still works from a terminal if
-# you want it; see `make pois-refresh`.
+# First-time stack bring-up: `tilt up` → DB migrates → click data-fetch (or
+# skip if data/ is already populated) → click data-import. Routine refresh:
+# click data-fetch then data-import.
 
-for target in [
-    'planet-fitness',
-    'state-parks',
-    'national-parks',
-    'campgrounds',
-    'parks-canada-curated',
-    'alberta-provincial',
-    'tesla-pricing',
-]:
-    local_resource(
-        'ingest-' + target,
-        cmd='scripts/admin-curl.sh ingest ' + target,
-        auto_init=False,
-        trigger_mode=TRIGGER_MODE_MANUAL,
-        resource_deps=['backend'],
-        labels=['data'],
-    )
+local_resource(
+    'data-fetch',
+    cmd='scripts/admin-curl.sh fetch',
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    resource_deps=['backend'],
+    labels=['data'],
+)
+
+local_resource(
+    'data-import',
+    cmd='scripts/admin-curl.sh import',
+    auto_init=False,
+    trigger_mode=TRIGGER_MODE_MANUAL,
+    resource_deps=['backend'],
+    labels=['data'],
+)

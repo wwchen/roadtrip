@@ -170,9 +170,9 @@ Skip for the POC.
 commits any changed GeoJSON back to main → deploy server pulls.
 ```
 
-The fetcher scripts above produce GeoJSON inputs. The Kotlin importer
-(`make pois-import SOURCE=all`, or `make pois-import SOURCE=<name>`) ingests those
-GeoJSON files into Postgres+PostGIS, and the Ktor backend serves them via
+The fetcher scripts above produce GeoJSON inputs. `make data-import` (or
+`make data-import TARGET=<name>`) ingests those GeoJSON files into
+Postgres+PostGIS via the Kotlin importer, and the Ktor backend serves them via
 the bbox-keyed `/api/pois` endpoint at runtime. Static parks polygons and
 Supercharger geometry remain file-served (`/data/*` and a live fetch from
 supercharge.info, respectively).

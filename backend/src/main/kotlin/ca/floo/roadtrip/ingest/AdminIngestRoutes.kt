@@ -9,90 +9,42 @@ import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import io.ktor.server.routing.post
 import io.ktor.server.routing.route
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.launch
 import org.jooq.DSLContext
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
 // Admin surface for the ingestion controller (RFC 0004 / issue #44).
 //
+// Vocabulary:
+//   POST /api/admin/data/fetch[/{target}]    web → data/<target>.{json,geojson}
+//   POST /api/admin/data/import[/{target}]   data/ → Postgres rows via Importer
+//   GET  /api/admin/data/runs[?target=…|/:id] history
+//   GET  /api/admin/data/health              per-target last-completed + age
+//
+// With no {target}, fetch and import fan out across every known target,
+// sequentially, in `defaultTargets` declaration order. The response is the
+// per-target outcome list.
+//
 // Auth boundary lives upstream at the Cloudflare Zero Trust path rule on
 // /api/admin/* (existing tunnel). Locally the routes are reachable on
-// 127.0.0.1:8765 directly — Tilt buttons and `make pois-refresh` curl them.
-// If you ever expose dev to the internet, bind to loopback only.
-//
-// Default semantics: POST is synchronous. The handler suspends until the
-// run completes (success or first phase failure) and returns the final
-// status. Pass ?async=1 to fire-and-forget with a 202 + run_id.
+// 127.0.0.1:8765 directly — Tilt buttons and `make data-fetch`/`data-import`
+// curl them. If you ever expose dev to the internet, bind to loopback only.
 fun Route.adminIngestRoutes(
     controller: IngestController,
     ctx: DSLContext,
-    scope: CoroutineScope,
 ) {
-    route("/api/admin/ingest") {
-        post("/{target}") {
-            val target = call.parameters["target"]!!
-            val async = call.request.queryParameters["async"] == "1"
-            val triggeredBy = call.request.queryParameters["triggered_by"] ?: "admin-api"
+    route("/api/admin/data") {
+        // One target — sync default; ?async=1 fires-and-forgets.
+        post("/fetch/{target}") { runOne(controller, RunKind.FETCH) }
+        post("/import/{target}") { runOne(controller, RunKind.IMPORT) }
 
-            if (async) {
-                // Fire-and-forget. We need the parent run_id to return — start
-                // the run, but launch the actual phases on the supervisor scope.
-                // To avoid racing the scope.launch and getting a 202 before the
-                // parent row exists, do the lock+row creation synchronously and
-                // run phases async. Simplest path: just spawn startRun and
-                // surface failures as a synchronous error.
-                scope.launch {
-                    try {
-                        controller.startRun(target, triggeredBy)
-                    } catch (_: TargetNotFoundException) {
-                        // already returned 404 below
-                    } catch (e: TargetBusyException) {
-                        // already returned 409 below
-                    }
-                }
-                // Best-effort 202: caller polls GET /runs?target= to find it.
-                call.respondText(
-                    """{"target":"$target","async":true}""",
-                    ContentType.Application.Json,
-                    HttpStatusCode.Accepted,
-                )
-                return@post
-            }
-
-            try {
-                val outcome = controller.startRun(target, triggeredBy)
-                val status =
-                    if (outcome.status == "completed") HttpStatusCode.OK else HttpStatusCode.InternalServerError
-                val sb = StringBuilder()
-                sb.append('{')
-                sb.append(""""run_id":""").append(outcome.parentRunId)
-                sb.append(""","target":""").append(jsonString(target))
-                sb.append(""","status":""").append(jsonString(outcome.status))
-                outcome.failedPhase?.let { sb.append(""","failed_phase":""").append(jsonString(it)) }
-                sb.append(""","async":false}""")
-                call.respondText(sb.toString(), ContentType.Application.Json, status)
-            } catch (_: TargetNotFoundException) {
-                val known = controller.knownTargets().sorted()
-                call.respondText(
-                    """{"error":"unknown target","target":${jsonString(target)},"known":${jsonStringArray(known)}}""",
-                    ContentType.Application.Json,
-                    HttpStatusCode.NotFound,
-                )
-            } catch (e: TargetBusyException) {
-                call.respondText(
-                    """{"error":"target busy","target":"${e.target}","running_run_id":${e.runningRunId}}""",
-                    ContentType.Application.Json,
-                    HttpStatusCode.Conflict,
-                )
-            }
-        }
+        // No target — fan out across every known target sequentially.
+        post("/fetch") { runAll(controller, RunKind.FETCH) }
+        post("/import") { runAll(controller, RunKind.IMPORT) }
 
         get("/runs") {
             val target = call.request.queryParameters["target"]
-            val rows = listRecent(ctx, target, limit = 50)
-            call.respondText(rows, ContentType.Application.Json)
+            call.respondText(listRecent(ctx, target, limit = 50), ContentType.Application.Json)
         }
 
         get("/runs/{id}") {
@@ -114,10 +66,88 @@ fun Route.adminIngestRoutes(
         }
 
         get("/health") {
-            val rows = healthByTarget(ctx, controller.knownTargets())
-            call.respondText(rows, ContentType.Application.Json)
+            call.respondText(healthByTarget(ctx, controller.knownTargets()), ContentType.Application.Json)
         }
     }
+}
+
+private suspend fun io.ktor.server.routing.RoutingContext.runOne(
+    controller: IngestController,
+    kind: RunKind,
+) {
+    val target = call.parameters["target"]!!
+    try {
+        val outcome = controller.startRun(target, kind, "admin-api")
+        val status =
+            when (outcome.status) {
+                "completed", "noop" -> HttpStatusCode.OK
+                else -> HttpStatusCode.InternalServerError
+            }
+        call.respondText(outcomeJson(outcome), ContentType.Application.Json, status)
+    } catch (_: TargetNotFoundException) {
+        val known = controller.knownTargets().sorted()
+        call.respondText(
+            """{"error":"unknown target","target":${jsonString(target)},"known":${jsonStringArray(known)}}""",
+            ContentType.Application.Json,
+            HttpStatusCode.NotFound,
+        )
+    } catch (e: TargetBusyException) {
+        call.respondText(
+            """{"error":"target busy","target":${jsonString(e.target)},"running_run_id":${e.runningRunId}}""",
+            ContentType.Application.Json,
+            HttpStatusCode.Conflict,
+        )
+    }
+}
+
+private suspend fun io.ktor.server.routing.RoutingContext.runAll(
+    controller: IngestController,
+    kind: RunKind,
+) {
+    // Fan out sequentially. Concurrent might be tempting but parallel fetches
+    // against the same upstream (rec.gov, OSM Overpass) burn rate-limit
+    // budget for no real wall-clock savings on a manual refresh.
+    val outcomes = mutableListOf<RunOutcome>()
+    var anyFailed = false
+    for (target in controller.knownTargets().sorted()) {
+        try {
+            val outcome = controller.startRun(target, kind, "admin-api")
+            if (outcome.status == "failed") anyFailed = true
+            outcomes.add(outcome)
+        } catch (e: TargetBusyException) {
+            // Skip a busy target rather than abort the whole fan-out.
+            anyFailed = true
+            outcomes.add(
+                RunOutcome(
+                    parentRunId = e.runningRunId,
+                    target = e.target,
+                    kind = kind,
+                    status = "busy",
+                    failedPhase = null,
+                ),
+            )
+        }
+    }
+    val status = if (anyFailed) HttpStatusCode.InternalServerError else HttpStatusCode.OK
+    val sb = StringBuilder("""{"kind":""").append(jsonString(kind.rowValue)).append(""","outcomes":[""")
+    outcomes.forEachIndexed { i, o ->
+        if (i > 0) sb.append(',')
+        sb.append(outcomeJson(o))
+    }
+    sb.append("]}")
+    call.respondText(sb.toString(), ContentType.Application.Json, status)
+}
+
+private fun outcomeJson(o: RunOutcome): String {
+    val sb = StringBuilder()
+    sb.append('{')
+    sb.append(""""run_id":""").append(o.parentRunId)
+    sb.append(""","target":""").append(jsonString(o.target))
+    sb.append(""","kind":""").append(jsonString(o.kind.rowValue))
+    sb.append(""","status":""").append(jsonString(o.status))
+    o.failedPhase?.let { sb.append(""","failed_phase":""").append(jsonString(it)) }
+    sb.append('}')
+    return sb.toString()
 }
 
 private fun listRecent(
@@ -151,6 +181,8 @@ private fun listRecent(
         if (i > 0) sb.append(',')
         sb.append("""{"id":""").append(r.get(INGEST_RUNS.ID))
         sb.append(""","target":""").append(jsonString(r.get(INGEST_RUNS.TARGET)!!))
+        // Parent row's `phase` column carries the run kind (fetch | import).
+        sb.append(""","kind":""").append(jsonString(r.get(INGEST_RUNS.PHASE)!!))
         sb.append(""","status":""").append(jsonString(r.get(INGEST_RUNS.STATUS)!!))
         sb.append(""","triggered_by":""").append(jsonString(r.get(INGEST_RUNS.TRIGGERED_BY)!!))
         sb.append(""","started_at":""").append(jsonString(r.get(INGEST_RUNS.STARTED_AT)!!.toString()))
@@ -184,6 +216,7 @@ private fun runDetail(
     sb.append('{')
     sb.append(""""id":""").append(parent.id)
     sb.append(""","target":""").append(jsonString(parent.target!!))
+    sb.append(""","kind":""").append(jsonString(parent.phase!!))
     sb.append(""","status":""").append(jsonString(parent.status!!))
     sb.append(""","triggered_by":""").append(jsonString(parent.triggeredBy!!))
     sb.append(""","started_at":""").append(jsonString(parent.startedAt!!.toString()))
@@ -230,9 +263,10 @@ private fun healthByTarget(
         sb.append('{')
         sb.append(""""target":""").append(jsonString(t))
         if (latest == null) {
-            sb.append(""","last_run":null,"status":null,"age_sec":null}""")
+            sb.append(""","last_run":null,"kind":null,"status":null,"age_sec":null}""")
         } else {
             sb.append(""","last_run":""").append(latest.id)
+            sb.append(""","kind":""").append(jsonString(latest.phase!!))
             sb.append(""","status":""").append(jsonString(latest.status!!))
             val ageSec =
                 java.time.Duration

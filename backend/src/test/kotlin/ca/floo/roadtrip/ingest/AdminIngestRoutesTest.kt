@@ -12,9 +12,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -78,13 +76,12 @@ class AdminIngestRoutesTest {
     }
 
     @Test
-    fun `POST unknown target returns 404 with known list`() =
+    fun `POST fetch unknown target returns 404 with known list`() =
         testApplication {
             val controller = controllerWith(emptyMap())
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            application { routing { adminIngestRoutes(controller, ctx, scope) } }
+            application { routing { adminIngestRoutes(controller, ctx) } }
 
-            val resp = client.post("/api/admin/ingest/nope")
+            val resp = client.post("/api/admin/data/fetch/nope")
             assertEquals(HttpStatusCode.NotFound, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("unknown target", body["error"]!!.jsonPrimitive.content)
@@ -92,52 +89,126 @@ class AdminIngestRoutesTest {
         }
 
     @Test
-    fun `POST happy path returns 200 with run_id and run shows in GET runs`() =
+    fun `POST fetch happy path returns 200 and run shows in GET runs`() =
         testApplication {
             val factory = SingleProcessFactory(0, "ok\n", "")
             val controller =
                 controllerWith(
-                    mapOf("t" to Target("t", listOf(Phase.Shell("step1", listOf("echo", "ok"))))),
+                    mapOf(
+                        "t" to
+                            Target(
+                                "t",
+                                listOf(Phase.Fetch("step1", listOf("echo", "ok"))),
+                                emptyList(),
+                            ),
+                    ),
                     factory = factory,
                 )
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            application { routing { adminIngestRoutes(controller, ctx, scope) } }
+            application { routing { adminIngestRoutes(controller, ctx) } }
 
-            val resp = client.post("/api/admin/ingest/t")
+            val resp = client.post("/api/admin/data/fetch/t")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("completed", body["status"]!!.jsonPrimitive.content)
             assertEquals("t", body["target"]!!.jsonPrimitive.content)
+            assertEquals("fetch", body["kind"]!!.jsonPrimitive.content)
             val runId = body["run_id"]!!.jsonPrimitive.content.toLong()
 
-            val list = client.get("/api/admin/ingest/runs")
+            val list = client.get("/api/admin/data/runs")
             assertEquals(HttpStatusCode.OK, list.status)
             val listBody = Json.parseToJsonElement(list.bodyAsText()).jsonObject
-            assertTrue(listBody["runs"]!!.jsonArray.isNotEmpty(), "runs list must be non-empty")
+            val runs = listBody["runs"]!!.jsonArray
+            assertTrue(runs.isNotEmpty(), "runs list must be non-empty")
+            assertEquals("fetch", runs[0].jsonObject["kind"]!!.jsonPrimitive.content)
 
-            val detail = client.get("/api/admin/ingest/runs/$runId")
+            val detail = client.get("/api/admin/data/runs/$runId")
             assertEquals(HttpStatusCode.OK, detail.status)
             val detailBody = Json.parseToJsonElement(detail.bodyAsText()).jsonObject
             assertEquals(1, detailBody["phases"]!!.jsonArray.size)
+            assertEquals("fetch", detailBody["kind"]!!.jsonPrimitive.content)
         }
 
     @Test
-    fun `POST shell-failure returns 500 with failed_phase`() =
+    fun `POST fetch failure returns 500 with failed_phase`() =
         testApplication {
             val factory = SingleProcessFactory(7, "", "broke\n")
             val controller =
                 controllerWith(
-                    mapOf("t" to Target("t", listOf(Phase.Shell("step1", listOf("false"))))),
+                    mapOf(
+                        "t" to
+                            Target(
+                                "t",
+                                listOf(Phase.Fetch("step1", listOf("false"))),
+                                emptyList(),
+                            ),
+                    ),
                     factory = factory,
                 )
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            application { routing { adminIngestRoutes(controller, ctx, scope) } }
+            application { routing { adminIngestRoutes(controller, ctx) } }
 
-            val resp = client.post("/api/admin/ingest/t")
+            val resp = client.post("/api/admin/data/fetch/t")
             assertEquals(HttpStatusCode.InternalServerError, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("failed", body["status"]!!.jsonPrimitive.content)
             assertEquals("step1", body["failed_phase"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `POST fetch with no target fans out across all known targets`() =
+        testApplication {
+            val factory =
+                MultiProcessFactory(
+                    listOf(
+                        FakeOutcome(0, "", ""),
+                        FakeOutcome(0, "", ""),
+                    ),
+                )
+            val controller =
+                controllerWith(
+                    mapOf(
+                        "alpha" to Target("alpha", listOf(Phase.Fetch("a", listOf("a"))), emptyList()),
+                        "beta" to Target("beta", listOf(Phase.Fetch("b", listOf("b"))), emptyList()),
+                    ),
+                    factory = factory,
+                )
+            application { routing { adminIngestRoutes(controller, ctx) } }
+
+            val resp = client.post("/api/admin/data/fetch")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("fetch", body["kind"]!!.jsonPrimitive.content)
+            val outcomes = body["outcomes"]!!.jsonArray
+            assertEquals(2, outcomes.size)
+            assertEquals(
+                setOf("alpha", "beta"),
+                outcomes.map { it.jsonObject["target"]!!.jsonPrimitive.content }.toSet(),
+            )
+            assertTrue(outcomes.all { it.jsonObject["status"]!!.jsonPrimitive.content == "completed" })
+        }
+
+    @Test
+    fun `POST import for a fetch-only target is a noop completion`() =
+        testApplication {
+            // tesla-pricing-shaped target: fetch phases, no import phases.
+            // POSTing to /import/{target} must return 200 with status='noop'
+            // rather than 500, because there's nothing to import.
+            val controller =
+                controllerWith(
+                    mapOf(
+                        "t" to
+                            Target(
+                                "t",
+                                listOf(Phase.Fetch("f", listOf("a"))),
+                                emptyList(),
+                            ),
+                    ),
+                )
+            application { routing { adminIngestRoutes(controller, ctx) } }
+
+            val resp = client.post("/api/admin/data/import/t")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("noop", body["status"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -153,18 +224,17 @@ class AdminIngestRoutesTest {
             val controller =
                 controllerWith(
                     mapOf(
-                        "alpha" to Target("alpha", listOf(Phase.Shell("a", listOf("a")))),
-                        "beta" to Target("beta", listOf(Phase.Shell("b", listOf("b")))),
+                        "alpha" to Target("alpha", listOf(Phase.Fetch("a", listOf("a"))), emptyList()),
+                        "beta" to Target("beta", listOf(Phase.Fetch("b", listOf("b"))), emptyList()),
                     ),
                     factory = factory,
                 )
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            application { routing { adminIngestRoutes(controller, ctx, scope) } }
+            application { routing { adminIngestRoutes(controller, ctx) } }
 
-            client.post("/api/admin/ingest/alpha")
-            client.post("/api/admin/ingest/beta")
+            client.post("/api/admin/data/fetch/alpha")
+            client.post("/api/admin/data/fetch/beta")
 
-            val onlyAlpha = client.get("/api/admin/ingest/runs?target=alpha")
+            val onlyAlpha = client.get("/api/admin/data/runs?target=alpha")
             val body = Json.parseToJsonElement(onlyAlpha.bodyAsText()).jsonObject
             val runs = body["runs"]!!.jsonArray
             assertEquals(1, runs.size)
@@ -177,14 +247,13 @@ class AdminIngestRoutesTest {
             val controller =
                 controllerWith(
                     mapOf(
-                        "alpha" to Target("alpha", listOf(Phase.Kotlin("k", "x"))),
-                        "beta" to Target("beta", listOf(Phase.Kotlin("k", "x"))),
+                        "alpha" to Target("alpha", emptyList(), listOf(Phase.Import("k", "x"))),
+                        "beta" to Target("beta", emptyList(), listOf(Phase.Import("k", "x"))),
                     ),
                 )
-            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
-            application { routing { adminIngestRoutes(controller, ctx, scope) } }
+            application { routing { adminIngestRoutes(controller, ctx) } }
 
-            val resp = client.get("/api/admin/ingest/health")
+            val resp = client.get("/api/admin/data/health")
             assertEquals(HttpStatusCode.OK, resp.status)
             val targets =
                 Json
@@ -239,7 +308,7 @@ class AdminIngestRoutesTest {
     }
 
     private class MultiProcessFactory(
-        private val outcomes: List<FakeOutcome>,
+        outcomes: List<FakeOutcome>,
     ) : ProcessFactory {
         private val queue: ArrayDeque<FakeOutcome> = ArrayDeque(outcomes)
 

@@ -38,23 +38,28 @@ for Tesla pricing, `refresh-tesla-cookies` to mint fresh `_abck` cookies for
 the Tesla scraper into `.env`, and `refresh-image` (one-shot prereq for the
 supercharger refreshers). Click the row, watch logs in the right pane.
 
-POI ingestion goes through the backend's admin API (RFC 0004). Tilt has one
-`ingest-<target>` button per target under the `data` cluster — click to fetch
-upstream data and import in one shot, with the run recorded in `ingest_runs`.
-From a terminal:
+POI data refresh goes through the backend's admin API (RFC 0004). Two-step
+flow, two Tilt buttons under the `data` cluster, two make targets:
 
 ```sh
-make pois-refresh TARGET=campgrounds       # fetch + import; sync, prints status
-make pois-refresh TARGET=planet-fitness
+make data-fetch                       # web → data/<target>.{json,geojson}
+make data-fetch TARGET=campgrounds    # one target only
+make data-import                      # data/ → Postgres rows via Importer
+make data-import TARGET=planet-fitness
 ```
+
+`data-fetch` runs the Python fetchers (`scripts/fetch_*.py`,
+`scripts/enrich_campgrounds.py`); `data-import` runs the Kotlin importer.
+Each phase is recorded in `ingest_runs`; per-target mutex serializes a
+fetch and an import on the same target. Skipping `data-fetch` (e.g.
+because `data/` is already populated) is fine — `data-import` runs
+independently.
 
 Targets: `planet-fitness`, `state-parks`, `national-parks`, `campgrounds`
 (composite — uscampgrounds + bc-parks + parks-canada + recgov-enrichment),
-`parks-canada-curated`, `alberta-provincial`, `tesla-pricing` (cache rebuild).
-
-The legacy `make pois-import` (interactive fzf picker over the local
-importer only — no fetch phase) is still available for offline-import
-workflows. `make pois-refresh` is what you want when refreshing prod.
+`parks-canada-curated` (curated JSON, no fetch step), `alberta-provincial`
+(curated JSON, no fetch step), `tesla-pricing` (cache rebuild, no import
+step).
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
 > backend-owned via `TokenManager` (RFC 0001 / PR #22) — paste a fresh cURL
@@ -77,9 +82,9 @@ needs Tesla cookies in `.env` — see `README_PRICING.md` and
 
 ## Refresh POI data
 
-The boring path is `make pois-refresh TARGET=<name>` (Tilt button equivalent).
-The Python scripts can still be invoked directly when you want to inspect
-the on-disk artifact without importing:
+Use `make data-fetch` then `make data-import` (or the matching Tilt buttons).
+The underlying Python fetchers can still be invoked directly when you want
+to inspect the on-disk artifact without importing:
 
 ```sh
 python3 scripts/fetch_planet_fitness.py   # Overpass — no key
@@ -98,18 +103,22 @@ test on a small sample.
 
 | Verb | Path | Returns |
 |------|------|---------|
-| POST | `/api/admin/ingest/{target}` | sync; 200 + `{run_id, status, ...}` on success, 500 + `failed_phase` on phase failure |
-| POST | `/api/admin/ingest/{target}?async=1` | 202 + `{target, async: true}`; poll the runs endpoint |
-| GET  | `/api/admin/ingest/runs[?target=…]` | last 50 parent runs |
-| GET  | `/api/admin/ingest/runs/{id}` | parent + ordered phase rows |
-| GET  | `/api/admin/ingest/health` | per-target last completed status + age |
+| POST | `/api/admin/data/fetch[/{target}]` | sync; runs Python fetcher phase(s). 200 on success, 500 + `failed_phase` on phase failure |
+| POST | `/api/admin/data/import[/{target}]` | sync; runs the Kotlin importer phase(s). 200 on success/noop, 500 on phase failure |
+| GET  | `/api/admin/data/runs[?target=…]` | last 50 parent runs |
+| GET  | `/api/admin/data/runs/{id}` | parent + ordered phase rows |
+| GET  | `/api/admin/data/health` | per-target last completed status + age |
+
+Without a `{target}`, fetch and import fan out across every known target
+sequentially. Per-target mutex means a fetch and an import on the same
+target serialize.
 
 **Auth boundary:** Cloudflare Zero Trust path rule on `/api/admin/*` — same
-tunnel that already fronts the deploy. Workload is idempotent + non-sensitive
-(refresh trigger + status read). No in-app token. Locally the routes are
-reachable on `127.0.0.1:8765` directly. **If you ever expose dev to the
-public internet (port-forward, ngrok, etc.), bind admin routes to loopback
-only first.**
+tunnel that already fronts the deploy. Workload is idempotent +
+non-sensitive (refresh trigger + status read). No in-app token. Locally the
+routes are reachable on `127.0.0.1:8765` directly. **If you ever expose dev
+to the public internet (port-forward, ngrok, etc.), bind admin routes to
+loopback only first.**
 
 The admin API only runs on hosts where `data/` is writable. The deploy
 container's `/app/static/data` is mounted **read-only** by design — POI

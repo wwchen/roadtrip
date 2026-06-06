@@ -29,19 +29,33 @@ class TargetBusyException(
     val runningRunId: Long,
 ) : RuntimeException("target=$target is already running as run_id=$runningRunId")
 
+// What a run does. Each target has both a fetch list (web → data/) and an
+// import list (data/ → Postgres). They share a per-target mutex so a fetch
+// and an import on the same target serialize.
+enum class RunKind(
+    val rowValue: String,
+) {
+    FETCH("fetch"),
+    IMPORT("import"),
+}
+
 data class RunOutcome(
     val parentRunId: Long,
-    val status: String, // 'completed' | 'failed'
+    val target: String,
+    val kind: RunKind,
+    val status: String, // 'completed' | 'failed' | 'noop'
     val failedPhase: String?,
 )
 
 // Per-target locked, structured-record orchestrator. RFC 0004 / issue #44.
 //
-// Sequence per startRun():
+// Sequence per startRun(target, kind):
 //   1. tryLock the target's mutex; on contention, throw TargetBusyException
 //      carrying the existing parent run_id so the caller can return 409.
-//   2. Insert a parent ingest_runs row (phase_kind='target', status='started').
-//   3. For each phase in order, insert a phase row, run it, finalize the row.
+//   2. Insert a parent ingest_runs row (phase_kind='target',
+//      phase='fetch'|'import', status='started').
+//   3. For each phase in the chosen kind's list, insert a phase row, run
+//      it, finalize the row.
 //   4. On any phase failure, mark parent failed and skip remaining phases.
 //   5. On success, mark parent completed.
 //   6. Always release the mutex in finally.
@@ -69,6 +83,7 @@ class IngestController(
 
     suspend fun startRun(
         targetName: String,
+        kind: RunKind,
         triggeredBy: String,
     ): RunOutcome {
         val target = targets[targetName] ?: throw TargetNotFoundException(targetName)
@@ -81,12 +96,24 @@ class IngestController(
             throw TargetBusyException(targetName, existing)
         }
 
-        val parentId = createParentRow(target.name, triggeredBy)
+        val phases: List<Phase> =
+            when (kind) {
+                RunKind.FETCH -> target.fetchPhases
+                RunKind.IMPORT -> target.importPhases
+            }
+
+        val parentId = createParentRow(target.name, kind, triggeredBy)
         synchronized(active) { active[targetName] = parentId }
-        log.info("ingest_runs id={} target={} started ({} phases)", parentId, target.name, target.phases.size)
+        log.info(
+            "ingest_runs id={} target={} kind={} started ({} phases)",
+            parentId,
+            target.name,
+            kind.rowValue,
+            phases.size,
+        )
 
         try {
-            return runPhases(target, parentId)
+            return runPhases(target, kind, phases, parentId)
         } finally {
             synchronized(active) { active.remove(targetName) }
             mutex.unlock()
@@ -95,15 +122,25 @@ class IngestController(
 
     private suspend fun runPhases(
         target: Target,
+        kind: RunKind,
+        phases: List<Phase>,
         parentId: Long,
     ): RunOutcome {
-        for (phase in target.phases) {
+        // Empty phase list is a legitimate no-op (e.g. parks-canada-curated
+        // has no fetch step). Mark the parent completed and return; this
+        // shows up cleanly on the dashboard rather than as a phantom row.
+        if (phases.isEmpty()) {
+            completeParent(parentId)
+            return RunOutcome(parentId, target.name, kind, "noop", null)
+        }
+
+        for (phase in phases) {
             val phaseId = createPhaseRow(parentId, target.name, phase)
             try {
                 val counts =
                     when (phase) {
-                        is Phase.Shell -> runShell(phase)
-                        is Phase.Kotlin -> runKotlin(phase)
+                        is Phase.Fetch -> runFetch(phase)
+                        is Phase.Import -> runImport(phase)
                     }
                 completePhase(phaseId, counts)
                 log.info("ingest_runs id={} phase={} completed", phaseId, phase.label)
@@ -112,15 +149,15 @@ class IngestController(
                 failPhase(phaseId, notes, exit)
                 failParent(parentId, "phase=${phase.label}: ${notes.take(300)}")
                 log.warn("ingest_runs id={} phase={} failed: {}", phaseId, phase.label, notes.take(300))
-                return RunOutcome(parentId, "failed", phase.label)
+                return RunOutcome(parentId, target.name, kind, "failed", phase.label)
             }
         }
         completeParent(parentId)
-        return RunOutcome(parentId, "completed", null)
+        return RunOutcome(parentId, target.name, kind, "completed", null)
     }
 
-    // -- Shell phases ---------------------------------------------------------
-    private suspend fun runShell(phase: Phase.Shell): JSONB =
+    // -- Fetch phases (web → data/) -------------------------------------------
+    private suspend fun runFetch(phase: Phase.Fetch): JSONB =
         withContext(ioDispatcher) {
             val process =
                 processFactory.start(
@@ -163,14 +200,14 @@ class IngestController(
                 process.killTree()
                 stdoutDrain.cancel()
                 stderrDrain.cancel()
-                throw ShellTimeoutException("phase ${phase.label} exceeded ${phase.timeoutSec}s timeout")
+                throw FetchTimeoutException("phase ${phase.label} exceeded ${phase.timeoutSec}s timeout")
             }
             // Wait for drainers to finish so notes carry the full tail.
             runCatching { stdoutDrain.await() }
             runCatching { stderrDrain.await() }
 
             if (finished != 0) {
-                throw ShellFailedException(
+                throw FetchFailedException(
                     exitCode = finished,
                     stderrTail = synchronized(stderrTail) { stderrTail.toString() },
                 )
@@ -178,8 +215,8 @@ class IngestController(
             JSONB.valueOf("""{"exit_code":0}""")
         }
 
-    // -- Kotlin phases --------------------------------------------------------
-    private suspend fun runKotlin(phase: Phase.Kotlin): JSONB =
+    // -- Import phases (data/ → Postgres) -------------------------------------
+    private suspend fun runImport(phase: Phase.Import): JSONB =
         withContext(ioDispatcher) {
             val source = sourceFor(phase.sourceName, dataDir)
             val result = importer.run(source)
@@ -191,12 +228,13 @@ class IngestController(
     // -- ingest_runs row CRUD -------------------------------------------------
     private fun createParentRow(
         target: String,
+        kind: RunKind,
         triggeredBy: String,
     ): Long =
         ctx
             .insertInto(INGEST_RUNS)
             .set(INGEST_RUNS.TARGET, target)
-            .set(INGEST_RUNS.PHASE, "target")
+            .set(INGEST_RUNS.PHASE, kind.rowValue) // 'fetch' or 'import'
             .set(INGEST_RUNS.PHASE_KIND, "target")
             .set(INGEST_RUNS.STATUS, "started")
             .set(INGEST_RUNS.TRIGGERED_BY, triggeredBy)
@@ -212,8 +250,8 @@ class IngestController(
     ): Long {
         val kind =
             when (phase) {
-                is Phase.Shell -> "shell"
-                is Phase.Kotlin -> "kotlin"
+                is Phase.Fetch -> "fetch"
+                is Phase.Import -> "import"
             }
         return ctx
             .insertInto(INGEST_RUNS)
@@ -281,9 +319,9 @@ class IngestController(
 
     private fun phaseFailureNotes(e: Throwable): Pair<String, Int?> =
         when (e) {
-            is ShellFailedException ->
+            is FetchFailedException ->
                 "exit=${e.exitCode}\n${e.stderrTail.trim()}" to e.exitCode
-            is ShellTimeoutException -> (e.message ?: "timeout") to null
+            is FetchTimeoutException -> (e.message ?: "timeout") to null
             else -> "${e.javaClass.simpleName}: ${e.message ?: ""}" to null
         }
 
@@ -292,12 +330,12 @@ class IngestController(
     }
 }
 
-class ShellFailedException(
+class FetchFailedException(
     val exitCode: Int,
     val stderrTail: String,
-) : RuntimeException("shell phase exited $exitCode")
+) : RuntimeException("fetch phase exited $exitCode")
 
-class ShellTimeoutException(
+class FetchTimeoutException(
     message: String,
 ) : RuntimeException(message)
 
