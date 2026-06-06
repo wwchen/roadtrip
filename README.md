@@ -17,11 +17,14 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 tilt up                  # full dev stack (postgres in Docker, backend + companion on host)
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make companion           # campsite Playwright companion against the local backend
-make docker-run          # local docker build (backend + postgres), port-publishes 8765
 make deploy              # ssh to the mini, git pull, docker compose up
-make deploy-local        # full stack (backend + postgres + cloudflared) on this host
 make refresh-cookies     # push Tesla cookies from clipboard → mini (offline refresh worker only)
 ```
+
+Local dev runs the backend on the host (Gradle), with only Postgres in
+Docker. The backend's `Dockerfile` is still used by `make deploy` to build
+the container that runs on mini-ca behind cloudflared, but it's no longer
+part of the laptop dev loop.
 
 `tilt up` is the easiest path for full-stack dev: Tilt reuses the existing
 Docker Postgres (`pois-up`), runs the backend with Gradle on the host so
@@ -86,17 +89,15 @@ test on a small sample.
    CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
    ```
 
-3. **Bring up the stack:**
-   ```sh
-   make deploy-local           # or make deploy to do it remotely via ssh
-   ```
+3. **Bring up the stack:** `make deploy` (ssh's to the mini, git pull, build,
+   `docker compose up`). The deploy is also wired to GHA (push to master →
+   .github/workflows/deploy.yml), so you usually don't run this by hand.
 
-   The `app` container serves the map on port 8765 (not exposed on the host
-   unless you use `docker-compose.local.yml`). `cloudflared` opens the
-   tunnel to Cloudflare's edge. A `cookie-bot` service sits under a profile
-   for future use (see cookie-bot/README notes in the code) — currently
-   disabled because no aarch64 Chromium build passes Akamai's TLS fingerprint
-   gate on the mini.
+   The `backend` container serves the map on port 8765 (not exposed to the
+   public host — cloudflared talks to it on the compose network). A
+   `cookie-bot` service sits under a profile for future use (see
+   cookie-bot/README notes in the code) — currently disabled because no
+   aarch64 Chromium build passes Akamai's TLS fingerprint gate on the mini.
 
 4. **Pricing cache** persists in `$HOME/.roadtrip-map/pricing-cache`
    (override with `CACHE_DIR=…` in `.env`).

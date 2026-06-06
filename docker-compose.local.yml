@@ -1,10 +1,7 @@
 services:
   # Expose Postgres on the host for the importer + jOOQ codegen, local-only.
+  # The backend runs on the host (`make run` or `tilt up`), not in Docker;
+  # only Postgres + the offline refresh worker need ports here.
   postgres:
     ports:
       - "127.0.0.1:5432:5432"
-  # Backend serves the whole site; bind to 8765 to match historical bookmarks
-  # and Playwright's QA_BASE_URL default.
-  backend:
-    ports:
-      - "127.0.0.1:8765:8765"

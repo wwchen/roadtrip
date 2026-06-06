@@ -1,4 +1,4 @@
-.PHONY: help run docker-run deploy deploy-local stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import backend-run qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -46,11 +46,6 @@ install: install-hooks
 	brew install tilt docker openjdk node
 	cd companion && npm install && npx playwright install chromium
 
-docker-run:
-	cd backend && ./gradlew shadowJar
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build backend postgres
-	@echo "http://127.0.0.1:$(PORT)"
-
 check-pushed:
 	@git fetch --quiet origin
 	@ahead=$$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0); \
@@ -61,12 +56,7 @@ check-pushed:
 deploy: check-pushed
 	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && (cd backend && ./gradlew shadowJar) && docker compose --profile tunnel --profile pois up -d --build'
 
-deploy-local:
-	cd backend && ./gradlew shadowJar
-	docker compose --profile tunnel --profile pois up -d --build
-
 stop:
-	- docker compose --profile tunnel --profile pois down
 	- docker compose -f docker-compose.yml -f docker-compose.local.yml --profile pois down
 
 # Build the offline-refresh image (curl-impersonate baked in). Needed before
@@ -132,13 +122,6 @@ ifdef SOURCE
 else
 	@scripts/pois-import-picker.sh
 endif
-
-# Build + run the backend in Docker against local postgres on the compose
-# network. backend's port 8765 is exposed to the host via docker-compose.local.yml.
-backend-run: pois-up
-	cd backend && ./gradlew shadowJar
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d --build backend
-	@echo "backend ready on 127.0.0.1:8765"
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
