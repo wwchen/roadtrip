@@ -1,4 +1,4 @@
-.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down data-fetch data-import qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers data-fetch data-import qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -11,8 +11,6 @@ help:
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (per-clone)"
 	@echo "  make run              Build + run backend locally on 127.0.0.1:$(PORT) (serves static + /api)"
 	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
-	@echo "  make pois-up          Start Postgres+PostGIS on 127.0.0.1:5432"
-	@echo "  make pois-down        Stop Postgres"
 	@echo "  make data-fetch       Fetch upstream POI data into data/ (TARGET=<name> for one)"
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<name> for one)"
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
@@ -25,12 +23,13 @@ help:
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
-# Run the backend on the host, serving static + /api. Postgres still has to
-# be reachable — start it with `make pois-up` first if you don't already
-# have it running. The backend serves index.html, /web/*, /data/* (excluding
+# Run the backend on the host, serving static + /api. Brings up Postgres
+# in Docker first (idempotent — `compose up -d` is a no-op if already
+# running). The backend serves index.html, /web/*, /data/* (excluding
 # pricing-cache, which is exposed only via /api/pricing/{slug}), plus all
 # four /api/* routes.
-run: pois-up
+run:
+	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
 	cd backend && PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
 	  ROADTRIP_DB_URL=jdbc:postgresql://127.0.0.1:5432/roadtrip \
 	  ROADTRIP_DB_USER=roadtrip ROADTRIP_DB_PASSWORD=roadtrip \
@@ -101,28 +100,22 @@ refresh-superchargers: refresh-image
 	  -v "$(PWD)/.env:/app/.env:ro" \
 	  roadtrip-refresh:local python3 /app/scripts/fetch_tesla_superchargers.py
 
-# Phase 2 backend: PostGIS Postgres on 127.0.0.1:5432, importer, tests.
-pois-up:
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
-	@echo "postgres ready on 127.0.0.1:5432 (db=roadtrip user=roadtrip)"
-
-pois-down:
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois stop postgres
-
 # Two-step refresh through the backend's admin API (RFC 0004 / issue #44):
-#   make data-fetch         # web → data/<target>.{json,geojson} (all targets)
-#   make data-fetch TARGET=campgrounds
-#   make data-import        # data/ → Postgres rows via Importer (all targets)
+#   make data-fetch                       # all targets
+#   make data-fetch TARGET=campgrounds    # one target
+#   make data-import                      # all targets
 #   make data-import TARGET=planet-fitness
 #
 # Backend must be running (e.g. `tilt up` or `make run`). Per-target mutex
-# means a fetch and an import on the same target serialize. ADMIN_BASE
-# defaults to 127.0.0.1:$(PORT); set it to point at a remote deploy.
+# means a fetch and an import on the same target serialize. Override the
+# host with ADMIN_BASE for remote deploys (e.g. ADMIN_BASE=https://… make data-fetch).
+ADMIN_BASE ?= http://127.0.0.1:$(PORT)
+
 data-fetch:
-	@scripts/admin-curl.sh fetch $(TARGET)
+	curl --fail-with-body -sS --max-time 1800 -X POST $(ADMIN_BASE)/api/admin/data/fetch$(if $(TARGET),/$(TARGET))
 
 data-import:
-	@scripts/admin-curl.sh import $(TARGET)
+	curl --fail-with-body -sS --max-time 1800 -X POST $(ADMIN_BASE)/api/admin/data/import$(if $(TARGET),/$(TARGET))
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
