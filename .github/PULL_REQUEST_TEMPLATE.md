@@ -4,10 +4,10 @@
 
 ## Test plan
 
-- [ ] `./gradlew test` passes locally (`make pois-test`)
-- [ ] `./gradlew ktlintCheck` clean
+- [ ] `cd backend && ./gradlew test` passes locally
+- [ ] `cd backend && ./gradlew ktlintCheck` clean
 - [ ] If touching the request path: `make qa` smoke passes against local stack
-- [ ] If touching data shape: ran `make pois-import-all` and spot-checked
+- [ ] If touching data shape: ran `make pois-import SOURCE=all` and spot-checked
 - [ ] If touching `/api/campsite/*` or the `/campsite` UI: smoked the campsite tool too
 
 ## Notes

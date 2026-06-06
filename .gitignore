@@ -11,6 +11,7 @@ __pycache__/
 # Backend (Kotlin) build artifacts. jOOQ generated classes are regenerated
 # at build time via Testcontainers + Flyway, so they don't need to be checked in.
 backend/.gradle/
+backend/.kotlin/
 backend/build/
 
 # Playwright smoke artifacts. Tests live in qa/, deps + browser cache + run
