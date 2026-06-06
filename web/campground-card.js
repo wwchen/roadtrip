@@ -34,7 +34,7 @@ export function amenitiesPillsHTML(amenities) {
   return `<div class="pills">${amenities.map(a => `<span class="pill">${escapeHtml(a)}</span>`).join('')}</div>`;
 }
 
-const CARRIER_LABEL = { verizon: 'VZ', att: 'ATT', tmobile: 'TMo', sprint: 'Spr' };
+const CARRIER_LABEL = { verizon: 'Verizon', att: 'AT&T', tmobile: 'T-Mobile', sprint: 'Sprint' };
 /**
  * Render per-carrier cell-signal chips. cc is `{verizon: [avg, count], ...}`
  * where avg is rec.gov's 0–4 scale. Sorts by signal strength desc.

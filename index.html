@@ -71,102 +71,50 @@
     max-width: calc(100vw - 32px);
     box-shadow: 0 2px 8px rgba(0,0,0,0.25);
   }
-  /* Popup: bottom-sheet style for one-handed iPhone reach. anchor='bottom' is
-     set on the Popup constructor; the CSS just makes it scroll-friendly and
-     bumps the type scale from the prior 12-13px to 14-17px. */
-  .maplibregl-popup-content {
-    max-width: calc(100vw - 24px) !important;
-    max-height: 60vh; overflow-y: auto;
-    touch-action: pan-y; overscroll-behavior: contain;
-    padding: 14px 16px 12px;
-    border-radius: 10px;
-  }
-  .maplibregl-popup-close-button {
-    width: 44px; height: 44px; font-size: 22px;
-    line-height: 44px; padding: 0; right: 0; top: 0;
-  }
-  .popup { font-size: 14px; line-height: 1.45; color: #222; }
-  .popup h3 { margin: 0 0 2px; font-size: 16px; font-weight: 600; line-height: 1.25; padding-right: 32px; }
-  .popup .sub { color: #666; font-size: 13px; margin-bottom: 8px; }
-  .popup .meta { color: #555; }
-  .popup .verdict {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 15px; font-weight: 500;
-    margin: 8px 0; padding: 6px 0;
-  }
-  .popup .verdict::before {
-    content: ''; display: inline-block;
-    width: 8px; height: 8px; border-radius: 50%;
-    background: currentColor;
-  }
-  .popup .verdict.open  { color: #1b5e20; }
-  .popup .verdict.closed { color: #b71c1c; }
-  .popup .verdict.fcfs   { color: #5d4037; }
-  .popup .actions { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
-  .popup .btn {
-    display: flex; align-items: center; justify-content: center;
-    width: 100%; box-sizing: border-box;
-    padding: 0 14px; height: 48px;
-    border-radius: 8px;
-    font-size: 16px; font-weight: 600;
-    text-decoration: none;
-    -webkit-tap-highlight-color: rgba(0,0,0,0.1);
-  }
-  .popup .btn-primary { background: #1b5e20; color: #fff; }
-  .popup .btn-primary:active { background: #154d18; }
-  .popup .btn-secondary {
-    background: #f5f5f5; color: #222;
-    height: 44px;
-    border: 1px solid #ddd;
-  }
-  .popup .btn-secondary:active { background: #e8e8e8; }
-  .popup .btn-disabled {
-    background: #f5f5f5; color: #999;
-    height: 44px; border: 1px solid #eee;
-    cursor: not-allowed;
-  }
-  .popup .pills {
-    display: flex; flex-wrap: wrap; gap: 4px 6px;
+  /* Shared classes used inside the drawer for amenities, ratings, etc.
+     (Popups have been replaced by the drawer; styles drop the .popup scope
+     so amenityPillsHTML / ratingHTML / cellCoveragePillsHTML render right
+     anywhere they're mounted.) */
+  .cg-drawer .meta { color: #5a6068; }
+  .cg-drawer .actions { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; }
+  .cg-drawer .pills {
+    display: flex; flex-wrap: wrap; gap: 6px;
     margin: 8px 0;
   }
-  .popup .pill {
-    display: inline-block; padding: 3px 9px;
-    background: #eef1f4; color: #333;
-    border-radius: 12px;
-    font-size: 12px; font-weight: 500;
+  .cg-drawer .pill {
+    display: inline-block; padding: 4px 10px;
+    background: #f4f5f7; color: #1a1d21;
+    border-radius: 999px;
+    font-size: 12px; font-weight: 500; line-height: 1.3;
   }
-  .popup .footer {
+  .cg-drawer .footer {
     margin-top: 8px; padding-top: 8px;
-    border-top: 1px solid #eee;
-    color: #888; font-size: 11px;
+    border-top: 1px solid #e6e8eb;
+    color: #8a8f96; font-size: 12px;
   }
-  .popup .footer.warn { color: #e65100; font-weight: 500; }
-  .popup .tag {
-    display: inline-block; padding: 1px 5px; border-radius: 3px; margin-right: 4px;
-    background: #eee; font-size: 11px; text-transform: uppercase;
+  .cg-drawer .footer.warn { color: #b85c00; font-weight: 500; }
+  .cg-drawer .tag {
+    display: inline-block; padding: 2px 8px; border-radius: 4px; margin-right: 4px;
+    background: #f4f5f7; color: #1a1d21;
+    font-size: 11px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.04em;
   }
-  .popup .photo {
-    display: block; width: 100%; max-height: 140px; object-fit: cover;
-    border-radius: 4px; margin: 0 0 6px;
+  .cg-drawer .rating { color: #1a1d21; font-weight: 600; font-size: 14px; }
+  .cg-drawer .rating .stars { color: #f5a623; letter-spacing: -1px; margin-right: 2px; }
+  .cg-drawer .rating .count { color: #8a8f96; font-weight: 400; font-size: 12px; margin-left: 3px; }
+  .cg-drawer .cell { margin-top: 6px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .cg-drawer .cell-pill {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 4px 10px; border-radius: 999px;
+    font-size: 12px; font-weight: 500; color: #fff; line-height: 1.4;
   }
-  .popup .rating { color: #333; font-weight: 600; }
-  .popup .rating .stars { color: #f5a623; letter-spacing: -1px; }
-  .popup .rating .count { color: #777; font-weight: 400; font-size: 12px; margin-left: 3px; }
-  .popup .cell { margin-top: 6px; display: flex; gap: 4px; flex-wrap: wrap; }
-  .popup .cell-pill {
-    display: inline-flex; align-items: baseline; gap: 3px;
-    padding: 2px 7px; border-radius: 10px;
-    font-size: 11px; font-weight: 600; color: #fff; line-height: 1.5;
-  }
-  .popup .cell-pill .carrier { font-size: 10px; opacity: 0.9; }
-  .popup .cell-pill .val { font-variant-numeric: tabular-nums; }
-  /* 0-4 scale: 0 = none (dark red), 1 = major issues (red), 2 = some (amber),
-     3 = good (green), 4 = excellent (deep green) */
-  .popup .cell-pill[data-bucket="0"] { background: #7a1e1e; }
-  .popup .cell-pill[data-bucket="1"] { background: #c62828; }
-  .popup .cell-pill[data-bucket="2"] { background: #e8a730; }
-  .popup .cell-pill[data-bucket="3"] { background: #2e7d32; }
-  .popup .cell-pill[data-bucket="4"] { background: #1b5e20; }
+  .cg-drawer .cell-pill .carrier { font-size: 12px; font-weight: 500; opacity: 0.95; }
+  .cg-drawer .cell-pill .val { font-variant-numeric: tabular-nums; font-weight: 600; opacity: 0.85; }
+  /* 0-4 scale: 0 = none, 1 = major issues, 2 = some, 3 = good, 4 = excellent */
+  .cg-drawer .cell-pill[data-bucket="0"] { background: #7a1e1e; }
+  .cg-drawer .cell-pill[data-bucket="1"] { background: #c62828; }
+  .cg-drawer .cell-pill[data-bucket="2"] { background: #b07e1d; }
+  .cg-drawer .cell-pill[data-bucket="3"] { background: #2e7d32; }
+  .cg-drawer .cell-pill[data-bucket="4"] { background: #1b5e20; }
   #panel .section-label { font-size: 10px; text-transform: uppercase; color: #888; margin: 8px 0 2px; letter-spacing: 0.5px; }
   #panel .section-label:first-of-type { margin-top: 0; }
   #search-wrap { margin-bottom: 8px; position: relative; }
