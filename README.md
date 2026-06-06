@@ -38,10 +38,23 @@ for Tesla pricing, `refresh-tesla-cookies` to mint fresh `_abck` cookies for
 the Tesla scraper into `.env`, and `refresh-image` (one-shot prereq for the
 supercharger refreshers). Click the row, watch logs in the right pane.
 
-POI imports are shell-only because `make pois-import` is interactive
-(fzf-driven picker) and Tilt panes don't have a TTY. From a terminal:
-`make pois-import` for the picker, or `make pois-import SOURCE=all` to skip
-it. `SOURCE=uscampgrounds` and the other source names also work.
+POI ingestion goes through the backend's admin API (RFC 0004). Tilt has one
+`ingest-<target>` button per target under the `data` cluster — click to fetch
+upstream data and import in one shot, with the run recorded in `ingest_runs`.
+From a terminal:
+
+```sh
+make pois-refresh TARGET=campgrounds       # fetch + import; sync, prints status
+make pois-refresh TARGET=planet-fitness
+```
+
+Targets: `planet-fitness`, `state-parks`, `national-parks`, `campgrounds`
+(composite — uscampgrounds + bc-parks + parks-canada + recgov-enrichment),
+`parks-canada-curated`, `alberta-provincial`, `tesla-pricing` (cache rebuild).
+
+The legacy `make pois-import` (interactive fzf picker over the local
+importer only — no fetch phase) is still available for offline-import
+workflows. `make pois-refresh` is what you want when refreshing prod.
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
 > backend-owned via `TokenManager` (RFC 0001 / PR #22) — paste a fresh cURL
@@ -64,6 +77,10 @@ needs Tesla cookies in `.env` — see `README_PRICING.md` and
 
 ## Refresh POI data
 
+The boring path is `make pois-refresh TARGET=<name>` (Tilt button equivalent).
+The Python scripts can still be invoked directly when you want to inspect
+the on-disk artifact without importing:
+
 ```sh
 python3 scripts/fetch_planet_fitness.py   # Overpass — no key
 python3 scripts/fetch_campgrounds.py      # USCampgrounds.info regional CSVs (US)
@@ -76,6 +93,28 @@ python3 scripts/fetch_parks.py            # PAD-US FeatureServer
 `enrich_campgrounds.py` is resume-safe (skip features already marked
 `enriched: true`). Pass `--refresh` to re-query everything; `--limit N` to
 test on a small sample.
+
+### Admin API surface (RFC 0004)
+
+| Verb | Path | Returns |
+|------|------|---------|
+| POST | `/api/admin/ingest/{target}` | sync; 200 + `{run_id, status, ...}` on success, 500 + `failed_phase` on phase failure |
+| POST | `/api/admin/ingest/{target}?async=1` | 202 + `{target, async: true}`; poll the runs endpoint |
+| GET  | `/api/admin/ingest/runs[?target=…]` | last 50 parent runs |
+| GET  | `/api/admin/ingest/runs/{id}` | parent + ordered phase rows |
+| GET  | `/api/admin/ingest/health` | per-target last completed status + age |
+
+**Auth boundary:** Cloudflare Zero Trust path rule on `/api/admin/*` — same
+tunnel that already fronts the deploy. Workload is idempotent + non-sensitive
+(refresh trigger + status read). No in-app token. Locally the routes are
+reachable on `127.0.0.1:8765` directly. **If you ever expose dev to the
+public internet (port-forward, ngrok, etc.), bind admin routes to loopback
+only first.**
+
+The admin API only runs on hosts where `data/` is writable. The deploy
+container's `/app/static/data` is mounted **read-only** by design — POI
+refresh runs on the deploy host filesystem before/around `docker compose up`,
+not inside the container.
 
 ## Deploy via Docker + Cloudflare tunnel
 

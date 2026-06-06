@@ -146,7 +146,30 @@ local_resource(
     labels=['data'],
 )
 
-# POI imports stay shell-only — `make pois-import` is interactive (fzf
-# multi-select picker), and Tilt resource panes don't have a TTY to drive
-# fzf or bash `select`. Run from a terminal: `make pois-import` for the
-# picker, `make pois-import SOURCE=all` to skip it.
+# --- Ingest targets (RFC 0004 / issue #44) -----------------------------------
+# Each row POSTs to the backend's admin API, which runs the same Python
+# fetchers + Kotlin importer the human runs by hand — but records every
+# phase to ingest_runs. Pass/fail is the curl exit code; logs stream into
+# the resource pane.
+#
+# These replace the carve-out for `make pois-import` (interactive fzf picker
+# can't run inside a Tilt pane). The picker still works from a terminal if
+# you want it; see `make pois-refresh`.
+
+for target in [
+    'planet-fitness',
+    'state-parks',
+    'national-parks',
+    'campgrounds',
+    'parks-canada-curated',
+    'alberta-provincial',
+    'tesla-pricing',
+]:
+    local_resource(
+        'ingest-' + target,
+        cmd='scripts/admin-curl.sh ingest ' + target,
+        auto_init=False,
+        trigger_mode=TRIGGER_MODE_MANUAL,
+        resource_deps=['backend'],
+        labels=['data'],
+    )

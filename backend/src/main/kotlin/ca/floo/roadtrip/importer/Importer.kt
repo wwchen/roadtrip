@@ -182,7 +182,10 @@ fun main(args: Array<String>) {
     ds.close()
 }
 
-private fun sourceFor(
+// Resolve a source name (matching the picker / importer-args vocabulary)
+// against the on-disk data files. Lifted to public so the IngestController
+// (RFC 0004) can call it for kotlin phases without duplicating the map.
+fun sourceFor(
     name: String,
     dataDir: File,
 ): Source =

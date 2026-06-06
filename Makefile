@@ -1,4 +1,4 @@
-.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers pois-up pois-down pois-import pois-refresh qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -14,6 +14,7 @@ help:
 	@echo "  make pois-up          Start Postgres+PostGIS on 127.0.0.1:5432"
 	@echo "  make pois-down        Stop Postgres"
 	@echo "  make pois-import      Import POI sources (interactive picker; SOURCE=uscampgrounds or SOURCE=all to skip the picker)"
+	@echo "  make pois-refresh TARGET=<name>  POST to the backend admin API for one ingest target (RFC 0004)"
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make stop             Stop all compose services locally"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
@@ -122,6 +123,18 @@ ifdef SOURCE
 else
 	@scripts/pois-import-picker.sh
 endif
+
+# RFC 0004 admin API entry point. Curls the backend's POST endpoint, which
+# runs fetcher + importer phases under one target lock and records every
+# phase to ingest_runs. Sync — exits with the run's pass/fail status. Set
+# ADMIN_BASE to point at a remote deploy (defaults to 127.0.0.1:8765).
+#   make pois-refresh TARGET=campgrounds
+#   ADMIN_BASE=https://roadtrip.floo.ca make pois-refresh TARGET=planet-fitness
+pois-refresh:
+ifndef TARGET
+	$(error TARGET is required. Example: make pois-refresh TARGET=campgrounds)
+endif
+	@scripts/admin-curl.sh ingest $(TARGET)
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
