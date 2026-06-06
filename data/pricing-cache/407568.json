@@ -1,0 +1,40 @@
+{
+  "data": {
+    "data": {
+      "name": "Louisville, CO - McCaslin Blvd",
+      "address": {
+        "street": null,
+        "streetNumber": null,
+        "city": null,
+        "district": null,
+        "state": "CO",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "80027",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": null,
+      "centroid": null,
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/Denver",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "ff9ea446-d0e8-4bbf-b4fd-177f30764d93",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

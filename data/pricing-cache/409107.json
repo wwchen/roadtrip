@@ -1,0 +1,127 @@
+{
+  "data": {
+    "data": {
+      "name": "South Padre Island, TX - Padre Blvd",
+      "address": {
+        "street": "Padre Blvd",
+        "streetNumber": "321",
+        "city": "South Padre Island",
+        "district": null,
+        "state": "TX",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "78597",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 26.082518,
+        "longitude": -97.164925
+      },
+      "centroid": {
+        "latitude": 26.082518,
+        "longitude": -97.164925
+      },
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/Chicago",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "87450d87-940a-4662-ba34-fd207adc8ff4",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.37,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.51,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

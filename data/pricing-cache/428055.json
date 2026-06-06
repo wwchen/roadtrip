@@ -1,0 +1,127 @@
+{
+  "data": {
+    "data": {
+      "name": "Kingston, ON - 1636 15",
+      "address": {
+        "street": "15",
+        "streetNumber": "1636",
+        "city": "Kingston",
+        "district": "Frontenac County",
+        "state": "ON",
+        "countryCode": "CA",
+        "country": "Canada",
+        "postalCode": "K7L 4V3",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 44.2852133,
+        "longitude": -76.433454
+      },
+      "centroid": {
+        "latitude": 44.2852133,
+        "longitude": -76.433454
+      },
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/Toronto",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "c8971d6f-f3b5-4172-bace-1387e9d0a7a8",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.39,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "CAD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "CAD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.54,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "CAD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "CAD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

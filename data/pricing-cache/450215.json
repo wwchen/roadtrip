@@ -1,0 +1,130 @@
+{
+  "data": {
+    "data": {
+      "name": "Florence, OR",
+      "address": {
+        "street": "US-101",
+        "streetNumber": "4701",
+        "city": "Florence",
+        "district": "Lane County",
+        "state": "OR",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "97439",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 44.007269,
+        "longitude": -124.102017
+      },
+      "centroid": {
+        "latitude": 44.007269,
+        "longitude": -124.102017
+      },
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": [
+        "AMENITIES_RESTROOMS",
+        "AMENITIES_SHOPPING"
+      ],
+      "maxPowerKw": 0,
+      "timeZone": "America/Los_Angeles",
+      "accessType": "Public",
+      "openToNonTeslas": true,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "fd7b8743-8a38-45e0-a0f7-86bec70ca66f",
+      "commonSiteName": "Fred Meyer",
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.38,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.53,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

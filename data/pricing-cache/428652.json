@@ -1,0 +1,127 @@
+{
+  "data": {
+    "data": {
+      "name": "Dunn, NC - (Cracker Barrel #539)",
+      "address": {
+        "street": "E Cumberland St",
+        "streetNumber": "1102",
+        "city": "Dunn",
+        "district": null,
+        "state": "NC",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "28334",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 35.296616,
+        "longitude": -78.598274
+      },
+      "centroid": {
+        "latitude": 35.296616,
+        "longitude": -78.598274
+      },
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/New_York",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "932c048e-577d-412d-b870-1ee39873b7aa",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.41,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.57,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

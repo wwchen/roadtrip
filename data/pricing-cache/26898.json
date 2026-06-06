@@ -1,0 +1,127 @@
+{
+  "data": {
+    "data": {
+      "name": "Front Royal, VA - Crooked Run Plaza",
+      "address": {
+        "street": "Crooked Run Plaza",
+        "streetNumber": "260",
+        "city": "Front Royal",
+        "district": "Warren County",
+        "state": "VA",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "22630",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 38.9672982,
+        "longitude": -78.1897533
+      },
+      "centroid": {
+        "latitude": 38.9672982,
+        "longitude": -78.1897533
+      },
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/New_York",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "cef45042-9378-40af-a97c-7ab8bf895b7a",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.39,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.55,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

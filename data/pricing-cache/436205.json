@@ -1,0 +1,40 @@
+{
+  "data": {
+    "data": {
+      "name": "Chester, NY",
+      "address": {
+        "street": null,
+        "streetNumber": null,
+        "city": null,
+        "district": null,
+        "state": "NY",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "10918",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": null,
+      "centroid": null,
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/New_York",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "a8a860be-ee85-4cb5-9a26-845de0cdb57e",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

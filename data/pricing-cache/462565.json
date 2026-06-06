@@ -1,0 +1,40 @@
+{
+  "data": {
+    "data": {
+      "name": "Memphis, TN - US-64",
+      "address": {
+        "street": "US-64",
+        "streetNumber": "7989",
+        "city": "Memphis",
+        "district": null,
+        "state": "TN",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "38133",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": null,
+      "centroid": null,
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/Chicago",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "5529b4d5-abef-4492-bb31-f62d8d84bc27",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

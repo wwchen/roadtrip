@@ -1,0 +1,127 @@
+{
+  "data": {
+    "data": {
+      "name": "Port Hawkesbury, NS",
+      "address": {
+        "street": "Reeves St",
+        "streetNumber": "634",
+        "city": "Port Hawkesbury",
+        "district": "Inverness County",
+        "state": "NS",
+        "countryCode": "CA",
+        "country": "Canada",
+        "postalCode": "B9A 2R7",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 45.6166278,
+        "longitude": -61.3525623
+      },
+      "centroid": {
+        "latitude": 45.6166278,
+        "longitude": -61.3525623
+      },
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/Halifax",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "d111d5cf-3c2b-4c21-90bb-1f484e207761",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0,
+          "rateTier1": 0.81,
+          "rateTier2": 1.62,
+          "rateMinTier1": 0.81,
+          "rateMinTier2": 1.62,
+          "rateMinTier3": 2.52,
+          "rateMinTier4": 4.24,
+          "currencyCode": "CAD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "CAD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0,
+          "rateTier1": 0.81,
+          "rateTier2": 1.62,
+          "rateMinTier1": 0.81,
+          "rateMinTier2": 1.62,
+          "rateMinTier3": 2.52,
+          "rateMinTier4": 4.24,
+          "currencyCode": "CAD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "CAD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

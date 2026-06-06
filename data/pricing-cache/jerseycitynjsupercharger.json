@@ -1,0 +1,379 @@
+{
+  "data": {
+    "data": {
+      "name": "Jersey City, NJ \u2013 First Street",
+      "address": {
+        "street": "First Street",
+        "streetNumber": "160",
+        "city": "Jersey City",
+        "district": null,
+        "state": "NJ",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "07302",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 40.721498,
+        "longitude": -74.040481
+      },
+      "centroid": {
+        "latitude": 40.721706,
+        "longitude": -74.040223
+      },
+      "publicStallCount": 6,
+      "openToPublic": true,
+      "amenities": [
+        "AMENITIES_WIFI",
+        "AMENITIES_RESTROOMS",
+        "AMENITIES_CAFE",
+        "AMENITIES_RESTAURANT",
+        "AMENITIES_TWENTY_FOUR_HOUR"
+      ],
+      "maxPowerKw": 72,
+      "timeZone": "America/New_York",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": {
+        "siteId": {
+          "id": 1297,
+          "siteType": "SITE_TYPE_SUPERCHARGER"
+        },
+        "trtId": {
+          "id": 4208,
+          "siteType": "SITE_TYPE_SUPERCHARGER"
+        },
+        "createdTimestamp": "2026-06-02T00:00:00Z",
+        "utcOffset": "-14400s",
+        "availabilityProfile": {
+          "sunday": {
+            "congestionValue": [
+              0,
+              0,
+              0.020833333333333332,
+              0.020833333333333332,
+              0.020833333333333332,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.020833333333333332,
+              0.03125,
+              0.041666666666666664,
+              0.03125,
+              0.020833333333333332,
+              0.041666666666666664,
+              0.0625,
+              0.09722222222222222,
+              0.10416666666666666,
+              0.08333333333333334,
+              0.09375,
+              0.08958333333333333
+            ]
+          },
+          "monday": {
+            "congestionValue": [
+              0.08805555555555557,
+              0.06666666666666667,
+              0.058333333333333334,
+              0.04583333333333334,
+              0.03333333333333333,
+              0.03333333333333333,
+              0.03333333333333333,
+              0.03333333333333333,
+              0.03333333333333333,
+              0.03333333333333333,
+              0.03333333333333333,
+              0.025,
+              0.016666666666666666,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.016666666666666666,
+              0.025,
+              0.03333333333333333,
+              0.03333333333333333,
+              0.04583333333333334,
+              0.05208333333333333
+            ]
+          },
+          "tuesday": {
+            "congestionValue": [
+              0.06666666666666667,
+              0.06249999999999999,
+              0.057291666666666664,
+              0.03125,
+              0.020833333333333332,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.08333333333333333,
+              0.11458333333333333,
+              0.13802083333333331,
+              0.10416666666666667,
+              0.09375,
+              0.08333333333333334,
+              0.10416666666666666,
+              0.08333333333333334,
+              0.057291666666666664,
+              0.041666666666666664,
+              0.041666666666666664,
+              0.041666666666666664,
+              0.041666666666666664
+            ]
+          },
+          "wednesday": {
+            "congestionValue": [
+              0.057291666666666664,
+              0.07291666666666666,
+              0.09722222222222222,
+              0.10416666666666666,
+              0.09722222222222222,
+              0.08333333333333333,
+              0.08333333333333333,
+              0.08333333333333333,
+              0.08333333333333333,
+              0.07291666666666667,
+              0.057291666666666664,
+              0.041666666666666664,
+              0.041666666666666664,
+              0.041666666666666664,
+              0.041666666666666664,
+              0.057291666666666664,
+              0.07291666666666666,
+              0.08333333333333333,
+              0.0625,
+              0.041666666666666664,
+              0,
+              0.020833333333333332,
+              0.03125,
+              0.03125
+            ]
+          },
+          "thursday": {
+            "congestionValue": [
+              0.020833333333333332,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.020833333333333332,
+              0.03125,
+              0.041666666666666664,
+              0.041666666666666664,
+              0.041666666666666664,
+              0.03125,
+              0.020833333333333332,
+              0,
+              0,
+              0.020833333333333332,
+              0.03125,
+              0.041666666666666664,
+              0.057291666666666664
+            ]
+          },
+          "friday": {
+            "congestionValue": [
+              0.08333333333333334,
+              0.09375,
+              0.059027777777777776,
+              0.020833333333333332,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.020833333333333332,
+              0.041666666666666664,
+              0.07291666666666666,
+              0.07291666666666667,
+              0.041666666666666664,
+              0.020833333333333332,
+              0,
+              0,
+              0,
+              0.020833333333333332,
+              0.041666666666666664,
+              0.06249999999999999,
+              0.057291666666666664
+            ]
+          },
+          "saturday": {
+            "congestionValue": [
+              0.057291666666666664,
+              0.11666666666666667,
+              0.15625,
+              0.11041666666666666,
+              0.0625,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.020833333333333332,
+              0.041666666666666664,
+              0.06249999999999999,
+              0.057291666666666664,
+              0.03125,
+              0.020833333333333332
+            ]
+          }
+        }
+      },
+      "accessHours": {
+        "regularHours": [
+          {
+            "weekday": 7,
+            "periodBegin": "06:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 1,
+            "periodBegin": "06:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 2,
+            "periodBegin": "06:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 3,
+            "periodBegin": "06:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 4,
+            "periodBegin": "06:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 5,
+            "periodBegin": "06:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 6,
+            "periodBegin": "06:00",
+            "periodEnd": "23:59"
+          }
+        ],
+        "twentyFourSeven": false
+      },
+      "locationGUID": "c299e4c3-10d2-4224-8e69-85ecc4eb5925",
+      "commonSiteName": "The Oakman",
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.25,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "PARKING",
+          "rateBase": 0,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.35,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "PARKING",
+          "rateBase": 0,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

@@ -3,16 +3,10 @@
 !.env.example
 samples/
 node_modules/
-data/pricing-cache/
 .DS_Store
 __pycache__/
 *.pyc
 .gstack/
-
-# Tesla's bulk get-locations feed is 12 MB and regenerable from the saved
-# curl in scripts/fetch_tesla_superchargers.py docs. The downstream
-# data/tesla-superchargers.geojson IS checked in.
-data/tesla-locations-us.json
 
 # Backend (Kotlin) build artifacts. jOOQ generated classes are regenerated
 # at build time via Testcontainers + Flyway, so they don't need to be checked in.

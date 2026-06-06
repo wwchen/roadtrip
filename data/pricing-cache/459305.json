@@ -1,0 +1,40 @@
+{
+  "data": {
+    "data": {
+      "name": "Weston, WI - US-51 BUS",
+      "address": {
+        "street": "US-51 BUS",
+        "streetNumber": "6205",
+        "city": "Weston",
+        "district": null,
+        "state": "WI",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "54476",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": null,
+      "centroid": null,
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/Chicago",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "fd3f7819-7276-43f9-9352-3364e4cc32de",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

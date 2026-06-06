@@ -1,0 +1,380 @@
+{
+  "data": {
+    "data": {
+      "name": "Henderson, NC",
+      "address": {
+        "street": "Ruin Creek Road",
+        "streetNumber": "619",
+        "city": "Henderson",
+        "district": null,
+        "state": "NC",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "27536",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 36.329091,
+        "longitude": -78.44779
+      },
+      "centroid": {
+        "latitude": 36.329089,
+        "longitude": -78.447785
+      },
+      "publicStallCount": 8,
+      "openToPublic": true,
+      "amenities": [
+        "AMENITIES_WIFI",
+        "AMENITIES_RESTROOMS",
+        "AMENITIES_CAFE",
+        "AMENITIES_SHOPPING",
+        "AMENITIES_RESTAURANT",
+        "AMENITIES_TWENTY_FOUR_HOUR"
+      ],
+      "maxPowerKw": 150,
+      "timeZone": "America/New_York",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": {
+        "siteId": {
+          "id": 2196,
+          "siteType": "SITE_TYPE_SUPERCHARGER"
+        },
+        "trtId": {
+          "id": 8477,
+          "siteType": "SITE_TYPE_SUPERCHARGER"
+        },
+        "createdTimestamp": "2026-06-02T00:00:00Z",
+        "utcOffset": "-14400s",
+        "availabilityProfile": {
+          "sunday": {
+            "congestionValue": [
+              0.15625,
+              0.12131998069498068,
+              0.10006157635467981,
+              0.06361607142857142,
+              0.046875,
+              0,
+              0,
+              0,
+              0,
+              0.015625,
+              0.05859375,
+              0.1015625,
+              0.15848214285714285,
+              0.20220473057644112,
+              0.24651708743842363,
+              0.2650320870535714,
+              0.2633928571428571,
+              0.23409598214285712,
+              0.23099078341013826,
+              0.25,
+              0.24265552995391704,
+              0.24515796703296702,
+              0.26450892857142855,
+              0.26905563186813186
+            ]
+          },
+          "monday": {
+            "congestionValue": [
+              0.226875,
+              0.19791666666666666,
+              0.16249999999999998,
+              0.0953125,
+              0.0375,
+              0,
+              0,
+              0,
+              0,
+              0.0125,
+              0.03862577639751553,
+              0.08873782467532468,
+              0.13124999999999998,
+              0.16400375939849623,
+              0.1854064039408867,
+              0.20714285714285713,
+              0.21559065934065935,
+              0.23833487940630793,
+              0.2517857142857143,
+              0.22605519480519481,
+              0.20934065934065932,
+              0.19999999999999998,
+              0.18234432234432232,
+              0.14970238095238095
+            ]
+          },
+          "tuesday": {
+            "congestionValue": [
+              0.13508771929824562,
+              0.134375,
+              0.125,
+              0.075,
+              0.03125,
+              0,
+              0,
+              0,
+              0,
+              0.03125,
+              0.05208333333333333,
+              0.1171875,
+              0.1484375,
+              0.14583333333333331,
+              0.15848214285714285,
+              0.171875,
+              0.2222222222222222,
+              0.21875,
+              0.22916666666666669,
+              0.1875,
+              0.16964285714285715,
+              0.1484375,
+              0.15625,
+              0.1484375
+            ]
+          },
+          "wednesday": {
+            "congestionValue": [
+              0.115625,
+              0.109375,
+              0.09375,
+              0.0625,
+              0.03125,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.09375,
+              0.140625,
+              0.171875,
+              0.14583333333333331,
+              0.134375,
+              0.203125,
+              0.25,
+              0.23906249999999998,
+              0.16964285714285712,
+              0.1953125,
+              0.1875,
+              0.2099609375,
+              0.1875
+            ]
+          },
+          "thursday": {
+            "congestionValue": [
+              0.18638392857142855,
+              0.140625,
+              0.1171875,
+              0.0390625,
+              0.03125,
+              0,
+              0,
+              0,
+              0.03125,
+              0.05208333333333333,
+              0.078125,
+              0.09765625,
+              0.125,
+              0.15625,
+              0.15625,
+              0.19010416666666666,
+              0.2265625,
+              0.25,
+              0.234375,
+              0.21875,
+              0.21875,
+              0.234375,
+              0.19791666666666669,
+              0.18080357142857142
+            ]
+          },
+          "friday": {
+            "congestionValue": [
+              0.171875,
+              0.16964285714285715,
+              0.125,
+              0.075,
+              0.03125,
+              0,
+              0,
+              0,
+              0.03125,
+              0.05208333333333333,
+              0.09375,
+              0.1736111111111111,
+              0.2265625,
+              0.24103009259259262,
+              0.22395833333333331,
+              0.2214725378787879,
+              0.2275390625,
+              0.2265625,
+              0.20703125,
+              0.23124999999999998,
+              0.265625,
+              0.278125,
+              0.26004464285714285,
+              0.22502125850340135
+            ]
+          },
+          "saturday": {
+            "congestionValue": [
+              0.20216211484593838,
+              0.17410714285714285,
+              0.15513392857142858,
+              0.0859375,
+              0.0625,
+              0,
+              0,
+              0,
+              0.015625,
+              0.044270833333333336,
+              0.0703125,
+              0.1125,
+              0.14620535714285715,
+              0.24005681818181818,
+              0.3125,
+              0.3046875,
+              0.2670454545454546,
+              0.24131944444444445,
+              0.30078125,
+              0.29910714285714285,
+              0.24524340986394558,
+              0.18382352941176472,
+              0.18526785714285715,
+              0.16224614845938376
+            ]
+          }
+        }
+      },
+      "accessHours": {
+        "regularHours": [
+          {
+            "weekday": 7,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 1,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 2,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 3,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 4,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 5,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 6,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          }
+        ],
+        "twentyFourSeven": false
+      },
+      "locationGUID": "db2bec68-2d42-4661-bbca-45895e567f2e",
+      "commonSiteName": "Sheetz",
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.41,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.57,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

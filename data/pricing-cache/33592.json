@@ -1,0 +1,40 @@
+{
+  "data": {
+    "data": {
+      "name": "Des Moines, IA - Fleur Drive",
+      "address": {
+        "street": null,
+        "streetNumber": null,
+        "city": null,
+        "district": null,
+        "state": "IA",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "50321",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": null,
+      "centroid": null,
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/Chicago",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "071b11b8-b179-4390-988c-1f6270434284",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

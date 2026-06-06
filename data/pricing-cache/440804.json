@@ -1,0 +1,40 @@
+{
+  "data": {
+    "data": {
+      "name": "Moreno Valley, CA - 27100 Eucalyptus Ave",
+      "address": {
+        "street": null,
+        "streetNumber": null,
+        "city": null,
+        "district": null,
+        "state": "CA",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "92555",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": null,
+      "centroid": null,
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/Los_Angeles",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "6fd09c32-279a-4a28-8b48-249265342934",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

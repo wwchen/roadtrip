@@ -1,0 +1,40 @@
+{
+  "data": {
+    "data": {
+      "name": "Sicamous, BC - Trans-Canada Hwy",
+      "address": {
+        "street": "Trans-Canada Hwy",
+        "streetNumber": "907",
+        "city": "Sicamous",
+        "district": null,
+        "state": "BC",
+        "countryCode": "CA",
+        "country": "Canada",
+        "postalCode": "V0E 2V0",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": null,
+      "centroid": null,
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/Vancouver",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "a776a811-bf21-4a2c-9adc-6a327b6ad2c4",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

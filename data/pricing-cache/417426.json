@@ -1,0 +1,40 @@
+{
+  "data": {
+    "data": {
+      "name": "Oviedo, FL",
+      "address": {
+        "street": null,
+        "streetNumber": null,
+        "city": null,
+        "district": null,
+        "state": "FL",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "32765",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": null,
+      "centroid": null,
+      "publicStallCount": null,
+      "openToPublic": false,
+      "amenities": null,
+      "maxPowerKw": 0,
+      "timeZone": "America/New_York",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": null,
+      "accessHours": {
+        "twentyFourSeven": true
+      },
+      "locationGUID": "36c7cd1e-a01f-47fa-9347-decd0415c38f",
+      "commonSiteName": null,
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

@@ -1,0 +1,379 @@
+{
+  "data": {
+    "data": {
+      "name": "New York, NY - 59 Allen Street",
+      "address": {
+        "street": "Allen Street",
+        "streetNumber": "59",
+        "city": "New York",
+        "district": null,
+        "state": "NY",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "10002",
+        "postalExt": null,
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 40.717129,
+        "longitude": -73.99168
+      },
+      "centroid": {
+        "latitude": 40.717122,
+        "longitude": -73.991991
+      },
+      "publicStallCount": 4,
+      "openToPublic": true,
+      "amenities": [
+        "AMENITIES_WIFI",
+        "AMENITIES_RESTROOMS",
+        "AMENITIES_CAFE",
+        "AMENITIES_LODGING",
+        "AMENITIES_RESTAURANT"
+      ],
+      "maxPowerKw": 72,
+      "timeZone": "America/New_York",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": {
+        "siteId": {
+          "id": 1408,
+          "siteType": "SITE_TYPE_SUPERCHARGER"
+        },
+        "trtId": {
+          "id": 4057,
+          "siteType": "SITE_TYPE_SUPERCHARGER"
+        },
+        "createdTimestamp": "2026-06-02T00:00:00Z",
+        "utcOffset": "-14400s",
+        "availabilityProfile": {
+          "sunday": {
+            "congestionValue": [
+              0.125,
+              0.109375,
+              0.0859375,
+              0.046875,
+              0.03125,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.0625,
+              0.09375,
+              0.14583333333333334,
+              0.140625,
+              0.16666666666666669,
+              0.16796875,
+              0.25,
+              0.25,
+              0.2,
+              0.109375,
+              0.203125,
+              0.246875
+            ]
+          },
+          "monday": {
+            "congestionValue": [
+              0.26425,
+              0.1875,
+              0.08333333333333334,
+              0.05,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.025,
+              0.09375000000000001,
+              0.1625,
+              0.18750000000000003,
+              0.11875,
+              0.1,
+              0.025,
+              0.125,
+              0.1375,
+              0.165625,
+              0.15,
+              0.13749999999999998,
+              0.125
+            ]
+          },
+          "tuesday": {
+            "congestionValue": [
+              0.1375,
+              0.171875,
+              0.140625,
+              0.09375,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.03125,
+              0.146875,
+              0.25,
+              0.28125,
+              0.165625,
+              0.09375,
+              0.03125,
+              0.0625,
+              0.109375,
+              0.125,
+              0.171875,
+              0.21875,
+              0.25
+            ]
+          },
+          "wednesday": {
+            "congestionValue": [
+              0.234375,
+              0.20703125,
+              0.140625,
+              0.09375,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.03125,
+              0.0625,
+              0.109375,
+              0.171875,
+              0.1875,
+              0.171875,
+              0.14583333333333334,
+              0.15625,
+              0.14583333333333331,
+              0.125,
+              0.125,
+              0.125,
+              0.109375,
+              0.0859375
+            ]
+          },
+          "thursday": {
+            "congestionValue": [
+              0.0625,
+              0.0859375,
+              0.078125,
+              0.0625,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.03125,
+              0.046875,
+              0.0859375,
+              0.125,
+              0.15625,
+              0.14583333333333331,
+              0.14583333333333334,
+              0.125,
+              0.15625,
+              0.0625,
+              0.125,
+              0.09375,
+              0.109375
+            ]
+          },
+          "friday": {
+            "congestionValue": [
+              0.0859375,
+              0.046875,
+              0.03125,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.03125,
+              0.046875,
+              0.0625,
+              0.0859375,
+              0.09375,
+              0.109375,
+              0.1484375,
+              0.171875,
+              0.14453125,
+              0.11458333333333334,
+              0.109375,
+              0.125,
+              0.046875
+            ]
+          },
+          "saturday": {
+            "congestionValue": [
+              0.0625,
+              0.0859375,
+              0.09375,
+              0.0625,
+              0.03125,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.03125,
+              0.03125,
+              0.125,
+              0.140625,
+              0.15625,
+              0.16666666666666669,
+              0.16796875,
+              0.203125,
+              0.171875,
+              0.09375,
+              0.0625,
+              0.03125,
+              0.046875
+            ]
+          }
+        }
+      },
+      "accessHours": {
+        "regularHours": [
+          {
+            "weekday": 7,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 1,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 2,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 3,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 4,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 5,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 6,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          }
+        ],
+        "twentyFourSeven": false
+      },
+      "locationGUID": "2dd2d210-1304-47fa-8105-41ee2624068e",
+      "commonSiteName": "57 Allen St Parking",
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.38,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "PARKING",
+          "rateBase": 0,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.53,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "PARKING",
+          "rateBase": 0,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}

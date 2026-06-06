@@ -1,0 +1,378 @@
+{
+  "data": {
+    "data": {
+      "name": "New York, NY - Mott Street",
+      "address": {
+        "street": "Mott Street",
+        "streetNumber": "106",
+        "city": "New York",
+        "district": null,
+        "state": "NY",
+        "countryCode": "US",
+        "country": "United States",
+        "postalCode": "10013",
+        "postalExt": "4600",
+        "navRegion": "us",
+        "nearestEntrance": null
+      },
+      "entryPoint": {
+        "latitude": 40.717566,
+        "longitude": -73.997176
+      },
+      "centroid": {
+        "latitude": 40.717622,
+        "longitude": -73.996778
+      },
+      "publicStallCount": 2,
+      "openToPublic": true,
+      "amenities": [
+        "AMENITIES_WIFI",
+        "AMENITIES_RESTROOMS",
+        "AMENITIES_CAFE",
+        "AMENITIES_RESTAURANT"
+      ],
+      "maxPowerKw": 72,
+      "timeZone": "America/New_York",
+      "accessType": "Public",
+      "openToNonTeslas": false,
+      "availabilityProfile": {
+        "siteId": {
+          "id": 1484,
+          "siteType": "SITE_TYPE_SUPERCHARGER"
+        },
+        "trtId": {
+          "id": 4648,
+          "siteType": "SITE_TYPE_SUPERCHARGER"
+        },
+        "createdTimestamp": "2026-06-02T00:00:00Z",
+        "utcOffset": "-14400s",
+        "availabilityProfile": {
+          "sunday": {
+            "congestionValue": [
+              0.09375,
+              0.0625,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.0625,
+              0.125,
+              0.21875,
+              0.21875,
+              0.171875,
+              0.09375,
+              0.125,
+              0.09375,
+              0.171875,
+              0.18125
+            ]
+          },
+          "monday": {
+            "congestionValue": [
+              0.12000000000000001,
+              0.05,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.05,
+              0.14166666666666666,
+              0.25,
+              0.24999999999999997,
+              0.18333333333333332,
+              0.18333333333333332,
+              0.25,
+              0.22499999999999998,
+              0.2,
+              0.05,
+              0.05,
+              0.05,
+              0.07500000000000001,
+              0.07500000000000001,
+              0.05
+            ]
+          },
+          "tuesday": {
+            "congestionValue": [
+              0,
+              0.125,
+              0.15625,
+              0.125,
+              0.0625,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.0625,
+              0.09375,
+              0.2890625,
+              0.42500000000000004,
+              0.59375,
+              0.5625,
+              0.375,
+              0.22916666666666669,
+              0.09375,
+              0.125,
+              0.09375,
+              0.125,
+              0.125,
+              0.171875
+            ]
+          },
+          "wednesday": {
+            "congestionValue": [
+              0.1875,
+              0.125,
+              0.0625,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.0625,
+              0.09375,
+              0.09375,
+              0.125,
+              0.125,
+              0.1875,
+              0.171875,
+              0.09375,
+              0.0625,
+              0.0625,
+              0.09375,
+              0.171875,
+              0.15625,
+              0.125,
+              0.0625
+            ]
+          },
+          "thursday": {
+            "congestionValue": [
+              0.0625,
+              0.0625,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.0625,
+              0.17708333333333334,
+              0.3125,
+              0.4140625,
+              0.40625,
+              0.296875,
+              0.125,
+              0.0625,
+              0,
+              0.0625,
+              0.0625,
+              0.125,
+              0.0625,
+              0.1875
+            ]
+          },
+          "friday": {
+            "congestionValue": [
+              0.15625,
+              0.125,
+              0.125,
+              0.0625,
+              0.0625,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.0625,
+              0.09375,
+              0.171875,
+              0.21875,
+              0.21875,
+              0.171875,
+              0.09375,
+              0.125,
+              0.09375,
+              0.09375,
+              0.25,
+              0.21875,
+              0.22916666666666669,
+              0.09375
+            ]
+          },
+          "saturday": {
+            "congestionValue": [
+              0.0625,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0,
+              0.0625,
+              0.09375,
+              0.125,
+              0.125,
+              0.171875,
+              0.1875,
+              0.125,
+              0.125,
+              0.0625,
+              0.0625,
+              0,
+              0.0625,
+              0.125,
+              0.21875
+            ]
+          }
+        }
+      },
+      "accessHours": {
+        "regularHours": [
+          {
+            "weekday": 7,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 1,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 2,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 3,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 4,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 5,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          },
+          {
+            "weekday": 6,
+            "periodBegin": "05:00",
+            "periodEnd": "23:59"
+          }
+        ],
+        "twentyFourSeven": false
+      },
+      "locationGUID": "177ae446-06b1-4aae-999b-c3f118fb2d82",
+      "commonSiteName": "Parking 106",
+      "ownershipType": null,
+      "brandName": null,
+      "effectivePricebooks": [
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.41,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "TSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": true
+        },
+        {
+          "feeType": "CHARGING",
+          "rateBase": 0.57,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "kwh",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        },
+        {
+          "feeType": "CONGESTION",
+          "rateBase": 0.5,
+          "rateTier1": 0,
+          "rateTier2": 0,
+          "rateMinTier1": null,
+          "rateMinTier2": null,
+          "rateMinTier3": null,
+          "rateMinTier4": null,
+          "currencyCode": "USD",
+          "uom": "min",
+          "startTime": "",
+          "endTime": "",
+          "days": "",
+          "isTou": false,
+          "vehicleMakeType": "NTSLA",
+          "minSiteOccupancy": null,
+          "maxSiteOccupancy": null,
+          "isMemberPricebook": false
+        }
+      ],
+      "isTrailerFriendly": false
+    },
+    "success": true
+  }
+}
