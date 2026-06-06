@@ -3,9 +3,9 @@ package ca.floo.campsite.recgov.booker.api
 import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.monitoring.StatusMonitor
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
 import java.time.Instant
 
 fun Route.statusRoutes(
@@ -13,7 +13,10 @@ fun Route.statusRoutes(
     tokenManager: TokenManager? = null,
     monitor: StatusMonitor? = null,
 ) {
-    get("/api/campsite/status") {
+    get("/api/campsite/status", {
+        tags = listOf("campsite")
+        summary = "Recreation.gov reachability + JWT login state"
+    }) {
         val snapshot = monitor?.snapshot()
         val recgovReachable = snapshot?.recgovReachable ?: true // optimistic until bootstrap probe lands
         val checkedAt = (snapshot?.checkedAt ?: Instant.now()).toString()
