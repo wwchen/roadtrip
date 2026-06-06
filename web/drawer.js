@@ -226,8 +226,11 @@ function renderShell(f) {
   const detailsBody = [pills, cellPills, rating,
     sitesTag ? `<div class="cg-sites">${sitesTag}</div>` : '',
     footer].filter(Boolean).join('');
+  // Desktop has the room — open by default. Mobile keeps the accordion
+  // collapsed so the heat-strip + CTAs stay above the fold.
+  const isDesktop = typeof window !== 'undefined' && window.matchMedia?.('(min-width: 768px)').matches;
   const detailsSection = detailsBody
-    ? `<details class="cg-details">
+    ? `<details class="cg-details"${isDesktop ? ' open' : ''}>
          <summary>More details</summary>
          ${detailsBody}
        </details>`
