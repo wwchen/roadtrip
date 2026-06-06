@@ -18,6 +18,40 @@ fun Route.pricingRoutes(cacheDir: File) {
     get("/api/pricing/{slug}", {
         tags = listOf("pricing")
         summary = "Cached Tesla pricing JSON for one supercharger slug; 404 if not yet crawled"
+        request {
+            pathParameter<String>("slug") {
+                description = "Supercharger slug from data/tesla-superchargers.geojson, e.g. truckee-ca."
+                example("truckee-ca") { value = "truckee-ca" }
+            }
+        }
+        response {
+            code(HttpStatusCode.OK) {
+                description = "Cached pricing JSON, with _cache.age_seconds spliced in."
+                body<String> {
+                    mediaTypes(ContentType.Application.Json)
+                    example("cached") {
+                        value =
+                            """{"siteName":"Truckee, CA","tiers":[{"start":"00:00","end":"24:00","perKwh":0.42}],"_cache":{"age_seconds":3600}}"""
+                    }
+                }
+            }
+            code(HttpStatusCode.NotFound) {
+                description = "Slug has not been crawled yet; rerun make refresh-superchargers"
+                body<String> {
+                    mediaTypes(ContentType.Application.Json)
+                    example("not cached") {
+                        value = """{"error":"not_cached","message":"Pricing not yet cached for this site."}"""
+                    }
+                }
+            }
+            code(HttpStatusCode.BadRequest) {
+                description = "Slug failed validation (path traversal attempt or empty)"
+                body<String> {
+                    mediaTypes(ContentType.Application.Json)
+                    example("bad slug") { value = """{"error":"bad slug"}""" }
+                }
+            }
+        }
     }) {
         val slug = call.parameters["slug"]
         if (slug.isNullOrEmpty() || slug.contains('/') || slug.contains("..")) {

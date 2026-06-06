@@ -16,6 +16,19 @@ fun Route.statusRoutes(
     get("/api/campsite/status", {
         tags = listOf("campsite")
         summary = "Recreation.gov reachability + JWT login state"
+        response {
+            code(io.ktor.http.HttpStatusCode.OK) {
+                body<String> {
+                    mediaTypes(io.ktor.http.ContentType.Application.Json)
+                    example("logged in") {
+                        value = """{"recgovReachable":true,"loggedIn":true,"checkedAt":"2026-06-06T19:14:02Z"}"""
+                    }
+                    example("recgov down") {
+                        value = """{"recgovReachable":false,"loggedIn":true,"checkedAt":"2026-06-06T19:14:02Z"}"""
+                    }
+                }
+            }
+        }
     }) {
         val snapshot = monitor?.snapshot()
         val recgovReachable = snapshot?.recgovReachable ?: true // optimistic until bootstrap probe lands

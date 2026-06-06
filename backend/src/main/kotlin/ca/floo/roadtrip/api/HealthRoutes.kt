@@ -15,6 +15,16 @@ fun Route.healthRoutes(cacheDir: File) {
     get("/api/health", {
         tags = listOf("health")
         summary = "Liveness probe + pricing-cache size; never calls Tesla"
+        response {
+            code(io.ktor.http.HttpStatusCode.OK) {
+                body<String> {
+                    mediaTypes(ContentType.Application.Json)
+                    example("ok") {
+                        value = """{"status":"ok","pricing_cache_count":1365,"now":1717683240}"""
+                    }
+                }
+            }
+        }
     }) {
         val cacheCount =
             if (cacheDir.isDirectory) {

@@ -97,4 +97,52 @@ class OpenApiSmokeTest {
                 paths["/api/admin/data/fetch"]!!.jsonObject["post"]!!.jsonObject
             assertEquals("Fetch upstream data", fetchPost["summary"]!!.jsonPrimitive.content)
         }
+
+    @Test
+    fun `response examples land in the openapi spec`() =
+        testApplication {
+            application {
+                install(SwaggerUI)
+                routing {
+                    route("/api/docs/openapi.json") { openApiSpec() }
+                    get("/api/example", {
+                        tags = listOf("test")
+                        summary = "Has examples"
+                        response {
+                            code(HttpStatusCode.OK) {
+                                body<String> {
+                                    mediaTypes(io.ktor.http.ContentType.Application.Json)
+                                    example("happy") { value = """{"hello":"world"}""" }
+                                }
+                            }
+                        }
+                    }) { call.respondText("ok") }
+                }
+            }
+
+            val resp = client.get("/api/docs/openapi.json")
+            assertEquals(HttpStatusCode.OK, resp.status)
+
+            val spec = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            // paths./api/example.get.responses.200.content."application/json".examples.happy.value
+            val examples =
+                spec["paths"]!!
+                    .jsonObject["/api/example"]!!
+                    .jsonObject["get"]!!
+                    .jsonObject["responses"]!!
+                    .jsonObject["200"]!!
+                    .jsonObject["content"]!!
+                    .jsonObject["application/json"]!!
+                    .jsonObject["examples"]!!
+                    .jsonObject
+
+            assertNotNull(examples["happy"], "named example 'happy' not found in spec")
+            // The example value is reflected verbatim. The plugin may serialize
+            // the JSON string with escapes or as a literal — accept either, just
+            // confirm the inner payload is round-tripped.
+            assertTrue(
+                examples["happy"]!!.toString().contains("hello"),
+                "example payload missing from spec; got: ${examples["happy"]}",
+            )
+        }
 }
