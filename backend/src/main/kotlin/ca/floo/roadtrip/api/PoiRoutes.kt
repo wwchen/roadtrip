@@ -23,6 +23,40 @@ fun Route.poiRoutes(ctx: DSLContext) {
     get("/api/pois", {
         tags = listOf("poi")
         summary = "GeoJSON FeatureCollection within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"
+        request {
+            queryParameter<String>("bbox") {
+                description = "Bounding box: west,south,east,north (decimal degrees, EPSG:4326)"
+                required = true
+                example("Pacific Northwest") { value = "-125,47,-120,51" }
+            }
+            queryParameter<String>("category") {
+                description = "Comma-separated. One or more of: campground, state-park, national-park, planet-fitness"
+                required = false
+                example("camping only") { value = "campground" }
+                example("camping + parks") { value = "campground,state-park,national-park" }
+            }
+        }
+        response {
+            code(io.ktor.http.HttpStatusCode.OK) {
+                description = "GeoJSON FeatureCollection. truncated:true means the bbox spans more than $POI_LIMIT rows."
+                body<String> {
+                    mediaTypes(io.ktor.http.ContentType.Application.Json)
+                    example("two features") {
+                        value =
+                            """{"type":"FeatureCollection","truncated":false,"features":[{"type":"Feature","id":42,"geometry":{"type":"Point","coordinates":[-122.95,50.1]},"properties":{"source":"uscampgrounds","source_id":"whistler-rv-park","category":"campground","name":"Whistler RV Park","raw":{"season":"year-round"}}}]}"""
+                    }
+                }
+            }
+            code(io.ktor.http.HttpStatusCode.BadRequest) {
+                description = "Missing or malformed bbox query parameter"
+                body<String> {
+                    mediaTypes(io.ktor.http.ContentType.Application.Json)
+                    example("bad bbox") {
+                        value = """{"error":"missing or malformed bbox; expected west,south,east,north"}"""
+                    }
+                }
+            }
+        }
     }) {
         val bboxParam = call.request.queryParameters["bbox"]
         val bbox = bboxParam?.let(::parseBbox)
