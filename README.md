@@ -26,10 +26,10 @@ Docker. The backend's `Dockerfile` is still used by `make deploy` to build
 the container that runs on mini-ca behind cloudflared, but it's no longer
 part of the laptop dev loop.
 
-`tilt up` is the easiest path for full-stack dev: Tilt reuses the existing
-Docker Postgres (`pois-up`), runs the backend with Gradle on the host so
-Kotlin recompiles are fast, and runs the campsite companion as a host Node
-process so Playwright can drive a real Chromium. Tilt UI is at
+`tilt up` is the easiest path for full-stack dev: Tilt brings up Docker
+Postgres (idempotent `compose up -d`), runs the backend with Gradle on the
+host so Kotlin recompiles are fast, and runs the campsite companion as a
+host Node process so Playwright can drive a real Chromium. Tilt UI is at
 <http://localhost:10350>.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers

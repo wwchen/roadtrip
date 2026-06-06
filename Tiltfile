@@ -1,7 +1,7 @@
 # Roadtrip Map dev stack.
 #
 # Three resources:
-#   postgres  — Docker (PostGIS), reused via the existing `make pois-up` flow.
+#   postgres  — Docker (PostGIS), idempotent `compose up -d postgres`.
 #   backend   — Kotlin/Ktor on the host, hot-rebuilt on src changes.
 #   companion — Node/Playwright on the host, restarted on src changes.
 #
@@ -13,13 +13,13 @@
 PORT = '8765'
 
 # --- postgres (Docker) -------------------------------------------------------
-# Reuse the same compose file the rest of the project uses. `make pois-up` is
-# idempotent (compose up -d), `pois-down` stops it. Tilt won't manage Docker
-# state directly — it just shells out and shows the result.
+# Reuse the same compose file the rest of the project uses. `up -d` is
+# idempotent (no-op when postgres is already running). Tilt won't manage
+# Docker state directly — it just shells out and shows the result.
 
 local_resource(
     'postgres',
-    cmd='make pois-up',
+    cmd='docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres',
     serve_cmd='docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois logs -f postgres',
     deps=['docker-compose.yml', 'docker-compose.local.yml'],
     readiness_probe=probe(
@@ -156,10 +156,14 @@ local_resource(
 # First-time stack bring-up: `tilt up` → DB migrates → click data-fetch (or
 # skip if data/ is already populated) → click data-import. Routine refresh:
 # click data-fetch then data-import.
+#
+# `--fail-with-body` makes curl exit non-zero on 4xx/5xx but still print the
+# JSON body (so a failed_phase shows up in the resource pane). 30-min timeout
+# covers the campgrounds enricher worst case (~10 min today).
 
 local_resource(
     'data-fetch',
-    cmd='scripts/admin-curl.sh fetch',
+    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + PORT + '/api/admin/data/fetch',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
     resource_deps=['backend'],
@@ -168,7 +172,7 @@ local_resource(
 
 local_resource(
     'data-import',
-    cmd='scripts/admin-curl.sh import',
+    cmd='curl --fail-with-body -sS --max-time 1800 -X POST http://127.0.0.1:' + PORT + '/api/admin/data/import',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
     resource_deps=['backend'],
