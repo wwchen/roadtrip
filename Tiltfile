@@ -62,14 +62,15 @@ local_resource(
 )
 
 # --- companion (host Node) ---------------------------------------------------
-# `cmd` runs `make install-companion` (idempotent: `npm install` is a no-op
-# when node_modules is fresh; `playwright install chromium` likewise skips
-# when the browser is already on disk). Re-runs when package.json changes.
+# `cmd` runs the same npm + playwright install pair as `make install` does,
+# but scoped to the companion (idempotent: `npm install` is a no-op when
+# node_modules is fresh; `playwright install chromium` likewise skips when
+# the browser is already on disk). Re-runs when package.json changes.
 # `serve_cmd` then keeps the Node process attached for log streaming.
 
 local_resource(
     'companion',
-    cmd='make install-companion',
+    cmd='cd companion && npm install && npx playwright install chromium',
     serve_cmd='cd companion && node --experimental-eventsource src/index.js',
     serve_env={'BACKEND_URL': 'http://127.0.0.1:' + PORT},
     deps=['companion/src', 'companion/package.json'],
@@ -103,7 +104,7 @@ local_resource(
 # - 'refresh-cookies-local' mints Tesla cookies into THIS repo's .env. The
 #   prod equivalent ('make refresh-cookies', remote-host) intentionally is
 #   not surfaced here — it's a deploy-machine concern.
-# - 'pois-import' / 'pois-import-all' run the Kotlin importer against local
+# - 'pois-import' (with SOURCE=all or SOURCE=<name>) runs the Kotlin importer against local
 #   Postgres. Upstream Python fetchers (scripts/fetch_*.py) generate the
 #   data/*.json the importer reads — those are still Make-only because they
 #   run rarely and require source-specific cookies/keys.
