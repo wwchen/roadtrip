@@ -1,13 +1,13 @@
 package ca.floo.roadtrip.ingest
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
+import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
-import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import org.jooq.DSLContext
 import java.time.OffsetDateTime
@@ -35,19 +35,39 @@ fun Route.adminIngestRoutes(
 ) {
     route("/api/admin/data") {
         // One target — sync default; ?async=1 fires-and-forgets.
-        post("/fetch/{target}") { runOne(controller, RunKind.FETCH) }
-        post("/import/{target}") { runOne(controller, RunKind.IMPORT) }
+        post("/fetch/{target}", {
+            tags = listOf("admin")
+            summary = "Fetch upstream data into data/{target}.* for one target"
+        }) { runOne(controller, RunKind.FETCH) }
+
+        post("/import/{target}", {
+            tags = listOf("admin")
+            summary = "Import data/ files into Postgres for one target"
+        }) { runOne(controller, RunKind.IMPORT) }
 
         // No target — fan out across every known target sequentially.
-        post("/fetch") { runAll(controller, RunKind.FETCH) }
-        post("/import") { runAll(controller, RunKind.IMPORT) }
+        post("/fetch", {
+            tags = listOf("admin")
+            summary = "Fetch upstream data for every known target (sequential fan-out)"
+        }) { runAll(controller, RunKind.FETCH) }
 
-        get("/runs") {
+        post("/import", {
+            tags = listOf("admin")
+            summary = "Import data/ files for every known target (sequential fan-out)"
+        }) { runAll(controller, RunKind.IMPORT) }
+
+        get("/runs", {
+            tags = listOf("admin")
+            summary = "Last 50 parent ingest runs (filter by ?target=)"
+        }) {
             val target = call.request.queryParameters["target"]
             call.respondText(listRecent(ctx, target, limit = 50), ContentType.Application.Json)
         }
 
-        get("/runs/{id}") {
+        get("/runs/{id}", {
+            tags = listOf("admin")
+            summary = "One ingest run with its ordered phase rows"
+        }) {
             val id = call.parameters["id"]?.toLongOrNull()
             if (id == null) {
                 call.respondText("""{"error":"bad id"}""", ContentType.Application.Json, HttpStatusCode.BadRequest)
@@ -65,7 +85,10 @@ fun Route.adminIngestRoutes(
             }
         }
 
-        get("/health") {
+        get("/health", {
+            tags = listOf("admin")
+            summary = "Per-target last-completed run + age in seconds"
+        }) {
             call.respondText(healthByTarget(ctx, controller.knownTargets()), ContentType.Application.Json)
         }
     }

@@ -14,6 +14,9 @@ import ca.floo.roadtrip.ingest.IngestController
 import ca.floo.roadtrip.ingest.adminIngestRoutes
 import ca.floo.roadtrip.ingest.defaultTargets
 import ca.floo.roadtrip.ingest.sweepStaleIngestRuns
+import io.github.smiley4.ktorswaggerui.SwaggerUI
+import io.github.smiley4.ktorswaggerui.routing.openApiSpec
+import io.github.smiley4.ktorswaggerui.routing.swaggerUI
 import io.ktor.http.ContentType
 import io.ktor.http.content.CachingOptions
 import io.ktor.server.application.Application
@@ -28,6 +31,7 @@ import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.compression.matchContentType
 import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
+import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import java.io.File
 
@@ -65,6 +69,17 @@ fun Application.module() {
             targets = defaultTargets(staticDir),
             workingDir = staticDir,
         )
+
+    // Self-documenting /api/docs (issue #47). Builds the OpenAPI spec from
+    // the live routing tree at boot; routes carry their own `documentation
+    // { summary = ... }` blocks. /api/docs serves Swagger UI; /api/docs/openapi.json
+    // serves the spec. Both are public — non-sensitive paths + summaries.
+    install(SwaggerUI) {
+        info {
+            title = "roadtrip API"
+            description = "Backend for roadtrip.floo.ca. Endpoints reflect the live routing tree."
+        }
+    }
 
     install(ConditionalHeaders)
     install(Compression) {
@@ -118,6 +133,16 @@ fun Application.module() {
     }
 
     routing {
+        // /api/docs — Swagger UI; /api/docs/openapi.json — the spec it loads.
+        // Both must be mounted before the static file fallthrough at "/" so
+        // the catch-all doesn't shadow them.
+        route("/api/docs") {
+            swaggerUI("/api/docs/openapi.json")
+        }
+        route("/api/docs/openapi.json") {
+            openApiSpec()
+        }
+
         poiRoutes(ctx)
         pricingRoutes(pricingCache)
         healthRoutes(pricingCache)

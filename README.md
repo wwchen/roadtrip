@@ -99,6 +99,24 @@ python3 scripts/fetch_parks.py            # PAD-US FeatureServer
 `enriched: true`). Pass `--refresh` to re-query everything; `--limit N` to
 test on a small sample.
 
+### `/api/docs` — interactive API browser
+
+Swagger UI at `/api/docs`, OpenAPI 3.1 spec at `/api/docs/openapi.json`.
+Built from the live routing tree at boot, so the doc reflects whatever's
+mounted (issue #47). To document a new route, replace the `io.ktor.server.routing.{get,post}`
+import with `io.github.smiley4.ktorswaggerui.dsl.routing.{get,post}` and pass
+a doc block:
+
+```kotlin
+get("/api/foo", {
+    tags = listOf("group")
+    summary = "One-line description"
+}) { /* handler */ }
+```
+
+Routes without a doc block still appear in the spec (untitled). The page is
+public — paths and summaries only, no secrets.
+
 ### Admin API surface (RFC 0004)
 
 | Verb | Path | Returns |

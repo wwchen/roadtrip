@@ -1,11 +1,11 @@
 package ca.floo.roadtrip.api
 
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
 import java.io.File
 import java.time.Instant
 
@@ -15,7 +15,10 @@ import java.time.Instant
 // user request path, which means no Akamai 429s, no cookie burns, no curl-
 // impersonate dependency in the live serving stack.
 fun Route.pricingRoutes(cacheDir: File) {
-    get("/api/pricing/{slug}") {
+    get("/api/pricing/{slug}", {
+        tags = listOf("pricing")
+        summary = "Cached Tesla pricing JSON for one supercharger slug; 404 if not yet crawled"
+    }) {
         val slug = call.parameters["slug"]
         if (slug.isNullOrEmpty() || slug.contains('/') || slug.contains("..")) {
             call.respondText(

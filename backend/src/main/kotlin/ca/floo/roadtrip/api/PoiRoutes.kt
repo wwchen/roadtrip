@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.api
 
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.call
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
 import org.jooq.DSLContext
 
 // Hard cap. The Mapbox/MapLibre frontend chokes on >5k features per source,
@@ -20,7 +20,10 @@ const val POI_LIMIT: Int = 2000
 // correct GeoJSON type without any client-side conversion. properties carries
 // the full source-side JSONB so the client can read amenities, season, etc.
 fun Route.poiRoutes(ctx: DSLContext) {
-    get("/api/pois") {
+    get("/api/pois", {
+        tags = listOf("poi")
+        summary = "GeoJSON FeatureCollection within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"
+    }) {
         val bboxParam = call.request.queryParameters["bbox"]
         val bbox = bboxParam?.let(::parseBbox)
         if (bbox == null) {

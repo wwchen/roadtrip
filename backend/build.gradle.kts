@@ -116,6 +116,11 @@ dependencies {
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:1.5.12")
 
+    // Self-documenting /api/docs at runtime — Swagger UI + OpenAPI 3.1 spec
+    // built from the live routing tree. Compatible with Ktor 3.0.x.
+    // Issue #47.
+    implementation("io.github.smiley4:ktor-swagger-ui:4.1.7")
+
     implementation("org.jooq:jooq:$jooqVersion")
     implementation("com.zaxxer:HikariCP:6.1.0")
     implementation("org.postgresql:postgresql:$postgresVersion")
