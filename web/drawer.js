@@ -181,6 +181,12 @@ function renderShell(f) {
     ? `<a class="cg-btn cg-btn-secondary" href="tel:${p.phone}">Call ${escapeHtml(p.phone)}</a>`
     : '';
 
+  // Hero photo lands flush against the top edges when present. Falls back
+  // to extra header padding when missing (drawer-head's first-child rule).
+  const hero = p.photo_url
+    ? `<div class="cg-hero" role="img" aria-label="${escapeHtml(p.name)}" style="background-image: url('${escapeHtml(p.photo_url)}')"></div>`
+    : '';
+
   // Recgov pins get the availability-first treatment: heat-strip, /campsite
   // deeplink for alerts, rec.gov as secondary. Non-recgov pins skip
   // availability entirely and just surface the existing reserve button.
@@ -192,7 +198,15 @@ function renderShell(f) {
         <div class="cg-strip" aria-hidden="true">
           ${'<div class="cg-cell skeleton"></div>'.repeat(30)}
         </div>
-        <div class="cg-day-labels"><span>Today</span><span></span></div>
+        <div class="cg-day-labels">
+          <span class="today">Today</span>
+          <span class="end"></span>
+        </div>
+        <div class="cg-legend" aria-hidden="true">
+          <span><span class="cg-legend-dot cg-cell-available"></span>Available</span>
+          <span><span class="cg-legend-dot cg-cell-partial"></span>Some sites</span>
+          <span><span class="cg-legend-dot cg-cell-booked"></span>Booked</span>
+        </div>
       </section>`
     : '';
 
@@ -209,8 +223,19 @@ function renderShell(f) {
         ${callBtn}
       </div>`;
 
+  const detailsBody = [pills, cellPills, rating,
+    sitesTag ? `<div class="cg-sites">${sitesTag}</div>` : '',
+    footer].filter(Boolean).join('');
+  const detailsSection = detailsBody
+    ? `<details class="cg-details">
+         <summary>More details</summary>
+         ${detailsBody}
+       </details>`
+    : '';
+
   const content = document.querySelector(`#${DRAWER_ROOT_ID} .cg-drawer-content`);
   content.innerHTML = `
+    ${hero}
     <header class="cg-drawer-head">
       <h2>${escapeHtml(p.name)}</h2>
       ${sub ? `<div class="cg-sub">${escapeHtml(sub)}</div>` : ''}
@@ -219,15 +244,7 @@ function renderShell(f) {
 
     ${availabilitySection}
     ${actions}
-
-    <details class="cg-details" open>
-      <summary>Details</summary>
-      ${pills}
-      ${cellPills}
-      ${rating}
-      ${sitesTag ? `<div class="cg-sites">${sitesTag}</div>` : ''}
-      ${footer}
-    </details>
+    ${detailsSection}
   `;
 }
 
