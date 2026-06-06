@@ -29,9 +29,6 @@ import io.ktor.server.plugins.compression.matchContentType
 import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
 import io.ktor.server.routing.routing
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import java.io.File
 
 fun main() {
@@ -56,10 +53,10 @@ fun Application.module() {
     val pricingCache = File(staticDir, "data/pricing-cache")
 
     // Ingestion controller (RFC 0004 / issue #44) — observability + remote
-    // trigger layer around the existing Python fetchers + Kotlin importer.
-    // Boot recovery first, so admins see a clean dashboard.
+    // trigger layer around the data-fetch (Python scripts) + data-import
+    // (Kotlin Importer) phases. Boot recovery first, so admins see a clean
+    // dashboard.
     sweepStaleIngestRuns(ctx)
-    val ingestScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     val ingestController =
         IngestController(
             ctx = ctx,
@@ -124,7 +121,7 @@ fun Application.module() {
         poiRoutes(ctx)
         pricingRoutes(pricingCache)
         healthRoutes(pricingCache)
-        adminIngestRoutes(ingestController, ctx, ingestScope)
+        adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
         // Static site. /web/* and /data/* (excluding pricing-cache, which is
         // server-private) serve directly from the repo checkout. Root path

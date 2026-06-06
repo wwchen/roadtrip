@@ -82,28 +82,31 @@ class IngestControllerTest {
     fun `unknown target throws`() {
         val controller = controllerWith(emptyMap())
         assertThrows<TargetNotFoundException> {
-            runBlocking { controller.startRun("nope", "test") }
+            runBlocking { controller.startRun("nope", RunKind.FETCH, "test") }
         }
     }
 
     @Test
-    fun `single shell phase happy path records completed parent and phase rows`() =
+    fun `single fetch phase happy path records completed parent and phase rows`() =
         runBlocking {
             val factory = FakeProcessFactory()
             factory.queue(FakeProcess(stdout = "ok\n", stderr = "", exit = 0))
             val controller =
                 controllerWith(
-                    mapOf("t" to Target("t", listOf(Phase.Shell("step1", listOf("echo", "ok"))))),
+                    targetMap("t", fetch = listOf(Phase.Fetch("step1", listOf("echo", "ok")))),
                     factory = factory,
                 )
 
-            val outcome = controller.startRun("t", "test")
+            val outcome = controller.startRun("t", RunKind.FETCH, "test")
 
             assertEquals("completed", outcome.status)
             assertNull(outcome.failedPhase)
+            assertEquals(RunKind.FETCH, outcome.kind)
 
             val parent = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(outcome.parentRunId)).fetchOne()!!
             assertEquals("target", parent.phaseKind)
+            // Parent row's `phase` column carries the run kind.
+            assertEquals("fetch", parent.phase)
             assertEquals("completed", parent.status)
             assertNotNull(parent.completedAt)
 
@@ -113,22 +116,40 @@ class IngestControllerTest {
                     .where(INGEST_RUNS.PARENT_RUN_ID.eq(outcome.parentRunId))
                     .fetch()
             assertEquals(1, phases.size)
-            assertEquals("shell", phases[0].phaseKind)
+            assertEquals("fetch", phases[0].phaseKind)
             assertEquals("completed", phases[0].status)
         }
 
     @Test
-    fun `shell non-zero exit fails phase and parent`() =
+    fun `import-with-no-phases is a noop that completes`() =
+        runBlocking {
+            // parks-canada-curated has no fetch phase; an import-only target
+            // with no fetch phases should complete cleanly when fetched.
+            val controller =
+                controllerWith(
+                    targetMap("curated", fetch = emptyList(), import = listOf(Phase.Import("k", "x"))),
+                )
+
+            val outcome = controller.startRun("curated", RunKind.FETCH, "test")
+            assertEquals("noop", outcome.status)
+
+            val parent = ctx.selectFrom(INGEST_RUNS).where(INGEST_RUNS.ID.eq(outcome.parentRunId)).fetchOne()!!
+            assertEquals("completed", parent.status)
+            assertEquals(0, ctx.fetchCount(INGEST_RUNS, INGEST_RUNS.PARENT_RUN_ID.eq(outcome.parentRunId)))
+        }
+
+    @Test
+    fun `fetch non-zero exit fails phase and parent`() =
         runBlocking {
             val factory = FakeProcessFactory()
             factory.queue(FakeProcess(stdout = "", stderr = "boom\n", exit = 1))
             val controller =
                 controllerWith(
-                    mapOf("t" to Target("t", listOf(Phase.Shell("step1", listOf("false"))))),
+                    targetMap("t", fetch = listOf(Phase.Fetch("step1", listOf("false")))),
                     factory = factory,
                 )
 
-            val outcome = controller.startRun("t", "test")
+            val outcome = controller.startRun("t", RunKind.FETCH, "test")
 
             assertEquals("failed", outcome.status)
             assertEquals("step1", outcome.failedPhase)
@@ -153,21 +174,19 @@ class IngestControllerTest {
             factory.queue(FakeProcess(stdout = "", stderr = "", exit = 0))
             val controller =
                 controllerWith(
-                    mapOf(
-                        "t" to
-                            Target(
-                                "t",
-                                listOf(
-                                    Phase.Shell("p1", listOf("a")),
-                                    Phase.Shell("p2", listOf("b")),
-                                    Phase.Shell("p3", listOf("c")),
-                                ),
+                    targetMap(
+                        "t",
+                        fetch =
+                            listOf(
+                                Phase.Fetch("p1", listOf("a")),
+                                Phase.Fetch("p2", listOf("b")),
+                                Phase.Fetch("p3", listOf("c")),
                             ),
                     ),
                     factory = factory,
                 )
 
-            val outcome = controller.startRun("t", "test")
+            val outcome = controller.startRun("t", RunKind.FETCH, "test")
 
             assertEquals("failed", outcome.status)
             assertEquals("p2", outcome.failedPhase)
@@ -195,19 +214,19 @@ class IngestControllerTest {
             factory.queue(BlockingFakeProcess(gate, release))
             val controller =
                 controllerWith(
-                    mapOf("t" to Target("t", listOf(Phase.Shell("hold", listOf("sleep"))))),
+                    targetMap("t", fetch = listOf(Phase.Fetch("hold", listOf("sleep")))),
                     factory = factory,
                 )
 
             coroutineScope {
-                val first = async(Dispatchers.IO) { controller.startRun("t", "first") }
+                val first = async(Dispatchers.IO) { controller.startRun("t", RunKind.FETCH, "first") }
 
                 // Wait for the phase to actually start (process spawn => gate completes).
                 withTimeout(5_000) { gate.await() }
 
                 val ex =
                     assertThrows<TargetBusyException> {
-                        runBlocking { controller.startRun("t", "second") }
+                        runBlocking { controller.startRun("t", RunKind.FETCH, "second") }
                     }
                 // Must surface the running parent run_id, not invent a new one.
                 val running =
@@ -226,6 +245,39 @@ class IngestControllerTest {
         }
 
     @Test
+    fun `fetch and import on same target serialize through the same mutex`() =
+        runBlocking {
+            // The whole point of one-mutex-per-target. A fetch in flight must
+            // block an import on the same target until it completes.
+            val gate = CompletableDeferred<Unit>()
+            val release = CompletableDeferred<Unit>()
+            val factory = FakeProcessFactory()
+            factory.queue(BlockingFakeProcess(gate, release))
+            val controller =
+                controllerWith(
+                    targetMap(
+                        "t",
+                        fetch = listOf(Phase.Fetch("hold", listOf("sleep"))),
+                        import = listOf(Phase.Import("i", "x")),
+                    ),
+                    factory = factory,
+                )
+
+            coroutineScope {
+                val fetchRun = async(Dispatchers.IO) { controller.startRun("t", RunKind.FETCH, "test") }
+                withTimeout(5_000) { gate.await() }
+
+                // Import on the same target while fetch is in flight: 409.
+                assertThrows<TargetBusyException> {
+                    runBlocking { controller.startRun("t", RunKind.IMPORT, "test") }
+                }
+
+                release.complete(Unit)
+                fetchRun.await()
+            }
+        }
+
+    @Test
     fun `different targets run concurrently`() =
         runBlocking {
             val gateA = CompletableDeferred<Unit>()
@@ -239,15 +291,15 @@ class IngestControllerTest {
             val controller =
                 controllerWith(
                     mapOf(
-                        "a" to Target("a", listOf(Phase.Shell("ha", listOf("sleep")))),
-                        "b" to Target("b", listOf(Phase.Shell("hb", listOf("sleep")))),
+                        "a" to Target("a", listOf(Phase.Fetch("ha", listOf("sleep"))), emptyList()),
+                        "b" to Target("b", listOf(Phase.Fetch("hb", listOf("sleep"))), emptyList()),
                     ),
                     factory = factory,
                 )
 
             coroutineScope {
-                val ra = async(Dispatchers.IO) { controller.startRun("a", "test") }
-                val rb = async(Dispatchers.IO) { controller.startRun("b", "test") }
+                val ra = async(Dispatchers.IO) { controller.startRun("a", RunKind.FETCH, "test") }
+                val rb = async(Dispatchers.IO) { controller.startRun("b", RunKind.FETCH, "test") }
                 withTimeout(5_000) {
                     gateA.await()
                     gateB.await()
@@ -266,14 +318,14 @@ class IngestControllerTest {
             factory.queue(FakeProcess(stdout = "", stderr = "", exit = 0))
             val controller =
                 controllerWith(
-                    mapOf("t" to Target("t", listOf(Phase.Shell("only", listOf("a"))))),
+                    targetMap("t", fetch = listOf(Phase.Fetch("only", listOf("a")))),
                     factory = factory,
                 )
 
-            val first = controller.startRun("t", "test")
+            val first = controller.startRun("t", RunKind.FETCH, "test")
             assertEquals("failed", first.status)
             // Second run must not be 409 — mutex must have been released.
-            val second = controller.startRun("t", "test")
+            val second = controller.startRun("t", RunKind.FETCH, "test")
             assertEquals("completed", second.status)
         }
 
@@ -285,7 +337,7 @@ class IngestControllerTest {
             ctx
                 .insertInto(INGEST_RUNS)
                 .set(INGEST_RUNS.TARGET, "t")
-                .set(INGEST_RUNS.PHASE, "target")
+                .set(INGEST_RUNS.PHASE, "fetch")
                 .set(INGEST_RUNS.PHASE_KIND, "target")
                 .set(INGEST_RUNS.STATUS, "started")
                 .set(INGEST_RUNS.STARTED_AT, past)
@@ -299,7 +351,7 @@ class IngestControllerTest {
             ctx
                 .insertInto(INGEST_RUNS)
                 .set(INGEST_RUNS.TARGET, "t")
-                .set(INGEST_RUNS.PHASE, "target")
+                .set(INGEST_RUNS.PHASE, "import")
                 .set(INGEST_RUNS.PHASE_KIND, "target")
                 .set(INGEST_RUNS.STATUS, "started")
                 .set(INGEST_RUNS.STARTED_AT, recent)
@@ -321,16 +373,20 @@ class IngestControllerTest {
     }
 
     @Test
-    fun `kotlin phase failure surfaces as failed phase row`() {
+    fun `import phase failure surfaces as failed phase row`() {
         // sourceFor() throws IllegalStateException for an unknown source name;
         // IngestController catches it and records the failure on the phase row.
         val controller =
             controllerWith(
-                mapOf("t" to Target("t", listOf(Phase.Kotlin("import:does-not-exist", "does-not-exist")))),
+                targetMap(
+                    "t",
+                    fetch = emptyList(),
+                    import = listOf(Phase.Import("import:does-not-exist", "does-not-exist")),
+                ),
                 dataDir = File("/tmp/this-does-not-exist-${System.nanoTime()}"),
             )
 
-        val outcome = runBlocking { controller.startRun("t", "test") }
+        val outcome = runBlocking { controller.startRun("t", RunKind.IMPORT, "test") }
         assertEquals("failed", outcome.status)
         val phase =
             ctx
@@ -338,6 +394,7 @@ class IngestControllerTest {
                 .where(INGEST_RUNS.PARENT_RUN_ID.eq(outcome.parentRunId))
                 .fetchOne() ?: fail("phase row not created")
         assertEquals("failed", phase.status)
+        assertEquals("import", phase.phaseKind)
         assertNotNull(phase.notes)
     }
 
@@ -355,6 +412,12 @@ class IngestControllerTest {
             ioDispatcher = Dispatchers.IO,
             processFactory = factory,
         )
+
+    private fun targetMap(
+        name: String,
+        fetch: List<Phase.Fetch> = emptyList(),
+        import: List<Phase.Import> = emptyList(),
+    ): Map<String, Target> = mapOf(name to Target(name, fetch, import))
 
     // -- Fakes ----------------------------------------------------------------
 

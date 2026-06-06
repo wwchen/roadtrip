@@ -2,9 +2,10 @@ package ca.floo.roadtrip.ingest
 
 import java.io.File
 
-// Static target map. Adding a new target = appending an entry. No admin-API
-// change, no schema change. Each target's phase list is the exact sequence
-// today's `make` targets run; the wrapper just makes them observable.
+// Static target map. One entry per coherent on-disk artifact; fetch + import
+// phases live in the same Target so the per-target mutex serializes them
+// (you can't import a half-written campgrounds.geojson). Adding a new
+// upstream = appending an entry. No admin-API or schema change.
 //
 // `repoRoot` is the working directory shell phases run in (so paths like
 // `scripts/fetch_planet_fitness.py` resolve correctly).
@@ -17,66 +18,68 @@ fun defaultTargets(repoRoot: File): Map<String, Target> {
         listOf(
             Target(
                 name = "planet-fitness",
-                phases =
-                    listOf(
-                        Phase.Shell("fetch_planet_fitness.py", python + script("fetch_planet_fitness.py")),
-                        Phase.Kotlin("import:osm-pf", "osm-pf"),
-                    ),
+                fetchPhases = listOf(Phase.Fetch("fetch_planet_fitness.py", python + script("fetch_planet_fitness.py"))),
+                importPhases = listOf(Phase.Import("import:osm-pf", "osm-pf")),
             ),
             Target(
                 name = "state-parks",
-                phases =
+                fetchPhases =
                     listOf(
-                        Phase.Shell("fetch_parks.py state", python + script("fetch_parks.py") + listOf("--layer", "state-parks")),
-                        Phase.Kotlin("import:state-parks", "state-parks"),
+                        Phase.Fetch(
+                            "fetch_parks.py state",
+                            python + script("fetch_parks.py") + listOf("--layer", "state-parks"),
+                        ),
                     ),
+                importPhases = listOf(Phase.Import("import:state-parks", "state-parks")),
             ),
             Target(
                 name = "national-parks",
-                phases =
+                fetchPhases =
                     listOf(
-                        Phase.Shell(
+                        Phase.Fetch(
                             "fetch_parks.py national",
                             python + script("fetch_parks.py") + listOf("--layer", "national-parks"),
                         ),
-                        Phase.Kotlin("import:national-parks", "national-parks"),
                     ),
+                importPhases = listOf(Phase.Import("import:national-parks", "national-parks")),
             ),
             // Composite. Four scripts share campgrounds.geojson; running them
             // under one target's mutex is the whole point.
             Target(
                 name = "campgrounds",
-                phases =
+                fetchPhases =
                     listOf(
-                        Phase.Shell("fetch_campgrounds.py", python + script("fetch_campgrounds.py")),
-                        Phase.Shell("fetch_bc_parks.py", python + script("fetch_bc_parks.py")),
-                        Phase.Shell("fetch_parks_canada.py", python + script("fetch_parks_canada.py")),
-                        Phase.Shell("enrich_campgrounds.py", python + script("enrich_campgrounds.py")),
-                        Phase.Kotlin("import:uscampgrounds", "uscampgrounds"),
+                        Phase.Fetch("fetch_campgrounds.py", python + script("fetch_campgrounds.py")),
+                        Phase.Fetch("fetch_bc_parks.py", python + script("fetch_bc_parks.py")),
+                        Phase.Fetch("fetch_parks_canada.py", python + script("fetch_parks_canada.py")),
+                        Phase.Fetch("enrich_campgrounds.py", python + script("enrich_campgrounds.py")),
                     ),
+                importPhases = listOf(Phase.Import("import:uscampgrounds", "uscampgrounds")),
             ),
-            // Curated JSON files — no fetch phase; importer reads the committed
-            // data/parks-canada-*.json directly.
+            // Curated JSON files committed to the repo — no fetch phase; the
+            // importer reads data/parks-canada-*.json directly.
             Target(
                 name = "parks-canada-curated",
-                phases = listOf(Phase.Kotlin("import:parks-canada", "parks-canada")),
+                fetchPhases = emptyList(),
+                importPhases = listOf(Phase.Import("import:parks-canada", "parks-canada")),
             ),
             Target(
                 name = "alberta-provincial",
-                phases = listOf(Phase.Kotlin("import:alberta-provincial", "alberta-provincial")),
+                fetchPhases = emptyList(),
+                importPhases = listOf(Phase.Import("import:alberta-provincial", "alberta-provincial")),
             ),
-            // Tesla pricing cache rebuild. Cache-only (no upstream network);
-            // full refresh stays in `make refresh-superchargers` because the
-            // egress IP is bound to the Tesla cookies in .env.
+            // Tesla pricing cache rebuild. Fetch-only — there's no import
+            // step (the cache files are served as-is from disk).
             Target(
                 name = "tesla-pricing",
-                phases =
+                fetchPhases =
                     listOf(
-                        Phase.Shell(
+                        Phase.Fetch(
                             "make rebuild-superchargers",
                             listOf("make", "rebuild-superchargers"),
                         ),
                     ),
+                importPhases = emptyList(),
             ),
         )
     return targets.associateBy { it.name }
