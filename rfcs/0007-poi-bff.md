@@ -70,7 +70,7 @@ If we don't fix this:
   branches in `drawer.js` or `campground-card.js`.
 - Strongly-typed Kotlin POI domain model that mirrors the DB schema, with
   per-type properties as a sealed hierarchy.
-- Adding a new POI type is: ingest target + category enum value + (optional)
+- Adding a new POI type is: poller target + category enum value + (optional)
   vendor adapter for availability. No new API route, no new FE fetch path,
   no new drawer code.
 
@@ -144,7 +144,7 @@ Aspira behind the scenes.
 Fold superchargers into the `pois` table. Schema additions:
 
 - Extend the `category` CHECK to include `'supercharger'`.
-- New ingest target: Tesla supercharger CSV/JSON → `pois` rows with
+- New poller target: Tesla supercharger CSV/JSON → `pois` rows with
   `source='tesla'`, `category='supercharger'`, point geometry, properties
   carrying connector/stall/voltage details.
 - Drop `data/tesla-superchargers.geojson` and the `superchargersRoutes` route
@@ -181,13 +181,13 @@ captures. Sketch of the entities + how they relate:
 ┌──────────────────┐    ┌────┴─────────────┐    ┌──────────────────┐
 │      source      │    │       poi        │    │ booking_provider │
 │ id, name,        │ 1..│ id, source_id,   │ N..│ id, name, host,  │
-│ ingest_kind      │────│ category, geom,  │────│ vendor           │   rec.gov, aspira,
+│ poller_kind      │────│ category, geom,  │────│ vendor           │   rec.gov, aspira,
 └──────────────────┘  N │ name, props…     │  1 └──────────────────┘   camis, none
                         │ governing_body_id│                           (FK optional)
                         │ booking_prov_id  │
                         │ parent_poi_id    │←┐
                         │ last_seen_run_id │ │
-                        │ last_ingest_id   │ │ self-FK
+                        │ last_poller_id   │ │ self-FK
                         └────────┬─────────┘ │   (parent must be polygon)
                                  │           │
                                  └───────────┘
@@ -196,12 +196,12 @@ captures. Sketch of the entities + how they relate:
 
 
       ┌──────────────────┐                  ┌──────────────────┐
-      │   import_runs    │                  │   ingest_runs    │
+      │   import_runs    │                  │   poller_runs    │
       │ id, source,      │                  │ id, target,      │
       │ status, …        │                  │ phase, status…   │
       └────────┬─────────┘                  └────────┬─────────┘
                │                                     │
-               │ pois.last_seen_run_id               │ pois.last_ingest_run_id
+               │ pois.last_seen_run_id               │ pois.last_poller_run_id
                └─────────────────────────────────────┘
                           (every poi row carries both)
 ```
@@ -232,7 +232,7 @@ the BE renders (e.g. "Booking via Aspira NextGen (BC Parks)") read from
 those tables instead of being hardcoded in TypeScript or the drawer
 assembler.
 
-#### Provenance: stamp the ingest run on every row
+#### Provenance: stamp the poller run on every row
 
 Today `pois.last_seen_run_id → import_runs(id)` records which **import**
 last touched a row, but not which **fetch** brought the data over the wall.
@@ -240,25 +240,33 @@ That's the question we'd actually want to answer when triaging "why is this
 campground showing yesterday's price?" — was the fetch stale, or did the
 import skip it?
 
-Add `pois.last_ingest_run_id BIGINT REFERENCES ingest_runs(id)`, populated by
+Add `pois.last_poller_run_id BIGINT REFERENCES poller_runs(id)`, populated by
 the importer at the same UPSERT site that already sets `last_seen_run_id`.
-The importer is invoked as part of the parent ingest run (Phase.Import); it
+The importer is invoked as part of the parent poller run (Phase.Import); it
 already has the parent run id in scope, so plumbing it in is a one-line
 change in `Importer.run`.
 
 With this in place, every POI row carries a pointer to:
 1. Its last import (`last_seen_run_id` → `import_runs`)
-2. The parent ingest run that imports rolled up under (`last_ingest_run_id`
-   → `ingest_runs` parent row, which links to its fetch + import phase rows
-   via `parent_run_id`)
+2. The parent poller run that imports rolled up under
+   (`last_poller_run_id` → `poller_runs` parent row, which links to its
+   fetch + import phase rows via `parent_run_id`)
 
 Querying "which rows came from fetch run #N" becomes one join. Drift between
 fetch + import (e.g. fetch succeeded, import partial) shows up as rows
-sharing an import run but not an ingest run.
+sharing an import run but not a poller run.
 
 Out of scope for this RFC: deciding whether to deprecate `import_runs` in
-favor of treating `ingest_runs` phase rows as the authoritative audit log.
+favor of treating `poller_runs` phase rows as the authoritative audit log.
 Both tables are useful today; merging is a separate cleanup.
+
+> **Naming note.** The existing wrapper around fetch + import is currently
+> called "ingest" in code (RFC 0004; `ingest_runs`, `IngestController`,
+> `/api/admin/ingest/*`). This RFC renames it to "poller" because it more
+> accurately describes the schedule-driven, periodic nature of the work
+> (poll vendor → write artifact → import). Renaming the existing artifacts
+> (table, class, routes, RFC 0004 title) is a separate mechanical PR; this
+> RFC adopts "poller" terminology going forward.
 
 ### Section 3: Unified query API
 
@@ -379,7 +387,7 @@ After Sections 1–5 land, the FE drawer becomes:
 
 This is not a single PR. PR sequence (each independently mergeable):
 
-1. **PR 1: Tesla → pois.** New ingest target writes SC into pois. Old
+1. **PR 1: Tesla → pois.** New poller target writes SC into pois. Old
    `/api/superchargers` route stays. `pois` rows now include SC; nothing
    reads them yet.
 2. **PR 2: Sealed Kotlin Poi model + drawer payload assembler.** Add the
@@ -475,5 +483,6 @@ proliferate without FE changes.
 | 2 | 2026-06-07 | Fold SC into `pois` table | Same shape as other types; parallel pipeline doesn't pay for itself |
 | 3 | 2026-06-07 | Sealed Kotlin POI hierarchy over generic Poi | Compiler-checked display-rule logic; per-type properties named once |
 | 4 | 2026-06-07 | One `/api/availability/{poi_id}` with internal vendor dispatch | Provider is BE-side knowledge; minimum API surface |
-| 5 | 2026-06-07 | Stamp `pois.last_ingest_run_id` alongside existing `last_seen_run_id` | Lets us trace any row back to the fetch + import that produced it; one-line plumbing change |
+| 5 | 2026-06-07 | Stamp `pois.last_poller_run_id` alongside existing `last_seen_run_id` | Lets us trace any row back to the fetch + import that produced it; one-line plumbing change |
 | 6 | 2026-06-07 | Promote `governing_body` and `booking_provider` to dimension tables; add `pois.parent_poi_id` self-FK | Captures the agency-vs-source distinction (rec.gov serves multiple agencies) and lets the BE cheaply roll up "campground → park" subtitles without spatial joins |
+| 7 | 2026-06-07 | Rename "ingest" to "poller" in this RFC's vocabulary | "poller" describes the periodic, schedule-driven nature of the work better than "ingest"; existing artifacts (`ingest_runs` table, `IngestController`, `/api/admin/ingest/*`) rename in a separate mechanical PR |
