@@ -1,7 +1,9 @@
 package ca.floo.roadtrip.ingest
 
+import ca.floo.roadtrip.importer.HttpFetchSource
+
 // Vocabulary:
-//   fetch  = web → local file in data/   (Phase.Fetch, runs a Python script)
+//   fetch  = web → local file in data/   (Phase.Fetch — Shell or Kotlin variant)
 //   import = local file → Postgres rows   (Phase.Import, runs Importer.run)
 //
 // "ingest" is the umbrella term for fetch + import together; it appears only
@@ -10,11 +12,21 @@ package ca.floo.roadtrip.ingest
 sealed interface Phase {
     val label: String
 
-    data class Fetch(
-        override val label: String,
-        val cmd: List<String>,
-        val timeoutSec: Long = 30 * 60,
-    ) : Phase
+    sealed interface Fetch : Phase {
+        data class Shell(
+            override val label: String,
+            val cmd: List<String>,
+            val timeoutSec: Long = 30 * 60,
+        ) : Fetch
+
+        // RFC 0004 step 3: in-process Kotlin fetcher. The source builds the
+        // same data/<name>.{json,geojson} a Python script would, but inside
+        // the JVM — no subprocess, no Python on PATH, shared HTTP client.
+        data class Kotlin(
+            override val label: String,
+            val source: HttpFetchSource,
+        ) : Fetch
+    }
 
     data class Import(
         override val label: String,

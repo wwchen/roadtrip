@@ -3,6 +3,9 @@ package ca.floo.roadtrip.ingest
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.importer.Importer
 import ca.floo.roadtrip.importer.sourceFor
+import io.ktor.client.HttpClient
+import io.ktor.client.engine.cio.CIO
+import io.ktor.client.plugins.HttpTimeout
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -70,7 +73,27 @@ class IngestController(
     private val workingDir: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val processFactory: ProcessFactory = DefaultProcessFactory,
+    // Lazy-init so tests that never hit a Phase.Fetch.Kotlin path don't pay
+    // the CIO engine wiring cost. Real prod gets one shared client per
+    // controller; the Importer + admin routes can call HTTP without a
+    // separate pool.
+    private val httpClientFactory: () -> HttpClient = {
+        // Default Ktor CIO timeouts (15s socket) are way too tight for the
+        // upstreams we hit. Overpass can take ~30s for a bbox query, PAD-US
+        // pages can take ~10s under load. Set a single-request ceiling that
+        // matches the per-phase shell timeout (30 min) so a slow upstream
+        // surfaces as a phase timeout, not a confusing socket timeout.
+        HttpClient(CIO) {
+            install(HttpTimeout) {
+                requestTimeoutMillis = 30 * 60 * 1000L // 30 min
+                connectTimeoutMillis = 30_000L
+                socketTimeoutMillis = 5 * 60 * 1000L
+            }
+        }
+    },
 ) {
+    private val httpClient: HttpClient by lazy { httpClientFactory() }
+
     private val log = LoggerFactory.getLogger(javaClass)
     private val locks: Map<String, Mutex> = targets.mapValues { Mutex() }
 
@@ -139,7 +162,8 @@ class IngestController(
             try {
                 val counts =
                     when (phase) {
-                        is Phase.Fetch -> runFetch(phase)
+                        is Phase.Fetch.Shell -> runShellFetch(phase)
+                        is Phase.Fetch.Kotlin -> runKotlinFetch(phase)
                         is Phase.Import -> runImport(phase)
                     }
                 completePhase(phaseId, counts)
@@ -156,8 +180,17 @@ class IngestController(
         return RunOutcome(parentId, target.name, kind, "completed", null)
     }
 
-    // -- Fetch phases (web → data/) -------------------------------------------
-    private suspend fun runFetch(phase: Phase.Fetch): JSONB =
+    // -- Kotlin fetch phases (in-process HTTP) --------------------------------
+    private suspend fun runKotlinFetch(phase: Phase.Fetch.Kotlin): JSONB =
+        withContext(ioDispatcher) {
+            val outcome = phase.source.fetch(httpClient, dataDir)
+            JSONB.valueOf(
+                """{"feature_count":${outcome.featureCount},"output_file":"${outcome.outputFile.name}"}""",
+            )
+        }
+
+    // -- Shell fetch phases (web → data/ via subprocess) ----------------------
+    private suspend fun runShellFetch(phase: Phase.Fetch.Shell): JSONB =
         withContext(ioDispatcher) {
             val process =
                 processFactory.start(

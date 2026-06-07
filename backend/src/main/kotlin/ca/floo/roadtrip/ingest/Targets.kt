@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.ingest
 
+import ca.floo.roadtrip.importer.PadUsParksHttpSource
+import ca.floo.roadtrip.importer.PlanetFitnessHttpSource
 import java.io.File
 
 // Static target map. One entry per coherent on-disk artifact; fetch + import
@@ -16,31 +18,23 @@ fun defaultTargets(repoRoot: File): Map<String, Target> {
 
     val targets =
         listOf(
+            // RFC 0004 step 3: ported in-process. The Python script lingers
+            // as scripts/fetch_planet_fitness.py for offline debugging, but
+            // the Tilt button + admin API now run the Kotlin path.
             Target(
                 name = "planet-fitness",
-                fetchPhases = listOf(Phase.Fetch("fetch_planet_fitness.py", python + script("fetch_planet_fitness.py"))),
+                fetchPhases = listOf(Phase.Fetch.Kotlin("fetch:osm-pf", PlanetFitnessHttpSource())),
                 importPhases = listOf(Phase.Import("import:osm-pf", "osm-pf")),
             ),
             Target(
                 name = "state-parks",
-                fetchPhases =
-                    listOf(
-                        Phase.Fetch(
-                            "fetch_parks.py state",
-                            python + script("fetch_parks.py") + listOf("--layer", "state-parks"),
-                        ),
-                    ),
+                fetchPhases = listOf(Phase.Fetch.Kotlin("fetch:padus-state-parks", PadUsParksHttpSource.stateParks())),
                 importPhases = listOf(Phase.Import("import:state-parks", "state-parks")),
             ),
             Target(
                 name = "national-parks",
                 fetchPhases =
-                    listOf(
-                        Phase.Fetch(
-                            "fetch_parks.py national",
-                            python + script("fetch_parks.py") + listOf("--layer", "national-parks"),
-                        ),
-                    ),
+                    listOf(Phase.Fetch.Kotlin("fetch:padus-national-parks", PadUsParksHttpSource.nationalParks())),
                 importPhases = listOf(Phase.Import("import:national-parks", "national-parks")),
             ),
             // Composite. Four scripts share campgrounds.geojson; running them
@@ -49,10 +43,10 @@ fun defaultTargets(repoRoot: File): Map<String, Target> {
                 name = "campgrounds",
                 fetchPhases =
                     listOf(
-                        Phase.Fetch("fetch_campgrounds.py", python + script("fetch_campgrounds.py")),
-                        Phase.Fetch("fetch_bc_parks.py", python + script("fetch_bc_parks.py")),
-                        Phase.Fetch("fetch_parks_canada.py", python + script("fetch_parks_canada.py")),
-                        Phase.Fetch("enrich_campgrounds.py", python + script("enrich_campgrounds.py")),
+                        Phase.Fetch.Shell("fetch_campgrounds.py", python + script("fetch_campgrounds.py")),
+                        Phase.Fetch.Shell("fetch_bc_parks.py", python + script("fetch_bc_parks.py")),
+                        Phase.Fetch.Shell("fetch_parks_canada.py", python + script("fetch_parks_canada.py")),
+                        Phase.Fetch.Shell("enrich_campgrounds.py", python + script("enrich_campgrounds.py")),
                     ),
                 importPhases = listOf(Phase.Import("import:uscampgrounds", "uscampgrounds")),
             ),
@@ -74,7 +68,7 @@ fun defaultTargets(repoRoot: File): Map<String, Target> {
                 name = "tesla-pricing",
                 fetchPhases =
                     listOf(
-                        Phase.Fetch(
+                        Phase.Fetch.Shell(
                             "make rebuild-superchargers",
                             listOf("make", "rebuild-superchargers"),
                         ),

@@ -93,7 +93,7 @@ class IngestControllerTest {
             factory.queue(FakeProcess(stdout = "ok\n", stderr = "", exit = 0))
             val controller =
                 controllerWith(
-                    targetMap("t", fetch = listOf(Phase.Fetch("step1", listOf("echo", "ok")))),
+                    targetMap("t", fetch = listOf(Phase.Fetch.Shell("step1", listOf("echo", "ok")))),
                     factory = factory,
                 )
 
@@ -145,7 +145,7 @@ class IngestControllerTest {
             factory.queue(FakeProcess(stdout = "", stderr = "boom\n", exit = 1))
             val controller =
                 controllerWith(
-                    targetMap("t", fetch = listOf(Phase.Fetch("step1", listOf("false")))),
+                    targetMap("t", fetch = listOf(Phase.Fetch.Shell("step1", listOf("false")))),
                     factory = factory,
                 )
 
@@ -178,9 +178,9 @@ class IngestControllerTest {
                         "t",
                         fetch =
                             listOf(
-                                Phase.Fetch("p1", listOf("a")),
-                                Phase.Fetch("p2", listOf("b")),
-                                Phase.Fetch("p3", listOf("c")),
+                                Phase.Fetch.Shell("p1", listOf("a")),
+                                Phase.Fetch.Shell("p2", listOf("b")),
+                                Phase.Fetch.Shell("p3", listOf("c")),
                             ),
                     ),
                     factory = factory,
@@ -214,7 +214,7 @@ class IngestControllerTest {
             factory.queue(BlockingFakeProcess(gate, release))
             val controller =
                 controllerWith(
-                    targetMap("t", fetch = listOf(Phase.Fetch("hold", listOf("sleep")))),
+                    targetMap("t", fetch = listOf(Phase.Fetch.Shell("hold", listOf("sleep")))),
                     factory = factory,
                 )
 
@@ -257,7 +257,7 @@ class IngestControllerTest {
                 controllerWith(
                     targetMap(
                         "t",
-                        fetch = listOf(Phase.Fetch("hold", listOf("sleep"))),
+                        fetch = listOf(Phase.Fetch.Shell("hold", listOf("sleep"))),
                         import = listOf(Phase.Import("i", "x")),
                     ),
                     factory = factory,
@@ -291,8 +291,8 @@ class IngestControllerTest {
             val controller =
                 controllerWith(
                     mapOf(
-                        "a" to Target("a", listOf(Phase.Fetch("ha", listOf("sleep"))), emptyList()),
-                        "b" to Target("b", listOf(Phase.Fetch("hb", listOf("sleep"))), emptyList()),
+                        "a" to Target("a", listOf(Phase.Fetch.Shell("ha", listOf("sleep"))), emptyList()),
+                        "b" to Target("b", listOf(Phase.Fetch.Shell("hb", listOf("sleep"))), emptyList()),
                     ),
                     factory = factory,
                 )
@@ -318,7 +318,7 @@ class IngestControllerTest {
             factory.queue(FakeProcess(stdout = "", stderr = "", exit = 0))
             val controller =
                 controllerWith(
-                    targetMap("t", fetch = listOf(Phase.Fetch("only", listOf("a")))),
+                    targetMap("t", fetch = listOf(Phase.Fetch.Shell("only", listOf("a")))),
                     factory = factory,
                 )
 

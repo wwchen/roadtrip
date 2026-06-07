@@ -98,7 +98,7 @@ class AdminIngestRoutesTest {
                         "t" to
                             Target(
                                 "t",
-                                listOf(Phase.Fetch("step1", listOf("echo", "ok"))),
+                                listOf(Phase.Fetch.Shell("step1", listOf("echo", "ok"))),
                                 emptyList(),
                             ),
                     ),
@@ -138,7 +138,7 @@ class AdminIngestRoutesTest {
                         "t" to
                             Target(
                                 "t",
-                                listOf(Phase.Fetch("step1", listOf("false"))),
+                                listOf(Phase.Fetch.Shell("step1", listOf("false"))),
                                 emptyList(),
                             ),
                     ),
@@ -166,8 +166,8 @@ class AdminIngestRoutesTest {
             val controller =
                 controllerWith(
                     mapOf(
-                        "alpha" to Target("alpha", listOf(Phase.Fetch("a", listOf("a"))), emptyList()),
-                        "beta" to Target("beta", listOf(Phase.Fetch("b", listOf("b"))), emptyList()),
+                        "alpha" to Target("alpha", listOf(Phase.Fetch.Shell("a", listOf("a"))), emptyList()),
+                        "beta" to Target("beta", listOf(Phase.Fetch.Shell("b", listOf("b"))), emptyList()),
                     ),
                     factory = factory,
                 )
@@ -198,7 +198,7 @@ class AdminIngestRoutesTest {
                         "t" to
                             Target(
                                 "t",
-                                listOf(Phase.Fetch("f", listOf("a"))),
+                                listOf(Phase.Fetch.Shell("f", listOf("a"))),
                                 emptyList(),
                             ),
                     ),
@@ -224,8 +224,8 @@ class AdminIngestRoutesTest {
             val controller =
                 controllerWith(
                     mapOf(
-                        "alpha" to Target("alpha", listOf(Phase.Fetch("a", listOf("a"))), emptyList()),
-                        "beta" to Target("beta", listOf(Phase.Fetch("b", listOf("b"))), emptyList()),
+                        "alpha" to Target("alpha", listOf(Phase.Fetch.Shell("a", listOf("a"))), emptyList()),
+                        "beta" to Target("beta", listOf(Phase.Fetch.Shell("b", listOf("b"))), emptyList()),
                     ),
                     factory = factory,
                 )
