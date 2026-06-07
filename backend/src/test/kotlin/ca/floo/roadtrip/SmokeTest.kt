@@ -91,14 +91,17 @@ class SmokeTest {
 
             // 5. Drive search → result click → synthesizeClick (deterministic
             // popup render, dodges pixel-rounding issues from clicking the dot).
-            page.fill("#search", "tunnel mountain village")
-            page.locator(".sr-item").first().waitFor(
+            // The Google-Maps-style top bar (web/topbar.js) puts the search input
+            // at .tb-row[data-i="0"] .tb-input; matching pin results render as
+            // .tb-result rows in #tb-dropdown.
+            page.fill(".tb-row[data-i=\"0\"] .tb-input", "tunnel mountain village")
+            page.locator("#tb-dropdown .tb-result").first().waitFor(
                 com.microsoft.playwright.Locator
                     .WaitForOptions()
                     .setState(WaitForSelectorState.VISIBLE)
                     .setTimeout(5_000.0),
             )
-            page.locator(".sr-item").first().click()
+            page.locator("#tb-dropdown .tb-result").first().click()
 
             // 6. Drawer renders with name + reserve link. (Tunnel Mountain is
             // a Parks Canada pin — no recgov_id — so the drawer skips the
