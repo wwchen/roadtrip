@@ -12,6 +12,26 @@
 
 PORT = '8765'
 
+# Pull MAPBOX_TOKEN from .env so the backend's /api/route endpoint can call
+# Mapbox Directions. read_file with default='' returns empty when the file
+# is missing, and the dotenv parser ignores blank/comment lines. Tokens
+# never appear on the rendered command line — they go through serve_env.
+def _load_dotenv(path):
+    out = {}
+    raw = str(read_file(path, default=''))
+    for line in raw.splitlines():
+        line = line.strip()
+        if not line or line.startswith('#') or '=' not in line:
+            continue
+        k, _, v = line.partition('=')
+        k = k.strip()
+        v = v.strip().strip('"').strip("'")
+        if k and k not in out:
+            out[k] = v
+    return out
+
+DOTENV = _load_dotenv('.env')
+
 # --- postgres (Docker) -------------------------------------------------------
 # Reuse the same compose file the rest of the project uses. `up -d` is
 # idempotent (no-op when postgres is already running). Tilt won't manage
@@ -41,7 +61,12 @@ local_resource(
               'ROADTRIP_DB_URL=jdbc:postgresql://127.0.0.1:5432/roadtrip ' +
               'ROADTRIP_DB_USER=roadtrip ROADTRIP_DB_PASSWORD=roadtrip ' +
               './gradlew --console=plain run',
-    serve_env={'JAVA_TOOL_OPTIONS': '-Dorg.gradle.daemon=true'},
+    serve_env={
+        'JAVA_TOOL_OPTIONS': '-Dorg.gradle.daemon=true',
+        # MAPBOX_TOKEN is read by /api/route. Empty when .env is missing —
+        # endpoint then 503s, rest of the app is unaffected.
+        'MAPBOX_TOKEN': DOTENV.get('MAPBOX_TOKEN', ''),
+    },
     deps=[
         'backend/src/main',
         'backend/build.gradle.kts',
