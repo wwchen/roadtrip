@@ -15,6 +15,9 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
+import org.slf4j.LoggerFactory
+
+private val log = LoggerFactory.getLogger("PoiRoutes")
 
 // Hard cap. The Mapbox/MapLibre frontend chokes on >5k features per source,
 // and our POIs cover all of US/CA — the user is expected to zoom in. Returning
@@ -89,17 +92,38 @@ fun Route.poiRoutes(ctx: DSLContext) {
                 rawCategories
             }
 
+        // Polygon corridors from turf.buffer can rarely produce a self-
+        // intersection pathology that PostGIS GEOS rejects with
+        // TopologyException even after ST_MakeValid. Catch that, log it,
+        // and degrade to bbox-only — the user sees more POIs than ideal,
+        // but never a 500. Other failures bubble up.
         val rows =
             if (categories?.isEmpty() == true) {
                 emptyList()
             } else {
-                fetchPois(
-                    ctx = ctx,
-                    bbox = req.bbox,
-                    categories = categories,
-                    polygonGeoJson = req.polygonGeoJson,
-                    limit = POI_LIMIT + 1,
-                )
+                try {
+                    fetchPois(
+                        ctx = ctx,
+                        bbox = req.bbox,
+                        categories = categories,
+                        polygonGeoJson = req.polygonGeoJson,
+                        limit = POI_LIMIT + 1,
+                    )
+                } catch (e: org.jooq.exception.DataAccessException) {
+                    val cause = e.cause?.message.orEmpty()
+                    if (req.polygonGeoJson != null && cause.contains("TopologyException")) {
+                        log.warn("polygon GEOS topology fault, falling back to bbox-only: {}", cause)
+                        fetchPois(
+                            ctx = ctx,
+                            bbox = req.bbox,
+                            categories = categories,
+                            polygonGeoJson = null,
+                            limit = POI_LIMIT + 1,
+                        )
+                    } else {
+                        throw e
+                    }
+                }
             }
         val truncated = rows.size > POI_LIMIT
         val effective = if (truncated) rows.take(POI_LIMIT) else rows
@@ -237,10 +261,27 @@ internal fun fetchPois(
                     """.trimIndent(),
                 )
                 if (polygonGeoJson != null) {
-                    // ST_Within(geom, polygon). Polygon is built once per
-                    // subquery from the GeoJSON text. PostGIS optimizes
-                    // identical sub-expressions across UNION branches.
-                    append("\n      AND ST_Within(geom, ST_SetSRID(ST_GeomFromGeoJSON(?), 4326))")
+                    // ST_Intersects(geom, polygon). Polygon is built once per
+                    // subquery from the GeoJSON text.
+                    //
+                    // The polygon goes through ST_MakeValid + ST_CollectionExtract
+                    // because turf.buffer on a route that doubles back can
+                    // produce self-intersecting rings. GEOS rejects those
+                    // with TopologyException. ST_MakeValid cleans the
+                    // intersections (may return a GeometryCollection with
+                    // sliver lines/points) and ST_CollectionExtract(_, 3)
+                    // keeps only the polygonal parts so the spatial predicate
+                    // can evaluate cleanly.
+                    //
+                    // ST_Intersects (vs ST_Within) is the right operator here:
+                    // both return the same result for points (a point is
+                    // either inside or outside the corridor), but ST_Intersects
+                    // is more permissive about the shape of the polygon arg
+                    // (handles MultiPolygon naturally) and uses the GIST
+                    // index the same way.
+                    append(
+                        "\n      AND ST_Intersects(geom, ST_CollectionExtract(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)), 3))",
+                    )
                 }
                 append("\n    LIMIT ?")
                 append(")")

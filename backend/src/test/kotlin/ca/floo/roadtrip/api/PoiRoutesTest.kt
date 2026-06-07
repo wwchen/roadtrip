@@ -319,6 +319,15 @@ class PoiRoutesTest {
             assertEquals(true, parsed["corridor"]?.jsonPrimitive?.boolean)
         }
 
+    // Pathological self-intersecting polygons (e.g. turf.buffer of a route
+    // that doubles back) can still throw GEOS TopologyException even after
+    // ST_MakeValid. The handler in poiRoutes() catches that and falls back
+    // to bbox-only so the user never sees a 500. This is hard to reproduce
+    // deterministically across PostGIS versions (testcontainers' GEOS
+    // handles some bowties that production Docker rejects), so the
+    // fallback is verified by manual smoke against the live backend, not
+    // here. The polygon-too-large path below is the deterministic guard.
+
     @Test
     fun `polygon with too many vertices returns 400`() =
         testApplication {
