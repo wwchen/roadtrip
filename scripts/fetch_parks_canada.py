@@ -101,11 +101,18 @@ def main():
     existing = []
     if OUT.exists():
         doc = json.loads(OUT.read_text())
+        # Also purge legacy bare 'PC-' entries that predate the PC-BC-/PC-AB-
+        # split. They're hand-curated duplicates of the modern PC-BC-/PC-AB-
+        # entries; carrying them forward made pins overlap, so any future
+        # run drops them on sight.
+        legacy_bare_pc = "PC-"
         for f in doc.get("features", []):
             code = str(f.get("properties", {}).get("code", ""))
-            # Keep features whose code prefix is NOT being re-imported this run.
-            if not any(code.startswith(prefix) for prefix in all_codes_replaced):
-                existing.append(f)
+            if any(code.startswith(prefix) for prefix in all_codes_replaced):
+                continue
+            if code.startswith(legacy_bare_pc) and not code.startswith(("PC-BC-", "PC-AB-")):
+                continue
+            existing.append(f)
 
     merged = existing + new_features
     fetched_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

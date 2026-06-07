@@ -29,9 +29,9 @@ private const val MAX_DAYS = 60
 // the backend at arbitrary URLs by guessing host names.
 private val ALLOWED_HOSTS =
     setOf(
-        "reservation.pc.gc.ca",
-        "washington.goingtocamp.com",
-        "discovercamping.ca",
+        "reservation.pc.gc.ca", // Parks Canada
+        "camping.bcparks.ca", // BC Provincial (discovercamping.ca redirects here)
+        "washington.goingtocamp.com", // WA State Parks
     )
 
 /**
