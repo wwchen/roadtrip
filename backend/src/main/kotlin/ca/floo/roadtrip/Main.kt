@@ -7,6 +7,7 @@ import ca.floo.roadtrip.api.healthRoutes
 import ca.floo.roadtrip.api.poiRoutes
 import ca.floo.roadtrip.api.pricingRoutes
 import ca.floo.roadtrip.api.routeRoutes
+import ca.floo.roadtrip.api.superchargersRoutes
 import ca.floo.roadtrip.geocode.MapboxGeocoder
 import ca.floo.roadtrip.importer.DbConfig
 import ca.floo.roadtrip.importer.Importer
@@ -160,6 +161,7 @@ fun Application.module() {
         routeRoutes(mapboxDirections)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes(pricingCache)
+        superchargersRoutes(File(staticDir, "data"))
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
         // Static site. /web/* and /data/* (excluding pricing-cache, which is

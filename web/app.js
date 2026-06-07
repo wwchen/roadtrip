@@ -181,15 +181,14 @@ const EMPTY_FC = { type: 'FeatureCollection', features: [] };
 async function load() {
   const status = document.getElementById('status');
 
-  // Superchargers stay static — ~1k OPEN features (~90KB) is fine, they don't
-  // change per-pan. The local file is filtered to OPEN-only at fetch time
-  // (scripts/fetch_tesla_superchargers.py); the live supercharge.info
-  // fallback is gone since it would reintroduce CONSTRUCTION/PERMIT/PLAN
-  // pins. SC remain searchable globally.
+  // Superchargers come through /api/superchargers — the FE invariant is no
+  // direct /data/* reads; everything goes through the backend. The data is
+  // pre-filtered to OPEN-only at fetch time (scripts/fetch_tesla_superchargers.py).
+  // SC remain searchable globally; no per-pan refetch.
   (async () => {
     try {
       status.textContent = 'Loading Superchargers…';
-      const fc = await fetchJSON('/data/tesla-superchargers.geojson');
+      const fc = await fetchJSON('/api/superchargers');
       setCount('c-open', fc.features.length);
       state.overlayData.sc = fc;
       for (const f of fc.features) {
