@@ -193,14 +193,49 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
     url = `https://www.recreation.gov/search?q=${recq}&entity_type=campground&inventory_type=camping`;
     label = 'Search recreation.gov';
   } else {
-    const gq = encodeURIComponent(`${p.name} ${p.state || ''}`.trim());
-    url = `https://www.google.com/search?q=${gq}+campground`;
-    label = 'Search Google';
+    // Region-specific park-system search beats a raw Google for the cases
+    // we can route confidently. Each entry returns [url, label].
+    // Falls through to Google if the (state, country) tuple isn't here —
+    // a Google query is at least targeted, not random.
+    const regional = regionalParkSearch(p);
+    if (regional) {
+      [url, label] = regional;
+    } else {
+      const gq = encodeURIComponent(`${p.name} ${p.state || ''}`.trim());
+      url = `https://www.google.com/search?q=${gq}+campground`;
+      label = 'Search Google';
+    }
   }
   if (p.reservable === false && !p.reserve_url) {
     return `<span class="${btnClass} ${btnClass}-disabled">First-come, first-served</span>`;
   }
   return `<a class="${btnClass} ${btnClass}-primary" href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+}
+
+/**
+ * Map a pin's (state, country) to its park-system search page. Returns
+ * [url, label] or null if we don't have a confident route. Sites with their
+ * own structured search are preferable to Google because the result set is
+ * already filtered to actual park entries, not a noisy general web search.
+ */
+function regionalParkSearch(p) {
+  const q = encodeURIComponent(p.name);
+  if (p.country === 'CA') {
+    if (p.state === 'AB') return [`https://www.albertaparks.ca/parks/?searchPhrase=${q}`, 'Search Alberta Parks'];
+    if (p.state === 'BC') return [`https://bcparks.ca/?s=${q}`, 'Search BC Parks'];
+  }
+  // US state-park sites — only the ones with a working search-by-name URL.
+  // Quietly returning null for the rest leaves the Google fallback in place.
+  switch (p.state) {
+    case 'WA': return [`https://parks.wa.gov/find-parks/parks-and-recreation-areas?keyword=${q}`, 'Search WA State Parks'];
+    case 'OR': return [`https://stateparks.oregon.gov/index.cfm?do=search.results&searchTerm=${q}`, 'Search OR State Parks'];
+    case 'CA': return [`https://www.parks.ca.gov/?page_id=21805&q=${q}`, 'Search CA State Parks'];
+    case 'CO': return [`https://cpw.state.co.us/buyapply/Pages/CampingDetails.aspx?q=${q}`, 'Search CO Parks'];
+    case 'TX': return [`https://tpwd.texas.gov/state-parks/find-a-park?keyword=${q}`, 'Search TX State Parks'];
+    case 'NY': return [`https://parks.ny.gov/parks/?q=${q}`, 'Search NY State Parks'];
+    case 'FL': return [`https://www.floridastateparks.org/parks-and-trails?keyword=${q}`, 'Search FL State Parks'];
+    default: return null;
+  }
 }
 
 function labelForReserveUrl(url) {
