@@ -84,6 +84,32 @@ export function lastVerifiedFooterHTML(p) {
   return `<div class="${cls}">Verified ${p.last_verified}${stale}</div>`;
 }
 
+/**
+ * Footnote naming the booking system the pin reserves through. Helps users
+ * recognize the upstream booking flow + identifies why some pins have a heat
+ * strip (we have a public API for that vendor) and others don't.
+ */
+export function bookingSystemFooterHTML(p) {
+  const sys = bookingSystemLabel(p);
+  if (!sys) return '';
+  return `<div class="footer cg-booking-sys">Booking via ${sys}</div>`;
+}
+
+function bookingSystemLabel(p) {
+  if (p.aspira?.host) {
+    if (p.aspira.host === 'reservation.pc.gc.ca') return 'Aspira NextGen (Parks Canada)';
+    if (p.aspira.host === 'camping.bcparks.ca') return 'Aspira NextGen (BC Parks)';
+    if (p.aspira.host === 'washington.goingtocamp.com') return 'Aspira NextGen (WA State Parks)';
+    return 'Aspira NextGen';
+  }
+  if (p.recgov_id) return 'Recreation.gov';
+  if (p.parks_alberta_url) return 'Camis (Alberta Parks)';
+  // bcparks_url without aspira: BC Parks site, but no booking system flagged.
+  if (p.bcparks_url) return 'BC Parks';
+  if (p.parks_canada_url) return 'Parks Canada';
+  return null;
+}
+
 const MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, sept:8, oct:9, nov:10, dec:11 };
 const FUZZY_DAY = { early: 5, mid: 15, late: 25 };
 

@@ -27,6 +27,7 @@ import {
   ratingHTML,
   sitesTagHTML,
   lastVerifiedFooterHTML,
+  bookingSystemFooterHTML,
   seasonVerdictHTML,
   reserveButtonHTML,
 } from './campground-card.js';
@@ -194,6 +195,7 @@ function renderShell(f) {
   const rating = ratingHTML(rr);
   const sitesTag = sitesTagHTML(p);
   const footer = lastVerifiedFooterHTML(p);
+  const bookingSysFooter = bookingSystemFooterHTML(p);
 
   const verdict = seasonVerdictHTML(p.season, p.reservable);
   const callBtns = callButtonsHTML(p.phone);
@@ -244,6 +246,7 @@ function renderShell(f) {
 
   const detailsBody = [pills, cellPills, rating,
     sitesTag ? `<div class="cg-sites">${sitesTag}</div>` : '',
+    bookingSysFooter,
     footer].filter(Boolean).join('');
   // Desktop has the room — open by default. Mobile keeps the accordion
   // collapsed so the heat-strip + CTAs stay above the fold.
