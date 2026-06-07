@@ -6,6 +6,11 @@ export function registerSearchItems(items) {
   searchIndex.push(...items);
 }
 
+/** Read-only access to the search index for the trip-planner top bar. */
+export function getSearchIndex() {
+  return searchIndex;
+}
+
 // Maps search result kind → one or more filter-toggle ids that must be ON
 // for the destination layer's popup to render (queryRenderedFeatures only sees
 // what's currently visible). For Superchargers, the site's status decides which
