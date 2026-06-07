@@ -164,6 +164,34 @@ Per-type fields live in `properties` (JSONB). Type taxonomy:
 - `supercharger` (new)
 - future: `dump-station`, `gas`, `viewpoint`, etc.
 
+#### Provenance: stamp the ingest run on every row
+
+Today `pois.last_seen_run_id → import_runs(id)` records which **import**
+last touched a row, but not which **fetch** brought the data over the wall.
+That's the question we'd actually want to answer when triaging "why is this
+campground showing yesterday's price?" — was the fetch stale, or did the
+import skip it?
+
+Add `pois.last_ingest_run_id BIGINT REFERENCES ingest_runs(id)`, populated by
+the importer at the same UPSERT site that already sets `last_seen_run_id`.
+The importer is invoked as part of the parent ingest run (Phase.Import); it
+already has the parent run id in scope, so plumbing it in is a one-line
+change in `Importer.run`.
+
+With this in place, every POI row carries a pointer to:
+1. Its last import (`last_seen_run_id` → `import_runs`)
+2. The parent ingest run that imports rolled up under (`last_ingest_run_id`
+   → `ingest_runs` parent row, which links to its fetch + import phase rows
+   via `parent_run_id`)
+
+Querying "which rows came from fetch run #N" becomes one join. Drift between
+fetch + import (e.g. fetch succeeded, import partial) shows up as rows
+sharing an import run but not an ingest run.
+
+Out of scope for this RFC: deciding whether to deprecate `import_runs` in
+favor of treating `ingest_runs` phase rows as the authoritative audit log.
+Both tables are useful today; merging is a separate cleanup.
+
 ### Section 3: Unified query API
 
 One endpoint replaces `/api/pois` (existing), `/api/superchargers`, and
@@ -379,3 +407,4 @@ proliferate without FE changes.
 | 2 | 2026-06-07 | Fold SC into `pois` table | Same shape as other types; parallel pipeline doesn't pay for itself |
 | 3 | 2026-06-07 | Sealed Kotlin POI hierarchy over generic Poi | Compiler-checked display-rule logic; per-type properties named once |
 | 4 | 2026-06-07 | One `/api/availability/{poi_id}` with internal vendor dispatch | Provider is BE-side knowledge; minimum API surface |
+| 5 | 2026-06-07 | Stamp `pois.last_ingest_run_id` alongside existing `last_seen_run_id` | Lets us trace any row back to the fetch + import that produced it; one-line plumbing change |
