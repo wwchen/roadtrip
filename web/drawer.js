@@ -61,6 +61,16 @@ export function openDrawer(contentHtml, onMounted) {
   attachDragHandlers(root);
 }
 
+function normalizeAspira(f) {
+  const a = f.properties?.aspira;
+  if (typeof a !== 'string') return f;
+  try {
+    return { ...f, properties: { ...f.properties, aspira: JSON.parse(a) } };
+  } catch {
+    return { ...f, properties: { ...f.properties, aspira: null } };
+  }
+}
+
 /**
  * Campground-specific drawer. Renders availability for recgov pins and
  * skips it for everything else.
@@ -71,6 +81,11 @@ export function openCampgroundDrawer(f) {
 
   if (openController) openController.abort();
   openController = new AbortController();
+  // MapLibre's GeoJSON source serializes nested-object properties to JSON
+  // strings when features round-trip through queryRenderedFeatures. `aspira`
+  // is the only nested object the drawer reads, so parse once at entry.
+  // Primitives like recgov_id survive the round-trip fine.
+  f = normalizeAspira(f);
   activeFeature = f;
 
   renderShell(f);
