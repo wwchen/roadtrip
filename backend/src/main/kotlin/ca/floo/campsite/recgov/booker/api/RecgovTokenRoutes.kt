@@ -1,11 +1,11 @@
 package ca.floo.campsite.recgov.booker.api
 
 import ca.floo.campsite.recgov.booker.auth.TokenManager
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
 
 /**
  * Companion-facing token endpoint. The companion (Playwright auto-cart)
@@ -20,7 +20,10 @@ import io.ktor.server.routing.get
  * cloudflared tunnel without ACLs, this needs auth.
  */
 fun Route.recgovTokenRoutes(tokenManager: TokenManager) {
-    get("/api/campsite/recgov/fresh-token") {
+    get("/api/campsite/recgov/fresh-token", {
+        tags = listOf("campsite")
+        summary = "Companion-facing rec.gov recaccount JSON; backend owns the refresh"
+    }) {
         val recaccount = tokenManager.getFreshRecaccount()
         if (recaccount == null) {
             call.respond(HttpStatusCode.NotFound, """{"error":"no recgov token saved"}""")

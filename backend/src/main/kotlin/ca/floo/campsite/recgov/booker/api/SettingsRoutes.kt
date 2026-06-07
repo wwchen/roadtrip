@@ -3,13 +3,13 @@ package ca.floo.campsite.recgov.booker.api
 import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
+import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
-import io.ktor.server.routing.post
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
@@ -20,7 +20,10 @@ fun Route.settingsRoutes(
     slack: SlackNotifier,
     tokenManager: TokenManager? = null,
 ) {
-    get("/api/campsite/settings") {
+    get("/api/campsite/settings", {
+        tags = listOf("campsite")
+        summary = "All campsite settings (masked); includes recgov_token expiry info"
+    }) {
         val all = settings.all()
         val token = all["recgov_token"].orEmpty()
         val info = RecgovAuth.tokenInfo(token)
@@ -41,7 +44,10 @@ fun Route.settingsRoutes(
         call.respondText(masked.toString())
     }
 
-    post("/api/campsite/settings") {
+    post("/api/campsite/settings", {
+        tags = listOf("campsite")
+        summary = "Upsert one or more settings keys; preserves masked values when sent"
+    }) {
         val body = parseJson(call.receiveText())
         val allowed = setOf("poll_interval", "slack_token", "slack_channel", "slack_enabled", "ridb_api_key")
         val updates = mutableMapOf<String, String>()
@@ -61,7 +67,10 @@ fun Route.settingsRoutes(
         call.respondText("""{"ok":true}""")
     }
 
-    post("/api/campsite/settings/test-slack") {
+    post("/api/campsite/settings/test-slack", {
+        tags = listOf("campsite")
+        summary = "Send a test message to the configured Slack webhook"
+    }) {
         // Accepts optional {slack_token, slack_channel} in the body so the
         // onboarding wizard can prove credentials before persisting them.
         // Empty body falls back to saved settings (existing Settings-modal flow).
@@ -80,7 +89,10 @@ fun Route.settingsRoutes(
     // string. Saves whatever it can extract (Bearer token + refresh creds);
     // does not hit recreation.gov. Returns counts the UI uses to render
     // ✓/✗ next to the textarea.
-    post("/api/campsite/settings/test-cookies") {
+    post("/api/campsite/settings/test-cookies", {
+        tags = listOf("campsite")
+        summary = "Probe rec.gov with the saved cookies; reports loggedIn + token state"
+    }) {
         val body = parseJson(call.receiveText())
         val raw = body.string("raw").orEmpty()
         if (raw.isEmpty()) {
@@ -111,7 +123,10 @@ fun Route.settingsRoutes(
     // "Test browser session" — repurposed: validate the stored token, and if
     // it's expired but we have refresh creds, mint a fresh one. No browser.
     // Delegates to TokenManager so all refresh paths share one mutex.
-    post("/api/campsite/settings/test-chrome") {
+    post("/api/campsite/settings/test-chrome", {
+        tags = listOf("campsite")
+        summary = "Spawn the Playwright companion to validate end-to-end auth"
+    }) {
         val token = settings.get("recgov_token").orEmpty()
         if (token.isEmpty()) {
             call.respondText("""{"loggedIn":false,"error":"no token saved"}""")
@@ -157,7 +172,10 @@ fun Route.settingsRoutes(
         }
     }
 
-    post("/api/campsite/settings/refresh-token") {
+    post("/api/campsite/settings/refresh-token", {
+        tags = listOf("campsite")
+        summary = "Force a rec.gov JWT refresh now (out-of-band from the scheduler)"
+    }) {
         // Delegates to TokenManager so SettingsRoutes and the scheduler-fired
         // TokenRefreshDue handler share one mutex'd refresh path. Returns
         // synchronously — the UI button needs the answer.
@@ -185,7 +203,10 @@ fun Route.settingsRoutes(
         }
     }
 
-    post("/api/campsite/settings/clear-session") {
+    post("/api/campsite/settings/clear-session", {
+        tags = listOf("campsite")
+        summary = "Wipe saved cookies + token; the next refresh has to bootstrap from cURL"
+    }) {
         settings.setMany(
             mapOf(
                 "recgov_token" to "",

@@ -6,15 +6,15 @@ import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.poller.Poller
 import ca.floo.campsite.recgov.booker.scheduler.Scheduler
+import io.github.smiley4.ktorswaggerui.dsl.routing.delete
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
+import io.github.smiley4.ktorswaggerui.dsl.routing.patch
+import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.delete
-import io.ktor.server.routing.get
-import io.ktor.server.routing.patch
-import io.ktor.server.routing.post
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -27,11 +27,17 @@ fun Route.alertRoutes(
     bus: EventBus? = null,
     eventDriven: Boolean = false,
 ) {
-    get("/api/campsite/alerts") {
+    get("/api/campsite/alerts", {
+        tags = listOf("campsite")
+        summary = "List every recreation.gov alert (any status)"
+    }) {
         call.respondText(JsonArray(alerts.list().map { alertJson(it) }).toString())
     }
 
-    post("/api/campsite/alerts") {
+    post("/api/campsite/alerts", {
+        tags = listOf("campsite")
+        summary = "Create a new alert; triggers an immediate poll"
+    }) {
         val body = parseJson(call.receiveText())
         val campgroundId = body.string("campground_id")
         val campgroundName = body.string("campground_name")
@@ -72,7 +78,10 @@ fun Route.alertRoutes(
         call.respondText("""{"id":$id}""")
     }
 
-    patch("/api/campsite/alerts/{id}") {
+    patch("/api/campsite/alerts/{id}", {
+        tags = listOf("campsite")
+        summary = "Patch one or more alert fields (status, dates, party size, …)"
+    }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@patch call.respond(HttpStatusCode.BadRequest, "bad id")
@@ -101,7 +110,10 @@ fun Route.alertRoutes(
         call.respondText("""{"ok":true}""")
     }
 
-    delete("/api/campsite/alerts/{id}") {
+    delete("/api/campsite/alerts/{id}", {
+        tags = listOf("campsite")
+        summary = "Hard-delete an alert and stop its poll job"
+    }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@delete call.respond(HttpStatusCode.BadRequest, "bad id")
