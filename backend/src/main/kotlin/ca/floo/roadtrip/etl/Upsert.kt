@@ -3,6 +3,10 @@ package ca.floo.roadtrip.etl
 import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import org.jooq.DSLContext
+import org.jooq.Geometry
+import org.jooq.JSONB
+import org.jooq.impl.DSL
+import org.jooq.impl.SQLDataType
 import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -14,6 +18,14 @@ import java.time.ZoneOffset
 // Sweep is scoped to the union of source names this run wrote — a
 // campground-merge run wipes only campground sources, never Tesla
 // (RFC decision #16).
+//
+// Implemented via the jOOQ DSL (not raw SQL) so adding a column to
+// `pois` becomes a compile-time obligation: the generated `POIS`
+// table type changes, and any forgotten `set()` here surfaces as a
+// type mismatch at the next build, not a silent column drop at
+// runtime. The one bit of raw SQL is `ST_SetSRID(ST_GeomFromGeoJSON
+// (?), 4326)` for the PostGIS geometry constructor; jOOQ OSS doesn't
+// have a typed builder for that.
 class Upsert(
     private val ctx: DSLContext,
 ) {
@@ -37,8 +49,8 @@ class Upsert(
         require(sources.isNotEmpty()) { "must specify at least one source for sweep scope" }
 
         val now = OffsetDateTime.now(ZoneOffset.UTC)
-        // Use the first source as the import_runs.source label. The sweep
-        // scope is `sources` (multi-source merges share one run).
+        // Use the sorted source list as the import_runs.source label.
+        // Sweep scope is `sources` (multi-source merges share one run).
         val runLabel = sources.sorted().joinToString(",")
         val runId =
             ctx
@@ -98,77 +110,66 @@ class Upsert(
         runId: Long,
     ) {
         val fetchedAtTs = OffsetDateTime.ofInstant(poi.fetchedAt, ZoneOffset.UTC)
-        // booking_provider_id + provider_ref both come from the per-type
-        // variant. Read them via type-narrowed access; the route uses the
-        // FK to dispatch the adapter (PR 4) and the JSONB carries the IDs.
-        val bookingProviderId: Long? =
-            when (poi) {
-                is Poi.Campground -> if (poi.providerRef != null) bookingProviderIdFor(poi.providerRef) else null
-                else -> null
-            }
-        val providerRefJson: String? =
-            when (poi) {
-                is Poi.Campground -> poi.providerRef?.let { providerRefToJson(it) }
-                else -> null
-            }
-        // Address column is JSONB; serialize as JSON or null.
-        val addressJson: String? = poi.address?.let { addressToJson(it) }
+        val (bookingProviderId, providerRefJson) = providerColumnsFor(poi)
+        val addressJson = poi.address?.let { JSONB.valueOf(addressToJson(it)) }
+        val propertiesJson = JSONB.valueOf(poi.propertiesJson().toString())
 
-        ctx.execute(
-            """
-            INSERT INTO pois (
-              source, source_id, category, name, geom,
-              region, country, unit_name, phone, address, info_url,
-              governing_body_id, booking_provider_id, provider_ref,
-              properties, fetched_at, last_verified,
-              last_seen_run_id, deleted_at
+        // PostGIS geometry constructor — jOOQ OSS has no typed builder for
+        // ST_GeomFromGeoJSON, so this stays as a parameterized DSL field.
+        // SRID 4326 matches the column declaration.
+        val geomField =
+            DSL.field<Geometry>(
+                "ST_SetSRID(ST_GeomFromGeoJSON({0}), 4326)",
+                SQLDataType.GEOMETRY,
+                DSL.value(poi.geomGeoJson),
             )
-            VALUES (
-              ?, ?, ?, ?, ST_SetSRID(ST_GeomFromGeoJSON(?), 4326),
-              ?, ?, ?, ?, ?::jsonb, ?,
-              ?, ?, ?::jsonb,
-              ?::jsonb, ?::timestamptz, ?,
-              ?, NULL
-            )
-            ON CONFLICT (source, source_id) DO UPDATE SET
-              category            = EXCLUDED.category,
-              name                = EXCLUDED.name,
-              geom                = EXCLUDED.geom,
-              region              = EXCLUDED.region,
-              country             = EXCLUDED.country,
-              unit_name           = EXCLUDED.unit_name,
-              phone               = EXCLUDED.phone,
-              address             = EXCLUDED.address,
-              info_url            = EXCLUDED.info_url,
-              governing_body_id   = EXCLUDED.governing_body_id,
-              booking_provider_id = EXCLUDED.booking_provider_id,
-              provider_ref        = EXCLUDED.provider_ref,
-              properties          = EXCLUDED.properties,
-              fetched_at          = EXCLUDED.fetched_at,
-              last_verified       = EXCLUDED.last_verified,
-              last_seen_run_id    = EXCLUDED.last_seen_run_id,
-              deleted_at          = NULL,
-              updated_at          = NOW()
-            """.trimIndent(),
-            poi.source,
-            poi.sourceId,
-            poi.categorySql(),
-            poi.name,
-            poi.geomGeoJson,
-            poi.region,
-            poi.country,
-            null, // unit_name — transitional, ETL doesn't populate (RFC: derived via ST_Within at query time)
-            poi.phone,
-            addressJson,
-            poi.infoUrl,
-            poi.governingBodyId,
-            bookingProviderId,
-            providerRefJson,
-            poi.propertiesJson().toString(),
-            fetchedAtTs,
-            poi.lastVerified,
-            runId,
-        )
+
+        ctx
+            .insertInto(POIS)
+            .set(POIS.SOURCE, poi.source)
+            .set(POIS.SOURCE_ID, poi.sourceId)
+            .set(POIS.CATEGORY, poi.categorySql())
+            .set(POIS.NAME, poi.name)
+            .set(POIS.GEOM, geomField)
+            .set(POIS.REGION, poi.region)
+            .set(POIS.COUNTRY, poi.country)
+            // unit_name is transitional; ETL never populates it (parent-of
+            // is derived via ST_Within at query time per RFC decision #18).
+            .set(POIS.UNIT_NAME, null as String?)
+            .set(POIS.PHONE, poi.phone)
+            .set(POIS.ADDRESS, addressJson)
+            .set(POIS.INFO_URL, poi.infoUrl)
+            .set(POIS.GOVERNING_BODY_ID, poi.governingBodyId)
+            .set(POIS.BOOKING_PROVIDER_ID, bookingProviderId)
+            .set(POIS.PROVIDER_REF, providerRefJson)
+            .set(POIS.PROPERTIES, propertiesJson)
+            .set(POIS.FETCHED_AT, fetchedAtTs)
+            .set(POIS.LAST_VERIFIED, poi.lastVerified)
+            .set(POIS.LAST_SEEN_RUN_ID, runId)
+            .onConflict(POIS.SOURCE, POIS.SOURCE_ID)
+            .doUpdate()
+            // EXCLUDED.* refers to the row that would have been inserted.
+            // jOOQ's onDuplicateKeyUpdate idiom uses DSL.excluded(field).
+            .set(POIS.CATEGORY, DSL.excluded(POIS.CATEGORY))
+            .set(POIS.NAME, DSL.excluded(POIS.NAME))
+            .set(POIS.GEOM, DSL.excluded(POIS.GEOM))
+            .set(POIS.REGION, DSL.excluded(POIS.REGION))
+            .set(POIS.COUNTRY, DSL.excluded(POIS.COUNTRY))
+            .set(POIS.UNIT_NAME, DSL.excluded(POIS.UNIT_NAME))
+            .set(POIS.PHONE, DSL.excluded(POIS.PHONE))
+            .set(POIS.ADDRESS, DSL.excluded(POIS.ADDRESS))
+            .set(POIS.INFO_URL, DSL.excluded(POIS.INFO_URL))
+            .set(POIS.GOVERNING_BODY_ID, DSL.excluded(POIS.GOVERNING_BODY_ID))
+            .set(POIS.BOOKING_PROVIDER_ID, DSL.excluded(POIS.BOOKING_PROVIDER_ID))
+            .set(POIS.PROVIDER_REF, DSL.excluded(POIS.PROVIDER_REF))
+            .set(POIS.PROPERTIES, DSL.excluded(POIS.PROPERTIES))
+            .set(POIS.FETCHED_AT, DSL.excluded(POIS.FETCHED_AT))
+            .set(POIS.LAST_VERIFIED, DSL.excluded(POIS.LAST_VERIFIED))
+            .set(POIS.LAST_SEEN_RUN_ID, DSL.excluded(POIS.LAST_SEEN_RUN_ID))
+            // Resurrection: a previously deleted source_id reappears with deleted_at=NULL.
+            .set(POIS.DELETED_AT, null as OffsetDateTime?)
+            .set(POIS.UPDATED_AT, OffsetDateTime.now(ZoneOffset.UTC))
+            .execute()
     }
 
     private fun sweep(
@@ -196,18 +197,24 @@ class Upsert(
             .execute()
     }
 
-    // The per-row booking_provider FK is implicit: the campground's
-    // ProviderRef variant + (for Aspira) its host need to map back to
-    // a booking_provider row. PR 4 introduces a richer adapter-loaded
-    // dispatch; for now we punt to the Camis-style fallback (no adapter
-    // means no booking_provider).
-    //
-    // TODO PR 4: this needs to be threaded through TransformCtx so per-
-    // source ETLs can select the correct (vendor, host) at transform
-    // time. For now, ProviderRef.RecGov → recgov, Aspira → null until
-    // we resolve host (host comes from booking_provider, not the ref —
-    // RFC decision #23). PlanetFitness/Park don't have providers.
-    private fun bookingProviderIdFor(ref: ProviderRef): Long? = null
+    /**
+     * Per-row booking_provider FK + provider_ref JSONB. Only Campground
+     * variants carry these; everything else maps to (null, null).
+     *
+     * TODO PR 4: BookingProviderAdapter dispatch will resolve the FK
+     * from the ProviderRef sealed variant + (for Aspira) the host. For
+     * now this returns (null, json) so rows have the IDs in JSONB even
+     * though the FK isn't filled in yet.
+     */
+    private fun providerColumnsFor(poi: Poi): Pair<Long?, JSONB?> =
+        when (poi) {
+            is Poi.Campground -> {
+                val fk: Long? = null // TODO PR 4 — adapter-loaded dispatch
+                val ref = poi.providerRef?.let { JSONB.valueOf(providerRefToJson(it)) }
+                fk to ref
+            }
+            else -> null to null
+        }
 
     private fun providerRefToJson(ref: ProviderRef): String =
         when (ref) {
