@@ -141,6 +141,27 @@ class SuperchargersRoutesTest {
     }
 
     @Test
+    fun `feature has top-level id lifted from properties_id`(
+        @TempDir tmp: Path,
+    ) = testApplication {
+        val data = tmp.resolve("data").toFile().also { it.mkdirs() }
+        // Upstream Tesla feed only sets id under properties; MapLibre paint
+        // expressions read the top-level feature id, so we must lift it.
+        File(data, "tesla-superchargers.geojson").writeText(scFc(listOf(Triple("sc-42", 0.0, 0.0))))
+        application { routing { superchargersRoutes(data) } }
+
+        val resp =
+            client.post("/api/superchargers") {
+                contentType(ContentType.Application.Json)
+                setBody("""{"bbox":[-1,-1,1,1]}""")
+            }
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val fc = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+        val feature = fc["features"]!!.jsonArray[0].jsonObject
+        assertEquals("sc-42", feature["id"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `missing data file returns empty FC`(
         @TempDir tmp: Path,
     ) = testApplication {

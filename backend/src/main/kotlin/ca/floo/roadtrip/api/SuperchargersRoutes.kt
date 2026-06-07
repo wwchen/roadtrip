@@ -207,12 +207,23 @@ private class ScCache(
                 if (coords.size < 2) return@mapNotNull null
                 val lng = coords[0].jsonPrimitive.doubleOrNull ?: return@mapNotNull null
                 val lat = coords[1].jsonPrimitive.doubleOrNull ?: return@mapNotNull null
-                ScFeature(lng, lat, obj.toString())
+                // Lift properties.id to top-level id. MapLibre's feature-state
+                // and `promoteId`-style code paths read the top-level id; the
+                // upstream Tesla feed only puts id in properties, so without
+                // this copy the layer's paint expressions can resolve to null.
+                val rebuilt = withTopLevelId(obj)
+                ScFeature(lng, lat, rebuilt.toString())
             }
         } catch (e: Exception) {
             log.warn("failed to parse {}: {}", f, e.message)
             emptyList()
         }
+    }
+
+    private fun withTopLevelId(obj: JsonObject): JsonObject {
+        if (obj["id"] != null) return obj
+        val propId = obj["properties"]?.jsonObject?.get("id") ?: return obj
+        return JsonObject(obj.toMutableMap().apply { put("id", propId) })
     }
 }
 

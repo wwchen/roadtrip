@@ -12,7 +12,6 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 private const val MAX_WAYPOINTS = 25
-private val LNGLAT_RE = Regex("""^-?\d{1,3}(\.\d{1,8})?,-?\d{1,3}(\.\d{1,8})?$""")
 
 /**
  * GET /api/route?coords=lng,lat;lng,lat;...
@@ -58,7 +57,8 @@ fun Route.routeRoutes(directions: MapboxDirections) {
 
         val coords = mutableListOf<Pair<Double, Double>>()
         for ((i, p) in pieces.withIndex()) {
-            if (!LNGLAT_RE.matches(p)) {
+            val parts = p.split(",")
+            if (parts.size != 2) {
                 call.respondText(
                     """{"error":"bad_coords","detail":"point $i: '$p' is not 'lng,lat'"}""",
                     io.ktor.http.ContentType.Application.Json,
@@ -66,10 +66,17 @@ fun Route.routeRoutes(directions: MapboxDirections) {
                 )
                 return@get
             }
-            val parts = p.split(",")
             val lng = parts[0].toDoubleOrNull()
             val lat = parts[1].toDoubleOrNull()
-            if (lng == null || lat == null || lng !in -180.0..180.0 || lat !in -90.0..90.0) {
+            if (lng == null || lat == null) {
+                call.respondText(
+                    """{"error":"bad_coords","detail":"point $i: '$p' is not 'lng,lat'"}""",
+                    io.ktor.http.ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
+                )
+                return@get
+            }
+            if (lng !in -180.0..180.0 || lat !in -90.0..90.0) {
                 call.respondText(
                     """{"error":"out_of_range","detail":"point $i out of lng/lat range"}""",
                     io.ktor.http.ContentType.Application.Json,
