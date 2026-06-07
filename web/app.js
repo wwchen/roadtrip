@@ -14,6 +14,7 @@ import {
   installStateLines,
   setCGData,
   setPFData,
+  setSCData,
   setNPData,
   setSPData,
   synthesizeClick,
@@ -179,37 +180,6 @@ function flattenPoi(f) {
 const EMPTY_FC = { type: 'FeatureCollection', features: [] };
 
 async function load() {
-  const status = document.getElementById('status');
-
-  // Superchargers come through /api/superchargers — the FE invariant is no
-  // direct /data/* reads; everything goes through the backend. The data is
-  // pre-filtered to OPEN-only at fetch time (scripts/fetch_tesla_superchargers.py).
-  // SC remain searchable globally; no per-pan refetch.
-  (async () => {
-    try {
-      status.textContent = 'Loading Superchargers…';
-      const fc = await fetchJSON('/api/superchargers');
-      setCount('c-open', fc.features.length);
-      state.overlayData.sc = fc;
-      for (const f of fc.features) {
-        const p = f.properties;
-        const [lng, lat] = f.geometry.coordinates;
-        registerSearchItems([{
-          name: p.name || '',
-          sub: [p.city, p.state].filter(Boolean).join(', '),
-          kind: 'SC', color: '#e82127',
-          lng, lat, zoom: 13,
-          onSelect: () => synthesizeClick(['sc-points-hit', 'sc-points'], [lng, lat]),
-        }]);
-      }
-      reinstallOverlays();
-      status.textContent = fc.features.length.toLocaleString() + ' Superchargers';
-    } catch (err) {
-      console.error(err);
-      status.textContent = 'Supercharger load failed: ' + err.message;
-    }
-  })();
-
   // State boundary lines — small, static, no bbox needed.
   (async () => {
     try {
@@ -227,13 +197,14 @@ async function load() {
   state.overlayData.sp = EMPTY_FC;
   state.overlayData.pf = EMPTY_FC;
   state.overlayData.cg = EMPTY_FC;
+  state.overlayData.sc = EMPTY_FC;
   reinstallOverlays();
 
   // bbox-on-moveend. One round-trip per pan, debounced 250ms so dragging
   // doesn't fire mid-gesture. AbortController kills the in-flight request
   // when the user keeps panning. Counts on the legend reflect the current
   // viewport, not a global total.
-  const seenSearchIds = { CG: new Set(), NP: new Set(), SP: new Set(), PF: new Set() };
+  const seenSearchIds = { CG: new Set(), NP: new Set(), SP: new Set(), PF: new Set(), SC: new Set() };
   const cgCounts = { federal: 0, state: 0, local: 0, provincial: 0, other: 0 };
   const CG_ZOOM_THRESHOLD = 6;
   let cgUnlocked = false;
@@ -262,18 +233,31 @@ async function load() {
 
     if (inflight) inflight.abort();
     inflight = new AbortController();
-    const reqBody = { bbox: [west, south, east, north], zoom, categories: cats };
-    if (polygon) reqBody.polygon = polygon;
-    let fc;
+    const poisBody = { bbox: [west, south, east, north], zoom, categories: cats };
+    if (polygon) poisBody.polygon = polygon;
+    const scBody = { bbox: [west, south, east, north], zoom };
+    if (polygon) scBody.polygon = polygon;
+
+    let fc, scFc;
     try {
-      const r = await fetch('/api/pois', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(reqBody),
-        signal: inflight.signal,
-      });
-      if (!r.ok) throw new Error(`/api/pois HTTP ${r.status}`);
-      fc = await r.json();
+      const [poisRes, scRes] = await Promise.all([
+        fetch('/api/pois', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(poisBody),
+          signal: inflight.signal,
+        }),
+        fetch('/api/superchargers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(scBody),
+          signal: inflight.signal,
+        }),
+      ]);
+      if (!poisRes.ok) throw new Error(`/api/pois HTTP ${poisRes.status}`);
+      if (!scRes.ok) throw new Error(`/api/superchargers HTTP ${scRes.status}`);
+      fc = await poisRes.json();
+      scFc = await scRes.json();
     } catch (err) {
       if (err.name === 'AbortError') return;
       console.error('bbox fetch failed:', err);
@@ -290,18 +274,25 @@ async function load() {
       else if (c === 'planet-fitness') pf.push(f);
       else if (c === 'campground') cg.push(f);
     }
+    // SC features are pre-shaped: properties already flat (id, name, city,
+    // state, color, ...) and the source geojson always sets a top-level id.
+    // No flattenPoi needed.
+    const sc = scFc.features || [];
     setNPData({ type: 'FeatureCollection', features: np });
     setSPData({ type: 'FeatureCollection', features: sp });
     setPFData({ type: 'FeatureCollection', features: pf });
     setCGData({ type: 'FeatureCollection', features: cg });
+    setSCData({ type: 'FeatureCollection', features: sc });
     state.overlayData.np = { type: 'FeatureCollection', features: np };
     state.overlayData.sp = { type: 'FeatureCollection', features: sp };
     state.overlayData.pf = { type: 'FeatureCollection', features: pf };
     state.overlayData.cg = { type: 'FeatureCollection', features: cg };
+    state.overlayData.sc = { type: 'FeatureCollection', features: sc };
 
     setCount('c-np', np.length);
     setCount('c-sp', sp.length);
     setCount('c-pf', pf.length);
+    setCount('c-open', sc.length);
     cgCounts.federal = 0; cgCounts.state = 0; cgCounts.local = 0;
     cgCounts.provincial = 0; cgCounts.other = 0;
     cg.forEach(f => {
@@ -318,7 +309,7 @@ async function load() {
     // wiping prior entries, so panning back to a previous area still has
     // those POIs searchable. Dedupe by db id.
     const indexAdd = (items) => items.length && registerSearchItems(items);
-    const npNew = [], spNew = [], pfNew = [], cgNew = [];
+    const npNew = [], spNew = [], pfNew = [], cgNew = [], scNew = [];
     for (const f of np) {
       if (seenSearchIds.NP.has(f.id)) continue;
       seenSearchIds.NP.add(f.id);
@@ -372,7 +363,21 @@ async function load() {
         onSelect: () => synthesizeClick(['cg-points-hit', 'cg-points'], [lng, lat]),
       });
     }
-    indexAdd(npNew); indexAdd(spNew); indexAdd(pfNew); indexAdd(cgNew);
+    for (const f of sc) {
+      const id = f.properties?.id || f.id;
+      if (id == null || seenSearchIds.SC.has(id)) continue;
+      seenSearchIds.SC.add(id);
+      const [lng, lat] = f.geometry.coordinates;
+      const p = f.properties || {};
+      scNew.push({
+        name: p.name || '',
+        sub: [p.city, p.state].filter(Boolean).join(', '),
+        kind: 'SC', color: '#e82127',
+        lng, lat, zoom: 13,
+        onSelect: () => synthesizeClick(['sc-points-hit', 'sc-points'], [lng, lat]),
+      });
+    }
+    indexAdd(npNew); indexAdd(spNew); indexAdd(pfNew); indexAdd(cgNew); indexAdd(scNew);
   }
 
   function scheduleBboxRefresh() {
