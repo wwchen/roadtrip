@@ -370,24 +370,15 @@ sealed class Poi {
 }
 ```
 
-jOOQ codegen owns the shared fields; per-type properties parse from JSONB
-explicitly. The `Poi` -> drawer payload assembly is a `fun
-buildDrawerPayload(poi: Poi): DrawerPayload` that pattern-matches on the
+jOOQ owns shared fields. Per-type properties parse from JSONB explicitly.
+`buildDrawerPayload(poi: Poi): DrawerPayload` pattern-matches on the
 sealed type — one place for all display-rule logic.
 
-Lifecycle fields (`created_at`, `updated_at`, `last_verified`) are
-POI-level, not per-type. The schema already has the first two; add
-`last_verified DATE` to the row (currently it lives in JSONB on
-campgrounds — a curated audit field set by the BC/PC scripts when someone
-manually checks a pin). Promoting to a column makes it filterable
-(`WHERE last_verified < now() - 60 days`) and stops it being campground-only
-prior art for the next type that wants it.
+`last_verified` (currently a JSONB-only campground audit field) gets
+promoted to a real column. It applies to every POI eventually and
+becomes filterable.
 
-`ProviderRef` is the per-POI ID payload that the booking-provider's adapter
-needs to look the POI up upstream. It's deliberately generic — instead of
-campground-specific `recgovId: String?` and `aspira: AspiraIds?` fields, we
-carry one nullable `providerRef` that pairs the FK to `booking_provider`
-with whatever ID(s) that provider needs.
+**`ProviderRef`** is the per-POI booking-provider lookup payload:
 
 ```kotlin
 data class ProviderRef(
@@ -396,51 +387,27 @@ data class ProviderRef(
 )
 ```
 
-Examples (the `ids` schema is the adapter's contract):
-
 ```json
 // rec.gov
 {"providerId": 1, "ids": {"recgov_id": "232857"}}
-
-// Aspira NextGen (Parks Canada / BC / WA share this shape)
+// Aspira NextGen (PC / BC / WA share this shape)
 {"providerId": 2, "ids": {"transactionLocationId": -2147483630, "mapId": -2147483388, "resourceLocationId": -2147483624}}
-
 // Camis (Alberta), if/when added
 {"providerId": 3, "ids": {"facility_id": "BVPP"}}
 ```
 
-Stored on the row as a JSONB column (`provider_ref`) — promoting the inner
-`ids` to columns would require a per-provider table per POI type, which is
-exactly the kind of N×M sprawl this RFC is trying to retire. Validation
-(shape of `ids` matching the named provider) lives in the adapter; bad data
-fails at adapter-load time, not at row insert.
+Stored as JSONB. The `ids` schema is the adapter's contract — validation
+lives in the adapter, not at row insert. The availability route (Section
+5) hands `ids` to the matching adapter and never inspects it.
 
-The vendor-dispatch availability route (Section 5) reads `providerRef`,
-looks up the matching `BookingProviderAdapter`, and hands the adapter the
-opaque `ids` blob. No campground-specific code outside the adapter knows
-what's inside.
+#### `reservable` is computed, not stored
 
-#### `reservable` is not a row-level fact
-
-The current schema carries `reservable: Boolean?` on each campground row.
-Treating it as static is wrong: a campground is reservable in summer but
-not in winter; rec.gov sometimes lifts a site from FCFS to reservable
-mid-season. Three signals that drive the answer:
-
-1. **Today vs `season`** — if today is outside the season window, "Closed
-   for season" wins, no booking flow.
-2. **`providerRef` presence** — without one, the pin is FCFS / not on a
-   booking platform.
-3. **Live availability** — provider may temporarily disable bookings.
-
-The right place for the answer is the availability route. The drawer
-payload's `availability` section returns a normalized status (`available`
-/ `partial` / `closed_for_season` / `no_provider` / `unreservable_today`)
-and the BE composes the right CTA from that. The row stops carrying
-`reservable`; `season` stays as a string the BE parses.
-
-This also kills `seasonVerdictHTML` on the FE — the season-vs-today
-comparison moves to the BE alongside everything else.
+The current `reservable: Boolean?` column is a lie: it depends on
+season-vs-today, `providerRef` presence, and live availability state.
+The availability route returns a normalized status (`available` /
+`partial` / `closed_for_season` / `no_provider` / `unreservable_today`)
+and the BE composes the CTA from that. Drop the column. `seasonVerdictHTML`
+on the FE deletes alongside.
 
 ### Section 5: Vendor-dispatched availability
 
@@ -486,137 +453,63 @@ After Sections 1–5 land, the FE drawer becomes:
 
 ### Section 7: Thin Python fetchers, Kotlin owns ETL
 
-Today's pipeline splits transform between two languages:
+Today, transform is split across two languages: Python `fetch_*.py`
+scripts map type codes, merge across files, and write FE-shaped geojson;
+Kotlin `Importer` parses that geojson and re-transforms (enrichment,
+parent lookups). Move the line: Python writes raw upstream bytes, Kotlin
+owns parse + transform + merge + enrich + upsert.
 
 ```
-Python fetch_*.py  ──►  data/*.geojson  ──►  Kotlin Importer  ──►  pois
-   ▲                       ▲                    ▲
-   │                       │                    │
-   │   raw HTTP/CSV/JSON    │   transformed,        │   re-transforms
-   │                       │   merged, FE-shaped    │   (enrichment,
-   │                                                  │   parent lookups)
-   └─ HTTP, auth, cookies, ─┘
-      pagination, rate limits
+Python fetcher  ──►  data/raw/<source>/<ts>.<ext>  ──►  Kotlin ETL  ──►  pois
+   (HTTP, auth,         (verbatim upstream bytes,           (parse, transform,
+    cookies, rate-       timestamped, retained)              merge, enrich,
+    limit only)                                              mark-and-sweep)
 ```
 
-Two transforms in two languages, no clean line. `fetch_campgrounds.py`
-maps `TYPE_LABELS` codes to `category`. `fetch_parks_canada.py` *merges*
-across three curated JSON files into the same output. `fetch_aspira_bc_wa.py`
-*stamps* fields onto an existing geojson in place. None of that is fetch
-work — it's transform/merge that happens to live in Python because that's
-where the file ended up first.
+**Raw cache layout** (`data/raw/<source>/`):
 
-#### New shape
+- `YYYY-MM-DDTHH-MM-SSZ.<ext>` per capture (UTC, `-` for `:` for FS-safety).
+  Multi-file sources nest under a per-capture directory.
+- `latest -> <ts>.<ext>` symlink swapped atomically with `ln -sfn`. Kotlin
+  ETL only reads `latest/`.
+- `<ts>.meta.json` per capture: upstream URL, HTTP status, ETag /
+  Last-Modified, `poller_runs.id`. Lets Kotlin skip re-import on no-op
+  fetches.
+- Failed/partial fetches written as `<ts>.partial`, never linked.
+- Retention: 30 captures/source. Worst-case disk ≈ 1GB.
 
-Python becomes a **thin fetch shim**: hit upstream, write the response
-verbatim to a raw cache directory. Nothing more.
+**Kotlin ETL** lives in `backend/.../etl/`. Per-source classes (extending
+the existing `Source` interface) own parsing, schema mapping, and
+emitting `Poi` instances. Merging across sources (campgrounds = US +
+BC-curated + AB-curated + Aspira) becomes a `fold` of those emitters —
+the procedural Python merge stops existing.
 
-```
-Python fetcher ──► data/raw/<source>/<timestamp>.<ext>  ──► Kotlin ETL ──► pois
-        ▲                                                    ▲
-        │                                                    │
-        │  raw bytes only                                   │   parse,
-        │  (HTML, CSV, JSON,                                  │   transform,
-        │   whatever upstream                                │   merge,
-        │   serves)                                           │   enrich,
-        │                                                    │   upsert
-        └─ HTTP / auth / cookies /                           │
-           rate-limit / SPA scrape ──────────────────────────┘
-                                                          (one language,
-                                                           one transform)
-```
+**Deletes** stay mark-and-sweep, scoped per source set:
 
-Concretely:
+- Row absent from this run's emitted set → `deleted_at = NOW()`.
+- Soft delete; `/api/pois` already filters `WHERE deleted_at IS NULL`.
+- Reappearance un-deletes (`deleted_at = NULL` on next UPSERT).
+- Tripwire: abort before sweep if `seen < 0.5 × prior_active` (already
+  in `Importer.kt`).
+- Sweep scope = the run's sources (e.g. campgrounds = the four sources
+  above), never global. A campground feed going dark won't wipe Tesla.
 
-- **`scripts/fetch_*.py`** keeps only HTTP concerns: hit upstream, write
-  the response verbatim. No `TYPE_LABELS`, no merging across files, no
-  amenity-code lookup tables, no `to_feature()`. Output filename includes
-  a timestamp so re-runs don't clobber prior captures (small disk cost,
-  big debugging win — diff this morning's fetch against yesterday's).
-- **`backend/.../etl/`** (new module) owns:
-  - Parsing each raw format (CSV, JSON, GeoJSON, OSM XML, whatever).
-  - Mapping per-source quirks → the canonical `Poi` sealed type
-    (Section 4). The `TYPE_LABELS` map for uscampgrounds.info lives here,
-    in Kotlin.
-  - Merging across sources where needed (e.g. campgrounds = US +
-    BC-curated + AB-curated + Aspira IDs). Today this is procedural
-    Python; in Kotlin it's a `fold` over a list of `RawSource`
-    transformers, each emitting `Poi` instances.
-  - Enrichment (rec.gov amenity/cell lookups, photo URL resolution).
-- **The existing `Source` interface** (`UsCampgroundsSource`,
-  `ParksCanadaSource`, etc.) becomes the home for those per-source
-  transforms. They already exist in Kotlin — they just don't carry
-  enough logic today because the Python pre-cooked things.
+**What deletes / collapses:**
 
-#### Why this is worth doing
+- `fetch_parks_canada.py`, `fetch_aspira_bc_wa.py` — merge logic moves
+  to `ParksCanadaSource.kt` + a new `AspiraIndexSource.kt`.
+- The `aspira` block in curated `parks-canada-{bc,ab}.json` — those
+  files revert to raw curated data (lat/lng + name + season); aspira
+  IDs come from the actual aspira-maps fetch at ETL time.
+- `data/*.geojson` (merged artifacts) — gone. Repo-curated JSON inputs
+  move under `data/raw/` like everything else.
+- `Phase.Fetch.Kotlin` from RFC 0004 step 3 — folds back into
+  `Phase.Import.Kotlin`. Fetch is shell-only; ETL is Kotlin.
 
-- **One language for transform** = compiler-checked schema mapping.
-  Today, if a Python script forgets to set `code`, the Kotlin importer
-  silently UPSERTs a row with a null source_id and the unique constraint
-  fires later. With a Kotlin-only transform, the absence of source_id
-  fails to compile.
-- **Raw cache is a debug + replay surface.** "Why does this row look
-  weird?" is `cat data/raw/<source>/<timestamp>.json | jq` instead of
-  re-running the fetcher and praying upstream gives the same answer.
-- **Re-import without re-fetch.** Schema bug in the importer → re-run
-  Kotlin against the existing raw cache, no upstream hits, no Aspira WAF
-  trip. Today this is approximately possible (the geojson is on disk)
-  but only if the Python transform was already correct.
-- **Fetchers shrink to ~30 lines each.** Most of `fetch_campgrounds.py`'s
-  120 lines is the type-code/amenity-code lookup; that's all moving.
-- **Per-source poller targets get clearer.** `Phase.Fetch.Shell` writes
-  raw; `Phase.Import.Kotlin` reads raw + writes pois. The current
-  `Phase.Fetch.Kotlin` (introduced in RFC 0004 step 3) folds back into
-  the import phase — there's no intermediate "Kotlin fetch" anymore.
-
-#### What changes for the runtime / poller
-
-`PollerRun` (renamed from `IngestRun`) gains a third phase:
-
-```
-Target: campgrounds
-  Phase.Fetch.Shell      uscampgrounds_raw       → data/raw/uscampgrounds/<ts>.csv
-  Phase.Fetch.Shell      bc_parks_raw            → data/raw/bc-parks/<ts>.json
-  Phase.Fetch.Shell      parks_canada_curated    → (no fetch — file lives in repo)
-  Phase.Fetch.Shell      aspira_index_raw        → data/raw/aspira-maps/<ts>.json
-  Phase.Import.Kotlin    campgrounds             → pois
-```
-
-The import phase fans out over the raw inputs in code; one parent
-poller_run, multiple fetch leaves, one import leaf. Mark-and-sweep still
-operates on the import scope.
-
-#### What this lets us delete / merge
-
-- `fetch_parks_canada.py` (the merge script) — its job moves entirely
-  into `ParksCanadaSource.kt`.
-- `fetch_aspira_bc_wa.py` (the stamper) — it stops writing into
-  campgrounds.geojson; instead, the Kotlin ETL fetches the Aspira
-  `/api/maps` raw cache, builds an in-memory map, and applies it to
-  `Campground` rows during transform.
-- The `aspira` JSONB block in the curated `parks-canada-{bc,ab}.json`
-  files — those files become "just lat/lng + name + season/etc." raw
-  curated data; aspira IDs come from the actual aspira-maps fetch.
-- The `*.geojson` files in `data/` (the merged artifacts) — no longer
-  the importer's input. They're either deleted or kept as repo-level
-  curated raw inputs (parks-canada-*.json, alberta-provincial.json),
-  which sit at the *raw* layer, not the merged one.
-
-#### Trade-offs
-
-- **More Kotlin to write.** True; we're moving ~300 LoC of Python into
-  Kotlin. But it's mechanical and the import path already exists. We're
-  not building new machinery, we're moving boundary lines.
-- **Disk cost of raw cache.** A single Tesla cua-api fetch is 9MB,
-  uscampgrounds.info CSV is 3MB, OSM Planet Fitness is 1MB. Daily
-  retention with a 30-day TTL = under 500MB. Negligible.
-- **Lose the FE-readability of `data/campgrounds.geojson`.** Today you
-  can `jq` it to see what's on the map. After this, you'd query
-  `/api/pois`. That's the right answer anyway — the geojson on disk and
-  what the API serves can drift today; after this, the API is the only
-  view.
-
-
+**Trade-offs.** ~300 LoC moves Python → Kotlin (mechanical; import path
+already exists). Disk cost negligible. Loses ad-hoc `jq data/*.geojson`
+introspection — replaced by `/api/pois`, which is what the FE sees
+anyway.
 
 This is not a single PR. PR sequence (each independently mergeable):
 
@@ -646,135 +539,59 @@ This is not a single PR. PR sequence (each independently mergeable):
 
 ## Rationale
 
-**Prior art: how rec.gov and Aspira NextGen model this.**
+**Prior art: rec.gov + Aspira NextGen.** Both vendors model the same
+domain with richer three-level hierarchies. Useful as a sanity check on
+what we're not modeling.
 
-Both vendors handle the same domain (sites the public reserves) with richer
-hierarchies than what we're proposing. Useful as a sanity check on what
-we're choosing not to model.
+| Layer | rec.gov RIDB | Aspira `/api/maps` | Us (proposed) |
+|---|---|---|---|
+| Umbrella | RecArea (forest, wilderness, corps lake) | Park (top-level node) | `Park` POI (polygon) |
+| Container | Facility (campground/lookout/lodge, point) | MapLink / sub-area / loop (Banff: 7 loops) | `Campground` POI (point) |
+| Bookable unit | Campsite (#A23, equipment-typed, attributes) | Resource (site, equipment-typed, per-night codes) | not modeled |
+| Side dimensions | Permits, Tours, Activities, Events, Media | EquipmentCategory, BookingCategory, Amenity, Feature | flat string lists |
 
-*rec.gov (Recreation.gov RIDB API)* — three-level tree:
+**What rec.gov + Aspira have that we don't:** site/resource level below
+the campground, sub-area (loop) container within a park, facility/site
+type taxonomies, equipment compatibility, first-class amenity + activity
+join tables.
 
-- **RecArea** — the umbrella (a national forest, a wilderness, a corps lake).
-  Has `RecAreaID`, geometry, governing agency (NPS / USFS / BLM / Army Corps),
-  email, phone, parent organization. Carries marketing copy + media.
-- **Facility** — what we'd call a campground. `FacilityID`, type
-  (`Campground`, `Day-use`, `Lookout`, `Lodge`...), point coordinate,
-  `FacilityReservationURL`. Belongs to one RecArea (sometimes more via
-  RECAREAFACILITIES join).
-- **Campsite** — the bookable unit. `CampsiteID`, type (`STANDARD ELECTRIC`,
-  `WALK TO`, `RV`...), max occupancy, equipment allowed (`Tent`, `RV up to
-  N ft`), accessibility flags, attributes (shade, picnic table, fire ring).
-  Belongs to one Facility.
-- Plus dimension tables: `Permits`, `Tours`, `Activities`, `Events`, `Media`.
+**What we explicitly skip (and why):**
 
-*Aspira NextGen* — similar three-level shape via `/api/maps`:
+- **Site-level modeling.** Heat strip aggregates *across* sites; we never
+  need per-site state. Adding a 4th table doubles the schema for ~zero
+  user-visible benefit. (See decision #11.)
+- **Sub-area / loop modeling.** Natural fit for the `parent_poi_id` chain,
+  but our curated JSONs don't carry it. Skip until per-loop UX is needed.
+- **Equipment / amenity dimension tables.** FE doesn't filter on amenity;
+  flat string array suffices.
+- **Activities / events / tours / media.** rec.gov's secondary endpoints
+  are no-ops for us — we link out, operator handles the rest.
 
-- **Park** (top-level node, `mapType=2` at PC, region-nested at BC/WA) —
-  `transactionLocationId`, `mapId`, name, image. The bookable destination.
-- **MapLink / sub-area** — what Aspira calls a "loop" or "campground within
-  the park" (Banff has 7 of these: Tunnel Mountain Village I, II, etc.).
-  Has its own `childMapId` + `transactionLocationId` + `resourceLocationId`
-  (the field we just learned matters for WA's deeplink).
-- **Resource** — the individual site. Equipment-typed (RV / tent / cabin),
-  with a lat/lng inside the loop and per-night status codes (the integers
-  we map in `AspiraStatus.classify`).
-- Plus: `EquipmentCategory`, `BookingCategory`, `Amenity`, `Feature` taxonomies.
+**What it tells us to add later** (out of scope here, follow-up RFC):
 
-**What rec.gov + Aspira have that we don't:**
-
-1. **A site/resource level below the campground.** They model individual
-   campsites (#A23, the walk-to tent pad) as first-class entities. We
-   collapse to one campground point. Costs us: can't show "this campground
-   has 12 RV-electric sites and 30 tent-only" without scraping per-site
-   data.
-2. **A park-level container distinct from individual campgrounds.** Banff
-   National Park is one entity; the 7 sub-loops are children. Our
-   `parent_poi_id` self-FK partly captures this, but we don't model loops
-   at all.
-3. **Facility/site type taxonomies.** rec.gov knows a "Lookout" is not a
-   "Campground"; Aspira knows "RV with electric" is not "Walk-to tent."
-   We have one `category='campground'` regardless.
-4. **Equipment compatibility.** Aspira's deeplink takes
-   `equipmentCategoryId` because the lookup is "what RVs fit in this site."
-   We pass the "any equipment" sentinel.
-5. **First-class amenity + activity tables.** We list amenities as a string
-   array on the campground row; rec.gov + Aspira have join tables and
-   filterable taxonomies (e.g. "show me parks with horseback riding").
-
-**What we're explicitly choosing to skip (and why):**
-
-- **Site-level (Campsite/Resource) modeling.** The product surface is "find
-  a campground, click through to book." We don't run our own booking flow,
-  and the heat strip aggregates *across* sites — we never need to know
-  which specific site is open, only how many are. Adding a 4th table
-  doubles the schema for ~zero user-visible benefit. Revisit if/when we
-  build per-site availability tracking, which would also force us to deal
-  with rec.gov's tier-1 rate limits.
-- **Sub-area / loop modeling within a park.** A natural fit for the
-  parent_poi_id self-FK chain (park → loop → site), but we'd need to
-  source it. rec.gov + Aspira have it; our curated JSONs don't, and we'd
-  scrape per-loop data per park to backfill. Skip until something needs
-  per-loop UX.
-- **Equipment / amenity taxonomies as join tables.** We carry amenities as
-  a flat string list. Promoting to a dimension table is a DX nicety
-  (`SELECT pois WHERE amenity = 'horseback'`) but the FE doesn't filter on
-  amenity today. Defer.
-- **Activities / events / tours / media.** All of rec.gov's secondary
-  endpoints are no-ops for us; we surface the booking link, the operator
-  does the rest.
-
-**What this prior-art review *does* tell us to add:**
-
-- **Facility type beyond `category='campground'`.** Even within campgrounds,
-  there's a meaningful split: `tent-only`, `rv-only`, `mixed`,
-  `backcountry`, `cabin`. Aspira's `BookingCategory` does this; rec.gov's
-  `Type` field does this. Worth promoting from JSONB into a real column,
-  even if we keep the taxonomy small. Punt to a follow-up RFC after we
-  have data on what we're actually getting from each source.
-- **Operator vs. agency.** rec.gov treats RecArea's `ParentOrganization`
-  (NPS, USFS) separately from the contractor running on-site bookings.
-  Our `governing_body` covers ParentOrganization; we don't model the
-  contractor. Probably fine — it's a level of fidelity that's not
-  user-visible.
+- Facility type beyond `category='campground'` (tent / RV / mixed /
+  backcountry / cabin). rec.gov's `Type` and Aspira's `BookingCategory`
+  both expose this; we'd promote from JSONB once we have a sense of what
+  comes through each source.
 
 ---
 
-**Why server-assembled (BFF) over rich client?**
+**Why BFF over rich client?** One FE consumer; the N-vendor × M-display-rule
+explosion is already 60% of the drawer. BFF puts that in one place. If we
+ever add a second consumer, reconsider (gRPC/protobuf likely wins).
 
-We're a small team with one FE consumer. The BFF tradeoff costs us deploy
-coupling (BE + FE move together for new section types) but saves us from the
-N-vendor-times-M-display-rule explosion that's already 60% of the drawer
-code. With one consumer, BFF is the cheaper place for that complexity.
+**Why SC in `pois` and not its own table?** Same shape as everything else
+(point + source + URL). Splitting duplicates the geometry/import-runs
+infrastructure for no benefit.
 
-If we ever add a second consumer (CLI, mobile app), we'd reconsider — at
-which point a typed gRPC/protobuf contract probably beats both.
+**Why sealed Kotlin hierarchy?** Today's generic `PoiRow` + `properties:
+JsonObject` leaks JSONB shape everywhere. Sealed types make
+`buildDrawerPayload` exhaustive (compiler-checked).
 
-**Why fold SC into pois instead of a parallel "vehicles" table?**
+**Why not GraphQL?** Doesn't pay back at one consumer + ~10 queries.
 
-SC has the same shape as everything else: point geometry, name, source,
-external URL. The only thing that's unique is its properties JSONB
-(connectors, stalls). Splitting it out doesn't pay for itself; we'd just
-duplicate the geometry/source/import-runs infrastructure.
-
-**Why a sealed Kotlin hierarchy instead of generic `Poi` with `properties:
-JsonObject`?**
-
-Today's `PoiRow` is the latter, and it leaks JSONB-shaped concerns
-everywhere. A sealed type forces the per-type shape to be named once and
-referenced thereafter. The display-rule logic in `buildDrawerPayload` becomes
-exhaustive (compiler-checked) over POI types.
-
-**Why not GraphQL?**
-
-The BFF pattern handles our shape needs without a query language. The cost
-of GraphQL (resolver fan-out, N+1 risks, tooling) doesn't pay back when
-there's one consumer with maybe ten distinct queries.
-
-**Why one availability route instead of provider-specific routes?**
-
-The provider is BE-side knowledge. Today's routes leak it to the FE. One
-route + internal dispatch is the minimum API surface; vendor adapters can
-proliferate without FE changes.
+**Why one availability route?** Provider is BE-side knowledge. Existing
+provider-specific routes leak it to the FE.
 
 **Trade we're making vs. the current architecture:**
 
@@ -790,24 +607,12 @@ proliferate without FE changes.
 Walking the actual columns we ingest today against the proposed model.
 Anything that doesn't have a row gap-checks the design.
 
-> **Caveat about the geojsons.** The files in `data/*.geojson` are the
-> *merged + transformed* artifacts the importer reads — not the raw
-> upstream payloads. They've already been:
->
-> - normalized to a flat property bag (`fetch_campgrounds.py` maps
->   uscampgrounds.info CSV columns → `category`, `typeLabel`, `amenities`)
-> - merged across sources (`fetch_parks_canada.py` overlays curated AB/BC
->   JSON onto the US campgrounds set; `fetch_aspira_bc_wa.py` stamps
->   aspira IDs onto BC/WA features)
-> - filtered (`fetch_tesla_superchargers.py` keeps only `status='OPEN'`,
->   drops `effectivePricebooks` + `availabilityProfile` from Tesla's
->   raw payload)
-> - shaped for the FE's existing layer code (color, group, status fields
->   exist *because* `index.html`'s SC layer reads them)
->
-> So the audit below is a fair check on "what does the BE-to-FE wire
-> shape need," but not on "what data exists upstream that we could be
-> capturing." For that, the raw inputs matter.
+> **Caveat.** `data/*.geojson` are merged + transformed artifacts, not
+> raw upstream — Python today already normalizes property bags, merges
+> across sources, filters, and shapes for the FE's existing layer code.
+> The audit below is a fair check on the BE-to-FE wire shape, not on
+> what data exists upstream. The "Raw upstream" subsection at the end
+> covers what we strip.
 
 ### `data/campgrounds.geojson`
 
@@ -878,107 +683,54 @@ national parks (Channel Islands, Glacier Bay). Already covered by the
 | `stallCount` | `Supercharger.stallCount: Int` | per-type, in RFC |
 | `powerKilowatt` | `Supercharger.maxPowerKw: Int` | per-type, in RFC |
 
-### Gaps the RFC needs to close
+### Gaps the RFC closes
 
-1. **`pois.country`** — promote from per-type to base. Drives FE behavior
-   (US-vs-CA park-system fallback search) and BE adapter selection.
-2. **`pois.phone`** — base, not per-type. Three of four POI types carry it.
-3. **`pois.address`** — JSONB on base. Avoids "every type re-models street/city/state/postcode."
-4. **`pois.info_url`** — base, replaces the parks_canada_url / parks_alberta_url /
-   bcparks_url / website per-type sprawl. One column for "non-booking
-   informational link," BE composes "Park info on …" / "Visit website" /
-   "Find on Tesla.com" buttons from `(info_url, governing_body)`.
-5. **`Campground.photoUrl`, `activities`, `cellCoverage`, `ratingReviews`**
-   — present in geojson, missing from the RFC's `Campground` shape. Add.
-6. **`Park.designation`** — `Des_Tp` ("National Park" vs "Wilderness" vs
-   "National Recreation Area") is a meaningful display distinction.
-7. **`Park.officialName` / `Loc_Nm`** — keep for the small set where it
-   differs from `Unit_Nm`; otherwise null.
+**Hoist to POI base** (was per-type or implicit):
+`country` (drives US/CA dispatch), `phone` (3 of 4 types carry it),
+`address` (JSONB blob), `info_url` (retires the
+parks_canada_url / parks_alberta_url / bcparks_url / website sprawl —
+BE composes "Park info on …" / "Visit website" buttons from `(info_url,
+governing_body)`).
 
-The **drop** column is also the point: `enriched`, `color`, `group`,
-`type`, `typeLabel`, `parent_name`, `parent_type`, `reservable` —
-poller-internal artifacts or fields the model now derives. They've been
-leaking to the wire for no reason.
+**Add to per-type shapes** (in geojson today, missing from RFC's first pass):
+`Campground.photoUrl`, `activities`, `cellCoverage`, `ratingReviews`;
+`Park.designation` (Des_Tp), `Park.officialName` (Loc_Nm); `PF.openingHours`;
+`SC.facility`.
 
-### Raw upstream — what the geojsons currently strip
+**Drop from the wire** (poller-internal or now-derivable):
+`enriched`, `color`, `group`, `type`, `typeLabel`, `parent_name`,
+`parent_type`, `reservable`.
 
-Looking past the merged artifacts, the upstream sources carry richer data
-the poller could capture but doesn't:
+### Raw upstream — what the geojsons strip
 
-**uscampgrounds.info CSV (fetch_campgrounds.py source).** Has per-site
-fields the merge collapses: `ELEV` (elevation), per-site `LON`/`LAT` for
-GPS-precise spots, `AGENCY` (operator separately from manager).
+Each poller's raw upstream payload carries data the merged geojson drops.
+None of this is forcing for the data model (JSONB accommodates it later);
+flagged here so the future-fields audit isn't lost:
 
-**Tesla cua-api `/locations/<slug>` (fetch_tesla_superchargers.py source,
-cached at `data/pricing-cache/<id>.json`).** Has:
+- **Tesla cua-api** (already cached at `data/pricing-cache/<id>.json`):
+  `accessHours`, `accessType`, structured `address`,
+  `amenities` (restroom/food/lodging), `isTrailerFriendly`,
+  `openToNonTeslas`, `timeZone`, `commonSiteName`.
+- **rec.gov RIDB:** facility `Description`, `Directions`, `Stay limit`,
+  fees, photo URLs (we keep only `cell_coverage` + `rating_reviews`).
+- **PAD-US:** ~30+ fields beyond the 5 we keep (`Pub_Access`, `Access_Typ`,
+  `IUCN_Cat`, `Date_Est`, `Own_Type`).
+- **Aspira `/api/maps`:** `mapImageUrls`, `description`, `directions`,
+  `cancellationPolicy`, `arrivalInstructions`, sub-area names.
+- **OSM Overpass (PF):** `wheelchair`, `level`, `payment:*`, social links.
+- **uscampgrounds.info CSV:** `ELEV`, GPS-precise per-site coords,
+  `AGENCY` (operator vs. manager).
 
-- `accessHours` — supercharger access window (most are 24/7, some
-  hotel/mall lots aren't)
-- `accessType` — e.g. "Restricted", "Public"
-- `address` — structured (street/city/state/postcode/country/centroid)
-- `amenities` — restroom, food, lodging, shopping (we currently drop)
-- `effectivePricebooks` — pricing tiers (the backend caches these for
-  `/api/pricing/{slug}` — relevant for the `features.pricing` capability)
-- `isTrailerFriendly`, `openToNonTeslas`, `openToPublic`, `ownershipType`
-- `timeZone` — useful for displaying access hours
-- `commonSiteName` — sometimes more user-friendly than `name`
+**Worth capturing soon:** Tesla amenities + accessHours (in the cache
+already, drawer popup gets richer for free); structured Tesla address
+(country + centroid for free); rec.gov `Description`/`Directions` (the
+drawer's expandable section is starved for non-recgov content).
+**Skip:** Aspira sub-area names, Tesla `effectivePricebooks` (pricing
+route owns it), most OSM tags (no use case).
 
-**OSM Overpass for Planet Fitness (fetch_planet_fitness.py).** OSM tags
-include `wheelchair`, `level`, `internet_access`, `payment:*`, social
-links — currently we keep only the explicit address fields.
-
-**rec.gov RIDB (used for enrichment).** Captured today: `cell_coverage`,
-`rating_reviews`. Available but not captured: facility-level
-`Description`, `Directions`, `Stay limit`, `Reservation cutoff`, `Open
-season`, fees, photo URLs.
-
-**PAD-US (national/state parks).** We keep five fields. The dataset has
-~30+ more, including `Pub_Access` (open/restricted), `Access_Typ`
-(walk-in/drive-up), `IUCN_Cat` (conservation classification), `Date_Est`,
-`Own_Type` (federal/state/private/joint).
-
-**Aspira `/api/maps` (already partly captured).** We capture
-`transactionLocationId`, `mapId`, `resourceLocationId`, `title`. The same
-endpoint also has `mapImageUrls` (per-park map graphic), `description`,
-`directions`, `cancellationPolicy`, `arrivalInstructions`, plus
-sub-area-level (`mapLinks`) names + coordinates that we ignore.
-
-**Aspira `/api/availability/map` (drawer fetch).** Sub-area names get
-collapsed to integer per-day status codes; we throw away `loop_name`,
-`equipment_compatibility`, per-site detail.
-
-#### What of this is worth capturing?
-
-In terms of obvious wins on the FE:
-
-- **Tesla amenities + accessHours** — already in the cache; the SC popup
-  could surface "24/7 · 16 stalls · restroom · food" with no new fetch.
-- **Tesla `address` structured** — drop the assembled `street` field,
-  switch to the raw object so we get country and centroid for free.
-- **rec.gov facility `Description`/`Directions`** — drawer expandable
-  detail section is starved for content for non-recgov pins; rec.gov
-  ones could carry it.
-- **PAD-US `Date_Est`, `Own_Type`** — minor flavor for the park drawer.
-
-Things the user won't ever see (skip):
-
-- Aspira sub-area-level names. Useful only for per-loop UX, which we
-  decided against (decision #11).
-- Tesla `effectivePricebooks`. Already captured separately by the
-  backend's pricing route.
-- OSM `level`/`wheelchair`/etc. Out of scope unless a use case appears.
-
-This isn't a forcing function for the data model. The model is JSONB on
-the per-type Kotlin shape (`Campground`, `Supercharger`, etc.), which
-already accommodates anything we want to capture later. The point is
-that the audit should be of *what we want from upstream*, not what the
-poller currently happens to copy through.
-
-> **Action item, not RFC scope.** A separate small task: re-survey each
-> poller's raw payload, decide what's worth capturing, and update the
-> per-type Kotlin shapes + JSONB conventions. The RFC's structural
-> decisions don't depend on which fields land — only on the fact that
-> they have a shape-stable home.
+> **Out of scope here.** Re-surveying each poller and updating the
+> per-type Kotlin shapes is a follow-up task. RFC structure doesn't
+> depend on which fields land.
 
 ## Unresolved questions
 
@@ -1021,3 +773,5 @@ poller currently happens to copy through.
 | 12 | 2026-06-07 | Hoist `country`/`phone`/`address`/`info_url` to POI base | Field audit shows three of four POI types carry phone + address; one base `info_url` retires the parks_canada_url / parks_alberta_url / bcparks_url / website per-type sprawl |
 | 13 | 2026-06-07 | Drop poller-internal fields from the wire (`enriched`, `color`, `group`, `type`, `typeLabel`, `parent_name`, `parent_type`) | Caller-derivable or only meaningful inside the poller; leaking them to the FE is incidental |
 | 14 | 2026-06-07 | Python is fetch-only; Kotlin owns transform + upsert | Today's split has merge/transform logic in two languages. Python writes raw bytes to `data/raw/<source>/<ts>.<ext>`; Kotlin ETL parses, transforms, merges, enriches, upserts. One language for the schema-shaped boundary. |
+| 15 | 2026-06-07 | Raw cache is timestamped + retained; `latest` symlink is what Kotlin reads | Versioned captures let us diff fetches and re-import without re-fetching. 30-capture retention + paired `<ts>.meta.json` = cheap audit trail |
+| 16 | 2026-06-07 | Kotlin ETL handles deletes via mark-and-sweep, scoped per source | Existing `Importer.kt` behavior generalizes: rows not seen in a run get `deleted_at`; reappearance un-deletes; tripwire (seen < 0.5 × prior) aborts before sweep. Sweep scope is the run's source set, not all `pois` |
