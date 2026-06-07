@@ -1,24 +1,5 @@
 import { state } from './core.js';
 
-export const STATUS_COLOR = {
-  OPEN: '#e82127',
-  EXPANDING: '#e82127',
-  CONSTRUCTION: '#f5a623',
-  PERMIT: '#f7d56e',
-  VOTING: '#f7d56e',
-  PLAN: '#bfbfbf',
-  CLOSED_TEMP: '#333',
-  CLOSED_PERM: '#333',
-};
-
-export const FILTER_GROUP = {
-  OPEN: 'open', EXPANDING: 'open',
-  CONSTRUCTION: 'construction',
-  PERMIT: 'permit', VOTING: 'permit',
-  PLAN: 'plan',
-  CLOSED_TEMP: 'closed', CLOSED_PERM: 'closed',
-};
-
 // Available basemaps. Value passed to map.setStyle() is either a style URL
 // (vector) or a style object (raster). Free and key-less unless noted.
 export const BASEMAPS = {

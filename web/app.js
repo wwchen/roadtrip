@@ -7,7 +7,6 @@ import {
   bindSatelliteToggle,
 } from './basemap.js';
 import {
-  toGeoJSON,
   installSCLayer,
   installCGLayer,
   installPFLayer,
@@ -182,35 +181,24 @@ const EMPTY_FC = { type: 'FeatureCollection', features: [] };
 async function load() {
   const status = document.getElementById('status');
 
-  // Superchargers stay static — 1.4k features (~120KB) is fine, they don't
-  // change per-pan, and the supercharge.info fallback is the only safety net
-  // we have if the local feed fails. SC remain searchable globally.
+  // Superchargers stay static — ~1k OPEN features (~90KB) is fine, they don't
+  // change per-pan. The local file is filtered to OPEN-only at fetch time
+  // (scripts/fetch_tesla_superchargers.py); the live supercharge.info
+  // fallback is gone since it would reintroduce CONSTRUCTION/PERMIT/PLAN
+  // pins. SC remain searchable globally.
   (async () => {
     try {
       status.textContent = 'Loading Superchargers…';
-      let fc = null;
-      try {
-        const local = await fetchJSON('/data/tesla-superchargers.geojson');
-        if (local?.features?.length > 100) fc = local;
-      } catch (_) { /* fall through */ }
-      if (!fc) {
-        const all = await fetchJSON('https://supercharge.info/service/supercharge/allSites');
-        const sites = all.filter(s => s?.gps && (s.address?.countryId === 100 || s.address?.countryId === 101));
-        fc = toGeoJSON(sites);
-      }
-      const counts = { open: 0, construction: 0, permit: 0, plan: 0, closed: 0 };
-      fc.features.forEach(f => { counts[f.properties.group || 'open']++; });
-      for (const [k, v] of Object.entries(counts)) setCount('c-' + k, v);
+      const fc = await fetchJSON('/data/tesla-superchargers.geojson');
+      setCount('c-open', fc.features.length);
       state.overlayData.sc = fc;
       for (const f of fc.features) {
         const p = f.properties;
-        if (p.status === 'CLOSED_PERM') continue;
         const [lng, lat] = f.geometry.coordinates;
         registerSearchItems([{
           name: p.name || '',
           sub: [p.city, p.state].filter(Boolean).join(', '),
           kind: 'SC', color: '#e82127',
-          scGroup: p.group || 'open',
           lng, lat, zoom: 13,
           onSelect: () => synthesizeClick(['sc-points-hit', 'sc-points'], [lng, lat]),
         }]);

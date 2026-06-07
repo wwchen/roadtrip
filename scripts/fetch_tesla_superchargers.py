@@ -249,6 +249,12 @@ def main():
             continue
 
         props = detail_to_props(slug, pin["lat"], pin["lng"], pin["site_status"], detail)
+        # Only OPEN sites land in the file — the map is for trips happening
+        # now, not future-planning around CONSTRUCTION/PERMIT/PLAN pins. Saves
+        # ~30% of features and removes the legend's status sub-filters.
+        if props.get("status") != "OPEN":
+            skipped += 1
+            continue
         features.append({
             "type": "Feature",
             "geometry": {"type": "Point", "coordinates": [pin["lng"], pin["lat"]]},

@@ -1,5 +1,4 @@
 import { state, geomCenter } from './core.js';
-import { FILTER_GROUP, STATUS_COLOR } from './basemap.js';
 import {
   openCampgroundPopup,
   openParkPopup,
@@ -22,45 +21,13 @@ export function bindCursor(layerId) {
   map.on('mouseleave', layerId, () => map.getCanvas().style.cursor = '');
 }
 
-export function toGeoJSON(sites) {
-  return {
-    type: 'FeatureCollection',
-    features: sites.map(s => ({
-      type: 'Feature',
-      geometry: { type: 'Point', coordinates: [s.gps.longitude, s.gps.latitude] },
-      properties: {
-        id: s.id,
-        locationId: s.locationId ?? '',
-        name: s.name,
-        status: s.status,
-        group: FILTER_GROUP[s.status] || 'open',
-        color: STATUS_COLOR[s.status] || '#888',
-        stallCount: s.stallCount ?? null,
-        powerKilowatt: s.powerKilowatt ?? null,
-        v2: s.stalls?.v2 ?? 0,
-        v3: s.stalls?.v3 ?? 0,
-        v4: s.stalls?.v4 ?? 0,
-        nacs: s.plugs?.nacs ?? 0,
-        tpc: s.plugs?.tpc ?? 0,
-        dateOpened: s.dateOpened ?? null,
-        street: s.address?.street ?? '',
-        city: s.address?.city ?? '',
-        state: s.address?.state ?? '',
-        facility: s.facilityName ?? '',
-      },
-    })),
-  };
-}
-
+// SC are pre-filtered to OPEN-only at fetch time, so the runtime layer
+// filter is just on/off based on the f-open checkbox.
 export function updateFilter() {
   const { map } = state;
-  const groups = [];
-  if (document.getElementById('f-open').checked) groups.push('open');
-  if (document.getElementById('f-construction').checked) groups.push('construction');
-  if (document.getElementById('f-permit').checked) groups.push('permit');
-  if (document.getElementById('f-plan').checked) groups.push('plan');
-  if (document.getElementById('f-closed').checked) groups.push('closed');
-  map.setFilter('sc-points', ['in', ['get', 'group'], ['literal', groups]]);
+  const visible = document.getElementById('f-open').checked;
+  map.setLayoutProperty('sc-points', 'visibility', visible ? 'visible' : 'none');
+  map.setLayoutProperty('sc-points-hit', 'visibility', visible ? 'visible' : 'none');
 }
 
 const CG_COLOR = {
@@ -357,9 +324,7 @@ export function installSCLayer(geojson) {
 
   if (state.bound.sc) return;
   state.bound.sc = true;
-  for (const id of ['f-open','f-construction','f-permit','f-plan','f-closed']) {
-    document.getElementById(id).addEventListener('change', updateFilter);
-  }
+  document.getElementById('f-open').addEventListener('change', updateFilter);
 }
 
 // Update existing source data without rebuilding layers. Used by the bbox

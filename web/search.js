@@ -25,10 +25,7 @@ function togglesForItem(item) {
       const id = cat === 'other' ? 'f-cg-federal' : `f-cg-${cat}`;
       return [id];
     }
-    case 'SC': {
-      const group = item.scGroup || 'open';
-      return [`f-${group}`];
-    }
+    case 'SC': return ['f-open'];
     default: return [];
   }
 }
