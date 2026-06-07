@@ -19,6 +19,7 @@ Features carry:
 Code prefix per source so the merge can replace stale entries cleanly across
 re-runs:  PC-BC-, PC-AB-, AP-AB-.
 """
+import datetime as dt
 import json
 import sys
 from pathlib import Path
@@ -100,7 +101,8 @@ def main():
                 existing.append(f)
 
     merged = existing + new_features
-    OUT.write_text(json.dumps({"type": "FeatureCollection", "features": merged}))
+    fetched_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    OUT.write_text(json.dumps({"_fetched_at": fetched_at, "type": "FeatureCollection", "features": merged}))
     for name, count in per_source_counts:
         print(f"  {name}: {count}", file=sys.stderr)
     print(

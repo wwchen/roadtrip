@@ -5,6 +5,7 @@ Source: https://uscampgrounds.info/takeit.html — CC-BY licensed CSVs, no key.
 Schema is documented at https://uscampgrounds.info/abbreviations.html
 """
 import csv
+import datetime as dt
 import io
 import json
 import sys
@@ -140,7 +141,8 @@ def main():
         print(f"  +{len(features) - count_before} (total {len(features)})", file=sys.stderr)
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
+    fetched_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    OUT.write_text(json.dumps({"_fetched_at": fetched_at, "type": "FeatureCollection", "features": features}))
     print(f"wrote {len(features)} features to {OUT}", file=sys.stderr)
 
 

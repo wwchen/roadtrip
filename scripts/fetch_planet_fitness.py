@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Fetch Planet Fitness US locations from OpenStreetMap Overpass API, save as GeoJSON."""
+import datetime as dt
 import json
 import sys
 import urllib.parse
@@ -56,7 +57,10 @@ def main():
         })
 
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
+    # Stamp upstream-fetch time so the importer's pois.fetched_at reflects when
+    # we actually called Overpass, not when this file was last touched on disk.
+    fetched_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    OUT.write_text(json.dumps({"_fetched_at": fetched_at, "type": "FeatureCollection", "features": features}))
     print(f"wrote {len(features)} features to {OUT}", file=sys.stderr)
 
 

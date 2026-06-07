@@ -5,7 +5,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
-import java.time.Instant
 
 // State + national parks ship as GeoJSON FeatureCollection with Polygon /
 // MultiPolygon geometries. The geom column is geometry(Geometry,4326), so
@@ -22,7 +21,7 @@ class ParksGeoJsonSource(
         sequence {
             val root = Json.parseToJsonElement(file.readText()).jsonObject
             val features = root["features"]!!.jsonArray
-            val fetchedAt = Instant.ofEpochMilli(file.lastModified())
+            val fetchedAt = readFetchedAt(root, file)
             for (feat in features) {
                 val obj = feat.jsonObject
                 val geom = obj["geometry"]?.jsonObject ?: continue

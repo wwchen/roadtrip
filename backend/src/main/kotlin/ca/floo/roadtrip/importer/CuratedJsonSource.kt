@@ -7,7 +7,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
-import java.time.Instant
 
 // Shared base for the hand-curated Alberta-provincial / Parks-Canada JSON
 // files. They all share the same shape:
@@ -27,7 +26,10 @@ abstract class CuratedJsonSource(
             for (file in files) {
                 val root = Json.parseToJsonElement(file.readText()).jsonObject
                 val arr = root["campgrounds"]!!.jsonArray
-                val fetchedAt = Instant.ofEpochMilli(file.lastModified())
+                // Curated JSON files are committed to the repo, so they don't
+                // carry _fetched_at — readFetchedAt falls back to file.lastModified()
+                // (which means "last hand-edit time"; semantically correct here).
+                val fetchedAt = readFetchedAt(root, file)
                 for (item in arr) {
                     val obj = item.jsonObject
                     val n = obj["name"]?.jsonPrimitive?.content ?: continue

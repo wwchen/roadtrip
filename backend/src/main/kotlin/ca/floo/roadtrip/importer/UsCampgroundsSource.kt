@@ -6,7 +6,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
-import java.time.Instant
 
 // Normalizes data/campgrounds.geojson (~11.9k features) into StagedPoi rows.
 // The upstream `code` field is NOT unique (5697 distinct codes for 11906
@@ -14,7 +13,6 @@ import java.time.Instant
 // stable across re-runs and survives the regex constraint.
 class UsCampgroundsSource(
     private val geojson: File,
-    private val fetchedAt: Instant = Instant.ofEpochMilli(geojson.lastModified()),
 ) : Source {
     override val name = "uscampgrounds"
 
@@ -22,6 +20,7 @@ class UsCampgroundsSource(
         sequence {
             val root = Json.parseToJsonElement(geojson.readText()).jsonObject
             val features = root["features"]!!.jsonArray
+            val fetchedAt = readFetchedAt(root, geojson)
             for (feat in features) {
                 val obj = feat.jsonObject
                 val geom = obj["geometry"]?.jsonObject ?: continue

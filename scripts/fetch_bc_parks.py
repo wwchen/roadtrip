@@ -30,6 +30,7 @@ Reservations in BC go through Discover Camping / Parks Canada, a separate
 system; we just link to the park page and let users click through.
 """
 from __future__ import annotations
+import datetime as dt
 import json
 import sys
 import urllib.parse
@@ -152,7 +153,12 @@ def main():
 
     merged = existing + features
     OUT.parent.mkdir(parents=True, exist_ok=True)
-    OUT.write_text(json.dumps({"type": "FeatureCollection", "features": merged}))
+    # Stamp our just-fetched-from-BC-Parks time on the merged file. The
+    # importer reads this for pois.fetched_at; the timestamp documents when
+    # THIS script's data was pulled, even if US-side rows in the same file
+    # are older.
+    fetched_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    OUT.write_text(json.dumps({"_fetched_at": fetched_at, "type": "FeatureCollection", "features": merged}))
     print(f"wrote {len(merged)} total features to {OUT} "
           f"(US: {len(existing)}, BC: {len(features)})", file=sys.stderr)
 
