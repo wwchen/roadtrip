@@ -52,12 +52,10 @@ function renderPricing(resp) {
   if (!books.length) return '<div class="meta">No pricing on file.</div>';
 
   const tslaCharging = books.filter(b => b.feeType === 'CHARGING' && b.vehicleMakeType === 'TSLA');
-  const ntslaCharging = books.filter(b => b.feeType === 'CHARGING' && b.vehicleMakeType === 'NTSLA');
   const congestion = books.filter(b => b.feeType === 'CONGESTION');
 
   const rows = [];
   rows.push(renderRateGroup('Tesla', tslaCharging));
-  if (ntslaCharging.length) rows.push(renderRateGroup('Non-Tesla', ntslaCharging));
   if (congestion.length) {
     const c = congestion[0];
     rows.push(`<div class="rate-row"><span class="rate-label">Idle/congestion</span><span class="rate-val">${formatRate(c)}</span></div>`);
