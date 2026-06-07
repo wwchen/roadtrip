@@ -39,8 +39,11 @@ DOTENV = _load_dotenv('.env')
 
 local_resource(
     'postgres',
-    cmd='docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres',
-    serve_cmd='docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois logs -f postgres',
+    # Foreground `up` (no -d, no separate `logs -f`). Tilt owns the
+    # docker-compose process and sends SIGTERM on shutdown, so the container
+    # stops cleanly when Tilt exits. Volumes persist (no `down -v`), so DB
+    # state is preserved between sessions; only the container is stopped.
+    serve_cmd='docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up postgres',
     deps=['docker-compose.yml', 'docker-compose.local.yml'],
     readiness_probe=probe(
         period_secs=2,
