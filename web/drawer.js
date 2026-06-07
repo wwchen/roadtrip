@@ -310,7 +310,7 @@ async function runFetch(url, f, signal) {
       return;
     }
 
-    renderState(json);
+    renderState(json, f);
   } catch (e) {
     if (e.name === 'AbortError') return;
     renderError('network', 30, f);
@@ -318,12 +318,17 @@ async function runFetch(url, f, signal) {
 }
 
 /** Render success / zero_available / closed_for_season / empty. */
-function renderState(json) {
+function renderState(json, f) {
   const summaryEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-summary`);
   const freshEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-freshness`);
   const stripEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-strip`);
   const labelEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-day-labels span:last-child`);
   const primaryBtn = document.querySelector(`#${DRAWER_ROOT_ID} .cg-btn-primary`);
+  // Watch / Snipe relabels are rec.gov-only — they point at /campsite, our
+  // openings tracker, which only knows recgov_ids. For Aspira pins the
+  // primary button is the upstream Reserve link; relabeling it to "Watch
+  // for openings" would just lie about where the click goes.
+  const isRecgov = !!f?.properties?.recgov_id;
 
   summaryEl.textContent = json.summary || '';
   const ageMin = Math.max(1, Math.round((json.cache?.age_seconds ?? 0) / 60));
@@ -335,7 +340,7 @@ function renderState(json) {
   if (json.state === 'closed_for_season') {
     // Replace strip with a banner.
     stripEl.outerHTML = `<div class="cg-closed-banner">⛰️ ${json.season?.reopens_on ? 'Reopens ' + json.season.reopens_on : 'Closed for season'}</div>`;
-    primaryBtn.textContent = 'Watch for opening day';
+    if (isRecgov) primaryBtn.textContent = 'Watch for opening day';
     if (labelEl) labelEl.textContent = '';
     return;
   }
@@ -356,10 +361,12 @@ function renderState(json) {
   }).join('');
   stripEl.innerHTML = cells;
 
-  if (json.state === 'zero_available') {
-    primaryBtn.textContent = 'Snipe a cancellation';
-  } else {
-    primaryBtn.textContent = 'Watch for openings';
+  if (isRecgov) {
+    if (json.state === 'zero_available') {
+      primaryBtn.textContent = 'Snipe a cancellation';
+    } else {
+      primaryBtn.textContent = 'Watch for openings';
+    }
   }
 
   if (labelEl && json.window?.start && json.window?.days) {
