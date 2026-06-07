@@ -32,7 +32,33 @@
     font-size: 13px; line-height: 1.4;
     max-width: 260px; max-height: calc(100vh - 20px); overflow-y: auto;
     -webkit-font-smoothing: antialiased;
+    transition: transform 180ms ease, opacity 180ms ease;
   }
+  #panel.collapsed { display: none; }
+  #panel-collapse {
+    position: absolute; top: 8px; right: 10px;
+    width: 22px; height: 22px;
+    background: transparent; color: var(--cg-muted);
+    border: 0; cursor: pointer;
+    border-radius: 4px;
+    display: grid; place-items: center;
+    font-size: 16px; line-height: 1;
+  }
+  #panel-collapse:hover { background: var(--cg-bg-hover); color: var(--cg-text); }
+  #panel h1 { padding-right: 28px; }
+  #panel-show {
+    display: none;
+    position: absolute; z-index: 2;
+    top: max(10px, env(safe-area-inset-top)); right: 10px;
+    width: 36px; height: 36px; padding: 0;
+    background: var(--cg-surface); color: var(--cg-text);
+    border: 1px solid var(--cg-border-strong); border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.30);
+    cursor: pointer;
+    align-items: center; justify-content: center;
+  }
+  #panel-show.visible { display: grid; }
+  #panel-show svg { width: 18px; height: 18px; }
   #panel h1 { margin: 0 0 8px; font-size: 14px; font-weight: 600; color: var(--cg-text); letter-spacing: -0.005em; }
   #panel label { display: block; margin: 2px 0; cursor: pointer; user-select: none; color: var(--cg-text); }
   #panel label input { margin-right: 6px; vertical-align: middle; accent-color: var(--cg-accent); }
@@ -50,6 +76,7 @@
 
   @media (max-width: 640px) {
     #panel-toggle { display: block; }
+    #panel-collapse, #panel-show.visible { display: none !important; }
     #panel {
       top: max(10px, env(safe-area-inset-top)); right: 10px; left: 10px;
       max-width: none; max-height: 75vh;
@@ -470,7 +497,11 @@
 <body>
 <div id="map"></div>
 <button id="panel-toggle" aria-label="Toggle layers panel">☰</button>
+<button id="panel-show" aria-label="Show layers panel" title="Show layers">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"/><polyline points="2 17 12 22 22 17"/><polyline points="2 12 12 17 22 12"/></svg>
+</button>
 <div id="panel">
+  <button id="panel-collapse" aria-label="Hide layers panel" title="Hide">×</button>
   <h1>Roadtrip Map</h1>
   <div id="search-wrap">
     <input type="search" id="search" placeholder="Search parks, chargers, gyms…" autocomplete="off">
