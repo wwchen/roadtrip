@@ -1,30 +1,25 @@
 #!/usr/bin/env python3
-"""Capture Aspira NextGen `/api/maps` indexes for all 3 hosts.
+"""Capture Aspira NextGen `/api/maps` for one host.
 
-Thin fetch-only per RFC 0007. Three captures per run, one per Aspira-
-deployed host:
+Per RFC 0007 PR 3.5: vendor-centric, host-parameterized. The poller
+(or `bin/refresh GOVERNING=...`) invokes this once per host that the
+registry declares — three times today (PC/BC/WA). The `--source` flag
+controls the data/raw subdir (must match config/poi-registry.yaml).
 
-  data/raw/aspira-maps-pc/<UTC-ts>.json   (reservation.pc.gc.ca)
-  data/raw/aspira-maps-bc/<UTC-ts>.json   (camping.bcparks.ca)
-  data/raw/aspira-maps-wa/<UTC-ts>.json   (washington.goingtocamp.com)
+  python3 scripts/fetch_aspira_maps.py --host=reservation.pc.gc.ca --source=aspira-maps-pc
+  python3 scripts/fetch_aspira_maps.py --host=camping.bcparks.ca   --source=aspira-maps-bc
+  python3 scripts/fetch_aspira_maps.py --host=washington.goingtocamp.com --source=aspira-maps-wa
 
-Each capture is the raw `/api/maps` JSON (the per-park hierarchy used to
-look up `transactionLocationId` + `mapId` + `resourceLocationId` for
-reservation deeplinks). The Kotlin ETL builds the index at parse time
-and binds aspira IDs to campground POIs by exact title match against
-the curated `aspira_park_title` field.
+Adding a fourth Aspira host is a one-line YAML change — no edits here.
 
 Aspira's WAF (Azure App Gateway) rejects bare-curl UAs and `Accept-
 Charset` headers — same browser-shaped UA as the backend's
 AspiraAvailabilityClient is required.
-
-Run:
-  python3 scripts/fetch_aspira_maps.py
 """
 from __future__ import annotations
 
+import argparse
 import sys
-import time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -34,42 +29,45 @@ UA = (
     "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 )
-HOSTS = [
-    ("aspira-maps-pc", "reservation.pc.gc.ca"),
-    ("aspira-maps-bc", "camping.bcparks.ca"),
-    ("aspira-maps-wa", "washington.goingtocamp.com"),
-]
-THROTTLE_S = 1.5  # match the backend's AspiraAvailabilityClient mutex window
 
 FETCHER = "fetch_aspira_maps"
-FETCHER_VERSION = "2"
+FETCHER_VERSION = "3"  # v3: --host param, single-host per invocation
 
 
-def fetch_host(source: str, host: str) -> bool:
-    url = f"https://{host}/api/maps"
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", required=True, help="Aspira host (e.g. reservation.pc.gc.ca)")
+    parser.add_argument(
+        "--source",
+        required=True,
+        help="data/raw subdir / poi-registry source.id (e.g. aspira-maps-pc)",
+    )
+    args = parser.parse_args()
+
+    url = f"https://{args.host}/api/maps"
     headers = {
         "User-Agent": UA,
         "Accept": "application/json",
-        "Referer": f"https://{host}/",
+        "Referer": f"https://{args.host}/",
     }
-    err(f"  fetching {host}…")
+    err(f"fetching {args.host}…")
     try:
         status, resp_headers, body = http_get_text(url, headers=headers, timeout=30)
     except Exception as e:  # noqa: BLE001
-        err(f"  {host} failed: {e}")
-        return False
+        err(f"  {args.host} failed: {e}")
+        return 1
 
     # WAF challenge detection: Aspira sometimes returns HTML 200s.
     if body.lstrip().startswith("<"):
-        err(f"  {host} WAF-challenge HTML response (status={status}); not writing")
-        return False
+        err(f"  {args.host} WAF-challenge HTML response (status={status}); not writing")
+        return 1
 
     payload = parse_payload(resp_headers.get("content-type", ""), body)
     if status != 200:
-        err(f"  {host} HTTP {status}; not writing")
-        return False
+        err(f"  {args.host} HTTP {status}; not writing")
+        return 1
     write_envelope(
-        source=source,
+        source=args.source,
         fetcher=FETCHER,
         fetcher_version=FETCHER_VERSION,
         request_url=url,
@@ -80,18 +78,8 @@ def fetch_host(source: str, host: str) -> bool:
         payload=payload,
     )
     n = len(payload) if isinstance(payload, list) else "?"
-    err(f"  {host}: wrote ({n} top-level entries)")
-    return True
-
-
-def main() -> int:
-    rc = 0
-    for i, (source, host) in enumerate(HOSTS):
-        if i > 0:
-            time.sleep(THROTTLE_S)
-        if not fetch_host(source, host):
-            rc = 1
-    return rc
+    err(f"  {args.host}: wrote ({n} top-level entries)")
+    return 0
 
 
 if __name__ == "__main__":

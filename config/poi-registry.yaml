@@ -1,0 +1,211 @@
+# POI registry — source of truth for governing bodies + booking providers
+# + the per-source fetcher recipes.
+#
+# Both Python (bin/refresh) and Kotlin (backend boot) read this. Backend
+# UPSERTs governing_body + booking_provider rows from here on every boot;
+# runs that reference a slug not declared here fail loudly. Adding a new
+# vendor = one entry here + a Kotlin ETL impl + maybe a fetcher script.
+# No Flyway migration to add a vendor.
+#
+# Contract:
+#   slugs are stable, kebab-case, never change without coordinated cleanup
+#   booking_providers are declared once globally; governing-body source
+#   rows reference them by (vendor, host)
+
+governing_bodies:
+  # ----- US federal -----
+  - slug: nps
+    name: National Park Service
+    kind: federal
+    country: US
+
+  - slug: usfs
+    name: US Forest Service
+    kind: federal
+    country: US
+
+  - slug: blm
+    name: Bureau of Land Management
+    kind: federal
+    country: US
+
+  - slug: coe
+    name: US Army Corps of Engineers
+    kind: federal
+    country: US
+
+  - slug: usfw
+    name: US Fish & Wildlife
+    kind: federal
+    country: US
+
+  - slug: bor
+    name: Bureau of Reclamation
+    kind: federal
+    country: US
+
+  - slug: tva
+    name: Tennessee Valley Authority
+    kind: federal
+    country: US
+
+  - slug: nm
+    name: National Monument
+    kind: federal
+    country: US
+
+  - slug: nra
+    name: National Recreation Area
+    kind: federal
+    country: US
+
+  # ----- US state / local / private -----
+  - slug: us-state-park
+    name: US State Parks
+    kind: state
+    country: US
+    sources:
+      - id: aspira-maps-wa
+        fetcher: fetch_aspira_maps
+        args:
+          host: washington.goingtocamp.com
+          source: aspira-maps-wa
+        provides: aspira-id-index
+        booking_provider: { vendor: aspira, host: washington.goingtocamp.com }
+
+  - slug: us-state-rec
+    name: US State Recreation Area
+    kind: state
+    country: US
+
+  - slug: us-state-forest
+    name: US State Forest
+    kind: state
+    country: US
+
+  - slug: us-state-fishwildlife
+    name: US State Fish & Wildlife
+    kind: state
+    country: US
+
+  - slug: us-state-beach
+    name: US State Beach
+    kind: state
+    country: US
+
+  - slug: us-county
+    name: US County Park
+    kind: local
+    country: US
+
+  - slug: us-region
+    name: US Regional Park
+    kind: local
+    country: US
+
+  - slug: us-muni
+    name: US Municipal Park
+    kind: local
+    country: US
+
+  - slug: us-utility
+    name: US Utility Land
+    kind: local
+    country: US
+
+  - slug: us-private
+    name: US Private Campground
+    kind: private
+    country: US
+
+  # ----- Canada -----
+  - slug: parks-canada
+    name: Parks Canada
+    kind: federal
+    country: CA
+    sources:
+      - id: aspira-maps-pc
+        fetcher: fetch_aspira_maps
+        args:
+          host: reservation.pc.gc.ca
+          source: aspira-maps-pc
+        provides: aspira-id-index
+        booking_provider: { vendor: aspira, host: reservation.pc.gc.ca }
+
+  - slug: bc-parks
+    name: BC Parks
+    kind: provincial
+    country: CA
+    sources:
+      - id: bcparks-strapi
+        fetcher: fetch_bc_parks   # scripts/fetch_bc_parks.py
+        provides: campground
+      - id: aspira-maps-bc
+        fetcher: fetch_aspira_maps
+        args:
+          host: camping.bcparks.ca
+          source: aspira-maps-bc
+        provides: aspira-id-index
+        booking_provider: { vendor: aspira, host: camping.bcparks.ca }
+
+  - slug: alberta-parks
+    name: Alberta Parks
+    kind: provincial
+    country: CA
+    # Camis adapter not implemented yet — POI rows can still FK to the
+    # booking_provider row, availability returns no_provider. When a
+    # CamisAbEtl ships, add `sources:` here pointing at it.
+
+  # ----- Corporate -----
+  - slug: tesla
+    name: Tesla
+    kind: corporate
+    sources:
+      - id: tesla-index
+        fetcher: fetch_tesla_index
+        provides: tesla-index
+      - id: tesla-locations
+        fetcher: fetch_tesla_locations
+        provides: supercharger
+        depends_on: [tesla-index]   # locations script reads the index
+
+  - slug: pf
+    name: Planet Fitness Corp
+    kind: corporate
+    country: US
+    sources:
+      - id: osm-pf
+        fetcher: fetch_planet_fitness
+        provides: planet-fitness
+
+# ----------------------------------------------------------------------
+# Booking providers: the reservation systems the FE deeplinks/heat-strips
+# against. Vendor + host is the unique key. Adapter class is the Kotlin
+# class the availability route loads (PR 4); empty string = no adapter
+# yet, availability returns no_provider.
+# ----------------------------------------------------------------------
+booking_providers:
+  - vendor: recgov
+    host: www.recreation.gov
+    name: Recreation.gov
+    adapter_class: RecGovAdapter
+
+  - vendor: aspira
+    host: reservation.pc.gc.ca
+    name: Aspira NextGen (Parks Canada)
+    adapter_class: AspiraAdapter
+
+  - vendor: aspira
+    host: camping.bcparks.ca
+    name: Aspira NextGen (BC Parks)
+    adapter_class: AspiraAdapter
+
+  - vendor: aspira
+    host: washington.goingtocamp.com
+    name: Aspira NextGen (WA State Parks)
+    adapter_class: AspiraAdapter
+
+  - vendor: camis
+    host: reserve.albertaparks.ca
+    name: Camis (Alberta Parks)
+    adapter_class: ""   # not implemented; row exists so curated AB data can FK to it

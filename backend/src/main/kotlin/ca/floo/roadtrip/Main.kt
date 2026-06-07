@@ -12,6 +12,8 @@ import ca.floo.roadtrip.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.aspira.CachedAspiraAvailability
 import ca.floo.roadtrip.aspira.aspiraAvailabilityRoutes
 import ca.floo.roadtrip.etl.EtlOrchestrator
+import ca.floo.roadtrip.etl.registry.PoiRegistry
+import ca.floo.roadtrip.etl.registry.PoiRegistrySync
 import ca.floo.roadtrip.geocode.MapboxGeocoder
 import ca.floo.roadtrip.importer.DbConfig
 import ca.floo.roadtrip.importer.Importer
@@ -20,8 +22,8 @@ import ca.floo.roadtrip.importer.dsl
 import ca.floo.roadtrip.importer.migrate
 import ca.floo.roadtrip.ingest.IngestController
 import ca.floo.roadtrip.ingest.adminIngestRoutes
-import ca.floo.roadtrip.ingest.defaultTargets
 import ca.floo.roadtrip.ingest.sweepStaleIngestRuns
+import ca.floo.roadtrip.ingest.targetsFromRegistry
 import ca.floo.roadtrip.route.MapboxDirections
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
@@ -73,6 +75,15 @@ fun Application.module() {
     val mapboxDirections = MapboxDirections(token = mapboxToken)
     val mapboxGeocoder = MapboxGeocoder(token = mapboxToken)
 
+    // POI registry (RFC 0007 PR 3.5) — config/poi-registry.yaml is the
+    // source of truth for governing_body + booking_provider rows. Boot
+    // UPSERTs; refuses to start if YAML deletes a slug that's still FK'd
+    // by a non-deleted POI. Adding a vendor is a YAML diff + Kotlin ETL,
+    // no Flyway migration.
+    val registryFile = File(staticDir, "config/poi-registry.yaml")
+    val poiRegistry = PoiRegistry.load(registryFile)
+    PoiRegistrySync(ctx).apply(poiRegistry)
+
     // Ingestion controller (RFC 0004 / issue #44) — observability + remote
     // trigger layer around the data-fetch (Python scripts) + data-import
     // (Kotlin Importer) phases. Boot recovery first, so admins see a clean
@@ -84,7 +95,7 @@ fun Application.module() {
             importer = Importer(ctx),
             etl = EtlOrchestrator(ctx, File(staticDir, "data/raw")),
             dataDir = File(staticDir, "data"),
-            targets = defaultTargets(staticDir),
+            targets = targetsFromRegistry(poiRegistry, staticDir),
             workingDir = staticDir,
         )
 

@@ -3,6 +3,8 @@ package ca.floo.roadtrip.etl.osmpf
 import ca.floo.roadtrip.etl.RawCapture
 import ca.floo.roadtrip.etl.TransformCtx
 import ca.floo.roadtrip.etl.ValidationResult
+import ca.floo.roadtrip.etl.registry.PoiRegistry
+import ca.floo.roadtrip.etl.registry.PoiRegistrySync
 import ca.floo.roadtrip.importer.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -51,6 +53,12 @@ class PlanetFitnessEtlTest {
         ds = HikariDataSource(cfg)
         migrate(ds)
         ctx = DSL.using(ds, SQLDialect.POSTGRES)
+        // Dim rows seeded from config/poi-registry.yaml at boot (PR 3.5).
+        val yamlPath =
+            File(System.getProperty("user.dir"))
+                .resolve("../config/poi-registry.yaml")
+                .canonicalFile
+        PoiRegistrySync(ctx).apply(PoiRegistry.load(yamlPath))
         transformCtx = TransformCtx.load(ctx)
     }
 

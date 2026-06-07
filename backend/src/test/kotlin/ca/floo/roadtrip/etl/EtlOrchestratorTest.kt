@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.etl
 
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
+import ca.floo.roadtrip.etl.registry.PoiRegistry
+import ca.floo.roadtrip.etl.registry.PoiRegistrySync
 import ca.floo.roadtrip.importer.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -47,6 +49,12 @@ class EtlOrchestratorTest {
         ds = HikariDataSource(cfg)
         migrate(ds)
         ctx = DSL.using(ds, SQLDialect.POSTGRES)
+        // Dim rows seeded from config/poi-registry.yaml at boot (PR 3.5).
+        val yamlPath =
+            File(System.getProperty("user.dir"))
+                .resolve("../config/poi-registry.yaml")
+                .canonicalFile
+        PoiRegistrySync(ctx).apply(PoiRegistry.load(yamlPath))
 
         // Mirror data/raw/osm-pf/<ts>.json under a tempdir so the orchestrator
         // can find it via newestSingle().
