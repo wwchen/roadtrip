@@ -156,22 +156,23 @@ export function seasonVerdictHTML(seasonStr, reservable) {
 export function reserveButtonHTML(p, btnClass = 'btn') {
   let url = '';
   let label = 'Reserve';
-  if (p.reserve_url) {
+  // Aspira NextGen deeplink takes priority across all providers (Parks Canada,
+  // BC Parks, WA State Parks). When we have the per-park IDs, we can drop the
+  // user straight onto the booking flow instead of an info/homepage.
+  if (p.aspira?.transactionLocationId != null && p.aspira?.mapId != null) {
+    url = buildAspiraDeeplink({
+      host: p.aspira.host || 'reservation.pc.gc.ca',
+      transactionLocationId: p.aspira.transactionLocationId,
+      mapId: p.aspira.mapId,
+    });
+    label = labelForAspiraHost(p.aspira.host);
+  } else if (p.reserve_url) {
     url = p.reserve_url;
     label = labelForReserveUrl(url);
   } else if (p.parks_canada_url && p.reservable) {
-    // parks.canada.ca pages are informational; reservation.pc.gc.ca is the
-    // booking site (Aspira NextGen platform). Build a real per-park deeplink
-    // when the curated JSON has aspira IDs; otherwise fall back to the homepage.
-    if (p.aspira?.transactionLocationId != null && p.aspira?.mapId != null) {
-      url = buildAspiraDeeplink({
-        host: p.aspira.host || 'reservation.pc.gc.ca',
-        transactionLocationId: p.aspira.transactionLocationId,
-        mapId: p.aspira.mapId,
-      });
-    } else {
-      url = 'https://reservation.pc.gc.ca';
-    }
+    // No aspira IDs but the pin is reservable on Parks Canada — homepage is
+    // the best we can do.
+    url = 'https://reservation.pc.gc.ca';
     label = 'Reserve on parks.canada.ca';
   } else if (p.parks_canada_url) {
     url = p.parks_canada_url;
@@ -236,6 +237,12 @@ function regionalParkSearch(p) {
     case 'FL': return [`https://www.floridastateparks.org/parks-and-trails?keyword=${q}`, 'Search FL State Parks'];
     default: return null;
   }
+}
+
+function labelForAspiraHost(host) {
+  if (host === 'camping.bcparks.ca') return 'Book on BC Parks';
+  if (host === 'washington.goingtocamp.com') return 'Book WA State Park';
+  return 'Reserve on parks.canada.ca';
 }
 
 function labelForReserveUrl(url) {
