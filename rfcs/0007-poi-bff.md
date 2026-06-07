@@ -651,6 +651,25 @@ proliferate without FE changes.
 Walking the actual columns we ingest today against the proposed model.
 Anything that doesn't have a row gap-checks the design.
 
+> **Caveat about the geojsons.** The files in `data/*.geojson` are the
+> *merged + transformed* artifacts the importer reads — not the raw
+> upstream payloads. They've already been:
+>
+> - normalized to a flat property bag (`fetch_campgrounds.py` maps
+>   uscampgrounds.info CSV columns → `category`, `typeLabel`, `amenities`)
+> - merged across sources (`fetch_parks_canada.py` overlays curated AB/BC
+>   JSON onto the US campgrounds set; `fetch_aspira_bc_wa.py` stamps
+>   aspira IDs onto BC/WA features)
+> - filtered (`fetch_tesla_superchargers.py` keeps only `status='OPEN'`,
+>   drops `effectivePricebooks` + `availabilityProfile` from Tesla's
+>   raw payload)
+> - shaped for the FE's existing layer code (color, group, status fields
+>   exist *because* `index.html`'s SC layer reads them)
+>
+> So the audit below is a fair check on "what does the BE-to-FE wire
+> shape need," but not on "what data exists upstream that we could be
+> capturing." For that, the raw inputs matter.
+
 ### `data/campgrounds.geojson`
 
 | Field | Where it lives | Notes |
@@ -741,6 +760,86 @@ The **drop** column is also the point: `enriched`, `color`, `group`,
 `type`, `typeLabel`, `parent_name`, `parent_type`, `reservable` —
 poller-internal artifacts or fields the model now derives. They've been
 leaking to the wire for no reason.
+
+### Raw upstream — what the geojsons currently strip
+
+Looking past the merged artifacts, the upstream sources carry richer data
+the poller could capture but doesn't:
+
+**uscampgrounds.info CSV (fetch_campgrounds.py source).** Has per-site
+fields the merge collapses: `ELEV` (elevation), per-site `LON`/`LAT` for
+GPS-precise spots, `AGENCY` (operator separately from manager).
+
+**Tesla cua-api `/locations/<slug>` (fetch_tesla_superchargers.py source,
+cached at `data/pricing-cache/<id>.json`).** Has:
+
+- `accessHours` — supercharger access window (most are 24/7, some
+  hotel/mall lots aren't)
+- `accessType` — e.g. "Restricted", "Public"
+- `address` — structured (street/city/state/postcode/country/centroid)
+- `amenities` — restroom, food, lodging, shopping (we currently drop)
+- `effectivePricebooks` — pricing tiers (the backend caches these for
+  `/api/pricing/{slug}` — relevant for the `features.pricing` capability)
+- `isTrailerFriendly`, `openToNonTeslas`, `openToPublic`, `ownershipType`
+- `timeZone` — useful for displaying access hours
+- `commonSiteName` — sometimes more user-friendly than `name`
+
+**OSM Overpass for Planet Fitness (fetch_planet_fitness.py).** OSM tags
+include `wheelchair`, `level`, `internet_access`, `payment:*`, social
+links — currently we keep only the explicit address fields.
+
+**rec.gov RIDB (used for enrichment).** Captured today: `cell_coverage`,
+`rating_reviews`. Available but not captured: facility-level
+`Description`, `Directions`, `Stay limit`, `Reservation cutoff`, `Open
+season`, fees, photo URLs.
+
+**PAD-US (national/state parks).** We keep five fields. The dataset has
+~30+ more, including `Pub_Access` (open/restricted), `Access_Typ`
+(walk-in/drive-up), `IUCN_Cat` (conservation classification), `Date_Est`,
+`Own_Type` (federal/state/private/joint).
+
+**Aspira `/api/maps` (already partly captured).** We capture
+`transactionLocationId`, `mapId`, `resourceLocationId`, `title`. The same
+endpoint also has `mapImageUrls` (per-park map graphic), `description`,
+`directions`, `cancellationPolicy`, `arrivalInstructions`, plus
+sub-area-level (`mapLinks`) names + coordinates that we ignore.
+
+**Aspira `/api/availability/map` (drawer fetch).** Sub-area names get
+collapsed to integer per-day status codes; we throw away `loop_name`,
+`equipment_compatibility`, per-site detail.
+
+#### What of this is worth capturing?
+
+In terms of obvious wins on the FE:
+
+- **Tesla amenities + accessHours** — already in the cache; the SC popup
+  could surface "24/7 · 16 stalls · restroom · food" with no new fetch.
+- **Tesla `address` structured** — drop the assembled `street` field,
+  switch to the raw object so we get country and centroid for free.
+- **rec.gov facility `Description`/`Directions`** — drawer expandable
+  detail section is starved for content for non-recgov pins; rec.gov
+  ones could carry it.
+- **PAD-US `Date_Est`, `Own_Type`** — minor flavor for the park drawer.
+
+Things the user won't ever see (skip):
+
+- Aspira sub-area-level names. Useful only for per-loop UX, which we
+  decided against (decision #11).
+- Tesla `effectivePricebooks`. Already captured separately by the
+  backend's pricing route.
+- OSM `level`/`wheelchair`/etc. Out of scope unless a use case appears.
+
+This isn't a forcing function for the data model. The model is JSONB on
+the per-type Kotlin shape (`Campground`, `Supercharger`, etc.), which
+already accommodates anything we want to capture later. The point is
+that the audit should be of *what we want from upstream*, not what the
+poller currently happens to copy through.
+
+> **Action item, not RFC scope.** A separate small task: re-survey each
+> poller's raw payload, decide what's worth capturing, and update the
+> per-type Kotlin shapes + JSONB conventions. The RFC's structural
+> decisions don't depend on which fields land — only on the fact that
+> they have a shape-stable home.
 
 ## Unresolved questions
 
