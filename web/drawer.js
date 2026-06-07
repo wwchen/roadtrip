@@ -378,14 +378,6 @@ function attachDragHandlers(root) {
 
   const handle = root.querySelector('.cg-drawer-handle');
 
-  let startY = null;
-  let startH = null;
-  // 'handle' = drag began on the grab bar; always tracks.
-  // 'body'   = drag began in the body while scrollTop=0; tracks only while
-  //            user keeps pulling down. If we ever start scrolling instead,
-  //            cancel the drag so the body scrolls normally.
-  let mode = null;
-
   let startY = 0;
   let startH = 0;
   // 'pending' = touch started but we haven't decided drag-vs-scroll yet
@@ -393,7 +385,6 @@ function attachDragHandlers(root) {
   // 'body'    = drag began in the body and exceeded the slop threshold
   //             downward while at scrollTop=0 — we own the gesture
   let phase = null;
-  let originAtHandle = false;
   // Pixels the user must travel before a body touch becomes a drag. Below
   // this, we let the browser interpret the touch as a tap or scroll.
   const SLOP = 8;
