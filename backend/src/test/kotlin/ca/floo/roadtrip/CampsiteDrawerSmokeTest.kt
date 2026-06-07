@@ -144,14 +144,14 @@ class CampsiteDrawerSmokeTest {
             null,
             Page.WaitForFunctionOptions().setTimeout(15_000.0),
         )
-        page.fill("#search", testCampgroundName)
-        page.locator(".sr-item").first().waitFor(
+        page.fill(".tb-row[data-i=\"0\"] .tb-input", testCampgroundName)
+        page.locator("#tb-dropdown .tb-result").first().waitFor(
             com.microsoft.playwright.Locator
                 .WaitForOptions()
                 .setState(WaitForSelectorState.VISIBLE)
                 .setTimeout(5_000.0),
         )
-        page.locator(".sr-item").first().click()
+        page.locator("#tb-dropdown .tb-result").first().click()
 
         // Drawer header should appear; popup should NOT.
         val drawer = page.locator("#cg-drawer.open")
@@ -304,14 +304,14 @@ class CampsiteDrawerSmokeTest {
                 null,
                 Page.WaitForFunctionOptions().setTimeout(15_000.0),
             )
-            page.fill("#search", testCampgroundName)
-            page.locator(".sr-item").first().waitFor(
+            page.fill(".tb-row[data-i=\"0\"] .tb-input", testCampgroundName)
+            page.locator("#tb-dropdown .tb-result").first().waitFor(
                 com.microsoft.playwright.Locator
                     .WaitForOptions()
                     .setState(WaitForSelectorState.VISIBLE)
                     .setTimeout(5_000.0),
             )
-            page.locator(".sr-item").first().click()
+            page.locator("#tb-dropdown .tb-result").first().click()
             // Skeleton cells render before fetch resolves.
             page.locator("#cg-drawer .cg-cell.skeleton").first().waitFor(
                 com.microsoft.playwright.Locator
