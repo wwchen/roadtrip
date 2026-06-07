@@ -27,9 +27,13 @@ const MAX_STOPS = 25;
 // Corridor: a buffered polygon around the active route, used to filter
 // /api/pois server-side. 30 mi default — wide enough to catch realistic
 // detour-worthy stops, narrow enough that the corridor is meaningful.
+// User-adjustable via the topbar slider; range 5..100 mi.
 // MAX_POLYGON_VERTICES is the backend cap (2000); we simplify aggressively
 // to stay well under so even cross-country routes fit in one POST body.
-const CORRIDOR_MILES = 30;
+const CORRIDOR_DEFAULT_MILES = 30;
+const CORRIDOR_MIN_MILES = 5;
+const CORRIDOR_MAX_MILES = 100;
+const CORRIDOR_STEP_MILES = 5;
 const CORRIDOR_SIMPLIFY_TOLERANCE = 0.02;  // degrees — ~2km at mid-latitudes
 
 const KIND_COLOR = {
@@ -51,7 +55,8 @@ const trip = {
   // Each stop is { name, lng, lat, kind, pinItem? } or null (empty slot)
   stops: [],
   route: null,        // GeoJSON FeatureCollection from /api/route
-  corridor: null,     // GeoJSON Polygon from turf.buffer(route, CORRIDOR_MILES)
+  corridor: null,     // GeoJSON Polygon from turf.buffer(route, corridorMiles)
+  corridorMiles: CORRIDOR_DEFAULT_MILES,
   routeAbort: null,
   generation: 0,
   endpointMarkers: [], // parallel to stops; null for empty slots
@@ -231,6 +236,30 @@ function injectStyles() {
   #tb-status .tb-stat-num { color: ${ROUTE_COLOR}; font-weight: 600; }
   #tb-status .tb-stat-sep { color: var(--cg-faint); margin: 0 8px; }
 
+  /* Corridor radius slider — visible only when a route is active. */
+  #tb-corridor {
+    display: none;
+    align-items: center;
+    gap: 10px;
+    padding: 8px 12px;
+    border-top: 1px solid var(--cg-border);
+    font-size: 11px; color: var(--cg-muted);
+  }
+  #tb-corridor.visible { display: flex; }
+  #tb-corridor label { white-space: nowrap; }
+  #tb-corridor .tb-corridor-value {
+    color: var(--cg-text);
+    font-variant-numeric: tabular-nums;
+    min-width: 44px;
+    text-align: right;
+  }
+  #tb-corridor input[type=range] {
+    flex: 1;
+    accent-color: ${ROUTE_COLOR};
+    cursor: pointer;
+    margin: 0;
+  }
+
   @media (max-width: 768px) {
     #topbar { left: 8px; right: 8px; width: auto; max-width: none; }
   }
@@ -258,6 +287,19 @@ function injectDom() {
     </div>
     <div id="tb-dropdown"></div>
     <div id="tb-status"></div>
+    <div id="tb-corridor">
+      <label for="tb-corridor-range">Corridor</label>
+      <input
+        type="range"
+        id="tb-corridor-range"
+        min="${CORRIDOR_MIN_MILES}"
+        max="${CORRIDOR_MAX_MILES}"
+        step="${CORRIDOR_STEP_MILES}"
+        value="${CORRIDOR_DEFAULT_MILES}"
+        aria-label="Corridor radius in miles"
+      >
+      <span class="tb-corridor-value" id="tb-corridor-value">${CORRIDOR_DEFAULT_MILES} mi</span>
+    </div>
   `;
   document.body.appendChild(el);
 }
@@ -274,6 +316,18 @@ function bindEvents() {
     if (!item) return;
     pickResult(currentResults[Number(item.dataset.i)]);
     e.preventDefault();
+  });
+
+  // Corridor radius slider. 'input' fires continuously while dragging — we
+  // recompute the polygon + update the on-map fill on every tick so the
+  // user sees the corridor expand/shrink in real time. The /api/pois +
+  // /api/superchargers refetch is debounced 250ms inside app.js, so the
+  // server isn't pummeled mid-drag.
+  const range = document.getElementById('tb-corridor-range');
+  range.addEventListener('input', (e) => {
+    trip.corridorMiles = Number(e.target.value);
+    document.getElementById('tb-corridor-value').textContent = `${trip.corridorMiles} mi`;
+    updateCorridor();
   });
 
   document.addEventListener('click', (e) => {
@@ -631,6 +685,8 @@ function drawRoute() {
     layout: { 'line-join': 'round', 'line-cap': 'round' },
     paint: { 'line-color': ROUTE_COLOR, 'line-width': 5, 'line-opacity': 0.85 },
   });
+
+  document.getElementById('tb-corridor').classList.add('visible');
 }
 
 function removeRouteLayer() {
@@ -640,6 +696,23 @@ function removeRouteLayer() {
   if (mapRef.getLayer('trip-corridor-fill')) mapRef.removeLayer('trip-corridor-fill');
   if (mapRef.getSource('trip-corridor')) mapRef.removeSource('trip-corridor');
   trip.corridor = null;
+  const slider = document.getElementById('tb-corridor');
+  if (slider) slider.classList.remove('visible');
+}
+
+/** Recompute the corridor polygon from the existing route + current radius,
+ *  push it to the on-map source, and tell app.js to refetch. Cheap to call
+ *  on every slider tick — turf.buffer + turf.simplify run in <10ms for the
+ *  routes we ship; the network refetch is debounced inside app.js. */
+function updateCorridor() {
+  if (!trip.route) return;
+  const lineGeo = trip.route.features[0].geometry;
+  trip.corridor = computeCorridor(lineGeo);
+  const src = mapRef?.getSource('trip-corridor');
+  if (trip.corridor && src) {
+    src.setData({ type: 'Feature', geometry: trip.corridor, properties: {} });
+  }
+  notifyCorridorChanged();
 }
 
 /**
@@ -653,7 +726,7 @@ function computeCorridor(lineGeo) {
   try {
     const buffered = window.turf.buffer(
       { type: 'Feature', geometry: lineGeo, properties: {} },
-      CORRIDOR_MILES,
+      trip.corridorMiles,
       { units: 'miles' },
     );
     if (!buffered?.geometry) return null;
