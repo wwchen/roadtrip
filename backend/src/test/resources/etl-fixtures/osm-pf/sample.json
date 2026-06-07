@@ -1,0 +1,116 @@
+{
+  "fetcher": "fetch_planet_fitness",
+  "fetcher_version": "2",
+  "fetched_at": "2026-06-07T21:47:54Z",
+  "request": {
+    "url": "https://overpass-api.de/api/interpreter",
+    "method": "POST",
+    "headers": {
+      "User-Agent": "roadtrip-map/0.1 (personal)"
+    }
+  },
+  "response": {
+    "status": 200,
+    "headers": {
+      "date": "Sun, 07 Jun 2026 21:47:20 GMT",
+      "server": "Apache/2.4.67 (Debian)",
+      "vary": "Accept-Encoding",
+      "connection": "close",
+      "transfer-encoding": "chunked",
+      "content-type": "application/json"
+    }
+  },
+  "payload": {
+    "elements": [
+      {
+        "type": "node",
+        "id": 448794721,
+        "lat": 41.7128338,
+        "lon": -93.5782301,
+        "tags": {
+          "addr:city": "Ankeny",
+          "addr:housenumber": "1205",
+          "addr:postcode": "50021",
+          "addr:state": "IA",
+          "addr:street": "Southeast 16th Court",
+          "brand": "Planet Fitness",
+          "brand:wikidata": "Q7201095",
+          "leisure": "fitness_centre",
+          "name": "Planet Fitness"
+        }
+      },
+      {
+        "type": "node",
+        "id": 460005321,
+        "lat": 44.8303044,
+        "lon": -93.1610358,
+        "tags": {
+          "addr:city": "Eagan",
+          "addr:housenumber": "1278",
+          "addr:postcode": "55123",
+          "addr:state": "MN",
+          "addr:street": "Town Centre Drive",
+          "addr:unit": "135",
+          "brand": "Planet Fitness",
+          "brand:wikidata": "Q7201095",
+          "check_date": "2024-09-26",
+          "fixme:atp": "check if location still exists;no corresponding ATP location found",
+          "leisure": "fitness_centre",
+          "name": "Planet Fitness",
+          "opening_hours": "Mo 05:00-24:00, Tu-Th 00:00-24:00, Fr 00:00-21:00, Sa-Su 06:00-20:00",
+          "phone": "+1-651-330-6135",
+          "website": "https://www.planetfitness.com/gyms/eagan-mn"
+        }
+      },
+      {
+        "type": "node",
+        "id": 460480679,
+        "lat": 30.4144559,
+        "lon": -88.8050707,
+        "tags": {
+          "brand": "Planet Fitness",
+          "brand:wikidata": "Q7201095",
+          "leisure": "fitness_centre",
+          "name": "Planet Fitness"
+        }
+      },
+      {
+        "type": "node",
+        "id": 486343703,
+        "lat": 38.899492,
+        "lon": -77.0215406,
+        "tags": {
+          "addr:city": "Washington",
+          "addr:housenumber": "783",
+          "addr:postcode": "20001",
+          "addr:street": "7th Street Northwest",
+          "brand": "Planet Fitness",
+          "brand:wikidata": "Q7201095",
+          "check_date": "2023-09-17",
+          "leisure": "fitness_centre",
+          "name": "Planet Fitness",
+          "opening_hours": "Mo-Th 05:00-22:00; Fr 05:00-21:00; Sa-Su 07:00-19:00",
+          "phone": "+1-202-221-8235",
+          "sport": "fitness",
+          "website": "https://www.planetfitness.com/gyms/washington-gallery-place-dc"
+        }
+      },
+      {
+        "type": "node",
+        "id": 571822034,
+        "lat": 34.8844844,
+        "lon": -82.3524968,
+        "tags": {
+          "addr:city": "Greenville",
+          "addr:housenumber": "2100",
+          "addr:postcode": "29615",
+          "addr:street": "Wade Hampton Boulevard",
+          "brand": "Planet Fitness",
+          "brand:wikidata": "Q7201095",
+          "leisure": "fitness_centre",
+          "name": "Planet Fitness"
+        }
+      }
+    ]
+  }
+}
