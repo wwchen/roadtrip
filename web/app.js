@@ -19,8 +19,9 @@ import {
   setSPData,
   synthesizeClick,
 } from './layers.js';
-import { initSearch, registerSearchItems } from './search.js';
+import { initSearch, registerSearchItems, getSearchIndex } from './search.js';
 import { closeDrawer } from './drawer.js';
+import { initTopbar } from './topbar.js';
 
 const initialKey = getInitialBasemapKey();
 
@@ -116,6 +117,7 @@ function hideGeoBanner() {
 initBasemapPicker(initialKey);
 bindSatelliteToggle();
 initSearch();
+initTopbar(map, getSearchIndex);
 
 // Mobile panel drawer toggle
 (function initPanelToggle() {
