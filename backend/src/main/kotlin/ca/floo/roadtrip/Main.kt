@@ -8,6 +8,9 @@ import ca.floo.roadtrip.api.poiRoutes
 import ca.floo.roadtrip.api.pricingRoutes
 import ca.floo.roadtrip.api.routeRoutes
 import ca.floo.roadtrip.api.superchargersRoutes
+import ca.floo.roadtrip.aspira.AspiraAvailabilityClient
+import ca.floo.roadtrip.aspira.CachedAspiraAvailability
+import ca.floo.roadtrip.aspira.aspiraAvailabilityRoutes
 import ca.floo.roadtrip.geocode.MapboxGeocoder
 import ca.floo.roadtrip.importer.DbConfig
 import ca.floo.roadtrip.importer.Importer
@@ -152,6 +155,12 @@ fun Application.module() {
         }
     }
 
+    // Aspira NextGen availability (Parks Canada / WA State / BC Discover Camping).
+    // Same pattern as rec.gov's CachedAvailability — process-wide singleton with
+    // a 10-min TTL and a 1.5s mutex against Aspira's Azure WAF. See
+    // ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
+    val aspiraCache = CachedAspiraAvailability(AspiraAvailabilityClient())
+
     routing {
         // /api/docs — Swagger UI; /api/docs/openapi.json — the spec it loads.
         // Both must be mounted before the static file fallthrough at "/" so
@@ -169,6 +178,7 @@ fun Application.module() {
         geocodeRoutes(mapboxGeocoder)
         healthRoutes(pricingCache)
         superchargersRoutes(File(staticDir, "data"))
+        aspiraAvailabilityRoutes(aspiraCache)
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
         // Static site. /web/* and /data/* (excluding pricing-cache, which is
