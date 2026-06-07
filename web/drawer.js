@@ -386,63 +386,87 @@ function attachDragHandlers(root) {
   //            cancel the drag so the body scrolls normally.
   let mode = null;
 
+  let startY = 0;
+  let startH = 0;
+  // 'pending' = touch started but we haven't decided drag-vs-scroll yet
+  // 'handle'  = drag began on the grab bar; always tracks
+  // 'body'    = drag began in the body and exceeded the slop threshold
+  //             downward while at scrollTop=0 — we own the gesture
+  let phase = null;
+  let originAtHandle = false;
+  // Pixels the user must travel before a body touch becomes a drag. Below
+  // this, we let the browser interpret the touch as a tap or scroll.
+  const SLOP = 8;
+
   function onStart(e, originatedAtHandle) {
     if (e.touches.length !== 1) return;
-    // Don't hijack drags that start on a button/link inside the drawer.
     if (!originatedAtHandle && e.target.closest('a, button, input, select, textarea')) return;
-    if (!originatedAtHandle) {
-      // Body drag: only initiate when content is already at the top.
-      if (root.scrollTop > 0) return;
-    }
+    if (!originatedAtHandle && root.scrollTop > 0) return;
     startY = e.touches[0].clientY;
     startH = root.getBoundingClientRect().height;
-    mode = originatedAtHandle ? 'handle' : 'body';
+    originAtHandle = originatedAtHandle;
+    phase = originatedAtHandle ? 'handle' : 'pending';
   }
 
   function onMove(e) {
-    if (startY == null) return;
+    if (phase == null) return;
     const dy = e.touches[0].clientY - startY;
-    if (mode === 'body' && dy < 0) {
-      // Body drag flipped to upward — let it become a normal scroll.
-      startY = null;
-      mode = null;
+
+    // Pending body touch → decide whether this is a drag or a scroll.
+    if (phase === 'pending') {
+      if (dy > SLOP) {
+        phase = 'body';
+      } else if (dy < -SLOP || root.scrollTop > 0) {
+        // User wants to scroll; release the gesture entirely.
+        phase = null;
+        return;
+      } else {
+        return; // not enough motion yet
+      }
+    }
+
+    if (phase === 'body' && dy < 0) {
+      // Drag flipped upward; hand back to native scroll.
       root.style.height = '';
+      phase = null;
       return;
     }
+    // Active drag — claim the gesture so iOS doesn't rubber-band the body.
+    if (e.cancelable) e.preventDefault();
     if (dy > 0) {
       const newH = Math.max(0, startH - dy);
       root.style.height = `${newH}px`;
-    } else if (mode === 'handle') {
-      // Handle drag upward → snap to full.
+    } else if (phase === 'handle') {
       root.classList.add('full');
     }
   }
 
   function onEnd(e) {
-    if (startY == null) return;
+    if (phase == null) return;
     const dy = e.changedTouches[0].clientY - startY;
     const dragged = (dy / startH) * 100;
-    root.style.height = ''; // restore CSS-driven height
-    if (dragged > 30) {
-      close();
-    } else if (mode === 'handle' && dy < -50) {
-      root.classList.add('full');
-    } else if (mode === 'handle') {
-      root.classList.remove('full');
+    root.style.height = '';
+    if (phase !== 'pending') {
+      if (dragged > 30) {
+        close();
+      } else if (phase === 'handle' && dy < -50) {
+        root.classList.add('full');
+      } else if (phase === 'handle') {
+        root.classList.remove('full');
+      }
     }
-    startY = null;
-    startH = null;
-    mode = null;
+    phase = null;
   }
 
   if (handle) {
     handle.addEventListener('touchstart', (e) => onStart(e, true), { passive: true });
   }
   root.addEventListener('touchstart', (e) => {
-    if (handle && handle.contains(e.target)) return; // already wired above
+    if (handle && handle.contains(e.target)) return;
     onStart(e, false);
   }, { passive: true });
-  root.addEventListener('touchmove', onMove, { passive: true });
+  // Non-passive: we need preventDefault to claim the gesture from iOS scroll.
+  root.addEventListener('touchmove', onMove, { passive: false });
   root.addEventListener('touchend', onEnd);
   root.addEventListener('touchcancel', onEnd);
 }

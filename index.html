@@ -290,11 +290,22 @@
   }
 
   .cg-drawer-handle {
+    /* The visible pill is 4px × 40px. We expand the hit area to ~36px tall
+       via an absolute-positioned ::before so a finger anywhere near the top
+       of the drawer registers as a drag. Without this, the 4px strip is
+       essentially impossible to grab on a phone. */
+    position: relative;
     width: 40px; height: 4px;
     background: rgba(255,255,255,0.18); border-radius: 2px;
     margin: 10px auto 4px;
     cursor: grab;
     touch-action: none;
+  }
+  .cg-drawer-handle::before {
+    content: '';
+    position: absolute;
+    left: -40px; right: -40px;
+    top: -16px; bottom: -16px;
   }
   /* Mobile: drag handle is the close affordance; X is hidden.
      Desktop (min-width 768px): no drag handle, X is the close affordance. */
