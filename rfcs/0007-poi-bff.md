@@ -159,10 +159,18 @@ id | source | source_id | category | name | geom | region | unit_name | properti
 Per-type fields live in `properties` (JSONB). Type taxonomy:
 
 - `campground` (rec.gov, parks-canada-curated, bc-parks, alberta-provincial)
-- `national-park` / `state-park` (geometry is polygon)
+- `national-park` / `state-park` (geometry is polygon or multi-polygon —
+  many parks come in non-contiguous chunks, e.g. island clusters or
+  detached recreation areas)
 - `planet-fitness`
 - `supercharger` (new)
 - future: `dump-station`, `gas`, `viewpoint`, etc.
+
+The existing `geom geometry(Geometry, 4326)` column already accepts any JTS
+geometry — Point, LineString, Polygon, MultiPolygon. No schema change is
+needed to hold multi-polygon parks; the only new constraint is the
+parent-FK rule above. If we ever add LineString POIs (trails, rivers, scenic
+drives), the same column accommodates them without migration.
 
 #### Entity relationships
 
@@ -222,7 +230,8 @@ Relationships:
 - **POI → POI (parent)** (N:1, optional, self-FK). A campground belongs to
   a park; a park has no parent (or in nested cases, a wilderness area inside
   a national park). Constraint: `parent_poi_id` must reference a row whose
-  geom is a polygon and whose category is in (`'national-park'`,
+  geom is areal (Polygon or MultiPolygon — `GeometryType(geom) IN
+  ('POLYGON','MULTIPOLYGON')`) and whose category is in (`'national-park'`,
   `'state-park'`). This is denormalization — the spatial relation is
   recoverable via `ST_Within(child.geom, parent.geom)` — but it lets the BE
   cheaply assemble subtitles ("Kicking Horse Campground · Yoho National
