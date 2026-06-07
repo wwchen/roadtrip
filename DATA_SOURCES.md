@@ -65,16 +65,33 @@ attaches rec.gov-specific metadata to the federal subset.
   updated ~monthly by the maintainer.
 - Fetcher: `scripts/fetch_campgrounds.py`.
 
-**Parks Canada — BC national-park campgrounds**
-- Source: hand-curated `data/parks-canada-bc.json` scraped from
-  parks.canada.ca/pn-np/bc/<slug>. Parks Canada does not publish an open
-  points dataset for campgrounds, and the reservation API (reservation.pc.gc.ca)
-  is Azure WAF-gated. Coordinates verified via OSM Nominatim where possible.
-- ~20 frontcountry campgrounds across Yoho, Kootenay, Glacier,
-  Mt Revelstoke, Pacific Rim, Gulf Islands NPR.
+**Parks Canada — BC + AB national-park campgrounds**
+- Source: hand-curated `data/parks-canada-{bc,ab}.json` scraped from
+  parks.canada.ca/pn-np/<region>/<slug>. Parks Canada does not publish an
+  open points dataset for campgrounds. Coordinates verified via OSM
+  Nominatim where possible.
+- ~46 frontcountry campgrounds across Yoho, Kootenay, Glacier, Mt Revelstoke,
+  Pacific Rim, Gulf Islands NPR (BC) + Banff, Jasper, Waterton Lakes (AB).
 - Fetcher: `scripts/fetch_parks_canada.py` (merges into campgrounds.geojson
   with category=`federal`, country=`CA`, `parks_canada_url` set).
 - Data accuracy should be audited before trusting for navigation.
+
+**Reservation deeplink — `reservation.pc.gc.ca` (Aspira NextGen)**
+- Vendor: Aspira NextGen (formerly Active Network → Going to Camp). Same
+  platform powers `washington.goingtocamp.com`, `discovercamping.ca`
+  (BC Parks), and others.
+- Public API (no auth): `GET https://reservation.pc.gc.ca/api/maps`
+  returns the full park hierarchy. `mapType=2` entries are individual
+  parks; each carries `mapId` + `transactionLocationId` — the IDs the
+  booking-deeplink URL needs.
+- ID stamping: `scripts/fetch_parks_canada_aspira.py` walks the API once
+  and adds an `aspira: { transactionLocationId, mapId, … }` block to
+  each curated campground. Re-run only when Aspira renumbers (rare).
+- URL builder: `web/aspira.js` produces
+  `https://reservation.pc.gc.ca/create-booking/results?…` from the IDs.
+  Frontend's `reserveButtonHTML` (web/campground-card.js) calls it for
+  any campground with an `aspira` block; falls back to the homepage
+  otherwise. See RFC 0006 for the full URL shape.
 
 **BC Parks — British Columbia provincial parks**
 - API: `https://bcparks.api.gov.bc.ca/api/protected-areas` (Strapi, public,

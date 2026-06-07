@@ -63,8 +63,10 @@ URL: <https://roadtrip.floo.ca>
 - [ ] Search "Tunnel Mountain" → tap result → popup opens.
 - [ ] Popup shows: name, "Banff National Park" parent, season string,
       reservable badge.
-- [ ] Links row: `parks.canada.ca ↗` and `reservation.pc.gc.ca ↗`. Tap
-      reservation.pc.gc.ca; opens cleanly.
+- [ ] Reserve button: tap. Lands on `reservation.pc.gc.ca/create-booking/results`
+      with the URL containing `mapId` + `transactionLocationId` for Banff
+      (per RFC 0006 — Aspira NextGen deeplink). The booking page should
+      load with Banff selected, not the bare reservation.pc.gc.ca homepage.
 
 ### 5b. AB provincial
 
