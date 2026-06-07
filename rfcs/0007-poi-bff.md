@@ -89,6 +89,33 @@ If we don't fix this:
   they just translate to `types=` query params instead of toggling layer
   visibility.
 
+**Considered during plan-eng-review and explicitly deferred:**
+
+- **Site/Resource-level modeling (rec.gov Campsite, Aspira Resource).** Heat
+  strip aggregates across sites; we don't run our own booking flow.
+- **Sub-area / loop modeling within a park.** Aspira has it (Banff:
+  7 loops); we don't, and per-loop UX isn't planned.
+- **Equipment / amenity dimension tables.** FE doesn't filter on
+  amenity; flat string list suffices.
+- **Activities / events / tours / media** (rec.gov RIDB secondaries).
+  We link out, vendor handles. No use case.
+- **Per-type cap behavior on `POST /api/pois`.** Single global cap
+  for first-pass; revisit if any type starves on dense queries (Bay
+  Area SC density, etc.).
+- **Search index for global pin name search (issue #67).** Unified
+  `/api/pois?q=` solves it server-side; whether to debounce or build
+  a separate `/api/pois/search-index` boot payload is a follow-up.
+- **Drawer payload schema versioning.** Skip-unknown on new section
+  kinds is enough today (FE+BE deploy together). Add `schema_version`
+  if a non-additive change ever ships.
+- **Promoting `Pricing` to a first-class capability** (`features.pricing.endpoint`).
+  Requires retrofitting `/api/pricing/{slug}` to key on `(source,
+  source_id)`. Independent of this RFC.
+- **Sub-day fetch caching at the meta.json layer** (skip re-import
+  on no-op fetches via ETag/Last-Modified match). The envelope carries
+  the headers; using them is a perf optimization deferred until proven
+  needed.
+
 ## Proposal
 
 ### Section 1: API returns a render tree, not raw data
@@ -710,40 +737,116 @@ already exists). Disk cost negligible. Loses ad-hoc `jq data/*.geojson`
 introspection — replaced by `/api/pois`, which is what the FE sees
 anyway.
 
+### Test plan
+
+This RFC introduces enough new surface that the test posture is part
+of the contract. Coverage targets, by stage:
+
+```
+ETL PIPELINE                                              COVERAGE
+[+] Envelope.parse(json)                                  ★★★ schema regression test
+[+] <Source>Etl.parse(envelope) → DTO (per source)        ★★★ golden-file per source
+                                                              fixtures captured from
+                                                              real raw/<source>/<ts>.json
+[+] <Source>Etl.validate(DTO) → ok | errors               ★★★ happy + each error class
+                                                              (missing required, bad enum,
+                                                               malformed geom, bad ID format)
+[+] <Source>Etl.transform(DTO, ctx) → List<Poi>           ★★★ each per-type field path,
+                                                              missing-optional-becomes-null,
+                                                              MultiPolygon round-trip,
+                                                              governing_body lookup miss
+[+] ETLOrchestrator.merge(per-source streams)             ★★  dedupe by (source, source_id),
+                                                              order-independence
+[+] Importer.upsert(List<Poi>)                            ★★★ mark-and-sweep semantics,
+                                                              tripwire fires at <50%,
+                                                              resurrected rows un-delete
+
+API LAYER
+[+] POST /api/pois bbox/corridor/types/q                  ★★★ each filter + their combos,
+                                                              mixed-type response shape,
+                                                              limit cap behavior
+[+] GET /api/availability/{poi_id}                        ★★★ no provider → no_provider state,
+                                                              dispatch by booking_provider_id,
+                                                              adapter exception → upstream_5xx,
+                                                              cache hit/miss behavior
+[+] GET /api/pois/{id}/drawer                             ★★★ section tree per POI type,
+                                                              actions[] composition,
+                                                              availability.endpoint reference,
+                                                              campground subtitle from spatial parent
+
+ADAPTERS                                                  COVERAGE
+[+] RecGovAdapter (parseRef + availability + deeplink)    ★★★ MockEngine; golden raw fixtures
+[+] AspiraAdapter (parseRef + availability + deeplink)    ★★★ + WAF-trip retry, all 3 hosts
+[+] AspiraStatus.classify                                 ★★★ already covered ✓
+
+FE DRAWER
+[+] renderSection(kind=availability)                      ★★  strip render + skeleton/error
+[+] renderSection(kind=actions)                           ★★  button list + external links
+[+] renderSection(kind=details)                           ★★  expandable + pill rows
+[+] renderSection(unknown kind)                           ★★  silent skip
+[→E2E] full drawer flow per POI type                      ★★★ campground/SC/park click → drawer
+
+LEGEND: ★★★ behavior + edge + error  ★★ happy path  ★ smoke
+```
+
+Test strategy:
+
+- **Captured raw fixtures.** Each source's first ETL test PR copies
+  one real capture from `data/raw/<source>/` into the test resources
+  directory. Subsequent runs replay against the fixture; no mocked
+  HTTP, no Akamai/WAF surprise. The fixture is the contract.
+- **Adapter mocks** use Ktor MockEngine (already in use for
+  AspiraAvailabilityClient) — adapter tests are unit, no real network.
+- **Drawer payload contract tests** assert the section tree shape per
+  POI type. Snapshot-style is fine: render `buildDrawerPayload(poi)`,
+  compare against a golden JSON. New section types breaking old
+  clients gets caught here.
+- **E2E** extends `SmokeTest.kt`: click campground → assert heat
+  strip renders, click SC → assert SC popup, click park → assert
+  drawer renders without errors. Three new test cases.
+- **Regression coverage** is a hard requirement: any path the existing
+  drawer/FE code covers must have an equivalent test against the new
+  payload-driven path before the corresponding old code deletes.
+
 ### Migration: there isn't one
 
 This is a personal project; treat as a full rewrite. Drop `pois` (and
 the merged `data/*.geojson`) and rebuild from scratch against the new
 schema. Captured raw data stays — the new Kotlin ETL replays it.
 
-PR sequence (still useful for reviewability, not for back-compat):
+PR sequence (each independently reviewable):
 
-1. **PR 1: Schema reset.** New migrations: `pois` reshaped per Section 4
-   (sealed-type-aligned columns, `provider_ref`,
-   `governing_body_id`, `last_poller_run_id`, `country`/`phone`/`address`/
-   `info_url`/`last_verified` on the base, `reservable` dropped),
-   plus `governing_body` + `booking_provider` dimension tables.
-2. **PR 2: Thin Python fetchers + raw cache layout.** Existing scripts
-   strip to fetch-only; `data/raw/<source>/<ts>.<ext>` becomes the only
-   on-disk artifact. Captured raw is committed (or otherwise persisted)
-   so the Kotlin ETL has something to replay against.
-3. **PR 3: Sealed Kotlin Poi + ETL.** New `etl/` module reads
-   `data/raw/<source>/latest/`, emits `Poi` instances, upserts with
-   mark-and-sweep. `buildDrawerPayload` assembler.
-4. **PR 4: Unified availability route.** `GET /api/availability/{poi_id}`
-   dispatches by provider. Drawer payload references it.
-5. **PR 5: Unified query API.** `POST /api/pois` accepts `types=` and
-   replaces `/api/superchargers`. FE switches its fetch loop. SC GeoJSON
-   file deletes.
-6. **PR 6: Cleanup.** Remove `flattenPoi`, `campground-card.js`, dead
-   per-layer fetch paths, and any vendor-specific FE code that survived.
-7. **PR 7: Raw cache + Kotlin ETL (Section 7).** New `data/raw/<source>/`
-   layout. One source at a time, in order of risk: Planet Fitness first
-   (smallest, most isolated), then Tesla SC, then state/national parks
-   (PAD-US — already minimal in Python), then campgrounds (the big merge).
-   Each source's PR strips the corresponding Python transform and adds
-   the equivalent Kotlin ETL. Mergeable independently because each source
-   has its own poller target.
+1. **PR 1: Schema reset.** New migrations: drop `pois`; recreate with
+   the new shape per Section 4 (sealed-type-aligned columns,
+   `provider_ref`, `booking_provider_id`, `governing_body_id`,
+   `last_poller_run_id`, `country`/`phone`/`address`/`info_url`/
+   `last_verified` on the base, `reservable` dropped). Add
+   `governing_body` + `booking_provider` dimension tables, seeded.
+2. **PR 2: Thin Python fetchers + envelope-wrapped raw cache.**
+   Existing scripts strip to fetch-only and write
+   `data/raw/<source>/<ts>.json` envelopes. Captured raw committed (or
+   otherwise persisted) so the Kotlin ETL has something to replay.
+3. **PR 3: Sealed Kotlin Poi + staged ETL.** New `etl/` module: per-source
+   `SourceEtl` impls (parse → validate → transform), orchestrator (merge
+   → upsert), each with golden-file unit tests against captured fixtures.
+4. **PR 4: Adapter framework + unified availability route.**
+   `BookingProviderAdapter` interface, `RecGovAdapter` + `AspiraAdapter`
+   implementations, `GET /api/availability/{poi_id}` dispatcher. Adapter
+   contract tests for each. Old per-vendor routes stay alive but unused.
+5. **PR 5: Drawer payload assembler + `GET /api/pois/{id}/drawer`.**
+   `buildDrawerPayload` pattern-matches on sealed Poi. Per-type contract
+   tests verifying section tree shape.
+6. **PR 6: Unified `POST /api/pois` (bbox/corridor/types/q).** Replaces
+   `/api/superchargers` and absorbs the campsite availability flow's
+   fetch shape.
+7. **PR 7: FE consolidation.** Drawer renders from payload tree.
+   `flattenPoi`, `campground-card.js`, vendor branches, per-layer
+   fetch paths all delete. Map gets one point layer + one polygon layer
+   driven by `properties.type`.
+8. **PR 8: Cleanup of old routes and old `pois` infrastructure.**
+   Remove `/api/campsite/availability/*`, `/api/superchargers`, the
+   merged `data/*.geojson` files (they're regenerated as needed for
+   debug), `Phase.Fetch.Kotlin` from RFC 0004.
 
 ## Rationale
 
@@ -947,10 +1050,13 @@ route owns it), most OSM tags (no use case).
   campground pricing data. It fits the `features` capability map shape
   (`features.pricing.endpoint`), but the slug-vs-id schism needs cleanup.
   Plausible: pricing keys on `(source, source_id)` directly.
-- **Park polygons + child campgrounds.** A national park is a polygon; the
-  campgrounds inside it are points. Right now they're both in `pois`,
-  unrelated. Should there be a parent/child link? (Probably yes, but
-  out-of-scope for this RFC unless it changes the drawer payload shape.)
+- **Mixed-type cap behavior on `POST /api/pois`.** With a 2000-row cap
+  and types=campground,supercharger&bbox=..., one type can starve the
+  other (Bay Area is dense in SC; query returns zero campgrounds).
+  Punted — first-pass implementation uses a single global cap, and we
+  iterate only if the FE actually starves. Three options on the table:
+  per-type cap (UNION ALL of LIMITed selects), stratified sample,
+  zoom-driven only.
 - **Search index.** Issue #67 calls out that name-search is viewport-bound.
   The unified `/api/pois?q=` solves it server-side, but is one query per
   keystroke acceptable load? May need a debounce + a separate
@@ -988,3 +1094,71 @@ route owns it), most OSM tags (no use case).
 | 19 | 2026-06-07 | Python writes envelope-wrapped raw, not bare bytes | Bare HTTP body strips the contract (which endpoint, what headers, which fetcher version). Envelope is uniform; ETL parses outer shape once, dispatches inner payload by `fetcher` field. Replaces the separate `<ts>.meta.json` sidecar |
 | 20 | 2026-06-07 | ETL is staged: Parse → Validate → Transform → Merge → Upsert | Each stage is pure (except Upsert), unit-testable against captured raw fixtures with no DB. Validation errors counted in poller_runs.counts; bad upstream data doesn't poison pois. Transform-stage `Poi` instances are reusable for future consumers (CLI exporter, search index) |
 | 16 | 2026-06-07 | Kotlin ETL handles deletes via mark-and-sweep, scoped per source | Existing `Importer.kt` behavior generalizes: rows not seen in a run get `deleted_at`; reappearance un-deletes; tripwire (seen < 0.5 × prior) aborts before sweep. Sweep scope is the run's source set, not all `pois` |
+| 21 | 2026-06-07 | ETL binds aspira IDs by explicit `aspira_park_title` exact match, not fuzzy normalize | Curated AB/BC JSON files carry the verbatim Aspira map title. Rename detection becomes loud (poller_run validation error), not silent (heat strip drops). Brittle work moves to commit-time |
+| 22 | 2026-06-07 | Sealed `ProviderRef` hierarchy (RecGov / Aspira / Camis), not opaque `ids: JsonObject` | Same reasoning that makes us pick sealed Poi over generic Poi+JsonObject applies one level deeper. Compiler-checked variants; adapters receive typed values |
+| 23 | 2026-06-07 | Aspira `host` lives on `booking_provider` row, not on `ProviderRef.Aspira` | Aspira gets 3 rows (PC/BC/WA), each with its host. One source of truth; no per-row redundancy |
+| 24 | 2026-06-07 | Drop `kind` discriminator from `provider_ref` JSONB; dispatch via `booking_provider_id` FK | Single source of truth for which adapter handles a row; FK and JSONB discriminator can't disagree |
+| 25 | 2026-06-07 | Pin `BookingProviderAdapter<R : ProviderRef>` interface in the RFC | Makes throttle / auth / cookie / host-whitelist ownership explicit; route handler stays minimal |
+| 26 | 2026-06-07 | One file per source under `etl/<source>/`, behind a uniform `SourceEtl<DTO, OUT>` interface | Cohesive grouping per source; uniform contract for parse/validate/transform |
+| 27 | 2026-06-07 | Full-coverage test posture: golden-file ETL + adapter unit + drawer-payload contract + E2E per type | AI-assisted coding makes complete suites cheap; matches the project's stated 'too many tests > too few' preference |
+
+## Implementation Tasks
+
+Synthesized from this review's findings. Each task derives from a specific
+finding above. Run with Claude Code or Codex; checkbox as you ship.
+
+- [ ] **T1 (P1, human: ~30min / CC: ~10min)** — curated PC JSON — Add `aspira_park_title` field to every entry in `data/parks-canada-{bc,ab}.json`, verbatim Aspira title
+  - Surfaced by: Architecture #1 — fuzzy match at ETL silently drops bindings on rename
+  - Files: `data/parks-canada-bc.json`, `data/parks-canada-ab.json`
+  - Verify: every entry has `aspira_park_title`; manual cross-check against `https://reservation.pc.gc.ca/api/maps`
+- [ ] **T2 (P1, human: ~6h / CC: ~1.5h)** — Python fetchers — Rewrite all `scripts/fetch_*.py` as envelope-wrapped raw-only writers
+  - Surfaced by: Architecture #5 (envelope), Architecture #6 (multi-stage). Decision #14, #19.
+  - Files: `scripts/fetch_*.py` (all), new shared `scripts/_fetch_envelope.py` helper
+  - Verify: each script writes `data/raw/<source>/<ts>.json` with envelope shape; no transform logic remaining
+- [ ] **T3 (P1, human: ~2d / CC: ~3h)** — Kotlin ETL — Build `backend/.../etl/` module with per-source `SourceEtl` impls (Parse/Validate/Transform) + orchestrator (Merge/Upsert)
+  - Surfaced by: Architecture #6, Code Quality #11. Decision #20, #26.
+  - Files: `backend/src/main/kotlin/ca/floo/roadtrip/etl/{aspira,uscampgrounds,padus,osm-pf,tesla}/`
+  - Verify: golden-file unit tests against `data/raw/<source>/` fixtures pass; tripwire fires at <50% shrinkage
+- [ ] **T4 (P1, human: ~3h / CC: ~30min)** — Schema reset — Drop `pois`, recreate with new shape (sealed-aligned, `provider_ref`, `booking_provider_id`, `governing_body_id`, base columns, `last_verified`)
+  - Surfaced by: Section 4, Section 7. Decision #17, #12, #18.
+  - Files: `backend/src/main/resources/db/migration/V5__pois_v2.sql` (drop+recreate), seed `governing_body` + `booking_provider`
+  - Verify: Flyway migration runs cleanly; jOOQ codegen produces expected types
+- [ ] **T5 (P1, human: ~4h / CC: ~1h)** — `BookingProviderAdapter` interface + impls — Pin interface, port `RecGovAdapter` + `AspiraAdapter` (one adapter, 3 hosts)
+  - Surfaced by: Code Quality #7. Decision #25, #22.
+  - Files: `backend/.../availability/BookingProviderAdapter.kt`, `RecGovAdapter.kt`, `AspiraAdapter.kt`
+  - Verify: `AspiraStatus.classify` tests still pass; new MockEngine tests for each adapter's `parseRef` + `availability` + `deeplink`
+- [ ] **T6 (P1, human: ~3h / CC: ~30min)** — `GET /api/availability/{poi_id}` — Unified dispatch route
+  - Surfaced by: Section 5. Decision #4.
+  - Files: `backend/.../api/AvailabilityRoutes.kt`
+  - Verify: per-provider integration tests; `no_provider` for unbound POIs; adapter-throws fall-through to `upstream_5xx`
+- [ ] **T7 (P1, human: ~5h / CC: ~1h)** — Sealed `Poi` + `buildDrawerPayload` + `GET /api/pois/{id}/drawer`
+  - Surfaced by: Section 1, Section 4. Decision #1, #3.
+  - Files: `backend/.../poi/Poi.kt`, `DrawerPayload.kt`, `api/PoiDrawerRoutes.kt`
+  - Verify: contract test per POI type; spatial-parent subtitle test for campgrounds inside parks
+- [ ] **T8 (P2, human: ~4h / CC: ~1h)** — Unified `POST /api/pois` (bbox + corridor + types + q)
+  - Surfaced by: Section 3.
+  - Files: `backend/.../api/PoiRoutes.kt`
+  - Verify: existing PoiRoutesTest passes; new tests for `types=` filter, `q=` search
+- [ ] **T9 (P2, human: ~6h / CC: ~1.5h)** — FE consolidation — Drawer renders from payload tree; kill flatten/card/vendor branches
+  - Surfaced by: Section 6.
+  - Files: `web/drawer.js`, `web/app.js`; delete `web/campground-card.js`, `web/superchargers.js`
+  - Verify: SmokeTest + new E2E for campground/SC/park click → drawer
+- [ ] **T10 (P3, human: ~1h / CC: ~10min)** — Rename `ingest` → `poller` across existing artifacts
+  - Surfaced by: Decision #7 (out of scope for this RFC, follow-up)
+  - Files: `ingest_runs` → `poller_runs`, `IngestController` → `PollerController`, `/api/admin/ingest/*` → `/api/admin/poller/*`
+  - Verify: existing `IngestControllerTest` ports cleanly
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | not run |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | not run |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR | 13 issues raised, 11 resolved with user decisions, 1 verified-acceptable, 1 deferred |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | not run |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | not run |
+
+**UNRESOLVED:** mixed-type cap behavior on `POST /api/pois` (decision #28 — punted to first-pass implementation; revisit if any type starves).
+
+**VERDICT:** ENG CLEARED — ready to implement. CEO/Design reviews not run; not required for this RFC (architectural + data-model scope, no UI/strategic decisions left open).
+
