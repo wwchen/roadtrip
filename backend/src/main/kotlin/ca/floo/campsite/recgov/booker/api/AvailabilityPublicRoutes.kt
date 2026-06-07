@@ -3,11 +3,11 @@ package ca.floo.campsite.recgov.booker.api
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.campsite.recgov.booker.availability.CachedResult
 import ca.floo.campsite.recgov.booker.poller.Campsite
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.plugins.origin
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -56,7 +56,10 @@ fun Route.availabilityPublicRoutes(
 ) {
     val rateLimit = IpRateLimiter(perMinute = 30)
 
-    get("/api/campsite/availability/{recgov_id}") {
+    get("/api/campsite/availability/{recgov_id}", {
+        tags = listOf("campsite")
+        summary = "30-day campsite availability snapshot for one rec.gov campground (cached)"
+    }) {
         val recgovId = call.parameters["recgov_id"].orEmpty()
         if (!RECGOV_ID_RE.matches(recgovId)) {
             call.respondText(

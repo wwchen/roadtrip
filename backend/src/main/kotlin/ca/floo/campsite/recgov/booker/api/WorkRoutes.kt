@@ -1,9 +1,9 @@
 package ca.floo.campsite.recgov.booker.api
 
 import ca.floo.campsite.recgov.booker.db.MatchRepo
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
 
 /**
  * Companion-facing planner endpoint. The companion calls this on every
@@ -25,7 +25,10 @@ import io.ktor.server.routing.get
  * time can both see the same match here; only one will win the claim.
  */
 fun Route.workRoutes(matches: MatchRepo) {
-    get("/api/campsite/work/next") {
+    get("/api/campsite/work/next", {
+        tags = listOf("campsite")
+        summary = "Companion planner: returns the next match to ATC, or {match:null}"
+    }) {
         val pick = matches.nextWorkItem()
         if (pick == null) {
             call.respondText("""{"match":null}""")

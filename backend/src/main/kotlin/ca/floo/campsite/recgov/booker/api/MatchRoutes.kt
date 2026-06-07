@@ -7,14 +7,14 @@ import ca.floo.campsite.recgov.booker.domain.Match
 import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
+import io.github.smiley4.ktorswaggerui.dsl.routing.delete
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
+import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.delete
-import io.ktor.server.routing.get
-import io.ktor.server.routing.post
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -37,7 +37,10 @@ fun Route.matchRoutes(
     tokenManager: ca.floo.campsite.recgov.booker.auth.TokenManager? = null,
 ) {
     /** Spike-only: create an alert + match in one shot so the protocol harness exercises the full DB path. */
-    post("/api/campsite/spike/synth-match") {
+    post("/api/campsite/spike/synth-match", {
+        tags = listOf("campsite")
+        summary = "Spike-only: create an alert + match in one shot for protocol harness tests"
+    }) {
         val body = parseJson(call.receiveText())
         val campgroundId = body.string("campgroundId") ?: "232447"
         val campsiteId = body.string("campsiteId") ?: "1"
@@ -82,7 +85,10 @@ fun Route.matchRoutes(
         call.respondText("""{"ok":true,"id":$matchId}""")
     }
 
-    post("/api/campsite/matches/{id}/claim") {
+    post("/api/campsite/matches/{id}/claim", {
+        tags = listOf("campsite")
+        summary = "Atomically transition match.status pending → claimed (companion claim)"
+    }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@post call.respond(HttpStatusCode.BadRequest, "bad id")
@@ -103,7 +109,10 @@ fun Route.matchRoutes(
         call.respondText("""{"ok":true,"leaseExpires":"${claimed.leaseExpires}"}""")
     }
 
-    post("/api/campsite/matches/{id}/result") {
+    post("/api/campsite/matches/{id}/result", {
+        tags = listOf("campsite")
+        summary = "Companion reports the outcome of an ATC attempt (success/fail/timeout)"
+    }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@post call.respond(HttpStatusCode.BadRequest, "bad id")
@@ -140,7 +149,10 @@ fun Route.matchRoutes(
         call.respondText("""{"ok":true}""")
     }
 
-    get("/api/campsite/matches/{id}") {
+    get("/api/campsite/matches/{id}", {
+        tags = listOf("campsite")
+        summary = "Get one match by id"
+    }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "bad id")
@@ -148,14 +160,20 @@ fun Route.matchRoutes(
         call.respondText(matchEnvelope(m))
     }
 
-    get("/api/campsite/matches") {
+    get("/api/campsite/matches", {
+        tags = listOf("campsite")
+        summary = "List all matches (across all alerts)"
+    }) {
         val limit = call.request.queryParameters["limit"]?.toIntOrNull() ?: 50
         val alertId = call.request.queryParameters["alert_id"]?.toLongOrNull()
         val list = matches.list(limit, alertId)
         call.respondText(buildJsonArray(list).toString())
     }
 
-    delete("/api/campsite/matches/{id}") {
+    delete("/api/campsite/matches/{id}", {
+        tags = listOf("campsite")
+        summary = "Delete a match (drops it from history)"
+    }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@delete call.respond(HttpStatusCode.BadRequest, "bad id")
@@ -166,7 +184,10 @@ fun Route.matchRoutes(
     // Re-checks rec.gov for the specific campsite/date in a Match. Used by the
     // UI to colour each match card after a poll cycle. Synchronous: hits
     // recreation.gov via the shared throttled AvailabilityClient.
-    get("/api/campsite/matches/{id}/availability") {
+    get("/api/campsite/matches/{id}/availability", {
+        tags = listOf("campsite")
+        summary = "Live availability snapshot for a match's campground (rec.gov, no cache)"
+    }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@get call.respond(HttpStatusCode.BadRequest, "bad id")
@@ -206,7 +227,10 @@ fun Route.matchRoutes(
     //                          {ok, queued, cart_added:false} synchronously; the actual
     //                          result lands later via /matches/{id}/result and the SSE
     //                          stream updates the UI.
-    post("/api/campsite/matches/{id}/cart") {
+    post("/api/campsite/matches/{id}/cart", {
+        tags = listOf("campsite")
+        summary = "Issue an ATC (add-to-cart) request to rec.gov for this match"
+    }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@post call.respond(HttpStatusCode.BadRequest, "bad id")
@@ -239,7 +263,10 @@ fun Route.matchRoutes(
     // endpoint with the stored Bearer token. No browser, no SPA — one HTTP
     // call. Companion does this on a 5-min interval after a successful ATC,
     // but the UI Extend Hold button calls this for manual extension.
-    post("/api/campsite/cart/extend") {
+    post("/api/campsite/cart/extend", {
+        tags = listOf("campsite")
+        summary = "Extend the rec.gov cart-hold lease for an in-flight ATC"
+    }) {
         // Cart extend needs a token that's actually valid right now — use
         // getFreshToken so a near-expiry token gets refreshed in-line. Falls
         // back to settings-direct read when TokenManager isn't wired (tests).

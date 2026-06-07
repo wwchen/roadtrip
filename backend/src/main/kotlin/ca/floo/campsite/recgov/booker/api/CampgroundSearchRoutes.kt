@@ -1,5 +1,6 @@
 package ca.floo.campsite.recgov.booker.api
 
+import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
@@ -7,7 +8,6 @@ import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import io.ktor.server.routing.get
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
@@ -44,7 +44,10 @@ private val NOISE =
     )
 
 fun Route.campgroundSearchRoutes() {
-    get("/api/campsite/campgrounds/search") {
+    get("/api/campsite/campgrounds/search", {
+        tags = listOf("campsite")
+        summary = "Search rec.gov for parks + campgrounds matching ?q="
+    }) {
         val q = call.request.queryParameters["q"]
         if (q.isNullOrBlank()) {
             return@get call.respondText("""{"parks":[],"campgrounds":[]}""")
@@ -70,7 +73,10 @@ fun Route.campgroundSearchRoutes() {
         }
     }
 
-    get("/api/campsite/campgrounds/in-park/{parkId}") {
+    get("/api/campsite/campgrounds/in-park/{parkId}", {
+        tags = listOf("campsite")
+        summary = "Campgrounds nested under a rec.gov park (filtered by park name)"
+    }) {
         val parkName = call.request.queryParameters["name"].orEmpty()
         try {
             log.info("Search: rec.gov campgrounds in park \"{}\"", parkName)
