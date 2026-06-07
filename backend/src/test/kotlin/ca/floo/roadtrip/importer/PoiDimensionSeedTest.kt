@@ -2,6 +2,8 @@ package ca.floo.roadtrip.importer
 
 import ca.floo.roadtrip.db.generated.tables.BookingProvider.Companion.BOOKING_PROVIDER
 import ca.floo.roadtrip.db.generated.tables.GoverningBody.Companion.GOVERNING_BODY
+import ca.floo.roadtrip.etl.registry.PoiRegistry
+import ca.floo.roadtrip.etl.registry.PoiRegistrySync
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.jooq.DSLContext
@@ -13,6 +15,7 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -45,6 +48,13 @@ class PoiDimensionSeedTest {
         ds = HikariDataSource(cfg)
         migrate(ds)
         ctx = DSL.using(ds, SQLDialect.POSTGRES)
+        // Dim rows are now seeded from config/poi-registry.yaml at boot
+        // (PR 3.5), so the test mirrors the same flow before asserting.
+        val yamlPath =
+            File(System.getProperty("user.dir"))
+                .resolve("../config/poi-registry.yaml")
+                .canonicalFile
+        PoiRegistrySync(ctx).apply(PoiRegistry.load(yamlPath))
     }
 
     @AfterAll
