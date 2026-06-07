@@ -190,6 +190,7 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
       host: p.aspira.host || 'reservation.pc.gc.ca',
       transactionLocationId: p.aspira.transactionLocationId,
       mapId: p.aspira.mapId,
+      resourceLocationId: p.aspira.resourceLocationId,
     });
     label = labelForAspiraHost(p.aspira.host);
   } else if (p.reserve_url) {

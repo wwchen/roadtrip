@@ -118,6 +118,9 @@ def park_index(maps: list) -> dict[str, dict]:
                     "title": title,
                     "transactionLocationId": link["transactionLocationId"],
                     "mapId": link["childMapId"],
+                    # Aspira's deeplink is much sturdier when this is set: WA's
+                    # site's results-page redirect logic checks for it.
+                    "resourceLocationId": link.get("resourceLocationId"),
                 }
     return idx
 
@@ -131,8 +134,6 @@ def stamp_features(features: list, source: dict, idx: dict[str, dict]) -> tuple[
         if not source["predicate"](p):
             continue
         eligible += 1
-        if p.get("aspira"):
-            continue  # don't overwrite an already-stamped entry
         name = p.get("name") or ""
         key = normalize(name)
         hit = idx.get(key)
@@ -145,6 +146,8 @@ def stamp_features(features: list, source: dict, idx: dict[str, dict]) -> tuple[
             "mapId": hit["mapId"],
             "park_title": hit["title"],
         }
+        if hit.get("resourceLocationId") is not None:
+            p["aspira"]["resourceLocationId"] = hit["resourceLocationId"]
         matched += 1
     return matched, eligible, missed
 

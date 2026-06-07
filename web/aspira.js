@@ -14,7 +14,7 @@ export function buildAspiraDeeplink({
   host,
   transactionLocationId,
   mapId,
-  resourceLocationId = 'NULL',
+  resourceLocationId,
   startDate,
   endDate,
 }) {
@@ -25,10 +25,12 @@ export function buildAspiraDeeplink({
   // Servers don't validate the shape; matching the working URL just keeps
   // the wire bytes recognizable.
   const searchTime = today.toISOString().replace(/\.\d+Z$/, '.000');
+  // WA's results-page redirect logic refuses to render unless flexibleSearch
+  // carries a real anchor date; null breaks it. Use today, format YYYY-MM-DD.
+  const flexAnchor = ymd(today);
 
-  const params = new URLSearchParams({
+  const fields = {
     transactionLocationId: String(transactionLocationId),
-    resourceLocationId: String(resourceLocationId),
     mapId: String(mapId),
     searchTabGroupId: '0',
     bookingCategoryId: '0',
@@ -40,9 +42,16 @@ export function buildAspiraDeeplink({
     subEquipmentId: '-32768',             // "any sub-equipment"
     peopleCapacityCategoryCounts: '[[-32767,null,1,null]]',
     searchTime,
-    flexibleSearch: '[false,false,null,1]',
+    flexibleSearch: `[false,false,"${flexAnchor}",1]`,
     view: 'list',
     filterData: '{"-32756":"[[1],0,0,0]"}',
-  });
+  };
+  // Only include resourceLocationId when we actually have it. Sending the
+  // string "NULL" (or omitting when required) makes WA bounce the user back
+  // to the homepage instead of the results page.
+  if (resourceLocationId != null) {
+    fields.resourceLocationId = String(resourceLocationId);
+  }
+  const params = new URLSearchParams(fields);
   return `https://${host}/create-booking/results?${params}`;
 }
