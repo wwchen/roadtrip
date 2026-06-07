@@ -1,4 +1,4 @@
-.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers data-fetch data-import qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers data-fetch data-import poll-raw qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -11,7 +11,8 @@ help:
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (per-clone)"
 	@echo "  make run              Build + run backend locally on 127.0.0.1:$(PORT) (serves static + /api)"
 	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
-	@echo "  make data-fetch       Fetch upstream POI data into data/ (TARGET=<name> for one)"
+	@echo "  make poll-raw         Pick a fetcher via fzf, run it, print the raw-cache path (RFC 0007). SOURCE=<name> or --all to skip the picker."
+	@echo "  make data-fetch       Fetch upstream POI data via admin API (TARGET=<name> for one). Wraps the same fetchers as poll-raw."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<name> for one)"
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make stop             Stop all compose services locally"
@@ -105,6 +106,17 @@ data-fetch:
 
 data-import:
 	curl --fail-with-body -sS --max-time 1800 -X POST $(ADMIN_BASE)/api/admin/data/import$(if $(TARGET),/$(TARGET))
+
+# RFC 0007 raw poller. One entry point for every thin fetcher; uses fzf
+# to pick a source unless SOURCE=<name> or SOURCE=--all is set. Prints
+# the data/raw/<source>/<ts>.json path each fetcher writes.
+#
+#   make poll-raw                  # fzf picker (interactive)
+#   make poll-raw SOURCE=osm-pf    # one source
+#   make poll-raw SOURCE=--all     # everything in registry order
+#   make poll-raw SOURCE=--list    # JSON registry, no fetch
+poll-raw:
+	@python3 scripts/poll_raw.py $(SOURCE)
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
