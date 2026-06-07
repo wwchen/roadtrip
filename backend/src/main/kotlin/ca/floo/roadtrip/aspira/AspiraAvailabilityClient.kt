@@ -1,13 +1,6 @@
 package ca.floo.roadtrip.aspira
 
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
-import io.ktor.client.plugins.HttpTimeout
-import io.ktor.client.request.get
-import io.ktor.client.request.headers
-import io.ktor.client.statement.bodyAsText
-import io.ktor.http.HttpHeaders
-import io.ktor.http.HttpStatusCode
+import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
@@ -16,6 +9,11 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
+import java.net.URI
+import java.net.http.HttpClient
+import java.net.http.HttpRequest
+import java.net.http.HttpResponse
+import java.time.Duration
 import java.time.LocalDate
 
 /**
@@ -52,6 +50,10 @@ import java.time.LocalDate
  * Azure WAF gates aggressive use — a 30-day query for one park is fine, but
  * looping 50 parks back-to-back triggers a CAPTCHA challenge. The mutex below
  * serializes outbound requests to ~1/sec so a hot drawer flow can't trip it.
+ *
+ * We use Java's built-in HttpClient instead of Ktor's CIO because Ktor's
+ * HttpPlainText plugin auto-adds `Accept-Charset: UTF-8` and Aspira's WAF
+ * rejects requests carrying that header (real browsers don't send it).
  */
 class AspiraAvailabilityClient(
     private val client: HttpClient = defaultClient(),
@@ -88,25 +90,32 @@ class AspiraAvailabilityClient(
                     "&equipmentCategoryId=-32768" +
                     "&subEquipmentCategoryId=-32768"
             log.debug("aspira GET {}", url)
+            val req =
+                HttpRequest
+                    .newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(30))
+                    // Aspira's WAF rejects bare-curl UAs (returns 403). A
+                    // browser-shaped UA is the difference between 200 and
+                    // immediately tripping the bot challenge.
+                    .header("User-Agent", USER_AGENT)
+                    .header("Accept", "application/json")
+                    .header("Referer", "https://$host/")
+                    .GET()
+                    .build()
             val resp =
-                client.get(url) {
-                    headers {
-                        // Aspira's WAF rejects bare-curl UAs (returns 403). A
-                        // browser-shaped UA is the difference between 200 and
-                        // immediately tripping the bot challenge.
-                        append(HttpHeaders.UserAgent, USER_AGENT)
-                        append(HttpHeaders.Accept, "application/json")
-                        append(HttpHeaders.Referrer, "https://$host/")
-                    }
+                try {
+                    client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
+                } catch (e: Exception) {
+                    throw AspiraException("aspira request failed: ${e.message}", httpStatus = null)
                 }
             lastFetchAtMs = System.currentTimeMillis()
-            if (resp.status != HttpStatusCode.OK) {
+            if (resp.statusCode() != 200) {
                 throw AspiraException(
-                    "aspira HTTP ${resp.status.value} for mapId=$mapId",
-                    httpStatus = resp.status.value,
+                    "aspira HTTP ${resp.statusCode()} for mapId=$mapId",
+                    httpStatus = resp.statusCode(),
                 )
             }
-            val body = resp.bodyAsText()
+            val body = resp.body()
             // WAF challenge bypass detection: Azure WAF returns HTML 200s.
             if (body.startsWith("<")) {
                 throw AspiraException("aspira WAF challenge (HTML response)", httpStatus = 503)
@@ -140,13 +149,11 @@ class AspiraAvailabilityClient(
                 "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
         fun defaultClient(): HttpClient =
-            HttpClient(CIO) {
-                install(HttpTimeout) {
-                    requestTimeoutMillis = 30_000L
-                    connectTimeoutMillis = 10_000L
-                    socketTimeoutMillis = 30_000L
-                }
-            }
+            HttpClient
+                .newBuilder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build()
     }
 }
 
