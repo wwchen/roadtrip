@@ -274,6 +274,9 @@ class AdminIngestRoutesTest {
         IngestController(
             ctx = ctx,
             importer = Importer(ctx),
+            etl =
+                ca.floo.roadtrip.etl
+                    .EtlOrchestrator(ctx, File("/tmp")),
             dataDir = File("/tmp"),
             targets = targets,
             workingDir = File("/tmp"),
