@@ -131,9 +131,16 @@ fun Application.module() {
                 ContentType.Application.JavaScript,
                 ContentType.Text.CSS,
                 ->
+                    // No-cache means "ask the origin every time," but
+                    // ConditionalHeaders + Last-Modified still let the server
+                    // answer 304 Not Modified — bytes-on-the-wire ~0 when
+                    // unchanged. Trade: one round-trip per JS/CSS file per
+                    // page load, in exchange for deploys propagating
+                    // instantly instead of waiting hours for browser/edge
+                    // caches to expire.
                     CachingOptions(
                         io.ktor.http.CacheControl
-                            .MaxAge(3600),
+                            .NoCache(null),
                     )
                 ContentType.Image.SVG, ContentType.Image.PNG ->
                     CachingOptions(
