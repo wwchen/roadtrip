@@ -12,12 +12,7 @@
       "reservable": true,
       "season": "mid-May to early October",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Tunnel Mountain Village II",
@@ -28,12 +23,7 @@
       "reservable": true,
       "season": "year-round",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Tunnel Mountain Trailer Court",
@@ -44,12 +34,7 @@
       "reservable": true,
       "season": "mid-May to early October",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Two Jack Lakeside",
@@ -60,12 +45,7 @@
       "reservable": true,
       "season": "mid-May to early October",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Two Jack Main",
@@ -76,12 +56,7 @@
       "reservable": true,
       "season": "mid-May to early October",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Lake Louise Campground",
@@ -92,12 +67,7 @@
       "reservable": true,
       "season": "year-round (trailer); summer (tent)",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Mosquito Creek Campground",
@@ -108,12 +78,7 @@
       "reservable": false,
       "season": "mid-June to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Waterfowl Lakes Campground",
@@ -124,12 +89,7 @@
       "reservable": false,
       "season": "mid-June to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Rampart Creek Campground",
@@ -140,12 +100,7 @@
       "reservable": false,
       "season": "mid-June to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Johnston Canyon Campground",
@@ -156,12 +111,7 @@
       "reservable": true,
       "season": "early June to late September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Castle Mountain Campground",
@@ -172,12 +122,7 @@
       "reservable": false,
       "season": "early June to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Protection Mountain Campground",
@@ -188,12 +133,7 @@
       "reservable": false,
       "season": "late June to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483648,
-        "mapId": -2147483630,
-        "park_title": "Banff"
-      }
+      "aspira_park_title": "Banff"
     },
     {
       "name": "Whistlers Campground",
@@ -204,12 +144,7 @@
       "reservable": true,
       "season": "early May to mid-October",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Wapiti Campground",
@@ -220,12 +155,7 @@
       "reservable": true,
       "season": "year-round",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Wabasso Campground",
@@ -236,12 +166,7 @@
       "reservable": true,
       "season": "late June to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Snaring Campground",
@@ -252,12 +177,7 @@
       "reservable": false,
       "season": "mid-May to early October",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Pocahontas Campground",
@@ -268,12 +188,7 @@
       "reservable": true,
       "season": "mid-May to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Wilcox Creek Campground",
@@ -284,12 +199,7 @@
       "reservable": false,
       "season": "mid-June to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Columbia Icefield Campground",
@@ -300,12 +210,7 @@
       "reservable": false,
       "season": "late June to mid-September; tent-only",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Honeymoon Lake Campground",
@@ -316,12 +221,7 @@
       "reservable": false,
       "season": "late May to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Jonas Creek Campground",
@@ -332,12 +232,7 @@
       "reservable": false,
       "season": "mid-May to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Mount Kerkeslin Campground",
@@ -348,12 +243,7 @@
       "reservable": false,
       "season": "mid-June to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483628,
-        "mapId": -2147483463,
-        "park_title": "Jasper"
-      }
+      "aspira_park_title": "Jasper"
     },
     {
       "name": "Waterton Townsite Campground",
@@ -364,12 +254,7 @@
       "reservable": true,
       "season": "early May to early October",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483607,
-        "mapId": -2147483198,
-        "park_title": "Waterton Lakes"
-      }
+      "aspira_park_title": "Waterton Lakes"
     },
     {
       "name": "Crandell Mountain Campground",
@@ -380,12 +265,7 @@
       "reservable": false,
       "season": "mid-May to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483607,
-        "mapId": -2147483198,
-        "park_title": "Waterton Lakes"
-      }
+      "aspira_park_title": "Waterton Lakes"
     },
     {
       "name": "Belly River Campground",
@@ -396,12 +276,7 @@
       "reservable": false,
       "season": "mid-May to early September",
       "last_verified": "2026-06-03",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483607,
-        "mapId": -2147483198,
-        "park_title": "Waterton Lakes"
-      }
+      "aspira_park_title": "Waterton Lakes"
     },
     {
       "name": "Astotin Lake Campground",

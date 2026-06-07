@@ -12,12 +12,7 @@
       "reservable": true,
       "season": "mid-May to early October",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483605,
-        "mapId": -2147483186,
-        "park_title": "Yoho"
-      }
+      "aspira_park_title": "Yoho"
     },
     {
       "name": "Monarch Campground",
@@ -28,12 +23,7 @@
       "reservable": false,
       "season": "mid-May to early October",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483605,
-        "mapId": -2147483186,
-        "park_title": "Yoho"
-      }
+      "aspira_park_title": "Yoho"
     },
     {
       "name": "Hoodoo Creek Campground",
@@ -44,12 +34,7 @@
       "reservable": false,
       "season": "late June to early September",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483605,
-        "mapId": -2147483186,
-        "park_title": "Yoho"
-      }
+      "aspira_park_title": "Yoho"
     },
     {
       "name": "Chancellor Peak Campground",
@@ -60,12 +45,7 @@
       "reservable": false,
       "season": "mid-May to early October",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483605,
-        "mapId": -2147483186,
-        "park_title": "Yoho"
-      }
+      "aspira_park_title": "Yoho"
     },
     {
       "name": "Takakkaw Falls Walk-in Campground",
@@ -76,12 +56,7 @@
       "reservable": false,
       "season": "late June to early October",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483605,
-        "mapId": -2147483186,
-        "park_title": "Yoho"
-      }
+      "aspira_park_title": "Yoho"
     },
     {
       "name": "Redstreak Campground",
@@ -92,12 +67,7 @@
       "reservable": true,
       "season": "early May to early October",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483625,
-        "mapId": -2147483385,
-        "park_title": "Kootenay"
-      }
+      "aspira_park_title": "Kootenay"
     },
     {
       "name": "McLeod Meadows Campground",
@@ -108,12 +78,7 @@
       "reservable": true,
       "season": "late May to mid-September",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483625,
-        "mapId": -2147483385,
-        "park_title": "Kootenay"
-      }
+      "aspira_park_title": "Kootenay"
     },
     {
       "name": "Marble Canyon Campground",
@@ -124,12 +89,7 @@
       "reservable": false,
       "season": "late June to early September",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483625,
-        "mapId": -2147483385,
-        "park_title": "Kootenay"
-      }
+      "aspira_park_title": "Kootenay"
     },
     {
       "name": "Illecillewaet Campground",
@@ -140,12 +100,7 @@
       "reservable": false,
       "season": "late June to late September",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483634,
-        "mapId": -2147483497,
-        "park_title": "Glacier"
-      }
+      "aspira_park_title": "Glacier"
     },
     {
       "name": "Loop Brook Campground",
@@ -156,12 +111,7 @@
       "reservable": false,
       "season": "late June to late September",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483634,
-        "mapId": -2147483497,
-        "park_title": "Glacier"
-      }
+      "aspira_park_title": "Glacier"
     },
     {
       "name": "Mount Sir Donald Campground",
@@ -172,12 +122,7 @@
       "reservable": false,
       "season": "late June to late September",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483634,
-        "mapId": -2147483497,
-        "park_title": "Glacier"
-      }
+      "aspira_park_title": "Glacier"
     },
     {
       "name": "Snowforest Campground",
@@ -188,12 +133,7 @@
       "reservable": true,
       "season": "mid-June to early September",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483620,
-        "mapId": -2147483323,
-        "park_title": "Mount Revelstoke"
-      }
+      "aspira_park_title": "Mount Revelstoke"
     },
     {
       "name": "Green Point Campground",
@@ -204,15 +144,10 @@
       "reservable": true,
       "season": "mid-March to mid-October",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483619,
-        "mapId": -2147483316,
-        "park_title": "Pacific Rim"
-      }
+      "aspira_park_title": "Pacific Rim"
     },
     {
-      "name": "Smone\u0107ten (McDonald) Campground",
+      "name": "Smonećten (McDonald) Campground",
       "lat": 48.6738,
       "lon": -123.4264,
       "park": "Gulf Islands National Park Reserve",
@@ -220,12 +155,7 @@
       "reservable": true,
       "season": "mid-May to mid-October",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483630,
-        "mapId": -2147483478,
-        "park_title": "Gulf Islands"
-      }
+      "aspira_park_title": "Gulf Islands"
     },
     {
       "name": "Prior Centennial Campground",
@@ -236,12 +166,7 @@
       "reservable": true,
       "season": "mid-May to mid-October",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483630,
-        "mapId": -2147483478,
-        "park_title": "Gulf Islands"
-      }
+      "aspira_park_title": "Gulf Islands"
     },
     {
       "name": "Sidney Spit Campground",
@@ -252,12 +177,7 @@
       "reservable": true,
       "season": "mid-May to mid-September (boat/ferry access)",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483630,
-        "mapId": -2147483478,
-        "park_title": "Gulf Islands"
-      }
+      "aspira_park_title": "Gulf Islands"
     },
     {
       "name": "Beaumont Marine Provincial Park Campground",
@@ -268,12 +188,7 @@
       "reservable": false,
       "season": "year-round (boat access, South Pender Island)",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483630,
-        "mapId": -2147483478,
-        "park_title": "Gulf Islands"
-      }
+      "aspira_park_title": "Gulf Islands"
     },
     {
       "name": "Prevost Island (James Bay)",
@@ -284,12 +199,7 @@
       "reservable": false,
       "season": "year-round (boat access)",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483630,
-        "mapId": -2147483478,
-        "park_title": "Gulf Islands"
-      }
+      "aspira_park_title": "Gulf Islands"
     },
     {
       "name": "Portland Island (Princess Bay)",
@@ -300,12 +210,7 @@
       "reservable": false,
       "season": "year-round (boat access)",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483630,
-        "mapId": -2147483478,
-        "park_title": "Gulf Islands"
-      }
+      "aspira_park_title": "Gulf Islands"
     },
     {
       "name": "D'Arcy Island",
@@ -316,12 +221,7 @@
       "reservable": false,
       "season": "year-round (boat access)",
       "last_verified": "2026-05-11",
-      "aspira": {
-        "host": "reservation.pc.gc.ca",
-        "transactionLocationId": -2147483630,
-        "mapId": -2147483478,
-        "park_title": "Gulf Islands"
-      }
+      "aspira_park_title": "Gulf Islands"
     }
   ]
 }

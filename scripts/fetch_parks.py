@@ -1,29 +1,52 @@
 #!/usr/bin/env python3
-"""Fetch National Park + State Park polygons from USGS PAD-US FeatureServer.
+"""Capture National Park + State Park polygons from USGS PAD-US.
 
-ArcGIS REST has a per-query record cap (usually 2000), so we paginate with
-resultOffset. We also request simplified geometry (maxAllowableOffset in degrees)
-to keep file sizes down — parks at continental-US zoom don't need cm precision.
+Thin fetch-only per RFC 0007. Two raw captures per run:
+  data/raw/padus-np/<UTC-ts>/page-001.json
+  data/raw/padus-sp/<UTC-ts>/page-001.json
+
+Each `page-N.json` envelope wraps one ArcGIS REST query (paginated by
+resultOffset). Pages live under one timestamp directory so the ETL knows
+they're one logical capture. We capture simplified geometry
+(maxAllowableOffset=0.001°, ~111m) — full-resolution polygons are huge
+and the map never needs sub-city precision.
+
+Run:
+  python3 scripts/fetch_parks.py
 """
-import datetime as dt
-import json
+from __future__ import annotations
+
 import sys
 import time
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).parent))
+from _envelope import (  # noqa: E402
+    err,
+    http_get_text,
+    parse_payload,
+    utc_ts,
+    write_envelope,
+)
+
 SVC = "https://services.arcgis.com/v01gqwM5QqNysAAi/ArcGIS/rest/services/Manager_Name_PADUS/FeatureServer/0"
-OUT_DIR = Path(__file__).parent.parent / "data"
 FIELDS = "Unit_Nm,Loc_Nm,State_Nm,Mang_Name,Des_Tp,GIS_Acres"
+SIMPLIFY = 0.001  # degrees, ~111m at equator
+PAGE_SIZE = 1000
 
-# maxAllowableOffset in degrees (WGS84). 0.001° ≈ 111m at equator. Good enough for a map
-# that rarely zooms below city level; drop to 0.0005 if outlines look too blocky.
-SIMPLIFY = 0.001
+FETCHER = "fetch_parks"
+FETCHER_VERSION = "2"
 
 
-def query_all(where: str, out_path: Path, page: int = 1000):
-    all_features = []
+def capture_target(where: str, source: str) -> int:
+    """Paginated capture for one PAD-US filter. All pages in this run share
+    the same `ts` directory so the ETL can stitch them as one logical
+    capture; later runs land under a new directory.
+    """
+    ts = utc_ts()
+    pages_written = 0
+    total = 0
     offset = 0
     while True:
         params = {
@@ -35,37 +58,63 @@ def query_all(where: str, out_path: Path, page: int = 1000):
             "maxAllowableOffset": SIMPLIFY,
             "outSR": 4326,
             "resultOffset": offset,
-            "resultRecordCount": page,
+            "resultRecordCount": PAGE_SIZE,
         }
-        url = SVC + "/query?" + urllib.parse.urlencode(params)
-        print(f"  fetch offset={offset}", file=sys.stderr)
-        with urllib.request.urlopen(url, timeout=120) as resp:
-            data = json.loads(resp.read())
-        feats = data.get("features", [])
-        if not feats:
+        url = f"{SVC}/query?{urllib.parse.urlencode(params)}"
+        err(f"  {source} offset={offset}…")
+        try:
+            status, headers, body = http_get_text(url, timeout=120)
+        except Exception as e:  # noqa: BLE001
+            err(f"  {source} page {pages_written + 1} failed: {e}")
+            return -1
+
+        payload = parse_payload(headers.get("content-type", ""), body)
+        pages_written += 1
+        write_envelope(
+            source=source,
+            fetcher=FETCHER,
+            fetcher_version=FETCHER_VERSION,
+            request_url=url,
+            request_method="GET",
+            request_headers={},
+            response_status=status,
+            response_headers=headers,
+            payload=payload,
+            ts=ts,
+            part=f"page-{pages_written:03d}",
+        )
+        feats = payload.get("features", []) if isinstance(payload, dict) else []
+        total += len(feats)
+        if len(feats) < PAGE_SIZE:
             break
-        all_features.extend(feats)
-        if len(feats) < page:
-            break
-        offset += page
+        offset += PAGE_SIZE
         time.sleep(0.2)
 
-    fetched_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    fc = {"_fetched_at": fetched_at, "type": "FeatureCollection", "features": all_features}
-    out_path.write_text(json.dumps(fc))
-    print(f"  wrote {len(all_features)} features to {out_path.name}", file=sys.stderr)
-    return len(all_features)
+    err(f"  {source}: {pages_written} pages, {total} features (ts={ts})")
+    return total
 
 
-def main():
-    OUT_DIR.mkdir(parents=True, exist_ok=True)
+def main() -> int:
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--layer",
+        choices=["national-parks", "state-parks", "all"],
+        default="all",
+    )
+    args = parser.parse_args()
 
-    print("National Parks (Des_Tp='NP')…", file=sys.stderr)
-    query_all("Des_Tp='NP'", OUT_DIR / "national-parks.geojson")
-
-    print("State Parks (Des_Tp='SP' AND Mang_Type='STAT')…", file=sys.stderr)
-    query_all("Des_Tp='SP' AND Mang_Type='STAT'", OUT_DIR / "state-parks.geojson")
+    rc = 0
+    if args.layer in ("national-parks", "all"):
+        err("padus-np: National Parks (Des_Tp='NP')…")
+        if capture_target("Des_Tp='NP'", "padus-np") < 0:
+            rc = 1
+    if args.layer in ("state-parks", "all"):
+        err("padus-sp: State Parks (Des_Tp='SP' AND Mang_Type='STAT')…")
+        if capture_target("Des_Tp='SP' AND Mang_Type='STAT'", "padus-sp") < 0:
+            rc = 1
+    return rc
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
