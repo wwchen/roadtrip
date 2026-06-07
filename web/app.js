@@ -244,21 +244,34 @@ async function load() {
     const m = state.map;
     if (!m) return;
     const b = m.getBounds();
-    // /api/pois rejects full-continent for sanity; trust the server cap and
-    // just always send the actual bounds. The 2000-row truncation defends.
     const west = b.getWest(), south = b.getSouth(), east = b.getEast(), north = b.getNorth();
-    // Below z6, skip campgrounds — the design preserves the lazy-load gate.
+    const zoom = Math.floor(m.getZoom());
+    // CG zoom gating still tracked client-side for cgUnlocked + counts UI;
+    // the server enforces its own gate at zoom < 6 anyway.
     const wantCG = m.getZoom() >= CG_ZOOM_THRESHOLD || cgUnlocked;
     if (wantCG) cgUnlocked = true;
     const cats = ['national-park', 'state-park', 'planet-fitness'];
     if (wantCG) cats.push('campground');
 
+    // When a trip route is active, topbar exposes a corridor polygon via
+    // window.__rtTripCorridor (a GeoJSON Polygon object). Including it
+    // narrows /api/pois to POIs inside the corridor.
+    const polygon = (typeof window.__rtTripCorridor === 'function')
+      ? window.__rtTripCorridor()
+      : null;
+
     if (inflight) inflight.abort();
     inflight = new AbortController();
-    const url = `/api/pois?bbox=${west},${south},${east},${north}&category=${cats.join(',')}`;
+    const reqBody = { bbox: [west, south, east, north], zoom, categories: cats };
+    if (polygon) reqBody.polygon = polygon;
     let fc;
     try {
-      const r = await fetch(url, { signal: inflight.signal });
+      const r = await fetch('/api/pois', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reqBody),
+        signal: inflight.signal,
+      });
       if (!r.ok) throw new Error(`/api/pois HTTP ${r.status}`);
       fc = await r.json();
     } catch (err) {
@@ -366,6 +379,11 @@ async function load() {
     clearTimeout(debounceTimer);
     debounceTimer = setTimeout(refreshBbox, 250);
   }
+
+  // Topbar calls this when the trip corridor changes (route added/removed/
+  // reordered, or radius changed) so POIs re-filter without waiting for a pan.
+  // Same debounce as moveend; identical refresh path.
+  window.__rtRefreshBbox = scheduleBboxRefresh;
 
   map.on('moveend', scheduleBboxRefresh);
   // First load: fire once style is ready so layers are mounted.
