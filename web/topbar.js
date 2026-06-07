@@ -15,8 +15,9 @@
 //   initTopbar(map, getPinSearchIndex)
 //   The module otherwise owns its DOM and state internally.
 
-import { state, distanceKm } from './core.js';
+import { state, distanceKm, formatDistance } from './core.js';
 import { fitAndSelect } from './search.js';
+import { synthesizeClick } from './layers.js';
 
 // --- constants -------------------------------------------------------------
 
@@ -69,6 +70,9 @@ let dropdownIdx = -1;
 let currentResults = [];
 let geocodeAbort = null;
 let geocodeTimer = null;
+// Set true while a card-click is synthesizing a map click — bindPinClicks
+// reads this and skips its "fill active row with pin name" side effect.
+let suppressPinClick = false;
 
 // --- public --------------------------------------------------------------
 
@@ -86,6 +90,10 @@ export function initTopbar(map, getPinSearchIndex) {
   // it in the POST /api/pois body. Returns null when no route is active —
   // app.js then sends a normal bbox-only request.
   window.__rtTripCorridor = () => trip.corridor;
+
+  // app.js calls this on every bbox refresh with the latest campground feature
+  // list. We dedupe + sort + render only when a route is active.
+  window.__rtSetTripPois = (cgFeatures) => setTripPois(cgFeatures);
 }
 
 // --- DOM scaffolding -----------------------------------------------------
@@ -260,8 +268,75 @@ function injectStyles() {
     margin: 0;
   }
 
+  /* Campground results — appears when a route is active. */
+  #tb-results {
+    display: none;
+    flex-direction: column;
+    border-top: 1px solid var(--cg-border);
+    max-height: min(50vh, 480px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
+  #tb-results.visible { display: flex; }
+  .tb-results-head {
+    position: sticky; top: 0; z-index: 1;
+    padding: 8px 12px;
+    background: var(--cg-surface);
+    border-bottom: 1px solid var(--cg-border);
+    display: flex; align-items: center; gap: 6px;
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--cg-muted); font-weight: 600;
+  }
+  .tb-results-head .tb-results-count {
+    color: var(--cg-faint); font-weight: 400; text-transform: none; letter-spacing: 0;
+    font-size: 11px;
+  }
+  .tb-card {
+    display: flex; gap: 10px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--cg-border);
+    cursor: pointer;
+    transition: background 100ms ease;
+  }
+  .tb-card:last-child { border-bottom: 0; }
+  .tb-card:hover { background: var(--cg-bg-hover); }
+  .tb-card-dot {
+    flex-shrink: 0;
+    width: 10px; height: 10px; margin-top: 5px;
+    border-radius: 50%;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.16);
+  }
+  .tb-card-body { flex: 1; min-width: 0; }
+  .tb-card-name {
+    color: var(--cg-text);
+    font-size: 13px; font-weight: 500; line-height: 1.3;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tb-card-sub {
+    color: var(--cg-muted);
+    font-size: 11px; line-height: 1.4;
+    margin-top: 2px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tb-card-meta {
+    display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+    margin-top: 4px;
+    font-size: 11px; color: var(--cg-faint);
+    font-variant-numeric: tabular-nums;
+  }
+  .tb-card-dist { color: ${ROUTE_COLOR}; font-weight: 500; }
+  .tb-card-rating { color: #f5a623; font-weight: 500; }
+  .tb-card-sites { color: var(--cg-muted); }
+  .tb-card-season { color: var(--cg-muted); }
+  .tb-card-empty {
+    padding: 14px 12px;
+    color: var(--cg-muted); font-size: 12px;
+    text-align: center;
+  }
+
   @media (max-width: 768px) {
     #topbar { left: 8px; right: 8px; width: auto; max-width: none; }
+    #tb-results { max-height: 40vh; }
   }
   `;
   const tag = document.createElement('style');
@@ -300,6 +375,7 @@ function injectDom() {
       >
       <span class="tb-corridor-value" id="tb-corridor-value">${CORRIDOR_DEFAULT_MILES} mi</span>
     </div>
+    <div id="tb-results"></div>
   `;
   document.body.appendChild(el);
 }
@@ -343,6 +419,7 @@ function bindPinClicks() {
   // find the topmost interactive pin under the cursor.
   const layers = ['cg-points-hit', 'sc-points-hit', 'pf-points-hit', 'np-pts-hit', 'sp-pts-hit'];
   mapRef.on('click', (e) => {
+    if (suppressPinClick) return;
     const present = layers.filter(id => mapRef.getLayer(id));
     if (!present.length) return;
     const hits = mapRef.queryRenderedFeatures(e.point, { layers: present });
@@ -566,6 +643,9 @@ function onClearAll() {
   hideStatus();
   rerender();
   notifyCorridorChanged();
+  tripResults.cards = [];
+  tripResults.byId.clear();
+  renderResults();
 }
 
 function onRowX(i, wasFilled) {
@@ -645,6 +725,7 @@ async function tryFetchRoute() {
   fitMapToRoute();
   showRouteSummary();
   notifyCorridorChanged();
+  renderResults();
 }
 
 function drawRoute() {
@@ -967,6 +1048,244 @@ function hideStatus() {
   el.innerHTML = '';
 }
 
+// --- trip results (campground cards) ----------------------------------
+
+const CG_DOT_COLOR = {
+  federal: '#2e7d32',
+  provincial: '#2e7d32',
+  state: '#558b2f',
+  local: '#9ccc65',
+  other: '#cddc39',
+};
+
+const CG_LEGEND_TOGGLES = ['f-cg-federal', 'f-cg-state', 'f-cg-local', 'f-cg-provincial'];
+
+const tripResults = {
+  cards: [],     // [{ id, name, sub, lng, lat, category, routeKm, distKm, rating, sites, season, feature }]
+  byId: new Map(),
+  // Cumulative-distance index for the active route's polyline. Lets us
+  // O(N) project a pin onto the route once and read its along-route
+  // distance in km.
+  routeCoords: null,   // [[lng, lat], ...]
+  routeCum: null,      // [0, d01, d01+d12, ...] in km
+  legendBound: false,
+};
+
+/** Build the cumulative-km index for the active route polyline. */
+function indexRoute(lineGeo) {
+  if (!lineGeo?.coordinates?.length) {
+    tripResults.routeCoords = null;
+    tripResults.routeCum = null;
+    return;
+  }
+  const coords = lineGeo.coordinates;
+  const cum = new Float64Array(coords.length);
+  cum[0] = 0;
+  for (let i = 1; i < coords.length; i++) {
+    const [a1, b1] = coords[i - 1];
+    const [a2, b2] = coords[i];
+    cum[i] = cum[i - 1] + distanceKm(b1, a1, b2, a2);
+  }
+  tripResults.routeCoords = coords;
+  tripResults.routeCum = cum;
+}
+
+/** Project (lng,lat) onto the indexed route, return distance-along-route in km.
+ *  Linear scan over segments — O(N). Approximates by treating each segment
+ *  as flat in degree space, which is fine for the segment-projection step
+ *  even for cross-country routes. */
+function distanceAlongRouteKm(lng, lat) {
+  const coords = tripResults.routeCoords;
+  const cum = tripResults.routeCum;
+  if (!coords || !cum) return 0;
+  let bestSeg = 0, bestT = 0, bestD2 = Infinity;
+  for (let i = 0; i < coords.length - 1; i++) {
+    const [ax, ay] = coords[i];
+    const [bx, by] = coords[i + 1];
+    const dx = bx - ax, dy = by - ay;
+    const len2 = dx * dx + dy * dy;
+    let t = len2 ? ((lng - ax) * dx + (lat - ay) * dy) / len2 : 0;
+    if (t < 0) t = 0; else if (t > 1) t = 1;
+    const px = ax + t * dx, py = ay + t * dy;
+    const ex = lng - px, ey = lat - py;
+    const d2 = ex * ex + ey * ey;
+    if (d2 < bestD2) { bestD2 = d2; bestSeg = i; bestT = t; }
+  }
+  // Once we know the closest segment, get accurate along-route km via cum.
+  const segLen = cum[bestSeg + 1] - cum[bestSeg];
+  return cum[bestSeg] + bestT * segLen;
+}
+
+/** Called by app.js after every bbox refresh. We accumulate dedupe-by-id so
+ *  campgrounds discovered in earlier viewports stay in the list, and re-sort
+ *  whenever the origin moves (route added/cleared/reordered). */
+function setTripPois(cgFeatures) {
+  if (trip.mode !== 'directions' || !trip.route || !trip.stops[0]) {
+    tripResults.cards = [];
+    tripResults.byId.clear();
+    renderResults();
+    return;
+  }
+  // Refresh route index — the route polyline may have changed since the
+  // last call (added/removed/reordered stops).
+  indexRoute(trip.route.features[0].geometry);
+
+  const origin = trip.stops[0];
+  for (const f of cgFeatures || []) {
+    const id = f.id ?? f.properties?.id;
+    if (id == null || tripResults.byId.has(id)) continue;
+    const [lng, lat] = f.geometry?.coordinates || [];
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
+    const p = f.properties || {};
+    // rating_reviews can be either an array (already parsed by /api/pois)
+    // or a JSON string (legacy popups path) — handle both.
+    let rating = null;
+    if (Array.isArray(p.rating_reviews)) rating = p.rating_reviews;
+    else if (typeof p.rating_reviews === 'string') {
+      try { rating = JSON.parse(p.rating_reviews); } catch { /* ignore */ }
+    }
+    const card = {
+      id,
+      name: p.name || 'Campground',
+      sub: [p.typeLabel, p.state || p.country].filter(Boolean).join(' · '),
+      category: p.category || 'other',
+      sites: Number.isFinite(Number(p.sites)) ? Number(p.sites) : null,
+      season: p.season || null,
+      reservable: p.reservable,
+      rating: Array.isArray(rating) ? rating : null,
+      lng, lat,
+      feature: f,
+    };
+    tripResults.byId.set(id, card);
+    tripResults.cards.push(card);
+  }
+  // Recompute distances every refresh — origin or route geometry may have changed.
+  for (const c of tripResults.cards) {
+    c.distKm = distanceKm(origin.lat, origin.lng, c.lat, c.lng);
+    c.routeKm = distanceAlongRouteKm(c.lng, c.lat);
+  }
+  tripResults.cards.sort((a, b) => a.routeKm - b.routeKm);
+  renderResults();
+}
+
+/** Compact season label: "Open through Oct 25" / "Closed until May 5" /
+ *  "Year-round" / first-come hint, derived from the same season string the
+ *  drawer parses. Returns '' when nothing useful to assert. Lightweight
+ *  re-implementation to keep cards independent from drawer/popup imports. */
+function compactSeasonLabel(seasonStr, reservable) {
+  if (!seasonStr) {
+    return reservable === false ? 'First-come' : '';
+  }
+  if (/year[\s-]*round/i.test(seasonStr)) return 'Year-round';
+  // Strip parenthetical qualifiers ("year-round (boat access)") and
+  // truncate so we never blow the card width.
+  const cleaned = seasonStr.replace(/\s*\([^)]*\)/g, '').trim();
+  return cleaned.length > 28 ? cleaned.slice(0, 26) + '…' : cleaned;
+}
+
+function visibleCards() {
+  const allowed = new Set();
+  for (const id of CG_LEGEND_TOGGLES) {
+    const el = document.getElementById(id);
+    if (el?.checked) allowed.add(id.replace('f-cg-', ''));
+  }
+  // 'other' rides with federal — same as the map filter in layers.js.
+  if (allowed.has('federal')) allowed.add('other');
+  return tripResults.cards.filter(c => allowed.has(c.category));
+}
+
+function renderResults() {
+  const el = document.getElementById('tb-results');
+  if (!el) return;
+  if (trip.mode !== 'directions' || !trip.route) {
+    el.classList.remove('visible');
+    el.innerHTML = '';
+    return;
+  }
+  // Save scroll position so a bbox-refresh re-render doesn't yank the user
+  // back to the top while they're scanning the list.
+  const scrollY = el.scrollTop;
+
+  const cards = visibleCards();
+  const total = tripResults.cards.length;
+  const filteredOut = total - cards.length;
+  const filterNote = filteredOut > 0
+    ? ` <span class="tb-results-count">· ${cards.length} of ${total}</span>`
+    : ` <span class="tb-results-count">· ${total}</span>`;
+  const head = `<div class="tb-results-head">Campgrounds along route${filterNote}</div>`;
+
+  if (!cards.length) {
+    const msg = total === 0
+      ? 'Pan the map or widen the corridor to find campgrounds.'
+      : 'All campgrounds hidden — re-enable a category in the legend.';
+    el.innerHTML = head + `<div class="tb-card-empty">${msg}</div>`;
+    el.classList.add('visible');
+    return;
+  }
+  let body = '';
+  for (const c of cards) {
+    const color = CG_DOT_COLOR[c.category] || CG_DOT_COLOR.other;
+    const ratingHtml = c.rating
+      ? `<span class="tb-card-rating">★ ${c.rating[0].toFixed(1)}</span>`
+      : '';
+    const sitesHtml = c.sites
+      ? `<span class="tb-card-sites">${c.sites} sites</span>`
+      : '';
+    const seasonStr = compactSeasonLabel(c.season, c.reservable);
+    const seasonHtml = seasonStr ? `<span class="tb-card-season">${escapeHtml(seasonStr)}</span>` : '';
+    body += `<div class="tb-card" data-id="${escapeHtml(String(c.id))}">
+      <span class="tb-card-dot" style="background:${color}"></span>
+      <div class="tb-card-body">
+        <div class="tb-card-name">${escapeHtml(c.name)}</div>
+        ${c.sub ? `<div class="tb-card-sub">${escapeHtml(c.sub)}</div>` : ''}
+        <div class="tb-card-meta">
+          <span class="tb-card-dist">${formatRouteKm(c.routeKm)}</span>
+          ${ratingHtml}${sitesHtml}${seasonHtml}
+        </div>
+      </div>
+    </div>`;
+  }
+  el.innerHTML = head + body;
+  el.classList.add('visible');
+  el.scrollTop = scrollY;
+
+  // Bind once: when the user toggles a category in the right panel, re-render
+  // the card list so it reflects what's visible on the map.
+  if (!tripResults.legendBound) {
+    tripResults.legendBound = true;
+    for (const id of CG_LEGEND_TOGGLES) {
+      document.getElementById(id)?.addEventListener('change', () => renderResults());
+    }
+  }
+  el.querySelectorAll('.tb-card').forEach(node => {
+    node.addEventListener('click', () => {
+      const id = node.dataset.id;
+      const card = tripResults.byId.get(id) || tripResults.byId.get(Number(id));
+      if (!card) return;
+      // Make sure the federal/state/local toggle for this campground is on,
+      // then fly to the pin and synthesize a click so the existing drawer
+      // path takes over (handles availability fetch + pin reselect logic).
+      const cat = card.category === 'other' ? 'federal' : card.category;
+      const toggle = document.getElementById(`f-cg-${cat}`);
+      if (toggle && !toggle.checked) {
+        toggle.checked = true;
+        toggle.dispatchEvent(new Event('change'));
+      }
+      // suppressPinClick prevents bindPinClicks() from overwriting the
+      // destination input with this campground's name when synthesizeClick
+      // dispatches the synthetic map-click event.
+      suppressPinClick = true;
+      mapRef.flyTo({ center: [card.lng, card.lat], zoom: 13, speed: 1.6 });
+      mapRef.once('moveend', () => {
+        synthesizeClick(['cg-points-hit', 'cg-points'], [card.lng, card.lat]);
+        // Synthesized click runs synchronously inside synthesizeClick —
+        // release the flag right after so genuine user clicks aren't blocked.
+        suppressPinClick = false;
+      });
+    });
+  });
+}
+
 // --- helpers -----------------------------------------------------------
 
 function escapeHtml(s) {
@@ -978,6 +1297,12 @@ function formatDist(km) {
   if (km < 1) return `${Math.round(km * 1000)} m`;
   if (km < 100) return `${km.toFixed(1)} km`;
   return `${km.toFixed(0)} km`;
+}
+/** Distance-along-route — "X km in" reads better than "X km away". */
+function formatRouteKm(km) {
+  if (km < 1) return `${Math.round(km * 1000)} m in`;
+  if (km < 10) return `${km.toFixed(1)} km in`;
+  return `${Math.round(km)} km in`;
 }
 function formatDuration(hrs) {
   const h = Math.floor(hrs);

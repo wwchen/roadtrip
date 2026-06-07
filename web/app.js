@@ -119,6 +119,24 @@ bindSatelliteToggle();
 initSearch();
 initTopbar(map, getSearchIndex);
 
+// Desktop panel collapse — hide the layers/legend panel and show a small
+// pop-out button to bring it back. Mobile uses the existing #panel-toggle
+// hamburger flow below.
+(function initPanelCollapse() {
+  const panel = document.getElementById('panel');
+  const collapseBtn = document.getElementById('panel-collapse');
+  const showBtn = document.getElementById('panel-show');
+  if (!panel || !collapseBtn || !showBtn) return;
+  collapseBtn.addEventListener('click', () => {
+    panel.classList.add('collapsed');
+    showBtn.classList.add('visible');
+  });
+  showBtn.addEventListener('click', () => {
+    panel.classList.remove('collapsed');
+    showBtn.classList.remove('visible');
+  });
+})();
+
 // Mobile panel drawer toggle
 (function initPanelToggle() {
   const btn = document.getElementById('panel-toggle');
@@ -283,6 +301,9 @@ async function load() {
     setPFData({ type: 'FeatureCollection', features: pf });
     setCGData({ type: 'FeatureCollection', features: cg });
     setSCData({ type: 'FeatureCollection', features: sc });
+
+    // Trip-corridor card list reads from this hook on each refresh.
+    if (typeof window.__rtSetTripPois === 'function') window.__rtSetTripPois(cg);
     state.overlayData.np = { type: 'FeatureCollection', features: np };
     state.overlayData.sp = { type: 'FeatureCollection', features: sp };
     state.overlayData.pf = { type: 'FeatureCollection', features: pf };
