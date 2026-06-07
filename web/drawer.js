@@ -77,6 +77,8 @@ export function openCampgroundDrawer(f) {
   show();
   if (f.properties?.recgov_id) {
     fetchAvailability(f, openController.signal);
+  } else if (f.properties?.aspira?.mapId != null) {
+    fetchAspiraAvailability(f, openController.signal);
   }
 
   root.querySelector('.cg-drawer-close')?.addEventListener('click', close);
@@ -185,10 +187,12 @@ function renderShell(f) {
     ? `<div class="cg-hero" role="img" aria-label="${escapeHtml(p.name)}" style="background-image: url('${escapeHtml(p.photo_url)}')"></div>`
     : '';
 
-  // Recgov pins get the availability-first treatment: heat-strip, /campsite
-  // deeplink for alerts, rec.gov as secondary. Non-recgov pins skip
-  // availability entirely and just surface the existing reserve button.
-  const availabilitySection = p.recgov_id
+  // Pins that have an availability provider (rec.gov or Aspira NextGen) get
+  // the availability-first treatment: heat-strip, watch CTA, reserve as
+  // secondary. Other pins skip availability entirely and just surface the
+  // existing reserve button.
+  const hasAvailability = !!(p.recgov_id || p.aspira?.mapId);
+  const availabilitySection = hasAvailability
     ? `
       <section class="cg-availability" aria-live="polite">
         <div class="cg-summary">Checking availability…</div>
@@ -249,9 +253,25 @@ function renderShell(f) {
   `;
 }
 
+async function fetchAspiraAvailability(f, signal) {
+  // Same renderer as the rec.gov path; the API contract is intentionally
+  // identical (state, summary, availability[], cache). See
+  // backend/src/main/kotlin/ca/floo/roadtrip/aspira/AspiraAvailabilityRoutes.kt.
+  const a = f.properties.aspira;
+  const tx = a.transactionLocationId;
+  const mapId = a.mapId;
+  const host = a.host || 'reservation.pc.gc.ca';
+  const url = `/api/campsite/availability-aspira/${encodeURIComponent(tx)}/${encodeURIComponent(mapId)}?host=${encodeURIComponent(host)}&days=30`;
+  await runFetch(url, f, signal);
+}
+
 async function fetchAvailability(f, signal) {
   const recgovId = f.properties.recgov_id;
   const url = `/api/campsite/availability/${encodeURIComponent(recgovId)}?days=30`;
+  await runFetch(url, f, signal);
+}
+
+async function runFetch(url, f, signal) {
   try {
     const resp = await fetch(url, { signal });
     const json = await resp.json().catch(() => null);
@@ -304,7 +324,7 @@ function renderState(json) {
   }
 
   if (json.state === 'empty') {
-    summaryEl.textContent = 'No availability data — try Reserve on rec.gov directly';
+    summaryEl.textContent = 'No availability data — try the Reserve link';
     stripEl.style.display = 'none';
     if (labelEl) labelEl.textContent = '';
     return;
@@ -350,7 +370,11 @@ function renderError(code, retryAfter, f) {
     if (openController) openController.abort();
     openController = new AbortController();
     renderShell(f);
-    fetchAvailability(f, openController.signal);
+    if (f.properties?.recgov_id) {
+      fetchAvailability(f, openController.signal);
+    } else if (f.properties?.aspira?.mapId != null) {
+      fetchAspiraAvailability(f, openController.signal);
+    }
   });
 }
 
