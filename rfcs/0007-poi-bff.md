@@ -321,39 +321,52 @@ sealed class Poi {
     abstract val sourceId: String
     abstract val name: String
     abstract val geom: org.locationtech.jts.geom.Geometry
-    abstract val region: String?
+    abstract val region: String?               // US state / Canadian province
+    abstract val country: String?              // ISO 3166-1 alpha-2 (US, CA)
     abstract val governingBodyId: Long
     abstract val parentPoiId: Long?
-    // Lifecycle timestamps live on every POI, not per-type. createdAt /
-    // updatedAt are DB-managed on UPSERT; lastVerified is an editorial
-    // touch (someone confirmed the data point still reflects reality).
+    abstract val phone: String?
+    abstract val address: Address?             // street/city/postcode bag
+    abstract val infoUrl: String?              // non-booking informational link
+    // Lifecycle: createdAt/updatedAt DB-managed on UPSERT; lastVerified is
+    // an editorial touch (someone confirmed the row still reflects reality).
     abstract val createdAt: Instant
     abstract val updatedAt: Instant
     abstract val lastVerified: LocalDate?
 
     data class Campground(
-        override val id: Long, /* shared fields */,
-        val providerRef: ProviderRef?,     // BookingProvider FK + opaque ref blob
+        /* shared fields */,
+        val providerRef: ProviderRef?,         // BookingProvider FK + opaque ref blob
         val amenities: List<String>,
+        val activities: List<String>,
         val sites: Int?,
-        val season: String?                 // "mid-May to early October", parsed BE-side
+        val season: String?,                   // "mid-May to early October", parsed BE-side
+        val near: String?,                     // "5mi NE of Tonasket"
+        val photoUrl: String?,
+        val cellCoverage: Map<Carrier, CellSignal>?,  // rec.gov-enriched
+        val ratingReviews: RatingSummary?      // rec.gov-enriched (avg + count)
     ) : Poi()
 
     data class Supercharger(
         /* shared */,
         val stallCount: Int,
         val maxPowerKw: Int,
+        val facility: String?,                 // "hotel parking", "mall lot"
         val connectors: List<ConnectorType>
     ) : Poi()
 
     data class Park(
         /* shared */,
-        val parkType: ParkType,    // National, State, Provincial
-        val unitName: String?,
+        val parkType: ParkType,                // National, State, Provincial
+        val designation: String,               // "National Park" vs "Wilderness" vs "Recreation Area"
+        val officialName: String?,             // PAD-US Loc_Nm if it differs from name
         val acres: Double?
     ) : Poi()
 
-    data class PlanetFitness(/* shared */) : Poi()
+    data class PlanetFitness(
+        /* shared */,
+        val openingHours: String?              // OSM-format ("Mo-Fr 05:00-23:00")
+    ) : Poi()
 }
 ```
 
@@ -633,6 +646,102 @@ proliferate without FE changes.
 - The `properties.type`-keyed renderer means a new type's first PR is just
   BE-side; FE can ship a fallback render until a custom one is added.
 
+## Field audit: every property in `data/*.geojson` mapped to a home
+
+Walking the actual columns we ingest today against the proposed model.
+Anything that doesn't have a row gap-checks the design.
+
+### `data/campgrounds.geojson`
+
+| Field | Where it lives | Notes |
+|---|---|---|
+| `name` | `pois.name` | shared |
+| `code` | `pois.source_id` | already does this |
+| `category` (federal/state/local/provincial) | hoist to **`agency_kind` on `governing_body`** | the geojson `category` maps from `governing_body.kind` (already in the entity sketch) |
+| `state` | `pois.region` | shared |
+| `country` | promote to **`pois.country` (CHAR(2))** | not currently a column; matters for AB/BC dispatch and FE rendering |
+| `phone` | `Campground.phone: String?` | per-type |
+| `season` | `Campground.season: String?` | per-type |
+| `sites` | `Campground.sites: Int?` | per-type |
+| `amenities` | `Campground.amenities: List<String>` | per-type |
+| `activities` | `Campground.activities: List<String>` | **missing from RFC**, add it (BC parks carries this) |
+| `cell_coverage` | `Campground.cellCoverage: Map<Carrier, Pair<Float, Int>>?` | **missing from RFC**, rec.gov-enriched |
+| `rating_reviews` | `Campground.ratingReviews: Pair<Float, Int>?` | **missing from RFC**, rec.gov-enriched |
+| `photo_url` | `Campground.photoUrl: String?` | **missing from RFC**, but only present on BC parks; could promote to base if other types want it |
+| `near` | `Campground.near: String?` | "5mi NE of X" — purely descriptive; per-type |
+| `type` (NP/SP/PK/etc.) | drop | classifier shorthand from sources, redundant once `category` + `governing_body` exist |
+| `typeLabel` ("Yoho National Park") | derived from parent POI | when `parent_poi_id` is wired, this is `parent.name` — drop the field |
+| `parent_name`, `parent_type` | derived from `parent_poi_id` | drop after parent FK is populated |
+| `recgov_id` | folds into `provider_ref.ids` | covered by Section 4 |
+| `aspira` | folds into `provider_ref.ids` | covered |
+| `parks_canada_url` / `parks_alberta_url` / `bcparks_url` | drop, replaced by **`pois.info_url`** | one nullable column for "non-booking park-info link"; the BE assembles "Park info on …" buttons from this + a label derived from `governing_body` |
+| `reservable` | drop | per decision #9, season + provider state + live availability owns this |
+| `enriched` | drop (poller-internal flag) | should never have left the importer; not user-visible |
+
+### `data/national-parks.geojson` / `data/state-parks.geojson`
+
+These come straight from PAD-US (USGS protected-areas dataset) with naming
+conventions that smell of ESRI:
+
+| Field | Where it lives | Notes |
+|---|---|---|
+| `Unit_Nm` | `pois.name` | shared |
+| `Loc_Nm` | `Park.officialName: String?` (or drop) | often duplicates `Unit_Nm`; capture if non-empty |
+| `State_Nm` | `pois.region` | shared |
+| `Mang_Name` ("National Park Service") | `pois.governing_body_id` (FK) | exactly what `governing_body` is for |
+| `Des_Tp` ("National Park", "Wilderness") | `Park.designation: String` | per-type — useful for FE labeling |
+| `GIS_Acres` | `Park.acres: Double?` | per-type, already in RFC |
+
+Geometry: PAD-US ships `Polygon` for state parks, `MultiPolygon` for many
+national parks (Channel Islands, Glacier Bay). Already covered by the
+`geom geometry(Geometry, 4326)` decision.
+
+### `data/planet-fitness.geojson`
+
+| Field | Where it lives | Notes |
+|---|---|---|
+| `name` | `pois.name` | shared |
+| `osm_id` | `pois.source_id` (with `source='osm-pf'`) | shared |
+| `street` / `city` / `state` / `postcode` | promote to **`pois.address` (JSONB) or split columns** | currently per-type-only on PF; tents and SCs also have these. JSONB blob keeps it open |
+| `phone` | hoist to base or per-type? | campgrounds, PF, and SC service desks all have phones. Probably **base `pois.phone: String?`** |
+| `opening_hours` | `PlanetFitness.openingHours: String?` | OSM-format (`"Mo-Fr 05:00-23:00"`); per-type for now, could go to base |
+| `website` | `pois.info_url` | same column as the campground park-info URLs |
+
+### `data/tesla-superchargers.geojson`
+
+| Field | Where it lives | Notes |
+|---|---|---|
+| `name` ("Santa Barbara, CA") | `pois.name` | shared |
+| `id` / `locationId` | `pois.source_id` | shared (with `source='tesla'`) |
+| `street` / `city` / `state` / `country` | base `address` JSONB or columns | same case as PF |
+| `status` ("OPEN" / "PERMIT") | filter at poller (only OPEN) — already done | shouldn't reach the row |
+| `color` / `group` ("open" / "construction") | drop, derive from `status` | poller artifact |
+| `facility` | `Supercharger.facility: String?` ("hotel parking") | per-type |
+| `stallCount` | `Supercharger.stallCount: Int` | per-type, in RFC |
+| `powerKilowatt` | `Supercharger.maxPowerKw: Int` | per-type, in RFC |
+
+### Gaps the RFC needs to close
+
+1. **`pois.country`** — promote from per-type to base. Drives FE behavior
+   (US-vs-CA park-system fallback search) and BE adapter selection.
+2. **`pois.phone`** — base, not per-type. Three of four POI types carry it.
+3. **`pois.address`** — JSONB on base. Avoids "every type re-models street/city/state/postcode."
+4. **`pois.info_url`** — base, replaces the parks_canada_url / parks_alberta_url /
+   bcparks_url / website per-type sprawl. One column for "non-booking
+   informational link," BE composes "Park info on …" / "Visit website" /
+   "Find on Tesla.com" buttons from `(info_url, governing_body)`.
+5. **`Campground.photoUrl`, `activities`, `cellCoverage`, `ratingReviews`**
+   — present in geojson, missing from the RFC's `Campground` shape. Add.
+6. **`Park.designation`** — `Des_Tp` ("National Park" vs "Wilderness" vs
+   "National Recreation Area") is a meaningful display distinction.
+7. **`Park.officialName` / `Loc_Nm`** — keep for the small set where it
+   differs from `Unit_Nm`; otherwise null.
+
+The **drop** column is also the point: `enriched`, `color`, `group`,
+`type`, `typeLabel`, `parent_name`, `parent_type`, `reservable` —
+poller-internal artifacts or fields the model now derives. They've been
+leaking to the wire for no reason.
+
 ## Unresolved questions
 
 - **Where does pricing live?** Today there's `/api/pricing/{slug}` for
@@ -671,3 +780,5 @@ proliferate without FE changes.
 | 9 | 2026-06-07 | Drop `reservable` from the row shape | It depends on season + provider state, not row-level data; the availability route owns the answer |
 | 10 | 2026-06-07 | `created_at` / `updated_at` / `last_verified` are POI-level, not per-type | Lifecycle is shared; promoting `last_verified` from JSONB to a column makes it filterable + reusable for future types |
 | 11 | 2026-06-07 | Skip rec.gov-style site-level (Campsite) modeling for now | Heat strip aggregates across sites; we never need per-site state. Revisit if we ever build per-site availability tracking |
+| 12 | 2026-06-07 | Hoist `country`/`phone`/`address`/`info_url` to POI base | Field audit shows three of four POI types carry phone + address; one base `info_url` retires the parks_canada_url / parks_alberta_url / bcparks_url / website per-type sprawl |
+| 13 | 2026-06-07 | Drop poller-internal fields from the wire (`enriched`, `color`, `group`, `type`, `typeLabel`, `parent_name`, `parent_type`) | Caller-derivable or only meaningful inside the poller; leaking them to the FE is incidental |
