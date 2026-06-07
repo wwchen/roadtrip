@@ -126,9 +126,11 @@ class SmokeTest {
                 "reserve href didn't match expected hosts: $href",
             )
 
-            // 7. last_verified footer.
-            assertThat(drawer.locator(".footer"))
-                .containsText(Pattern.compile("Verified \\d{4}-\\d{2}-\\d{2}"))
+            // 7. last_verified footer. The drawer also has a Booking-system
+            // footnote that uses the same .footer class, so match the
+            // verified one by its content.
+            assertThat(drawer.getByText(Pattern.compile("Verified \\d{4}-\\d{2}-\\d{2}")))
+                .isVisible()
 
             // 8. No JS errors during the run.
             assertTrue(
