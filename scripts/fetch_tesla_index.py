@@ -65,6 +65,12 @@ def main() -> int:
     except Exception as e:  # noqa: BLE001
         err(f"  fetch failed: {e}")
         return 1
+    if status != 200:
+        # Don't pollute the raw cache with WAF/throttle responses. Cookies
+        # that fail (403/429) typically mean an IP-binding mismatch or
+        # Akamai escalation — re-mint and retry, don't archive the failure.
+        err(f"  upstream HTTP {status} — skipping write (body head: {body[:200]!r})")
+        return 1
     payload = parse_payload("application/json", body)
     write_envelope(
         source="tesla-index",
@@ -83,7 +89,7 @@ def main() -> int:
     except Exception:
         pass
     err(f"  wrote {n} locations (HTTP {status})")
-    return 0 if status == 200 else 1
+    return 0
 
 
 if __name__ == "__main__":
