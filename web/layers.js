@@ -338,6 +338,10 @@ export function setPFData(geojson) {
   const src = state.map?.getSource('pf');
   if (src) src.setData(geojson);
 }
+export function setSCData(geojson) {
+  const src = state.map?.getSource('sc');
+  if (src) src.setData(geojson);
+}
 export function setNPData(geojson) {
   const m = state.map;
   if (!m) return;
