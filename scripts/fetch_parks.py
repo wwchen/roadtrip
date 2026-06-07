@@ -5,6 +5,7 @@ ArcGIS REST has a per-query record cap (usually 2000), so we paginate with
 resultOffset. We also request simplified geometry (maxAllowableOffset in degrees)
 to keep file sizes down — parks at continental-US zoom don't need cm precision.
 """
+import datetime as dt
 import json
 import sys
 import time
@@ -49,7 +50,8 @@ def query_all(where: str, out_path: Path, page: int = 1000):
         offset += page
         time.sleep(0.2)
 
-    fc = {"type": "FeatureCollection", "features": all_features}
+    fetched_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    fc = {"_fetched_at": fetched_at, "type": "FeatureCollection", "features": all_features}
     out_path.write_text(json.dumps(fc))
     print(f"  wrote {len(all_features)} features to {out_path.name}", file=sys.stderr)
     return len(all_features)

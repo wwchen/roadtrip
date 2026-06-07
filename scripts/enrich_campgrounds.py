@@ -27,6 +27,7 @@ so interruptions resume cleanly.
 from __future__ import annotations
 import argparse
 import asyncio
+import datetime as dt
 import json
 import math
 import sys
@@ -236,6 +237,10 @@ async def main():
                 print(f"  [{n}/{len(todo)}] hits={hits} misses={misses} errs={errors}  last: {props['name']} → {tag}",
                       file=sys.stderr)
 
+    # Bump _fetched_at to reflect the most recent network touch (rec.gov for
+    # the federal subset). Preserves the existing key shape so the importer
+    # reads one timestamp per file regardless of which script wrote last.
+    data["_fetched_at"] = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     DATA.write_text(json.dumps(data))
     print(f"done. hits={hits} misses={misses} errors={errors}", file=sys.stderr)
 

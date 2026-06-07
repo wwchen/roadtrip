@@ -5,7 +5,6 @@ import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
-import java.time.Instant
 
 // data/planet-fitness.geojson is OSM-derived. osm_id is "node/<digits>" and
 // is stable-ish (OSM rarely renumbers nodes), so we use it directly as
@@ -20,7 +19,7 @@ class PlanetFitnessSource(
         sequence {
             val root = Json.parseToJsonElement(file.readText()).jsonObject
             val features = root["features"]!!.jsonArray
-            val fetchedAt = Instant.ofEpochMilli(file.lastModified())
+            val fetchedAt = readFetchedAt(root, file)
             for (feat in features) {
                 val obj = feat.jsonObject
                 val geom = obj["geometry"]?.jsonObject ?: continue
