@@ -24,6 +24,14 @@ const ROUTE_COLOR = '#4285F4';   // Google-Maps-blue
 const GEOCODE_DEBOUNCE_MS = 220;
 const MAX_STOPS = 25;
 
+// Corridor: a buffered polygon around the active route, used to filter
+// /api/pois server-side. 30 mi default — wide enough to catch realistic
+// detour-worthy stops, narrow enough that the corridor is meaningful.
+// MAX_POLYGON_VERTICES is the backend cap (2000); we simplify aggressively
+// to stay well under so even cross-country routes fit in one POST body.
+const CORRIDOR_MILES = 30;
+const CORRIDOR_SIMPLIFY_TOLERANCE = 0.02;  // degrees — ~2km at mid-latitudes
+
 const KIND_COLOR = {
   PLACE: '#3a7bd5',
   ADDR:  '#5a6a8a',
@@ -43,6 +51,7 @@ const trip = {
   // Each stop is { name, lng, lat, kind, pinItem? } or null (empty slot)
   stops: [],
   route: null,        // GeoJSON FeatureCollection from /api/route
+  corridor: null,     // GeoJSON Polygon from turf.buffer(route, CORRIDOR_MILES)
   routeAbort: null,
   generation: 0,
   endpointMarkers: [], // parallel to stops; null for empty slots
@@ -67,6 +76,11 @@ export function initTopbar(map, getPinSearchIndex) {
   bindEvents();
   bindPinClicks();
   renderRows();
+
+  // Expose the corridor polygon to app.js's bbox refresh so it can include
+  // it in the POST /api/pois body. Returns null when no route is active —
+  // app.js then sends a normal bbox-only request.
+  window.__rtTripCorridor = () => trip.corridor;
 }
 
 // --- DOM scaffolding -----------------------------------------------------
@@ -497,6 +511,7 @@ function onClearAll() {
   removeAllMarkers();
   hideStatus();
   rerender();
+  notifyCorridorChanged();
 }
 
 function onRowX(i, wasFilled) {
@@ -506,6 +521,7 @@ function onRowX(i, wasFilled) {
     rerender();
     removeRouteLayer();
     hideStatus();
+    notifyCorridorChanged();
     setTimeout(() => {
       const el = document.querySelector(`.tb-row[data-i="${i}"] .tb-input`);
       if (el) { activeRowIdx = i; el.focus(); }
@@ -520,7 +536,16 @@ function onRowX(i, wasFilled) {
     }
     rerender();
     if (allStopsFilled()) tryFetchRoute();
-    else { removeRouteLayer(); hideStatus(); }
+    else { removeRouteLayer(); hideStatus(); notifyCorridorChanged(); }
+  }
+}
+
+/** Tell app.js the corridor has changed so it re-fetches /api/pois with the
+ *  new polygon (or no polygon if the route was cleared). Debounced inside
+ *  app.js (250ms), so calling it multiple times in quick succession is fine. */
+function notifyCorridorChanged() {
+  if (typeof window.__rtRefreshBbox === 'function') {
+    window.__rtRefreshBbox();
   }
 }
 
@@ -565,12 +590,36 @@ async function tryFetchRoute() {
   drawRoute();
   fitMapToRoute();
   showRouteSummary();
+  notifyCorridorChanged();
 }
 
 function drawRoute() {
   removeRouteLayer();
   if (!trip.route) return;
   const lineGeo = trip.route.features[0].geometry;
+
+  // Compute the corridor polygon BEFORE adding the route line, so we can add
+  // the corridor fill underneath. Failure to buffer (turf missing or weird
+  // input) is non-fatal — we just skip the corridor fill and the bbox
+  // refresh won't include polygon, behaving as if there's no corridor.
+  trip.corridor = computeCorridor(lineGeo);
+
+  if (trip.corridor) {
+    mapRef.addSource('trip-corridor', {
+      type: 'geojson',
+      data: { type: 'Feature', geometry: trip.corridor, properties: {} },
+    });
+    mapRef.addLayer({
+      id: 'trip-corridor-fill',
+      source: 'trip-corridor',
+      type: 'fill',
+      paint: {
+        'fill-color': ROUTE_COLOR,
+        'fill-opacity': 0.08,
+      },
+    }, firstSymbolLayerId());
+  }
+
   mapRef.addSource('trip-route', {
     type: 'geojson',
     data: { type: 'Feature', geometry: lineGeo, properties: {} },
@@ -588,6 +637,50 @@ function removeRouteLayer() {
   if (!mapRef) return;
   if (mapRef.getLayer('trip-route-line')) mapRef.removeLayer('trip-route-line');
   if (mapRef.getSource('trip-route')) mapRef.removeSource('trip-route');
+  if (mapRef.getLayer('trip-corridor-fill')) mapRef.removeLayer('trip-corridor-fill');
+  if (mapRef.getSource('trip-corridor')) mapRef.removeSource('trip-corridor');
+  trip.corridor = null;
+}
+
+/**
+ * Buffer the route polyline into a corridor polygon, then simplify so the
+ * polygon stays well under the backend's MAX_POLYGON_VERTICES cap (2000).
+ * Returns a GeoJSON Polygon (or MultiPolygon if the buffer self-intersects)
+ * geometry, or null if turf is unavailable / the input is degenerate.
+ */
+function computeCorridor(lineGeo) {
+  if (!window.turf || !lineGeo?.coordinates?.length) return null;
+  try {
+    const buffered = window.turf.buffer(
+      { type: 'Feature', geometry: lineGeo, properties: {} },
+      CORRIDOR_MILES,
+      { units: 'miles' },
+    );
+    if (!buffered?.geometry) return null;
+    // Simplify keeps the body small. tolerance is in degrees; ~0.02 ≈ 2km
+    // at mid-latitudes, which is invisible at typical zoom levels.
+    const simplified = window.turf.simplify(buffered, {
+      tolerance: CORRIDOR_SIMPLIFY_TOLERANCE,
+      highQuality: false,
+    });
+    return simplified?.geometry || buffered.geometry;
+  } catch (e) {
+    console.warn('[topbar] computeCorridor failed', e);
+    return null;
+  }
+}
+
+/**
+ * Find the first symbol layer in the current style so we can insert the
+ * corridor fill underneath it (above pin layers but below labels). MapLibre
+ * convention; matches how the existing layers do it.
+ */
+function firstSymbolLayerId() {
+  const layers = mapRef.getStyle()?.layers || [];
+  for (const l of layers) {
+    if (l.type === 'symbol') return l.id;
+  }
+  return undefined;
 }
 
 function fitMapToRoute() {

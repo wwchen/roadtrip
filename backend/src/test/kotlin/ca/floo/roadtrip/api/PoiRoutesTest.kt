@@ -9,8 +9,12 @@ import ca.floo.roadtrip.importer.pointGeoJson
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
@@ -86,7 +90,11 @@ class PoiRoutesTest {
             )
             application { routing { poiRoutes(ctx) } }
 
-            val resp = client.get("/api/pois?bbox=-125,47,-120,51")
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51"))
+                }
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("FeatureCollection", body["type"]!!.jsonPrimitive.content)
@@ -115,7 +123,11 @@ class PoiRoutesTest {
             )
             application { routing { poiRoutes(ctx) } }
 
-            val resp = client.get("/api/pois?bbox=-160,5,-150,15")
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-160,5,-150,15"))
+                }
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("FeatureCollection", body["type"]!!.jsonPrimitive.content)
@@ -135,7 +147,11 @@ class PoiRoutesTest {
             )
             application { routing { poiRoutes(ctx) } }
 
-            val resp = client.get("/api/pois?bbox=-125,47,-120,51&category=campground,state-park")
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51", categories = listOf("campground", "state-park")))
+                }
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val cats =
                 body["features"]!!
@@ -149,9 +165,12 @@ class PoiRoutesTest {
         }
 
     @Test
-    fun `truncation kicks in above the cap`() =
+    fun `truncation kicks in above the per-category cap`() =
         testApplication {
-            // Seed POI_LIMIT + 5 rows in a tight bbox.
+            // Seed POI_LIMIT + 5 campground rows in a tight bbox. Per-category
+            // limit is POI_LIMIT/5 (5 default categories), so we should see
+            // exactly that many — and the response is NOT marked truncated
+            // because per-cat truncation is the design, not an error state.
             val rows =
                 (1..(POI_LIMIT + 5)).map { i ->
                     row(
@@ -165,20 +184,78 @@ class PoiRoutesTest {
             seed(rows)
             application { routing { poiRoutes(ctx) } }
 
-            val body = Json.parseToJsonElement(client.get("/api/pois?bbox=-125,47,-120,51").bodyAsText()).jsonObject
-            assertEquals(true, body["truncated"]!!.jsonPrimitive.boolean)
-            assertEquals(POI_LIMIT, body["features"]!!.jsonArray.size)
+            // No categories filter → defaults to all 5, each capped at POI_LIMIT/5 = 400.
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51"))
+                }
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(POI_LIMIT / 5, parsed["features"]!!.jsonArray.size)
+
+            // When the caller scopes to a single category, that category gets
+            // the full POI_LIMIT slot — and global truncation kicks in only
+            // when total rows >= POI_LIMIT + 1.
+            val respScoped =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51", categories = listOf("campground")))
+                }
+            val parsedScoped = Json.parseToJsonElement(respScoped.bodyAsText()).jsonObject
+            assertEquals(true, parsedScoped["truncated"]!!.jsonPrimitive.boolean)
+            assertEquals(POI_LIMIT, parsedScoped["features"]!!.jsonArray.size)
         }
 
     @Test
-    fun `malformed bbox returns 400`() =
+    fun `malformed body returns 400`() =
         testApplication {
             application { routing { poiRoutes(ctx) } }
 
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/pois").status)
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/pois?bbox=not,a,real,bbox").status)
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/pois?bbox=-125,51,-120,47").status) // s>=n
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/pois?bbox=-125,47,-120").status)
+            // Empty body
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                client
+                    .post("/api/pois") {
+                        contentType(ContentType.Application.Json)
+                        setBody("")
+                    }.status,
+            )
+            // Missing bbox
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                client
+                    .post("/api/pois") {
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"zoom":8}""")
+                    }.status,
+            )
+            // bbox not 4 elements
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                client
+                    .post("/api/pois") {
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"bbox":[-125,47,-120]}""")
+                    }.status,
+            )
+            // bbox south >= north
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                client
+                    .post("/api/pois") {
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"bbox":[-125,51,-120,47]}""")
+                    }.status,
+            )
+            // bbox values not numeric
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                client
+                    .post("/api/pois") {
+                        contentType(ContentType.Application.Json)
+                        setBody("""{"bbox":["a","b","c","d"]}""")
+                    }.status,
+            )
         }
 
     @Test
@@ -188,7 +265,14 @@ class PoiRoutesTest {
             // ST_MakeEnvelope can't express a wrapping envelope without splitting,
             // so we reject at the API layer instead of returning misleading rows.
             application { routing { poiRoutes(ctx) } }
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/pois?bbox=170,-10,-170,10").status)
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                client
+                    .post("/api/pois") {
+                        contentType(ContentType.Application.Json)
+                        setBody(body("170,-10,-170,10"))
+                    }.status,
+            )
         }
 
     @Test
@@ -196,6 +280,129 @@ class PoiRoutesTest {
         testApplication {
             application { routing { poiRoutes(ctx) } }
             assertEquals(HttpStatusCode.OK, client.get("/api/pois/health").status)
+        }
+
+    @Test
+    fun `polygon filter excludes points outside the corridor`() =
+        testApplication {
+            // Three points: two inside a small polygon around Vancouver, one
+            // outside in eastern WA. With polygon set, only the two inside
+            // should come back.
+            seed(
+                listOf(
+                    row("inside-1", "Inside A", -123.0, 49.05, Category.CAMPGROUND),
+                    row("inside-2", "Inside B", -123.05, 49.10, Category.CAMPGROUND),
+                    row("outside-1", "Outside East", -118.0, 47.0, Category.CAMPGROUND),
+                ),
+            )
+            application { routing { poiRoutes(ctx) } }
+
+            // Polygon: small square around Vancouver, BC
+            val polygon = """{"type":"Polygon","coordinates":[[[-123.2,48.9],[-122.8,48.9],[-122.8,49.2],[-123.2,49.2],[-123.2,48.9]]]}"""
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-117,51", polygon = polygon))
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val names =
+                parsed["features"]!!
+                    .jsonArray
+                    .map {
+                        it.jsonObject["properties"]!!
+                            .jsonObject["name"]!!
+                            .jsonPrimitive.content
+                    }.toSet()
+            assertEquals(setOf("Inside A", "Inside B"), names)
+            // Response should mark corridor:true so the FE can show different UI.
+            assertEquals(true, parsed["corridor"]?.jsonPrimitive?.boolean)
+        }
+
+    @Test
+    fun `polygon with too many vertices returns 400`() =
+        testApplication {
+            application { routing { poiRoutes(ctx) } }
+            // Build a polygon with 2001 vertices (one over the cap).
+            val ring = StringBuilder("[")
+            for (i in 0..2000) {
+                if (i > 0) ring.append(",")
+                ring.append("[${-123.0 + i * 0.0001},49.0]")
+            }
+            ring.append("]")
+            val polygon = """{"type":"Polygon","coordinates":[$ring]}"""
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-117,51", polygon = polygon))
+                }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+        }
+
+    @Test
+    fun `zoom below CG_MIN_ZOOM drops campground from results`() =
+        testApplication {
+            seed(
+                listOf(
+                    row("cg-1", "Camp", -123.0, 49.0, Category.CAMPGROUND),
+                    row("sp-1", "Park", -123.05, 49.05, Category.STATE_PARK),
+                ),
+            )
+            application { routing { poiRoutes(ctx) } }
+
+            // Zoom 4 < CG_MIN_ZOOM=6 → campground category dropped server-side
+            // even when explicitly requested.
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51", categories = listOf("campground", "state-park"), zoom = 4))
+                }
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val cats =
+                parsed["features"]!!
+                    .jsonArray
+                    .map {
+                        it.jsonObject["properties"]!!
+                            .jsonObject["category"]!!
+                            .jsonPrimitive.content
+                    }.toSet()
+            assertEquals(setOf("state-park"), cats)
+        }
+
+    @Test
+    fun `per-category limit gives each category its own slot budget`() =
+        testApplication {
+            // Seed 50 PF + 50 CG + 50 SP all in tight bbox. With per-cat limit
+            // of POI_LIMIT/3 = 666, each category returns all 50 of its rows
+            // (no starvation).
+            val rows =
+                buildList {
+                    repeat(50) { i ->
+                        add(row("pf-$i", "PF $i", -123.0 + i * 0.0001, 49.0, Category.PLANET_FITNESS))
+                        add(row("cg-$i", "CG $i", -122.9 + i * 0.0001, 49.0, Category.CAMPGROUND))
+                        add(row("sp-$i", "SP $i", -122.8 + i * 0.0001, 49.0, Category.STATE_PARK))
+                    }
+                }
+            seed(rows)
+            application { routing { poiRoutes(ctx) } }
+
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51", categories = listOf("planet-fitness", "campground", "state-park")))
+                }
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val byCat = mutableMapOf<String, Int>()
+            parsed["features"]!!.jsonArray.forEach {
+                val c =
+                    it.jsonObject["properties"]!!
+                        .jsonObject["category"]!!
+                        .jsonPrimitive.content
+                byCat[c] = (byCat[c] ?: 0) + 1
+            }
+            assertEquals(50, byCat["planet-fitness"])
+            assertEquals(50, byCat["campground"])
+            assertEquals(50, byCat["state-park"])
         }
 
     @Test
@@ -222,10 +429,39 @@ class PoiRoutesTest {
             )
             application { routing { poiRoutes(ctx) } }
 
-            val body = Json.parseToJsonElement(client.get("/api/pois?bbox=-125,47,-120,51").bodyAsText()).jsonObject
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51"))
+                }
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val feat = body["features"]!!.jsonArray.single().jsonObject
             assertEquals("Polygon", feat["geometry"]!!.jsonObject["type"]!!.jsonPrimitive.content)
         }
+
+    /** Build a JSON request body for POST /api/pois. */
+    private fun body(
+        bbox: String, // "west,south,east,north"
+        categories: List<String>? = null,
+        zoom: Int? = null,
+        polygon: String? = null, // raw GeoJSON Polygon string
+    ): String {
+        val parts = bbox.split(",")
+        val sb = StringBuilder()
+        sb.append("""{"bbox":[${parts[0]},${parts[1]},${parts[2]},${parts[3]}]""")
+        if (zoom != null) sb.append(""","zoom":$zoom""")
+        if (categories != null) {
+            sb.append(""","categories":[""")
+            categories.forEachIndexed { i, c ->
+                if (i > 0) sb.append(",")
+                sb.append("\"").append(c).append("\"")
+            }
+            sb.append("]")
+        }
+        if (polygon != null) sb.append(""","polygon":$polygon""")
+        sb.append("}")
+        return sb.toString()
+    }
 
     private fun row(
         sourceId: String,
