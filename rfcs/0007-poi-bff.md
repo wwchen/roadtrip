@@ -193,7 +193,9 @@ captures. Sketch of the entities + how they relate:
 └──────────────────┘  N │ name, props…     │  1 └──────────────────┘   camis, none
                         │ governing_body_id│                           (FK optional)
                         │ booking_prov_id  │
-                        │ parent_poi_id    │←┐
+                        │  (parent: derived│
+                        │   via ST_Within, │
+                        │   not stored)    │←┐
                         │ last_seen_run_id │ │
                         │ last_poller_id   │ │ self-FK
                         └────────┬─────────┘ │   (parent must be polygon)
@@ -227,15 +229,15 @@ Relationships:
   the availability route's call (see Section 5 + the `reservable` note in
   Section 4), not a row-level fact. The vendor-dispatch availability route
   reads this field.
-- **POI → POI (parent)** (N:1, optional, self-FK). A campground belongs to
-  a park; a park has no parent (or in nested cases, a wilderness area inside
-  a national park). Constraint: `parent_poi_id` must reference a row whose
-  geom is areal (Polygon or MultiPolygon — `GeometryType(geom) IN
-  ('POLYGON','MULTIPOLYGON')`) and whose category is in (`'national-park'`,
-  `'state-park'`). This is denormalization — the spatial relation is
-  recoverable via `ST_Within(child.geom, parent.geom)` — but it lets the BE
-  cheaply assemble subtitles ("Kicking Horse Campground · Yoho National
-  Park") without a spatial join on every render.
+- **POI → POI (parent)** is a derived relation, not a stored FK. The
+  drawer payload assembler runs `ST_Within(child.geom, parent.geom) AND
+  parent.category IN ('national-park', 'state-park')` at query time
+  (sub-ms at 11K rows with the existing GIST index). Subtitles
+  ("Kicking Horse Campground · Yoho National Park") read from the
+  spatial join. We deliberately do not store a `parent_poi_id` column
+  — the geometry is the truth, a denormalized FK would silently drift
+  when PAD-US re-issues park polygons. (Correctness over perf — see
+  the project memory rule on the same topic.)
 - **POI → source** (N:1, required, already modeled as `source TEXT`).
   Eventually move to a real FK once we promote `source` to a table.
 
@@ -324,7 +326,6 @@ sealed class Poi {
     abstract val region: String?               // US state / Canadian province
     abstract val country: String?              // ISO 3166-1 alpha-2 (US, CA)
     abstract val governingBodyId: Long
-    abstract val parentPoiId: Long?
     abstract val phone: String?
     abstract val address: Address?             // street/city/postcode bag
     abstract val infoUrl: String?              // non-booking informational link
@@ -378,27 +379,43 @@ sealed type — one place for all display-rule logic.
 promoted to a real column. It applies to every POI eventually and
 becomes filterable.
 
-**`ProviderRef`** is the per-POI booking-provider lookup payload:
+**`ProviderRef`** is a sealed hierarchy mirroring the booking_provider
+dimension. Same reasoning that picks sealed Poi over generic
+`Poi + properties:JsonObject` applies one level deeper — the compiler
+enforces "Aspira has mapId, RecGov has recgov_id":
 
 ```kotlin
-data class ProviderRef(
-    val providerId: Long,    // FK to booking_provider
-    val ids: JsonObject      // shape determined by the provider's adapter
-)
+sealed class ProviderRef {
+    data class RecGov(val recgovId: String) : ProviderRef()
+    data class Aspira(
+        val host: String,                       // reservation.pc.gc.ca / camping.bcparks.ca / ...
+        val transactionLocationId: Long,
+        val mapId: Long,
+        val resourceLocationId: Long?
+    ) : ProviderRef()
+    data class Camis(val facilityId: String) : ProviderRef()
+}
 ```
+
+Stored as JSONB on the row with a discriminator + payload:
 
 ```json
 // rec.gov
-{"providerId": 1, "ids": {"recgov_id": "232857"}}
-// Aspira NextGen (PC / BC / WA share this shape)
-{"providerId": 2, "ids": {"transactionLocationId": -2147483630, "mapId": -2147483388, "resourceLocationId": -2147483624}}
+{"kind": "recgov", "recgov_id": "232857"}
+// Aspira NextGen
+{"kind": "aspira", "host": "camping.bcparks.ca", "transactionLocationId": -2147483630, "mapId": -2147483388, "resourceLocationId": -2147483624}
 // Camis (Alberta), if/when added
-{"providerId": 3, "ids": {"facility_id": "BVPP"}}
+{"kind": "camis", "facility_id": "BVPP"}
 ```
 
-Stored as JSONB. The `ids` schema is the adapter's contract — validation
-lives in the adapter, not at row insert. The availability route (Section
-5) hands `ids` to the matching adapter and never inspects it.
+Serialization handled by a `ProviderRef.serialize` / `parse` pair. The
+availability route (Section 5) reads the parsed `ProviderRef`, dispatches
+on the sealed type to the matching adapter, and the adapter receives a
+typed value — no `JsonObject.getString("foo")` parse at adapter time.
+
+Adding a new provider is: new sealed variant + new adapter + new row in
+`booking_provider`. The compiler refuses to forget the new variant in
+`buildDrawerPayload` or the dispatcher.
 
 #### `reservable` is computed, not stored
 
@@ -468,14 +485,43 @@ Python fetcher  ──►  data/raw/<source>/<ts>.<ext>  ──►  Kotlin ETL  
 
 **Raw cache layout** (`data/raw/<source>/`):
 
-- `YYYY-MM-DDTHH-MM-SSZ.<ext>` per capture (UTC, `-` for `:` for FS-safety).
+- `YYYY-MM-DDTHH-MM-SSZ.json` per capture (UTC, `-` for `:` for FS-safety).
   Multi-file sources nest under a per-capture directory.
-- `latest -> <ts>.<ext>` symlink swapped atomically with `ln -sfn`. Kotlin
-  ETL only reads `latest/`.
-- `<ts>.meta.json` per capture: upstream URL, HTTP status, ETag /
-  Last-Modified, `poller_runs.id`. Lets Kotlin skip re-import on no-op
-  fetches.
-- Failed/partial fetches written as `<ts>.partial`, never linked.
+- **No `latest` symlink.** The filename format is monotonic; ETL picks
+  the newest by listing the directory and taking the lexicographically-
+  greatest entry. Atomic via the OS rename. One less moving part.
+- ETL accepts an optional `--at <ts>` (or per-source `--filename
+  <ts>.<ext>`) for replay — same directory, different file.
+- Failed/partial fetches written as `.partial`, never picked up.
+
+**Capture envelope: Python writes structured, not verbatim.**
+
+A bare HTTP body strips the contract: which endpoint produced this,
+under what headers, by which fetcher version. Python wraps every
+response in a uniform envelope so Kotlin always reads the same outer
+shape, then dispatches the inner `payload` to the per-source DTO:
+
+```json
+{
+  "fetcher": "fetch_aspira_index",
+  "fetcher_version": "1",
+  "fetched_at": "2026-06-07T19:23:44Z",
+  "request":  { "url": "https://reservation.pc.gc.ca/api/maps",
+                "method": "GET",
+                "headers": { "User-Agent": "...", "Referer": "..." } },
+  "response": { "status": 200,
+                "headers": { "content-type": "application/json",
+                             "etag": "..." } },
+  "poller_run_id": 123,
+  "payload": <verbatim upstream JSON | string for non-JSON | base64 if binary>
+}
+```
+
+Trade vs. fully-verbatim: 200 bytes of envelope per capture, in
+exchange for: (a) the ETL never has to infer source from path, (b)
+when a vendor renames `/api/maps` to `/api/v2/maps` we have a record
+of which captures hold the old contract, (c) one file per capture
+(no separate `<ts>.meta.json` to keep in sync).
 - **Retention: keep all captures.** Crawling has real cost (Aspira's
   Azure WAF, Tesla's curl-impersonate + cookie refresh, OSM Overpass
   timeouts) — so once a capture is on disk, it stays. The Kotlin ETL
@@ -483,11 +529,72 @@ Python fetcher  ──►  data/raw/<source>/<ts>.<ext>  ──►  Kotlin ETL  
   upstream. Disk grows on the order of MB/day; cheap relative to what
   one WAF strike costs.
 
-**Kotlin ETL** lives in `backend/.../etl/`. Per-source classes (extending
-the existing `Source` interface) own parsing, schema mapping, and
-emitting `Poi` instances. Merging across sources (campgrounds = US +
-BC-curated + AB-curated + Aspira) becomes a `fold` of those emitters —
-the procedural Python merge stops existing.
+**Kotlin ETL** lives in `backend/.../etl/`. The pipeline is staged so each
+step is a pure function with its own test surface, not one
+`Importer.run` mega-loop:
+
+```
+data/raw/<source>/<ts>.json                    (envelope on disk)
+        │
+        │  read + parse envelope (uniform)
+        ▼
+   <Source>RawDto                              (per-source data class
+        │                                       mirroring upstream wire shape;
+        │                                       deserialize is the only thing
+        │                                       this stage does)
+        │
+        │  validate (per-source rules:
+        │            required fields, enum membership,
+        │            geometry well-formedness, ID format)
+        ▼
+   ValidatedDto OR ValidationError             (ValidationError counted in
+        │                                       poller_runs.counts; row dropped,
+        │                                       run continues)
+        │
+        │  transform (DTO → domain Poi sealed type
+        │             from Section 4; lookup
+        │             governing_body / booking_provider FKs)
+        ▼
+     Poi                                       (canonical in-memory model)
+        │
+        │  merge (per-target; e.g. campgrounds = fold(US, BC, AB, Aspira))
+        ▼
+   List<Poi>                                   (deduplicated by source_id within
+        │                                       the target's source set)
+        │
+        │  upsert (mark-and-sweep against pois.source IN
+        │          {target's sources}; tripwire on 50% shrinkage)
+        ▼
+     pois rows                                 (deletes are scoped per source)
+```
+
+What each stage owns:
+
+- **Parse** — read envelope, deserialize `payload` into a per-source
+  Kotlin data class (`UsCampgroundsRawDto`, `AspiraMapsRawDto`, etc.).
+  Pure. No DB. No domain types.
+- **Validate** — per-source rules: required fields, enum membership,
+  geometry well-formedness, ID format. Bad rows produce
+  `ValidationError(row, reason)`, counted but not fatal. Pure.
+- **Transform** — DTO → `Poi` sealed type. Lookup `governing_body_id`
+  + `booking_provider_id` from the dimension tables (read-only). Pure
+  except for the dim-table reads.
+- **Merge** — per-target fold (campgrounds = US + BC + AB + Aspira).
+  Dedupe by `(source, source_id)`. Pure.
+- **Upsert** — mark-and-sweep against `pois.source IN {target's
+  sources}`. Tripwire if `seen < 0.5 × prior_active` aborts before
+  sweep. The only stage that touches DB write.
+
+Why staged:
+
+1. Each stage is unit-testable without a DB. Parse + Validate +
+   Transform have golden-file tests against `data/raw/<source>/`
+   fixtures — captured once, replayed forever.
+2. Validation errors are counted in `poller_runs.counts` and the
+   ingest dashboard surfaces them — bad upstream data doesn't
+   silently poison `pois`.
+3. Transform is reusable. A future CLI exporter or search-index
+   builder consumes `Poi` instances, not DB rows.
 
 **Deletes** stay mark-and-sweep, scoped per source set:
 
@@ -504,8 +611,13 @@ the procedural Python merge stops existing.
 - `fetch_parks_canada.py`, `fetch_aspira_bc_wa.py` — merge logic moves
   to `ParksCanadaSource.kt` + a new `AspiraIndexSource.kt`.
 - The `aspira` block in curated `parks-canada-{bc,ab}.json` — those
-  files revert to raw curated data (lat/lng + name + season); aspira
-  IDs come from the actual aspira-maps fetch at ETL time.
+  files keep an explicit `aspira_park_title` (the verbatim Aspira map
+  title, e.g. `"Yoho"`). At ETL time, the binding is an exact-match
+  lookup in the aspira-maps fetch — no fuzzy name normalization. If
+  Aspira renames a park, the binding fails loud (counted in the
+  poller_run; surfaces in the ingest dashboard) instead of silently
+  dropping the heat strip. The IDs themselves still come from the
+  aspira-maps fetch, so they re-stamp on each run.
 - `data/*.geojson` (merged artifacts) — gone. Repo-curated JSON inputs
   move under `data/raw/` like everything else.
 - `Phase.Fetch.Kotlin` from RFC 0004 step 3 — folds back into
@@ -525,7 +637,7 @@ schema. Captured raw data stays — the new Kotlin ETL replays it.
 PR sequence (still useful for reviewability, not for back-compat):
 
 1. **PR 1: Schema reset.** New migrations: `pois` reshaped per Section 4
-   (sealed-type-aligned columns, `provider_ref`, `parent_poi_id`,
+   (sealed-type-aligned columns, `provider_ref`,
    `governing_body_id`, `last_poller_run_id`, `country`/`phone`/`address`/
    `info_url`/`last_verified` on the base, `reservable` dropped),
    plus `governing_body` + `booking_provider` dimension tables.
@@ -574,8 +686,9 @@ join tables.
 - **Site-level modeling.** Heat strip aggregates *across* sites; we never
   need per-site state. Adding a 4th table doubles the schema for ~zero
   user-visible benefit. (See decision #11.)
-- **Sub-area / loop modeling.** Natural fit for the `parent_poi_id` chain,
-  but our curated JSONs don't carry it. Skip until per-loop UX is needed.
+- **Sub-area / loop modeling.** Would need a parent relationship (FK or
+  spatial), and our curated JSONs don't carry per-loop polygons. Skip
+  until per-loop UX is needed.
 - **Equipment / amenity dimension tables.** FE doesn't filter on amenity;
   flat string array suffices.
 - **Activities / events / tours / media.** rec.gov's secondary endpoints
@@ -647,8 +760,8 @@ Anything that doesn't have a row gap-checks the design.
 | `photo_url` | `Campground.photoUrl: String?` | **missing from RFC**, but only present on BC parks; could promote to base if other types want it |
 | `near` | `Campground.near: String?` | "5mi NE of X" — purely descriptive; per-type |
 | `type` (NP/SP/PK/etc.) | drop | classifier shorthand from sources, redundant once `category` + `governing_body` exist |
-| `typeLabel` ("Yoho National Park") | derived from parent POI | when `parent_poi_id` is wired, this is `parent.name` — drop the field |
-| `parent_name`, `parent_type` | derived from `parent_poi_id` | drop after parent FK is populated |
+| `typeLabel` ("Yoho National Park") | derived from spatial parent at drawer-payload time (`ST_Within` lookup) | drop the column |
+| `parent_name`, `parent_type` | derived from spatial parent | drop the columns |
 | `recgov_id` | folds into `provider_ref.ids` | covered by Section 4 |
 | `aspira` | folds into `provider_ref.ids` | covered |
 | `parks_canada_url` / `parks_alberta_url` / `bcparks_url` | drop, replaced by **`pois.info_url`** | one nullable column for "non-booking park-info link"; the BE assembles "Park info on …" buttons from this + a label derived from `governing_body` |
@@ -778,7 +891,8 @@ route owns it), most OSM tags (no use case).
 | 3 | 2026-06-07 | Sealed Kotlin POI hierarchy over generic Poi | Compiler-checked display-rule logic; per-type properties named once |
 | 4 | 2026-06-07 | One `/api/availability/{poi_id}` with internal vendor dispatch | Provider is BE-side knowledge; minimum API surface |
 | 5 | 2026-06-07 | Stamp `pois.last_poller_run_id` alongside existing `last_seen_run_id` | Lets us trace any row back to the fetch + import that produced it; one-line plumbing change |
-| 6 | 2026-06-07 | Promote `governing_body` and `booking_provider` to dimension tables; add `pois.parent_poi_id` self-FK | Captures the agency-vs-source distinction (rec.gov serves multiple agencies) and lets the BE cheaply roll up "campground → park" subtitles without spatial joins |
+| 6 | 2026-06-07 | Promote `governing_body` and `booking_provider` to dimension tables | Captures the agency-vs-source distinction (rec.gov serves multiple agencies). Parent-of relationship stays derived via ST_Within (decision #18 supersedes the original parent_poi_id self-FK) |
+| 18 | 2026-06-07 | Drop `parent_poi_id` self-FK; compute parent-of via ST_Within at query time | Spatial geometry is the truth; storing a derived FK creates a second source that drifts when PAD-US re-issues park polygons. Sub-ms at 11K rows. Correctness over perf |
 | 7 | 2026-06-07 | Rename "ingest" to "poller" in this RFC's vocabulary | "poller" describes the periodic, schedule-driven nature of the work better than "ingest"; existing artifacts (`ingest_runs` table, `IngestController`, `/api/admin/ingest/*`) rename in a separate mechanical PR |
 | 8 | 2026-06-07 | Collapse `recgovId` + `aspira` into a generic `provider_ref` (booking_provider FK + opaque `ids` JSONB) | Per-vendor fields are exactly the N×M sprawl the RFC retires; opaque `ids` keeps the adapter contract local to its adapter |
 | 9 | 2026-06-07 | Drop `reservable` from the row shape | It depends on season + provider state, not row-level data; the availability route owns the answer |
@@ -787,6 +901,8 @@ route owns it), most OSM tags (no use case).
 | 12 | 2026-06-07 | Hoist `country`/`phone`/`address`/`info_url` to POI base | Field audit shows three of four POI types carry phone + address; one base `info_url` retires the parks_canada_url / parks_alberta_url / bcparks_url / website per-type sprawl |
 | 13 | 2026-06-07 | Drop poller-internal fields from the wire (`enriched`, `color`, `group`, `type`, `typeLabel`, `parent_name`, `parent_type`) | Caller-derivable or only meaningful inside the poller; leaking them to the FE is incidental |
 | 14 | 2026-06-07 | Python is fetch-only; Kotlin owns transform + upsert | Today's split has merge/transform logic in two languages. Python writes raw bytes to `data/raw/<source>/<ts>.<ext>`; Kotlin ETL parses, transforms, merges, enriches, upserts. One language for the schema-shaped boundary. |
-| 15 | 2026-06-07 | Raw cache is timestamped, `latest` symlink is what Kotlin reads, **all captures retained** | Crawling upstream is expensive (Aspira WAF, Tesla curl-impersonate + cookie injection); raw replay is free. ETL must always be replayable against historical captures with zero upstream calls |
+| 15 | 2026-06-07 | Raw cache is timestamped (`YYYY-MM-DDTHH-MM-SSZ.<ext>`); ETL picks newest by lexical sort. Optional `--filename` for replay. **All captures retained.** | Filename format is monotonic, so no symlink needed (one less moving part). Crawling upstream is expensive (Aspira WAF, Tesla curl-impersonate + cookie injection); raw replay is free. ETL must always be replayable against historical captures with zero upstream calls |
 | 17 | 2026-06-07 | Treat the new data model as a full rewrite, not a migration | Personal project, no live users to preserve continuity for. Drop `pois` + merged geojsons, rebuild from raw captures. Saves ~50% of the design-complexity budget that would otherwise be spent on dual-read/dual-write transitions |
+| 19 | 2026-06-07 | Python writes envelope-wrapped raw, not bare bytes | Bare HTTP body strips the contract (which endpoint, what headers, which fetcher version). Envelope is uniform; ETL parses outer shape once, dispatches inner payload by `fetcher` field. Replaces the separate `<ts>.meta.json` sidecar |
+| 20 | 2026-06-07 | ETL is staged: Parse → Validate → Transform → Merge → Upsert | Each stage is pure (except Upsert), unit-testable against captured raw fixtures with no DB. Validation errors counted in poller_runs.counts; bad upstream data doesn't poison pois. Transform-stage `Poi` instances are reusable for future consumers (CLI exporter, search index) |
 | 16 | 2026-06-07 | Kotlin ETL handles deletes via mark-and-sweep, scoped per source | Existing `Importer.kt` behavior generalizes: rows not seen in a run get `deleted_at`; reappearance un-deletes; tripwire (seen < 0.5 × prior) aborts before sweep. Sweep scope is the run's source set, not all `pois` |
