@@ -33,10 +33,10 @@ host Node process so Playwright can drive a real Chromium. Tilt UI is at
 <http://localhost:10350>.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
-(none auto-run on `tilt up`): `refresh-superchargers` / `rebuild-superchargers`
-for Tesla pricing, `refresh-tesla-cookies` to mint fresh `_abck` cookies for
-the Tesla scraper into `.env`, and `refresh-image` (one-shot prereq for the
-supercharger refreshers). Click the row, watch logs in the right pane.
+(none auto-run on `tilt up`): `refresh-superchargers` for the Tesla
+fetcher pair (index + per-slug), `refresh-tesla-cookies` to mint fresh
+`_abck` cookies into `.env`, and `refresh-image` (one-shot prereq for the
+supercharger refresher). Click the row, watch logs in the right pane.
 
 POI data refresh goes through the backend's admin API (RFC 0004). Two-step
 flow, two Tilt buttons under the `data` cluster, two make targets:
@@ -48,18 +48,19 @@ make data-import                      # data/ → Postgres rows via Importer
 make data-import TARGET=planet-fitness
 ```
 
-`data-fetch` runs the Python fetchers (`scripts/fetch_*.py`,
-`scripts/enrich_campgrounds.py`); `data-import` runs the Kotlin importer.
-Each phase is recorded in `ingest_runs`; per-target mutex serializes a
-fetch and an import on the same target. Skipping `data-fetch` (e.g.
-because `data/` is already populated) is fine — `data-import` runs
-independently.
+`data-fetch` runs the Python fetchers (the same ones `make poll-raw`
+dispatches); `data-import` runs the Kotlin importer. Each phase is
+recorded in `ingest_runs`; per-target mutex serializes a fetch and an
+import on the same target. Skipping `data-fetch` is fine — the importer
+runs against whatever's on disk.
 
 Targets: `planet-fitness`, `state-parks`, `national-parks`, `campgrounds`
-(composite — uscampgrounds + bc-parks + parks-canada + recgov-enrichment),
-`parks-canada-curated` (curated JSON, no fetch step), `alberta-provincial`
-(curated JSON, no fetch step), `tesla-pricing` (cache rebuild, no import
-step).
+(uscampgrounds + bc-parks raw captures), `aspira-maps` (3-host capture,
+fetch-only), `parks-canada-curated` (curated JSON, no fetch step),
+`alberta-provincial` (curated JSON, no fetch step), `tesla-superchargers`
+(index + per-slug, fetch-only until ETL ships), `enrich-campgrounds`
+(rec.gov enrichment, still mutates the frozen geojson — RFC 0007 will
+rewrite this in a follow-up).
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
 > backend-owned via `TokenManager` (RFC 0001 / PR #22) — paste a fresh cURL
@@ -75,29 +76,76 @@ make install        # Homebrew deps + companion (npm + playwright) + git hooks
 Pricing is served from the on-disk cache (`data/pricing-cache/`). Tesla is
 never called from the user request path — the backend just reads cached JSON
 and 404s with `{"error":"not_cached"}` for sites that haven't been crawled.
-To populate/refresh the cache, run `make refresh-superchargers` (full run,
-~25 min) or `make rebuild-superchargers` (cache-only, ~30s). That worker
+To populate/refresh the cache, run `make refresh-superchargers` (or
+`make poll-raw SOURCE=tesla-locations` for a cache-aware re-fetch
+without the bulk index). That worker
 needs Tesla cookies in `.env` — see `README_PRICING.md` and
 `make refresh-cookies` / `make refresh-cookies-local`.
 
 ## Refresh POI data
 
-Use `make data-fetch` then `make data-import` (or the matching Tilt buttons).
-The underlying Python fetchers can still be invoked directly when you want
-to inspect the on-disk artifact without importing:
+Two paths, picked by where you want to land:
 
-```sh
-python3 scripts/fetch_planet_fitness.py   # Overpass — no key
-python3 scripts/fetch_campgrounds.py      # USCampgrounds.info regional CSVs (US)
-python3 scripts/fetch_bc_parks.py         # BC Parks Strapi API (BC provincial, merges into campgrounds.geojson)
-python3 scripts/fetch_parks_canada.py     # Hand-curated Parks Canada BC national-park campgrounds
-python3 scripts/enrich_campgrounds.py     # rec.gov search + rating/review APIs (US federal)
-python3 scripts/fetch_parks.py            # PAD-US FeatureServer
+- **`make poll-raw`** — interactive fzf picker over every fetcher. Runs
+  the chosen one and prints the `data/raw/<source>/<ts>.json` it wrote.
+  Append `SOURCE=<name>` to skip the picker, `SOURCE=--all` to run every
+  source in registry order, `SOURCE=--list` for the JSON registry.
+- **`make data-fetch` then `make data-import`** — same fetchers, run via
+  the backend's admin API so they're recorded in `ingest_runs` and
+  serialized by per-target mutex. Use this for production-shaped runs
+  (Tilt buttons trigger the same path).
+
+### RFC 0007 fetcher split
+
+Per RFC 0007, every fetcher is now thin: hit upstream, wrap the response
+in a uniform envelope, write to `data/raw/<source>/<ts>.json`. No
+transform, no merge — those move into the Kotlin ETL.
+
+Envelope shape:
+
+```json
+{
+  "fetcher":         "fetch_aspira_maps",
+  "fetcher_version": "2",
+  "fetched_at":      "2026-06-07T21:07:39Z",
+  "request":  { "url": "...", "method": "GET", "headers": {...} },
+  "response": { "status": 200, "headers": {...} },
+  "poller_run_id":   null,
+  "payload":         <verbatim upstream JSON|string>
+}
 ```
 
-`enrich_campgrounds.py` is resume-safe (skip features already marked
-`enriched: true`). Pass `--refresh` to re-query everything; `--limit N` to
-test on a small sample.
+Sources today (run `make poll-raw SOURCE=--list` for the live registry):
+
+| Source            | Upstream                                | Output dir              |
+|-------------------|-----------------------------------------|-------------------------|
+| `planet-fitness`  | OSM Overpass                            | `data/raw/osm-pf/`      |
+| `campgrounds`     | uscampgrounds.info (5 regional CSVs)    | `data/raw/uscampgrounds/<ts>/{west,southwest,...}.json` |
+| `bc-parks`        | bcparks.api.gov.bc.ca Strapi (paginated)| `data/raw/bcparks-strapi/<ts>/page-NNN.json` |
+| `parks-national`  | USGS PAD-US FeatureServer (paginated)   | `data/raw/padus-np/<ts>/page-NNN.json` |
+| `parks-state`     | USGS PAD-US FeatureServer (paginated)   | `data/raw/padus-sp/<ts>/page-NNN.json` |
+| `aspira-maps`     | Aspira `/api/maps` × 3 hosts (PC/BC/WA) | `data/raw/aspira-maps-{pc,bc,wa}/<ts>.json` |
+| `tesla-index`     | tesla.com get-locations (curl-impersonate) | `data/raw/tesla-index/<ts>.json` |
+| `tesla-locations` | tesla.com get-charger-details, per-slug, cache-aware (~30d freshness) | `data/raw/tesla-locations/<slug>/<ts>.json` |
+
+**Curated repo data** (no fetch step) lives at `data/curated/`:
+`parks-canada-{bc,ab}.json`, `alberta-provincial.json`. The Kotlin
+importer reads these directly.
+
+**Raw cache.** `data/raw/` is gitignored — captures are append-only on
+the host running the poller. Crawling Aspira/Tesla is expensive (Azure
+WAF, curl-impersonate + cookie injection); replaying raw is free.
+Recovery on a fresh checkout: re-run the fetchers, or run
+`scripts/_migrate_tesla_cache.py` to bootstrap Tesla from the legacy
+`data/pricing-cache/` if it's still around.
+
+### Bridge period
+
+While the Kotlin ETL is being built, the existing importer still reads
+the **frozen** `data/*.geojson` snapshots — running fetchers populates
+`data/raw/` but doesn't mutate the geojson files, and the map keeps
+serving the snapshot. Once the Kotlin ETL ships, the importer reads
+from `data/raw/` and the geojson files retire.
 
 ### `/api/docs` — interactive API browser
 
@@ -197,7 +245,7 @@ re-run `make refresh-cookies`.
 - **Pricing cache.** `/api/pricing/{slug}` is read-only against
   `data/pricing-cache/{slug}.json`. Misses return 404 with
   `{"error":"not_cached"}`. Cache is populated offline by
-  `scripts/fetch_tesla_superchargers.py` (run via `make refresh-superchargers`),
+  `scripts/fetch_tesla_index.py` + `scripts/fetch_tesla_locations.py` (run via `make refresh-superchargers`),
   which shells out to `curl-impersonate` because Akamai fingerprints TLS
   ClientHello + HTTP/2 SETTINGS — stock OpenSSL curl gets 403.
 - **Map** — MapLibre GL, vector and raster basemaps, runtime style-swap.

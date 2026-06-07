@@ -1,10 +1,18 @@
 # Pricing setup
 
 Supercharger pricing is served read-only from `data/pricing-cache/{slug}.json`.
-The cache is populated **offline** by `scripts/fetch_tesla_superchargers.py`
-(run via `make refresh-superchargers` / `make rebuild-superchargers`); the
-Kotlin backend never calls Tesla on the request path. Misses on
-`/api/pricing/{slug}` return HTTP 404 with `{"error":"not_cached"}`.
+The cache is populated **offline** by `scripts/fetch_tesla_index.py` + 
+`scripts/fetch_tesla_locations.py` (run via `make refresh-superchargers`,
+or pick interactively with `make poll-raw`); the Kotlin backend never
+calls Tesla on the request path. Misses on `/api/pricing/{slug}` return
+HTTP 404 with `{"error":"not_cached"}`.
+
+> **RFC 0007 transition.** New captures land under
+> `data/raw/tesla-locations/<slug>/<ts>.json` (envelope-wrapped). The
+> `/api/pricing/{slug}` route still serves the legacy
+> `data/pricing-cache/<slug>.json` files until the Kotlin ETL ships;
+> `scripts/_migrate_tesla_cache.py` mirrored the legacy cache into the
+> new layout one-time, idempotent, no upstream calls.
 
 The offline refresh worker hits `tesla.com/api/findus/get-charger-details`
 through `curl-impersonate` (Akamai fingerprints TLS ClientHello + HTTP/2
