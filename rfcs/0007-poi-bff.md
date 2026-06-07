@@ -164,6 +164,74 @@ Per-type fields live in `properties` (JSONB). Type taxonomy:
 - `supercharger` (new)
 - future: `dump-station`, `gas`, `viewpoint`, etc.
 
+#### Entity relationships
+
+The POI graph has more structure than the current single `pois` table
+captures. Sketch of the entities + how they relate:
+
+```
+                    ┌──────────────────┐
+                    │  governing_body  │   NPS, USFS, BLM, Parks Canada,
+                    │ id, name, kind,  │   BC Parks, Alberta Parks,
+                    │ jurisdiction     │   WA State Parks, Tesla, PF Corp
+                    └────────┬─────────┘
+                             │ 1
+                             │
+                             │ N
+┌──────────────────┐    ┌────┴─────────────┐    ┌──────────────────┐
+│      source      │    │       poi        │    │ booking_provider │
+│ id, name,        │ 1..│ id, source_id,   │ N..│ id, name, host,  │
+│ ingest_kind      │────│ category, geom,  │────│ vendor           │   rec.gov, aspira,
+└──────────────────┘  N │ name, props…     │  1 └──────────────────┘   camis, none
+                        │ governing_body_id│                           (FK optional)
+                        │ booking_prov_id  │
+                        │ parent_poi_id    │←┐
+                        │ last_seen_run_id │ │
+                        │ last_ingest_id   │ │ self-FK
+                        └────────┬─────────┘ │   (parent must be polygon)
+                                 │           │
+                                 └───────────┘
+                                 N:1 optional
+                                 (campground → park)
+
+
+      ┌──────────────────┐                  ┌──────────────────┐
+      │   import_runs    │                  │   ingest_runs    │
+      │ id, source,      │                  │ id, target,      │
+      │ status, …        │                  │ phase, status…   │
+      └────────┬─────────┘                  └────────┬─────────┘
+               │                                     │
+               │ pois.last_seen_run_id               │ pois.last_ingest_run_id
+               └─────────────────────────────────────┘
+                          (every poi row carries both)
+```
+
+Relationships:
+
+- **POI → governing_body** (N:1, required). The agency that operates the
+  pin. Distinct from `source` because one source can carry many governing
+  bodies (rec.gov serves NPS + USFS + BLM + Army Corps; the booking-vendor
+  Aspira serves Parks Canada + BC Parks + WA State Parks).
+- **POI → booking_provider** (N:1, optional). Where to reserve. Null means
+  first-come, first-served or unreservable. Vendor-dispatched availability
+  (Section 5) reads this field.
+- **POI → POI (parent)** (N:1, optional, self-FK). A campground belongs to
+  a park; a park has no parent (or in nested cases, a wilderness area inside
+  a national park). Constraint: `parent_poi_id` must reference a row whose
+  geom is a polygon and whose category is in (`'national-park'`,
+  `'state-park'`). This is denormalization — the spatial relation is
+  recoverable via `ST_Within(child.geom, parent.geom)` — but it lets the BE
+  cheaply assemble subtitles ("Kicking Horse Campground · Yoho National
+  Park") without a spatial join on every render.
+- **POI → source** (N:1, required, already modeled as `source TEXT`).
+  Eventually move to a real FK once we promote `source` to a table.
+
+`governing_body` and `booking_provider` are small dimension tables (10–20
+rows each) — promote-from-string, not free-form JSONB. Display strings that
+the BE renders (e.g. "Booking via Aspira NextGen (BC Parks)") read from
+those tables instead of being hardcoded in TypeScript or the drawer
+assembler.
+
 #### Provenance: stamp the ingest run on every row
 
 Today `pois.last_seen_run_id → import_runs(id)` records which **import**
@@ -408,3 +476,4 @@ proliferate without FE changes.
 | 3 | 2026-06-07 | Sealed Kotlin POI hierarchy over generic Poi | Compiler-checked display-rule logic; per-type properties named once |
 | 4 | 2026-06-07 | One `/api/availability/{poi_id}` with internal vendor dispatch | Provider is BE-side knowledge; minimum API surface |
 | 5 | 2026-06-07 | Stamp `pois.last_ingest_run_id` alongside existing `last_seen_run_id` | Lets us trace any row back to the fetch + import that produced it; one-line plumbing change |
+| 6 | 2026-06-07 | Promote `governing_body` and `booking_provider` to dimension tables; add `pois.parent_poi_id` self-FK | Captures the agency-vs-source distinction (rec.gov serves multiple agencies) and lets the BE cheaply roll up "campground → park" subtitles without spatial joins |
