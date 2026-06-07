@@ -1,0 +1,142 @@
+package ca.floo.roadtrip.etl.osmpf
+
+import ca.floo.roadtrip.etl.Address
+import ca.floo.roadtrip.etl.Envelope
+import ca.floo.roadtrip.etl.Poi
+import ca.floo.roadtrip.etl.SourceEtl
+import ca.floo.roadtrip.etl.TransformCtx
+import ca.floo.roadtrip.etl.ValidationResult
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import java.time.Instant
+
+// OSM Overpass → Poi.PlanetFitness.
+//
+// Capture path: data/raw/osm-pf/<ts>.json (single envelope per run).
+// Upstream payload shape:
+//   { "elements": [ { "type": "node", "id": ..., "lat": ..., "lon": ...,
+//                     "tags": { "name": "Planet Fitness",
+//                               "addr:street": "...", "phone": "...",
+//                               "opening_hours": "...", ... } },
+//                   { "type": "way", "id": ..., "center": {lat, lon}, "tags": {...} },
+//                   ... ] }
+//
+// node: lat/lon at the element. way: lat/lon under `center` (Overpass `out
+// center` directive). Some entries have neither — those get dropped at
+// validate.
+class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, Poi.PlanetFitness> {
+    override val sourceName = "osm-pf"
+
+    override fun parse(envelope: Envelope): PlanetFitnessRawDto {
+        val payload =
+            json.decodeFromJsonElement(
+                PlanetFitnessRawDto.serializer(),
+                envelope.payload,
+            )
+        return payload.copy(_fetchedAt = parseFetchedAt(envelope))
+    }
+
+    override fun validate(dto: PlanetFitnessRawDto): ValidationResult<PlanetFitnessRawDto> {
+        // The DTO can hold a 200-elements payload; we validate per-element
+        // at transform time and drop invalid elements there. This stage
+        // only checks the outer shape.
+        val errors = mutableListOf<String>()
+        if (dto.elements.isEmpty()) errors += "no elements in payload"
+        return if (errors.isEmpty()) {
+            ValidationResult.Ok(dto)
+        } else {
+            ValidationResult.Bad(sourceId = null, errors = errors)
+        }
+    }
+
+    override fun transform(
+        dto: PlanetFitnessRawDto,
+        ctx: TransformCtx,
+    ): List<Poi.PlanetFitness> {
+        val gbId = ctx.governingBodyId("pf")
+        return dto.elements.mapNotNull { el -> transformElement(el, gbId, dto._fetchedAt) }
+    }
+
+    private fun transformElement(
+        el: OverpassElement,
+        gbId: Long,
+        fetchedAt: Instant,
+    ): Poi.PlanetFitness? {
+        // Resolve lat/lon: nodes have it directly, ways/relations have it
+        // under `center` (Overpass `out center` semantics).
+        val lat = el.lat ?: el.center?.lat ?: return null
+        val lon = el.lon ?: el.center?.lon ?: return null
+        val tags = el.tags ?: emptyMap()
+        // OSM source_id format: <type>-<id>. Lowercased, hyphenated to
+        // satisfy the V5 source_id CHECK constraint (^[a-z0-9:_-]+$).
+        val sourceId = "${el.type}-${el.id}"
+
+        // Address bag. Empty values dropped so the row carries null
+        // when nothing's known instead of {"street":"","city":""}.
+        val address = buildAddress(tags)
+
+        return Poi.PlanetFitness(
+            source = "osm-pf",
+            sourceId = sourceId,
+            name = tags["name"] ?: "Planet Fitness",
+            geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
+            region = tags["addr:state"]?.takeIf { it.isNotBlank() },
+            country = "US", // OSM-PF poller's bbox is continental US; safe default
+            governingBodyId = gbId,
+            phone = tags["phone"]?.takeIf { it.isNotBlank() },
+            address = address,
+            infoUrl = tags["website"]?.takeIf { it.isNotBlank() },
+            fetchedAt = fetchedAt,
+            lastVerified = null, // OSM — no editorial-touch field
+            openingHours = tags["opening_hours"]?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    private fun buildAddress(tags: Map<String, String>): Address? {
+        val street =
+            listOfNotNull(tags["addr:housenumber"], tags["addr:street"])
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+                .takeIf { it.isNotBlank() }
+        val city = tags["addr:city"]?.takeIf { it.isNotBlank() }
+        val state = tags["addr:state"]?.takeIf { it.isNotBlank() }
+        val postcode = tags["addr:postcode"]?.takeIf { it.isNotBlank() }
+        if (street == null && city == null && state == null && postcode == null) return null
+        return Address(street = street, city = city, state = state, postcode = postcode, country = "US")
+    }
+
+    private fun parseFetchedAt(envelope: Envelope): Instant =
+        try {
+            Instant.parse(envelope.fetchedAt)
+        } catch (e: Exception) {
+            Instant.now()
+        }
+
+    companion object {
+        private val json = Json { ignoreUnknownKeys = true }
+    }
+}
+
+// DTO mirroring Overpass's response shape. `_fetchedAt` is set by the ETL
+// after deserialization (it isn't on the wire — comes from the envelope).
+@Serializable
+data class PlanetFitnessRawDto(
+    val elements: List<OverpassElement> = emptyList(),
+    @kotlinx.serialization.Transient val _fetchedAt: Instant = Instant.EPOCH,
+)
+
+@Serializable
+data class OverpassElement(
+    val type: String, // "node" | "way" | "relation"
+    val id: Long,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val center: OverpassCenter? = null,
+    val tags: Map<String, String>? = null,
+)
+
+@Serializable
+data class OverpassCenter(
+    val lat: Double,
+    val lon: Double,
+)

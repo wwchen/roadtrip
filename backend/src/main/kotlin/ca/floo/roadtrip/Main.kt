@@ -11,6 +11,7 @@ import ca.floo.roadtrip.api.superchargersRoutes
 import ca.floo.roadtrip.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.aspira.CachedAspiraAvailability
 import ca.floo.roadtrip.aspira.aspiraAvailabilityRoutes
+import ca.floo.roadtrip.etl.EtlOrchestrator
 import ca.floo.roadtrip.geocode.MapboxGeocoder
 import ca.floo.roadtrip.importer.DbConfig
 import ca.floo.roadtrip.importer.Importer
@@ -81,6 +82,7 @@ fun Application.module() {
         IngestController(
             ctx = ctx,
             importer = Importer(ctx),
+            etl = EtlOrchestrator(ctx, File(staticDir, "data/raw")),
             dataDir = File(staticDir, "data"),
             targets = defaultTargets(staticDir),
             workingDir = staticDir,

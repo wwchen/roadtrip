@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.ingest
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
+import ca.floo.roadtrip.etl.EtlOrchestrator
 import ca.floo.roadtrip.importer.Importer
 import ca.floo.roadtrip.importer.sourceFor
 import kotlinx.coroutines.CoroutineDispatcher
@@ -65,6 +66,7 @@ data class RunOutcome(
 class IngestController(
     private val ctx: DSLContext,
     private val importer: Importer,
+    private val etl: EtlOrchestrator,
     private val dataDir: File,
     private val targets: Map<String, Target>,
     private val workingDir: File,
@@ -216,13 +218,26 @@ class IngestController(
         }
 
     // -- Import phases (data/ → Postgres) -------------------------------------
+    //
+    // RFC 0007 transition: sources registered in EtlOrchestrator.registry go
+    // through the new staged ETL (parse → validate → transform → upsert);
+    // anything else falls back to the legacy Importer reading the frozen
+    // data/*.geojson snapshots. PR 3 wedge: only osm-pf is on the new path;
+    // PR 3b/c/... migrate the rest.
     private suspend fun runImport(phase: Phase.Import): JSONB =
         withContext(ioDispatcher) {
-            val source = sourceFor(phase.sourceName, dataDir)
-            val result = importer.run(source)
-            JSONB.valueOf(
-                """{"import_run_id":${result.runId},"seen":${result.seenCount},"swept":${result.sweptCount}}""",
-            )
+            if (phase.sourceName in EtlOrchestrator.registry) {
+                val stats = etl.runSource(phase.sourceName)
+                JSONB.valueOf(
+                    """{"import_run_id":${stats.upsertResult.runId},"seen":${stats.upsertResult.seenCount},"swept":${stats.upsertResult.sweptCount},"path":"etl"}""",
+                )
+            } else {
+                val source = sourceFor(phase.sourceName, dataDir)
+                val result = importer.run(source)
+                JSONB.valueOf(
+                    """{"import_run_id":${result.runId},"seen":${result.seenCount},"swept":${result.sweptCount},"path":"legacy"}""",
+                )
+            }
         }
 
     // -- ingest_runs row CRUD -------------------------------------------------

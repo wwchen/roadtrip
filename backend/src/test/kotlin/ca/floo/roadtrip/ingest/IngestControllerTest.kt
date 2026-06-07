@@ -406,6 +406,9 @@ class IngestControllerTest {
         IngestController(
             ctx = ctx,
             importer = Importer(ctx),
+            etl =
+                ca.floo.roadtrip.etl
+                    .EtlOrchestrator(ctx, dataDir),
             dataDir = dataDir,
             targets = targets,
             workingDir = File("/tmp"),
