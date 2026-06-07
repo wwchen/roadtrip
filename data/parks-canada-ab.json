@@ -5,235 +5,408 @@
   "campgrounds": [
     {
       "name": "Tunnel Mountain Village I",
-      "lat": 51.1812, "lon": -115.5470,
+      "lat": 51.1812,
+      "lon": -115.547,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": true,
       "season": "mid-May to early October",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Tunnel Mountain Village II",
-      "lat": 51.1841, "lon": -115.5443,
+      "lat": 51.1841,
+      "lon": -115.5443,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": true,
       "season": "year-round",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Tunnel Mountain Trailer Court",
-      "lat": 51.1828, "lon": -115.5485,
+      "lat": 51.1828,
+      "lon": -115.5485,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": true,
       "season": "mid-May to early October",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Two Jack Lakeside",
-      "lat": 51.2049, "lon": -115.5066,
+      "lat": 51.2049,
+      "lon": -115.5066,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": true,
       "season": "mid-May to early October",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Two Jack Main",
-      "lat": 51.2010, "lon": -115.5085,
+      "lat": 51.201,
+      "lon": -115.5085,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": true,
       "season": "mid-May to early October",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Lake Louise Campground",
-      "lat": 51.4195, "lon": -116.1810,
+      "lat": 51.4195,
+      "lon": -116.181,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": true,
       "season": "year-round (trailer); summer (tent)",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Mosquito Creek Campground",
-      "lat": 51.7693, "lon": -116.4302,
+      "lat": 51.7693,
+      "lon": -116.4302,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": false,
       "season": "mid-June to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Waterfowl Lakes Campground",
-      "lat": 51.8555, "lon": -116.6097,
+      "lat": 51.8555,
+      "lon": -116.6097,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": false,
       "season": "mid-June to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Rampart Creek Campground",
-      "lat": 52.0837, "lon": -116.8250,
+      "lat": 52.0837,
+      "lon": -116.825,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": false,
       "season": "mid-June to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Johnston Canyon Campground",
-      "lat": 51.2452, "lon": -115.8425,
+      "lat": 51.2452,
+      "lon": -115.8425,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": true,
       "season": "early June to late September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Castle Mountain Campground",
-      "lat": 51.2685, "lon": -115.9210,
+      "lat": 51.2685,
+      "lon": -115.921,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": false,
       "season": "early June to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
     {
       "name": "Protection Mountain Campground",
-      "lat": 51.3540, "lon": -116.0270,
+      "lat": 51.354,
+      "lon": -116.027,
       "park": "Banff National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/banff",
       "reservable": false,
       "season": "late June to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483648,
+        "mapId": -2147483630,
+        "park_title": "Banff"
+      }
     },
-
     {
       "name": "Whistlers Campground",
-      "lat": 52.8552, "lon": -118.0780,
+      "lat": 52.8552,
+      "lon": -118.078,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": true,
       "season": "early May to mid-October",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
     {
       "name": "Wapiti Campground",
-      "lat": 52.8262, "lon": -118.0445,
+      "lat": 52.8262,
+      "lon": -118.0445,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": true,
       "season": "year-round",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
     {
       "name": "Wabasso Campground",
-      "lat": 52.7420, "lon": -117.8980,
+      "lat": 52.742,
+      "lon": -117.898,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": true,
       "season": "late June to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
     {
       "name": "Snaring Campground",
-      "lat": 52.9930, "lon": -118.1490,
+      "lat": 52.993,
+      "lon": -118.149,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": false,
       "season": "mid-May to early October",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
     {
       "name": "Pocahontas Campground",
-      "lat": 53.2080, "lon": -117.9050,
+      "lat": 53.208,
+      "lon": -117.905,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": true,
       "season": "mid-May to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
     {
       "name": "Wilcox Creek Campground",
-      "lat": 52.2110, "lon": -117.2280,
+      "lat": 52.211,
+      "lon": -117.228,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": false,
       "season": "mid-June to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
     {
       "name": "Columbia Icefield Campground",
-      "lat": 52.2230, "lon": -117.2240,
+      "lat": 52.223,
+      "lon": -117.224,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": false,
       "season": "late June to mid-September; tent-only",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
     {
       "name": "Honeymoon Lake Campground",
-      "lat": 52.4480, "lon": -117.7440,
+      "lat": 52.448,
+      "lon": -117.744,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": false,
       "season": "late May to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
     {
       "name": "Jonas Creek Campground",
-      "lat": 52.5020, "lon": -117.5610,
+      "lat": 52.502,
+      "lon": -117.561,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": false,
       "season": "mid-May to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
     {
       "name": "Mount Kerkeslin Campground",
-      "lat": 52.6020, "lon": -117.7720,
+      "lat": 52.602,
+      "lon": -117.772,
       "park": "Jasper National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/jasper",
       "reservable": false,
       "season": "mid-June to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483628,
+        "mapId": -2147483463,
+        "park_title": "Jasper"
+      }
     },
-
     {
       "name": "Waterton Townsite Campground",
-      "lat": 49.0540, "lon": -113.9085,
+      "lat": 49.054,
+      "lon": -113.9085,
       "park": "Waterton Lakes National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/waterton",
       "reservable": true,
       "season": "early May to early October",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483607,
+        "mapId": -2147483198,
+        "park_title": "Waterton Lakes"
+      }
     },
     {
       "name": "Crandell Mountain Campground",
-      "lat": 49.1180, "lon": -113.9200,
+      "lat": 49.118,
+      "lon": -113.92,
       "park": "Waterton Lakes National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/waterton",
       "reservable": false,
       "season": "mid-May to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483607,
+        "mapId": -2147483198,
+        "park_title": "Waterton Lakes"
+      }
     },
     {
       "name": "Belly River Campground",
-      "lat": 49.0040, "lon": -113.6770,
+      "lat": 49.004,
+      "lon": -113.677,
       "park": "Waterton Lakes National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/waterton",
       "reservable": false,
       "season": "mid-May to early September",
-      "last_verified": "2026-06-03"
+      "last_verified": "2026-06-03",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483607,
+        "mapId": -2147483198,
+        "park_title": "Waterton Lakes"
+      }
     },
-
     {
       "name": "Astotin Lake Campground",
-      "lat": 53.6850, "lon": -112.8530,
+      "lat": 53.685,
+      "lon": -112.853,
       "park": "Elk Island National Park",
       "park_url": "https://parks.canada.ca/pn-np/ab/elkisland",
       "reservable": true,

@@ -54,26 +54,33 @@ SOURCES = [
 
 def to_feature(entry: dict, source: dict) -> dict:
     safe = entry["name"].replace(" ", "-").replace("'", "").replace(".", "")
+    props = {
+        "code": f"{source['code_prefix']}{safe}",
+        "name": entry["name"],
+        "type": "NP" if source["category"] == "federal" else "SP",
+        "typeLabel": entry["park"],
+        "category": source["category"],
+        "state": source["state"],
+        "country": "CA",
+        "phone": "",
+        "season": entry.get("season", ""),
+        "sites": None,
+        "amenities": [],
+        "near": "",
+        "parent_name": entry["park"],
+        source["url_field"]: entry.get("park_url", ""),
+        "reservable": entry.get("reservable"),
+    }
+    # Aspira NextGen booking IDs (RFC 0006). Sourced from
+    # scripts/fetch_parks_canada_aspira.py against reservation.pc.gc.ca's
+    # /api/maps. Frontend's reserveButtonHTML builds a real per-park
+    # deeplink when this is present.
+    if entry.get("aspira"):
+        props["aspira"] = entry["aspira"]
     return {
         "type": "Feature",
         "geometry": {"type": "Point", "coordinates": [entry["lon"], entry["lat"]]},
-        "properties": {
-            "code": f"{source['code_prefix']}{safe}",
-            "name": entry["name"],
-            "type": "NP" if source["category"] == "federal" else "SP",
-            "typeLabel": entry["park"],
-            "category": source["category"],
-            "state": source["state"],
-            "country": "CA",
-            "phone": "",
-            "season": entry.get("season", ""),
-            "sites": None,
-            "amenities": [],
-            "near": "",
-            "parent_name": entry["park"],
-            source["url_field"]: entry.get("park_url", ""),
-            "reservable": entry.get("reservable"),
-        },
+        "properties": props,
     }
 
 
