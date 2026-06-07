@@ -212,9 +212,13 @@ Relationships:
   pin. Distinct from `source` because one source can carry many governing
   bodies (rec.gov serves NPS + USFS + BLM + Army Corps; the booking-vendor
   Aspira serves Parks Canada + BC Parks + WA State Parks).
-- **POI → booking_provider** (N:1, optional). Where to reserve. Null means
-  first-come, first-served or unreservable. Vendor-dispatched availability
-  (Section 5) reads this field.
+- **POI → booking_provider** (N:1, optional, via `provider_ref` JSONB).
+  Where to reserve and the per-pin IDs the provider's adapter needs. Null
+  means the pin isn't on any booking platform we integrate with —
+  whether that's FCFS, season-closed, or a vendor we don't speak yet is
+  the availability route's call (see Section 5 + the `reservable` note in
+  Section 4), not a row-level fact. The vendor-dispatch availability route
+  reads this field.
 - **POI → POI (parent)** (N:1, optional, self-FK). A campground belongs to
   a park; a park has no parent (or in nested cases, a wilderness area inside
   a national park). Constraint: `parent_poi_id` must reference a row whose
@@ -312,13 +316,10 @@ sealed class Poi {
 
     data class Campground(
         override val id: Long, /* shared fields */,
-        val provider: BookingProvider?,    // RecGov, Aspira, BcParks, AlbertaParks, None
-        val recgovId: String?,
-        val aspira: AspiraIds?,
+        val providerRef: ProviderRef?,     // BookingProvider FK + opaque ref blob
         val amenities: List<String>,
         val sites: Int?,
-        val season: String?,
-        val reservable: Boolean?,
+        val season: String?,                // "mid-May to early October", parsed BE-side
         val lastVerified: LocalDate?
     ) : Poi()
 
@@ -345,6 +346,65 @@ explicitly. The `Poi` -> drawer payload assembly is a `fun
 buildDrawerPayload(poi: Poi): DrawerPayload` that pattern-matches on the
 sealed type — one place for all display-rule logic.
 
+`ProviderRef` is the per-POI ID payload that the booking-provider's adapter
+needs to look the POI up upstream. It's deliberately generic — instead of
+campground-specific `recgovId: String?` and `aspira: AspiraIds?` fields, we
+carry one nullable `providerRef` that pairs the FK to `booking_provider`
+with whatever ID(s) that provider needs.
+
+```kotlin
+data class ProviderRef(
+    val providerId: Long,    // FK to booking_provider
+    val ids: JsonObject      // shape determined by the provider's adapter
+)
+```
+
+Examples (the `ids` schema is the adapter's contract):
+
+```json
+// rec.gov
+{"providerId": 1, "ids": {"recgov_id": "232857"}}
+
+// Aspira NextGen (Parks Canada / BC / WA share this shape)
+{"providerId": 2, "ids": {"transactionLocationId": -2147483630, "mapId": -2147483388, "resourceLocationId": -2147483624}}
+
+// Camis (Alberta), if/when added
+{"providerId": 3, "ids": {"facility_id": "BVPP"}}
+```
+
+Stored on the row as a JSONB column (`provider_ref`) — promoting the inner
+`ids` to columns would require a per-provider table per POI type, which is
+exactly the kind of N×M sprawl this RFC is trying to retire. Validation
+(shape of `ids` matching the named provider) lives in the adapter; bad data
+fails at adapter-load time, not at row insert.
+
+The vendor-dispatch availability route (Section 5) reads `providerRef`,
+looks up the matching `BookingProviderAdapter`, and hands the adapter the
+opaque `ids` blob. No campground-specific code outside the adapter knows
+what's inside.
+
+#### `reservable` is not a row-level fact
+
+The current schema carries `reservable: Boolean?` on each campground row.
+Treating it as static is wrong: a campground is reservable in summer but
+not in winter; rec.gov sometimes lifts a site from FCFS to reservable
+mid-season. Three signals that drive the answer:
+
+1. **Today vs `season`** — if today is outside the season window, "Closed
+   for season" wins, no booking flow.
+2. **`providerRef` presence** — without one, the pin is FCFS / not on a
+   booking platform.
+3. **Live availability** — provider may temporarily disable bookings.
+
+The right place for the answer is the availability route. The drawer
+payload's `availability` section returns a normalized status (`available`
+/ `partial` / `closed_for_season` / `no_provider` / `unreservable_today`)
+and the BE composes the right CTA from that. The row stops carrying
+`reservable`; `season` stays as a string the BE parses.
+
+This also kills `seasonVerdictHTML` on the FE — the season-vs-today
+comparison moves to the BE alongside everything else.
+
 ### Section 5: Vendor-dispatched availability
 
 Replace `/api/campsite/availability/{recgov_id}` and
@@ -356,12 +416,16 @@ GET /api/availability/{poi_id}?days=30
 
 The handler:
 1. Looks up the POI by id.
-2. Reads `provider` (or peeks at `aspira`/`recgov_id` properties).
-3. Dispatches to the matching `AvailabilityProvider`:
-   - `RecGovAvailability` → existing /api/campsite client
-   - `AspiraAvailability` → existing AspiraClient
-   - `NoneAvailable` → returns `{state: "no_provider"}`
-4. Normalizes to the existing per-day status response shape.
+2. Reads its `provider_ref` (FK to `booking_provider` + opaque `ids` blob;
+   see Section 4).
+3. Loads the registered `BookingProviderAdapter` for that provider FK and
+   hands it the `ids` blob.
+4. Adapter answers (or returns `no_provider` if `provider_ref IS NULL`),
+   normalized to one per-day status response shape.
+
+Adding a new provider is one Kotlin class implementing the adapter
+interface + a row in `booking_provider`. No new API route, no new field on
+the POI type, no FE change.
 
 The drawer payload's `availability.endpoint` always points here — FE doesn't
 know which provider answered.
@@ -486,3 +550,5 @@ proliferate without FE changes.
 | 5 | 2026-06-07 | Stamp `pois.last_poller_run_id` alongside existing `last_seen_run_id` | Lets us trace any row back to the fetch + import that produced it; one-line plumbing change |
 | 6 | 2026-06-07 | Promote `governing_body` and `booking_provider` to dimension tables; add `pois.parent_poi_id` self-FK | Captures the agency-vs-source distinction (rec.gov serves multiple agencies) and lets the BE cheaply roll up "campground → park" subtitles without spatial joins |
 | 7 | 2026-06-07 | Rename "ingest" to "poller" in this RFC's vocabulary | "poller" describes the periodic, schedule-driven nature of the work better than "ingest"; existing artifacts (`ingest_runs` table, `IngestController`, `/api/admin/ingest/*`) rename in a separate mechanical PR |
+| 8 | 2026-06-07 | Collapse `recgovId` + `aspira` into a generic `provider_ref` (booking_provider FK + opaque `ids` JSONB) | Per-vendor fields are exactly the N×M sprawl the RFC retires; opaque `ids` keeps the adapter contract local to its adapter |
+| 9 | 2026-06-07 | Drop `reservable` from the row shape | It depends on season + provider state, not row-level data; the availability route owns the answer |
