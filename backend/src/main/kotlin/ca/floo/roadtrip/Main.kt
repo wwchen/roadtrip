@@ -5,6 +5,7 @@ import ca.floo.campsite.recgov.booker.campsiteRoutes
 import ca.floo.roadtrip.api.healthRoutes
 import ca.floo.roadtrip.api.poiRoutes
 import ca.floo.roadtrip.api.pricingRoutes
+import ca.floo.roadtrip.api.routeRoutes
 import ca.floo.roadtrip.importer.DbConfig
 import ca.floo.roadtrip.importer.Importer
 import ca.floo.roadtrip.importer.dataSourceFor
@@ -14,6 +15,7 @@ import ca.floo.roadtrip.ingest.IngestController
 import ca.floo.roadtrip.ingest.adminIngestRoutes
 import ca.floo.roadtrip.ingest.defaultTargets
 import ca.floo.roadtrip.ingest.sweepStaleIngestRuns
+import ca.floo.roadtrip.route.MapboxDirections
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
@@ -55,6 +57,11 @@ fun Application.module() {
     // the host's repo root). data/pricing-cache lives under data/.
     val staticDir = File(System.getenv("ROADTRIP_STATIC_DIR") ?: ".")
     val pricingCache = File(staticDir, "data/pricing-cache")
+
+    // Mapbox Directions for /api/route. Token stays server-side — never sent
+    // to the browser. Endpoint responds 503 if MAPBOX_TOKEN is unset; the
+    // rest of the app is unaffected.
+    val mapboxDirections = MapboxDirections(token = System.getenv("MAPBOX_TOKEN"))
 
     // Ingestion controller (RFC 0004 / issue #44) — observability + remote
     // trigger layer around the data-fetch (Python scripts) + data-import
@@ -145,6 +152,7 @@ fun Application.module() {
 
         poiRoutes(ctx)
         pricingRoutes(pricingCache)
+        routeRoutes(mapboxDirections)
         healthRoutes(pricingCache)
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
