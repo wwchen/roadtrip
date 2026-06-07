@@ -362,46 +362,87 @@ function renderEmpty() {
   stripEl.style.display = 'none';
 }
 
-/** Drag-past-30% dismissal. Drag handle only — body of drawer scrolls normally. */
+/** Drag-past-30% dismissal.
+ *
+ * Two start regions:
+ *   - the handle (always; widely-spaced 40px-tall hitbox via CSS),
+ *   - the drawer body, but ONLY when scrolled to the top. Once the user has
+ *     scrolled the drawer content, vertical touches are scroll, not dismiss.
+ *
+ * This is the standard iOS bottom-sheet pattern: small-handle gesture for
+ * deliberate dismiss, body-gesture as a discoverability shortcut.
+ */
 function attachDragHandlers(root) {
+  if (root.dataset.dragWired) return;
+  root.dataset.dragWired = '1';
+
   const handle = root.querySelector('.cg-drawer-handle');
-  if (!handle || handle.dataset.wired) return;
-  handle.dataset.wired = '1';
 
   let startY = null;
   let startH = null;
+  // 'handle' = drag began on the grab bar; always tracks.
+  // 'body'   = drag began in the body while scrollTop=0; tracks only while
+  //            user keeps pulling down. If we ever start scrolling instead,
+  //            cancel the drag so the body scrolls normally.
+  let mode = null;
 
-  handle.addEventListener('touchstart', (e) => {
+  function onStart(e, originatedAtHandle) {
+    if (e.touches.length !== 1) return;
+    // Don't hijack drags that start on a button/link inside the drawer.
+    if (!originatedAtHandle && e.target.closest('a, button, input, select, textarea')) return;
+    if (!originatedAtHandle) {
+      // Body drag: only initiate when content is already at the top.
+      if (root.scrollTop > 0) return;
+    }
     startY = e.touches[0].clientY;
     startH = root.getBoundingClientRect().height;
-  }, { passive: true });
+    mode = originatedAtHandle ? 'handle' : 'body';
+  }
 
-  handle.addEventListener('touchmove', (e) => {
+  function onMove(e) {
     if (startY == null) return;
     const dy = e.touches[0].clientY - startY;
+    if (mode === 'body' && dy < 0) {
+      // Body drag flipped to upward — let it become a normal scroll.
+      startY = null;
+      mode = null;
+      root.style.height = '';
+      return;
+    }
     if (dy > 0) {
-      // dragging down
       const newH = Math.max(0, startH - dy);
       root.style.height = `${newH}px`;
-    } else {
-      // dragging up — snap to full
+    } else if (mode === 'handle') {
+      // Handle drag upward → snap to full.
       root.classList.add('full');
     }
-  }, { passive: true });
+  }
 
-  handle.addEventListener('touchend', (e) => {
+  function onEnd(e) {
     if (startY == null) return;
     const dy = e.changedTouches[0].clientY - startY;
     const dragged = (dy / startH) * 100;
-    root.style.height = ''; // restore to CSS-driven height
+    root.style.height = ''; // restore CSS-driven height
     if (dragged > 30) {
       close();
-    } else if (dy < -50) {
+    } else if (mode === 'handle' && dy < -50) {
       root.classList.add('full');
-    } else {
+    } else if (mode === 'handle') {
       root.classList.remove('full');
     }
     startY = null;
     startH = null;
-  });
+    mode = null;
+  }
+
+  if (handle) {
+    handle.addEventListener('touchstart', (e) => onStart(e, true), { passive: true });
+  }
+  root.addEventListener('touchstart', (e) => {
+    if (handle && handle.contains(e.target)) return; // already wired above
+    onStart(e, false);
+  }, { passive: true });
+  root.addEventListener('touchmove', onMove, { passive: true });
+  root.addEventListener('touchend', onEnd);
+  root.addEventListener('touchcancel', onEnd);
 }
