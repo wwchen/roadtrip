@@ -322,14 +322,21 @@ sealed class Poi {
     abstract val name: String
     abstract val geom: org.locationtech.jts.geom.Geometry
     abstract val region: String?
+    abstract val governingBodyId: Long
+    abstract val parentPoiId: Long?
+    // Lifecycle timestamps live on every POI, not per-type. createdAt /
+    // updatedAt are DB-managed on UPSERT; lastVerified is an editorial
+    // touch (someone confirmed the data point still reflects reality).
+    abstract val createdAt: Instant
+    abstract val updatedAt: Instant
+    abstract val lastVerified: LocalDate?
 
     data class Campground(
         override val id: Long, /* shared fields */,
         val providerRef: ProviderRef?,     // BookingProvider FK + opaque ref blob
         val amenities: List<String>,
         val sites: Int?,
-        val season: String?,                // "mid-May to early October", parsed BE-side
-        val lastVerified: LocalDate?
+        val season: String?                 // "mid-May to early October", parsed BE-side
     ) : Poi()
 
     data class Supercharger(
@@ -354,6 +361,14 @@ jOOQ codegen owns the shared fields; per-type properties parse from JSONB
 explicitly. The `Poi` -> drawer payload assembly is a `fun
 buildDrawerPayload(poi: Poi): DrawerPayload` that pattern-matches on the
 sealed type — one place for all display-rule logic.
+
+Lifecycle fields (`created_at`, `updated_at`, `last_verified`) are
+POI-level, not per-type. The schema already has the first two; add
+`last_verified DATE` to the row (currently it lives in JSONB on
+campgrounds — a curated audit field set by the BC/PC scripts when someone
+manually checks a pin). Promoting to a column makes it filterable
+(`WHERE last_verified < now() - 60 days`) and stops it being campground-only
+prior art for the next type that wants it.
 
 `ProviderRef` is the per-POI ID payload that the booking-provider's adapter
 needs to look the POI up upstream. It's deliberately generic — instead of
@@ -479,6 +494,99 @@ This is not a single PR. PR sequence (each independently mergeable):
 
 ## Rationale
 
+**Prior art: how rec.gov and Aspira NextGen model this.**
+
+Both vendors handle the same domain (sites the public reserves) with richer
+hierarchies than what we're proposing. Useful as a sanity check on what
+we're choosing not to model.
+
+*rec.gov (Recreation.gov RIDB API)* — three-level tree:
+
+- **RecArea** — the umbrella (a national forest, a wilderness, a corps lake).
+  Has `RecAreaID`, geometry, governing agency (NPS / USFS / BLM / Army Corps),
+  email, phone, parent organization. Carries marketing copy + media.
+- **Facility** — what we'd call a campground. `FacilityID`, type
+  (`Campground`, `Day-use`, `Lookout`, `Lodge`...), point coordinate,
+  `FacilityReservationURL`. Belongs to one RecArea (sometimes more via
+  RECAREAFACILITIES join).
+- **Campsite** — the bookable unit. `CampsiteID`, type (`STANDARD ELECTRIC`,
+  `WALK TO`, `RV`...), max occupancy, equipment allowed (`Tent`, `RV up to
+  N ft`), accessibility flags, attributes (shade, picnic table, fire ring).
+  Belongs to one Facility.
+- Plus dimension tables: `Permits`, `Tours`, `Activities`, `Events`, `Media`.
+
+*Aspira NextGen* — similar three-level shape via `/api/maps`:
+
+- **Park** (top-level node, `mapType=2` at PC, region-nested at BC/WA) —
+  `transactionLocationId`, `mapId`, name, image. The bookable destination.
+- **MapLink / sub-area** — what Aspira calls a "loop" or "campground within
+  the park" (Banff has 7 of these: Tunnel Mountain Village I, II, etc.).
+  Has its own `childMapId` + `transactionLocationId` + `resourceLocationId`
+  (the field we just learned matters for WA's deeplink).
+- **Resource** — the individual site. Equipment-typed (RV / tent / cabin),
+  with a lat/lng inside the loop and per-night status codes (the integers
+  we map in `AspiraStatus.classify`).
+- Plus: `EquipmentCategory`, `BookingCategory`, `Amenity`, `Feature` taxonomies.
+
+**What rec.gov + Aspira have that we don't:**
+
+1. **A site/resource level below the campground.** They model individual
+   campsites (#A23, the walk-to tent pad) as first-class entities. We
+   collapse to one campground point. Costs us: can't show "this campground
+   has 12 RV-electric sites and 30 tent-only" without scraping per-site
+   data.
+2. **A park-level container distinct from individual campgrounds.** Banff
+   National Park is one entity; the 7 sub-loops are children. Our
+   `parent_poi_id` self-FK partly captures this, but we don't model loops
+   at all.
+3. **Facility/site type taxonomies.** rec.gov knows a "Lookout" is not a
+   "Campground"; Aspira knows "RV with electric" is not "Walk-to tent."
+   We have one `category='campground'` regardless.
+4. **Equipment compatibility.** Aspira's deeplink takes
+   `equipmentCategoryId` because the lookup is "what RVs fit in this site."
+   We pass the "any equipment" sentinel.
+5. **First-class amenity + activity tables.** We list amenities as a string
+   array on the campground row; rec.gov + Aspira have join tables and
+   filterable taxonomies (e.g. "show me parks with horseback riding").
+
+**What we're explicitly choosing to skip (and why):**
+
+- **Site-level (Campsite/Resource) modeling.** The product surface is "find
+  a campground, click through to book." We don't run our own booking flow,
+  and the heat strip aggregates *across* sites — we never need to know
+  which specific site is open, only how many are. Adding a 4th table
+  doubles the schema for ~zero user-visible benefit. Revisit if/when we
+  build per-site availability tracking, which would also force us to deal
+  with rec.gov's tier-1 rate limits.
+- **Sub-area / loop modeling within a park.** A natural fit for the
+  parent_poi_id self-FK chain (park → loop → site), but we'd need to
+  source it. rec.gov + Aspira have it; our curated JSONs don't, and we'd
+  scrape per-loop data per park to backfill. Skip until something needs
+  per-loop UX.
+- **Equipment / amenity taxonomies as join tables.** We carry amenities as
+  a flat string list. Promoting to a dimension table is a DX nicety
+  (`SELECT pois WHERE amenity = 'horseback'`) but the FE doesn't filter on
+  amenity today. Defer.
+- **Activities / events / tours / media.** All of rec.gov's secondary
+  endpoints are no-ops for us; we surface the booking link, the operator
+  does the rest.
+
+**What this prior-art review *does* tell us to add:**
+
+- **Facility type beyond `category='campground'`.** Even within campgrounds,
+  there's a meaningful split: `tent-only`, `rv-only`, `mixed`,
+  `backcountry`, `cabin`. Aspira's `BookingCategory` does this; rec.gov's
+  `Type` field does this. Worth promoting from JSONB into a real column,
+  even if we keep the taxonomy small. Punt to a follow-up RFC after we
+  have data on what we're actually getting from each source.
+- **Operator vs. agency.** rec.gov treats RecArea's `ParentOrganization`
+  (NPS, USFS) separately from the contractor running on-site bookings.
+  Our `governing_body` covers ParentOrganization; we don't model the
+  contractor. Probably fine — it's a level of fidelity that's not
+  user-visible.
+
+---
+
 **Why server-assembled (BFF) over rich client?**
 
 We're a small team with one FE consumer. The BFF tradeoff costs us deploy
@@ -561,3 +669,5 @@ proliferate without FE changes.
 | 7 | 2026-06-07 | Rename "ingest" to "poller" in this RFC's vocabulary | "poller" describes the periodic, schedule-driven nature of the work better than "ingest"; existing artifacts (`ingest_runs` table, `IngestController`, `/api/admin/ingest/*`) rename in a separate mechanical PR |
 | 8 | 2026-06-07 | Collapse `recgovId` + `aspira` into a generic `provider_ref` (booking_provider FK + opaque `ids` JSONB) | Per-vendor fields are exactly the N×M sprawl the RFC retires; opaque `ids` keeps the adapter contract local to its adapter |
 | 9 | 2026-06-07 | Drop `reservable` from the row shape | It depends on season + provider state, not row-level data; the availability route owns the answer |
+| 10 | 2026-06-07 | `created_at` / `updated_at` / `last_verified` are POI-level, not per-type | Lifecycle is shared; promoting `last_verified` from JSONB to a column makes it filterable + reusable for future types |
+| 11 | 2026-06-07 | Skip rec.gov-style site-level (Campsite) modeling for now | Heat strip aggregates across sites; we never need per-site state. Revisit if we ever build per-site availability tracking |
