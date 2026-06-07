@@ -64,11 +64,13 @@ export function openDrawer(contentHtml, onMounted) {
 function normalizeAspira(f) {
   const a = f.properties?.aspira;
   if (typeof a !== 'string') return f;
-  try {
-    return { ...f, properties: { ...f.properties, aspira: JSON.parse(a) } };
-  } catch {
-    return { ...f, properties: { ...f.properties, aspira: null } };
-  }
+  // MapLibre wraps features so geometry/id are accessor properties — `{...f}`
+  // would silently drop them. Mutate the properties bag in place; the
+  // feature is per-click ephemeral, so this won't leak state into the source.
+  let parsed = null;
+  try { parsed = JSON.parse(a); } catch {}
+  f.properties.aspira = parsed;
+  return f;
 }
 
 /**
