@@ -2,10 +2,12 @@ package ca.floo.roadtrip
 
 import ca.floo.campsite.recgov.booker.campsiteModule
 import ca.floo.campsite.recgov.booker.campsiteRoutes
+import ca.floo.roadtrip.api.geocodeRoutes
 import ca.floo.roadtrip.api.healthRoutes
 import ca.floo.roadtrip.api.poiRoutes
 import ca.floo.roadtrip.api.pricingRoutes
 import ca.floo.roadtrip.api.routeRoutes
+import ca.floo.roadtrip.geocode.MapboxGeocoder
 import ca.floo.roadtrip.importer.DbConfig
 import ca.floo.roadtrip.importer.Importer
 import ca.floo.roadtrip.importer.dataSourceFor
@@ -58,10 +60,13 @@ fun Application.module() {
     val staticDir = File(System.getenv("ROADTRIP_STATIC_DIR") ?: ".")
     val pricingCache = File(staticDir, "data/pricing-cache")
 
-    // Mapbox Directions for /api/route. Token stays server-side — never sent
-    // to the browser. Endpoint responds 503 if MAPBOX_TOKEN is unset; the
-    // rest of the app is unaffected.
-    val mapboxDirections = MapboxDirections(token = System.getenv("MAPBOX_TOKEN"))
+    // Mapbox Directions for /api/route + Mapbox Geocoding for /api/geocode.
+    // Both share MAPBOX_TOKEN. Token stays server-side — never sent to the
+    // browser. Endpoints respond 503 if unset; the rest of the app is
+    // unaffected.
+    val mapboxToken = System.getenv("MAPBOX_TOKEN")
+    val mapboxDirections = MapboxDirections(token = mapboxToken)
+    val mapboxGeocoder = MapboxGeocoder(token = mapboxToken)
 
     // Ingestion controller (RFC 0004 / issue #44) — observability + remote
     // trigger layer around the data-fetch (Python scripts) + data-import
@@ -153,6 +158,7 @@ fun Application.module() {
         poiRoutes(ctx)
         pricingRoutes(pricingCache)
         routeRoutes(mapboxDirections)
+        geocodeRoutes(mapboxGeocoder)
         healthRoutes(pricingCache)
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
