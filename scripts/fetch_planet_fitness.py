@@ -1,68 +1,62 @@
 #!/usr/bin/env python3
-"""Fetch Planet Fitness US locations from OpenStreetMap Overpass API, save as GeoJSON."""
-import datetime as dt
-import json
+"""Capture Planet Fitness US locations from OSM Overpass.
+
+Thin fetch-only per RFC 0007. Writes one envelope-wrapped raw capture
+under data/raw/osm-pf/<UTC-ts>.json. Kotlin ETL parses + transforms.
+
+Run:
+  python3 scripts/fetch_planet_fitness.py
+"""
+from __future__ import annotations
+
 import sys
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
-OUT = Path(__file__).parent.parent / "data" / "planet-fitness.geojson"
-BBOX = "24.5,-125.0,49.5,-66.5"  # continental US + a bit
+sys.path.insert(0, str(Path(__file__).parent))
+from _envelope import err, http_post_text, parse_payload, write_envelope  # noqa: E402
 
+OVERPASS_URL = "https://overpass-api.de/api/interpreter"
+BBOX = "24.5,-125.0,49.5,-66.5"  # continental US + a bit
 QUERY = f"""
 [out:json][timeout:90];
 nwr["brand"="Planet Fitness"]({BBOX});
 out center tags;
 """
 
+UA = "roadtrip-map/0.1 (personal)"
+FETCHER = "fetch_planet_fitness"
+FETCHER_VERSION = "2"  # v1 was the merge-into-geojson era
 
-def main():
-    url = "https://overpass-api.de/api/interpreter"
-    data = urllib.parse.urlencode({"data": QUERY}).encode()
-    req = urllib.request.Request(url, data=data, headers={
-        "User-Agent": "roadtrip-map/0.1 (personal)",
-    })
-    print(f"fetching Overpass…", file=sys.stderr)
-    with urllib.request.urlopen(req, timeout=120) as resp:
-        payload = json.loads(resp.read())
 
-    elements = payload.get("elements", [])
-    print(f"  got {len(elements)} elements", file=sys.stderr)
+def main() -> int:
+    err("fetching OSM Overpass…")
+    headers = {"User-Agent": UA}
+    body_bytes = urllib.parse.urlencode({"data": QUERY}).encode()
+    try:
+        status, resp_headers, body = http_post_text(
+            OVERPASS_URL, data=body_bytes, headers=headers, timeout=120
+        )
+    except Exception as e:  # noqa: BLE001
+        err(f"  fetch failed: {e}")
+        return 1
 
-    features = []
-    for el in elements:
-        if el.get("type") == "node":
-            lon, lat = el.get("lon"), el.get("lat")
-        else:
-            c = el.get("center") or {}
-            lon, lat = c.get("lon"), c.get("lat")
-        if lon is None or lat is None:
-            continue
-        t = el.get("tags") or {}
-        features.append({
-            "type": "Feature",
-            "geometry": {"type": "Point", "coordinates": [lon, lat]},
-            "properties": {
-                "osm_id": f"{el['type']}/{el['id']}",
-                "name": t.get("name", "Planet Fitness"),
-                "street": " ".join(x for x in [t.get("addr:housenumber"), t.get("addr:street")] if x),
-                "city": t.get("addr:city", ""),
-                "state": t.get("addr:state", ""),
-                "postcode": t.get("addr:postcode", ""),
-                "phone": t.get("phone", ""),
-                "website": t.get("website", ""),
-                "opening_hours": t.get("opening_hours", ""),
-            },
-        })
-
-    OUT.parent.mkdir(parents=True, exist_ok=True)
-    # Stamp upstream-fetch time so the importer's pois.fetched_at reflects when
-    # we actually called Overpass, not when this file was last touched on disk.
-    fetched_at = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-    OUT.write_text(json.dumps({"_fetched_at": fetched_at, "type": "FeatureCollection", "features": features}))
-    print(f"wrote {len(features)} features to {OUT}", file=sys.stderr)
+    payload = parse_payload(resp_headers.get("content-type", ""), body)
+    out = write_envelope(
+        source="osm-pf",
+        fetcher=FETCHER,
+        fetcher_version=FETCHER_VERSION,
+        request_url=OVERPASS_URL,
+        request_method="POST",
+        request_headers=headers,
+        response_status=status,
+        response_headers=resp_headers,
+        payload=payload,
+    )
+    n = len(payload.get("elements", [])) if isinstance(payload, dict) else 0
+    err(f"  wrote {out} ({n} elements)")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

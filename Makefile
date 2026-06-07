@@ -1,4 +1,4 @@
-.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers rebuild-superchargers data-fetch data-import qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers data-fetch data-import qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -18,8 +18,7 @@ help:
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
 	@echo "  make refresh-cookies  Push Tesla cookies from clipboard → $(DEPLOY_HOST) (Tailscale exit node recommended)"
 	@echo "  make refresh-cookies-local  Mint cookies into THIS repo's .env (laptop-only egress)"
-	@echo "  make refresh-superchargers  Full Tesla refresh: bulk feed + per-site (~25 min)"
-	@echo "  make rebuild-superchargers  Rebuild geojson from cache, no network (~30s)"
+	@echo "  make refresh-superchargers  Full Tesla refresh: bulk index + per-slug detail (RFC 0007 raw captures)"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
@@ -60,7 +59,7 @@ stop:
 	- docker compose -f docker-compose.yml -f docker-compose.local.yml --profile pois down
 
 # Build the offline-refresh image (curl-impersonate baked in). Needed before
-# refresh-superchargers / rebuild-superchargers. Idempotent — if the image
+# refresh-superchargers. Idempotent — if the image
 # exists, this is a no-op.
 refresh-image:
 	docker build -t roadtrip-refresh:local -f scripts/Dockerfile.refresh scripts/
@@ -72,33 +71,23 @@ refresh-cookies:
 	@scripts/refresh-cookies-remote.sh "$(DEPLOY_HOST)" "$(DEPLOY_USER)" "$(DEPLOY_DIR)"
 
 # Same flow but writes cookies into THIS repo's .env. Use when iterating on a
-# script that runs in local Docker (e.g. fetch_tesla_superchargers.py). Cookies
+# script that runs in local Docker (e.g. fetch_tesla_index.py). Cookies
 # are bound to this laptop's egress IP so they only work locally — production
 # still needs `make refresh-cookies`.
 refresh-cookies-local:
 	@scripts/refresh-cookies-local.sh
 
-# Cache-first idempotent rebuild of data/tesla-superchargers.geojson. After a
-# full run has populated data/pricing-cache/, this is fast (~30s for ~1300
-# cache hits) and produces a deterministic geojson.
-rebuild-superchargers: refresh-image
-	docker run --rm --env-file .env \
-	  -v "$(PWD)/data:/app/data" \
-	  -v "$(PWD)/scripts:/app/scripts" \
-	  -v "$(PWD)/.env:/app/.env:ro" \
-	  roadtrip-refresh:local python3 /app/scripts/fetch_tesla_superchargers.py --no-fetch
-
-# Full network refresh of Tesla data — both the bulk get-locations feed and
-# every per-site get-charger-details. Network-bound (~1 req/sec, ~25 min).
-# Re-running is safe: cache hits skip the network entirely. The Kotlin
-# backend serves whatever this writes to data/pricing-cache/ — Tesla is
-# never called from the user request path.
+# Full network refresh of Tesla data — bulk get-locations + per-slug
+# get-charger-details. Network-bound (~1 req/sec). Cache-first behavior
+# lives in fetch_tesla_locations.py (--max-age-days controls freshness).
+# RFC 0007: writes envelope-wrapped raw to data/raw/tesla-{index,locations}/.
 refresh-superchargers: refresh-image
 	docker run --rm --env-file .env \
 	  -v "$(PWD)/data:/app/data" \
 	  -v "$(PWD)/scripts:/app/scripts" \
 	  -v "$(PWD)/.env:/app/.env:ro" \
-	  roadtrip-refresh:local python3 /app/scripts/fetch_tesla_superchargers.py
+	  roadtrip-refresh:local sh -c \
+	  "python3 /app/scripts/fetch_tesla_index.py && python3 /app/scripts/fetch_tesla_locations.py"
 
 # Two-step refresh through the backend's admin API (RFC 0004 / issue #44):
 #   make data-fetch                       # all targets

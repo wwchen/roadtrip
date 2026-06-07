@@ -21,3 +21,11 @@ qa/playwright-report/
 
 .idea/
 .obsidian/
+
+# RFC 0007 raw captures. Each fetcher writes envelope-wrapped upstream
+# bytes here on every run. Append-only on the poller host, but not
+# committed — captures are large (~40MB and growing) and machine-
+# specific. Recovery on a fresh checkout: re-run the fetchers, or run
+# scripts/_migrate_tesla_cache.py to bootstrap Tesla from the legacy
+# data/pricing-cache/ if it's still around.
+data/raw/

@@ -2,7 +2,7 @@
 #
 # Mirror of refresh-cookies-remote.sh but writes cookies into THIS repo's
 # .env instead of pushing to the mini. Use when iterating on a script that
-# runs in local Docker (e.g. fetch_tesla_superchargers.py smoke tests).
+# runs in local Docker (e.g. fetch_tesla_index.py / fetch_tesla_locations.py smoke tests).
 #
 # Akamai binds _abck to the egress IP that minted it, so cookies captured
 # here only work for fetches that egress from this laptop's IP. That matches
@@ -51,4 +51,4 @@ echo "Test now:"
 echo "  make refresh-image"
 echo "  docker run --rm --env-file .env \\"
 echo "    -v \"\$(pwd)/data:/app/data\" -v \"\$(pwd)/scripts:/app/scripts\" \\"
-echo "    roadtrip-refresh:local python3 /app/scripts/fetch_tesla_superchargers.py --limit 3"
+echo "    roadtrip-refresh:local python3 /app/scripts/fetch_tesla_index.py && python3 /app/scripts/fetch_tesla_locations.py --limit 3"

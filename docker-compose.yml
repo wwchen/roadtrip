@@ -3,7 +3,7 @@ services:
   # aarch64 hosts (see memory: akamai_http2_fingerprinting.md). To enable,
   # run with `--profile cookie-bot` on an amd64 host (or with a paid-solver
   # backend), then set COOKIE_BOT_URL=http://cookie-bot:8080 in .env.
-  # Used only by the offline refresh worker (scripts/fetch_tesla_superchargers.py),
+  # Used only by the offline refresh worker (scripts/fetch_tesla_{index,locations}.py),
   # not by the live serving stack.
   cookie-bot:
     profiles: [cookie-bot]

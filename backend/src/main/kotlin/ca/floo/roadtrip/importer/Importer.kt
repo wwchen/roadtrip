@@ -191,12 +191,15 @@ fun sourceFor(
 ): Source =
     when (name) {
         "uscampgrounds" -> UsCampgroundsSource(required(File(dataDir, "campgrounds.geojson")))
-        "alberta-provincial" -> AlbertaProvincialSource(required(File(dataDir, "alberta-provincial.json")))
+        // Curated repo-managed JSON moved under data/curated/ as part of
+        // RFC 0007 — they aren't fetched, so they don't belong next to the
+        // generated *.geojson snapshots.
+        "alberta-provincial" -> AlbertaProvincialSource(required(File(dataDir, "curated/alberta-provincial.json")))
         "parks-canada" ->
             ParksCanadaSource(
                 listOf(
-                    required(File(dataDir, "parks-canada-bc.json")),
-                    required(File(dataDir, "parks-canada-ab.json")),
+                    required(File(dataDir, "curated/parks-canada-bc.json")),
+                    required(File(dataDir, "curated/parks-canada-ab.json")),
                 ),
             )
         "state-parks" -> ParksGeoJsonSource(required(File(dataDir, "state-parks.geojson")), "state-parks", Category.STATE_PARK)

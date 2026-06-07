@@ -1,0 +1,168 @@
+#!/usr/bin/env python3
+"""Capture per-supercharger detail payloads (Tesla get-charger-details).
+
+Thin fetch-only per RFC 0007. One envelope per slug:
+
+  data/raw/tesla-locations/<slug>/<UTC-ts>.json
+
+Reads the latest tesla-index capture under data/raw/tesla-index/, walks
+its NA superchargers, and skips slugs that already have a capture
+within the freshness window (default: 30 days). Hits get-charger-details
+for the rest at SLEEP_S between calls (Akamai-friendly pacing).
+
+Crawling Tesla is expensive (cookie minting + curl-impersonate); the
+default behavior is "skip what we have." Pass --refresh-all to ignore
+freshness and re-fetch every slug.
+
+Run:
+  python3 scripts/fetch_tesla_locations.py
+  python3 scripts/fetch_tesla_locations.py --limit 5
+  python3 scripts/fetch_tesla_locations.py --refresh-all
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import sys
+import time
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent))
+import tesla_client  # noqa: E402
+from _envelope import RAW_ROOT, err, parse_payload, write_envelope  # noqa: E402
+
+ROOT = Path(__file__).parent.parent
+INDEX_DIR = RAW_ROOT / "tesla-index"
+LOCATIONS_DIR = RAW_ROOT / "tesla-locations"
+
+NA_BBOX = (14, 72, -180, -52)  # min_lat, max_lat, min_lng, max_lng — NA + Caribbean
+SLEEP_S = 1.0
+DEFAULT_FRESHNESS_DAYS = 30
+
+FETCHER = "fetch_tesla_locations"
+FETCHER_VERSION = "1"
+
+
+def newest_index_capture() -> Path | None:
+    """Pick the lexicographically-newest tesla-index capture (no symlinks)."""
+    if not INDEX_DIR.exists():
+        return None
+    captures = sorted(INDEX_DIR.glob("*.json"))
+    return captures[-1] if captures else None
+
+
+def latest_capture(slug: str) -> Path | None:
+    d = LOCATIONS_DIR / slug
+    if not d.exists():
+        return None
+    captures = sorted(d.glob("*.json"))
+    return captures[-1] if captures else None
+
+
+def is_fresh(slug: str, max_age_days: int) -> bool:
+    cap = latest_capture(slug)
+    if cap is None:
+        return False
+    age_s = time.time() - cap.stat().st_mtime
+    return age_s < max_age_days * 86400
+
+
+def na_supercharger_slugs(index_path: Path) -> list[str]:
+    """Walk the bulk locations payload, return slugs of NA supercharger pins."""
+    d = json.loads(index_path.read_text())
+    payload = d.get("payload") or d  # tolerate envelope or bare
+    items = ((payload.get("data") or {}).get("data") or [])
+    out = []
+    for item in items:
+        types = item.get("location_type") or []
+        if "supercharger" not in types and "coming_soon_supercharger" not in types:
+            continue
+        lat = item.get("latitude")
+        lng = item.get("longitude")
+        if lat is None or lng is None:
+            continue
+        if not (NA_BBOX[0] < lat < NA_BBOX[1] and NA_BBOX[2] < lng < NA_BBOX[3]):
+            continue
+        slug = item.get("location_url_slug")
+        if not slug:
+            continue
+        sf = item.get("supercharger_function") or {}
+        if sf.get("show_on_find_us") == "0":
+            continue
+        out.append(slug)
+    return out
+
+
+def fetch_slug(slug: str) -> tuple[int, dict | str]:
+    """Hit get-charger-details via tesla_client. Returns (http status, payload)."""
+    return tesla_client.fetch_tesla_pricing(slug)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--limit", type=int, default=None,
+                        help="only process first N slugs (smoke test)")
+    parser.add_argument("--refresh-all", action="store_true",
+                        help="ignore freshness, re-fetch every slug")
+    parser.add_argument("--max-age-days", type=int, default=DEFAULT_FRESHNESS_DAYS,
+                        help="skip slugs whose latest capture is younger than this")
+    args = parser.parse_args()
+
+    tesla_client.load_env()
+
+    idx = newest_index_capture()
+    if idx is None:
+        err("no tesla-index capture under data/raw/tesla-index/; run fetch_tesla_index.py first")
+        return 1
+    err(f"using index {idx.relative_to(ROOT)}")
+    slugs = na_supercharger_slugs(idx)
+    if args.limit:
+        slugs = slugs[: args.limit]
+    err(f"NA supercharger slugs in index: {len(slugs)}")
+
+    LOCATIONS_DIR.mkdir(parents=True, exist_ok=True)
+
+    fetched = 0
+    skipped = 0
+    failed = 0
+    started = time.time()
+    for i, slug in enumerate(slugs, 1):
+        if not args.refresh_all and is_fresh(slug, args.max_age_days):
+            skipped += 1
+            continue
+        status, payload = fetch_slug(slug)
+        if status != 200 or not isinstance(payload, dict):
+            failed += 1
+            err(f"  fail {slug}: HTTP {status}")
+            time.sleep(SLEEP_S)
+            continue
+        # Per-slug captures live at data/raw/tesla-locations/<slug>/<ts>.json
+        # — Path() join on `source` produces the subdirectory.
+        write_envelope(
+            source=f"tesla-locations/{slug}",
+            fetcher=FETCHER,
+            fetcher_version=FETCHER_VERSION,
+            request_url=(
+                f"https://www.tesla.com/api/findus/get-charger-details"
+                f"?locationSlug={slug}&programType=supercharger"
+                f"&locale=en-US&isInHkMoTw=false"
+            ),
+            request_method="GET",
+            request_headers={},
+            response_status=status,
+            response_headers={},
+            payload=payload,
+        )
+        fetched += 1
+        time.sleep(SLEEP_S)
+        if i % 50 == 0 or i == len(slugs):
+            elapsed = time.time() - started
+            err(f"  {i}/{len(slugs)} fetched={fetched} skipped={skipped} "
+                f"failed={failed} ({elapsed:.0f}s)")
+    err(f"done: fetched={fetched} skipped={skipped} failed={failed}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
