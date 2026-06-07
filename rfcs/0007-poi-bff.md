@@ -242,10 +242,28 @@ Relationships:
   Eventually move to a real FK once we promote `source` to a table.
 
 `governing_body` and `booking_provider` are small dimension tables (10–20
-rows each) — promote-from-string, not free-form JSONB. Display strings that
-the BE renders (e.g. "Booking via Aspira NextGen (BC Parks)") read from
-those tables instead of being hardcoded in TypeScript or the drawer
-assembler.
+rows each) — promote-from-string, not free-form JSONB. Display strings
+that the BE renders (e.g. "Booking via Aspira NextGen (BC Parks)") read
+from those tables instead of being hardcoded in TypeScript or the
+drawer assembler.
+
+**`booking_provider` shape**:
+
+```
+id  | name                          | vendor   | host                          | adapter_class
+----|-------------------------------|----------|-------------------------------|---------------------
+1   | Recreation.gov                | recgov   | www.recreation.gov            | RecGovAdapter
+2   | Aspira NextGen (Parks Canada) | aspira   | reservation.pc.gc.ca          | AspiraAdapter
+3   | Aspira NextGen (BC Parks)     | aspira   | camping.bcparks.ca            | AspiraAdapter
+4   | Aspira NextGen (WA State)     | aspira   | washington.goingtocamp.com    | AspiraAdapter
+5   | Camis (Alberta Parks)         | camis    | reserve.albertaparks.ca       | (future)
+```
+
+One row per (vendor × host). Aspira gets 3 rows because the same
+adapter speaks to 3 different host endpoints — the route handler reads
+`provider.host` to know where to call. `governing_body` and
+`booking_provider` are independent: NPS (governing) → rec.gov (booking),
+BC Parks (governing) → Aspira BC (booking).
 
 #### Provenance: stamp the poller run on every row
 
@@ -388,7 +406,9 @@ enforces "Aspira has mapId, RecGov has recgov_id":
 sealed class ProviderRef {
     data class RecGov(val recgovId: String) : ProviderRef()
     data class Aspira(
-        val host: String,                       // reservation.pc.gc.ca / camping.bcparks.ca / ...
+        // host comes from the FK row in booking_provider, not duplicated here.
+        // Aspira gets 3 rows in booking_provider — one per host (PC/BC/WA) —
+        // and the POI row's `booking_provider_id` FK selects which.
         val transactionLocationId: Long,
         val mapId: Long,
         val resourceLocationId: Long?
@@ -397,21 +417,32 @@ sealed class ProviderRef {
 }
 ```
 
-Stored as JSONB on the row with a discriminator + payload:
+The POI row carries both `booking_provider_id` (FK) and `provider_ref`
+(JSONB sealed). The adapter dispatcher reads both — the FK selects the
+adapter row (which carries the host), the `provider_ref` carries the
+typed IDs.
+
+Stored as JSONB on the row, payload-only (no discriminator — `booking_provider_id` is the single source of truth for which adapter):
 
 ```json
-// rec.gov
-{"kind": "recgov", "recgov_id": "232857"}
-// Aspira NextGen
-{"kind": "aspira", "host": "camping.bcparks.ca", "transactionLocationId": -2147483630, "mapId": -2147483388, "resourceLocationId": -2147483624}
-// Camis (Alberta), if/when added
-{"kind": "camis", "facility_id": "BVPP"}
+// rec.gov  (booking_provider_id=1)
+{"recgov_id": "232857"}
+// Aspira NextGen for BC Parks  (booking_provider_id=3, host comes from that row)
+{"transactionLocationId": -2147483630, "mapId": -2147483388, "resourceLocationId": -2147483624}
+// Camis  (booking_provider_id=5)
+{"facility_id": "BVPP"}
 ```
 
-Serialization handled by a `ProviderRef.serialize` / `parse` pair. The
-availability route (Section 5) reads the parsed `ProviderRef`, dispatches
-on the sealed type to the matching adapter, and the adapter receives a
-typed value — no `JsonObject.getString("foo")` parse at adapter time.
+Dispatch: `booking_provider.vendor` selects the adapter, the adapter
+parses `provider_ref` JSONB into its own sealed variant. No
+`JsonObject.getString("foo")` outside the adapter.
+
+```kotlin
+val provider = bookingProvider.findById(poi.bookingProviderId) ?: return noProvider()
+val adapter = adapters.getValue(provider.vendor)         // RecGovAdapter / AspiraAdapter / ...
+val ref     = adapter.parseRef(poi.providerRefJson)       // type-narrowed via reified generics
+adapter.availability(ref, days)
+```
 
 Adding a new provider is: new sealed variant + new adapter + new row in
 `booking_provider`. The compiler refuses to forget the new variant in
@@ -437,19 +468,52 @@ GET /api/availability/{poi_id}?days=30
 
 The handler:
 1. Looks up the POI by id.
-2. Reads its `provider_ref` (FK to `booking_provider` + opaque `ids` blob;
-   see Section 4).
-3. Loads the registered `BookingProviderAdapter` for that provider FK and
-   hands it the `ids` blob.
+2. Reads its `provider_ref` (sealed; see Section 4).
+3. Dispatches on the sealed type to the matching adapter.
 4. Adapter answers (or returns `no_provider` if `provider_ref IS NULL`),
    normalized to one per-day status response shape.
 
-Adding a new provider is one Kotlin class implementing the adapter
-interface + a row in `booking_provider`. No new API route, no new field on
-the POI type, no FE change.
+The drawer payload's `availability.endpoint` always points here — FE
+doesn't know which provider answered.
 
-The drawer payload's `availability.endpoint` always points here — FE doesn't
-know which provider answered.
+**Adapter interface:**
+
+```kotlin
+interface BookingProviderAdapter<R : ProviderRef> {
+    val providerId: Long                    // FK row in booking_provider
+    val refClass: KClass<R>                 // for dispatch
+
+    /** 30-day availability for one POI. Adapter owns throttling, auth,
+     *  cookies, WAF-evasion (browser UA, header shape, etc.). */
+    suspend fun availability(ref: R, days: Int): AvailabilityResult
+
+    /** External booking URL the drawer's primary action links to. */
+    fun deeplink(ref: R, host: String? = null): String
+
+    /** Optional poller hook: this provider's `/api/maps`-equivalent endpoint
+     *  produces the per-park IDs the curated POI rows reference. Returns
+     *  the indexed payload; null if the provider doesn't expose one. */
+    suspend fun fetchIndex(): RawCapture?     // wraps in the envelope
+}
+```
+
+Each adapter owns:
+
+- **Throttle state** (today's `AspiraAvailabilityClient` mutex moves
+  inside the adapter — one mutex per provider singleton, not global).
+- **Auth / cookie / UA shape** (Tesla's curl-impersonate stays here;
+  Aspira's no-Accept-Charset trick stays here).
+- **Host whitelist** if multi-host (Aspira: PC / BC / WA share the
+  adapter; the ALLOWED_HOSTS set lives on the adapter, not in the
+  route handler).
+- **Provider-specific status code mapping** (`AspiraStatus.classify`
+  is the adapter's, not shared).
+
+Adding a new provider is one new sealed `ProviderRef.Foo` variant + one
+new `FooAdapter : BookingProviderAdapter<ProviderRef.Foo>` + one row in
+`booking_provider`. The compiler refuses to forget the new variant in
+the route's exhaustive `when`. No new API route, no new POI field, no
+FE change.
 
 ### Section 6: FE consolidation
 
@@ -595,6 +659,24 @@ Why staged:
    silently poison `pois`.
 3. Transform is reusable. A future CLI exporter or search-index
    builder consumes `Poi` instances, not DB rows.
+
+**Code organization.** One file per source (`etl/aspira/AspiraEtl.kt`,
+`etl/uscampgrounds/UsCampgroundsEtl.kt`, etc.) contains that source's
+DTO + validator + transformer + the orchestrating function. The contract
+is an abstract interface every source implements:
+
+```kotlin
+interface SourceEtl<DTO : Any, OUT : Poi> {
+    val sourceName: String                  // 'aspira-maps', 'uscampgrounds', ...
+    fun parse(envelope: Envelope): DTO       // raw JSON -> DTO
+    fun validate(dto: DTO): ValidationResult // ok | List<ValidationError>
+    fun transform(dto: DTO, ctx: TransformCtx): List<OUT>
+}
+```
+
+The interface gives a uniform shape to grep across (`SourceEtl<*, *>`),
+the per-source file keeps the cohesive mass — DTO, validator, transformer,
+and tests against captured raw fixtures all in one place.
 
 **Deletes** stay mark-and-sweep, scoped per source set:
 
