@@ -286,11 +286,23 @@ function injectStyles() {
     display: flex; align-items: center; gap: 6px;
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
     color: var(--cg-muted); font-weight: 600;
+    cursor: pointer;
+    user-select: none;
   }
+  .tb-results-head:hover { color: var(--cg-text); }
   .tb-results-head .tb-results-count {
     color: var(--cg-faint); font-weight: 400; text-transform: none; letter-spacing: 0;
     font-size: 11px;
+    flex: 1;
   }
+  .tb-results-chevron {
+    flex-shrink: 0;
+    width: 14px; height: 14px;
+    transition: transform 150ms ease;
+  }
+  /* Chevron points down when collapsed, up when expanded. */
+  #tb-results.collapsed .tb-results-chevron { transform: rotate(180deg); }
+  #tb-results.collapsed .tb-results-body { display: none; }
   .tb-card {
     display: flex; gap: 10px;
     padding: 10px 12px;
@@ -337,6 +349,9 @@ function injectStyles() {
   @media (max-width: 768px) {
     #topbar { left: 8px; right: 8px; width: auto; max-width: none; }
     #tb-results { max-height: 40vh; }
+    /* On a phone, the card list eats the whole screen if expanded by default
+       — start collapsed so the map is visible after computing a route. */
+    #tb-results.collapsed { max-height: none; }
   }
   `;
   const tag = document.createElement('style');
@@ -1069,6 +1084,9 @@ const tripResults = {
   routeCoords: null,   // [[lng, lat], ...]
   routeCum: null,      // [0, d01, d01+d12, ...] in km
   legendBound: false,
+  // Collapse state. Starts collapsed on mobile so the map isn't covered
+  // by a long card list, expanded on desktop where there's room.
+  collapsed: typeof window !== 'undefined' && window.matchMedia?.('(max-width: 768px)').matches,
 };
 
 /** Build the cumulative-km index for the active route polyline. */
@@ -1183,6 +1201,22 @@ function compactSeasonLabel(seasonStr, reservable) {
   return cleaned.length > 28 ? cleaned.slice(0, 26) + '…' : cleaned;
 }
 
+/** Wire the collapse toggle on the results header. innerHTML rewrites blow
+ *  away listeners every render, so re-bind every time. */
+function bindResultsHead(el) {
+  const head = el.querySelector('.tb-results-head');
+  if (!head) return;
+  const toggle = () => {
+    tripResults.collapsed = !tripResults.collapsed;
+    el.classList.toggle('collapsed', tripResults.collapsed);
+    head.setAttribute('aria-expanded', String(!tripResults.collapsed));
+  };
+  head.addEventListener('click', toggle);
+  head.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); }
+  });
+}
+
 function visibleCards() {
   const allowed = new Set();
   for (const id of CG_LEGEND_TOGGLES) {
@@ -1212,14 +1246,21 @@ function renderResults() {
   const filterNote = filteredOut > 0
     ? ` <span class="tb-results-count">· ${cards.length} of ${total}</span>`
     : ` <span class="tb-results-count">· ${total}</span>`;
-  const head = `<div class="tb-results-head">Campgrounds along route${filterNote}</div>`;
+  const chevron = `<svg class="tb-results-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"/></svg>`;
+  const expanded = !tripResults.collapsed;
+  const head = `<div class="tb-results-head" role="button" tabindex="0" aria-expanded="${expanded}">
+    Campgrounds along route${filterNote}${chevron}
+  </div>`;
+
+  el.classList.toggle('collapsed', tripResults.collapsed);
 
   if (!cards.length) {
     const msg = total === 0
       ? 'Pan the map or widen the corridor to find campgrounds.'
       : 'All campgrounds hidden — re-enable a category in the legend.';
-    el.innerHTML = head + `<div class="tb-card-empty">${msg}</div>`;
+    el.innerHTML = head + `<div class="tb-results-body"><div class="tb-card-empty">${msg}</div></div>`;
     el.classList.add('visible');
+    bindResultsHead(el);
     return;
   }
   let body = '';
@@ -1245,9 +1286,10 @@ function renderResults() {
       </div>
     </div>`;
   }
-  el.innerHTML = head + body;
+  el.innerHTML = head + `<div class="tb-results-body">${body}</div>`;
   el.classList.add('visible');
   el.scrollTop = scrollY;
+  bindResultsHead(el);
 
   // Bind once: when the user toggles a category in the right panel, re-render
   // the card list so it reflects what's visible on the map.
