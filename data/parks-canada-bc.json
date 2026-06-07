@@ -5,183 +5,323 @@
   "campgrounds": [
     {
       "name": "Kicking Horse Campground",
-      "lat": 51.4242, "lon": -116.4321,
+      "lat": 51.4242,
+      "lon": -116.4321,
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": true,
       "season": "mid-May to early October",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483605,
+        "mapId": -2147483186,
+        "park_title": "Yoho"
+      }
     },
     {
       "name": "Monarch Campground",
-      "lat": 51.4210, "lon": -116.4445,
+      "lat": 51.421,
+      "lon": -116.4445,
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": false,
       "season": "mid-May to early October",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483605,
+        "mapId": -2147483186,
+        "park_title": "Yoho"
+      }
     },
     {
       "name": "Hoodoo Creek Campground",
-      "lat": 51.2230, "lon": -116.5713,
+      "lat": 51.223,
+      "lon": -116.5713,
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": false,
       "season": "late June to early September",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483605,
+        "mapId": -2147483186,
+        "park_title": "Yoho"
+      }
     },
     {
       "name": "Chancellor Peak Campground",
-      "lat": 51.1916, "lon": -116.5820,
+      "lat": 51.1916,
+      "lon": -116.582,
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": false,
       "season": "mid-May to early October",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483605,
+        "mapId": -2147483186,
+        "park_title": "Yoho"
+      }
     },
     {
       "name": "Takakkaw Falls Walk-in Campground",
-      "lat": 51.4969, "lon": -116.4746,
+      "lat": 51.4969,
+      "lon": -116.4746,
       "park": "Yoho National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/yoho",
       "reservable": false,
       "season": "late June to early October",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483605,
+        "mapId": -2147483186,
+        "park_title": "Yoho"
+      }
     },
     {
       "name": "Redstreak Campground",
-      "lat": 50.6273, "lon": -116.0579,
+      "lat": 50.6273,
+      "lon": -116.0579,
       "park": "Kootenay National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/kootenay",
       "reservable": true,
       "season": "early May to early October",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483625,
+        "mapId": -2147483385,
+        "park_title": "Kootenay"
+      }
     },
     {
       "name": "McLeod Meadows Campground",
-      "lat": 50.7675, "lon": -115.9414,
+      "lat": 50.7675,
+      "lon": -115.9414,
       "park": "Kootenay National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/kootenay",
       "reservable": true,
       "season": "late May to mid-September",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483625,
+        "mapId": -2147483385,
+        "park_title": "Kootenay"
+      }
     },
     {
       "name": "Marble Canyon Campground",
-      "lat": 51.1859, "lon": -116.1182,
+      "lat": 51.1859,
+      "lon": -116.1182,
       "park": "Kootenay National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/kootenay",
       "reservable": false,
       "season": "late June to early September",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483625,
+        "mapId": -2147483385,
+        "park_title": "Kootenay"
+      }
     },
     {
       "name": "Illecillewaet Campground",
-      "lat": 51.2651, "lon": -117.4950,
+      "lat": 51.2651,
+      "lon": -117.495,
       "park": "Glacier National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/glacier",
       "reservable": false,
       "season": "late June to late September",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483634,
+        "mapId": -2147483497,
+        "park_title": "Glacier"
+      }
     },
     {
       "name": "Loop Brook Campground",
-      "lat": 51.2573, "lon": -117.5383,
+      "lat": 51.2573,
+      "lon": -117.5383,
       "park": "Glacier National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/glacier",
       "reservable": false,
       "season": "late June to late September",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483634,
+        "mapId": -2147483497,
+        "park_title": "Glacier"
+      }
     },
     {
       "name": "Mount Sir Donald Campground",
-      "lat": 51.2700, "lon": -117.5150,
+      "lat": 51.27,
+      "lon": -117.515,
       "park": "Glacier National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/glacier",
       "reservable": false,
       "season": "late June to late September",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483634,
+        "mapId": -2147483497,
+        "park_title": "Glacier"
+      }
     },
     {
       "name": "Snowforest Campground",
-      "lat": 51.0020, "lon": -118.1450,
+      "lat": 51.002,
+      "lon": -118.145,
       "park": "Mount Revelstoke National Park",
       "park_url": "https://parks.canada.ca/pn-np/bc/revelstoke",
       "reservable": true,
       "season": "mid-June to early September",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483620,
+        "mapId": -2147483323,
+        "park_title": "Mount Revelstoke"
+      }
     },
     {
       "name": "Green Point Campground",
-      "lat": 49.0571, "lon": -125.7232,
+      "lat": 49.0571,
+      "lon": -125.7232,
       "park": "Pacific Rim National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/pacificrim",
       "reservable": true,
       "season": "mid-March to mid-October",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483619,
+        "mapId": -2147483316,
+        "park_title": "Pacific Rim"
+      }
     },
     {
-      "name": "Smonećten (McDonald) Campground",
-      "lat": 48.6738, "lon": -123.4264,
+      "name": "Smone\u0107ten (McDonald) Campground",
+      "lat": 48.6738,
+      "lon": -123.4264,
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": true,
       "season": "mid-May to mid-October",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483630,
+        "mapId": -2147483478,
+        "park_title": "Gulf Islands"
+      }
     },
     {
       "name": "Prior Centennial Campground",
-      "lat": 48.7666, "lon": -123.2744,
+      "lat": 48.7666,
+      "lon": -123.2744,
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": true,
       "season": "mid-May to mid-October",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483630,
+        "mapId": -2147483478,
+        "park_title": "Gulf Islands"
+      }
     },
     {
       "name": "Sidney Spit Campground",
-      "lat": 48.6450, "lon": -123.3450,
+      "lat": 48.645,
+      "lon": -123.345,
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": true,
       "season": "mid-May to mid-September (boat/ferry access)",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483630,
+        "mapId": -2147483478,
+        "park_title": "Gulf Islands"
+      }
     },
     {
       "name": "Beaumont Marine Provincial Park Campground",
-      "lat": 48.7550, "lon": -123.1800,
+      "lat": 48.755,
+      "lon": -123.18,
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": false,
       "season": "year-round (boat access, South Pender Island)",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483630,
+        "mapId": -2147483478,
+        "park_title": "Gulf Islands"
+      }
     },
     {
       "name": "Prevost Island (James Bay)",
-      "lat": 48.8230, "lon": -123.4100,
+      "lat": 48.823,
+      "lon": -123.41,
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": false,
       "season": "year-round (boat access)",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483630,
+        "mapId": -2147483478,
+        "park_title": "Gulf Islands"
+      }
     },
     {
       "name": "Portland Island (Princess Bay)",
-      "lat": 48.7300, "lon": -123.3650,
+      "lat": 48.73,
+      "lon": -123.365,
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": false,
       "season": "year-round (boat access)",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483630,
+        "mapId": -2147483478,
+        "park_title": "Gulf Islands"
+      }
     },
     {
       "name": "D'Arcy Island",
-      "lat": 48.5700, "lon": -123.2800,
+      "lat": 48.57,
+      "lon": -123.28,
       "park": "Gulf Islands National Park Reserve",
       "park_url": "https://parks.canada.ca/pn-np/bc/gulf",
       "reservable": false,
       "season": "year-round (boat access)",
-      "last_verified": "2026-05-11"
+      "last_verified": "2026-05-11",
+      "aspira": {
+        "host": "reservation.pc.gc.ca",
+        "transactionLocationId": -2147483630,
+        "mapId": -2147483478,
+        "park_title": "Gulf Islands"
+      }
     }
   ]
 }

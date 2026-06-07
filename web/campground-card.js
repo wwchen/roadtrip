@@ -12,6 +12,7 @@
 // (e.g. drawer uses a different button style) and stay with the caller.
 
 import { escapeHtml } from './core.js';
+import { buildAspiraDeeplink } from './aspira.js';
 
 /** Parse properties.amenities (JSON-encoded array) → string[]; safe on bad input. */
 export function parseAmenities(p) {
@@ -159,9 +160,18 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
     url = p.reserve_url;
     label = labelForReserveUrl(url);
   } else if (p.parks_canada_url && p.reservable) {
-    // The parks.canada.ca pages are informational; reservation.pc.gc.ca is
-    // where booking actually happens. Skip the hunt.
-    url = 'https://reservation.pc.gc.ca';
+    // parks.canada.ca pages are informational; reservation.pc.gc.ca is the
+    // booking site (Aspira NextGen platform). Build a real per-park deeplink
+    // when the curated JSON has aspira IDs; otherwise fall back to the homepage.
+    if (p.aspira?.transactionLocationId != null && p.aspira?.mapId != null) {
+      url = buildAspiraDeeplink({
+        host: p.aspira.host || 'reservation.pc.gc.ca',
+        transactionLocationId: p.aspira.transactionLocationId,
+        mapId: p.aspira.mapId,
+      });
+    } else {
+      url = 'https://reservation.pc.gc.ca';
+    }
     label = 'Reserve on parks.canada.ca';
   } else if (p.parks_canada_url) {
     url = p.parks_canada_url;
