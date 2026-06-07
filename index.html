@@ -246,6 +246,20 @@
     }
     .cg-drawer.open { transform: translateX(0); }
     .cg-drawer-handle { display: none; }
+    .cg-drawer-close {
+      display: block;
+      position: absolute; top: 12px; right: 12px;
+      width: 36px; height: 36px;
+      background: rgba(0,0,0,0.40);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+      border: 1px solid rgba(255,255,255,0.10);
+      border-radius: 50%;
+      font-size: 20px; color: rgba(255,255,255,0.85); cursor: pointer;
+      line-height: 1;
+      z-index: 1;
+    }
+    .cg-drawer-close:hover { background: rgba(0,0,0,0.55); color: #fff; }
   }
 
   .cg-drawer-handle {
@@ -255,19 +269,9 @@
     cursor: grab;
     touch-action: none;
   }
-  .cg-drawer-close {
-    position: absolute; top: 12px; right: 12px;
-    width: 36px; height: 36px;
-    background: rgba(0,0,0,0.40);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    border: 1px solid rgba(255,255,255,0.10);
-    border-radius: 50%;
-    font-size: 20px; color: rgba(255,255,255,0.85); cursor: pointer;
-    line-height: 1;
-    z-index: 1;
-  }
-  .cg-drawer-close:hover { background: rgba(0,0,0,0.55); color: #fff; }
+  /* Mobile: drag handle is the close affordance; X is hidden.
+     Desktop (min-width 768px): no drag handle, X is the close affordance. */
+  .cg-drawer-close { display: none; }
 
   .cg-drawer-content { display: flex; flex-direction: column; }
 
