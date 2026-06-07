@@ -476,7 +476,12 @@ Python fetcher  ──►  data/raw/<source>/<ts>.<ext>  ──►  Kotlin ETL  
   Last-Modified, `poller_runs.id`. Lets Kotlin skip re-import on no-op
   fetches.
 - Failed/partial fetches written as `<ts>.partial`, never linked.
-- Retention: 30 captures/source. Worst-case disk ≈ 1GB.
+- **Retention: keep all captures.** Crawling has real cost (Aspira's
+  Azure WAF, Tesla's curl-impersonate + cookie refresh, OSM Overpass
+  timeouts) — so once a capture is on disk, it stays. The Kotlin ETL
+  must be replayable against the entire history without ever calling
+  upstream. Disk grows on the order of MB/day; cheap relative to what
+  one WAF strike costs.
 
 **Kotlin ETL** lives in `backend/.../etl/`. Per-source classes (extending
 the existing `Source` interface) own parsing, schema mapping, and
@@ -511,17 +516,26 @@ already exists). Disk cost negligible. Loses ad-hoc `jq data/*.geojson`
 introspection — replaced by `/api/pois`, which is what the FE sees
 anyway.
 
-This is not a single PR. PR sequence (each independently mergeable):
+### Migration: there isn't one
 
-1. **PR 1: Tesla → pois.** New poller target writes SC into pois. Old
-   `/api/superchargers` route stays. `pois` rows now include SC; nothing
-   reads them yet.
-2. **PR 2: Sealed Kotlin Poi model + drawer payload assembler.** Add the
-   types and the `buildDrawerPayload` function. New `GET /api/pois/{id}/drawer`
-   endpoint exposes it. FE doesn't use it yet.
-3. **PR 3: FE drawer renders from payload.** Drawer fetches the new endpoint
-   on click instead of building HTML from feature properties. Vendor branches
-   delete.
+This is a personal project; treat as a full rewrite. Drop `pois` (and
+the merged `data/*.geojson`) and rebuild from scratch against the new
+schema. Captured raw data stays — the new Kotlin ETL replays it.
+
+PR sequence (still useful for reviewability, not for back-compat):
+
+1. **PR 1: Schema reset.** New migrations: `pois` reshaped per Section 4
+   (sealed-type-aligned columns, `provider_ref`, `parent_poi_id`,
+   `governing_body_id`, `last_poller_run_id`, `country`/`phone`/`address`/
+   `info_url`/`last_verified` on the base, `reservable` dropped),
+   plus `governing_body` + `booking_provider` dimension tables.
+2. **PR 2: Thin Python fetchers + raw cache layout.** Existing scripts
+   strip to fetch-only; `data/raw/<source>/<ts>.<ext>` becomes the only
+   on-disk artifact. Captured raw is committed (or otherwise persisted)
+   so the Kotlin ETL has something to replay against.
+3. **PR 3: Sealed Kotlin Poi + ETL.** New `etl/` module reads
+   `data/raw/<source>/latest/`, emits `Poi` instances, upserts with
+   mark-and-sweep. `buildDrawerPayload` assembler.
 4. **PR 4: Unified availability route.** `GET /api/availability/{poi_id}`
    dispatches by provider. Drawer payload references it.
 5. **PR 5: Unified query API.** `POST /api/pois` accepts `types=` and
@@ -773,5 +787,6 @@ route owns it), most OSM tags (no use case).
 | 12 | 2026-06-07 | Hoist `country`/`phone`/`address`/`info_url` to POI base | Field audit shows three of four POI types carry phone + address; one base `info_url` retires the parks_canada_url / parks_alberta_url / bcparks_url / website per-type sprawl |
 | 13 | 2026-06-07 | Drop poller-internal fields from the wire (`enriched`, `color`, `group`, `type`, `typeLabel`, `parent_name`, `parent_type`) | Caller-derivable or only meaningful inside the poller; leaking them to the FE is incidental |
 | 14 | 2026-06-07 | Python is fetch-only; Kotlin owns transform + upsert | Today's split has merge/transform logic in two languages. Python writes raw bytes to `data/raw/<source>/<ts>.<ext>`; Kotlin ETL parses, transforms, merges, enriches, upserts. One language for the schema-shaped boundary. |
-| 15 | 2026-06-07 | Raw cache is timestamped + retained; `latest` symlink is what Kotlin reads | Versioned captures let us diff fetches and re-import without re-fetching. 30-capture retention + paired `<ts>.meta.json` = cheap audit trail |
+| 15 | 2026-06-07 | Raw cache is timestamped, `latest` symlink is what Kotlin reads, **all captures retained** | Crawling upstream is expensive (Aspira WAF, Tesla curl-impersonate + cookie injection); raw replay is free. ETL must always be replayable against historical captures with zero upstream calls |
+| 17 | 2026-06-07 | Treat the new data model as a full rewrite, not a migration | Personal project, no live users to preserve continuity for. Drop `pois` + merged geojsons, rebuild from raw captures. Saves ~50% of the design-complexity budget that would otherwise be spent on dual-read/dual-write transitions |
 | 16 | 2026-06-07 | Kotlin ETL handles deletes via mark-and-sweep, scoped per source | Existing `Importer.kt` behavior generalizes: rows not seen in a run get `deleted_at`; reappearance un-deletes; tripwire (seen < 0.5 × prior) aborts before sweep. Sweep scope is the run's source set, not all `pois` |
