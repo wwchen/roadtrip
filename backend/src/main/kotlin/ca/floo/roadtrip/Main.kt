@@ -116,36 +116,43 @@ fun Application.module() {
     install(CachingHeaders) {
         options { _, content ->
             // index.html stays no-cache so the deploy you just shipped is what
-            // loads. Data/asset files get a day so the trip is offline-tolerant
-            // once primed; ConditionalHeaders still revalidates via Last-Modified.
-            when (content.contentType?.withoutParameters()) {
-                ContentType.Text.Html ->
+            // loads. JS/CSS also no-cache so deploys propagate instantly;
+            // ConditionalHeaders + Last-Modified still let the server answer
+            // 304 Not Modified, so bytes-on-the-wire are ~0 when unchanged.
+            // Data/asset files get a day so the trip is offline-tolerant.
+            //
+            // We match on (type, subtype) strings instead of `ContentType`
+            // constants because Ktor's static-file plugin returns
+            // `text/javascript` for .js (the modern MIME), while the
+            // `ContentType.Application.JavaScript` constant is
+            // `application/javascript` — `==` would miss it and the cache
+            // header would silently never apply.
+            val ct = content.contentType?.withoutParameters() ?: return@options null
+            val type = ct.contentType
+            val subtype = ct.contentSubtype
+            when {
+                type == "text" && subtype == "html" ->
                     CachingOptions(
                         io.ktor.http.CacheControl
                             .NoCache(null),
                     )
-                ContentType("application", "geo+json"),
-                ContentType.Application.Json,
-                ->
+                // JS: text/javascript OR application/javascript. CSS: text/css.
+                (type == "text" || type == "application") && subtype == "javascript" ->
+                    CachingOptions(
+                        io.ktor.http.CacheControl
+                            .NoCache(null),
+                    )
+                type == "text" && subtype == "css" ->
+                    CachingOptions(
+                        io.ktor.http.CacheControl
+                            .NoCache(null),
+                    )
+                type == "application" && (subtype == "json" || subtype == "geo+json") ->
                     CachingOptions(
                         io.ktor.http.CacheControl
                             .MaxAge(86400),
                     )
-                ContentType.Application.JavaScript,
-                ContentType.Text.CSS,
-                ->
-                    // No-cache means "ask the origin every time," but
-                    // ConditionalHeaders + Last-Modified still let the server
-                    // answer 304 Not Modified — bytes-on-the-wire ~0 when
-                    // unchanged. Trade: one round-trip per JS/CSS file per
-                    // page load, in exchange for deploys propagating
-                    // instantly instead of waiting hours for browser/edge
-                    // caches to expire.
-                    CachingOptions(
-                        io.ktor.http.CacheControl
-                            .NoCache(null),
-                    )
-                ContentType.Image.SVG, ContentType.Image.PNG ->
+                type == "image" ->
                     CachingOptions(
                         io.ktor.http.CacheControl
                             .MaxAge(86400),
