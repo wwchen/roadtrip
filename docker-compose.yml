@@ -56,6 +56,11 @@ services:
       - ROADTRIP_DB_URL=jdbc:postgresql://postgres:5432/${POSTGRES_DB:-roadtrip}
       - ROADTRIP_DB_USER=${POSTGRES_USER:-roadtrip}
       - ROADTRIP_DB_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+      # Mapbox is server-side only. /api/route (Directions) and /api/geocode
+      # (forward geocoding) read this; the FE never sees the token. Both
+      # endpoints return 503 when unset, so the trip planner just doesn't
+      # work, instead of leaking the token by accident.
+      - MAPBOX_TOKEN=${MAPBOX_TOKEN}
     volumes:
       - ./index.html:/app/static/index.html:ro
       - ./web:/app/static/web:ro
