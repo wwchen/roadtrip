@@ -484,7 +484,139 @@ After Sections 1–5 land, the FE drawer becomes:
 - `flattenPoi` deletes itself. The BE returns properties in their final
   shape — no JSONB string round-trips.
 
-### Migration plan
+### Section 7: Thin Python fetchers, Kotlin owns ETL
+
+Today's pipeline splits transform between two languages:
+
+```
+Python fetch_*.py  ──►  data/*.geojson  ──►  Kotlin Importer  ──►  pois
+   ▲                       ▲                    ▲
+   │                       │                    │
+   │   raw HTTP/CSV/JSON    │   transformed,        │   re-transforms
+   │                       │   merged, FE-shaped    │   (enrichment,
+   │                                                  │   parent lookups)
+   └─ HTTP, auth, cookies, ─┘
+      pagination, rate limits
+```
+
+Two transforms in two languages, no clean line. `fetch_campgrounds.py`
+maps `TYPE_LABELS` codes to `category`. `fetch_parks_canada.py` *merges*
+across three curated JSON files into the same output. `fetch_aspira_bc_wa.py`
+*stamps* fields onto an existing geojson in place. None of that is fetch
+work — it's transform/merge that happens to live in Python because that's
+where the file ended up first.
+
+#### New shape
+
+Python becomes a **thin fetch shim**: hit upstream, write the response
+verbatim to a raw cache directory. Nothing more.
+
+```
+Python fetcher ──► data/raw/<source>/<timestamp>.<ext>  ──► Kotlin ETL ──► pois
+        ▲                                                    ▲
+        │                                                    │
+        │  raw bytes only                                   │   parse,
+        │  (HTML, CSV, JSON,                                  │   transform,
+        │   whatever upstream                                │   merge,
+        │   serves)                                           │   enrich,
+        │                                                    │   upsert
+        └─ HTTP / auth / cookies /                           │
+           rate-limit / SPA scrape ──────────────────────────┘
+                                                          (one language,
+                                                           one transform)
+```
+
+Concretely:
+
+- **`scripts/fetch_*.py`** keeps only HTTP concerns: hit upstream, write
+  the response verbatim. No `TYPE_LABELS`, no merging across files, no
+  amenity-code lookup tables, no `to_feature()`. Output filename includes
+  a timestamp so re-runs don't clobber prior captures (small disk cost,
+  big debugging win — diff this morning's fetch against yesterday's).
+- **`backend/.../etl/`** (new module) owns:
+  - Parsing each raw format (CSV, JSON, GeoJSON, OSM XML, whatever).
+  - Mapping per-source quirks → the canonical `Poi` sealed type
+    (Section 4). The `TYPE_LABELS` map for uscampgrounds.info lives here,
+    in Kotlin.
+  - Merging across sources where needed (e.g. campgrounds = US +
+    BC-curated + AB-curated + Aspira IDs). Today this is procedural
+    Python; in Kotlin it's a `fold` over a list of `RawSource`
+    transformers, each emitting `Poi` instances.
+  - Enrichment (rec.gov amenity/cell lookups, photo URL resolution).
+- **The existing `Source` interface** (`UsCampgroundsSource`,
+  `ParksCanadaSource`, etc.) becomes the home for those per-source
+  transforms. They already exist in Kotlin — they just don't carry
+  enough logic today because the Python pre-cooked things.
+
+#### Why this is worth doing
+
+- **One language for transform** = compiler-checked schema mapping.
+  Today, if a Python script forgets to set `code`, the Kotlin importer
+  silently UPSERTs a row with a null source_id and the unique constraint
+  fires later. With a Kotlin-only transform, the absence of source_id
+  fails to compile.
+- **Raw cache is a debug + replay surface.** "Why does this row look
+  weird?" is `cat data/raw/<source>/<timestamp>.json | jq` instead of
+  re-running the fetcher and praying upstream gives the same answer.
+- **Re-import without re-fetch.** Schema bug in the importer → re-run
+  Kotlin against the existing raw cache, no upstream hits, no Aspira WAF
+  trip. Today this is approximately possible (the geojson is on disk)
+  but only if the Python transform was already correct.
+- **Fetchers shrink to ~30 lines each.** Most of `fetch_campgrounds.py`'s
+  120 lines is the type-code/amenity-code lookup; that's all moving.
+- **Per-source poller targets get clearer.** `Phase.Fetch.Shell` writes
+  raw; `Phase.Import.Kotlin` reads raw + writes pois. The current
+  `Phase.Fetch.Kotlin` (introduced in RFC 0004 step 3) folds back into
+  the import phase — there's no intermediate "Kotlin fetch" anymore.
+
+#### What changes for the runtime / poller
+
+`PollerRun` (renamed from `IngestRun`) gains a third phase:
+
+```
+Target: campgrounds
+  Phase.Fetch.Shell      uscampgrounds_raw       → data/raw/uscampgrounds/<ts>.csv
+  Phase.Fetch.Shell      bc_parks_raw            → data/raw/bc-parks/<ts>.json
+  Phase.Fetch.Shell      parks_canada_curated    → (no fetch — file lives in repo)
+  Phase.Fetch.Shell      aspira_index_raw        → data/raw/aspira-maps/<ts>.json
+  Phase.Import.Kotlin    campgrounds             → pois
+```
+
+The import phase fans out over the raw inputs in code; one parent
+poller_run, multiple fetch leaves, one import leaf. Mark-and-sweep still
+operates on the import scope.
+
+#### What this lets us delete / merge
+
+- `fetch_parks_canada.py` (the merge script) — its job moves entirely
+  into `ParksCanadaSource.kt`.
+- `fetch_aspira_bc_wa.py` (the stamper) — it stops writing into
+  campgrounds.geojson; instead, the Kotlin ETL fetches the Aspira
+  `/api/maps` raw cache, builds an in-memory map, and applies it to
+  `Campground` rows during transform.
+- The `aspira` JSONB block in the curated `parks-canada-{bc,ab}.json`
+  files — those files become "just lat/lng + name + season/etc." raw
+  curated data; aspira IDs come from the actual aspira-maps fetch.
+- The `*.geojson` files in `data/` (the merged artifacts) — no longer
+  the importer's input. They're either deleted or kept as repo-level
+  curated raw inputs (parks-canada-*.json, alberta-provincial.json),
+  which sit at the *raw* layer, not the merged one.
+
+#### Trade-offs
+
+- **More Kotlin to write.** True; we're moving ~300 LoC of Python into
+  Kotlin. But it's mechanical and the import path already exists. We're
+  not building new machinery, we're moving boundary lines.
+- **Disk cost of raw cache.** A single Tesla cua-api fetch is 9MB,
+  uscampgrounds.info CSV is 3MB, OSM Planet Fitness is 1MB. Daily
+  retention with a 30-day TTL = under 500MB. Negligible.
+- **Lose the FE-readability of `data/campgrounds.geojson`.** Today you
+  can `jq` it to see what's on the map. After this, you'd query
+  `/api/pois`. That's the right answer anyway — the geojson on disk and
+  what the API serves can drift today; after this, the API is the only
+  view.
+
+
 
 This is not a single PR. PR sequence (each independently mergeable):
 
@@ -504,6 +636,13 @@ This is not a single PR. PR sequence (each independently mergeable):
    file deletes.
 6. **PR 6: Cleanup.** Remove `flattenPoi`, `campground-card.js`, dead
    per-layer fetch paths, and any vendor-specific FE code that survived.
+7. **PR 7: Raw cache + Kotlin ETL (Section 7).** New `data/raw/<source>/`
+   layout. One source at a time, in order of risk: Planet Fitness first
+   (smallest, most isolated), then Tesla SC, then state/national parks
+   (PAD-US — already minimal in Python), then campgrounds (the big merge).
+   Each source's PR strips the corresponding Python transform and adds
+   the equivalent Kotlin ETL. Mergeable independently because each source
+   has its own poller target.
 
 ## Rationale
 
@@ -881,3 +1020,4 @@ poller currently happens to copy through.
 | 11 | 2026-06-07 | Skip rec.gov-style site-level (Campsite) modeling for now | Heat strip aggregates across sites; we never need per-site state. Revisit if we ever build per-site availability tracking |
 | 12 | 2026-06-07 | Hoist `country`/`phone`/`address`/`info_url` to POI base | Field audit shows three of four POI types carry phone + address; one base `info_url` retires the parks_canada_url / parks_alberta_url / bcparks_url / website per-type sprawl |
 | 13 | 2026-06-07 | Drop poller-internal fields from the wire (`enriched`, `color`, `group`, `type`, `typeLabel`, `parent_name`, `parent_type`) | Caller-derivable or only meaningful inside the poller; leaking them to the FE is incidental |
+| 14 | 2026-06-07 | Python is fetch-only; Kotlin owns transform + upsert | Today's split has merge/transform logic in two languages. Python writes raw bytes to `data/raw/<source>/<ts>.<ext>`; Kotlin ETL parses, transforms, merges, enriches, upserts. One language for the schema-shaped boundary. |
