@@ -3,6 +3,7 @@ package ca.floo.roadtrip.etl
 import ca.floo.roadtrip.db.generated.tables.BookingProvider.Companion.BOOKING_PROVIDER
 import ca.floo.roadtrip.db.generated.tables.GoverningBody.Companion.GOVERNING_BODY
 import org.jooq.DSLContext
+import java.io.File
 
 // Read-only dimension-table lookups the transform stage uses. Resolves
 // slug → governing_body.id and (vendor, host) → booking_provider.id.
@@ -13,6 +14,7 @@ import org.jooq.DSLContext
 class TransformCtx private constructor(
     private val governingBodyBySlug: Map<String, Long>,
     private val bookingProviderByVendorHost: Map<Pair<String, String?>, Long>,
+    val rawDir: File,
 ) {
     fun governingBodyId(slug: String): Long =
         governingBodyBySlug[slug]
@@ -32,7 +34,10 @@ class TransformCtx private constructor(
             )
 
     companion object {
-        fun load(ctx: DSLContext): TransformCtx {
+        fun load(
+            ctx: DSLContext,
+            rawDir: File,
+        ): TransformCtx {
             val gb =
                 ctx
                     .select(GOVERNING_BODY.SLUG, GOVERNING_BODY.ID)
@@ -45,7 +50,7 @@ class TransformCtx private constructor(
                     .from(BOOKING_PROVIDER)
                     .fetch()
                     .associate { (it.value1()!! to it.value2()) to it.value3()!! }
-            return TransformCtx(gb, bp)
+            return TransformCtx(gb, bp, rawDir)
         }
     }
 }

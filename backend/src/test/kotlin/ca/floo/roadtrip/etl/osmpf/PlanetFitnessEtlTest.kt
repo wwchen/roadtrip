@@ -59,7 +59,7 @@ class PlanetFitnessEtlTest {
                 .resolve("../config/poi-registry.yaml")
                 .canonicalFile
         PoiRegistrySync(ctx).apply(PoiRegistry.load(yamlPath))
-        transformCtx = TransformCtx.load(ctx)
+        transformCtx = TransformCtx.load(ctx, File("build/tmp/etl-test-raw"))
     }
 
     @AfterAll
