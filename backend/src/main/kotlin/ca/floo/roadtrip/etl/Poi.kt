@@ -89,6 +89,7 @@ sealed class Poi {
         // render. Empty list when the detail capture is missing or had no
         // pricebooks.
         val pricebooks: List<kotlinx.serialization.json.JsonElement> = emptyList(),
+        val extras: kotlinx.serialization.json.JsonElement? = null,
     ) : Poi()
 
     data class Park(
@@ -107,6 +108,7 @@ sealed class Poi {
         val designation: String,
         val officialName: String?,
         val acres: Double?,
+        val extras: kotlinx.serialization.json.JsonElement? = null,
     ) : Poi()
 
     data class PlanetFitness(
@@ -122,6 +124,7 @@ sealed class Poi {
         override val fetchedAt: Instant,
         override val lastVerified: LocalDate?,
         val openingHours: String?,
+        val extras: kotlinx.serialization.json.JsonElement? = null,
     ) : Poi()
 }
 
@@ -225,15 +228,18 @@ private fun perTypeProperties(poi: Poi): JsonObject =
                 put("max_power_kw", JsonPrimitive(poi.maxPowerKw))
                 poi.facility?.let { put("facility", JsonPrimitive(it)) }
                 if (poi.pricebooks.isNotEmpty()) put("pricebooks", JsonArray(poi.pricebooks))
+                poi.extras?.let { put("upstream", it) }
             }
         is Poi.Park ->
             buildJsonObject {
                 put("designation", JsonPrimitive(poi.designation))
                 poi.officialName?.let { put("official_name", JsonPrimitive(it)) }
                 poi.acres?.let { put("acres", JsonPrimitive(it)) }
+                poi.extras?.let { put("upstream", it) }
             }
         is Poi.PlanetFitness ->
             buildJsonObject {
                 poi.openingHours?.let { put("opening_hours", JsonPrimitive(it)) }
+                poi.extras?.let { put("upstream", it) }
             }
     }

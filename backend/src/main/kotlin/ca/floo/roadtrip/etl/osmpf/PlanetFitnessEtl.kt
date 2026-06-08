@@ -9,6 +9,10 @@ import ca.floo.roadtrip.etl.TransformCtx
 import ca.floo.roadtrip.etl.ValidationResult
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import java.time.Instant
 
 // OSM Overpass → Poi.PlanetFitness.
@@ -86,8 +90,35 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>>
             fetchedAt = fetchedAt,
             lastVerified = null, // OSM — no editorial-touch field
             openingHours = tags["opening_hours"]?.takeIf { it.isNotBlank() },
+            // OSM stores the interesting per-element data as tags (key/value
+            // strings). Surface the full tag map via extras so the drawer's
+            // "Upstream data" accordion has all of it.
+            extras = elementExtras(el),
         )
     }
+
+    private fun elementExtras(el: OverpassElement): JsonElement =
+        buildJsonObject {
+            put("type", JsonPrimitive(el.type))
+            put("id", JsonPrimitive(el.id))
+            el.lat?.let { put("lat", JsonPrimitive(it)) }
+            el.lon?.let { put("lon", JsonPrimitive(it)) }
+            el.center?.let {
+                put(
+                    "center",
+                    buildJsonObject {
+                        put("lat", JsonPrimitive(it.lat))
+                        put("lon", JsonPrimitive(it.lon))
+                    },
+                )
+            }
+            el.tags?.let { tags ->
+                put(
+                    "tags",
+                    JsonObject(tags.mapValues { (_, v) -> JsonPrimitive(v) }),
+                )
+            }
+        }
 
     private fun buildAddress(tags: Map<String, String>): Address? {
         val street =

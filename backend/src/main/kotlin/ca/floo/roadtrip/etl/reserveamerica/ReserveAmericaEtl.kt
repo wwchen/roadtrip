@@ -7,6 +7,9 @@ import ca.floo.roadtrip.etl.ProviderRef
 import ca.floo.roadtrip.etl.SourceEtl
 import ca.floo.roadtrip.etl.TransformCtx
 import ca.floo.roadtrip.etl.ValidationResult
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 
@@ -74,9 +77,26 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
                 cellCoverage = null,
                 ratingReviews = null,
                 subcategory = bucket,
+                extras = parkExtras(park),
             )
         }
     }
+
+    /**
+     * Re-emit the parsed-out HTML scraps as a flat JsonObject so the
+     * drawer's "Upstream data" accordion can surface what we know.
+     * Upstream is HTML — there's no canonical row-shaped JSON.
+     */
+    private fun parkExtras(park: ParsedPark): JsonElement =
+        buildJsonObject {
+            put("park_id", JsonPrimitive(park.parkId))
+            put("name", JsonPrimitive(park.name))
+            put("latitude", JsonPrimitive(park.lat))
+            put("longitude", JsonPrimitive(park.lon))
+            park.phone?.let { put("phone", JsonPrimitive(it)) }
+            park.photoUrl?.let { put("photo_url", JsonPrimitive(it)) }
+            park.infoUrl?.let { put("info_url", JsonPrimitive(it)) }
+        }
 
     private fun parsePark(
         parkId: Long,

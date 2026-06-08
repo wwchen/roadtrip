@@ -1,5 +1,5 @@
 import { state, distanceKm, formatDistance, escapeHtml, callButtonsHTML } from './core.js';
-import { openCampgroundDrawer, openDrawer } from './drawer.js';
+import { openCampgroundDrawer, openDrawer, upstreamHTML, reviveJsonProp } from './drawer.js';
 
 /** Compose subline from arbitrary parts: "Loop · State · 2.4 km away". */
 function buildSubline(parts) {
@@ -89,6 +89,7 @@ function externalParkLink(kind, name, stateName) {
 
 export function openParkPopup(kind, feature, lngLat) {
   const p = feature.properties;
+  reviveJsonProp(p, 'upstream');
   const name = p.Unit_Nm || p.Loc_Nm || 'Park';
   const stateName = p.State_Nm || '';
   const acres = p.GIS_Acres ? Number(p.GIS_Acres).toLocaleString() + ' acres' : '';
@@ -110,11 +111,13 @@ export function openParkPopup(kind, feature, lngLat) {
     ${drawerHeader(name, sub)}
     ${primaryBtn ? `<div class="cg-actions">${primaryBtn}</div>` : ''}
     ${pills ? `<div class="pills">${pills}</div>` : ''}
+    ${upstreamHTML(p.upstream)}
   `);
 }
 
 export function openPlanetFitnessPopup(f) {
   const p = f.properties;
+  reviveJsonProp(p, 'upstream');
   const [lng, lat] = f.geometry.coordinates;
   // Reading order matches the SC drawer: street, then city, then state+zip
   // as a single token. Empty pieces drop out so a missing zip doesn't
@@ -148,11 +151,13 @@ export function openPlanetFitnessPopup(f) {
       ${callBtns}
     </div>
     ${pills ? `<div class="pills">${pills}</div>` : ''}
+    ${upstreamHTML(p.upstream)}
   `);
 }
 
 export function openSuperchargerPopup(f) {
   const p = f.properties;
+  reviveJsonProp(p, 'upstream');
   const [lng, lat] = f.geometry.coordinates;
   // Build the address line from the new tesla-locations enrichment.
   // street + city + state + postcode is the natural reading order; drop
@@ -186,5 +191,6 @@ export function openSuperchargerPopup(f) {
     <div class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
       ${pricingHtml}
     </div>
+    ${upstreamHTML(p.upstream)}
   `);
 }
