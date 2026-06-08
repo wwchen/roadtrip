@@ -2,6 +2,7 @@ package ca.floo.roadtrip.etl.osmpf
 
 import ca.floo.roadtrip.etl.Address
 import ca.floo.roadtrip.etl.Envelope
+import ca.floo.roadtrip.etl.InputBundle
 import ca.floo.roadtrip.etl.Poi
 import ca.floo.roadtrip.etl.SourceEtl
 import ca.floo.roadtrip.etl.TransformCtx
@@ -24,10 +25,11 @@ import java.time.Instant
 // node: lat/lon at the element. way: lat/lon under `center` (Overpass `out
 // center` directive). Some entries have neither — those get dropped at
 // validate.
-class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, Poi.PlanetFitness> {
-    override val sourceName = "osm-pf"
+class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>> {
+    override val etlSlug = "osm-pf"
 
-    override fun parse(envelope: Envelope): PlanetFitnessRawDto {
+    override fun parse(inputs: InputBundle): PlanetFitnessRawDto {
+        val envelope = inputs.soleEnvelopes().single()
         val payload =
             json.decodeFromJsonElement(
                 PlanetFitnessRawDto.serializer(),
@@ -72,7 +74,7 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, Poi.PlanetFitness> {
         val address = buildAddress(tags)
 
         return Poi.PlanetFitness(
-            source = "osm-pf",
+            source = etlSlug,
             sourceId = sourceId,
             name = tags["name"] ?: "Planet Fitness",
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",

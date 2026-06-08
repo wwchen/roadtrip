@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.etl.tesla
 
 import ca.floo.roadtrip.etl.Envelope
+import ca.floo.roadtrip.etl.InputBundle
 import ca.floo.roadtrip.etl.Poi
 import ca.floo.roadtrip.etl.SourceEtl
 import ca.floo.roadtrip.etl.TransformCtx
@@ -25,10 +26,11 @@ import java.time.Instant
 // render with placeholder fields — the index alone is enough to put a
 // pin on the map. The cache lifetime is governed by the offline
 // refresh worker (`make refresh-superchargers`); rows go stale gracefully.
-class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
-    override val sourceName = "tesla-index"
+class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
+    override val etlSlug = "tesla-superchargers"
 
-    override fun parse(envelope: Envelope): TeslaIndexDto {
+    override fun parse(inputs: InputBundle): TeslaIndexDto {
+        val envelope = inputs.soleEnvelopes().single()
         val raw = json.decodeFromJsonElement(TeslaIndexEnvelope.serializer(), envelope.payload)
         return TeslaIndexDto(rows = raw.data.data, fetchedAt = parseFetchedAt(envelope))
     }
@@ -43,7 +45,12 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
         dto: TeslaIndexDto,
         ctx: TransformCtx,
     ): List<Poi.Supercharger> {
-        val locationsDir = File(ctx.rawDir, "tesla-locations")
+        // tesla-locations-raw is laid out as data/raw/tesla-locations-raw/
+        // <slug>/<UTC-ts>.json (one subdir per supercharger), which doesn't
+        // fit the InputBundle's flat list-of-envelopes contract. Side-load
+        // from ctx.rawDir directly; the YAML keeps it as a sibling
+        // data_source so fetch + cache-clear flows still address it.
+        val locationsDir = File(ctx.rawDir, "tesla-locations-raw")
         return dto.rows.mapNotNull { transformRow(it, dto.fetchedAt, locationsDir) }
     }
 
@@ -71,7 +78,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
         val (region, country) = regionCountryOf(detail)
 
         return Poi.Supercharger(
-            source = sourceName,
+            source = etlSlug,
             sourceId = sanitizeSlug(slug),
             name = name,
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",

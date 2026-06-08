@@ -182,7 +182,7 @@ class PoiRoutesTest {
             // enabled), so we should see exactly that many.
             val defaultCatCount =
                 testRegistry
-                    .enabledSources()
+                    .enabledPoiData()
                     .map { it.category }
                     .toSet()
                     .size

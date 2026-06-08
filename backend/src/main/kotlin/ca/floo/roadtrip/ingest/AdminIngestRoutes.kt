@@ -301,7 +301,7 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
     val log = org.slf4j.LoggerFactory.getLogger("AdminIngest.fanOut")
     val outcomes = mutableListOf<RunOutcome>()
     var anyFailed = false
-    val all = controller.fanOutTargets().sorted()
+    val all = controller.fanOutTargets(kind).sorted()
     val started = System.currentTimeMillis()
     log.info("fan-out start: kind={} targets={}", kind.rowValue, all.size)
     for ((idx, target) in all.withIndex()) {

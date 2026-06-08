@@ -208,6 +208,9 @@ poi_data:
     enabled: false
     category: supercharger
     etls:
+      # tesla-locations-raw is side-loaded from ctx.rawDir per-slug rather
+      # than declared as an input, because the per-slug filesystem layout
+      # doesn't fit the InputBundle's flat envelope contract.
       - slug: tesla-superchargers
         adapter: TeslaIndexEtl
-        inputs: [tesla-index-raw, tesla-locations-raw]
+        inputs: [tesla-index-raw]

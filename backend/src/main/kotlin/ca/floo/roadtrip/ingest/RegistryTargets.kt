@@ -6,61 +6,64 @@ import ca.floo.roadtrip.etl.registry.PoiRegistry
 import org.slf4j.LoggerFactory
 import java.io.File
 
-// Derives the IngestController target map from config/poi-registry.yaml.
-// One Target per enabled data_source. Lets the operator refresh just one
-// upstream (e.g. `make poll TARGET=osm-pf`).
+// Derives the IngestController target maps from config/poi-registry.yaml.
 //
-// Adding a new vendor: append a `data_sources:` row in YAML + register
-// the ETL in EtlOrchestrator.registry. No edits to this file. If a
-// data_source declares an etl_adapter that isn't yet wired into
-// EtlOrchestrator.registry, the target gets a fetch phase but no import
-// phase — the adapter slot can be reserved in YAML before the Kotlin
-// class lands, and the import becomes a noop instead of failing.
-fun targetsFromRegistry(
+// Two namespaces:
+//   - fetchTargets: one Target per data_sources row. Target.name is the
+//     data_source slug. Used by POST /api/admin/data/fetch/<slug> and the
+//     fan-out endpoint POST /api/admin/data/fetch.
+//   - importTargets: one Target per poi_data row. Target.name is the
+//     poi_data display name. Each Target's importPhases is a single
+//     phase whose sourceName is the row's terminal etl slug; the
+//     orchestrator walks the row's full etls chain when that phase runs.
+//
+// Adding a new vendor: append a `data_sources:` row + a `poi_data:` row
+// to YAML + register the ETL adapter(s) in EtlOrchestrator.registry.
+// No edits to this file. If a poi_data row's etl slugs aren't all in
+// EtlOrchestrator.registry, the import target gets an empty importPhases
+// list and the run is a no-op (so the YAML can declare future work).
+fun fetchTargetsFromRegistry(
     registry: PoiRegistry,
     repoRoot: File,
 ): Map<String, Target> {
+    val out = mutableMapOf<String, Target>()
+    for (src in registry.dataSources) {
+        out[src.slug] =
+            Target(
+                name = src.slug,
+                fetchPhases = listOf(fetchPhaseFor(src, repoRoot)),
+                importPhases = emptyList(),
+            )
+    }
+    return out
+}
+
+fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
     val log = LoggerFactory.getLogger("RegistryTargets")
     val out = mutableMapOf<String, Target>()
     val implemented = EtlOrchestrator.registry.keys
 
-    for (src in registry.enabledSources()) {
+    for (row in registry.poiData) {
+        val terminalSlug = row.etls.last().slug
+        val unwiredSlugs = row.etls.map { it.slug }.filterNot { it in implemented }
         val importPhases =
-            if (src.slug in implemented) {
-                listOf(Phase.Import("import:${src.slug}", src.slug))
+            if (unwiredSlugs.isEmpty()) {
+                listOf(Phase.Import("import:${row.name}", terminalSlug))
             } else {
-                if (src.etlAdapter != null) {
-                    log.warn(
-                        "data_source slug={} declares etl_adapter={} which isn't in " +
-                            "EtlOrchestrator.registry — fan-out will fetch but skip import",
-                        src.slug,
-                        src.etlAdapter,
-                    )
-                }
-                emptyList()
-            }
-        // fetcher.enabled=false sources keep their import phase but skip
-        // the fetch step. Use case: the upstream is unreachable (Tesla's
-        // Akamai blocks us, cookies stale) and we want to keep importing
-        // from the existing raw cache without re-fetching.
-        val fetchPhases =
-            if (src.fetcher.enabled) {
-                listOf(fetchPhaseFor(src, repoRoot))
-            } else {
-                log.info(
-                    "data_source slug={} has fetcher.enabled=false — fan-out will skip fetch",
-                    src.slug,
+                log.warn(
+                    "poi_data '{}' has unwired etl slugs {} — import will be a no-op until adapters land",
+                    row.name,
+                    unwiredSlugs,
                 )
                 emptyList()
             }
-        out[src.slug] =
+        out[row.name] =
             Target(
-                name = src.slug,
-                fetchPhases = fetchPhases,
+                name = row.name,
+                fetchPhases = emptyList(),
                 importPhases = importPhases,
             )
     }
-
     return out
 }
 

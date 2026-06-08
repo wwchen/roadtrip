@@ -2,8 +2,6 @@ package ca.floo.roadtrip.ingest
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.etl.EtlOrchestrator
-import ca.floo.roadtrip.importer.Importer
-import ca.floo.roadtrip.importer.sourceFor
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -65,42 +63,49 @@ data class RunOutcome(
 // is the default). Callers that want fire-and-forget wrap in scope.async.
 class IngestController(
     private val ctx: DSLContext,
-    private val importer: Importer,
     private val etl: EtlOrchestrator,
-    private val dataDir: File,
-    private val targets: Map<String, Target>,
+    private val fetchTargets: Map<String, Target>,
+    private val importTargets: Map<String, Target>,
     private val workingDir: File,
     private val ioDispatcher: CoroutineDispatcher = Dispatchers.IO,
     private val processFactory: ProcessFactory = DefaultProcessFactory,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val locks: Map<String, Mutex> = targets.mapValues { Mutex() }
 
-    // Active parent run_id per target while held — populated under the mutex.
-    // Returned in TargetBusyException so the admin route can put the existing
-    // run_id in the 409 body instead of the caller having to chase it down.
+    // Per-target mutex. Fetch and import keyspaces are disjoint (slug vs.
+    // poi_data name); use a combined map keyed by "<kind>:<name>" so
+    // a fetch and an import for the same upstream don't share a lock —
+    // they read/write different files.
+    private val locks: Map<String, Mutex> =
+        (fetchTargets.keys.map { "fetch:$it" } + importTargets.keys.map { "import:$it" })
+            .associateWith { Mutex() }
+
     private val active: MutableMap<String, Long> = mutableMapOf()
 
-    fun knownTargets(): Set<String> = targets.keys
+    /** All targets across both fetch and import maps (de-duplicated). */
+    fun knownTargets(): Set<String> = fetchTargets.keys + importTargets.keys
 
-    /**
-     * Targets eligible for the no-target fan-out. Today: all known
-     * targets (one per enabled data_source).
-     */
-    fun fanOutTargets(): Set<String> = targets.keys
+    /** Fan-out targets for [kind]. */
+    fun fanOutTargets(kind: RunKind): Set<String> =
+        when (kind) {
+            RunKind.FETCH -> fetchTargets.keys
+            RunKind.IMPORT -> importTargets.keys
+        }
 
     suspend fun startRun(
         targetName: String,
         kind: RunKind,
         triggeredBy: String,
     ): RunOutcome {
+        val targets = if (kind == RunKind.FETCH) fetchTargets else importTargets
         val target = targets[targetName] ?: throw TargetNotFoundException(targetName)
-        val mutex = locks[targetName]!!
+        val lockKey = "${kind.rowValue}:$targetName"
+        val mutex = locks[lockKey]!!
 
         if (!mutex.tryLock()) {
             val existing =
-                synchronized(active) { active[targetName] }
-                    ?: error("mutex held but no active run_id for target=$targetName")
+                synchronized(active) { active[lockKey] }
+                    ?: error("mutex held but no active run_id for $lockKey")
             throw TargetBusyException(targetName, existing)
         }
 
@@ -111,7 +116,7 @@ class IngestController(
             }
 
         val parentId = createParentRow(target.name, kind, triggeredBy)
-        synchronized(active) { active[targetName] = parentId }
+        synchronized(active) { active[lockKey] = parentId }
         log.info(
             "ingest_runs id={} target={} kind={} started ({} phases)",
             parentId,
@@ -123,7 +128,7 @@ class IngestController(
         try {
             return runPhases(target, kind, phases, parentId)
         } finally {
-            synchronized(active) { active.remove(targetName) }
+            synchronized(active) { active.remove(lockKey) }
             mutex.unlock()
         }
     }
@@ -223,27 +228,17 @@ class IngestController(
             JSONB.valueOf("""{"exit_code":0}""")
         }
 
-    // -- Import phases (data/ → Postgres) -------------------------------------
+    // -- Import phases (data/raw/ + data/etl-out/ → Postgres) -----------------
     //
-    // RFC 0007 transition: sources registered in EtlOrchestrator.registry go
-    // through the new staged ETL (parse → validate → transform → upsert);
-    // anything else falls back to the legacy Importer reading the frozen
-    // data/*.geojson snapshots. PR 3 wedge: only osm-pf is on the new path;
-    // PR 3b/c/... migrate the rest.
+    // The phase carries a poi_data row's display name. The orchestrator
+    // walks that row's full etls: chain — materializing intermediates to
+    // data/etl-out/<slug>/ and upserting the terminal etl's Poi.* output.
     private suspend fun runImport(phase: Phase.Import): JSONB =
         withContext(ioDispatcher) {
-            if (phase.sourceName in EtlOrchestrator.registry) {
-                val stats = etl.runSource(phase.sourceName)
-                JSONB.valueOf(
-                    """{"import_run_id":${stats.upsertResult.runId},"seen":${stats.upsertResult.seenCount},"swept":${stats.upsertResult.sweptCount},"path":"etl"}""",
-                )
-            } else {
-                val source = sourceFor(phase.sourceName, dataDir)
-                val result = importer.run(source)
-                JSONB.valueOf(
-                    """{"import_run_id":${result.runId},"seen":${result.seenCount},"swept":${result.sweptCount},"path":"legacy"}""",
-                )
-            }
+            val stats = etl.runPoiData(phase.poiDataName)
+            JSONB.valueOf(
+                """{"import_run_id":${stats.upsertResult.runId},"seen":${stats.upsertResult.seenCount},"swept":${stats.upsertResult.sweptCount},"terminal_etl":"${stats.terminalEtlSlug}"}""",
+            )
         }
 
     // -- ingest_runs row CRUD -------------------------------------------------

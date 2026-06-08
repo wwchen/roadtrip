@@ -2,7 +2,6 @@ package ca.floo.roadtrip.ingest
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.importer.Importer
 import ca.floo.roadtrip.importer.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -402,23 +401,27 @@ class IngestControllerTest {
         targets: Map<String, Target>,
         factory: FakeProcessFactory = FakeProcessFactory(),
         dataDir: File = File("/tmp"),
-    ): IngestController =
-        IngestController(
+    ): IngestController {
+        // Tests are constructed with single-target maps; each test fixture
+        // exercises either fetch or import, never both. Pass the same map
+        // to both slots — the controller dispatches by RunKind.
+        return IngestController(
             ctx = ctx,
-            importer = Importer(ctx),
             etl =
                 ca.floo.roadtrip.etl.EtlOrchestrator(
                     ctx,
                     dataDir,
+                    File(dataDir, "etl-out"),
                     ca.floo.roadtrip.etl.registry
-                        .PoiRegistry(emptyList()),
+                        .PoiRegistry(emptyList(), emptyList()),
                 ),
-            dataDir = dataDir,
-            targets = targets,
+            fetchTargets = targets,
+            importTargets = targets,
             workingDir = File("/tmp"),
             ioDispatcher = Dispatchers.IO,
             processFactory = factory,
         )
+    }
 
     private fun targetMap(
         name: String,
