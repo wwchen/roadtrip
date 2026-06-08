@@ -13,6 +13,7 @@ import java.io.File
 // directly with values from their args:.
 class TransformCtx private constructor(
     private val subcategoryByEtlSlug: Map<String, String?>,
+    private val argsByEtlSlug: Map<String, Map<String, String>>,
     val rawDir: File,
 ) {
     /**
@@ -22,10 +23,31 @@ class TransformCtx private constructor(
      */
     fun subcategoryFor(etlSlug: String): String? = subcategoryByEtlSlug[etlSlug]
 
+    /**
+     * Read a per-etl YAML arg by key (e.g. `argFor("aspira-wa-pins", "host")`
+     * → "washington.goingtocamp.com"). Returns null when the key isn't set.
+     */
+    fun argFor(
+        etlSlug: String,
+        key: String,
+    ): String? = argsByEtlSlug[etlSlug]?.get(key)
+
     companion object {
         fun load(
             rawDir: File,
             registry: PoiRegistry,
-        ): TransformCtx = TransformCtx(registry.subcategoryByTerminalEtlSlug(), rawDir)
+        ): TransformCtx {
+            val args = mutableMapOf<String, Map<String, String>>()
+            for (row in registry.poiData) {
+                for (e in row.etls) {
+                    args[e.slug] = e.args
+                }
+            }
+            return TransformCtx(
+                subcategoryByEtlSlug = registry.subcategoryByTerminalEtlSlug(),
+                argsByEtlSlug = args,
+                rawDir = rawDir,
+            )
+        }
     }
 }

@@ -248,6 +248,28 @@ class EtlOrchestrator(
                 "nps-campgrounds" to
                     ca.floo.roadtrip.etl.recgov
                         .RecGovCampgroundsEtl("nps-campgrounds"),
+                // Aspira NextGen — one leaf-walker + one join-by-name
+                // emitter per tenant. Both classes take the slug as a
+                // constructor arg so a fourth tenant is two YAML rows +
+                // two registry lines.
+                "aspira-leaves-wa" to
+                    ca.floo.roadtrip.etl.aspira
+                        .AspiraLeavesEtl("aspira-leaves-wa"),
+                "aspira-leaves-bc" to
+                    ca.floo.roadtrip.etl.aspira
+                        .AspiraLeavesEtl("aspira-leaves-bc"),
+                "aspira-leaves-pc" to
+                    ca.floo.roadtrip.etl.aspira
+                        .AspiraLeavesEtl("aspira-leaves-pc"),
+                "aspira-wa-pins" to
+                    ca.floo.roadtrip.etl.aspira
+                        .AspiraJoinByNameEtl("aspira-wa-pins"),
+                "aspira-bc-pins" to
+                    ca.floo.roadtrip.etl.aspira
+                        .AspiraJoinByNameEtl("aspira-bc-pins"),
+                "aspira-pc-pins" to
+                    ca.floo.roadtrip.etl.aspira
+                        .AspiraJoinByNameEtl("aspira-pc-pins"),
             )
     }
 }

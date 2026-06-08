@@ -29,3 +29,4 @@ qa/playwright-report/
 # scripts/_migrate_tesla_cache.py to bootstrap Tesla from the legacy
 # data/pricing-cache/ if it's still around.
 data/raw/
+data/etl-out/

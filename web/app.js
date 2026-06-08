@@ -204,10 +204,19 @@ function flattenPoi(f) {
   // Promote provider-ref discriminants to flat keys the drawer + campground
   // card already read (recgov_id for the rec.gov heat-strip path; aspira for
   // the NextGen path). Backend ships provider_ref as one nested object;
-  // legacy code shape stays.
+  // legacy code shape stays. host comes from raw.upstream.host (the join-by
+  // -name ETL stuffs it there) so the drawer can hit the right Aspira tenant.
   const pref = p.provider_ref;
   if (pref && typeof pref === 'object') {
     if (pref.recgov_id && !flat.recgov_id) flat.recgov_id = pref.recgov_id;
+    if (pref.transactionLocationId != null && !flat.aspira) {
+      flat.aspira = {
+        transactionLocationId: pref.transactionLocationId,
+        mapId: pref.mapId,
+        resourceLocationId: pref.resourceLocationId ?? null,
+        host: raw?.upstream?.host || null,
+      };
+    }
   }
   if (p.category === 'national-park' || p.category === 'state-park') {
     // Park layers + popups read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres /
