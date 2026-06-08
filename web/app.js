@@ -184,6 +184,22 @@ function flattenPoi(f) {
   const raw = p.raw || {};
   const flat = { id: f.id, ...raw, ...p };
   delete flat.raw;
+
+  // Address arrives as a nested object from /api/pois (the JSONB column).
+  // Flatten its parts onto the top of properties for every category that
+  // surfaces an address — popups read them directly instead of digging.
+  const addr = p.address || {};
+  flat.street = addr.street || '';
+  flat.city = addr.city || '';
+  flat.state = addr.state || p.region || '';
+  flat.postcode = addr.postcode || '';
+
+  // info_url is the BE's canonical "open this in upstream" link
+  // (Tesla findus, planetfitness.com gym page, BC Parks page, …).
+  // Popups read p.website / p.infoUrl — keep both names alive.
+  flat.website = p.info_url || p.website || '';
+  flat.infoUrl = p.info_url || '';
+
   if (p.category === 'campground' && raw.category) flat.category = raw.category;
   if (p.category === 'national-park' || p.category === 'state-park') {
     // Park layers + popups read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres /
@@ -196,19 +212,12 @@ function flattenPoi(f) {
     flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
     flat.Mang_Name = raw.Mang_Name || raw.designation || '';
   }
+  if (p.category === 'planet-fitness') {
+    // OSM Overpass tags → flat fields the popup reads.
+    flat.opening_hours = raw.opening_hours || '';
+  }
   if (p.category === 'supercharger') {
-    // Popup expects camelCase + flattened address fields. The Kotlin
-    // emit side stays snake_case (source_id, stall_count, max_power_kw)
-    // because that matches the rest of the pois.properties JSONB shape.
     flat.locationId = p.source_id;
-    // Address arrives as a top-level object on the feature's properties
-    // (separate from `raw`); flatten its parts so popups.js can read them
-    // directly instead of digging into another nested layer.
-    const addr = p.address || {};
-    flat.street = addr.street || '';
-    flat.city = addr.city || '';
-    flat.state = addr.state || p.region || '';
-    flat.postcode = addr.postcode || '';
     flat.stallCount = raw.stall_count ?? 0;
     flat.powerKilowatt = raw.max_power_kw ?? 0;
     flat.color = raw.color || '#e82127';   // Tesla red — the legacy file's open-status default

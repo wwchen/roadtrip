@@ -148,8 +148,13 @@ fun Route.poiRoutes(
             }
 
         val rawCategories = req.categories
+        // The CG zoom gate exists because at continental zoom (z<6) the
+        // ~12k campground rows nationwide would dominate the per-category
+        // budget. With a corridor active the spatial predicate already
+        // narrows results to the route, so the gate isn't needed —
+        // bypass it so campgrounds along a long road trip render at z=4.
         val categories =
-            if (rawCategories != null && req.zoom != null && req.zoom < CG_MIN_ZOOM) {
+            if (req.route == null && rawCategories != null && req.zoom != null && req.zoom < CG_MIN_ZOOM) {
                 rawCategories.filter { it != "campground" }.takeIf { it.isNotEmpty() }
             } else {
                 rawCategories
