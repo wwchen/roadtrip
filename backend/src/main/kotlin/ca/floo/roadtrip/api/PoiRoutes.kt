@@ -10,6 +10,7 @@ import io.ktor.server.application.call
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
@@ -237,17 +238,51 @@ fun Route.poiRoutes(
     // panned to Yosemite first — the bbox endpoint only sees the current
     // viewport, so a cross-country query needs a separate path.
     //
-    // Ranking: prefix match wins, then substring position, then name length.
-    // Cheap to compute on a 12k-row table; if pois grows we'll swap to
-    // pg_trgm + GIN index, but ILIKE is fine for now.
-    get("/api/pois/search") {
+    // Ranking: prefix match wins, then name length, then alphabetical.
+    // Cheap on a 12k-row table; if pois grows we can swap in pg_trgm + GIN.
+    get("/api/pois/search", {
+        tags = listOf("poi")
+        summary = "Text search POIs by name (cross-viewport)"
+        description =
+            "Returns up to `limit` matches ranked by prefix-match → name length → alphabetical. " +
+            "Empty `q` (or shorter than 2 chars) returns an empty list. " +
+            "Used by the topbar dropdown so a user can find a POI nationwide without panning to it first."
+        request {
+            queryParameter<String>("q") { description = "Query string, ≥ 2 chars" }
+            queryParameter<Int>("limit") { description = "Max results, 1..25 (default 10)" }
+        }
+        response {
+            code(io.ktor.http.HttpStatusCode.OK) {
+                description = "Ranked match list."
+                body<PoiSearchResponseSchema> {
+                    mediaTypes(io.ktor.http.ContentType.Application.Json)
+                    example("upper pines") {
+                        value =
+                            PoiSearchResponseSchema(
+                                results =
+                                    listOf(
+                                        PoiSearchHitSchema(
+                                            id = 12345,
+                                            name = "Upper Pines Campground",
+                                            category = "campground",
+                                            region = "CA",
+                                            lng = -119.5648,
+                                            lat = 37.7406,
+                                        ),
+                                    ),
+                            )
+                    }
+                }
+            }
+        }
+    }) {
         val q =
             call.request.queryParameters["q"]
                 ?.trim()
                 .orEmpty()
         if (q.length < 2) {
             call.respondText(
-                """{"results":[]}""",
+                Json.encodeToString(PoiSearchResponseSchema(results = emptyList())),
                 io.ktor.http.ContentType.Application.Json,
             )
             return@get
@@ -257,37 +292,38 @@ fun Route.poiRoutes(
                 ?.toIntOrNull()
                 ?.coerceIn(1, 25)
                 ?: 10
-        val pattern = "%${q.replace("%", "\\%").replace("_", "\\_")}%"
-        val prefix = "${q.replace("%", "\\%").replace("_", "\\_")}%"
-        val rows =
-            ctx.fetch(
-                """
-                SELECT id, name, category, region,
-                       ST_X(geom) AS lng, ST_Y(geom) AS lat
-                FROM pois
-                WHERE deleted_at IS NULL
-                  AND name ILIKE ?
-                ORDER BY (name ILIKE ?) DESC, length(name) ASC, name ASC
-                LIMIT ?
-                """.trimIndent(),
-                pattern,
-                prefix,
-                limit,
-            )
-        val sb = StringBuilder().append("""{"results":[""")
-        for ((i, r) in rows.withIndex()) {
-            if (i > 0) sb.append(',')
-            sb.append("""{"id":""").append((r.get("id") as Number).toLong())
-            sb.append(""","name":""").append(jsonString(r.get("name") as String))
-            sb.append(""","category":""").append(jsonString(r.get("category") as String))
-            val region = r.get("region") as String?
-            if (region != null) sb.append(""","region":""").append(jsonString(region))
-            sb.append(""","lng":""").append((r.get("lng") as Number).toDouble())
-            sb.append(""","lat":""").append((r.get("lat") as Number).toDouble())
-            sb.append('}')
-        }
-        sb.append("]}")
-        call.respondText(sb.toString(), io.ktor.http.ContentType.Application.Json)
+        val escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+        val pattern = "%$escaped%"
+        val prefix = "$escaped%"
+        val hits =
+            ctx
+                .fetch(
+                    """
+                    SELECT id, name, category, region,
+                           ST_X(geom) AS lng, ST_Y(geom) AS lat
+                    FROM pois
+                    WHERE deleted_at IS NULL
+                      AND name ILIKE ?
+                    ORDER BY (name ILIKE ?) DESC, length(name) ASC, name ASC
+                    LIMIT ?
+                    """.trimIndent(),
+                    pattern,
+                    prefix,
+                    limit,
+                ).map { r ->
+                    PoiSearchHitSchema(
+                        id = (r.get("id") as Number).toLong(),
+                        name = r.get("name") as String,
+                        category = r.get("category") as String,
+                        region = r.get("region") as String?,
+                        lng = (r.get("lng") as Number).toDouble(),
+                        lat = (r.get("lat") as Number).toDouble(),
+                    )
+                }
+        call.respondText(
+            Json.encodeToString(PoiSearchResponseSchema(results = hits)),
+            io.ktor.http.ContentType.Application.Json,
+        )
     }
 }
 
