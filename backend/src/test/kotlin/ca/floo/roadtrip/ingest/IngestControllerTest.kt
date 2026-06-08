@@ -432,16 +432,22 @@ class IngestControllerTest {
     // -- Fakes ----------------------------------------------------------------
 
     private class FakeProcessFactory : ProcessFactory {
-        private val queue: ArrayDeque<RunningProcess> = ArrayDeque()
+        // Thread-safe — the concurrent-targets test fires two start() calls
+        // from coroutines on Dispatchers.IO, and ArrayDeque.removeFirstOrNull
+        // races; the slow loser ends up with `null` and fails the run with
+        // "no fake process queued" instead of getting its blocking handle.
+        private val queue = java.util.concurrent.ConcurrentLinkedDeque<RunningProcess>()
 
-        fun queue(p: RunningProcess) = queue.addLast(p)
+        fun queue(p: RunningProcess) {
+            queue.addLast(p)
+        }
 
         fun unused(): Int = queue.size
 
         override fun start(
             cmd: List<String>,
             workingDir: File,
-        ): RunningProcess = queue.removeFirstOrNull() ?: error("no fake process queued for cmd=$cmd")
+        ): RunningProcess = queue.pollFirst() ?: error("no fake process queued for cmd=$cmd")
     }
 
     private class FakeProcess(
