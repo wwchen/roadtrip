@@ -207,6 +207,9 @@ function flattenPoi(f) {
     flat.powerKilowatt = raw.max_power_kw ?? 0;
     flat.color = raw.color || '#e82127';   // Tesla red — the legacy file's open-status default
     flat.status = raw.status || 'OPEN';    // pre-enrichment rows don't carry status
+    // Pricing is inlined on the row (replaces the old /api/pricing fetch);
+    // popups.js renders synchronously off this list.
+    flat.pricebooks = raw.pricebooks || [];
   }
   flat.name = p.name || raw.name || flat.name;
   return { ...f, properties: flat };

@@ -73,6 +73,11 @@ sealed class Poi {
         val stallCount: Int,
         val maxPowerKw: Int,
         val facility: String?,
+        // Tesla "effective pricebooks": one row per (feeType, vehicleMakeType,
+        // currency, time-band). Whole array kept verbatim for the FE to
+        // render. Empty list when the detail capture is missing or had no
+        // pricebooks.
+        val pricebooks: List<kotlinx.serialization.json.JsonElement> = emptyList(),
     ) : Poi()
 
     data class Park(
@@ -204,6 +209,7 @@ private fun perTypeProperties(poi: Poi): JsonObject =
                 put("stall_count", JsonPrimitive(poi.stallCount))
                 put("max_power_kw", JsonPrimitive(poi.maxPowerKw))
                 poi.facility?.let { put("facility", JsonPrimitive(it)) }
+                if (poi.pricebooks.isNotEmpty()) put("pricebooks", JsonArray(poi.pricebooks))
             }
         is Poi.Park ->
             buildJsonObject {

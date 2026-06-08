@@ -5,7 +5,6 @@ import ca.floo.campsite.recgov.booker.campsiteRoutes
 import ca.floo.roadtrip.api.geocodeRoutes
 import ca.floo.roadtrip.api.healthRoutes
 import ca.floo.roadtrip.api.poiRoutes
-import ca.floo.roadtrip.api.pricingRoutes
 import ca.floo.roadtrip.api.routeRoutes
 import ca.floo.roadtrip.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.aspira.CachedAspiraAvailability
@@ -62,9 +61,9 @@ fun Application.module() {
 
     // ROADTRIP_STATIC_DIR points at the repo checkout when running locally
     // (gradle run) or at /app/static inside the container (bind-mounted from
-    // the host's repo root). data/pricing-cache lives under data/.
+    // the host's repo root). Raw upstream captures live under data/raw/.
     val staticDir = File(System.getenv("ROADTRIP_STATIC_DIR") ?: ".")
-    val pricingCache = File(staticDir, "data/pricing-cache")
+    val rawDataDir = File(staticDir, "data/raw")
 
     // Mapbox Directions for /api/route + Mapbox Geocoding for /api/geocode.
     // Both share MAPBOX_TOKEN. Token stays server-side — never sent to the
@@ -192,22 +191,18 @@ fun Application.module() {
         }
 
         poiRoutes(ctx)
-        pricingRoutes(pricingCache)
         routeRoutes(mapboxDirections)
         geocodeRoutes(mapboxGeocoder)
-        healthRoutes(pricingCache)
+        healthRoutes(rawDataDir)
         aspiraAvailabilityRoutes(aspiraCache)
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
-        // Static site. /web/* and /data/* (excluding pricing-cache, which is
-        // server-private) serve directly from the repo checkout. Root path
-        // serves index.html.
+        // Static site. /web/* and /data/* serve directly from the repo
+        // checkout. Root path serves index.html. data/raw/ stays
+        // server-private — it's the upstream capture cache, never served.
         staticFiles("/web", File(staticDir, "web"))
         staticFiles("/data", File(staticDir, "data")) {
-            // Don't expose the on-disk cache files via /data/pricing-cache/*
-            // — they're served through /api/pricing/{slug} so the response
-            // shape (with _cache hint) stays consistent.
-            exclude { it.path.contains("/pricing-cache/") }
+            exclude { it.path.contains("/raw/") }
             contentType { f ->
                 if (f.name.endsWith(".geojson")) ContentType("application", "geo+json") else null
             }
