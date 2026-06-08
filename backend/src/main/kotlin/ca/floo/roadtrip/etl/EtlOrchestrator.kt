@@ -95,6 +95,9 @@ class EtlOrchestrator(
                 "tesla-index" to
                     ca.floo.roadtrip.etl.tesla
                         .TeslaIndexEtl(),
+                "reserveamerica-abpp" to
+                    ca.floo.roadtrip.etl.reserveamerica
+                        .ReserveAmericaEtl(),
             )
     }
 }
