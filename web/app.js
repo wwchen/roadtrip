@@ -201,8 +201,14 @@ function flattenPoi(f) {
     // emit side stays snake_case (source_id, stall_count, max_power_kw)
     // because that matches the rest of the pois.properties JSONB shape.
     flat.locationId = p.source_id;
-    flat.state = raw.state || p.region || '';
-    flat.city = raw.city || '';
+    // Address arrives as a top-level object on the feature's properties
+    // (separate from `raw`); flatten its parts so popups.js can read them
+    // directly instead of digging into another nested layer.
+    const addr = p.address || {};
+    flat.street = addr.street || '';
+    flat.city = addr.city || '';
+    flat.state = addr.state || p.region || '';
+    flat.postcode = addr.postcode || '';
     flat.stallCount = raw.stall_count ?? 0;
     flat.powerKilowatt = raw.max_power_kw ?? 0;
     flat.color = raw.color || '#e82127';   // Tesla red — the legacy file's open-status default
@@ -255,23 +261,24 @@ async function load() {
     const b = m.getBounds();
     const west = b.getWest(), south = b.getSouth(), east = b.getEast(), north = b.getNorth();
     const zoom = Math.floor(m.getZoom());
+    // When a trip route is active, topbar exposes its waypoints + radius
+    // via window.__rtTripRoute. The BE looks the polyline up from
+    // RouteCache (seeded by /api/route) and buffers server-side.
+    const route = (typeof window.__rtTripRoute === 'function')
+      ? window.__rtTripRoute()
+      : null;
+
     // CG zoom gating still tracked client-side for cgUnlocked + counts UI;
-    // the server enforces its own gate at zoom < 6 anyway.
-    const wantCG = m.getZoom() >= CG_ZOOM_THRESHOLD || cgUnlocked;
+    // the server enforces its own gate at zoom < 6 anyway. Bypass the
+    // gate when a route is active — campgrounds are exactly the kind of
+    // POI the user wants to see along the corridor regardless of zoom.
+    const wantCG = !!route || m.getZoom() >= CG_ZOOM_THRESHOLD || cgUnlocked;
     if (wantCG) cgUnlocked = true;
     // Defaults: just the point-geom layers. Park polygons (NP/SP) are
     // expensive to ship and clutter at low zoom — leave them out for now;
     // a follow-up will reintroduce them via a separate tile/render path.
     const cats = ['planet-fitness', 'supercharger'];
     if (wantCG) cats.push('campground');
-
-    // When a trip route is active, topbar exposes its waypoints + radius
-    // via window.__rtTripRoute. The BE looks the polyline up from
-    // RouteCache (seeded by /api/route) and buffers server-side — we do
-    // NOT ship the turf.buffer polygon, which would be kilobytes per pan.
-    const route = (typeof window.__rtTripRoute === 'function')
-      ? window.__rtTripRoute()
-      : null;
 
     if (inflight) inflight.abort();
     inflight = new AbortController();

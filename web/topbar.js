@@ -471,13 +471,17 @@ function pinKindFromLayer(layerId) {
 
 function onPinClickedFromMap(pin) {
   // In browse mode (no trip yet), populate row 0 if empty, otherwise
-  // replace it. In directions mode, populate the active row (whichever
-  // input the user last focused). The existing drawer/popup also opens
-  // because layers.js click handlers run independently.
-  const i = (trip.mode === 'browse') ? 0 : Math.max(activeRowIdx, 0);
-  setStop(i, { name: pin.name, lng: pin.lng, lat: pin.lat, kind: pin.kind });
+  // replace it. The existing drawer/popup opens regardless because
+  // layers.js click handlers run independently.
+  //
+  // In directions mode the click is a no-op for waypoints — the user
+  // picked a route already, and clicking a campground or supercharger
+  // along the corridor should let them open the drawer (to see hours,
+  // pricing, navigate) without rewriting their itinerary. Waypoints
+  // only change via the search/geocode flow now.
+  if (trip.mode !== 'browse') return;
+  setStop(0, { name: pin.name, lng: pin.lng, lat: pin.lat, kind: pin.kind });
   rerender();
-  if (trip.mode === 'directions' && allStopsFilled()) tryFetchRoute();
 }
 
 // --- input + dropdown ---------------------------------------------------

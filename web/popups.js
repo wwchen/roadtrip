@@ -136,27 +136,21 @@ export function openPlanetFitnessPopup(f) {
 export function openSuperchargerPopup(f) {
   const p = f.properties;
   const [lng, lat] = f.geometry.coordinates;
-  const addr = [p.street, p.city, p.state].filter(Boolean).join(', ');
-  const sub = buildSubline([addr, distanceTo(lng, lat)]);
+  // Build the address line from the new tesla-locations enrichment.
+  // street + city + state + postcode is the natural reading order; drop
+  // any blank pieces so a missing postcode doesn't leave a stray comma.
+  const addrLine = [p.street, p.city, [p.state, p.postcode].filter(Boolean).join(' ')]
+    .filter(Boolean).join(', ');
+  const sub = buildSubline([addrLine, distanceTo(lng, lat)]);
   const stalls = [p.v2 && `V2×${p.v2}`, p.v3 && `V3×${p.v3}`, p.v4 && `V4×${p.v4}`].filter(Boolean).join(' · ');
   const plugs = [p.nacs && `NACS×${p.nacs}`, p.tpc && `TPC×${p.tpc}`].filter(Boolean).join(' · ');
-  // tesla.com/findus deeplink. The `bounds` param (north,east,south,west)
-  // is what makes findus actually zoom in on the site — without it the map
-  // opens at a default zoom and the user has to hunt. We mirror the bbox
-  // size Tesla's own UI generates: ±0.44° lat × ±1.86° lng around the site.
-  // Keep rel="noopener" (security) but drop noreferrer — refererless requests
-  // trip Akamai bot detection more often.
-  const teslaBounds = p.locationId
-    ? `${(lat + 0.44).toFixed(6)},${(lng + 1.86).toFixed(6)},${(lat - 0.44).toFixed(6)},${(lng - 1.86).toFixed(6)}`
-    : '';
-  const teslaUrl = p.locationId
-    ? `https://www.tesla.com/findus?bounds=${encodeURIComponent(teslaBounds)}&location=${encodeURIComponent(p.locationId)}&functionType=supercharger`
-    : '';
-  const primaryBtn = teslaUrl
-    ? `<a class="cg-btn cg-btn-primary" href="${teslaUrl}" target="_blank" rel="noopener">Open in Tesla</a>`
-    : `<span class="cg-btn cg-btn-disabled">No Tesla link available</span>`;
+  // Primary CTA: Google Maps. Use a coords + label query so the dropped
+  // pin is right at the supercharger — Google routes from the user's
+  // current location and works whether they're on iOS, Android, or web.
+  const gmapsLabel = encodeURIComponent(p.name || 'Supercharger');
+  const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&query_place_id=&query=${gmapsLabel}%20${lat},${lng}`;
+  const primaryBtn = `<a class="cg-btn cg-btn-primary" href="${gmapsUrl}" target="_blank" rel="noopener">Open in Google Maps</a>`;
   const tags = [
-    `<span class="tag" style="background:${p.color};color:#fff">${escapeHtml(p.status || '')}</span>`,
     p.stallCount ? `<span class="tag">${p.stallCount} stalls</span>` : '',
     p.powerKilowatt ? `<span class="tag">${p.powerKilowatt} kW</span>` : '',
   ].filter(Boolean).join(' ');
@@ -166,9 +160,8 @@ export function openSuperchargerPopup(f) {
   const pricingHtml = renderPricing(p.pricebooks);
   openDrawer(`
     ${drawerHeader(p.name || '', sub)}
-    ${p.facility ? `<div class="cg-sub">at ${escapeHtml(p.facility)}</div>` : ''}
     <div class="cg-actions">${primaryBtn}</div>
-    <div style="margin-top:6px">${tags}</div>
+    ${tags ? `<div style="margin-top:6px">${tags}</div>` : ''}
     ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
     ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}
     ${p.dateOpened ? `<div class="footer">Opened ${escapeHtml(p.dateOpened)}</div>` : ''}

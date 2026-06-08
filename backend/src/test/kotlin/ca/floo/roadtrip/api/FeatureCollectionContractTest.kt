@@ -21,6 +21,9 @@ class FeatureCollectionContractTest {
                     region = "AB",
                     unitName = "Banff",
                     reserveUrl = "https://reservation.pc.gc.ca",
+                    phone = "1-877-737-3783",
+                    infoUrl = "https://parks.canada.ca/banff",
+                    addressJson = """{"city":"Banff","state":"AB"}""",
                     geomJson = """{"type":"Point","coordinates":[-115.547,51.1812]}""",
                     propertiesJson = """{"category":"federal","amenities":["showers"]}""",
                 ),
@@ -33,6 +36,8 @@ class FeatureCollectionContractTest {
                 """"category":"campground","name":"Tunnel Mountain Village I",""" +
                 """"region":"AB","unit_name":"Banff",""" +
                 """"reserve_url":"https://reservation.pc.gc.ca",""" +
+                """"phone":"1-877-737-3783","info_url":"https://parks.canada.ca/banff",""" +
+                """"address":{"city":"Banff","state":"AB"},""" +
                 """"raw":{"category":"federal","amenities":["showers"]}}}""" +
                 """]}"""
         )
@@ -52,6 +57,9 @@ class FeatureCollectionContractTest {
                     region = null,
                     unitName = null,
                     reserveUrl = null,
+                    phone = null,
+                    infoUrl = null,
+                    addressJson = null,
                     geomJson = """{"type":"Point","coordinates":[-123.0,49.0]}""",
                     propertiesJson = """{}""",
                 ),
@@ -61,6 +69,9 @@ class FeatureCollectionContractTest {
         assert(!out.contains("\"region\""))
         assert(!out.contains("\"unit_name\""))
         assert(!out.contains("\"reserve_url\""))
+        assert(!out.contains("\"phone\""))
+        assert(!out.contains("\"info_url\""))
+        assert(!out.contains("\"address\""))
     }
 
     @Test
@@ -82,6 +93,9 @@ class FeatureCollectionContractTest {
                     region = null,
                     unitName = null,
                     reserveUrl = null,
+                    phone = null,
+                    infoUrl = null,
+                    addressJson = null,
                     geomJson = """{"type":"Point","coordinates":[0,0]}""",
                     propertiesJson = """{}""",
                 ),

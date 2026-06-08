@@ -307,6 +307,11 @@ internal data class PoiRow(
     val region: String?,
     val unitName: String?,
     val reserveUrl: String?,
+    val phone: String?,
+    val infoUrl: String?,
+    // JSONB ::text — null when the row has no address bag (most parks).
+    // Surfaced verbatim to FE; popups read it directly.
+    val addressJson: String?,
     val geomJson: String,
     val propertiesJson: String,
 )
@@ -345,7 +350,9 @@ internal fun fetchPois(
                 append(
                     """
                     SELECT id, source, source_id, category, name, region, unit_name,
-                           reserve_url, ST_AsGeoJSON(geom) AS geom_json,
+                           reserve_url, phone, info_url,
+                           address::text AS address_text,
+                           ST_AsGeoJSON(geom) AS geom_json,
                            properties::text AS properties_text
                     FROM pois
                     WHERE deleted_at IS NULL
@@ -400,6 +407,9 @@ internal fun fetchPois(
             region = r.get("region") as String?,
             unitName = r.get("unit_name") as String?,
             reserveUrl = r.get("reserve_url") as String?,
+            phone = r.get("phone") as String?,
+            infoUrl = r.get("info_url") as String?,
+            addressJson = r.get("address_text") as String?,
             geomJson = r.get("geom_json") as String,
             propertiesJson = r.get("properties_text") as String,
         )
@@ -432,6 +442,9 @@ internal fun buildFeatureCollection(
         if (r.region != null) sb.append(""","region":""").append(jsonString(r.region))
         if (r.unitName != null) sb.append(""","unit_name":""").append(jsonString(r.unitName))
         if (r.reserveUrl != null) sb.append(""","reserve_url":""").append(jsonString(r.reserveUrl))
+        if (r.phone != null) sb.append(""","phone":""").append(jsonString(r.phone))
+        if (r.infoUrl != null) sb.append(""","info_url":""").append(jsonString(r.infoUrl))
+        if (r.addressJson != null) sb.append(""","address":""").append(r.addressJson)
         sb.append(""","raw":""").append(r.propertiesJson)
         sb.append("}}")
     }
