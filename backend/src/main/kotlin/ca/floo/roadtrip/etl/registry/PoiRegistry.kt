@@ -30,7 +30,60 @@ data class PoiRegistry(
                     com.charleskorn.kaml.YamlConfiguration(strictMode = false),
             )
 
-        fun load(file: File): PoiRegistry = yaml.decodeFromString(serializer(), file.readText())
+        fun load(file: File): PoiRegistry {
+            val r = yaml.decodeFromString(serializer(), file.readText())
+            r.validate()
+            return r
+        }
+    }
+
+    /**
+     * Sanity-check the registry after deserialization. Catches typos /
+     * dangling references at boot rather than at first row-insert.
+     *
+     * Today's checks:
+     *   - every `booking_provider:` reference (under a governing_body or a
+     *     source) points at a declared `booking_providers:` row
+     *   - governing_body slugs are unique
+     *   - source ids are unique across the whole file
+     */
+    fun validate() {
+        val errs = mutableListOf<String>()
+        val gbSlugSeen = mutableSetOf<String>()
+        for (gb in governingBodies) {
+            if (!gbSlugSeen.add(gb.slug)) errs += "duplicate governing_body slug='${gb.slug}'"
+            gb.bookingProvider?.let { ref ->
+                if (!bpExists(ref)) errs += danglingMsg("governing_body '${gb.slug}'", ref)
+            }
+            for (s in gb.sources) {
+                s.bookingProvider?.let { ref ->
+                    if (!bpExists(ref)) errs += danglingMsg("source '${s.id}'", ref)
+                }
+            }
+        }
+        val srcSeen = mutableSetOf<String>()
+        for (gb in governingBodies) {
+            for (s in gb.sources) {
+                if (!srcSeen.add(s.id)) {
+                    errs += "duplicate source id='${s.id}' (under governing_body '${gb.slug}')"
+                }
+            }
+        }
+        require(errs.isEmpty()) {
+            "config/poi-registry.yaml has ${errs.size} validation error(s):\n" +
+                errs.joinToString("\n") { "  - $it" }
+        }
+    }
+
+    private fun bpExists(ref: BookingProviderRef): Boolean = bookingProviders.any { it.vendor == ref.vendor && it.host == ref.host }
+
+    private fun danglingMsg(
+        owner: String,
+        ref: BookingProviderRef,
+    ): String {
+        val v = ref.vendor
+        val h = ref.host
+        return "$owner.booking_provider (vendor=$v, host=$h) is not declared in booking_providers:"
     }
 
     /** Look up by slug — used by ETL transformers. Throws if absent. */
@@ -59,6 +112,13 @@ data class GoverningBodyEntry(
     val name: String,
     val kind: String, // federal | state | provincial | local | private | corporate
     val country: String? = null, // ISO 3166-1 alpha-2; null for cross-border vendors
+    // Default booking_provider for POIs whose governing body is this body.
+    // Per-row transformers can override (e.g. some 'us-state-park' rows
+    // route to Aspira via WA, others elsewhere). When this body has a 1:1
+    // tie to one booking system (NPS → recgov; Parks Canada → aspira PC),
+    // the transformer reads it from here instead of hardcoding.
+    @kotlinx.serialization.SerialName("booking_provider")
+    val bookingProvider: BookingProviderRef? = null,
     val sources: List<SourceEntry> = emptyList(),
 )
 
