@@ -58,11 +58,12 @@ class EtlOrchestrator(
         etl: SourceEtl<DTO, OUT>,
         transformCtx: TransformCtx,
     ): List<OUT> {
-        // PR 3 only ships sources whose capture is single-file (osm-pf).
-        // Multi-part (paginated) sources need RawCapture.newestMultiPart;
-        // their ETLs land in 3b/3c.
-        val envelope = RawCapture.newestSingle(rawDir, etl.sourceName)
-        val dto = etl.parse(envelope)
+        val dto =
+            if (etl.multiPart) {
+                etl.parseMulti(RawCapture.newestMultiPart(rawDir, etl.sourceName))
+            } else {
+                etl.parse(RawCapture.newestSingle(rawDir, etl.sourceName))
+            }
         val validated =
             when (val v = etl.validate(dto)) {
                 is ValidationResult.Ok -> v.dto
@@ -82,6 +83,12 @@ class EtlOrchestrator(
                 "osm-pf" to
                     ca.floo.roadtrip.etl.osmpf
                         .PlanetFitnessEtl(),
+                "padus-np" to
+                    ca.floo.roadtrip.etl.padus
+                        .PadusNpEtl(),
+                "padus-sp" to
+                    ca.floo.roadtrip.etl.padus
+                        .PadusSpEtl(),
             )
     }
 }

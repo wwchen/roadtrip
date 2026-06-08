@@ -11,9 +11,19 @@ interface SourceEtl<DTO, OUT : Poi> {
     // stable across runs — `pois.UNIQUE (source, source_id)` keys off it.
     val sourceName: String
 
+    // True for paginated sources (PAD-US, BC Strapi) whose newest capture
+    // is a directory of page-NNN.json files; the orchestrator hands every
+    // page to [parseMulti]. False (default) for single-file captures —
+    // [parse] is called with one envelope.
+    val multiPart: Boolean get() = false
+
     // Verbatim upstream payload → strongly-typed DTO. Pure JSON →
     // data class deserialization; no transform, no merge.
-    fun parse(envelope: Envelope): DTO
+    fun parse(envelope: Envelope): DTO = error("$sourceName uses multi-part captures; override parseMulti")
+
+    // Multi-part variant. Default delegates to [parse] for single-page
+    // sources so existing ETLs don't change.
+    fun parseMulti(envelopes: List<Envelope>): DTO = error("$sourceName is single-part; override parse instead")
 
     // DTO row → ok | errors. Validation rules are per-source (required
     // fields, enum membership, geometry well-formedness, ID format).
