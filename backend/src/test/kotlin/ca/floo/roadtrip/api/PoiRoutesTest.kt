@@ -177,9 +177,15 @@ class PoiRoutesTest {
     fun `truncation kicks in above the per-category cap`() =
         testApplication {
             // Seed POI_LIMIT + 5 campground rows in a tight bbox. Per-category
-            // limit is POI_LIMIT/5 (5 default categories), so we should see
-            // exactly that many — and the response is NOT marked truncated
-            // because per-cat truncation is the design, not an error state.
+            // cap is POI_LIMIT/N where N is the number of distinct categories
+            // in the default set (varies with which YAML data_sources are
+            // enabled), so we should see exactly that many.
+            val defaultCatCount =
+                testRegistry
+                    .enabledSources()
+                    .map { it.category }
+                    .toSet()
+                    .size
             val rows =
                 (1..(POI_LIMIT + 5)).map { i ->
                     row(
@@ -193,14 +199,15 @@ class PoiRoutesTest {
             seed(rows)
             application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
 
-            // No categories filter → defaults to all 5, each capped at POI_LIMIT/5 = 400.
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
                     setBody(body("-125,47,-120,51"))
                 }
             val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(POI_LIMIT / 5, parsed["features"]!!.jsonArray.size)
+            // BE asks fetchPois for (POI_LIMIT + 1) as its overall budget so
+            // it can detect a boundary truncation; per-cat is that / N.
+            assertEquals((POI_LIMIT + 1) / defaultCatCount, parsed["features"]!!.jsonArray.size)
 
             // When the caller scopes to a single category, that category gets
             // the full POI_LIMIT slot — and global truncation kicks in only
@@ -452,10 +459,12 @@ class PoiRoutesTest {
             )
             application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
 
+            // state-park isn't in the default category set today (the
+            // PAD-US sources are disabled), so explicitly request it.
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-120,51"))
+                    setBody(body("-125,47,-120,51", categories = listOf("state-park")))
                 }
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val feat = body["features"]!!.jsonArray.single().jsonObject

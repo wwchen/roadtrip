@@ -93,6 +93,13 @@ data class DataSourceEntry(
     val name: String,
     val enabled: Boolean = true,
     val category: String,
+    // Sub-bucket for the FE campground layer's circle-color expression
+    // and per-bucket legend toggles: federal | state | local | provincial.
+    // Static stamp — every row from this source gets this bucket.
+    // Sources whose bucket varies per row (uscampgrounds reads it from
+    // CSV typeLabel) leave this null and let the ETL stamp per-row.
+    @kotlinx.serialization.SerialName("legend_bucket")
+    val legendBucket: String? = null,
     val fetcher: Fetcher,
     @kotlinx.serialization.SerialName("etl_adapter")
     val etlAdapter: String? = null,

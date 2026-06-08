@@ -275,8 +275,12 @@ class AdminIngestRoutesTest {
             ctx = ctx,
             importer = Importer(ctx),
             etl =
-                ca.floo.roadtrip.etl
-                    .EtlOrchestrator(ctx, File("/tmp")),
+                ca.floo.roadtrip.etl.EtlOrchestrator(
+                    ctx,
+                    File("/tmp"),
+                    ca.floo.roadtrip.etl.registry
+                        .PoiRegistry(emptyList()),
+                ),
             dataDir = File("/tmp"),
             targets = targets,
             workingDir = File("/tmp"),

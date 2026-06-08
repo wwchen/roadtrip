@@ -30,6 +30,7 @@ class EtlOrchestratorTest {
     private lateinit var ds: HikariDataSource
     private lateinit var ctx: DSLContext
     private lateinit var rawDir: File
+    private lateinit var poiRegistry: PoiRegistry
 
     @BeforeAll
     fun setUp() {
@@ -53,7 +54,8 @@ class EtlOrchestratorTest {
             File(System.getProperty("user.dir"))
                 .resolve("../config/poi-registry.yaml")
                 .canonicalFile
-        PoiRegistrySync(ctx).apply(PoiRegistry.load(yamlPath))
+        poiRegistry = PoiRegistry.load(yamlPath)
+        PoiRegistrySync(ctx).apply(poiRegistry)
 
         // Mirror data/raw/osm-pf/<ts>.json under a tempdir so the orchestrator
         // can find it via newestSingle().
@@ -78,7 +80,7 @@ class EtlOrchestratorTest {
 
     @Test
     fun `runSource(osm-pf) parses fixture and upserts rows into pois`() {
-        val orch = EtlOrchestrator(ctx, rawDir)
+        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         val stats = orch.runSource("osm-pf")
 
         assertEquals(5, stats.transformed, "fixture has 5 elements, all valid")
@@ -95,7 +97,7 @@ class EtlOrchestratorTest {
 
     @Test
     fun `re-running runSource is idempotent (same row count, no extras)`() {
-        val orch = EtlOrchestrator(ctx, rawDir)
+        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runSource("osm-pf") // first run populates
         val stats2 = orch.runSource("osm-pf") // second run replays
 
@@ -112,7 +114,7 @@ class EtlOrchestratorTest {
 
     @Test
     fun `upserted rows carry the right category and country`() {
-        val orch = EtlOrchestrator(ctx, rawDir)
+        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runSource("osm-pf")
 
         val sample =

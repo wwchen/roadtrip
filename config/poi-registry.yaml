@@ -8,7 +8,8 @@ data_sources:
   - slug: nps-national-parks
     name: US National Parks
     enabled: true
-    category: national-park
+    category: campground
+    legend_bucket: federal
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov.py
@@ -46,7 +47,8 @@ data_sources:
   - slug: bcparks-strapi
     name: BC Provincial Parks
     enabled: true
-    category: state-park
+    category: campground
+    legend_bucket: provincial
     fetcher:
       executor: python3
       filename: scripts/fetch_bc_parks.py
@@ -62,6 +64,7 @@ data_sources:
     name: Alberta Provincial Parks
     enabled: true
     category: campground
+    legend_bucket: provincial
     fetcher:
       executor: python3
       filename: scripts/fetch_reserveamerica.py
@@ -78,6 +81,9 @@ data_sources:
     name: US Campgrounds (uscampgrounds.info)
     enabled: false
     category: campground
+    # Per-row legend_bucket — the source CSVs already classify each
+    # entry as federal/state/local/private (typeLabel column), so the
+    # ETL stamps it from the row instead of statically.
     fetcher:
       executor: python3
       filename: scripts/fetch_campgrounds.py

@@ -53,6 +53,12 @@ sealed class Poi {
         val photoUrl: String?,
         val cellCoverage: Map<String, CellSignal>?,
         val ratingReviews: RatingSummary?,
+        // FE-rendering bucket: federal | state | local | provincial | private.
+        // Drives the campground layer's circle-color expression and the
+        // per-bucket legend toggles. ETLs read this from
+        // TransformCtx.legendBucketFor(slug) (static per-source) or stamp
+        // per-row from the upstream's own classification (uscampgrounds).
+        val legendBucket: String?,
     ) : Poi()
 
     data class Supercharger(
@@ -198,6 +204,11 @@ private fun perTypeProperties(poi: Poi): JsonObject =
                 poi.season?.let { put("season", JsonPrimitive(it)) }
                 poi.near?.let { put("near", JsonPrimitive(it)) }
                 poi.photoUrl?.let { put("photo_url", JsonPrimitive(it)) }
+                // FE reads `properties.category` as the sub-bucket key
+                // (legend toggles + circle-color match). Coarser
+                // pois.category column says "campground"; this stamps
+                // the FE-relevant detail (federal/state/local/provincial).
+                poi.legendBucket?.let { put("category", JsonPrimitive(it)) }
             }
         is Poi.Supercharger ->
             buildJsonObject {

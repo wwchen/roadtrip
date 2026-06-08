@@ -407,8 +407,12 @@ class IngestControllerTest {
             ctx = ctx,
             importer = Importer(ctx),
             etl =
-                ca.floo.roadtrip.etl
-                    .EtlOrchestrator(ctx, dataDir),
+                ca.floo.roadtrip.etl.EtlOrchestrator(
+                    ctx,
+                    dataDir,
+                    ca.floo.roadtrip.etl.registry
+                        .PoiRegistry(emptyList()),
+                ),
             dataDir = dataDir,
             targets = targets,
             workingDir = File("/tmp"),

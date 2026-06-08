@@ -47,8 +47,9 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, Poi.Campground> {
     override fun transform(
         dto: ReserveAmericaDto,
         ctx: TransformCtx,
-    ): List<Poi.Campground> =
-        dto.parks.map { park ->
+    ): List<Poi.Campground> {
+        val bucket = ctx.legendBucketFor(sourceName)
+        return dto.parks.map { park ->
             Poi.Campground(
                 source = sourceName,
                 sourceId = "ra-${park.parkId}",
@@ -70,8 +71,10 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, Poi.Campground> {
                 photoUrl = park.photoUrl,
                 cellCoverage = null,
                 ratingReviews = null,
+                legendBucket = bucket,
             )
         }
+    }
 
     private fun parsePark(
         parkId: Long,
