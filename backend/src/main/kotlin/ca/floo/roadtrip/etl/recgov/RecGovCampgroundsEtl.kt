@@ -2,6 +2,7 @@ package ca.floo.roadtrip.etl.recgov
 
 import ca.floo.roadtrip.etl.Address
 import ca.floo.roadtrip.etl.Envelope
+import ca.floo.roadtrip.etl.InputBundle
 import ca.floo.roadtrip.etl.Poi
 import ca.floo.roadtrip.etl.ProviderRef
 import ca.floo.roadtrip.etl.SourceEtl
@@ -25,12 +26,13 @@ import java.time.Instant
 // alerts off recgov_id) FKs cleanly to whatever the user picks on the
 // map.
 class RecGovCampgroundsEtl(
-    override val sourceName: String,
-) : SourceEtl<RecGovDto, Poi.Campground> {
+    override val etlSlug: String,
+) : SourceEtl<RecGovDto, List<Poi.Campground>> {
     override val multiPart: Boolean = true
 
-    override fun parseMulti(envelopes: List<Envelope>): RecGovDto {
-        require(envelopes.isNotEmpty()) { "$sourceName: no pages" }
+    override fun parse(inputs: InputBundle): RecGovDto {
+        val envelopes = inputs.soleEnvelopes()
+        require(envelopes.isNotEmpty()) { "$etlSlug: no pages" }
         val rows = mutableListOf<Facility>()
         for (env in envelopes) {
             val page = json.decodeFromJsonElement(RidbPageDto.serializer(), env.payload)
@@ -49,7 +51,7 @@ class RecGovCampgroundsEtl(
         dto: RecGovDto,
         ctx: TransformCtx,
     ): List<Poi.Campground> {
-        val bucket = ctx.legendBucketFor(sourceName)
+        val bucket = ctx.subcategoryFor(etlSlug)
         return dto.rows.mapNotNull { transformRow(it, dto.fetchedAt, bucket) }
     }
 
@@ -78,7 +80,7 @@ class RecGovCampgroundsEtl(
             }
 
         return Poi.Campground(
-            source = sourceName,
+            source = etlSlug,
             sourceId = "recgov-${row.FacilityID}",
             name = name,
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
@@ -102,7 +104,7 @@ class RecGovCampgroundsEtl(
             photoUrl = null,
             cellCoverage = null,
             ratingReviews = null,
-            legendBucket = bucket,
+            subcategory = bucket,
         )
     }
 

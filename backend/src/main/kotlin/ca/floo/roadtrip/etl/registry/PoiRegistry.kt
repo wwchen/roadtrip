@@ -4,24 +4,34 @@ import com.charleskorn.kaml.Yaml
 import kotlinx.serialization.Serializable
 import java.io.File
 
-// In-memory representation of config/poi-registry.yaml. Loaded once at
-// boot, used by:
-//   1. PoiRegistrySync — UPSERTs booking_provider rows from this into the
-//      DB (and refuses to boot if YAML deletes a (vendor, host) that's
-//      still referenced by pois rows).
-//   2. EtlOrchestrator / IngestController — looks up the source's
-//      etl_adapter to decide whether to run the ETL or skip the import
-//      phase entirely (no-import for adapters not yet implemented).
-//   3. RegistryTargets — flattens enabled data_sources into IngestController
-//      targets (one per source).
+// In-memory representation of config/poi-registry.yaml.
 //
-// Adding a new source = appending one entry under `data_sources`. Adding
-// a new vendor = a new `data_provider` block on a source plus a Kotlin
-// adapter class. No Flyway migration needed for either.
+// Two sections:
+//   - data_sources: fetchers (executor + filename + args + output_dir_prefix).
+//     One entry per upstream feed.
+//   - poi_data: user-facing datasets. Each row carries name, optional enabled
+//     (default true), category, optional subcategory, and an ordered etls:
+//     list. The LAST etls entry is the POI emitter (must produce Poi.*);
+//     earlier entries are intermediates. List order is dependency order:
+//     entry N may only reference data_source slugs OR earlier siblings via
+//     inputs. The framework topo-sorts the global DAG; cycles + forward
+//     references are rejected at boot.
+//
+// Loaded once at boot. Used by:
+//   1. EtlOrchestrator — runs each poi_data row's etls chain in order,
+//      materializing intermediates to data/etl-out/<etl-slug>/ and upserting
+//      the terminal's Poi.* output to the pois table with source=<terminal-slug>.
+//   2. IngestController / RegistryTargets — fetch is per data_source,
+//      import is per poi_data row.
+//
+// Adding a new source = one data_sources row + one poi_data row + one
+// EtlOrchestrator.registry line per ETL slug. No Flyway migration.
 @Serializable
 data class PoiRegistry(
     @kotlinx.serialization.SerialName("data_sources")
     val dataSources: List<DataSourceEntry>,
+    @kotlinx.serialization.SerialName("poi_data")
+    val poiData: List<PoiDataEntry>,
 ) {
     companion object {
         private val yaml =
@@ -39,72 +49,178 @@ data class PoiRegistry(
 
     /**
      * Sanity-check the registry after deserialization. Catches typos /
-     * dangling references at boot rather than at first row-insert.
+     * dangling references / cycles at boot rather than at first row-insert.
      *
-     * Today's checks:
-     *   - data_source slugs are unique
-     *   - depends_on references point at a declared slug
+     * Checks:
+     *   - data_source slugs unique
+     *   - etl slugs unique across the whole YAML, AND distinct from any
+     *     data_source slug (single namespace because inputs: resolves to
+     *     either kind)
+     *   - data_sources.depends_on references a declared data_source
+     *   - poi_data.etls is non-empty and has a terminal entry (the last
+     *     one); intermediates declare output_dir_prefix, terminals don't
+     *     need to (they emit straight to pois)
+     *   - within each row's etls, every input is either a data_source slug
+     *     OR an earlier sibling (forward references rejected)
+     *   - no cycles in the global DAG (data_sources → etls)
      */
     fun validate() {
         val errs = mutableListOf<String>()
-        val slugSeen = mutableSetOf<String>()
-        for (s in dataSources) {
-            if (!slugSeen.add(s.slug)) errs += "duplicate data_source slug='${s.slug}'"
+
+        val dsSlugs = mutableSetOf<String>()
+        for (ds in dataSources) {
+            if (!dsSlugs.add(ds.slug)) errs += "duplicate data_source slug='${ds.slug}'"
         }
-        val allSlugs = dataSources.map { it.slug }.toSet()
-        for (s in dataSources) {
-            for (dep in s.dependsOn) {
-                if (dep !in allSlugs) {
-                    errs += "data_source '${s.slug}'.depends_on='$dep' is not a declared slug"
+        for (ds in dataSources) {
+            for (dep in ds.dependsOn) {
+                if (dep !in dsSlugs) errs += "data_source '${ds.slug}'.depends_on='$dep' is not a declared slug"
+            }
+        }
+
+        // ETL slugs share a namespace with data_source slugs because
+        // inputs: resolves to either. Detect collisions.
+        val etlSlugs = mutableSetOf<String>()
+        for (row in poiData) {
+            if (row.etls.isEmpty()) {
+                errs += "poi_data '${row.name}' has empty etls list"
+                continue
+            }
+            for ((i, e) in row.etls.withIndex()) {
+                if (e.slug in dsSlugs) {
+                    errs += "poi_data '${row.name}' etl[$i] slug='${e.slug}' collides with a data_source slug"
+                }
+                if (!etlSlugs.add(e.slug)) {
+                    errs += "duplicate etl slug='${e.slug}' (in poi_data '${row.name}')"
+                }
+            }
+            // Per-row forward-reference check.
+            val priorSiblings = mutableSetOf<String>()
+            for ((i, e) in row.etls.withIndex()) {
+                for (input in e.inputs) {
+                    val resolvesToDataSource = input in dsSlugs
+                    val resolvesToPriorSibling = input in priorSiblings
+                    if (!resolvesToDataSource && !resolvesToPriorSibling) {
+                        // Could still be forward-reference (declared after
+                        // this entry) or completely dangling. Distinguish
+                        // for a clearer error.
+                        val laterSibling =
+                            row.etls.drop(i + 1).any { it.slug == input }
+                        errs +=
+                            if (laterSibling) {
+                                "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is a later sibling (forward reference)"
+                            } else {
+                                "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is neither a data_source nor a prior sibling"
+                            }
+                    }
+                }
+                priorSiblings += e.slug
+            }
+            // Intermediate entries must declare an output_dir_prefix; the
+            // terminal (last) does not — it goes straight to pois.
+            for ((i, e) in row.etls.withIndex()) {
+                val isTerminal = i == row.etls.lastIndex
+                if (!isTerminal && e.outputDirPrefix.isNullOrBlank()) {
+                    errs += "poi_data '${row.name}' etl[$i] '${e.slug}' is intermediate but missing output_dir_prefix"
                 }
             }
         }
+
+        // Global cycle detection over data_sources.depends_on + every
+        // etl.inputs. Edges run input → consumer. The (data_sources +
+        // etls) namespace is one set; a cycle means one of the .inputs
+        // slugs eventually depends on the consumer.
+        if (errs.isEmpty()) {
+            val edges = mutableMapOf<String, MutableSet<String>>()
+
+            fun edge(
+                from: String,
+                to: String,
+            ) {
+                edges.getOrPut(from) { mutableSetOf() }.add(to)
+            }
+            for (ds in dataSources) {
+                for (dep in ds.dependsOn) edge(dep, ds.slug)
+            }
+            for (row in poiData) {
+                for (e in row.etls) {
+                    for (input in e.inputs) edge(input, e.slug)
+                }
+            }
+            val cycles = detectCycles(edges)
+            if (cycles.isNotEmpty()) {
+                for (cycle in cycles) {
+                    errs += "cycle in DAG: ${cycle.joinToString(" → ")}"
+                }
+            }
+        }
+
         require(errs.isEmpty()) {
             "config/poi-registry.yaml has ${errs.size} validation error(s):\n" +
                 errs.joinToString("\n") { "  - $it" }
         }
     }
 
-    /** Sources to run on a no-target fan-out / drive ETL imports. */
-    fun enabledSources(): List<DataSourceEntry> = dataSources.filter { it.enabled }
+    /** poi_data rows that should run during fan-out import. */
+    fun enabledPoiData(): List<PoiDataEntry> = poiData.filter { it.enabled }
 
     /**
-     * The deduped (vendor, host) booking-provider set across every
-     * declared data_source's `data_provider` block. The DB sync UPSERTs
-     * one row per element.
+     * Look up the data_source entry that backs a fetch target. Returns null
+     * for unknown slugs (caller should 404).
      */
-    fun bookingProviders(): List<DataProvider> {
-        val seen = LinkedHashMap<Pair<String, String?>, DataProvider>()
-        for (s in dataSources) {
-            val p = s.dataProvider ?: continue
-            val key = p.vendor to p.host
-            // First wins — later entries with the same (vendor, host) are
-            // deduped silently. Display name and adapter are expected to
-            // agree across sources that share a provider.
-            seen.putIfAbsent(key, p)
+    fun dataSource(slug: String): DataSourceEntry? = dataSources.firstOrNull { it.slug == slug }
+
+    /** Look up a poi_data row by its display name. Names are unique by convention. */
+    fun poiDataByName(name: String): PoiDataEntry? = poiData.firstOrNull { it.name == name }
+
+    /**
+     * Static subcategory lookup keyed by terminal etl slug (== pois.source).
+     * Returns null when the row has no subcategory (e.g. planet-fitness).
+     */
+    fun subcategoryByTerminalEtlSlug(): Map<String, String?> {
+        val out = mutableMapOf<String, String?>()
+        for (row in poiData) {
+            val terminal = row.etls.lastOrNull() ?: continue
+            out[terminal.slug] = row.subcategory
         }
-        return seen.values.toList()
+        return out
     }
+}
+
+private fun detectCycles(edges: Map<String, Set<String>>): List<List<String>> {
+    val visited = mutableSetOf<String>()
+    val onStack = mutableSetOf<String>()
+    val stack = ArrayDeque<String>()
+    val cycles = mutableListOf<List<String>>()
+
+    fun dfs(node: String) {
+        visited.add(node)
+        onStack.add(node)
+        stack.addLast(node)
+        for (next in edges[node].orEmpty()) {
+            if (next !in visited) {
+                dfs(next)
+            } else if (next in onStack) {
+                val from = stack.indexOf(next)
+                if (from >= 0) {
+                    val cyc = stack.toList().subList(from, stack.size) + next
+                    cycles.add(cyc)
+                }
+            }
+        }
+        onStack.remove(node)
+        stack.removeLast()
+    }
+    for (node in edges.keys) {
+        if (node !in visited) dfs(node)
+    }
+    return cycles
 }
 
 @Serializable
 data class DataSourceEntry(
     val slug: String,
     val name: String,
-    val enabled: Boolean = true,
-    val category: String,
-    // Sub-bucket for the FE campground layer's circle-color expression
-    // and per-bucket legend toggles: federal | state | local | provincial.
-    // Static stamp — every row from this source gets this bucket.
-    // Sources whose bucket varies per row (uscampgrounds reads it from
-    // CSV typeLabel) leave this null and let the ETL stamp per-row.
-    @kotlinx.serialization.SerialName("legend_bucket")
-    val legendBucket: String? = null,
     val fetcher: Fetcher,
-    @kotlinx.serialization.SerialName("etl_adapter")
-    val etlAdapter: String? = null,
-    @kotlinx.serialization.SerialName("data_provider")
-    val dataProvider: DataProvider? = null,
     @kotlinx.serialization.SerialName("depends_on")
     val dependsOn: List<String> = emptyList(),
 )
@@ -113,23 +229,31 @@ data class DataSourceEntry(
 data class Fetcher(
     val executor: String,
     val filename: String,
-    // false = the upstream is currently unreachable / requires host-only
-    // setup (curl-impersonate + fresh cookies, etc). Skip fetch but still
-    // run import against any existing raw captures. The parent
-    // DataSourceEntry.enabled flag still wins — disabling the data_source
-    // turns off both fetch and import; this flag only narrows fetch.
-    val enabled: Boolean = true,
     val args: Map<String, String> = emptyMap(),
     @kotlinx.serialization.SerialName("output_dir_prefix")
     val outputDirPrefix: String,
 )
 
 @Serializable
-data class DataProvider(
-    val vendor: String,
-    val host: String? = null,
+data class PoiDataEntry(
     val name: String,
-    // Empty string = no adapter implemented yet; availability returns
-    // no_provider until one ships.
-    val adapter: String = "",
+    val enabled: Boolean = true,
+    val category: String,
+    // FE sub-bucket for legend toggles + circle-color (e.g. campground →
+    // federal | state | local | provincial). Null when the category has
+    // no sub-bucket (planet-fitness, supercharger).
+    val subcategory: String? = null,
+    val etls: List<EtlEntry>,
+)
+
+@Serializable
+data class EtlEntry(
+    val slug: String,
+    val adapter: String,
+    val inputs: List<String> = emptyList(),
+    val args: Map<String, String> = emptyMap(),
+    // Required for intermediate ETLs (typed payload materializes here).
+    // Omitted for the terminal — its output goes straight to pois.
+    @kotlinx.serialization.SerialName("output_dir_prefix")
+    val outputDirPrefix: String? = null,
 )

@@ -13,7 +13,8 @@ import java.time.ZoneOffset
 
 // Mark-and-sweep upsert into the v2 `pois` table. Same shape as the
 // legacy Importer.kt, generalized over the new sealed Poi types and
-// the v2 columns (provider_ref, booking_provider_id, etc.).
+// the v2 columns (provider_ref JSONB; booking_provider_id was dropped
+// in V8 since the dispatch path it was meant to power never landed).
 //
 // Sweep is scoped to the union of source names this run wrote — a
 // campground-merge run wipes only campground sources, never Tesla
@@ -110,7 +111,7 @@ class Upsert(
         runId: Long,
     ) {
         val fetchedAtTs = OffsetDateTime.ofInstant(poi.fetchedAt, ZoneOffset.UTC)
-        val (bookingProviderId, providerRefJson) = providerColumnsFor(poi)
+        val providerRefJson = providerRefJsonFor(poi)
         val addressJson = poi.address?.let { JSONB.valueOf(addressToJson(it)) }
         val propertiesJson = JSONB.valueOf(poi.propertiesJson().toString())
 
@@ -139,7 +140,6 @@ class Upsert(
             .set(POIS.PHONE, poi.phone)
             .set(POIS.ADDRESS, addressJson)
             .set(POIS.INFO_URL, poi.infoUrl)
-            .set(POIS.BOOKING_PROVIDER_ID, bookingProviderId)
             .set(POIS.PROVIDER_REF, providerRefJson)
             .set(POIS.PROPERTIES, propertiesJson)
             .set(POIS.FETCHED_AT, fetchedAtTs)
@@ -158,7 +158,6 @@ class Upsert(
             .set(POIS.PHONE, DSL.excluded(POIS.PHONE))
             .set(POIS.ADDRESS, DSL.excluded(POIS.ADDRESS))
             .set(POIS.INFO_URL, DSL.excluded(POIS.INFO_URL))
-            .set(POIS.BOOKING_PROVIDER_ID, DSL.excluded(POIS.BOOKING_PROVIDER_ID))
             .set(POIS.PROVIDER_REF, DSL.excluded(POIS.PROVIDER_REF))
             .set(POIS.PROPERTIES, DSL.excluded(POIS.PROPERTIES))
             .set(POIS.FETCHED_AT, DSL.excluded(POIS.FETCHED_AT))
@@ -195,23 +194,11 @@ class Upsert(
             .execute()
     }
 
-    /**
-     * Per-row booking_provider FK + provider_ref JSONB. Only Campground
-     * variants carry these; everything else maps to (null, null).
-     *
-     * TODO PR 4: BookingProviderAdapter dispatch will resolve the FK
-     * from the ProviderRef sealed variant + (for Aspira) the host. For
-     * now this returns (null, json) so rows have the IDs in JSONB even
-     * though the FK isn't filled in yet.
-     */
-    private fun providerColumnsFor(poi: Poi): Pair<Long?, JSONB?> =
+    /** provider_ref JSONB. Only Campground variants carry it; null otherwise. */
+    private fun providerRefJsonFor(poi: Poi): JSONB? =
         when (poi) {
-            is Poi.Campground -> {
-                val fk: Long? = null // TODO PR 4 — adapter-loaded dispatch
-                val ref = poi.providerRef?.let { JSONB.valueOf(providerRefToJson(it)) }
-                fk to ref
-            }
-            else -> null to null
+            is Poi.Campground -> poi.providerRef?.let { JSONB.valueOf(providerRefToJson(it)) }
+            else -> null
         }
 
     private fun providerRefToJson(ref: ProviderRef): String =

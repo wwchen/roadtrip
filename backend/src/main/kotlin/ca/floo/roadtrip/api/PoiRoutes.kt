@@ -67,10 +67,10 @@ fun Route.poiRoutes(
     registry: PoiRegistry,
 ) {
     // Default category list derives from the YAML registry so a new
-    // data_source category surfaces without code changes.
+    // poi_data category surfaces without code changes.
     val defaultCategories: List<String> =
         registry
-            .enabledSources()
+            .enabledPoiData()
             .map { it.category }
             .toSet()
             .toList()

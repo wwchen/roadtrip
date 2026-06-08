@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.etl.reserveamerica
 
 import ca.floo.roadtrip.etl.Envelope
+import ca.floo.roadtrip.etl.InputBundle
 import ca.floo.roadtrip.etl.Poi
 import ca.floo.roadtrip.etl.ProviderRef
 import ca.floo.roadtrip.etl.SourceEtl
@@ -21,12 +22,13 @@ import java.time.Instant
 // markup (place:location:latitude/longitude, og:title, itemprop=telephone).
 // Brittle to a redesign of shop.albertaparks.ca but cheap and obvious;
 // a redesign would shake out as a validation drop, not silent corruption.
-class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, Poi.Campground> {
-    override val sourceName = "reserveamerica-abpp"
+class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
+    override val etlSlug = "reserveamerica-abpp"
     override val multiPart: Boolean = true
 
-    override fun parseMulti(envelopes: List<Envelope>): ReserveAmericaDto {
-        require(envelopes.isNotEmpty()) { "$sourceName: no pages" }
+    override fun parse(inputs: InputBundle): ReserveAmericaDto {
+        val envelopes = inputs.soleEnvelopes()
+        require(envelopes.isNotEmpty()) { "$etlSlug: no pages" }
         val parks = mutableListOf<ParsedPark>()
         for (env in envelopes) {
             val partLabel = env.part ?: continue
@@ -48,10 +50,10 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, Poi.Campground> {
         dto: ReserveAmericaDto,
         ctx: TransformCtx,
     ): List<Poi.Campground> {
-        val bucket = ctx.legendBucketFor(sourceName)
+        val bucket = ctx.subcategoryFor(etlSlug)
         return dto.parks.map { park ->
             Poi.Campground(
-                source = sourceName,
+                source = etlSlug,
                 sourceId = "ra-${park.parkId}",
                 name = park.name,
                 geomGeoJson = """{"type":"Point","coordinates":[${park.lon},${park.lat}]}""",
@@ -71,7 +73,7 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, Poi.Campground> {
                 photoUrl = park.photoUrl,
                 cellCoverage = null,
                 ratingReviews = null,
-                legendBucket = bucket,
+                subcategory = bucket,
             )
         }
     }

@@ -2,7 +2,6 @@ package ca.floo.roadtrip.ingest
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.importer.Importer
 import ca.floo.roadtrip.importer.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -273,16 +272,16 @@ class AdminIngestRoutesTest {
     ): IngestController =
         IngestController(
             ctx = ctx,
-            importer = Importer(ctx),
             etl =
                 ca.floo.roadtrip.etl.EtlOrchestrator(
                     ctx,
                     File("/tmp"),
+                    File("/tmp/etl-out"),
                     ca.floo.roadtrip.etl.registry
-                        .PoiRegistry(emptyList()),
+                        .PoiRegistry(emptyList(), emptyList()),
                 ),
-            dataDir = File("/tmp"),
-            targets = targets,
+            fetchTargets = targets,
+            importTargets = targets,
             workingDir = File("/tmp"),
             ioDispatcher = Dispatchers.IO,
             processFactory = factory,

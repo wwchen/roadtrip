@@ -2,7 +2,6 @@ package ca.floo.roadtrip.etl
 
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.etl.registry.PoiRegistry
-import ca.floo.roadtrip.etl.registry.PoiRegistrySync
 import ca.floo.roadtrip.importer.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -30,6 +29,7 @@ class EtlOrchestratorTest {
     private lateinit var ds: HikariDataSource
     private lateinit var ctx: DSLContext
     private lateinit var rawDir: File
+    private lateinit var etlOutDir: File
     private lateinit var poiRegistry: PoiRegistry
 
     @BeforeAll
@@ -49,18 +49,16 @@ class EtlOrchestratorTest {
         ds = HikariDataSource(cfg)
         migrate(ds)
         ctx = DSL.using(ds, SQLDialect.POSTGRES)
-        // Dim rows seeded from config/poi-registry.yaml at boot (PR 3.5).
         val yamlPath =
             File(System.getProperty("user.dir"))
                 .resolve("../config/poi-registry.yaml")
                 .canonicalFile
         poiRegistry = PoiRegistry.load(yamlPath)
-        PoiRegistrySync(ctx).apply(poiRegistry)
 
-        // Mirror data/raw/osm-pf/<ts>.json under a tempdir so the orchestrator
-        // can find it via newestSingle().
-        rawDir = Files.createTempDirectory("etl-orch-").toFile()
-        val source = File(rawDir, "osm-pf")
+        // Mirror data/raw/osm-pf-raw/<ts>.json under a tempdir so the
+        // orchestrator can find it via the data_source slug.
+        rawDir = Files.createTempDirectory("etl-orch-raw-").toFile()
+        val source = File(rawDir, "osm-pf-raw")
         source.mkdirs()
         val src =
             File(
@@ -69,6 +67,8 @@ class EtlOrchestratorTest {
                     .toURI(),
             )
         src.copyTo(File(source, "2026-06-07T21-47-54Z.json"))
+
+        etlOutDir = Files.createTempDirectory("etl-orch-out-").toFile()
     }
 
     @AfterAll
@@ -76,12 +76,15 @@ class EtlOrchestratorTest {
         ds.close()
         pg.stop()
         rawDir.deleteRecursively()
+        etlOutDir.deleteRecursively()
     }
 
+    private fun newOrchestrator() = EtlOrchestrator(ctx, rawDir, etlOutDir, poiRegistry)
+
     @Test
-    fun `runSource(osm-pf) parses fixture and upserts rows into pois`() {
-        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
-        val stats = orch.runSource("osm-pf")
+    fun `runPoiData(Planet Fitness) parses fixture and upserts rows into pois`() {
+        val orch = newOrchestrator()
+        val stats = orch.runPoiData("Planet Fitness")
 
         assertEquals(5, stats.transformed, "fixture has 5 elements, all valid")
         assertEquals(5, stats.upsertResult.seenCount)
@@ -96,10 +99,10 @@ class EtlOrchestratorTest {
     }
 
     @Test
-    fun `re-running runSource is idempotent (same row count, no extras)`() {
-        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
-        orch.runSource("osm-pf") // first run populates
-        val stats2 = orch.runSource("osm-pf") // second run replays
+    fun `re-running runPoiData is idempotent (same row count, no extras)`() {
+        val orch = newOrchestrator()
+        orch.runPoiData("Planet Fitness")
+        val stats2 = orch.runPoiData("Planet Fitness")
 
         assertEquals(5, stats2.upsertResult.seenCount)
         assertEquals(0, stats2.upsertResult.sweptCount, "re-import sees same rows; sweep is no-op")
@@ -114,8 +117,8 @@ class EtlOrchestratorTest {
 
     @Test
     fun `upserted rows carry the right category and country`() {
-        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
-        orch.runSource("osm-pf")
+        val orch = newOrchestrator()
+        orch.runPoiData("Planet Fitness")
 
         val sample =
             ctx

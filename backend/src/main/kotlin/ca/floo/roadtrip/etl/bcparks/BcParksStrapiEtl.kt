@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.etl.bcparks
 
 import ca.floo.roadtrip.etl.Envelope
+import ca.floo.roadtrip.etl.InputBundle
 import ca.floo.roadtrip.etl.Poi
 import ca.floo.roadtrip.etl.SourceEtl
 import ca.floo.roadtrip.etl.TransformCtx
@@ -20,12 +21,13 @@ import java.time.Instant
 // Bucketed under campground/provincial (vs the older state-park
 // categorization) so BC Parks dots show up alongside Alberta Parks +
 // US federal/state campgrounds on the same FE legend layer.
-class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Campground> {
-    override val sourceName = "bcparks-strapi"
+class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
+    override val etlSlug = "bcparks-strapi"
     override val multiPart: Boolean = true
 
-    override fun parseMulti(envelopes: List<Envelope>): BcParksDto {
-        require(envelopes.isNotEmpty()) { "$sourceName: no pages" }
+    override fun parse(inputs: InputBundle): BcParksDto {
+        val envelopes = inputs.soleEnvelopes()
+        require(envelopes.isNotEmpty()) { "$etlSlug: no pages" }
         val rows = mutableListOf<BcParksRow>()
         for (env in envelopes) {
             val page = json.decodeFromJsonElement(BcParksPageDto.serializer(), env.payload)
@@ -44,7 +46,7 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Campground> {
         dto: BcParksDto,
         ctx: TransformCtx,
     ): List<Poi.Campground> {
-        val bucket = ctx.legendBucketFor(sourceName)
+        val bucket = ctx.subcategoryFor(etlSlug)
         return dto.rows.mapNotNull { transformRow(it, dto.fetchedAt, bucket) }
     }
 
@@ -64,7 +66,7 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Campground> {
         if (row.legalStatus != null && !row.legalStatus.equals("Active", ignoreCase = true)) return null
 
         return Poi.Campground(
-            source = sourceName,
+            source = etlSlug,
             sourceId = "orcs-$orcs",
             name = name,
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
@@ -87,7 +89,7 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Campground> {
             photoUrl = null,
             cellCoverage = null,
             ratingReviews = null,
-            legendBucket = bucket,
+            subcategory = bucket,
         )
     }
 
