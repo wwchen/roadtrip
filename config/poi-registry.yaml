@@ -2,13 +2,17 @@
 #
 # Two sections.
 # 1. data_sources — fetchers. Pure network acquisition. Output to data/raw/<slug>/.
-# 2. poi_data    — POI datasets. Each row carries `name`, `category`, optional
-#    `subcategory`, and an ordered `etls:` list. The LAST entry in `etls:` is
-#    the POI emitter (must output Poi.*); earlier entries are intermediates
-#    that serialize typed payloads to data/etl-out/<etl-slug>/. List order is
-#    dependency order — entry N may only reference data_source slugs OR
-#    earlier `etls:` siblings via `inputs:`. Cycles + forward references are
-#    rejected at boot.
+#    Always wired up; the IngestController will run a fetcher whenever it's
+#    asked to. Unreachable upstreams produce failed runs, not boot failures.
+# 2. poi_data    — POI datasets. Each row carries `name`, optional `enabled`
+#    (default true), `category`, optional `subcategory`, and an ordered
+#    `etls:` list. The LAST entry in `etls:` is the POI emitter (must output
+#    Poi.*); earlier entries are intermediates that serialize typed payloads
+#    to data/etl-out/<etl-slug>/. List order is dependency order — entry N
+#    may only reference data_source slugs OR earlier `etls:` siblings via
+#    `inputs:`. Cycles + forward references are rejected at boot.
+#    `enabled: false` skips the row in fan-out import; per-name imports still
+#    run it on request.
 #
 # Booking provider info is NOT in this file. ETLs that need it hard-code
 # their ProviderRef variant and resolve the booking_provider FK at transform
@@ -23,7 +27,6 @@ data_sources:
   # --- Aspira /api/maps (one fetcher, three tenants via args.host) -----------
   - slug: aspira-maps-wa
     name: Aspira maps (Washington State Parks)
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_aspira_maps.py
@@ -32,7 +35,6 @@ data_sources:
 
   - slug: aspira-maps-bc
     name: Aspira maps (BC Parks)
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_aspira_maps.py
@@ -41,7 +43,6 @@ data_sources:
 
   - slug: aspira-maps-pc
     name: Aspira maps (Parks Canada)
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_aspira_maps.py
@@ -51,7 +52,6 @@ data_sources:
   # --- Geometry-side feeds (joined into Aspira pins) -------------------------
   - slug: uscampgrounds
     name: uscampgrounds.info CSV
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_campgrounds.py
@@ -59,7 +59,6 @@ data_sources:
 
   - slug: bcparks-strapi
     name: BC Parks Strapi
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_bc_parks.py
@@ -67,7 +66,6 @@ data_sources:
 
   - slug: apca-accommodation
     name: Parks Canada Accommodation (ArcGIS)
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_arcgis_layer.py
@@ -78,7 +76,6 @@ data_sources:
 
   - slug: apca-places
     name: Parks Canada Places polygon centroids (ArcGIS)
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_arcgis_layer.py
@@ -90,7 +87,6 @@ data_sources:
   # --- Federal campgrounds (RIDB) --------------------------------------------
   - slug: nps-campgrounds-raw
     name: NPS campgrounds via RIDB
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov.py
@@ -100,7 +96,6 @@ data_sources:
   # --- Alberta provincial parks ----------------------------------------------
   - slug: reserveamerica-abpp-raw
     name: ReserveAmerica Alberta park HTML
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_reserveamerica.py
@@ -110,29 +105,27 @@ data_sources:
   # --- Planet Fitness --------------------------------------------------------
   - slug: osm-pf-raw
     name: Planet Fitness via OSM
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_planet_fitness.py
       output_dir_prefix: data/raw/osm-pf-raw
 
-  # --- Tesla superchargers (cookies stale; import from cache only) -----------
+  # --- Tesla superchargers ---------------------------------------------------
+  # Akamai blocks fetch; rely on the existing data/raw/ cache. Fan-out fetch
+  # will mark these targets failed; the poi_data row is enabled: false so
+  # fan-out import skips them.
   - slug: tesla-index-raw
     name: Tesla supercharger index
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_tesla_index.py
-      enabled: false   # Akamai blocks; rely on existing cache.
       output_dir_prefix: data/raw/tesla-index-raw
 
   - slug: tesla-locations-raw
     name: Tesla supercharger detail pages
-    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_tesla_locations.py
-      enabled: false
       output_dir_prefix: data/raw/tesla-locations-raw
     depends_on: [tesla-index-raw]
 
@@ -209,6 +202,10 @@ poi_data:
         inputs: [osm-pf-raw]
 
   - name: Tesla Superchargers
+    # Akamai blocks the fetch; fan-out import would just see stale data
+    # if the cache is missing. Trigger explicitly via per-name import
+    # when the cache is fresh.
+    enabled: false
     category: supercharger
     etls:
       - slug: tesla-superchargers
