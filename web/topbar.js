@@ -86,10 +86,20 @@ export function initTopbar(map, getPinSearchIndex) {
   bindPinClicks();
   renderRows();
 
-  // Expose the corridor polygon to app.js's bbox refresh so it can include
-  // it in the POST /api/pois body. Returns null when no route is active —
-  // app.js then sends a normal bbox-only request.
-  window.__rtTripCorridor = () => trip.corridor;
+  // Expose the active route (waypoints + radius) to app.js's bbox refresh
+  // so it can include it in the POST /api/pois body. The BE looks the
+  // polyline up server-side from RouteCache and buffers there — we do NOT
+  // send the buffered polygon back over the wire; that's a kilobytes-of-
+  // regurgitation per pan. Returns null when no route is active.
+  // The visual corridor (trip.corridor) is still computed client-side
+  // via turf.buffer for the on-map fill — different consumer, different shape.
+  window.__rtTripRoute = () => {
+    if (trip.mode !== 'directions' || !allStopsFilled()) return null;
+    return {
+      waypoints: trip.stops.map(s => ({ lat: s.lat, lng: s.lng })),
+      radius_miles: trip.corridorMiles,
+    };
+  };
 
   // app.js calls this on every bbox refresh with the latest campground feature
   // list. We dedupe + sort + render only when a route is active.

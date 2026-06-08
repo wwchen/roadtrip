@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.api
 
-import ca.floo.roadtrip.route.MapboxDirections
+import ca.floo.roadtrip.route.RouteCache
 import ca.floo.roadtrip.route.RoutingException
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.response.respondText
@@ -24,9 +24,9 @@ private const val MAX_WAYPOINTS = 25
  *   400 for malformed coords / wrong number of waypoints
  *   503 when MAPBOX_TOKEN unset or upstream fails
  */
-fun Route.routeRoutes(directions: MapboxDirections) {
+fun Route.routeRoutes(routeCache: RouteCache) {
     get("/api/route") {
-        if (!directions.configured) {
+        if (!routeCache.configured) {
             call.respondText(
                 """{"error":"routing_unavailable","detail":"MAPBOX_TOKEN not set"}""",
                 io.ktor.http.ContentType.Application.Json,
@@ -101,7 +101,7 @@ fun Route.routeRoutes(directions: MapboxDirections) {
 
         val response =
             try {
-                directions.directions(coords)
+                routeCache.directions(coords)
             } catch (e: RoutingException) {
                 call.respondText(
                     """{"error":"routing_unavailable","detail":"${escapeJson(e.message ?: "")}"}""",
