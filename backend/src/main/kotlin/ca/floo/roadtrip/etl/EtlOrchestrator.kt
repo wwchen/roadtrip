@@ -92,6 +92,9 @@ class EtlOrchestrator(
                 "bcparks-strapi" to
                     ca.floo.roadtrip.etl.bcparks
                         .BcParksStrapiEtl(),
+                "tesla-index" to
+                    ca.floo.roadtrip.etl.tesla
+                        .TeslaIndexEtl(),
             )
     }
 }
