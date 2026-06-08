@@ -87,20 +87,28 @@ data class ErrorNotFoundSchema(
 )
 
 // /api/pois request body — bbox is required (4 numbers, [w,s,e,n]),
-// zoom + categories + polygon optional. Polygon is a GeoJSON Polygon
-// whose outer ring has at least 4 points.
+// zoom + categories + route optional. When route is present, the BE
+// looks up the cached polyline (seeded by /api/route) and buffers it
+// server-side for the corridor predicate; the FE doesn't ship a
+// pre-buffered polygon over the wire.
 @Serializable
 data class PoisRequestSchema(
     val bbox: List<Double>,
     val zoom: Int? = null,
     val categories: List<String>? = null,
-    val polygon: GeoJsonPolygonSchema? = null,
+    val route: RouteSchema? = null,
 )
 
 @Serializable
-data class GeoJsonPolygonSchema(
-    val type: String,
-    val coordinates: List<List<List<Double>>>,
+data class RouteSchema(
+    val waypoints: List<WaypointSchema>,
+    val radius_miles: Double,
+)
+
+@Serializable
+data class WaypointSchema(
+    val lat: Double,
+    val lng: Double,
 )
 
 // Concrete examples surfaced in Swagger UI alongside the schema. Typed

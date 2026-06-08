@@ -6,6 +6,9 @@ import ca.floo.roadtrip.importer.Source
 import ca.floo.roadtrip.importer.StagedPoi
 import ca.floo.roadtrip.importer.migrate
 import ca.floo.roadtrip.importer.pointGeoJson
+import ca.floo.roadtrip.route.MapboxDirections
+import ca.floo.roadtrip.route.RouteCache
+import ca.floo.roadtrip.route.RouteResponse
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
@@ -88,7 +91,7 @@ class PoiRoutesTest {
                     row("outside-fl", "Miami Park", -80.0, 25.0, Category.CAMPGROUND),
                 ),
             )
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -121,7 +124,7 @@ class PoiRoutesTest {
                     row("vancouver", "Vancouver Park", -123.0, 49.0, Category.CAMPGROUND),
                 ),
             )
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -145,7 +148,7 @@ class PoiRoutesTest {
                     row("pf-1", "PF Vancouver", -123.1, 49.1, Category.PLANET_FITNESS),
                 ),
             )
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -182,7 +185,7 @@ class PoiRoutesTest {
                     )
                 }
             seed(rows)
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
 
             // No categories filter → defaults to all 5, each capped at POI_LIMIT/5 = 400.
             val resp =
@@ -209,7 +212,7 @@ class PoiRoutesTest {
     @Test
     fun `malformed body returns 400`() =
         testApplication {
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
 
             // Empty body
             assertEquals(
@@ -264,7 +267,7 @@ class PoiRoutesTest {
             // west=170, east=-170 (the bbox wraps the antimeridian). PostGIS
             // ST_MakeEnvelope can't express a wrapping envelope without splitting,
             // so we reject at the API layer instead of returning misleading rows.
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
             assertEquals(
                 HttpStatusCode.BadRequest,
                 client
@@ -278,31 +281,50 @@ class PoiRoutesTest {
     @Test
     fun `health route still serves`() =
         testApplication {
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
             assertEquals(HttpStatusCode.OK, client.get("/api/pois/health").status)
         }
 
     @Test
-    fun `polygon filter excludes points outside the corridor`() =
+    fun `route corridor filter excludes points outside the buffered polyline`() =
         testApplication {
-            // Three points: two inside a small polygon around Vancouver, one
-            // outside in eastern WA. With polygon set, only the two inside
-            // should come back.
+            // Three points: two near a Vancouver→Seattle line, one far east.
+            // Corridor = 30mi buffer around the line — the eastern point
+            // (Spokane-ish) should fall outside.
             seed(
                 listOf(
                     row("inside-1", "Inside A", -123.0, 49.05, Category.CAMPGROUND),
-                    row("inside-2", "Inside B", -123.05, 49.10, Category.CAMPGROUND),
+                    row("inside-2", "Inside B", -122.5, 48.0, Category.CAMPGROUND),
                     row("outside-1", "Outside East", -118.0, 47.0, Category.CAMPGROUND),
                 ),
             )
-            application { routing { poiRoutes(ctx) } }
 
-            // Polygon: small square around Vancouver, BC
-            val polygon = """{"type":"Polygon","coordinates":[[[-123.2,48.9],[-122.8,48.9],[-122.8,49.2],[-123.2,49.2],[-123.2,48.9]]]}"""
+            // Pre-seed RouteCache with a polyline running Vancouver → Seattle.
+            // The PoiRoutes handler reads this instead of calling Mapbox.
+            val routeCache = RouteCache(MapboxDirections(token = null))
+            val waypoints = listOf(-123.1 to 49.28, -122.33 to 47.61)
+            routeCache.put(
+                waypoints,
+                RouteResponse(
+                    coordinates =
+                        listOf(
+                            listOf(-123.1, 49.28),
+                            listOf(-122.7, 48.4),
+                            listOf(-122.33, 47.61),
+                        ),
+                    distanceMeters = 230_000.0,
+                    durationSeconds = 9_900.0,
+                    legs = emptyList(),
+                ),
+            )
+            application { routing { poiRoutes(ctx, routeCache) } }
+
+            val routeBody =
+                """{"waypoints":[{"lat":49.28,"lng":-123.1},{"lat":47.61,"lng":-122.33}],"radius_miles":30}"""
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-117,51", polygon = polygon))
+                    setBody(body("-125,47,-117,51", route = routeBody))
                 }
             assertEquals(HttpStatusCode.OK, resp.status)
             val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -315,35 +337,21 @@ class PoiRoutesTest {
                             .jsonPrimitive.content
                     }.toSet()
             assertEquals(setOf("Inside A", "Inside B"), names)
-            // Response should mark corridor:true so the FE can show different UI.
+            // corridor:true tells the FE the response was scoped to the route.
             assertEquals(true, parsed["corridor"]?.jsonPrimitive?.boolean)
         }
 
-    // Pathological self-intersecting polygons (e.g. turf.buffer of a route
-    // that doubles back) can still throw GEOS TopologyException even after
-    // ST_MakeValid. The handler in poiRoutes() catches that and falls back
-    // to bbox-only so the user never sees a 500. This is hard to reproduce
-    // deterministically across PostGIS versions (testcontainers' GEOS
-    // handles some bowties that production Docker rejects), so the
-    // fallback is verified by manual smoke against the live backend, not
-    // here. The polygon-too-large path below is the deterministic guard.
-
     @Test
-    fun `polygon with too many vertices returns 400`() =
+    fun `route with radius out of range returns 400`() =
         testApplication {
-            application { routing { poiRoutes(ctx) } }
-            // Build a polygon with 2001 vertices (one over the cap).
-            val ring = StringBuilder("[")
-            for (i in 0..2000) {
-                if (i > 0) ring.append(",")
-                ring.append("[${-123.0 + i * 0.0001},49.0]")
-            }
-            ring.append("]")
-            val polygon = """{"type":"Polygon","coordinates":[$ring]}"""
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
+            // 0.1mi is below MIN_RADIUS_MILES (1.0).
+            val routeBody =
+                """{"waypoints":[{"lat":49,"lng":-123},{"lat":48,"lng":-122}],"radius_miles":0.1}"""
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-117,51", polygon = polygon))
+                    setBody(body("-125,47,-117,51", route = routeBody))
                 }
             assertEquals(HttpStatusCode.BadRequest, resp.status)
         }
@@ -357,7 +365,7 @@ class PoiRoutesTest {
                     row("sp-1", "Park", -123.05, 49.05, Category.STATE_PARK),
                 ),
             )
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
 
             // Zoom 4 < CG_MIN_ZOOM=6 → campground category dropped server-side
             // even when explicitly requested.
@@ -393,7 +401,7 @@ class PoiRoutesTest {
                     }
                 }
             seed(rows)
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -436,7 +444,7 @@ class PoiRoutesTest {
                     ),
                 ),
             )
-            application { routing { poiRoutes(ctx) } }
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null))) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -453,7 +461,8 @@ class PoiRoutesTest {
         bbox: String, // "west,south,east,north"
         categories: List<String>? = null,
         zoom: Int? = null,
-        polygon: String? = null, // raw GeoJSON Polygon string
+        // route: raw JSON string for the {waypoints, radius_miles} object.
+        route: String? = null,
     ): String {
         val parts = bbox.split(",")
         val sb = StringBuilder()
@@ -467,7 +476,7 @@ class PoiRoutesTest {
             }
             sb.append("]")
         }
-        if (polygon != null) sb.append(""","polygon":$polygon""")
+        if (route != null) sb.append(""","route":$route""")
         sb.append("}")
         return sb.toString()
     }

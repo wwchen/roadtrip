@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.api
 
+import ca.floo.roadtrip.route.RouteCache
+import ca.floo.roadtrip.route.RoutingException
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
@@ -29,35 +31,47 @@ const val POI_LIMIT: Int = 2000
 // zoom and they crowd out the per-category limit budget.
 private const val CG_MIN_ZOOM: Int = 6
 
-// Polygon body cap. A 4-waypoint cross-country corridor at 30mi after
-// turf.simplify is ~500 vertices. 2000 is a generous ceiling that still
-// keeps the request body well under common reverse-proxy limits.
-private const val MAX_POLYGON_VERTICES: Int = 2000
+// Mapbox cap. We mirror it client-side so a request that would 400 at
+// /api/route 400s here too without hitting Mapbox.
+private const val MAX_WAYPOINTS = 25
+
+// Clamp on radius. Below ~5mi the corridor is too narrow to be useful;
+// above ~100mi it's basically a bbox already and PostGIS spends its time
+// in the spatial predicate instead of the index.
+private const val MIN_RADIUS_MILES = 1.0
+private const val MAX_RADIUS_MILES = 100.0
+private const val MILES_TO_METERS = 1609.34
 
 // POST /api/pois
 //
-// Returns a GeoJSON FeatureCollection of POIs in the requested bbox (and
-// inside the optional corridor polygon). One round-trip per pan — the FE
-// debounces moveend by 250ms.
+// Returns a GeoJSON FeatureCollection of POIs in the requested bbox (and,
+// when a route is supplied, inside the corridor around it). One round-trip
+// per pan — the FE debounces moveend by 250ms.
 //
-// Categories default to {campground, state-park, national-park,
-// planet-fitness, supercharger}. Each requested category gets its own
-// budget out of POI_LIMIT so dense datasets (Planet Fitness ~1.5k rows)
-// can't starve sparser ones; truncated:true tells the client to ask the
-// user to zoom in.
+// Categories are picked by the FE; default (when omitted) is the full set
+// {campground, state-park, national-park, planet-fitness, supercharger}.
+// Each requested category gets its own slot budget out of POI_LIMIT so a
+// dense layer (Planet Fitness ~1.5k rows) can't starve sparser ones;
+// truncated:true tells the client to ask the user to zoom in further.
 //
-// Why POST: a long-corridor polygon (turf.buffer of a multi-waypoint
-// route) is too big for a query string. POST removes URL length as a
-// constraint; the moveend debounce makes the loss of HTTP caching
-// negligible.
-fun Route.poiRoutes(ctx: DSLContext) {
+// Corridor filtering: the FE passes `route: { waypoints, radius_miles }`,
+// not a pre-buffered polygon. The polyline already lives in RouteCache
+// (seeded by /api/route a moment earlier), so the BE buffers it on the
+// fly via PostGIS ST_Buffer((line)::geography, meters)::geometry. Saves
+// the FE from shipping several KB of buffered polygon over the wire on
+// every pan.
+fun Route.poiRoutes(
+    ctx: DSLContext,
+    routeCache: RouteCache,
+) {
     post("/api/pois", {
         tags = listOf("poi")
         summary = "POIs within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"
         description =
-            "Body: { bbox: [w,s,e,n], zoom?, categories?, polygon? }. " +
+            "Body: { bbox: [w,s,e,n], zoom?, categories?, route? }. " +
             "categories defaults to {campground, state-park, national-park, planet-fitness, supercharger}. " +
-            "polygon (GeoJSON Polygon) filters to POIs inside the corridor. " +
+            "When route is present (waypoints + radius_miles), the BE looks up the cached polyline " +
+            "from /api/route and buffers server-side, narrowing results to the corridor. " +
             "zoom < $CG_MIN_ZOOM suppresses campgrounds even when requested."
         request {
             body<PoisRequestSchema> {
@@ -74,27 +88,23 @@ fun Route.poiRoutes(ctx: DSLContext) {
                         PoisRequestSchema(
                             bbox = listOf(-122.6, 37.4, -121.6, 38.0),
                             zoom = 10,
-                            categories = listOf("state-park", "national-park"),
+                            categories = listOf("planet-fitness", "supercharger"),
                         )
                 }
-                example("with corridor polygon") {
+                example("with corridor (3-stop route, 30mi radius)") {
                     value =
                         PoisRequestSchema(
-                            bbox = listOf(-122.6, 37.4, -121.6, 38.0),
-                            zoom = 10,
-                            polygon =
-                                GeoJsonPolygonSchema(
-                                    type = "Polygon",
-                                    coordinates =
+                            bbox = listOf(-117.0, 32.5, -111.0, 35.0),
+                            zoom = 7,
+                            route =
+                                RouteSchema(
+                                    waypoints =
                                         listOf(
-                                            listOf(
-                                                listOf(-122.6, 37.4),
-                                                listOf(-121.6, 37.4),
-                                                listOf(-121.6, 38.0),
-                                                listOf(-122.6, 38.0),
-                                                listOf(-122.6, 37.4),
-                                            ),
+                                            WaypointSchema(lat = 33.96, lng = -117.39),
+                                            WaypointSchema(lat = 33.45, lng = -112.07),
+                                            WaypointSchema(lat = 32.22, lng = -110.92),
                                         ),
+                                    radius_miles = 30.0,
                                 ),
                         )
                 }
@@ -104,11 +114,11 @@ fun Route.poiRoutes(ctx: DSLContext) {
             code(io.ktor.http.HttpStatusCode.OK) {
                 description =
                     "GeoJSON FeatureCollection. truncated:true when the bbox span exceeded the cap. " +
-                    "corridor:true when the request supplied a polygon."
+                    "corridor:true when a route was supplied."
                 body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
             }
             code(io.ktor.http.HttpStatusCode.BadRequest) {
-                description = "Malformed body, missing bbox, or polygon too large."
+                description = "Malformed body, missing bbox, or invalid waypoints/radius."
                 body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
             }
         }
@@ -134,11 +144,31 @@ fun Route.poiRoutes(ctx: DSLContext) {
                 rawCategories
             }
 
-        // Polygon corridors from turf.buffer can rarely produce a self-
+        // Resolve the route to a LineString GeoJSON we can hand to
+        // ST_GeomFromGeoJSON. RouteCache hits Mapbox only on miss; the
+        // FE almost always primes the cache with a /api/route call right
+        // before this. If the cache lookup fails (Mapbox unreachable,
+        // bad waypoints), drop the corridor and serve bbox-only — better
+        // to show too many POIs than to 5xx the whole pan.
+        val (corridorLineGeoJson, corridorRadiusMeters) =
+            if (req.route != null) {
+                try {
+                    val pairs = req.route.waypoints.map { it.lng to it.lat }
+                    val polyline = routeCache.directions(pairs).coordinates
+                    lineStringGeoJson(polyline) to (req.route.radiusMiles * MILES_TO_METERS)
+                } catch (e: RoutingException) {
+                    log.warn("route lookup failed, falling back to bbox-only: {}", e.message)
+                    null to 0.0
+                }
+            } else {
+                null to 0.0
+            }
+        val corridorActive = corridorLineGeoJson != null
+
+        // Polygon corridors via ST_Buffer can rarely produce a self-
         // intersection pathology that PostGIS GEOS rejects with
-        // TopologyException even after ST_MakeValid. Catch that, log it,
-        // and degrade to bbox-only — the user sees more POIs than ideal,
-        // but never a 500. Other failures bubble up.
+        // TopologyException. Catch that, log it, and degrade to bbox-only —
+        // the user sees more POIs than ideal, but never a 500.
         val rows =
             if (categories?.isEmpty() == true) {
                 emptyList()
@@ -148,18 +178,20 @@ fun Route.poiRoutes(ctx: DSLContext) {
                         ctx = ctx,
                         bbox = req.bbox,
                         categories = categories,
-                        polygonGeoJson = req.polygonGeoJson,
+                        corridorLineGeoJson = corridorLineGeoJson,
+                        corridorRadiusMeters = corridorRadiusMeters,
                         limit = POI_LIMIT + 1,
                     )
                 } catch (e: org.jooq.exception.DataAccessException) {
                     val cause = e.cause?.message.orEmpty()
-                    if (req.polygonGeoJson != null && cause.contains("TopologyException")) {
-                        log.warn("polygon GEOS topology fault, falling back to bbox-only: {}", cause)
+                    if (corridorLineGeoJson != null && cause.contains("TopologyException")) {
+                        log.warn("corridor GEOS topology fault, falling back to bbox-only: {}", cause)
                         fetchPois(
                             ctx = ctx,
                             bbox = req.bbox,
                             categories = categories,
-                            polygonGeoJson = null,
+                            corridorLineGeoJson = null,
+                            corridorRadiusMeters = 0.0,
                             limit = POI_LIMIT + 1,
                         )
                     } else {
@@ -171,7 +203,7 @@ fun Route.poiRoutes(ctx: DSLContext) {
         val effective = if (truncated) rows.take(POI_LIMIT) else rows
 
         call.respondText(
-            buildFeatureCollection(effective, truncated, req.polygonGeoJson != null),
+            buildFeatureCollection(effective, truncated, corridorActive),
             io.ktor.http.ContentType.Application.Json,
         )
     }
@@ -185,7 +217,17 @@ private data class PoiRequest(
     val bbox: Bbox,
     val zoom: Int?,
     val categories: List<String>?,
-    val polygonGeoJson: String?, // raw GeoJSON Polygon serialized to text
+    val route: RouteRequest?,
+)
+
+private data class RouteRequest(
+    val waypoints: List<Waypoint>,
+    val radiusMiles: Double,
+)
+
+private data class Waypoint(
+    val lat: Double,
+    val lng: Double,
 )
 
 private fun parseRequest(bodyText: String): PoiRequest {
@@ -211,23 +253,31 @@ private fun parseRequest(bodyText: String): PoiRequest {
                     ?.takeIf { c -> c.isNotEmpty() }
             }?.takeIf { it.isNotEmpty() }
 
-    val polygonGeoJson =
-        root["polygon"]?.jsonObject?.let { obj ->
-            val type = obj["type"]?.jsonPrimitive?.contentOrNull
-            require(type == "Polygon") { "polygon.type must be 'Polygon', got '$type'" }
-            val ringsArr = obj["coordinates"]?.jsonArray ?: error("polygon.coordinates required")
-            require(ringsArr.isNotEmpty()) { "polygon must have at least one ring" }
-            val outerRing = ringsArr[0].jsonArray
-            require(outerRing.size >= 4) { "polygon outer ring must have >= 4 points" }
-            val totalVerts = ringsArr.sumOf { it.jsonArray.size }
-            require(totalVerts <= MAX_POLYGON_VERTICES) {
-                "polygon too large: $totalVerts vertices (max $MAX_POLYGON_VERTICES). Simplify on the client."
+    val route =
+        root["route"]?.jsonObject?.let { obj ->
+            val wpsArr = obj["waypoints"]?.jsonArray ?: error("route.waypoints required")
+            require(wpsArr.size in 2..MAX_WAYPOINTS) {
+                "route.waypoints must have 2..$MAX_WAYPOINTS entries (got ${wpsArr.size})"
             }
-            // Serialize the polygon back to a stable JSON string for ST_GeomFromGeoJSON.
-            obj.toString()
+            val waypoints =
+                wpsArr.mapIndexed { i, el ->
+                    val o = el.jsonObject
+                    val lat = o["lat"]?.jsonPrimitive?.doubleOrNull ?: error("waypoint[$i].lat is missing or not a number")
+                    val lng = o["lng"]?.jsonPrimitive?.doubleOrNull ?: error("waypoint[$i].lng is missing or not a number")
+                    require(lat in -90.0..90.0) { "waypoint[$i].lat out of range" }
+                    require(lng in -180.0..180.0) { "waypoint[$i].lng out of range" }
+                    Waypoint(lat = lat, lng = lng)
+                }
+            val radius =
+                obj["radius_miles"]?.jsonPrimitive?.doubleOrNull
+                    ?: error("route.radius_miles is missing or not a number")
+            require(radius in MIN_RADIUS_MILES..MAX_RADIUS_MILES) {
+                "route.radius_miles must be in [$MIN_RADIUS_MILES, $MAX_RADIUS_MILES] (got $radius)"
+            }
+            RouteRequest(waypoints = waypoints, radiusMiles = radius)
         }
 
-    return PoiRequest(bbox, zoom, categories, polygonGeoJson)
+    return PoiRequest(bbox, zoom, categories, route)
 }
 
 data class Bbox(
@@ -265,7 +315,8 @@ internal fun fetchPois(
     ctx: DSLContext,
     bbox: Bbox,
     categories: List<String>?,
-    polygonGeoJson: String? = null,
+    corridorLineGeoJson: String? = null,
+    corridorRadiusMeters: Double = 0.0,
     limit: Int,
 ): List<PoiRow> {
     // Per-category limit: each requested category gets its own slot budget,
@@ -302,27 +353,22 @@ internal fun fetchPois(
                       AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
                     """.trimIndent(),
                 )
-                if (polygonGeoJson != null) {
-                    // ST_Intersects(geom, polygon). Polygon is built once per
-                    // subquery from the GeoJSON text.
+                if (corridorLineGeoJson != null) {
+                    // Cast to geography so ST_Buffer takes meters (Web
+                    // Mercator buffering distorts hugely at high latitudes;
+                    // geography path is correct everywhere). Cast back to
+                    // geometry for the index-friendly ST_Intersects.
                     //
-                    // The polygon goes through ST_MakeValid + ST_CollectionExtract
-                    // because turf.buffer on a route that doubles back can
-                    // produce self-intersecting rings. GEOS rejects those
-                    // with TopologyException. ST_MakeValid cleans the
-                    // intersections (may return a GeometryCollection with
-                    // sliver lines/points) and ST_CollectionExtract(_, 3)
-                    // keeps only the polygonal parts so the spatial predicate
-                    // can evaluate cleanly.
-                    //
-                    // ST_Intersects (vs ST_Within) is the right operator here:
-                    // both return the same result for points (a point is
-                    // either inside or outside the corridor), but ST_Intersects
-                    // is more permissive about the shape of the polygon arg
-                    // (handles MultiPolygon naturally) and uses the GIST
-                    // index the same way.
+                    // ST_MakeValid + ST_CollectionExtract guard against the
+                    // self-intersection pathology that buffering a route
+                    // doubling back can produce. CollectionExtract(_, 3)
+                    // keeps only polygonal parts so the predicate evaluates
+                    // cleanly even when ST_MakeValid emits a GeometryCollection.
                     append(
-                        "\n      AND ST_Intersects(geom, ST_CollectionExtract(ST_MakeValid(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)), 3))",
+                        "\n      AND ST_Intersects(geom, " +
+                            "ST_CollectionExtract(ST_MakeValid(" +
+                            "ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)::geography, ?)::geometry" +
+                            "), 3))",
                     )
                 }
                 append("\n    LIMIT ?")
@@ -337,8 +383,9 @@ internal fun fetchPois(
         args.add(bbox.south)
         args.add(bbox.east)
         args.add(bbox.north)
-        if (polygonGeoJson != null) {
-            args.add(polygonGeoJson)
+        if (corridorLineGeoJson != null) {
+            args.add(corridorLineGeoJson)
+            args.add(corridorRadiusMeters)
         }
         args.add(perCategoryLimit)
     }
@@ -391,6 +438,20 @@ internal fun buildFeatureCollection(
     sb.append("]}")
     return sb.toString()
 }
+
+private fun lineStringGeoJson(coords: List<List<Double>>): String =
+    buildString {
+        append("""{"type":"LineString","coordinates":[""")
+        for ((i, c) in coords.withIndex()) {
+            if (i > 0) append(',')
+            append('[')
+                .append(c[0])
+                .append(',')
+                .append(c[1])
+                .append(']')
+        }
+        append("]}")
+    }
 
 private fun jsonString(s: String): String {
     val sb = StringBuilder(s.length + 2)

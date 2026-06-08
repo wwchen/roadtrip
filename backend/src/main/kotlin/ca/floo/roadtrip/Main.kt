@@ -72,6 +72,12 @@ fun Application.module() {
     val mapboxToken = System.getenv("MAPBOX_TOKEN")
     val mapboxDirections = MapboxDirections(token = mapboxToken)
     val mapboxGeocoder = MapboxGeocoder(token = mapboxToken)
+    // /api/route seeds the cache; /api/pois reads it for corridor filtering
+    // so the FE doesn't have to ship a turf.buffer polygon over the wire on
+    // every pan. See RouteCache.kt.
+    val routeCache =
+        ca.floo.roadtrip.route
+            .RouteCache(mapboxDirections)
 
     // POI registry (RFC 0007 PR 3.5) — config/poi-registry.yaml is the
     // source of truth for governing_body + booking_provider rows. Boot
@@ -190,8 +196,8 @@ fun Application.module() {
             openApiSpec()
         }
 
-        poiRoutes(ctx)
-        routeRoutes(mapboxDirections)
+        poiRoutes(ctx, routeCache)
+        routeRoutes(routeCache)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes(rawDataDir)
         aspiraAvailabilityRoutes(aspiraCache)

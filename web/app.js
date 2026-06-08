@@ -265,17 +265,18 @@ async function load() {
     const cats = ['planet-fitness', 'supercharger'];
     if (wantCG) cats.push('campground');
 
-    // When a trip route is active, topbar exposes a corridor polygon via
-    // window.__rtTripCorridor (a GeoJSON Polygon object). Including it
-    // narrows /api/pois to POIs inside the corridor.
-    const polygon = (typeof window.__rtTripCorridor === 'function')
-      ? window.__rtTripCorridor()
+    // When a trip route is active, topbar exposes its waypoints + radius
+    // via window.__rtTripRoute. The BE looks the polyline up from
+    // RouteCache (seeded by /api/route) and buffers server-side — we do
+    // NOT ship the turf.buffer polygon, which would be kilobytes per pan.
+    const route = (typeof window.__rtTripRoute === 'function')
+      ? window.__rtTripRoute()
       : null;
 
     if (inflight) inflight.abort();
     inflight = new AbortController();
     const poisBody = { bbox: [west, south, east, north], zoom, categories: cats };
-    if (polygon) poisBody.polygon = polygon;
+    if (route) poisBody.route = route;
 
     let fc;
     try {
