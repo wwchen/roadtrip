@@ -9,6 +9,10 @@ import ca.floo.roadtrip.etl.TransformCtx
 import ca.floo.roadtrip.etl.ValidationResult
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import java.time.Instant
 
 // RIDB facilities feed → Poi.Campground.
@@ -31,12 +35,27 @@ class RecGovCampgroundsEtl(
 
     override fun parseMulti(envelopes: List<Envelope>): RecGovDto {
         require(envelopes.isNotEmpty()) { "$sourceName: no pages" }
-        val rows = mutableListOf<Facility>()
+        // Two passes per envelope: typed parse for the hot fields
+        // (FacilityID, lat/lng, name) and raw JsonObject for the full
+        // payload — we hand the latter to Poi.Campground.extras so the
+        // drawer sees every field RIDB ships, even ones the ETL didn't
+        // explicitly promote.
+        val typed = mutableListOf<Facility>()
+        val rawById = mutableMapOf<Long, JsonObject>()
         for (env in envelopes) {
             val page = json.decodeFromJsonElement(RidbPageDto.serializer(), env.payload)
-            rows += page.RECDATA
+            typed += page.RECDATA
+            val rawArr = env.payload.jsonObject["RECDATA"]?.jsonArray ?: continue
+            for (entry in rawArr) {
+                val obj = entry.jsonObject
+                val id =
+                    obj["FacilityID"]?.let { v ->
+                        kotlin.runCatching { v.toString().trim('"').toLong() }.getOrNull()
+                    } ?: continue
+                rawById[id] = obj
+            }
         }
-        return RecGovDto(rows = rows, fetchedAt = parseFetchedAt(envelopes.first()))
+        return RecGovDto(rows = typed, rawById = rawById, fetchedAt = parseFetchedAt(envelopes.first()))
     }
 
     override fun validate(dto: RecGovDto): ValidationResult<RecGovDto> {
@@ -50,11 +69,12 @@ class RecGovCampgroundsEtl(
         ctx: TransformCtx,
     ): List<Poi.Campground> {
         val bucket = ctx.legendBucketFor(sourceName)
-        return dto.rows.mapNotNull { transformRow(it, dto.fetchedAt, bucket) }
+        return dto.rows.mapNotNull { transformRow(it, dto.rawById[it.FacilityID], dto.fetchedAt, bucket) }
     }
 
     private fun transformRow(
         row: Facility,
+        raw: JsonElement?,
         fetchedAt: Instant,
         bucket: String?,
     ): Poi.Campground? {
@@ -103,6 +123,7 @@ class RecGovCampgroundsEtl(
             cellCoverage = null,
             ratingReviews = null,
             legendBucket = bucket,
+            extras = raw,
         )
     }
 
@@ -153,5 +174,6 @@ data class FacilityAddress(
 
 data class RecGovDto(
     val rows: List<Facility>,
+    val rawById: Map<Long, JsonObject>,
     val fetchedAt: Instant,
 )
