@@ -88,6 +88,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
             stallCount = detail?.publicStallCount ?: 0,
             maxPowerKw = detail?.maxPowerKw ?: 0,
             facility = detail?.accessType?.takeIf { it.isNotBlank() },
+            pricebooks = detail?.effectivePricebooks ?: emptyList(),
         )
     }
 
@@ -198,6 +199,10 @@ data class TeslaLocationDetail(
     val maxPowerKw: Int? = null,
     val accessType: String? = null,
     val openToNonTeslas: Boolean? = null,
+    // Pricebook entries Tesla returns alongside the location detail. Held
+    // as raw JsonElements; the FE knows the shape and renders only the
+    // entries it cares about (Tesla CHARGING, first CONGESTION row).
+    val effectivePricebooks: List<kotlinx.serialization.json.JsonElement> = emptyList(),
 )
 
 @Serializable

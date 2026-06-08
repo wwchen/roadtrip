@@ -1,28 +1,6 @@
 import { state, distanceKm, formatDistance, escapeHtml, callButtonsHTML } from './core.js';
 import { openCampgroundDrawer, openDrawer } from './drawer.js';
 
-async function loadPricing(slug, elId, signal) {
-  const el = document.getElementById(elId);
-  if (!el) return;
-  try {
-    const r = await fetch('/api/pricing/' + encodeURIComponent(slug), { signal });
-    const j = await r.json();
-    if (!r.ok) {
-      // 404 means the refresh worker hasn't crawled this site yet. Pricing
-      // is no longer fetched live — see scripts/fetch_tesla_superchargers.py.
-      const msg = r.status === 404
-        ? 'Pricing not yet cached.'
-        : `Pricing unavailable (HTTP ${r.status}).`;
-      el.innerHTML = `<div class="meta">${msg}</div>`;
-      return;
-    }
-    el.innerHTML = renderPricing(j);
-  } catch (err) {
-    if (err.name === 'AbortError') return;
-    el.innerHTML = `<div class="meta">Pricing fetch failed: ${err.message}</div>`;
-  }
-}
-
 /** Compose subline from arbitrary parts: "Loop · State · 2.4 km away". */
 function buildSubline(parts) {
   return parts.filter(Boolean).join(' · ');
@@ -45,11 +23,8 @@ function drawerHeader(name, sub, verdictHtml = '') {
     </header>`;
 }
 
-function renderPricing(resp) {
-  const d = resp?.data?.data;
-  if (!d) return '<div class="meta">No data.</div>';
-  const books = d.effectivePricebooks || [];
-  if (!books.length) return '<div class="meta">No pricing on file.</div>';
+function renderPricing(books) {
+  if (!books || !books.length) return '<div class="meta">No pricing on file.</div>';
 
   const tslaCharging = books.filter(b => b.feeType === 'CHARGING' && b.vehicleMakeType === 'TSLA');
   const congestion = books.filter(b => b.feeType === 'CONGESTION');
@@ -60,9 +35,7 @@ function renderPricing(resp) {
     const c = congestion[0];
     rows.push(`<div class="rate-row"><span class="rate-label">Idle/congestion</span><span class="rate-val">${formatRate(c)}</span></div>`);
   }
-  const cache = resp._cache;
-  const cacheNote = cache ? `<div class="meta" style="margin-top:4px; font-size:10px;">${cache.hit ? 'cached ' + formatAge(cache.age_seconds) + ' ago' : 'just fetched'}</div>` : '';
-  return '<div class="rates">' + rows.join('') + '</div>' + cacheNote;
+  return '<div class="rates">' + rows.join('') + '</div>';
 }
 
 // Most currencies render fine with Intl.NumberFormat's default symbol. For
@@ -87,13 +60,6 @@ function renderRateGroup(label, books) {
     lines.push(`<div class="rate-row rate-tou"><span class="rate-label">&nbsp;&nbsp;${win}</span><span class="rate-val">${formatRate(b)}</span></div>`);
   }
   return lines.join('');
-}
-
-function formatAge(s) {
-  if (s < 60) return s + 's';
-  if (s < 3600) return Math.round(s/60) + 'm';
-  if (s < 86400) return Math.round(s/3600) + 'h';
-  return Math.round(s/86400) + 'd';
 }
 
 // Campground click → drawer (RFC 0003). Drawer renders availability for
@@ -168,7 +134,6 @@ export function openSuperchargerPopup(f) {
   const sub = buildSubline([addr, distanceTo(lng, lat)]);
   const stalls = [p.v2 && `V2×${p.v2}`, p.v3 && `V3×${p.v3}`, p.v4 && `V4×${p.v4}`].filter(Boolean).join(' · ');
   const plugs = [p.nacs && `NACS×${p.nacs}`, p.tpc && `TPC×${p.tpc}`].filter(Boolean).join(' · ');
-  const priceId = 'price-' + p.id;
   // tesla.com/findus deeplink. The `bounds` param (north,east,south,west)
   // is what makes findus actually zoom in on the site — without it the map
   // opens at a default zoom and the user has to hunt. We mirror the bbox
@@ -189,19 +154,20 @@ export function openSuperchargerPopup(f) {
     p.stallCount ? `<span class="tag">${p.stallCount} stalls</span>` : '',
     p.powerKilowatt ? `<span class="tag">${p.powerKilowatt} kW</span>` : '',
   ].filter(Boolean).join(' ');
-  openDrawer(
-    `
-      ${drawerHeader(p.name || '', sub)}
-      ${p.facility ? `<div class="cg-sub">at ${escapeHtml(p.facility)}</div>` : ''}
-      <div class="cg-actions">${primaryBtn}</div>
-      <div style="margin-top:6px">${tags}</div>
-      ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
-      ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}
-      ${p.dateOpened ? `<div class="footer">Opened ${escapeHtml(p.dateOpened)}</div>` : ''}
-      <div id="${priceId}" class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
-        ${p.locationId ? '<span class="meta">Loading pricing…</span>' : '<span class="meta">No pricing available</span>'}
-      </div>
-    `,
-    p.locationId ? (signal) => loadPricing(p.locationId, priceId, signal) : undefined,
-  );
+  // Pricing now arrives inline on the feature properties (RFC 0007 — same
+  // tesla-locations capture that gives us name/stalls/kW). No second
+  // round-trip; render synchronously.
+  const pricingHtml = renderPricing(p.pricebooks);
+  openDrawer(`
+    ${drawerHeader(p.name || '', sub)}
+    ${p.facility ? `<div class="cg-sub">at ${escapeHtml(p.facility)}</div>` : ''}
+    <div class="cg-actions">${primaryBtn}</div>
+    <div style="margin-top:6px">${tags}</div>
+    ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
+    ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}
+    ${p.dateOpened ? `<div class="footer">Opened ${escapeHtml(p.dateOpened)}</div>` : ''}
+    <div class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
+      ${pricingHtml}
+    </div>
+  `);
 }

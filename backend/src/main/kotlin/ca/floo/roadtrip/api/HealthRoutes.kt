@@ -9,32 +9,34 @@ import java.io.File
 import java.time.Instant
 
 // One-shot status JSON. Useful from the phone on the trip to confirm the
-// pricing cache is warm and the backend can see Postgres. We deliberately do
-// NOT call Tesla here — the cache is populated by a separate refresh worker.
-fun Route.healthRoutes(cacheDir: File) {
+// supercharger detail cache is warm. Counts tesla-locations directories
+// — the per-slug capture cache that feeds the supercharger row's name,
+// stalls, kW, and pricing.
+fun Route.healthRoutes(rawDir: File) {
     get("/api/health", {
         tags = listOf("health")
-        summary = "Liveness probe + pricing-cache size; never calls Tesla"
+        summary = "Liveness probe + supercharger detail cache size"
         response {
             code(io.ktor.http.HttpStatusCode.OK) {
                 body<String> {
                     mediaTypes(ContentType.Application.Json)
                     example("ok") {
-                        value = """{"status":"ok","pricing_cache_count":1365,"now":1717683240}"""
+                        value = """{"status":"ok","tesla_locations_count":1365,"now":1717683240}"""
                     }
                 }
             }
         }
     }) {
-        val cacheCount =
-            if (cacheDir.isDirectory) {
-                cacheDir.listFiles { _, n -> n.endsWith(".json") }?.size ?: 0
+        val locDir = File(rawDir, "tesla-locations")
+        val count =
+            if (locDir.isDirectory) {
+                locDir.listFiles { f -> f.isDirectory }?.size ?: 0
             } else {
                 0
             }
         val now = Instant.now().epochSecond
         call.respondText(
-            """{"status":"ok","pricing_cache_count":$cacheCount,"now":$now}""",
+            """{"status":"ok","tesla_locations_count":$count,"now":$now}""",
             ContentType.Application.Json,
         )
     }
