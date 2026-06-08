@@ -229,6 +229,66 @@ fun Route.poiRoutes(
     get("/api/pois/health") {
         call.respondText("""{"status":"ok"}""", io.ktor.http.ContentType.Application.Json)
     }
+
+    // GET /api/pois/search?q=...&limit=10
+    //
+    // Text-search across the full pois table by name. Used by the topbar
+    // dropdown so a user can find a POI like "upper pines" without having
+    // panned to Yosemite first — the bbox endpoint only sees the current
+    // viewport, so a cross-country query needs a separate path.
+    //
+    // Ranking: prefix match wins, then substring position, then name length.
+    // Cheap to compute on a 12k-row table; if pois grows we'll swap to
+    // pg_trgm + GIN index, but ILIKE is fine for now.
+    get("/api/pois/search") {
+        val q =
+            call.request.queryParameters["q"]
+                ?.trim()
+                .orEmpty()
+        if (q.length < 2) {
+            call.respondText(
+                """{"results":[]}""",
+                io.ktor.http.ContentType.Application.Json,
+            )
+            return@get
+        }
+        val limit =
+            call.request.queryParameters["limit"]
+                ?.toIntOrNull()
+                ?.coerceIn(1, 25)
+                ?: 10
+        val pattern = "%${q.replace("%", "\\%").replace("_", "\\_")}%"
+        val prefix = "${q.replace("%", "\\%").replace("_", "\\_")}%"
+        val rows =
+            ctx.fetch(
+                """
+                SELECT id, name, category, region,
+                       ST_X(geom) AS lng, ST_Y(geom) AS lat
+                FROM pois
+                WHERE deleted_at IS NULL
+                  AND name ILIKE ?
+                ORDER BY (name ILIKE ?) DESC, length(name) ASC, name ASC
+                LIMIT ?
+                """.trimIndent(),
+                pattern,
+                prefix,
+                limit,
+            )
+        val sb = StringBuilder().append("""{"results":[""")
+        for ((i, r) in rows.withIndex()) {
+            if (i > 0) sb.append(',')
+            sb.append("""{"id":""").append((r.get("id") as Number).toLong())
+            sb.append(""","name":""").append(jsonString(r.get("name") as String))
+            sb.append(""","category":""").append(jsonString(r.get("category") as String))
+            val region = r.get("region") as String?
+            if (region != null) sb.append(""","region":""").append(jsonString(region))
+            sb.append(""","lng":""").append((r.get("lng") as Number).toDouble())
+            sb.append(""","lat":""").append((r.get("lat") as Number).toDouble())
+            sb.append('}')
+        }
+        sb.append("]}")
+        call.respondText(sb.toString(), io.ktor.http.ContentType.Application.Json)
+    }
 }
 
 private data class PoiRequest(
