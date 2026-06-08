@@ -13,51 +13,63 @@
 #   rows reference them by (vendor, host)
 
 governing_bodies:
-  # ----- US federal -----
+  # ----- US federal — all route through Recreation.gov -----
+  # Operating-agency → booking-system facts that don't change. The drawer-
+  # payload assembler reads these to compose CTAs ("Reserve on rec.gov")
+  # without per-vendor branches.
   - slug: nps
     name: National Park Service
     kind: federal
     country: US
+    booking_provider: { vendor: recgov, host: www.recreation.gov }
 
   - slug: usfs
     name: US Forest Service
     kind: federal
     country: US
+    booking_provider: { vendor: recgov, host: www.recreation.gov }
 
   - slug: blm
     name: Bureau of Land Management
     kind: federal
     country: US
+    booking_provider: { vendor: recgov, host: www.recreation.gov }
 
   - slug: coe
     name: US Army Corps of Engineers
     kind: federal
     country: US
+    booking_provider: { vendor: recgov, host: www.recreation.gov }
 
   - slug: usfw
     name: US Fish & Wildlife
     kind: federal
     country: US
+    booking_provider: { vendor: recgov, host: www.recreation.gov }
 
   - slug: bor
     name: Bureau of Reclamation
     kind: federal
     country: US
+    booking_provider: { vendor: recgov, host: www.recreation.gov }
 
   - slug: tva
     name: Tennessee Valley Authority
     kind: federal
     country: US
+    booking_provider: { vendor: recgov, host: www.recreation.gov }
 
   - slug: nm
     name: National Monument
     kind: federal
     country: US
+    booking_provider: { vendor: recgov, host: www.recreation.gov }
 
   - slug: nra
     name: National Recreation Area
     kind: federal
     country: US
+    booking_provider: { vendor: recgov, host: www.recreation.gov }
 
   # ----- US state / local / private -----
   - slug: us-state-park
@@ -123,6 +135,7 @@ governing_bodies:
     name: Parks Canada
     kind: federal
     country: CA
+    booking_provider: { vendor: aspira, host: reservation.pc.gc.ca }
     sources:
       - id: aspira-maps-pc
         fetcher: fetch_aspira_maps
@@ -136,6 +149,7 @@ governing_bodies:
     name: BC Parks
     kind: provincial
     country: CA
+    booking_provider: { vendor: aspira, host: camping.bcparks.ca }
     sources:
       - id: bcparks-strapi
         fetcher: fetch_bc_parks   # scripts/fetch_bc_parks.py
@@ -152,6 +166,7 @@ governing_bodies:
     name: Alberta Parks
     kind: provincial
     country: CA
+    booking_provider: { vendor: camis, host: reserve.albertaparks.ca }
     # Camis adapter not implemented yet — POI rows can still FK to the
     # booking_provider row, availability returns no_provider. When a
     # CamisAbEtl ships, add `sources:` here pointing at it.
