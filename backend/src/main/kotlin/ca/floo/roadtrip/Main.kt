@@ -97,7 +97,7 @@ fun Application.module() {
         IngestController(
             ctx = ctx,
             importer = Importer(ctx),
-            etl = EtlOrchestrator(ctx, File(staticDir, "data/raw")),
+            etl = EtlOrchestrator(ctx, File(staticDir, "data/raw"), poiRegistry),
             dataDir = File(staticDir, "data"),
             targets = targetsFromRegistry(poiRegistry, staticDir),
             workingDir = staticDir,

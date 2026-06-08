@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.etl.bcparks
 
 import ca.floo.roadtrip.etl.Envelope
-import ca.floo.roadtrip.etl.ParkType
 import ca.floo.roadtrip.etl.Poi
 import ca.floo.roadtrip.etl.SourceEtl
 import ca.floo.roadtrip.etl.TransformCtx
@@ -10,14 +9,18 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.Instant
 
-// BC Parks Strapi feed → Poi.Park.
+// BC Parks Strapi feed → Poi.Campground (provincial bucket).
 //
 // Capture path: data/raw/bcparks-strapi/<ts>/page-NNN.json (paginated,
 // 100 rows/page). Each row is a "protectedArea" record from BC Parks'
 // public Strapi instance, covering Parks, Recreation Areas, Protected
 // Areas, and Conservancies. Geometry is a single lat/lon point per row;
 // boundary polygons live in a separate dataset and aren't surfaced here.
-class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Park> {
+//
+// Bucketed under campground/provincial (vs the older state-park
+// categorization) so BC Parks dots show up alongside Alberta Parks +
+// US federal/state campgrounds on the same FE legend layer.
+class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Campground> {
     override val sourceName = "bcparks-strapi"
     override val multiPart: Boolean = true
 
@@ -40,12 +43,16 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Park> {
     override fun transform(
         dto: BcParksDto,
         ctx: TransformCtx,
-    ): List<Poi.Park> = dto.rows.mapNotNull { transformRow(it, dto.fetchedAt) }
+    ): List<Poi.Campground> {
+        val bucket = ctx.legendBucketFor(sourceName)
+        return dto.rows.mapNotNull { transformRow(it, dto.fetchedAt, bucket) }
+    }
 
     private fun transformRow(
         row: BcParksRow,
         fetchedAt: Instant,
-    ): Poi.Park? {
+        bucket: String?,
+    ): Poi.Campground? {
         // ORCS (Official Records and Conservation System) is the stable
         // BC Parks identifier — survives renames and reorganizations.
         val orcs = row.orcs ?: return null
@@ -56,7 +63,7 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Park> {
         // Active rows, but be defensive — Strapi could change its filter.
         if (row.legalStatus != null && !row.legalStatus.equals("Active", ignoreCase = true)) return null
 
-        return Poi.Park(
+        return Poi.Campground(
             source = sourceName,
             sourceId = "orcs-$orcs",
             name = name,
@@ -68,13 +75,19 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Park> {
             infoUrl = row.url?.takeIf { it.isNotBlank() },
             fetchedAt = fetchedAt,
             lastVerified = null,
-            parkType = ParkType.PROVINCIAL,
-            // type is "Park" / "Recreation Area" / "Protected Area" /
-            // "Conservancy"; class is "A"/"B"/"C"/"N" — pack the BC-Parks-
-            // native pair into designation so it survives the round-trip.
-            designation = listOfNotNull(row.type, row.parkClass?.let { "Class $it" }).joinToString(" • "),
-            officialName = null,
-            acres = row.totalArea?.let { it * HECTARE_TO_ACRES },
+            // BC Parks routes through Aspira NextGen (camping.bcparks.ca)
+            // for bookings; the per-park transactionLocationId/mapId are
+            // a separate fetch and aren't on this Strapi row.
+            providerRef = null,
+            amenities = emptyList(),
+            activities = emptyList(),
+            sites = null,
+            season = null,
+            near = null,
+            photoUrl = null,
+            cellCoverage = null,
+            ratingReviews = null,
+            legendBucket = bucket,
         )
     }
 
@@ -87,9 +100,6 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Park> {
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
-
-        // BC Parks reports totalArea in hectares; Poi.Park.acres is acres.
-        private const val HECTARE_TO_ACRES = 2.47105
     }
 }
 

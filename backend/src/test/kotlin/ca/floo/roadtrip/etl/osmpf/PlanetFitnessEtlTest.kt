@@ -59,8 +59,9 @@ class PlanetFitnessEtlTest {
             File(System.getProperty("user.dir"))
                 .resolve("../config/poi-registry.yaml")
                 .canonicalFile
-        PoiRegistrySync(ctx).apply(PoiRegistry.load(yamlPath))
-        transformCtx = TransformCtx.load(ctx, File("build/tmp/etl-test-raw"))
+        val registry = PoiRegistry.load(yamlPath)
+        PoiRegistrySync(ctx).apply(registry)
+        transformCtx = TransformCtx.load(ctx, File("build/tmp/etl-test-raw"), registry)
     }
 
     @AfterAll

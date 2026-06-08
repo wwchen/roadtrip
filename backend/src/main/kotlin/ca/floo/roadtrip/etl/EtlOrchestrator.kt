@@ -1,17 +1,16 @@
 package ca.floo.roadtrip.etl
 
+import ca.floo.roadtrip.etl.registry.PoiRegistry
 import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.io.File
 
 // Orchestrates one ETL run: parse → validate → transform → upsert.
 // Per-source ETLs implement SourceEtl; this class drives them.
-//
-// PR 3 ships only PlanetFitnessEtl wired through; subsequent PRs add
-// per-source ETLs by registering them here.
 class EtlOrchestrator(
     private val ctx: DSLContext,
     private val rawDir: File,
+    private val poiRegistry: PoiRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val upsert = Upsert(ctx)
@@ -34,7 +33,7 @@ class EtlOrchestrator(
         val etl = registry[source] ?: error("no ETL registered for source=$source")
         log.info("etl source={} starting", source)
 
-        val transformCtx = TransformCtx.load(ctx, rawDir)
+        val transformCtx = TransformCtx.load(ctx, rawDir, poiRegistry)
         val pois = runOneSource(etl, transformCtx)
         val ups = upsert.run(setOf(source), pois)
 
