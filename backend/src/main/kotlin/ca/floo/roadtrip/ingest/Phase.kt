@@ -30,4 +30,11 @@ data class Target(
     val name: String,
     val fetchPhases: List<Phase.Fetch>,
     val importPhases: List<Phase.Import>,
+    // Aggregate targets bundle multiple per-source targets under a
+    // governing-body slug (e.g. `alberta-parks` → all sources under that
+    // body). Excluded from the no-target fan-out (`/api/admin/data/fetch`
+    // with no slug) to avoid running the same source twice. Per-target
+    // calls still work — `/api/admin/data/fetch/alberta-parks` runs every
+    // phase under that body.
+    val aggregate: Boolean = false,
 )

@@ -292,16 +292,32 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
     // Fan out sequentially. Concurrent might be tempting but parallel fetches
     // against the same upstream (rec.gov, OSM Overpass) burn rate-limit
     // budget for no real wall-clock savings on a manual refresh.
+    val log = org.slf4j.LoggerFactory.getLogger("AdminIngest.fanOut")
     val outcomes = mutableListOf<RunOutcome>()
     var anyFailed = false
-    for (target in controller.knownTargets().sorted()) {
+    val all = controller.fanOutTargets().sorted()
+    val started = System.currentTimeMillis()
+    log.info("fan-out start: kind={} targets={}", kind.rowValue, all.size)
+    for ((idx, target) in all.withIndex()) {
+        val targetStarted = System.currentTimeMillis()
+        log.info("fan-out [{}/{}] target={} starting", idx + 1, all.size, target)
         try {
             val outcome = controller.startRun(target, kind, "admin-api")
             if (outcome.status == "failed") anyFailed = true
             outcomes.add(outcome)
+            val elapsed = (System.currentTimeMillis() - targetStarted) / 1000.0
+            log.info(
+                "fan-out [{}/{}] target={} {} ({}s)",
+                idx + 1,
+                all.size,
+                target,
+                outcome.status,
+                "%.1f".format(elapsed),
+            )
         } catch (e: TargetBusyException) {
             // Skip a busy target rather than abort the whole fan-out.
             anyFailed = true
+            log.warn("fan-out [{}/{}] target={} busy", idx + 1, all.size, target)
             outcomes.add(
                 RunOutcome(
                     parentRunId = e.runningRunId,
@@ -313,6 +329,14 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
             )
         }
     }
+    val totalElapsed = (System.currentTimeMillis() - started) / 1000.0
+    log.info(
+        "fan-out done: kind={} targets={} elapsed={}s anyFailed={}",
+        kind.rowValue,
+        all.size,
+        "%.1f".format(totalElapsed),
+        anyFailed,
+    )
     val status = if (anyFailed) HttpStatusCode.InternalServerError else HttpStatusCode.OK
     val sb = StringBuilder("""{"kind":""").append(jsonString(kind.rowValue)).append(""","outcomes":[""")
     outcomes.forEachIndexed { i, o ->

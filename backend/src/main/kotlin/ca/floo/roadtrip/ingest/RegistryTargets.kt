@@ -38,18 +38,24 @@ fun targetsFromRegistry(
         }
     }
 
-    // 2. Per-governing-body targets — only for bodies that actually have
-    //    sources (skip pure dim-table entries like 'us-state-park').
+    // 2. Per-governing-body aggregate targets — only for bodies that
+    //    actually have sources. Marked aggregate=true so the no-target
+    //    fan-out skips them; explicit calls (TARGET=alberta-parks) still
+    //    work.
     for (gb in registry.governingBodies) {
         if (gb.sources.isEmpty()) continue
         // depends_on order: a source can declare it depends on other sources
         // (Tesla locations needs the index first). Topo-sort within the body.
         val ordered = topoSort(gb.sources)
+        // Skip if the body has only one source — the per-source target
+        // already does the same thing.
+        if (ordered.size == 1) continue
         out[gb.slug] =
             Target(
                 name = gb.slug,
                 fetchPhases = ordered.map { fetchPhaseFor(it, repoRoot) },
                 importPhases = ordered.map { Phase.Import("import:${it.id}", it.id) },
+                aggregate = true,
             )
     }
 
