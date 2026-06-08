@@ -239,7 +239,7 @@ async function load() {
     // the server enforces its own gate at zoom < 6 anyway.
     const wantCG = m.getZoom() >= CG_ZOOM_THRESHOLD || cgUnlocked;
     if (wantCG) cgUnlocked = true;
-    const cats = ['national-park', 'state-park', 'planet-fitness'];
+    const cats = ['national-park', 'state-park', 'planet-fitness', 'supercharger'];
     if (wantCG) cats.push('campground');
 
     // When a trip route is active, topbar exposes a corridor polygon via
@@ -253,29 +253,17 @@ async function load() {
     inflight = new AbortController();
     const poisBody = { bbox: [west, south, east, north], zoom, categories: cats };
     if (polygon) poisBody.polygon = polygon;
-    const scBody = { bbox: [west, south, east, north], zoom };
-    if (polygon) scBody.polygon = polygon;
 
-    let fc, scFc;
+    let fc;
     try {
-      const [poisRes, scRes] = await Promise.all([
-        fetch('/api/pois', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(poisBody),
-          signal: inflight.signal,
-        }),
-        fetch('/api/superchargers', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(scBody),
-          signal: inflight.signal,
-        }),
-      ]);
+      const poisRes = await fetch('/api/pois', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(poisBody),
+        signal: inflight.signal,
+      });
       if (!poisRes.ok) throw new Error(`/api/pois HTTP ${poisRes.status}`);
-      if (!scRes.ok) throw new Error(`/api/superchargers HTTP ${scRes.status}`);
       fc = await poisRes.json();
-      scFc = await scRes.json();
     } catch (err) {
       if (err.name === 'AbortError') return;
       console.error('bbox fetch failed:', err);
@@ -283,7 +271,7 @@ async function load() {
     }
     inflight = null;
 
-    const np = [], sp = [], pf = [], cg = [];
+    const np = [], sp = [], pf = [], cg = [], sc = [];
     for (const raw of fc.features) {
       const f = flattenPoi(raw);
       const c = raw.properties?.category;
@@ -291,11 +279,8 @@ async function load() {
       else if (c === 'state-park') sp.push(f);
       else if (c === 'planet-fitness') pf.push(f);
       else if (c === 'campground') cg.push(f);
+      else if (c === 'supercharger') sc.push(f);
     }
-    // SC features are pre-shaped: properties already flat (id, name, city,
-    // state, color, ...) and the source geojson always sets a top-level id.
-    // No flattenPoi needed.
-    const sc = scFc.features || [];
     setNPData({ type: 'FeatureCollection', features: np });
     setSPData({ type: 'FeatureCollection', features: sp });
     setPFData({ type: 'FeatureCollection', features: pf });
