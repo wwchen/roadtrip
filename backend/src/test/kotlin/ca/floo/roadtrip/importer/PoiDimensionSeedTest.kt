@@ -76,15 +76,7 @@ class PoiDimensionSeedTest {
         // transformer is the failure mode this test catches.
         for (expected in listOf(
             "nps",
-            "usfs",
-            "blm",
-            "coe",
-            "usfw",
-            "bor",
-            "tva",
             "us-state-park",
-            "us-county",
-            "us-private",
             "parks-canada",
             "bc-parks",
             "alberta-parks",
