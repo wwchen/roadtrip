@@ -241,9 +241,30 @@ def fetch_tenant(tenant: Tenant, ts: str) -> int:
 
 
 def main() -> int:
+    import argparse
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--tenant",
+        help=(
+            "contract code to scope to (e.g. ABPP). Default: walk every "
+            "tenant in TENANTS. config/poi-registry.yaml passes one tenant "
+            "per source row so each tenant lands under its own data/raw/ dir."
+        ),
+    )
+    args = parser.parse_args()
+
+    chosen = TENANTS
+    if args.tenant:
+        chosen = [t for t in TENANTS if t.contract == args.tenant]
+        if not chosen:
+            err(f"unknown tenant={args.tenant}; configured: "
+                f"{', '.join(t.contract for t in TENANTS)}")
+            return 1
+
     ts = utc_ts()
     rc = 0
-    for tenant in TENANTS:
+    for tenant in chosen:
         if fetch_tenant(tenant, ts) != 0:
             rc = 1
     return rc
