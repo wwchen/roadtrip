@@ -5,17 +5,71 @@
 # Kotlin ETL class registered in EtlOrchestrator.registry.
 
 data_sources:
-  - slug: nps-national-parks
-    name: US National Parks
+  # Federal campgrounds via RIDB (recreation.gov backend). One entry per
+  # agency; same fetcher script + ETL adapter, args.agency selects the
+  # RIDB org. Auth via RIDB_API_KEY env var.
+  - slug: nps-campgrounds
+    name: NPS Campgrounds
     enabled: true
     category: campground
     legend_bucket: federal
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov.py
-      args: { agency: NPS, entity_type: recarea }
-      output_dir_prefix: data/raw/nps-national-parks
-    etl_adapter: RecGovParksEtl
+      args: { agency: NPS, slug: nps-campgrounds }
+      output_dir_prefix: data/raw/nps-campgrounds
+    etl_adapter: RecGovCampgroundsEtl
+    data_provider:
+      vendor: recgov
+      host: www.recreation.gov
+      name: Recreation.gov
+      adapter: RecGovAdapter
+
+  - slug: usfs-campgrounds
+    name: USFS Campgrounds
+    enabled: true
+    category: campground
+    legend_bucket: federal
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_recgov.py
+      args: { agency: USFS, slug: usfs-campgrounds }
+      output_dir_prefix: data/raw/usfs-campgrounds
+    etl_adapter: RecGovCampgroundsEtl
+    data_provider:
+      vendor: recgov
+      host: www.recreation.gov
+      name: Recreation.gov
+      adapter: RecGovAdapter
+
+  - slug: blm-campgrounds
+    name: BLM Campgrounds
+    enabled: true
+    category: campground
+    legend_bucket: federal
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_recgov.py
+      args: { agency: BLM, slug: blm-campgrounds }
+      output_dir_prefix: data/raw/blm-campgrounds
+    etl_adapter: RecGovCampgroundsEtl
+    data_provider:
+      vendor: recgov
+      host: www.recreation.gov
+      name: Recreation.gov
+      adapter: RecGovAdapter
+
+  - slug: usace-campgrounds
+    name: Army Corps of Engineers Campgrounds
+    enabled: true
+    category: campground
+    legend_bucket: federal
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_recgov.py
+      args: { agency: USACE, slug: usace-campgrounds }
+      output_dir_prefix: data/raw/usace-campgrounds
+    etl_adapter: RecGovCampgroundsEtl
     data_provider:
       vendor: recgov
       host: www.recreation.gov

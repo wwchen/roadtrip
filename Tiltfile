@@ -91,6 +91,10 @@ local_resource(
         # MAPBOX_TOKEN is read by /api/route. Empty when .env is missing —
         # endpoint then 503s, rest of the app is unaffected.
         'MAPBOX_TOKEN': DOTENV.get('MAPBOX_TOKEN', ''),
+        # RIDB_API_KEY is read by scripts/fetch_recgov.py (federal
+        # campground catalog from recreation.gov). Free key, register
+        # at https://ridb.recreation.gov.
+        'RIDB_API_KEY': DOTENV.get('RIDB_API_KEY', ''),
     },
     deps=[
         'backend/src/main',
