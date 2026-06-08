@@ -39,11 +39,23 @@ DOTENV = _load_dotenv('.env')
 
 local_resource(
     'postgres',
-    # Foreground `up` (no -d, no separate `logs -f`). Tilt owns the
-    # docker-compose process and sends SIGTERM on shutdown, so the container
-    # stops cleanly when Tilt exits. Volumes persist (no `down -v`), so DB
-    # state is preserved between sessions; only the container is stopped.
-    serve_cmd='docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up postgres',
+    # Lifecycle is tied to Tilt: container exists while Tilt runs, gone
+    # when Tilt exits. Bind-mounted Postgres data ($HOME/.roadtrip-map/
+    # postgres) persists across runs, so DB state survives.
+    #
+    # Implementation: foreground `compose up` runs while Tilt is alive; a
+    # bash trap on EXIT runs `compose down postgres` so the container is
+    # removed (not just stopped). docker-compose.yml's restart policy is
+    # `no` (see comment there), so Docker Desktop won't resurrect the
+    # container if it reboots while Tilt is gone.
+    serve_cmd=(
+        'trap "docker compose --env-file /dev/null ' +
+        '-f docker-compose.yml -f docker-compose.local.yml --profile pois ' +
+        'down postgres" EXIT INT TERM; ' +
+        'docker compose --env-file /dev/null ' +
+        '-f docker-compose.yml -f docker-compose.local.yml --profile pois ' +
+        'up postgres'
+    ),
     deps=['docker-compose.yml', 'docker-compose.local.yml'],
     # Probe via `docker exec` directly (not `docker compose exec`) so we
     # don't pay the compose-CLI parsing tax on every probe. The exec call
