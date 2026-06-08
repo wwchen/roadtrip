@@ -45,9 +45,19 @@ local_resource(
     # state is preserved between sessions; only the container is stopped.
     serve_cmd='docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up postgres',
     deps=['docker-compose.yml', 'docker-compose.local.yml'],
+    # Probe via `docker exec` directly (not `docker compose exec`) so we
+    # don't pay the compose-CLI parsing tax on every probe. The exec call
+    # alone takes ~3s on Apple Silicon (Rosetta-emulating the amd64
+    # PostGIS image), so the period is set above that to keep Tilt from
+    # killing probes mid-flight.
     readiness_probe=probe(
-        period_secs=2,
-        exec=exec_action(['docker', 'compose', 'exec', '-T', 'postgres', 'pg_isready', '-U', 'roadtrip', '-d', 'roadtrip']),
+        period_secs=10,
+        timeout_secs=8,
+        exec=exec_action([
+            'docker', 'exec',
+            'roadtrip-postgres-1',
+            'pg_isready', '-U', 'roadtrip', '-d', 'roadtrip',
+        ]),
     ),
     labels=['infra'],
 )
