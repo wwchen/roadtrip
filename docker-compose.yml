@@ -71,6 +71,9 @@ services:
       - ./index.html:/app/static/index.html:ro
       - ./web:/app/static/web:ro
       - ./data:/app/static/data:ro
+      # PoiRegistry.load reads /app/static/config/poi-registry.yaml at boot;
+      # backend hard-flaps without it.
+      - ./config:/app/static/config:ro
     depends_on:
       postgres:
         condition: service_healthy
