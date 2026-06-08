@@ -17,7 +17,7 @@
 // Pin reselect while drawer open: opacity-only fade (~150ms), DOM stable,
 // skeleton overlay during fetch. Inflight fetch is cancelled.
 
-import { state, distanceKm, formatDistance, escapeHtml, callButtonsHTML } from './core.js';
+import { state, distanceKm, formatDistance, escapeHtml } from './core.js';
 import {
   parseAmenities,
   parseCellCoverage,
@@ -31,6 +31,7 @@ import {
   seasonVerdictHTML,
   reserveButtonHTML,
 } from './campground-card.js';
+import { upstreamDecorations } from './upstream-html.js';
 
 const DRAWER_ROOT_ID = 'cg-drawer';
 const BACKDROP_ID = 'cg-drawer-backdrop';
@@ -189,7 +190,16 @@ function ensureDrawerDOM() {
 function renderShell(f) {
   const p = f.properties;
   const [lng, lat] = f.geometry.coordinates;
-  const parent = p.parent_name || p.typeLabel || '';
+
+  // Per-source decorations from properties.upstream — RIDB ships rich
+  // MEDIA / FacilityDescription / fees / parent-park name that other ETLs
+  // don't carry. Each section is empty string when absent so the drawer
+  // renders sparse for sources that don't have them.
+  const decor = upstreamDecorations(p.upstream);
+
+  // Subline: parent park (RIDB RECAREA[0].RecAreaName when present, else
+  // legacy parent_name / typeLabel) → region → distance.
+  const parent = decor.parentName || p.parent_name || p.typeLabel || '';
   const region = p.state || p.country || '';
   const subline = [parent, region].filter(Boolean).join(' · ');
   const distLine = state.userLocation
@@ -208,12 +218,14 @@ function renderShell(f) {
   const bookingSysFooter = bookingSystemFooterHTML(p);
 
   const verdict = seasonVerdictHTML(p.season, p.reservable);
-  const callBtns = callButtonsHTML(p.phone);
 
-  // Hero photo lands flush against the top edges when present. Falls back
-  // to extra header padding when missing (drawer-head's first-child rule).
-  const hero = p.photo_url
-    ? `<div class="cg-hero" role="img" aria-label="${escapeHtml(p.name)}" style="background-image: url('${escapeHtml(p.photo_url)}')"></div>`
+  // Hero photo lands flush against the top edges when present. Prefer the
+  // RIDB MEDIA hero (Primary → Preview → first), fall back to legacy
+  // p.photo_url. Falls back to extra header padding when neither (drawer-
+  // head's first-child rule).
+  const heroUrl = decor.heroUrl || p.photo_url;
+  const hero = heroUrl
+    ? `<div class="cg-hero" role="img" aria-label="${escapeHtml(p.name)}" style="background-image: url('${escapeHtml(heroUrl)}')"></div>`
     : '';
 
   // Pins that have an availability provider (rec.gov or Aspira NextGen) get
@@ -246,12 +258,10 @@ function renderShell(f) {
       <div class="cg-actions">
         <a class="cg-btn cg-btn-primary" href="/campsite?campground=${encodeURIComponent(p.recgov_id)}" data-cta="watch">Watch for openings</a>
         <a class="cg-btn cg-btn-secondary" href="https://www.recreation.gov/camping/campgrounds/${encodeURIComponent(p.recgov_id)}" target="_blank" rel="noreferrer" data-cta="reserve">Reserve on rec.gov</a>
-        ${callBtns}
       </div>`
     : `
       <div class="cg-actions">
         ${reserveButtonHTML(p, 'cg-btn')}
-        ${callBtns}
       </div>`;
 
   const detailsBody = [pills, cellPills, rating,
@@ -285,6 +295,9 @@ function renderShell(f) {
 
     ${availabilitySection}
     ${actions}
+    ${decor.about}
+    ${decor.fees}
+    ${decor.meta}
     ${detailsSection}
     ${upstreamSection}
   `;

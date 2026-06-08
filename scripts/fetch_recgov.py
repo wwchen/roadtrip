@@ -38,7 +38,7 @@ API_BASE = "https://ridb.recreation.gov/api/v1"
 PAGE_SIZE = 50  # RIDB cap
 
 FETCHER = "fetch_recgov"
-FETCHER_VERSION = "1"
+FETCHER_VERSION = "2"  # v2: full=true → inline RECAREA + ORGANIZATION arrays
 
 
 def resolve_org_id(api_key: str, agency_abbrev: str) -> int:
@@ -78,7 +78,11 @@ def main() -> int:
     headers = {"apikey": api_key}
 
     while True:
-        params = {"activity": "CAMPING", "limit": PAGE_SIZE, "offset": offset}
+        # full=true expands the inline RECAREA + ORGANIZATION arrays so the
+        # facility row carries the parent park's name (e.g. "Buffalo National
+        # River") and the agency's display name. The drawer reads these to
+        # render "<Facility Name> · <Park Name>" sublines.
+        params = {"activity": "CAMPING", "full": "true", "limit": PAGE_SIZE, "offset": offset}
         url = f"{API_BASE}/organizations/{org_id}/facilities?{urllib.parse.urlencode(params)}"
         err(f"  page {pages_written + 1}: offset={offset}")
         try:
@@ -115,7 +119,7 @@ def main() -> int:
             break
         offset += PAGE_SIZE
 
-    err(f"  {slug}: {pages_written} pages, {total_seen}/{total} facilities (ts={ts})")
+    err(f"  {args.slug}: {pages_written} pages, {total_seen}/{total} facilities (ts={ts})")
     return 0
 
 

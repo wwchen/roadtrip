@@ -95,7 +95,7 @@ class RecGovCampgroundsEtl(
                     city = it.City?.takeIf { s -> s.isNotBlank() },
                     state = it.AddressStateCode?.takeIf { s -> s.isNotBlank() },
                     postcode = it.PostalCode?.takeIf { s -> s.isNotBlank() },
-                    country = it.AddressCountryCode?.takeIf { s -> s.isNotBlank() } ?: "US",
+                    country = normalizeCountry(it.AddressCountryCode),
                 )
             }
 
@@ -127,6 +127,22 @@ class RecGovCampgroundsEtl(
             subcategory = bucket,
             extras = raw,
         )
+    }
+
+    /**
+     * RIDB returns ISO 3166-1 alpha-3 ("USA") in AddressCountryCode, but
+     * the pois.country column is alpha-2 (CHAR(2)). Map known agencies'
+     * codes; null when blank or unrecognized so downstream falls back to
+     * the ETL's static default ("US" for RIDB sources).
+     */
+    private fun normalizeCountry(raw: String?): String? {
+        val v = raw?.trim()?.uppercase() ?: return null
+        return when (v) {
+            "" -> null
+            "USA", "US" -> "US"
+            "CAN", "CA" -> "CA"
+            else -> if (v.length == 2) v else null
+        }
     }
 
     private fun parseFetchedAt(envelope: Envelope): Instant =
