@@ -116,20 +116,38 @@ export function openParkPopup(kind, feature, lngLat) {
 export function openPlanetFitnessPopup(f) {
   const p = f.properties;
   const [lng, lat] = f.geometry.coordinates;
-  const addr = [p.street, p.city, p.state, p.postcode].filter(Boolean).join(', ');
-  const website = p.website || 'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '));
-  const sub = buildSubline([addr, distanceTo(lng, lat)]);
+  // Reading order matches the SC drawer: street, then city, then state+zip
+  // as a single token. Empty pieces drop out so a missing zip doesn't
+  // leave a stray ", ".
+  const addrLine = [p.street, p.city, [p.state, p.postcode].filter(Boolean).join(' ')]
+    .filter(Boolean).join(', ');
+  const sub = buildSubline([addrLine, distanceTo(lng, lat)]);
+  // Primary CTA is Google Maps — same coords-query trick as superchargers,
+  // works on iOS/Android/web and routes from the user's current location.
+  const gmapsLabel = encodeURIComponent('Planet Fitness');
+  const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${gmapsLabel}%20${lat},${lng}`;
+  // Secondary: the OSM website tag if upstream had one; otherwise the
+  // planetfitness.com search by city/state.
+  const pfSearch =
+    'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '));
+  const pfUrl = p.website || pfSearch;
   const callBtns = callButtonsHTML(p.phone);
-  const hours = p.opening_hours
-    ? `<div class="pills"><span class="pill">${escapeHtml(p.opening_hours)}</span></div>`
-    : '';
+
+  // Pills row: 24/7 / hours / wheelchair access. Each is dropped if the
+  // upstream OSM tag is absent — sparse data should render sparse, not
+  // with empty placeholder pills.
+  const pills = [
+    p.opening_hours ? `<span class="pill">${escapeHtml(p.opening_hours)}</span>` : '',
+  ].filter(Boolean).join(' ');
+
   openDrawer(`
     ${drawerHeader(p.name || 'Planet Fitness', sub)}
     <div class="cg-actions">
-      <a class="cg-btn cg-btn-primary" href="${website}" target="_blank" rel="noreferrer">Open in Planet Fitness</a>
+      <a class="cg-btn cg-btn-primary" href="${gmapsUrl}" target="_blank" rel="noopener">Open in Google Maps</a>
+      <a class="cg-btn cg-btn-secondary" href="${pfUrl}" target="_blank" rel="noreferrer">Planet Fitness page</a>
       ${callBtns}
     </div>
-    ${hours}
+    ${pills ? `<div class="pills">${pills}</div>` : ''}
   `);
 }
 
