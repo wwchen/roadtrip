@@ -201,6 +201,14 @@ function flattenPoi(f) {
   flat.infoUrl = p.info_url || '';
 
   if (p.category === 'campground' && raw.subcategory) flat.category = raw.subcategory;
+  // Promote provider-ref discriminants to flat keys the drawer + campground
+  // card already read (recgov_id for the rec.gov heat-strip path; aspira for
+  // the NextGen path). Backend ships provider_ref as one nested object;
+  // legacy code shape stays.
+  const pref = p.provider_ref;
+  if (pref && typeof pref === 'object') {
+    if (pref.recgov_id && !flat.recgov_id) flat.recgov_id = pref.recgov_id;
+  }
   if (p.category === 'national-park' || p.category === 'state-park') {
     // Park layers + popups read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres /
     // Mang_Name — the field names PAD-US used. The new ETL stores the

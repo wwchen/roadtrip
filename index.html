@@ -355,14 +355,16 @@
 
   .cg-availability,
   .cg-actions,
-  .cg-details {
+  .cg-details,
+  .cg-upstream {
     padding-top: 16px;
     margin-top: 16px;
     border-top: 1px solid var(--cg-border);
   }
   .cg-drawer-head + .cg-availability,
   .cg-drawer-head + .cg-actions,
-  .cg-drawer-head + .cg-details { border-top: 0; padding-top: 0; margin-top: 0; }
+  .cg-drawer-head + .cg-details,
+  .cg-drawer-head + .cg-upstream { border-top: 0; padding-top: 0; margin-top: 0; }
 
   .cg-summary { font-size: 14px; color: var(--cg-text); line-height: 1.45; }
   .cg-summary .cg-error { color: var(--cg-error); }
@@ -503,6 +505,55 @@
   .cg-details > * + * { margin-top: 10px; }
   .cg-details > summary + * { margin-top: 12px; }
   .cg-sites { font-size: 12px; color: var(--cg-muted); }
+
+  /* Upstream raw-data dump. Same accordion treatment as cg-details. */
+  .cg-upstream summary {
+    font-size: 11px; font-weight: 600; color: var(--cg-muted);
+    cursor: pointer; outline: none;
+    list-style: none;
+    text-transform: uppercase; letter-spacing: 0.06em;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .cg-upstream summary::-webkit-details-marker { display: none; }
+  .cg-upstream summary::after {
+    content: '+'; color: var(--cg-muted); font-weight: 400; font-size: 18px;
+  }
+  .cg-upstream[open] summary::after { content: '−'; }
+  .cg-upstream > summary + * { margin-top: 12px; }
+  .cg-upstream-table {
+    width: 100%; border-collapse: collapse;
+    font-size: 12px; color: var(--cg-text);
+    table-layout: fixed;
+  }
+  .cg-upstream-table th,
+  .cg-upstream-table td {
+    text-align: left; vertical-align: top;
+    padding: 6px 8px;
+    border-top: 1px solid var(--cg-border);
+    word-break: break-word; overflow-wrap: anywhere;
+  }
+  .cg-upstream-table th {
+    width: 40%; font-weight: 500; color: var(--cg-muted);
+    font-variant-numeric: tabular-nums;
+  }
+  .cg-upstream-table td a { color: var(--cg-accent); text-decoration: none; }
+  .cg-upstream-table td a:hover { text-decoration: underline; }
+  .cg-upstream-table details summary {
+    text-transform: none; letter-spacing: 0;
+    font-size: 12px; font-weight: 500; color: var(--cg-muted);
+    display: inline; cursor: pointer;
+  }
+  .cg-upstream-table details summary::after { content: ''; display: none; }
+  .cg-upstream-table pre {
+    margin: 6px 0 0; padding: 8px;
+    background: var(--cg-bg-subtle);
+    border: 1px solid var(--cg-border);
+    border-radius: 6px;
+    font-size: 11px; line-height: 1.4;
+    color: var(--cg-text);
+    white-space: pre-wrap; word-break: break-word;
+    max-height: 240px; overflow: auto;
+  }
 </style>
 </head>
 <body>

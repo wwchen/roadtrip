@@ -74,6 +74,14 @@ function normalizeAspira(f) {
   return f;
 }
 
+// MapLibre stringifies nested-object properties on the way out of a GeoJSON
+// source. Parse the ones the drawer reads; primitives survive untouched.
+function reviveJsonProp(p, key) {
+  const v = p?.[key];
+  if (typeof v !== 'string') return;
+  try { p[key] = JSON.parse(v); } catch { p[key] = null; }
+}
+
 /**
  * Campground-specific drawer. Renders availability for recgov pins and
  * skips it for everything else.
@@ -89,6 +97,8 @@ export function openCampgroundDrawer(f) {
   // is the only nested object the drawer reads, so parse once at entry.
   // Primitives like recgov_id survive the round-trip fine.
   f = normalizeAspira(f);
+  reviveJsonProp(f.properties, 'upstream');
+  reviveJsonProp(f.properties, 'provider_ref');
   activeFeature = f;
 
   renderShell(f);
@@ -258,6 +268,12 @@ function renderShell(f) {
        </details>`
     : '';
 
+  // Raw upstream payload (whatever the ETL didn't promote). Flat key/value
+  // table for top-level fields, nested objects/arrays as collapsed JSON.
+  // Always collapsed by default — this is a "what's available" surface,
+  // not the primary read.
+  const upstreamSection = upstreamHTML(p.upstream);
+
   const content = document.querySelector(`#${DRAWER_ROOT_ID} .cg-drawer-content`);
   content.innerHTML = `
     ${hero}
@@ -270,6 +286,37 @@ function renderShell(f) {
     ${availabilitySection}
     ${actions}
     ${detailsSection}
+    ${upstreamSection}
+  `;
+}
+
+function upstreamHTML(upstream) {
+  if (!upstream || typeof upstream !== 'object') return '';
+  const entries = Object.entries(upstream).filter(([, v]) => {
+    if (v === null || v === undefined) return false;
+    if (typeof v === 'string') return v.trim() !== '';
+    if (Array.isArray(v)) return v.length > 0;
+    if (typeof v === 'object') return Object.keys(v).length > 0;
+    return true;
+  });
+  if (entries.length === 0) return '';
+  const rows = entries.map(([k, v]) => {
+    const label = escapeHtml(k);
+    if (typeof v === 'object') {
+      const json = JSON.stringify(v, null, 2);
+      return `<tr><th>${label}</th><td><details><summary>${Array.isArray(v) ? `[${v.length}]` : '{…}'}</summary><pre>${escapeHtml(json)}</pre></details></td></tr>`;
+    }
+    const text = String(v);
+    if (/^https?:\/\//.test(text)) {
+      return `<tr><th>${label}</th><td><a href="${escapeHtml(text)}" target="_blank" rel="noreferrer">${escapeHtml(text)}</a></td></tr>`;
+    }
+    return `<tr><th>${label}</th><td>${escapeHtml(text)}</td></tr>`;
+  }).join('');
+  return `
+    <details class="cg-upstream">
+      <summary>Upstream data (${entries.length})</summary>
+      <table class="cg-upstream-table"><tbody>${rows}</tbody></table>
+    </details>
   `;
 }
 
