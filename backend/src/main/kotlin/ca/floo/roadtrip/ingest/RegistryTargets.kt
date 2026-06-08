@@ -44,11 +44,10 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
     val implemented = EtlOrchestrator.registry.keys
 
     for (row in registry.poiData) {
-        val terminalSlug = row.etls.last().slug
         val unwiredSlugs = row.etls.map { it.slug }.filterNot { it in implemented }
         val importPhases =
             if (unwiredSlugs.isEmpty()) {
-                listOf(Phase.Import("import:${row.name}", terminalSlug))
+                listOf(Phase.Import("import:${row.name}", poiDataName = row.name))
             } else {
                 log.warn(
                     "poi_data '{}' has unwired etl slugs {} — import will be a no-op until adapters land",

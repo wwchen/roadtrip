@@ -175,10 +175,10 @@ map.on('style.load', () => {
 // (so the schema is one row in Postgres) but the rest of the webapp predates
 // that — keep the boundary here and the inside stays simple.
 //
-// For campgrounds: `raw.category` is federal/state/local/provincial — that's
-// the value the legend toggles + circle-color match against, so we promote it
-// to the top-level `category`. The API's coarser `category: "campground"` is
-// dropped on the way through.
+// For campgrounds: `raw.subcategory` is federal/state/local/provincial —
+// that's the value the legend toggles + circle-color match against, so we
+// promote it to the top-level `category`. The API's coarser
+// `category: "campground"` is dropped on the way through.
 function flattenPoi(f) {
   const p = f.properties || {};
   const raw = p.raw || {};
@@ -200,7 +200,7 @@ function flattenPoi(f) {
   flat.website = p.info_url || p.website || '';
   flat.infoUrl = p.info_url || '';
 
-  if (p.category === 'campground' && raw.category) flat.category = raw.category;
+  if (p.category === 'campground' && raw.subcategory) flat.category = raw.subcategory;
   if (p.category === 'national-park' || p.category === 'state-park') {
     // Park layers + popups read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres /
     // Mang_Name — the field names PAD-US used. The new ETL stores the
