@@ -59,7 +59,11 @@ def load_source(slug: str) -> LoadedSource:
     for src in doc.get("data_sources") or []:
         if src.get("slug") == slug:
             fetcher = src.get("fetcher") or {}
-            prefix = fetcher.get("output_dir_prefix") or f"data/raw/{slug}"
+            prefix = fetcher.get("output_dir_prefix")
+            if not prefix:
+                raise RuntimeError(
+                    f"data_source slug={slug!r} is missing fetcher.output_dir_prefix"
+                )
             return LoadedSource(
                 slug=slug,
                 name=src.get("name") or slug,

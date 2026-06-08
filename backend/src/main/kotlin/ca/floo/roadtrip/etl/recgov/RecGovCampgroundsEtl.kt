@@ -137,7 +137,6 @@ data class Facility(
     val FacilityLongitude: Double? = null,
     val FacilityPhone: String? = null,
     val FacilityReservationURL: String? = null,
-    val Reservable: Boolean = false,
     val FACILITYADDRESS: List<FacilityAddress>? = null,
 )
 
