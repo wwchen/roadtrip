@@ -104,15 +104,6 @@ class EtlOrchestrator(
                 "nps-campgrounds" to
                     ca.floo.roadtrip.etl.recgov
                         .RecGovCampgroundsEtl("nps-campgrounds"),
-                "usfs-campgrounds" to
-                    ca.floo.roadtrip.etl.recgov
-                        .RecGovCampgroundsEtl("usfs-campgrounds"),
-                "blm-campgrounds" to
-                    ca.floo.roadtrip.etl.recgov
-                        .RecGovCampgroundsEtl("blm-campgrounds"),
-                "usace-campgrounds" to
-                    ca.floo.roadtrip.etl.recgov
-                        .RecGovCampgroundsEtl("usace-campgrounds"),
             )
     }
 }

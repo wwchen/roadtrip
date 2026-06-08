@@ -25,57 +25,6 @@ data_sources:
       name: Recreation.gov
       adapter: RecGovAdapter
 
-  - slug: usfs-campgrounds
-    name: USFS Campgrounds
-    enabled: true
-    category: campground
-    legend_bucket: federal
-    fetcher:
-      executor: python3
-      filename: scripts/fetch_recgov.py
-      args: { agency: USFS, slug: usfs-campgrounds }
-      output_dir_prefix: data/raw/usfs-campgrounds
-    etl_adapter: RecGovCampgroundsEtl
-    data_provider:
-      vendor: recgov
-      host: www.recreation.gov
-      name: Recreation.gov
-      adapter: RecGovAdapter
-
-  - slug: blm-campgrounds
-    name: BLM Campgrounds
-    enabled: true
-    category: campground
-    legend_bucket: federal
-    fetcher:
-      executor: python3
-      filename: scripts/fetch_recgov.py
-      args: { agency: BLM, slug: blm-campgrounds }
-      output_dir_prefix: data/raw/blm-campgrounds
-    etl_adapter: RecGovCampgroundsEtl
-    data_provider:
-      vendor: recgov
-      host: www.recreation.gov
-      name: Recreation.gov
-      adapter: RecGovAdapter
-
-  - slug: usace-campgrounds
-    name: Army Corps of Engineers Campgrounds
-    enabled: true
-    category: campground
-    legend_bucket: federal
-    fetcher:
-      executor: python3
-      filename: scripts/fetch_recgov.py
-      args: { agency: USACE, slug: usace-campgrounds }
-      output_dir_prefix: data/raw/usace-campgrounds
-    etl_adapter: RecGovCampgroundsEtl
-    data_provider:
-      vendor: recgov
-      host: www.recreation.gov
-      name: Recreation.gov
-      adapter: RecGovAdapter
-
   - slug: padus-national-parks
     name: US National Parks (PAD-US polygons)
     enabled: false
