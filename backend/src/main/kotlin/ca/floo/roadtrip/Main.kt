@@ -79,11 +79,11 @@ fun Application.module() {
         ca.floo.roadtrip.route
             .RouteCache(mapboxDirections)
 
-    // POI registry (RFC 0007 PR 3.5) — config/poi-registry.yaml is the
-    // source of truth for governing_body + booking_provider rows. Boot
-    // UPSERTs; refuses to start if YAML deletes a slug that's still FK'd
-    // by a non-deleted POI. Adding a vendor is a YAML diff + Kotlin ETL,
-    // no Flyway migration.
+    // POI registry — config/poi-registry.yaml is the source of truth for
+    // booking_provider rows + the per-source fetch/ETL recipes. Boot
+    // UPSERTs; refuses to start if YAML deletes a (vendor, host) that's
+    // still FK'd by a non-deleted POI. Adding a vendor is a YAML diff +
+    // Kotlin ETL, no Flyway migration.
     val registryFile = File(staticDir, "config/poi-registry.yaml")
     val poiRegistry = PoiRegistry.load(registryFile)
     PoiRegistrySync(ctx).apply(poiRegistry)
@@ -196,7 +196,7 @@ fun Application.module() {
             openApiSpec()
         }
 
-        poiRoutes(ctx, routeCache)
+        poiRoutes(ctx, routeCache, poiRegistry)
         routeRoutes(routeCache)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes(rawDataDir)

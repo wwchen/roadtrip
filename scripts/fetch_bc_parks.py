@@ -26,10 +26,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 from _envelope import (  # noqa: E402
     err,
     http_get_text,
+    load_source,
     parse_payload,
     utc_ts,
     write_envelope,
 )
+
+SLUG = "bcparks-strapi"
+SOURCE = load_source(SLUG)
 
 API = "https://bcparks.api.gov.bc.ca/api/protected-areas"
 PAGE_SIZE = 100
@@ -73,7 +77,7 @@ def main() -> int:
             return 1
         payload = parse_payload(headers.get("content-type", ""), body)
         write_envelope(
-            source="bcparks-strapi",
+            source_obj=SOURCE,
             fetcher=FETCHER,
             fetcher_version=FETCHER_VERSION,
             request_url=url,

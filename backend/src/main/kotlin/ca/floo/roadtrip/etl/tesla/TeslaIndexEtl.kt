@@ -43,14 +43,12 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
         dto: TeslaIndexDto,
         ctx: TransformCtx,
     ): List<Poi.Supercharger> {
-        val gbId = ctx.governingBodyId("tesla")
         val locationsDir = File(ctx.rawDir, "tesla-locations")
-        return dto.rows.mapNotNull { transformRow(it, gbId, dto.fetchedAt, locationsDir) }
+        return dto.rows.mapNotNull { transformRow(it, dto.fetchedAt, locationsDir) }
     }
 
     private fun transformRow(
         row: TeslaIndexRow,
-        gbId: Long,
         fetchedAt: Instant,
         locationsDir: File,
     ): Poi.Supercharger? {
@@ -79,7 +77,6 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
             region = region,
             country = country,
-            governingBodyId = gbId,
             phone = null,
             address = addressOf(detail),
             infoUrl = "https://www.tesla.com/findus?location=$slug",

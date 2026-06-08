@@ -13,7 +13,7 @@ import java.time.ZoneOffset
 
 // Mark-and-sweep upsert into the v2 `pois` table. Same shape as the
 // legacy Importer.kt, generalized over the new sealed Poi types and
-// the v2 columns (provider_ref, governing_body_id, etc.).
+// the v2 columns (provider_ref, booking_provider_id, etc.).
 //
 // Sweep is scoped to the union of source names this run wrote — a
 // campground-merge run wipes only campground sources, never Tesla
@@ -139,7 +139,6 @@ class Upsert(
             .set(POIS.PHONE, poi.phone)
             .set(POIS.ADDRESS, addressJson)
             .set(POIS.INFO_URL, poi.infoUrl)
-            .set(POIS.GOVERNING_BODY_ID, poi.governingBodyId)
             .set(POIS.BOOKING_PROVIDER_ID, bookingProviderId)
             .set(POIS.PROVIDER_REF, providerRefJson)
             .set(POIS.PROPERTIES, propertiesJson)
@@ -159,7 +158,6 @@ class Upsert(
             .set(POIS.PHONE, DSL.excluded(POIS.PHONE))
             .set(POIS.ADDRESS, DSL.excluded(POIS.ADDRESS))
             .set(POIS.INFO_URL, DSL.excluded(POIS.INFO_URL))
-            .set(POIS.GOVERNING_BODY_ID, DSL.excluded(POIS.GOVERNING_BODY_ID))
             .set(POIS.BOOKING_PROVIDER_ID, DSL.excluded(POIS.BOOKING_PROVIDER_ID))
             .set(POIS.PROVIDER_REF, DSL.excluded(POIS.PROVIDER_REF))
             .set(POIS.PROPERTIES, DSL.excluded(POIS.PROPERTIES))

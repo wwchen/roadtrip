@@ -6,14 +6,13 @@ For the production-shaped path that goes through the admin API and is
 recorded in poller_runs, use `bin/refresh` instead.
 
   python3 scripts/poll_raw.py                         # fzf source picker
-  python3 scripts/poll_raw.py <source>                # by source id
-  python3 scripts/poll_raw.py --governing <slug>      # all sources under one body
-  python3 scripts/poll_raw.py --all                   # every source
+  python3 scripts/poll_raw.py <slug>                  # by data_source slug
+  python3 scripts/poll_raw.py --all                   # every enabled source
   python3 scripts/poll_raw.py --list                  # JSON, no fetch
 
-The list of sources comes from config/poi-registry.yaml — one source per
-governing_body.sources row. Adding a new fetcher means appending a row
-there + writing the Python script under scripts/.
+The list of sources comes from config/poi-registry.yaml — one entry per
+`data_sources:` row. Adding a new fetcher means appending a row there +
+writing the Python script under scripts/.
 """
 from __future__ import annotations
 
@@ -33,37 +32,41 @@ except ImportError:
     sys.exit(1)
 
 ROOT = Path(__file__).parent.parent
-RAW = ROOT / "data" / "raw"
 REGISTRY = ROOT / "config" / "poi-registry.yaml"
 
 
 @dataclass
 class Source:
-    id: str
-    fetcher: str
+    slug: str
+    enabled: bool
+    executor: str
+    filename: str
     args: dict = field(default_factory=dict)
-    governing_body: str = ""
+    output_dir_prefix: Path = ROOT
     depends_on: list[str] = field(default_factory=list)
 
 
 def load_sources() -> list[Source]:
-    """Flatten poi-registry.yaml into a list of Source rows."""
+    """Flatten poi-registry.yaml's data_sources into Source rows."""
     if not REGISTRY.exists():
         err(f"missing {REGISTRY}")
         sys.exit(1)
-    doc = yaml.safe_load(REGISTRY.read_text())
+    doc = yaml.safe_load(REGISTRY.read_text()) or {}
     out: list[Source] = []
-    for gb in doc.get("governing_bodies") or []:
-        for src in gb.get("sources") or []:
-            out.append(
-                Source(
-                    id=src["id"],
-                    fetcher=src["fetcher"],
-                    args=src.get("args") or {},
-                    governing_body=gb["slug"],
-                    depends_on=src.get("depends_on") or [],
-                )
+    for src in doc.get("data_sources") or []:
+        fetcher = src.get("fetcher") or {}
+        prefix = fetcher.get("output_dir_prefix") or f"data/raw/{src['slug']}"
+        out.append(
+            Source(
+                slug=src["slug"],
+                enabled=bool(src.get("enabled", True)),
+                executor=fetcher.get("executor", "python3"),
+                filename=fetcher.get("filename", ""),
+                args=fetcher.get("args") or {},
+                output_dir_prefix=ROOT / prefix,
+                depends_on=src.get("depends_on") or [],
             )
+        )
     return out
 
 
@@ -71,12 +74,11 @@ def err(msg: str) -> None:
     print(msg, file=sys.stderr)
 
 
-def captures_since(raw_dir: str, since_ts: float) -> list[Path]:
-    d = RAW / raw_dir
-    if not d.exists():
+def captures_since(out_dir: Path, since_ts: float) -> list[Path]:
+    if not out_dir.exists():
         return []
     out: list[Path] = []
-    for entry in d.iterdir():
+    for entry in out_dir.iterdir():
         if entry.is_file() and entry.suffix == ".json":
             if entry.stat().st_mtime >= since_ts:
                 out.append(entry)
@@ -91,14 +93,18 @@ def run_source(src: Source) -> int:
     cli_args: list[str] = []
     for k, v in src.args.items():
         cli_args += [f"--{k}", str(v)]
-    cmd = ["python3", str(ROOT / "scripts" / f"{src.fetcher}.py"), *cli_args]
-    err(f"\n→ {src.id} ({src.governing_body}): {' '.join(cmd)}")
+    script = ROOT / src.filename if src.filename else None
+    if script is None or not script.exists():
+        err(f"  ⚠ {src.slug}: missing fetcher script {src.filename}")
+        return 1
+    cmd = [src.executor, str(script), *cli_args]
+    err(f"\n→ {src.slug}: {' '.join(cmd)}")
     started = time.time() - 1
     rc = subprocess.call(cmd, cwd=ROOT)
     if rc != 0:
-        err(f"  ⚠ {src.id} exited {rc}")
+        err(f"  ⚠ {src.slug} exited {rc}")
         return rc
-    fresh = captures_since(src.id, started)
+    fresh = captures_since(src.output_dir_prefix, started)
     if fresh:
         err("  wrote:")
         if len(fresh) > 10:
@@ -113,22 +119,22 @@ def run_source(src: Source) -> int:
 
 
 def topo_sort(sources: list[Source]) -> list[Source]:
-    by_id = {s.id: s for s in sources}
+    by_id = {s.slug: s for s in sources}
     visited: set[str] = set()
     visiting: set[str] = set()
     out: list[Source] = []
 
     def visit(s: Source) -> None:
-        if s.id in visited:
+        if s.slug in visited:
             return
-        if s.id in visiting:
-            raise RuntimeError(f"depends_on cycle on {s.id}")
-        visiting.add(s.id)
+        if s.slug in visiting:
+            raise RuntimeError(f"depends_on cycle on {s.slug}")
+        visiting.add(s.slug)
         for dep in s.depends_on:
             if dep in by_id:
                 visit(by_id[dep])
-        visiting.discard(s.id)
-        visited.add(s.id)
+        visiting.discard(s.slug)
+        visited.add(s.slug)
         out.append(s)
 
     for s in sources:
@@ -138,11 +144,11 @@ def topo_sort(sources: list[Source]) -> list[Source]:
 
 def fzf_pick(sources: list[Source]) -> Source | None:
     if not shutil.which("fzf"):
-        err("fzf not installed; pass a source name explicitly")
-        err(f"  available: {', '.join(s.id for s in sources)}")
+        err("fzf not installed; pass a slug explicitly")
+        err(f"  available: {', '.join(s.slug for s in sources)}")
         return None
     rows = "\n".join(
-        f"{s.id:<22} ({s.governing_body})  fetcher={s.fetcher}" for s in sources
+        f"{s.slug:<26} enabled={s.enabled}  fetcher={s.filename}" for s in sources
     )
     proc = subprocess.run(
         ["fzf", "--height=40%", "--prompt=poll raw> ", "--no-multi"],
@@ -153,16 +159,13 @@ def fzf_pick(sources: list[Source]) -> Source | None:
     if proc.returncode != 0:
         return None
     name = proc.stdout.strip().split(None, 1)[0]
-    return next((s for s in sources if s.id == name), None)
+    return next((s for s in sources if s.slug == name), None)
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("source", nargs="?", help="source id (no fzf)")
-    parser.add_argument(
-        "--governing", metavar="SLUG", help="run every source under this governing body"
-    )
-    parser.add_argument("--all", action="store_true", help="run every source in registry order")
+    parser.add_argument("source", nargs="?", help="data_source slug (no fzf)")
+    parser.add_argument("--all", action="store_true", help="run every enabled data_source")
     parser.add_argument("--list", action="store_true", help="JSON registry, no fetch")
     args = parser.parse_args()
 
@@ -173,10 +176,12 @@ def main() -> int:
             json.dumps(
                 [
                     {
-                        "id": s.id,
-                        "governing_body": s.governing_body,
-                        "fetcher": s.fetcher,
+                        "slug": s.slug,
+                        "enabled": s.enabled,
+                        "executor": s.executor,
+                        "filename": s.filename,
                         "args": s.args,
+                        "output_dir_prefix": str(s.output_dir_prefix.relative_to(ROOT)),
                     }
                     for s in sources
                 ],
@@ -185,29 +190,18 @@ def main() -> int:
         )
         return 0
 
-    if args.governing:
-        chosen = [s for s in sources if s.governing_body == args.governing]
-        if not chosen:
-            err(f"no sources for governing_body={args.governing}")
-            return 1
-        rc = 0
-        for s in topo_sort(chosen):
-            if run_source(s) != 0:
-                rc = 1
-        return rc
-
     if args.all:
         rc = 0
-        for s in topo_sort(sources):
+        for s in topo_sort([s for s in sources if s.enabled]):
             if run_source(s) != 0:
                 rc = 1
         return rc
 
     if args.source:
-        match = next((s for s in sources if s.id == args.source), None)
+        match = next((s for s in sources if s.slug == args.source), None)
         if match is None:
             err(f"unknown source: {args.source}")
-            err(f"  available: {', '.join(s.id for s in sources)}")
+            err(f"  available: {', '.join(s.slug for s in sources)}")
             return 1
         return run_source(match)
 

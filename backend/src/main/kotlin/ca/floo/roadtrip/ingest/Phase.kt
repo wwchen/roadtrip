@@ -22,25 +22,11 @@ sealed interface Phase {
     ) : Phase
 }
 
-// A unit of refresh producing one coherent on-disk artifact (campgrounds,
-// planet-fitness, …). One target = one mutex; fetch + import on the same
-// target serialize. Targets that share an artifact (campgrounds.geojson)
-// keep all their fetch phases under one target so they can't interleave.
+// A unit of refresh producing one coherent on-disk artifact (one
+// data_source from config/poi-registry.yaml). One target = one mutex;
+// fetch + import on the same target serialize.
 data class Target(
     val name: String,
     val fetchPhases: List<Phase.Fetch>,
     val importPhases: List<Phase.Import>,
-    // Aggregate targets bundle multiple per-source targets under a
-    // governing-body slug (e.g. `alberta-parks` → all sources under that
-    // body). Excluded from the no-target fan-out (`/api/admin/data/fetch`
-    // with no slug) to avoid running the same source twice. Per-target
-    // calls still work — `/api/admin/data/fetch/alberta-parks` runs every
-    // phase under that body.
-    val aggregate: Boolean = false,
-    // Manual targets are also excluded from the fan-out, but for a
-    // different reason: their fetcher needs setup the backend can't do on
-    // its own (e.g. tesla-* needs curl-impersonate + fresh Akamai cookies,
-    // both bound to the host that minted them). Run via explicit
-    // `TARGET=<id>` after the operator has the prereqs.
-    val manual: Boolean = false,
 )

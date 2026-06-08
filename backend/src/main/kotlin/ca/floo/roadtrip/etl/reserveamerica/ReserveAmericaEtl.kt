@@ -47,9 +47,8 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, Poi.Campground> {
     override fun transform(
         dto: ReserveAmericaDto,
         ctx: TransformCtx,
-    ): List<Poi.Campground> {
-        val gbId = ctx.governingBodyId("alberta-parks")
-        return dto.parks.map { park ->
+    ): List<Poi.Campground> =
+        dto.parks.map { park ->
             Poi.Campground(
                 source = sourceName,
                 sourceId = "ra-${park.parkId}",
@@ -57,7 +56,6 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, Poi.Campground> {
                 geomGeoJson = """{"type":"Point","coordinates":[${park.lon},${park.lat}]}""",
                 region = "AB",
                 country = "CA",
-                governingBodyId = gbId,
                 phone = park.phone,
                 address = null,
                 infoUrl = park.infoUrl,
@@ -74,7 +72,6 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, Poi.Campground> {
                 ratingReviews = null,
             )
         }
-    }
 
     private fun parsePark(
         parkId: Long,

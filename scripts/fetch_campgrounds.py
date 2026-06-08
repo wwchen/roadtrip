@@ -28,10 +28,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 from _envelope import (  # noqa: E402
     err,
     http_get_text,
+    load_source,
     parse_payload,
     utc_ts,
     write_envelope,
 )
+
+SLUG = "uscampgrounds"
+SOURCE = load_source(SLUG)
 
 REGIONS = [
     ("west", "WestCamp"),
@@ -60,7 +64,7 @@ def main() -> int:
         # CSV is text/csv, not JSON — payload stays as a string.
         payload = parse_payload(headers.get("content-type", ""), body)
         write_envelope(
-            source="uscampgrounds",
+            source_obj=SOURCE,
             fetcher=FETCHER,
             fetcher_version=FETCHER_VERSION,
             request_url=url,

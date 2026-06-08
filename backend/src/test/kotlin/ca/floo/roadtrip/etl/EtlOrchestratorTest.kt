@@ -19,7 +19,6 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
-import kotlin.test.assertTrue
 
 // End-to-end: copy a captured envelope into a tempdir-shaped data/raw/<source>/,
 // run EtlOrchestrator.runSource(), assert pois rows land. Uses the same
@@ -112,13 +111,13 @@ class EtlOrchestratorTest {
     }
 
     @Test
-    fun `upserted rows carry stamped FK to governing_body and the right category`() {
+    fun `upserted rows carry the right category and country`() {
         val orch = EtlOrchestrator(ctx, rawDir)
         orch.runSource("osm-pf")
 
         val sample =
             ctx
-                .select(POIS.NAME, POIS.CATEGORY, POIS.GOVERNING_BODY_ID, POIS.COUNTRY)
+                .select(POIS.NAME, POIS.CATEGORY, POIS.COUNTRY)
                 .from(POIS)
                 .where(POIS.SOURCE.eq("osm-pf"))
                 .and(POIS.DELETED_AT.isNull)
@@ -126,9 +125,6 @@ class EtlOrchestratorTest {
                 .fetchOne()
         assertNotNull(sample)
         assertEquals("planet-fitness", sample.value2())
-        // FK was stamped — confirms the TransformCtx → Upsert wiring.
-        assertNotNull(sample.value3())
-        assertTrue(sample.value3()!! > 0)
-        assertEquals("US", sample.value4())
+        assertEquals("US", sample.value3())
     }
 }

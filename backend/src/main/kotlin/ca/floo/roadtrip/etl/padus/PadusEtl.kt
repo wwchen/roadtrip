@@ -24,7 +24,6 @@ import java.time.Instant
 abstract class PadusEtlBase(
     final override val sourceName: String,
     private val parkType: ParkType,
-    private val governingBodySlug: String,
 ) : SourceEtl<PadusDto, Poi.Park> {
     final override val multiPart: Boolean = true
 
@@ -48,7 +47,6 @@ abstract class PadusEtlBase(
         dto: PadusDto,
         ctx: TransformCtx,
     ): List<Poi.Park> {
-        val gbId = ctx.governingBodyId(governingBodySlug)
         // PAD-US splits a single logical park (e.g. Yellowstone) into
         // multiple features, one per disjoint boundary polygon. Group by
         // source_id and merge into a GeometryCollection so each park is
@@ -56,7 +54,7 @@ abstract class PadusEtlBase(
         return dto.features
             .mapNotNull { f -> deriveKey(f)?.let { it to f } }
             .groupBy({ it.first }, { it.second })
-            .mapNotNull { (sid, group) -> mergeFeatures(sid, group, gbId, dto.fetchedAt) }
+            .mapNotNull { (sid, group) -> mergeFeatures(sid, group, dto.fetchedAt) }
     }
 
     private fun deriveKey(f: PadusFeature): String? {
@@ -76,7 +74,6 @@ abstract class PadusEtlBase(
     private fun mergeFeatures(
         sourceId: String,
         group: List<PadusFeature>,
-        gbId: Long,
         fetchedAt: Instant,
     ): Poi.Park? {
         val props = group.first().properties ?: return null
@@ -95,7 +92,6 @@ abstract class PadusEtlBase(
             geomGeoJson = geomGeoJson,
             region = props.stateNm?.takeIf { it.isNotBlank() },
             country = "US",
-            governingBodyId = gbId,
             phone = null,
             address = null,
             infoUrl = null,
@@ -126,9 +122,9 @@ abstract class PadusEtlBase(
     }
 }
 
-class PadusNpEtl : PadusEtlBase(sourceName = "padus-np", parkType = ParkType.NATIONAL, governingBodySlug = "nps")
+class PadusNpEtl : PadusEtlBase(sourceName = "padus-national-parks", parkType = ParkType.NATIONAL)
 
-class PadusSpEtl : PadusEtlBase(sourceName = "padus-sp", parkType = ParkType.STATE, governingBodySlug = "us-state-park")
+class PadusSpEtl : PadusEtlBase(sourceName = "padus-state-parks", parkType = ParkType.STATE)
 
 @Serializable
 data class PadusPageDto(

@@ -26,9 +26,10 @@ import kotlin.test.assertTrue
 // 5-element slice of a real OSM Overpass capture; if the pipeline drifts
 // against this fixture, that's the canary.
 //
-// We need a live DB only for TransformCtx (governing_body / booking_provider
-// FK lookups). Parse + validate happen in pure Kotlin; transform asks
-// TransformCtx for `governingBodyId("pf")` to stamp the FK.
+// We need a live DB only for TransformCtx (booking_provider FK lookups).
+// Parse + validate happen in pure Kotlin; transform is mostly pure too,
+// but the ctx is plumbed through for ETL implementations that resolve
+// per-row booking provider FKs.
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PlanetFitnessEtlTest {
     private lateinit var pg: PostgreSQLContainer<*>
@@ -103,9 +104,6 @@ class PlanetFitnessEtlTest {
                 "unexpected sourceId=${p.sourceId}",
             )
             assertEquals("osm-pf", p.source)
-            // FK was stamped via TransformCtx; bodyless lookup would have
-            // thrown an error.
-            assertTrue(p.governingBodyId > 0, "governingBodyId not stamped")
             // Continental US bbox in the fetcher → country=US for every row.
             assertEquals("US", p.country)
             assertNotNull(p.geomGeoJson)

@@ -15,8 +15,7 @@ import json
 import sys
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent))
-from _envelope import RAW_ROOT  # noqa: E402
+RAW_ROOT = Path(__file__).parent.parent / "data" / "raw"
 
 ROOT = Path(__file__).parent.parent
 OLD_CACHE = ROOT / "data" / "pricing-cache"

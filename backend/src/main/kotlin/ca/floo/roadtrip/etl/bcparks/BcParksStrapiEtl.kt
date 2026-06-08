@@ -40,14 +40,10 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Park> {
     override fun transform(
         dto: BcParksDto,
         ctx: TransformCtx,
-    ): List<Poi.Park> {
-        val gbId = ctx.governingBodyId("bc-parks")
-        return dto.rows.mapNotNull { transformRow(it, gbId, dto.fetchedAt) }
-    }
+    ): List<Poi.Park> = dto.rows.mapNotNull { transformRow(it, dto.fetchedAt) }
 
     private fun transformRow(
         row: BcParksRow,
-        gbId: Long,
         fetchedAt: Instant,
     ): Poi.Park? {
         // ORCS (Official Records and Conservation System) is the stable
@@ -67,7 +63,6 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, Poi.Park> {
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
             region = "BC",
             country = "CA",
-            governingBodyId = gbId,
             phone = row.parkContact?.takeIf { it.isNotBlank() },
             address = null,
             infoUrl = row.url?.takeIf { it.isNotBlank() },

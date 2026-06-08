@@ -20,10 +20,53 @@ import json
 import sys
 import urllib.error
 import urllib.request
+from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).parent.parent
-RAW_ROOT = ROOT / "data" / "raw"
+REGISTRY = ROOT / "config" / "poi-registry.yaml"
+
+
+@dataclass
+class LoadedSource:
+    """One row from `data_sources:` in config/poi-registry.yaml.
+
+    Exposes the bits the per-source fetcher scripts need: where to write
+    the envelope (`output_dir_prefix`, relative to ROOT), the slug used
+    for source labelling, and the optional CLI args block.
+    """
+
+    slug: str
+    name: str
+    output_dir_prefix: Path
+    args: dict = field(default_factory=dict)
+
+
+def load_source(slug: str) -> LoadedSource:
+    """Look up a single data_source entry by slug.
+
+    PyYAML-only — no Kotlin coupling. The YAML is the contract.
+    """
+    try:
+        import yaml  # PyYAML
+    except ImportError:
+        err("scripts/_envelope.load_source needs PyYAML: pip install pyyaml")
+        raise
+
+    if not REGISTRY.exists():
+        raise RuntimeError(f"missing {REGISTRY}")
+    doc = yaml.safe_load(REGISTRY.read_text()) or {}
+    for src in doc.get("data_sources") or []:
+        if src.get("slug") == slug:
+            fetcher = src.get("fetcher") or {}
+            prefix = fetcher.get("output_dir_prefix") or f"data/raw/{slug}"
+            return LoadedSource(
+                slug=slug,
+                name=src.get("name") or slug,
+                output_dir_prefix=ROOT / prefix,
+                args=fetcher.get("args") or {},
+            )
+    raise KeyError(f"data_source slug={slug!r} not in {REGISTRY}")
 
 
 def utc_ts() -> str:
@@ -34,7 +77,8 @@ def utc_ts() -> str:
 
 def write_envelope(
     *,
-    source: str,
+    source: str | None = None,
+    source_obj: LoadedSource | None = None,
     fetcher: str,
     fetcher_version: str,
     request_url: str,
@@ -47,7 +91,12 @@ def write_envelope(
     part: str | None = None,
     ts: str | None = None,
 ) -> Path:
-    """Write a single capture under data/raw/<source>/. Returns the path written.
+    """Write a single capture for one data_source. Returns the path written.
+
+    Either `source` (slug string — the loader resolves it via
+    config/poi-registry.yaml) or `source_obj` (already-loaded
+    LoadedSource) must be supplied. When both are given, `source_obj`
+    wins.
 
     The Kotlin ETL parses the outer shape uniformly and dispatches the
     `payload` field by `fetcher`. `payload` carries the verbatim upstream
@@ -60,14 +109,20 @@ def write_envelope(
     `ts` lets a paginated/multi-step capture force all parts under the
     same timestamp directory; defaults to now.
     """
+    if source_obj is None:
+        if source is None:
+            raise TypeError("write_envelope: pass `source=<slug>` or `source_obj=<LoadedSource>`")
+        source_obj = load_source(source)
+    out_root = source_obj.output_dir_prefix
+    slug = source_obj.slug
     ts = ts or utc_ts()
     if part:
-        out_dir = RAW_ROOT / source / ts
+        out_dir = out_root / ts
         out_dir.mkdir(parents=True, exist_ok=True)
         out = out_dir / f"{part}.json"
     else:
-        (RAW_ROOT / source).mkdir(parents=True, exist_ok=True)
-        out = RAW_ROOT / source / f"{ts}.json"
+        out_root.mkdir(parents=True, exist_ok=True)
+        out = out_root / f"{ts}.json"
 
     envelope = {
         "fetcher": fetcher,

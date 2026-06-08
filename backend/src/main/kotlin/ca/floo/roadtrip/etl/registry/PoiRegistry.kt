@@ -6,22 +6,22 @@ import java.io.File
 
 // In-memory representation of config/poi-registry.yaml. Loaded once at
 // boot, used by:
-//   1. PoiRegistrySync — UPSERTs governing_body + booking_provider rows
-//      from this into the DB (and refuses to boot if YAML deletes a slug
-//      that's still referenced by pois rows).
-//   2. EtlOrchestrator — looks up the source's governing_body slug + the
-//      booking_provider FK (if any) when transforming.
+//   1. PoiRegistrySync — UPSERTs booking_provider rows from this into the
+//      DB (and refuses to boot if YAML deletes a (vendor, host) that's
+//      still referenced by pois rows).
+//   2. EtlOrchestrator / IngestController — looks up the source's
+//      etl_adapter to decide whether to run the ETL or skip the import
+//      phase entirely (no-import for adapters not yet implemented).
+//   3. RegistryTargets — flattens enabled data_sources into IngestController
+//      targets (one per source).
 //
-// Adding a new source = appending one entry under the relevant
-// governing_body's `sources:` list. Adding a new vendor = one
-// `booking_providers:` entry plus a Kotlin ETL impl + EtlOrchestrator
-// registration. No Flyway migration needed for either.
+// Adding a new source = appending one entry under `data_sources`. Adding
+// a new vendor = a new `data_provider` block on a source plus a Kotlin
+// adapter class. No Flyway migration needed for either.
 @Serializable
 data class PoiRegistry(
-    @kotlinx.serialization.SerialName("governing_bodies")
-    val governingBodies: List<GoverningBodyEntry>,
-    @kotlinx.serialization.SerialName("booking_providers")
-    val bookingProviders: List<BookingProviderEntry>,
+    @kotlinx.serialization.SerialName("data_sources")
+    val dataSources: List<DataSourceEntry>,
 ) {
     companion object {
         private val yaml =
@@ -42,30 +42,20 @@ data class PoiRegistry(
      * dangling references at boot rather than at first row-insert.
      *
      * Today's checks:
-     *   - every `booking_provider:` reference (under a governing_body or a
-     *     source) points at a declared `booking_providers:` row
-     *   - governing_body slugs are unique
-     *   - source ids are unique across the whole file
+     *   - data_source slugs are unique
+     *   - depends_on references point at a declared slug
      */
     fun validate() {
         val errs = mutableListOf<String>()
-        val gbSlugSeen = mutableSetOf<String>()
-        for (gb in governingBodies) {
-            if (!gbSlugSeen.add(gb.slug)) errs += "duplicate governing_body slug='${gb.slug}'"
-            gb.bookingProvider?.let { ref ->
-                if (!bpExists(ref)) errs += danglingMsg("governing_body '${gb.slug}'", ref)
-            }
-            for (s in gb.sources) {
-                s.bookingProvider?.let { ref ->
-                    if (!bpExists(ref)) errs += danglingMsg("source '${s.id}'", ref)
-                }
-            }
+        val slugSeen = mutableSetOf<String>()
+        for (s in dataSources) {
+            if (!slugSeen.add(s.slug)) errs += "duplicate data_source slug='${s.slug}'"
         }
-        val srcSeen = mutableSetOf<String>()
-        for (gb in governingBodies) {
-            for (s in gb.sources) {
-                if (!srcSeen.add(s.id)) {
-                    errs += "duplicate source id='${s.id}' (under governing_body '${gb.slug}')"
+        val allSlugs = dataSources.map { it.slug }.toSet()
+        for (s in dataSources) {
+            for (dep in s.dependsOn) {
+                if (dep !in allSlugs) {
+                    errs += "data_source '${s.slug}'.depends_on='$dep' is not a declared slug"
                 }
             }
         }
@@ -75,81 +65,58 @@ data class PoiRegistry(
         }
     }
 
-    private fun bpExists(ref: BookingProviderRef): Boolean = bookingProviders.any { it.vendor == ref.vendor && it.host == ref.host }
+    /** Sources to run on a no-target fan-out / drive ETL imports. */
+    fun enabledSources(): List<DataSourceEntry> = dataSources.filter { it.enabled }
 
-    private fun danglingMsg(
-        owner: String,
-        ref: BookingProviderRef,
-    ): String {
-        val v = ref.vendor
-        val h = ref.host
-        return "$owner.booking_provider (vendor=$v, host=$h) is not declared in booking_providers:"
+    /**
+     * The deduped (vendor, host) booking-provider set across every
+     * declared data_source's `data_provider` block. The DB sync UPSERTs
+     * one row per element.
+     */
+    fun bookingProviders(): List<DataProvider> {
+        val seen = LinkedHashMap<Pair<String, String?>, DataProvider>()
+        for (s in dataSources) {
+            val p = s.dataProvider ?: continue
+            val key = p.vendor to p.host
+            // First wins — later entries with the same (vendor, host) are
+            // deduped silently. Display name and adapter are expected to
+            // agree across sources that share a provider.
+            seen.putIfAbsent(key, p)
+        }
+        return seen.values.toList()
     }
-
-    /** Look up by slug — used by ETL transformers. Throws if absent. */
-    fun governingBody(slug: String): GoverningBodyEntry =
-        governingBodies.firstOrNull { it.slug == slug }
-            ?: error(
-                "governing body slug=$slug not in config/poi-registry.yaml — " +
-                    "add a row there",
-            )
-
-    /** Aspira-style multi-host vendors disambiguate by host. */
-    fun bookingProvider(
-        vendor: String,
-        host: String?,
-    ): BookingProviderEntry =
-        bookingProviders.firstOrNull { it.vendor == vendor && it.host == host }
-            ?: error(
-                "booking_provider (vendor=$vendor, host=$host) not in " +
-                    "config/poi-registry.yaml",
-            )
 }
 
 @Serializable
-data class GoverningBodyEntry(
+data class DataSourceEntry(
     val slug: String,
     val name: String,
-    val kind: String, // federal | state | provincial | local | private | corporate
-    val country: String? = null, // ISO 3166-1 alpha-2; null for cross-border vendors
-    // Default booking_provider for POIs whose governing body is this body.
-    // Per-row transformers can override (e.g. some 'us-state-park' rows
-    // route to Aspira via WA, others elsewhere). When this body has a 1:1
-    // tie to one booking system (NPS → recgov; Parks Canada → aspira PC),
-    // the transformer reads it from here instead of hardcoding.
-    @kotlinx.serialization.SerialName("booking_provider")
-    val bookingProvider: BookingProviderRef? = null,
-    val sources: List<SourceEntry> = emptyList(),
-)
-
-@Serializable
-data class SourceEntry(
-    val id: String, // matches data/raw/<id>/, also pois.source
-    val fetcher: String, // scripts/<fetcher>.py
-    val args: Map<String, String> = emptyMap(),
-    @kotlinx.serialization.SerialName("booking_provider")
-    val bookingProvider: BookingProviderRef? = null,
+    val enabled: Boolean = true,
+    val category: String,
+    val fetcher: Fetcher,
+    @kotlinx.serialization.SerialName("etl_adapter")
+    val etlAdapter: String? = null,
+    @kotlinx.serialization.SerialName("data_provider")
+    val dataProvider: DataProvider? = null,
     @kotlinx.serialization.SerialName("depends_on")
     val dependsOn: List<String> = emptyList(),
-    // Skip in the no-target fan-out (`make data-fetch`). The source still
-    // works via explicit `TARGET=<id>`. Use for fetchers that need
-    // host-only setup (curl-impersonate, fresh cookies) or strict rate
-    // budgets — running them on every routine refresh either fails on
-    // missing dependencies or burns an external WAF allowance.
-    val manual: Boolean = false,
 )
 
 @Serializable
-data class BookingProviderRef(
-    val vendor: String,
-    val host: String? = null,
+data class Fetcher(
+    val executor: String,
+    val filename: String,
+    val args: Map<String, String> = emptyMap(),
+    @kotlinx.serialization.SerialName("output_dir_prefix")
+    val outputDirPrefix: String,
 )
 
 @Serializable
-data class BookingProviderEntry(
+data class DataProvider(
     val vendor: String,
     val host: String? = null,
     val name: String,
-    @kotlinx.serialization.SerialName("adapter_class")
-    val adapterClass: String, // empty string = no adapter implemented yet
+    // Empty string = no adapter implemented yet; availability returns
+    // no_provider until one ships.
+    val adapter: String = "",
 )
