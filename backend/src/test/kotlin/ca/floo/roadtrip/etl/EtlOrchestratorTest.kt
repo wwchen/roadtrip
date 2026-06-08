@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.etl
 
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
+import ca.floo.roadtrip.db.migrate
 import ca.floo.roadtrip.etl.registry.PoiRegistry
-import ca.floo.roadtrip.importer.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.jooq.DSLContext

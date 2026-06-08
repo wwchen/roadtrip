@@ -1,4 +1,4 @@
-// roadtrip-backend — Ktor /api/pois service + standalone importer.
+// roadtrip-backend — Ktor /api/pois service.
 //
 // jOOQ codegen runs at build time against a Testcontainers Postgres so the
 // schema in src/main/resources/db/migration/ is the source of truth, and no
@@ -53,16 +53,6 @@ version = "0.1.0"
 
 application {
     mainClass.set("ca.floo.roadtrip.MainKt")
-}
-
-// Standalone importer entry. Invoke with:
-//   ./gradlew importer --args="uscampgrounds"
-tasks.register<JavaExec>("importer") {
-    group = "application"
-    description = "Run the POI importer."
-    mainClass.set("ca.floo.roadtrip.importer.ImporterKt")
-    classpath = sourceSets["main"].runtimeClasspath
-    standardInput = System.`in`
 }
 
 // Legacy data.json → Postgres migration tool (campsite). Invoke with:
@@ -266,7 +256,6 @@ kover {
                 packages("ca.floo.roadtrip.db.generated", "ca.floo.roadtrip.db.generated.*")
                 classes(
                     "ca.floo.roadtrip.MainKt",
-                    "ca.floo.roadtrip.importer.ImporterKt",
                     "ca.floo.campsite.recgov.booker.tools.*",
                 )
             }

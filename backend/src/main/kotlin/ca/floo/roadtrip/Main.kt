@@ -9,13 +9,13 @@ import ca.floo.roadtrip.api.routeRoutes
 import ca.floo.roadtrip.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.aspira.CachedAspiraAvailability
 import ca.floo.roadtrip.aspira.aspiraAvailabilityRoutes
+import ca.floo.roadtrip.db.DbConfig
+import ca.floo.roadtrip.db.dataSourceFor
+import ca.floo.roadtrip.db.dsl
+import ca.floo.roadtrip.db.migrate
 import ca.floo.roadtrip.etl.EtlOrchestrator
 import ca.floo.roadtrip.etl.registry.PoiRegistry
 import ca.floo.roadtrip.geocode.MapboxGeocoder
-import ca.floo.roadtrip.importer.DbConfig
-import ca.floo.roadtrip.importer.dataSourceFor
-import ca.floo.roadtrip.importer.dsl
-import ca.floo.roadtrip.importer.migrate
 import ca.floo.roadtrip.ingest.IngestController
 import ca.floo.roadtrip.ingest.adminIngestRoutes
 import ca.floo.roadtrip.ingest.fetchTargetsFromRegistry

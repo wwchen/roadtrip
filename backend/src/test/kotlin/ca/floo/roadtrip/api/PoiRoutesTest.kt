@@ -1,12 +1,7 @@
 package ca.floo.roadtrip.api
 
+import ca.floo.roadtrip.db.migrate
 import ca.floo.roadtrip.etl.registry.PoiRegistry
-import ca.floo.roadtrip.importer.Category
-import ca.floo.roadtrip.importer.Importer
-import ca.floo.roadtrip.importer.Source
-import ca.floo.roadtrip.importer.StagedPoi
-import ca.floo.roadtrip.importer.migrate
-import ca.floo.roadtrip.importer.pointGeoJson
 import ca.floo.roadtrip.route.MapboxDirections
 import ca.floo.roadtrip.route.RouteCache
 import ca.floo.roadtrip.route.RouteResponse
@@ -23,7 +18,6 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -38,7 +32,6 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
-import java.time.Instant
 import kotlin.test.assertEquals
 import java.io.File as IoFile
 
@@ -92,9 +85,9 @@ class PoiRoutesTest {
         testApplication {
             seed(
                 listOf(
-                    row("inside-1", "Vancouver Park", -123.0, 49.0, Category.CAMPGROUND),
-                    row("inside-2", "Whistler Camp", -122.95, 50.1, Category.CAMPGROUND),
-                    row("outside-fl", "Miami Park", -80.0, 25.0, Category.CAMPGROUND),
+                    row("inside-1", "Vancouver Park", -123.0, 49.0, "campground"),
+                    row("inside-2", "Whistler Camp", -122.95, 50.1, "campground"),
+                    row("outside-fl", "Miami Park", -80.0, 25.0, "campground"),
                 ),
             )
             application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
@@ -127,7 +120,7 @@ class PoiRoutesTest {
             // valid empty FeatureCollection — not an error, not a missing field.
             seed(
                 listOf(
-                    row("vancouver", "Vancouver Park", -123.0, 49.0, Category.CAMPGROUND),
+                    row("vancouver", "Vancouver Park", -123.0, 49.0, "campground"),
                 ),
             )
             application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
@@ -149,9 +142,9 @@ class PoiRoutesTest {
         testApplication {
             seed(
                 listOf(
-                    row("camp-1", "Camp A", -123.0, 49.0, Category.CAMPGROUND),
-                    row("park-1", "State Park A", -123.05, 49.05, Category.STATE_PARK),
-                    row("pf-1", "PF Vancouver", -123.1, 49.1, Category.PLANET_FITNESS),
+                    row("camp-1", "Camp A", -123.0, 49.0, "campground"),
+                    row("park-1", "State Park A", -123.05, 49.05, "state-park"),
+                    row("pf-1", "PF Vancouver", -123.1, 49.1, "planet-fitness"),
                 ),
             )
             application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
@@ -193,7 +186,7 @@ class PoiRoutesTest {
                         name = "Site $i",
                         lon = -123.0 + (i * 0.0001),
                         lat = 49.0 + (i * 0.0001),
-                        category = Category.CAMPGROUND,
+                        category = "campground",
                     )
                 }
             seed(rows)
@@ -306,9 +299,9 @@ class PoiRoutesTest {
             // (Spokane-ish) should fall outside.
             seed(
                 listOf(
-                    row("inside-1", "Inside A", -123.0, 49.05, Category.CAMPGROUND),
-                    row("inside-2", "Inside B", -122.5, 48.0, Category.CAMPGROUND),
-                    row("outside-1", "Outside East", -118.0, 47.0, Category.CAMPGROUND),
+                    row("inside-1", "Inside A", -123.0, 49.05, "campground"),
+                    row("inside-2", "Inside B", -122.5, 48.0, "campground"),
+                    row("outside-1", "Outside East", -118.0, 47.0, "campground"),
                 ),
             )
 
@@ -374,8 +367,8 @@ class PoiRoutesTest {
         testApplication {
             seed(
                 listOf(
-                    row("cg-1", "Camp", -123.0, 49.0, Category.CAMPGROUND),
-                    row("sp-1", "Park", -123.05, 49.05, Category.STATE_PARK),
+                    row("cg-1", "Camp", -123.0, 49.0, "campground"),
+                    row("sp-1", "Park", -123.05, 49.05, "state-park"),
                 ),
             )
             application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
@@ -408,9 +401,9 @@ class PoiRoutesTest {
             val rows =
                 buildList {
                     repeat(50) { i ->
-                        add(row("pf-$i", "PF $i", -123.0 + i * 0.0001, 49.0, Category.PLANET_FITNESS))
-                        add(row("cg-$i", "CG $i", -122.9 + i * 0.0001, 49.0, Category.CAMPGROUND))
-                        add(row("sp-$i", "SP $i", -122.8 + i * 0.0001, 49.0, Category.STATE_PARK))
+                        add(row("pf-$i", "PF $i", -123.0 + i * 0.0001, 49.0, "planet-fitness"))
+                        add(row("cg-$i", "CG $i", -122.9 + i * 0.0001, 49.0, "campground"))
+                        add(row("sp-$i", "SP $i", -122.8 + i * 0.0001, 49.0, "state-park"))
                     }
                 }
             seed(rows)
@@ -444,16 +437,13 @@ class PoiRoutesTest {
             val polygonGeoJson = """{"type":"Polygon","coordinates":$ring}"""
             seed(
                 listOf(
-                    StagedPoi(
+                    TestRow(
                         sourceId = "poly-1",
-                        category = Category.STATE_PARK,
+                        category = "state-park",
                         name = "Polygon Park",
                         geomGeoJson = polygonGeoJson,
                         region = "BC",
                         unitName = "Polygon Park",
-                        properties = buildJsonObject { put("test", true) },
-                        reserveUrl = null,
-                        fetchedAt = Instant.parse("2026-06-01T00:00:00Z"),
                     ),
                 ),
             )
@@ -496,33 +486,57 @@ class PoiRoutesTest {
         return sb.toString()
     }
 
+    /** Local fixture row. Deliberately small — covers the columns the test asserts on. */
+    private data class TestRow(
+        val sourceId: String,
+        val category: String,
+        val name: String,
+        val geomGeoJson: String,
+        val region: String? = "BC",
+        val unitName: String? = null,
+        val properties: String = """{"test":true}""",
+    )
+
     private fun row(
         sourceId: String,
         name: String,
         lon: Double,
         lat: Double,
-        category: Category,
-    ): StagedPoi =
-        StagedPoi(
+        category: String,
+    ): TestRow =
+        TestRow(
             sourceId = sourceId,
             category = category,
             name = name,
-            geomGeoJson = pointGeoJson(lon, lat),
-            region = "BC",
-            unitName = null,
-            properties = buildJsonObject { put("test", true) },
-            reserveUrl = null,
-            fetchedAt = Instant.parse("2026-06-01T00:00:00Z"),
+            geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
         )
 
-    private fun seed(rows: List<StagedPoi>) {
-        // Use the importer to honor the source/source_id constraint.
-        Importer(ctx).run(
-            object : Source {
-                override val name = "test"
-
-                override fun staged() = rows.asSequence()
-            },
-        )
+    private fun seed(rows: List<TestRow>) {
+        // Direct SQL insert — bypasses Upsert + the legacy Importer. Keeps
+        // the test focused on the serving path. Geometry goes through
+        // ST_SetSRID(ST_GeomFromGeoJSON(...), 4326) so the SRID matches the
+        // pois.geom column declaration.
+        for (r in rows) {
+            ctx.execute(
+                """
+                INSERT INTO pois (
+                    source, source_id, category, name, geom,
+                    region, unit_name, properties, fetched_at
+                ) VALUES (
+                    ?, ?, ?, ?,
+                    ST_SetSRID(ST_GeomFromGeoJSON(?), 4326),
+                    ?, ?, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
+                )
+                """.trimIndent(),
+                "test",
+                r.sourceId,
+                r.category,
+                r.name,
+                r.geomGeoJson,
+                r.region,
+                r.unitName,
+                r.properties,
+            )
+        }
     }
 }
