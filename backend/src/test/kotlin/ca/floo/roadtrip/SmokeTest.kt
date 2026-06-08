@@ -8,7 +8,6 @@ import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
 import com.microsoft.playwright.options.WaitForSelectorState
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
-import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
@@ -40,12 +39,6 @@ class SmokeTest {
         playwright.close()
     }
 
-    // Targets a Parks Canada pin ("Tunnel Mountain Village") which the
-    // Aspira-PC ETL chain was supposed to produce. The DAG migration
-    // (chore/poi-registry-dag-proposal) declares the chain in YAML but
-    // the leaf-walker + join-by-name ETLs aren't wired yet, so Parks
-    // Canada is a no-op import. Re-enable once Aspira-PC ships.
-    @Disabled("blocked on Aspira-PC ETL — see RFC 0007 follow-up")
     @Test
     fun `cold load - api pois - Banff campground popup`() {
         val context =
@@ -86,7 +79,7 @@ class SmokeTest {
 
             // 3. Programmatic pan to Banff. Triggers moveend → bbox refresh.
             page.evaluate(
-                "() => globalThis.__rtMap.flyTo({ center: [-115.55, 51.18], zoom: 13, animate: false })",
+                "() => globalThis.__rtMap.jumpTo({ center: [-115.55, 51.18], zoom: 13 })",
             )
 
             // 4. Wait for ≥1 campground in the cg source.
@@ -99,16 +92,31 @@ class SmokeTest {
             // 5. Drive search → result click → synthesizeClick (deterministic
             // popup render, dodges pixel-rounding issues from clicking the dot).
             // The Google-Maps-style top bar (web/topbar.js) puts the search input
-            // at .tb-row[data-i="0"] .tb-input; matching pin results render as
-            // .tb-result rows in #tb-dropdown.
+            // at .tb-row[data-i="0"] .tb-input; pin rows in the dropdown are
+            // .tb-result rows whose .tb-kind chip contains "CG" (campgrounds).
+            // Mapbox geocoder also surfaces "ADDR" rows for the same query,
+            // so filter on the kind chip to avoid clicking an address.
             page.fill(".tb-row[data-i=\"0\"] .tb-input", "tunnel mountain village")
-            page.locator("#tb-dropdown .tb-result").first().waitFor(
+            val pinResult =
+                page.locator("#tb-dropdown .tb-result").filter(
+                    com.microsoft.playwright.Locator
+                        .FilterOptions()
+                        .setHas(
+                            page.locator(
+                                ".tb-kind",
+                                com.microsoft.playwright.Page
+                                    .LocatorOptions()
+                                    .setHasText("CG"),
+                            ),
+                        ),
+                )
+            pinResult.first().waitFor(
                 com.microsoft.playwright.Locator
                     .WaitForOptions()
                     .setState(WaitForSelectorState.VISIBLE)
                     .setTimeout(5_000.0),
             )
-            page.locator("#tb-dropdown .tb-result").first().click()
+            pinResult.first().click()
 
             // 6. Drawer renders with name + reserve link. (Tunnel Mountain is
             // a Parks Canada pin — no recgov_id — so the drawer skips the
@@ -120,7 +128,11 @@ class SmokeTest {
                     .IsVisibleOptions()
                     .setTimeout(10_000.0),
             )
-            assertThat(drawer.locator("h2")).containsText("Tunnel Mountain Village")
+            // Aspira-PC names this pin "Tunnel Mountain - Village 1" /
+            // "...- Village 2" / "...- Trailer Court"; the loose "Tunnel
+            // Mountain" prefix is enough to confirm we landed on the
+            // right cluster regardless of which sibling sort-orders first.
+            assertThat(drawer.locator("h2")).containsText("Tunnel Mountain")
 
             val reserveBtn = drawer.locator("a.cg-btn-primary")
             assertThat(reserveBtn).isVisible()
@@ -133,13 +145,12 @@ class SmokeTest {
                 "reserve href didn't match expected hosts: $href",
             )
 
-            // 7. last_verified footer. The drawer also has a Booking-system
-            // footnote that uses the same .footer class, so match the
-            // verified one by its content.
-            assertThat(drawer.getByText(Pattern.compile("Verified \\d{4}-\\d{2}-\\d{2}")))
-                .isVisible()
-
-            // 8. No JS errors during the run.
+            // 7. No JS errors during the run.
+            //
+            // (Removed the "Verified YYYY-MM-DD" footer check that the old
+            // smoke had — Aspira pins are emitted with last_verified=null
+            // because /api/maps doesn't carry editorial-touch metadata.
+            // Re-add when ETL gains a last_verified source.)
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during smoke: ${pageErrors.joinToString(" | ")}",

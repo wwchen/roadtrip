@@ -106,4 +106,10 @@ class InputBundle(
         }
         return rawCaptures.values.first()
     }
+
+    /** Slugs in YAML declaration order, for ETLs whose dispatch is per-input. */
+    fun dataSourceSlugs(): List<String> = rawCaptures.keys.toList()
+
+    /** Same, for the subset that resolved to upstream ETL outputs. */
+    fun etlSlugs(): List<String> = etlOutputs.keys.toList()
 }
