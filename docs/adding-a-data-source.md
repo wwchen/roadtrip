@@ -52,7 +52,7 @@ What flows where:
 How runs are triggered:
 
 - **One target, manual** — fetch and import are addressed differently. Fetch is per data_source: `POST /api/admin/data/fetch/<data_source-slug>`. Import is per poi_data row: `POST /api/admin/data/import/<poi_data-name>`. Both return a `run_id` and final status; full history in `ingest_runs`.
-- **Fan-out** — `POST /api/admin/data/{fetch,import}` (no slug) walks every `enabled: true` row sequentially. Skips anything with `fetcher.enabled: false` for the fetch leg.
+- **Fan-out** — `POST /api/admin/data/fetch` (no slug) walks every `data_sources:` row sequentially. `POST /api/admin/data/import` walks every `poi_data:` row whose `enabled:` is true (default). A target whose fetcher is unreachable is recorded as a failed run and the next target proceeds; the import phase doesn't depend on the fetch phase.
 - **Local dev** — Tilt buttons + `make data-fetch` / `make data-import` curl the same admin endpoints.
 - **Recurring** — currently none; runs are triggered manually until a cron/worker lands.
 
@@ -85,13 +85,11 @@ This is the contract. Everything else fulfills it.
 data_sources:
   - slug: <data_source-slug>
     name: <human-readable name>
-    enabled: true
     fetcher:
       executor: <runtime>           # e.g. python3, node, bun, /usr/bin/env bash — anything on PATH
       filename: <path/to/fetcher>   # repo-relative; passed as the executor's first argument
       args: {}                      # optional; flattened to --key value at runtime
       output_dir_prefix: <path>     # repo-relative dir for raw envelopes; convention: data/raw/<data_source-slug>
-      enabled: true                 # set false to keep imports running when upstream is unreachable
 ```
 
 Then append a `poi_data:` row for the dataset that consumes those fetchers. The `etls:` list is ordered: each entry depends only on data_sources or earlier siblings. The **last entry is the emitter** — its adapter's output type must be `Poi.*`.
@@ -99,6 +97,7 @@ Then append a `poi_data:` row for the dataset that consumes those fetchers. The 
 ```yaml
 poi_data:
   - name: <Human-Readable Dataset Name>
+    enabled: true                   # default true; set false to skip in fan-out import
     category: <category>
     subcategory: <subcategory>      # required for categories with sub-buckets
     etls:
