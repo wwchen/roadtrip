@@ -24,6 +24,12 @@ function drawerHeader(name, sub, verdictHtml = '') {
 }
 
 function renderPricing(books) {
+  // MapLibre serializes nested feature properties to JSON strings when
+  // they live on its source; the pricebooks list comes back stringified
+  // by the time we read it from a click event. Parse on the way in.
+  if (typeof books === 'string') {
+    try { books = JSON.parse(books); } catch { books = []; }
+  }
   if (!books || !books.length) return '<div class="meta">No pricing on file.</div>';
 
   const tslaCharging = books.filter(b => b.feeType === 'CHARGING' && b.vehicleMakeType === 'TSLA');

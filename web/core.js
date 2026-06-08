@@ -95,9 +95,13 @@ export function escapeHtml(s) {
 }
 
 // Rough centroid of any GeoJSON geometry via bbox midpoint — good enough for flyTo.
+// Handles Point/LineString/Polygon/MultiPolygon/MultiLineString/MultiPoint via
+// recursive coordinate descent, and GeometryCollection via its `geometries`
+// array. PAD-US ships some parks as GeometryCollection (mixed polygon parts).
 export function geomCenter(geom) {
   let minX=Infinity, minY=Infinity, maxX=-Infinity, maxY=-Infinity;
   const visit = (c) => {
+    if (!Array.isArray(c) || c.length === 0) return;
     if (typeof c[0] === 'number') {
       if (c[0] < minX) minX = c[0];
       if (c[0] > maxX) maxX = c[0];
@@ -105,7 +109,12 @@ export function geomCenter(geom) {
       if (c[1] > maxY) maxY = c[1];
     } else for (const x of c) visit(x);
   };
-  visit(geom.coordinates);
+  if (geom?.type === 'GeometryCollection') {
+    for (const g of (geom.geometries || [])) visit(g.coordinates);
+  } else {
+    visit(geom?.coordinates);
+  }
+  if (!isFinite(minX)) return [0, 0, [[0, 0], [0, 0]]];
   return [(minX + maxX) / 2, (minY + maxY) / 2, [[minX, minY], [maxX, maxY]]];
 }
 
