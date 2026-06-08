@@ -86,7 +86,6 @@ jobs:
       ROADTRIP_DB_URL: jdbc:postgresql://localhost:5432/roadtrip
       ROADTRIP_DB_USER: roadtrip
       ROADTRIP_DB_PASSWORD: roadtrip
-      ROADTRIP_DATA_DIR: ${{ github.workspace }}/data
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -101,14 +100,6 @@ jobs:
         run: ./gradlew shadowJar
         working-directory: backend
 
-      # 'all' = uscampgrounds + alberta-provincial + parks-canada + state-parks
-      # + national-parks + osm-pf. Smoke only needs uscampgrounds + parks-canada
-      # for the Tunnel Mountain assertion, but importing all keeps the smoke
-      # representative of the live data shape.
-      - name: Import POI sources
-        run: ./gradlew importer --args=all
-        working-directory: backend
-
       - name: Start backend
         run: |
           jar=$(ls backend/build/libs/roadtrip-backend-*-all.jar | head -1)
@@ -121,6 +112,31 @@ jobs:
             sleep 1
           done
           echo "backend failed to start"; tail -100 backend.log; exit 1
+
+      # Seed pois with a tiny fixture so the serving smoke has rows to render.
+      # The new ETL pipeline is pinned out of CI for now (it needs upstream
+      # auth + WAF-shaped fetches that don't fit here); this row gives the
+      # FE a Banff/Parks-Canada-shaped Aspira pin which matches what the
+      # smoke clicks on. Fetch + import remain exercisable locally via Tilt.
+      - name: Seed pois with smoke fixture
+        run: |
+          PGPASSWORD=roadtrip psql -h localhost -U roadtrip -d roadtrip <<'SQL'
+          INSERT INTO pois (
+              source, source_id, category, name, geom, region, country,
+              info_url, fetched_at, provider_ref, properties
+          ) VALUES (
+              'aspira-pc-pins', 'aspira-fixture-tunnel-mountain',
+              'campground', 'Tunnel Mountain - Village 1',
+              ST_SetSRID(ST_GeomFromGeoJSON(
+                  '{"type":"Point","coordinates":[-115.5309, 51.1917]}'
+              ), 4326),
+              'AB', 'CA',
+              'https://reservation.pc.gc.ca/',
+              now(),
+              '{"transactionLocationId":-2147483648,"mapId":-2147483622,"resourceLocationId":-2147483646}'::jsonb,
+              '{"subcategory":"federal","upstream":{"host":"reservation.pc.gc.ca","match_kind":"fixture"}}'::jsonb
+          );
+          SQL
 
       - name: Install Playwright Chromium
         run: ./gradlew installPlaywrightBrowsers

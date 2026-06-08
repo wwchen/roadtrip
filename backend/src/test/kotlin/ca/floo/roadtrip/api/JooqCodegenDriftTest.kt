@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.api
 
 import ca.floo.roadtrip.db.generated.tables.Pois
-import ca.floo.roadtrip.importer.migrate
+import ca.floo.roadtrip.db.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.junit.jupiter.api.AfterAll

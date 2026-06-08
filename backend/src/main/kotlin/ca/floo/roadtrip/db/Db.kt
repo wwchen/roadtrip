@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.importer
+package ca.floo.roadtrip.db
 
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
