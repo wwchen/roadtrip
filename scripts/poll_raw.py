@@ -39,6 +39,7 @@ REGISTRY = ROOT / "config" / "poi-registry.yaml"
 class Source:
     slug: str
     enabled: bool
+    fetcher_enabled: bool
     executor: str
     filename: str
     args: dict = field(default_factory=dict)
@@ -60,6 +61,7 @@ def load_sources() -> list[Source]:
             Source(
                 slug=src["slug"],
                 enabled=bool(src.get("enabled", True)),
+                fetcher_enabled=bool(fetcher.get("enabled", True)),
                 executor=fetcher.get("executor", "python3"),
                 filename=fetcher.get("filename", ""),
                 args=fetcher.get("args") or {},
@@ -90,6 +92,9 @@ def captures_since(out_dir: Path, since_ts: float) -> list[Path]:
 
 
 def run_source(src: Source) -> int:
+    if not src.fetcher_enabled:
+        err(f"  ⚠ {src.slug}: fetcher.enabled=false in poi-registry.yaml; skipping")
+        return 0
     cli_args: list[str] = []
     for k, v in src.args.items():
         cli_args += [f"--{k}", str(v)]
@@ -178,6 +183,7 @@ def main() -> int:
                     {
                         "slug": s.slug,
                         "enabled": s.enabled,
+                        "fetcher_enabled": s.fetcher_enabled,
                         "executor": s.executor,
                         "filename": s.filename,
                         "args": s.args,
@@ -192,6 +198,10 @@ def main() -> int:
 
     if args.all:
         rc = 0
+        # Skip top-level disabled sources entirely. Sources with
+        # fetcher.enabled=false are kept in the topo sort (their
+        # depends_on may still matter for siblings) but `run_source`
+        # short-circuits with a "skipping" log.
         for s in topo_sort([s for s in sources if s.enabled]):
             if run_source(s) != 0:
                 rc = 1
