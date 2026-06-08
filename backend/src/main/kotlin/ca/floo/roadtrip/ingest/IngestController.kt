@@ -83,6 +83,14 @@ class IngestController(
 
     fun knownTargets(): Set<String> = targets.keys
 
+    /**
+     * Targets eligible for the no-target fan-out. Excludes aggregate
+     * targets (governing-body slugs that bundle multiple per-source
+     * targets) so a fan-out doesn't run the same source twice.
+     * Aggregates remain reachable via explicit `TARGET=<slug>` calls.
+     */
+    fun fanOutTargets(): Set<String> = targets.filterValues { !it.aggregate }.keys
+
     suspend fun startRun(
         targetName: String,
         kind: RunKind,

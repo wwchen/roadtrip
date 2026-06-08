@@ -22,6 +22,12 @@ governing_bodies:
     kind: federal
     country: US
     booking_provider: { vendor: recgov, host: www.recreation.gov }
+    sources:
+      - id: padus-np
+        fetcher: fetch_parks
+        args:
+          layer: national-parks
+        provides: park-polygon
 
   - slug: usfs
     name: US Forest Service
@@ -77,6 +83,11 @@ governing_bodies:
     kind: state
     country: US
     sources:
+      - id: padus-sp
+        fetcher: fetch_parks
+        args:
+          layer: state-parks
+        provides: park-polygon
       - id: aspira-maps-wa
         fetcher: fetch_aspira_maps
         args:
