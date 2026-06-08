@@ -23,7 +23,13 @@ services:
   postgres:
     profiles: [pois]
     image: postgis/postgis:16-3.4
-    restart: unless-stopped
+    # Restart `no` so the container's lifecycle is tied to whatever brought
+    # it up. In dev that's Tilt (compose up foreground + cleanup hook on
+    # exit); on the deploy host it's the `make deploy` orchestration.
+    # `unless-stopped` would resurrect the container on Docker Desktop
+    # reboots even when Tilt is gone, drifting "Tilt running" away from
+    # "container exists."
+    restart: "no"
     hostname: postgres
     environment:
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
