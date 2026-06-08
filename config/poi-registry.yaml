@@ -90,7 +90,7 @@ data_sources:
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov.py
-      args: { agency: NPS }
+      args: { agency: NPS, slug: nps-campgrounds-raw }
       output_dir_prefix: data/raw/nps-campgrounds-raw
 
   # --- Alberta provincial parks ----------------------------------------------
