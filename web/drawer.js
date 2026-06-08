@@ -440,13 +440,18 @@ function attachDragHandlers(root) {
   // this, we let the browser interpret the touch as a tap or scroll.
   const SLOP = 8;
 
+  // Records whether the touch began on an interactive element (link,
+  // button, input). We can't reject those at touchstart — the user
+  // needs to be able to drag-from-anywhere — but if motion stays below
+  // the slop threshold we let the tap through unimpeded.
+  let startedOnInteractive = false;
+
   function onStart(e, originatedAtHandle) {
     if (e.touches.length !== 1) return;
-    if (!originatedAtHandle && e.target.closest('a, button, input, select, textarea')) return;
-    if (!originatedAtHandle && root.scrollTop > 0) return;
     startY = e.touches[0].clientY;
     startH = root.getBoundingClientRect().height;
-    originAtHandle = originatedAtHandle;
+    startedOnInteractive =
+      !originatedAtHandle && !!e.target.closest('a, button, input, select, textarea');
     phase = originatedAtHandle ? 'handle' : 'pending';
   }
 
@@ -457,13 +462,21 @@ function attachDragHandlers(root) {
     // Pending body touch → decide whether this is a drag or a scroll.
     if (phase === 'pending') {
       if (dy > SLOP) {
+        // Body drag exceeded slop. If content is scrolled mid-drawer,
+        // hand back to the native scroll. Otherwise we own the gesture
+        // even when it started over a link or button — the user is
+        // clearly swiping, not tapping.
+        if (root.scrollTop > 0) {
+          phase = null;
+          return;
+        }
         phase = 'body';
       } else if (dy < -SLOP || root.scrollTop > 0) {
         // User wants to scroll; release the gesture entirely.
         phase = null;
         return;
       } else {
-        return; // not enough motion yet
+        return; // not enough motion yet — let any tap through
       }
     }
 
