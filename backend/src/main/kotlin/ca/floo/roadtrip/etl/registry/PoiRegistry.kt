@@ -106,6 +106,12 @@ data class DataSourceEntry(
 data class Fetcher(
     val executor: String,
     val filename: String,
+    // false = the upstream is currently unreachable / requires host-only
+    // setup (curl-impersonate + fresh cookies, etc). Skip fetch but still
+    // run import against any existing raw captures. The parent
+    // DataSourceEntry.enabled flag still wins — disabling the data_source
+    // turns off both fetch and import; this flag only narrows fetch.
+    val enabled: Boolean = true,
     val args: Map<String, String> = emptyMap(),
     @kotlinx.serialization.SerialName("output_dir_prefix")
     val outputDirPrefix: String,

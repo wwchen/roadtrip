@@ -39,10 +39,24 @@ fun targetsFromRegistry(
                 }
                 emptyList()
             }
+        // fetcher.enabled=false sources keep their import phase but skip
+        // the fetch step. Use case: the upstream is unreachable (Tesla's
+        // Akamai blocks us, cookies stale) and we want to keep importing
+        // from the existing raw cache without re-fetching.
+        val fetchPhases =
+            if (src.fetcher.enabled) {
+                listOf(fetchPhaseFor(src, repoRoot))
+            } else {
+                log.info(
+                    "data_source slug={} has fetcher.enabled=false — fan-out will skip fetch",
+                    src.slug,
+                )
+                emptyList()
+            }
         out[src.slug] =
             Target(
                 name = src.slug,
-                fetchPhases = listOf(fetchPhaseFor(src, repoRoot)),
+                fetchPhases = fetchPhases,
                 importPhases = importPhases,
             )
     }

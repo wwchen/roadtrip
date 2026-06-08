@@ -101,6 +101,7 @@ data_sources:
     fetcher:
       executor: python3
       filename: scripts/fetch_tesla_index.py
+      enabled: false       # Akamai blocks us; cookies stale. Import from existing raw cache only.
       output_dir_prefix: data/raw/tesla-index
     etl_adapter: TeslaIndexEtl
 
@@ -111,5 +112,6 @@ data_sources:
     fetcher:
       executor: python3
       filename: scripts/fetch_tesla_locations.py
+      enabled: false       # Same as tesla-index — cookies stale. Side-loaded by TeslaIndexEtl from cache.
       output_dir_prefix: data/raw/tesla-locations
     depends_on: [tesla-index]
