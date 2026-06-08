@@ -34,6 +34,7 @@ fun targetsFromRegistry(
                     name = src.id,
                     fetchPhases = listOf(fetchPhaseFor(src, repoRoot)),
                     importPhases = listOf(Phase.Import("import:${src.id}", src.id)),
+                    manual = src.manual,
                 )
         }
     }
