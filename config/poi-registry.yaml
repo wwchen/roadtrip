@@ -1,126 +1,216 @@
 # config/poi-registry.yaml
 #
-# One file. Both Python (scripts/_envelope.py) and Kotlin (PoiRegistry.kt)
-# read it. Adding a new vendor = one entry under data_sources + one
-# Kotlin ETL class registered in EtlOrchestrator.registry.
+# Two sections.
+# 1. data_sources — fetchers. Pure network acquisition. Output to data/raw/<slug>/.
+# 2. poi_data    — POI datasets. Each row carries `name`, `category`, optional
+#    `subcategory`, and an ordered `etls:` list. The LAST entry in `etls:` is
+#    the POI emitter (must output Poi.*); earlier entries are intermediates
+#    that serialize typed payloads to data/etl-out/<etl-slug>/. List order is
+#    dependency order — entry N may only reference data_source slugs OR
+#    earlier `etls:` siblings via `inputs:`. Cycles + forward references are
+#    rejected at boot.
+#
+# Booking provider info is NOT in this file. ETLs that need it hard-code
+# their ProviderRef variant and resolve the booking_provider FK at transform
+# time via TransformCtx.bookingProviderId(vendor, host); the value of `host`
+# comes from the etl's args. Seeding of booking_provider rows happens
+# separately (see backend/src/main/resources/db/migration/).
 
+# ============================================================================
+# data_sources — fetchers
+# ============================================================================
 data_sources:
-  # Federal campgrounds via RIDB (recreation.gov backend). One entry per
-  # agency; same fetcher script + ETL adapter, args.agency selects the
-  # RIDB org. Auth via RIDB_API_KEY env var.
-  - slug: nps-campgrounds
-    name: NPS Campgrounds
+  # --- Aspira /api/maps (one fetcher, three tenants via args.host) -----------
+  - slug: aspira-maps-wa
+    name: Aspira maps (Washington State Parks)
     enabled: true
-    category: campground
-    legend_bucket: federal
     fetcher:
       executor: python3
-      filename: scripts/fetch_recgov.py
-      args: { agency: NPS, slug: nps-campgrounds }
-      output_dir_prefix: data/raw/nps-campgrounds
-    etl_adapter: RecGovCampgroundsEtl
-    data_provider:
-      vendor: recgov
-      host: www.recreation.gov
-      name: Recreation.gov
-      adapter: RecGovAdapter
+      filename: scripts/fetch_aspira_maps.py
+      args: { host: washington.goingtocamp.com }
+      output_dir_prefix: data/raw/aspira-maps-wa
 
-  - slug: padus-national-parks
-    name: US National Parks (PAD-US polygons)
-    enabled: false
-    category: national-park
-    fetcher:
-      executor: python3
-      filename: scripts/fetch_parks.py
-      args: { layer: national-parks }
-      output_dir_prefix: data/raw/padus-national-parks
-    etl_adapter: PadusNpEtl
-
-  - slug: padus-state-parks
-    name: US State Parks (PAD-US polygons)
-    enabled: false
-    category: state-park
-    fetcher:
-      executor: python3
-      filename: scripts/fetch_parks.py
-      args: { layer: state-parks }
-      output_dir_prefix: data/raw/padus-state-parks
-    etl_adapter: PadusSpEtl
-
-  - slug: bcparks-strapi
-    name: BC Provincial Parks
+  - slug: aspira-maps-bc
+    name: Aspira maps (BC Parks)
     enabled: true
-    category: campground
-    legend_bucket: provincial
     fetcher:
       executor: python3
-      filename: scripts/fetch_bc_parks.py
-      output_dir_prefix: data/raw/bcparks-strapi
-    etl_adapter: BcParksStrapiEtl
-    data_provider:
-      vendor: aspira
-      host: camping.bcparks.ca
-      name: Aspira (BC Parks)
-      adapter: AspiraAdapter
+      filename: scripts/fetch_aspira_maps.py
+      args: { host: camping.bcparks.ca }
+      output_dir_prefix: data/raw/aspira-maps-bc
 
-  - slug: reserveamerica-abpp
-    name: Alberta Provincial Parks
+  - slug: aspira-maps-pc
+    name: Aspira maps (Parks Canada)
     enabled: true
-    category: campground
-    legend_bucket: provincial
     fetcher:
       executor: python3
-      filename: scripts/fetch_reserveamerica.py
-      args: { tenant: ABPP }
-      output_dir_prefix: data/raw/reserveamerica-abpp
-    etl_adapter: ReserveAmericaEtl
-    data_provider:
-      vendor: reserveamerica
-      host: shop.albertaparks.ca
-      name: ReserveAmerica (Alberta)
-      adapter: ""
+      filename: scripts/fetch_aspira_maps.py
+      args: { host: reservation.pc.gc.ca }
+      output_dir_prefix: data/raw/aspira-maps-pc
 
+  # --- Geometry-side feeds (joined into Aspira pins) -------------------------
   - slug: uscampgrounds
-    name: US Campgrounds (uscampgrounds.info)
-    enabled: false
-    category: campground
-    # Per-row legend_bucket — the source CSVs already classify each
-    # entry as federal/state/local/private (typeLabel column), so the
-    # ETL stamps it from the row instead of statically.
+    name: uscampgrounds.info CSV
+    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_campgrounds.py
       output_dir_prefix: data/raw/uscampgrounds
-    etl_adapter: UsCampgroundsEtl
 
-  - slug: osm-pf
-    name: Planet Fitness
+  - slug: bcparks-strapi
+    name: BC Parks Strapi
     enabled: true
-    category: planet-fitness
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_bc_parks.py
+      output_dir_prefix: data/raw/bcparks-strapi
+
+  - slug: apca-accommodation
+    name: Parks Canada Accommodation (ArcGIS)
+    enabled: true
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_arcgis_layer.py
+      args:
+        url: https://services2.arcgis.com/wCOMu5IS7YdSyPNx/arcgis/rest/services/vw_Accommodation_Hebergement_V2_FGP/FeatureServer/0
+        where: "Accommodation_Type='Camping'"
+      output_dir_prefix: data/raw/apca-accommodation
+
+  - slug: apca-places
+    name: Parks Canada Places polygon centroids (ArcGIS)
+    enabled: true
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_arcgis_layer.py
+      args:
+        url: https://services2.arcgis.com/wCOMu5IS7YdSyPNx/arcgis/rest/services/vw_Places_Public_lieux_public_APCA/FeatureServer/0
+        return_centroid: true
+      output_dir_prefix: data/raw/apca-places
+
+  # --- Federal campgrounds (RIDB) --------------------------------------------
+  - slug: nps-campgrounds-raw
+    name: NPS campgrounds via RIDB
+    enabled: true
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_recgov.py
+      args: { agency: NPS }
+      output_dir_prefix: data/raw/nps-campgrounds-raw
+
+  # --- Alberta provincial parks ----------------------------------------------
+  - slug: reserveamerica-abpp-raw
+    name: ReserveAmerica Alberta park HTML
+    enabled: true
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_reserveamerica.py
+      args: { tenant: ABPP }
+      output_dir_prefix: data/raw/reserveamerica-abpp-raw
+
+  # --- Planet Fitness --------------------------------------------------------
+  - slug: osm-pf-raw
+    name: Planet Fitness via OSM
+    enabled: true
     fetcher:
       executor: python3
       filename: scripts/fetch_planet_fitness.py
-      output_dir_prefix: data/raw/osm-pf
-    etl_adapter: PlanetFitnessEtl
+      output_dir_prefix: data/raw/osm-pf-raw
 
-  - slug: tesla-index
-    name: Tesla Superchargers
+  # --- Tesla superchargers (cookies stale; import from cache only) -----------
+  - slug: tesla-index-raw
+    name: Tesla supercharger index
     enabled: true
-    category: supercharger
     fetcher:
       executor: python3
       filename: scripts/fetch_tesla_index.py
-      enabled: false       # Akamai blocks us; cookies stale. Import from existing raw cache only.
-      output_dir_prefix: data/raw/tesla-index
-    etl_adapter: TeslaIndexEtl
+      enabled: false   # Akamai blocks; rely on existing cache.
+      output_dir_prefix: data/raw/tesla-index-raw
 
-  - slug: tesla-locations
-    name: Tesla Supercharger details
+  - slug: tesla-locations-raw
+    name: Tesla supercharger detail pages
     enabled: true
-    category: supercharger
     fetcher:
       executor: python3
       filename: scripts/fetch_tesla_locations.py
-      enabled: false       # Same as tesla-index — cookies stale. Side-loaded by TeslaIndexEtl from cache.
-      output_dir_prefix: data/raw/tesla-locations
-    depends_on: [tesla-index]
+      enabled: false
+      output_dir_prefix: data/raw/tesla-locations-raw
+    depends_on: [tesla-index-raw]
+
+# ============================================================================
+# poi_data — POI datasets. Each row owns its ETL chain. pois.source = the
+# last `etls:` entry's slug. Upsert sweep scope follows.
+# ============================================================================
+poi_data:
+  - name: NPS Campgrounds
+    category: campground
+    subcategory: federal
+    etls:
+      - slug: nps-campgrounds
+        adapter: RecGovCampgroundsEtl
+        inputs: [nps-campgrounds-raw]
+
+  - name: Washington State Parks
+    category: campground
+    subcategory: state
+    etls:
+      - slug: aspira-leaves-wa
+        adapter: AspiraLeavesEtl
+        inputs: [aspira-maps-wa]
+        output_dir_prefix: data/etl-out/aspira-leaves-wa
+      - slug: aspira-wa-pins
+        adapter: AspiraJoinByNameEtl
+        inputs: [aspira-leaves-wa, uscampgrounds]
+        args:
+          host: washington.goingtocamp.com
+          state_filter: WA
+
+  - name: BC Provincial Parks
+    category: campground
+    subcategory: provincial
+    etls:
+      - slug: aspira-leaves-bc
+        adapter: AspiraLeavesEtl
+        inputs: [aspira-maps-bc]
+        output_dir_prefix: data/etl-out/aspira-leaves-bc
+      - slug: aspira-bc-pins
+        adapter: AspiraJoinByNameEtl
+        inputs: [aspira-leaves-bc, bcparks-strapi]
+        args:
+          host: camping.bcparks.ca
+
+  - name: Parks Canada
+    category: campground
+    subcategory: federal
+    etls:
+      - slug: aspira-leaves-pc
+        adapter: AspiraLeavesEtl
+        inputs: [aspira-maps-pc]
+        output_dir_prefix: data/etl-out/aspira-leaves-pc
+      - slug: aspira-pc-pins
+        adapter: AspiraJoinByNameEtl
+        inputs: [aspira-leaves-pc, apca-accommodation, apca-places]
+        args:
+          host: reservation.pc.gc.ca
+          parent_name_fallback: true
+
+  - name: Alberta Provincial Parks
+    category: campground
+    subcategory: provincial
+    etls:
+      - slug: reserveamerica-abpp
+        adapter: ReserveAmericaEtl
+        inputs: [reserveamerica-abpp-raw]
+
+  - name: Planet Fitness
+    category: planet-fitness
+    etls:
+      - slug: osm-pf
+        adapter: PlanetFitnessEtl
+        inputs: [osm-pf-raw]
+
+  - name: Tesla Superchargers
+    category: supercharger
+    etls:
+      - slug: tesla-superchargers
+        adapter: TeslaIndexEtl
+        inputs: [tesla-index-raw, tesla-locations-raw]
