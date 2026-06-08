@@ -166,10 +166,14 @@ governing_bodies:
     name: Alberta Parks
     kind: provincial
     country: CA
-    booking_provider: { vendor: camis, host: reserve.albertaparks.ca }
-    # Camis adapter not implemented yet — POI rows can still FK to the
-    # booking_provider row, availability returns no_provider. When a
-    # CamisAbEtl ships, add `sources:` here pointing at it.
+    booking_provider: { vendor: reserveamerica, host: shop.albertaparks.ca }
+    sources:
+      - id: reserveamerica-abpp
+        fetcher: fetch_reserveamerica
+        # Tenant config lives in the Python fetcher's TENANTS map; default
+        # walks every configured tenant. Pass --tenant=ABPP to scope.
+        provides: campground
+        booking_provider: { vendor: reserveamerica, host: shop.albertaparks.ca }
 
   # ----- Corporate -----
   - slug: tesla
@@ -220,7 +224,7 @@ booking_providers:
     name: Aspira NextGen (WA State Parks)
     adapter_class: AspiraAdapter
 
-  - vendor: camis
-    host: reserve.albertaparks.ca
-    name: Camis (Alberta Parks)
-    adapter_class: ""   # not implemented; row exists so curated AB data can FK to it
+  - vendor: reserveamerica
+    host: shop.albertaparks.ca
+    name: ReserveAmerica (Alberta Parks)
+    adapter_class: ""   # not implemented; row exists so AB data can FK to it. Vendor is Active Network's ReserveAmerica platform.

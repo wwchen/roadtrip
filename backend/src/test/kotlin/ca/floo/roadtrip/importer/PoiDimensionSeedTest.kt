@@ -109,9 +109,11 @@ class PoiDimensionSeedTest {
         assertTrue(Triple("aspira", "reservation.pc.gc.ca", "AspiraAdapter") in rows)
         assertTrue(Triple("aspira", "camping.bcparks.ca", "AspiraAdapter") in rows)
         assertTrue(Triple("aspira", "washington.goingtocamp.com", "AspiraAdapter") in rows)
-        // Camis row must exist (curated AB data FKs to it) but adapter is empty —
-        // availability returns no_provider until an adapter ships.
-        assertTrue(Triple("camis", "reserve.albertaparks.ca", "") in rows)
+        // ReserveAmerica row must exist (Alberta Parks data FKs to it) but
+        // adapter is empty — availability returns no_provider until adapter
+        // ships. Active Network's ReserveAmerica platform; PR #73 is the
+        // first fetcher.
+        assertTrue(Triple("reserveamerica", "shop.albertaparks.ca", "") in rows)
     }
 
     @Test
