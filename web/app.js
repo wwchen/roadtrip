@@ -244,7 +244,10 @@ async function load() {
     // the server enforces its own gate at zoom < 6 anyway.
     const wantCG = m.getZoom() >= CG_ZOOM_THRESHOLD || cgUnlocked;
     if (wantCG) cgUnlocked = true;
-    const cats = ['national-park', 'state-park', 'planet-fitness', 'supercharger'];
+    // Defaults: just the point-geom layers. Park polygons (NP/SP) are
+    // expensive to ship and clutter at low zoom — leave them out for now;
+    // a follow-up will reintroduce them via a separate tile/render path.
+    const cats = ['planet-fitness', 'supercharger'];
     if (wantCG) cats.push('campground');
 
     // When a trip route is active, topbar exposes a corridor polygon via
