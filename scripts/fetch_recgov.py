@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Capture federal campgrounds from RIDB (recreation.gov backend).
 
-One data_source per agency. The agency is passed in via --agency
-(args.agency in poi-registry.yaml). The fetcher resolves the agency
-abbreviation (NPS, FS, BLM, USACE, FWS, BOR, TVA) to RIDB's orgId
-once at startup, then walks GET /organizations/<orgId>/facilities
-filtered to camping facilities.
+One data_source per agency. --agency is the literal RIDB
+OrgAbbrevName (NPS, FS, BLM, USACE, FWS, BOR, TVA — see
+GET /organizations); the fetcher resolves it to an orgId once at
+startup, then walks GET /organizations/<orgId>/facilities filtered
+to camping facilities.
 
 Multi-part output: one envelope per page under
   data/raw/<slug>/<UTC-ts>/page-NNN.json
@@ -40,23 +40,6 @@ PAGE_SIZE = 50  # RIDB cap
 FETCHER = "fetch_recgov"
 FETCHER_VERSION = "1"
 
-# Agency abbreviation → RIDB OrgAbbrevName. The agency arg in
-# poi-registry.yaml uses the friendly abbreviation; this map resolves
-# what the fetcher actually sends to RIDB on the first /organizations
-# call. (USFS is "FS" in RIDB; we accept both for ergonomics.)
-AGENCY_ABBREV = {
-    "NPS": "NPS",
-    "USFS": "FS",
-    "FS": "FS",
-    "BLM": "BLM",
-    "USACE": "USACE",
-    "COE": "USACE",
-    "FWS": "FWS",
-    "USFW": "FWS",
-    "BOR": "BOR",
-    "TVA": "TVA",
-}
-
 
 def resolve_org_id(api_key: str, agency_abbrev: str) -> int:
     url = f"{API_BASE}/organizations?limit=50"
@@ -73,8 +56,8 @@ def resolve_org_id(api_key: str, agency_abbrev: str) -> int:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--agency", required=True, help="agency abbreviation (NPS, FS, BLM, USACE, FWS, BOR, TVA)")
-    parser.add_argument("--slug", help="data_source slug; defaults to RIDB-derived")
+    parser.add_argument("--agency", required=True, help="RIDB OrgAbbrevName, e.g. NPS")
+    parser.add_argument("--slug", required=True, help="data_source slug from poi-registry.yaml")
     args = parser.parse_args()
 
     api_key = os.environ.get("RIDB_API_KEY", "").strip()
@@ -82,17 +65,11 @@ def main() -> int:
         err("RIDB_API_KEY env var not set; can't talk to RIDB")
         return 1
 
-    agency = AGENCY_ABBREV.get(args.agency.upper())
-    if agency is None:
-        err(f"unknown --agency={args.agency!r}; expected one of {sorted(AGENCY_ABBREV.keys())}")
-        return 1
+    src = load_source(args.slug)
 
-    slug = args.slug or f"{args.agency.lower()}-campgrounds"
-    src = load_source(slug)
-
-    err(f"resolving orgId for agency={agency}…")
-    org_id = resolve_org_id(api_key, agency)
-    err(f"  orgId={org_id} agency={agency}")
+    err(f"resolving orgId for agency={args.agency}…")
+    org_id = resolve_org_id(api_key, args.agency)
+    err(f"  orgId={org_id} agency={args.agency}")
 
     ts = utc_ts()
     pages_written = 0
