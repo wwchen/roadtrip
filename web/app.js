@@ -186,10 +186,15 @@ function flattenPoi(f) {
   delete flat.raw;
   if (p.category === 'campground' && raw.category) flat.category = raw.category;
   if (p.category === 'national-park' || p.category === 'state-park') {
-    // Park layers read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres / Mang_Name
-    // straight off properties. Those names live in raw — keep them.
+    // Park layers + popups read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres /
+    // Mang_Name — the field names PAD-US used. The new ETL stores the
+    // facts under different keys (acres, official_name, designation,
+    // region, source); map them here so the rendering code stays put.
     flat.Unit_Nm = raw.Unit_Nm || p.unit_name || p.name;
     flat.State_Nm = raw.State_Nm || p.region || '';
+    flat.Loc_Nm = raw.Loc_Nm || raw.official_name || '';
+    flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
+    flat.Mang_Name = raw.Mang_Name || raw.designation || '';
   }
   flat.name = p.name || raw.name || flat.name;
   return { ...f, properties: flat };
