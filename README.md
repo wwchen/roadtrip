@@ -38,34 +38,33 @@ fetcher pair (index + per-slug), `refresh-tesla-cookies` to mint fresh
 `_abck` cookies into `.env`, and `refresh-image` (one-shot prereq for the
 supercharger refresher). Click the row, watch logs in the right pane.
 
-POI data refresh goes through the backend's admin API (RFC 0004). Two-step
-flow, two Tilt buttons under the `data` cluster, two make targets:
+POI data refresh goes through the backend's admin API. Two-step flow,
+two Tilt buttons under the `data` cluster, two make targets:
 
 ```sh
-make data-fetch                       # web → data/<target>.{json,geojson}
+make data-fetch                       # spawn fetchers → data/raw/<source>/<ts>.json
 make data-fetch TARGET=campgrounds    # one target only
-make data-import                      # data/ → Postgres rows via Importer
+make data-import                      # data/raw/ → Postgres rows via the ETL
 make data-import TARGET=planet-fitness
 ```
 
 `data-fetch` runs the Python fetchers (the same ones `make poll-raw`
-dispatches); `data-import` runs the Kotlin importer. Each phase is
-recorded in `ingest_runs`; per-target mutex serializes a fetch and an
-import on the same target. Skipping `data-fetch` is fine — the importer
-runs against whatever's on disk.
+dispatches); `data-import` runs the Kotlin ETL pipeline (parse →
+validate → transform → upsert). Each phase is recorded in `ingest_runs`;
+per-target mutex serializes a fetch and an import on the same target.
+Skipping `data-fetch` is fine — the ETL runs against the newest capture
+already on disk.
 
-Targets: `planet-fitness`, `state-parks`, `national-parks`, `campgrounds`
-(uscampgrounds + bc-parks raw captures), `aspira-maps` (3-host capture,
-fetch-only), `parks-canada-curated` (curated JSON, no fetch step),
-`alberta-provincial` (curated JSON, no fetch step), `tesla-superchargers`
-(index + per-slug, fetch-only until ETL ships), `enrich-campgrounds`
-(rec.gov enrichment, still mutates the frozen geojson — RFC 0007 will
-rewrite this in a follow-up).
+Targets are derived from `config/poi-registry.yaml` at boot. Each
+`governing_body` slug becomes a multi-source target (refresh every source
+under that body), and each `source.id` becomes its own target (refresh
+just that one). Adding a vendor = appending a YAML row + writing the
+Kotlin ETL impl. Adding a governing body = appending a YAML row.
 
 > Note: `refresh-tesla-cookies` is **Tesla-only**. Recreation.gov auth is
-> backend-owned via `TokenManager` (RFC 0001 / PR #22) — paste a fresh cURL
-> in the campsite Settings UI and the backend handles refresh on its own
-> cadence. Two unrelated systems that both happen to use the word "cookies."
+> backend-owned via `TokenManager` — paste a fresh cURL in the campsite
+> Settings UI and the backend handles refresh on its own cadence. Two
+> unrelated systems that both happen to use the word "cookies."
 
 First time only:
 
@@ -95,11 +94,12 @@ Two paths, picked by where you want to land:
   serialized by per-target mutex. Use this for production-shaped runs
   (Tilt buttons trigger the same path).
 
-### RFC 0007 fetcher split
+### Pipeline shape
 
-Per RFC 0007, every fetcher is now thin: hit upstream, wrap the response
-in a uniform envelope, write to `data/raw/<source>/<ts>.json`. No
-transform, no merge — those move into the Kotlin ETL.
+Every fetcher is thin: hit upstream, wrap the response in a uniform
+envelope, write to `data/raw/<source>/<ts>.json`. No transform, no
+merge — those happen in the Kotlin ETL (parse → validate → transform →
+upsert) when `data-import` runs.
 
 Envelope shape:
 
@@ -115,22 +115,25 @@ Envelope shape:
 }
 ```
 
-Sources today (run `make poll-raw SOURCE=--list` for the live registry):
+Source registry lives at `config/poi-registry.yaml`. Run `make poll-raw
+SOURCE=--list` for the current set; abridged:
 
-| Source            | Upstream                                | Output dir              |
-|-------------------|-----------------------------------------|-------------------------|
-| `planet-fitness`  | OSM Overpass                            | `data/raw/osm-pf/`      |
-| `campgrounds`     | uscampgrounds.info (5 regional CSVs)    | `data/raw/uscampgrounds/<ts>/{west,southwest,...}.json` |
-| `bc-parks`        | bcparks.api.gov.bc.ca Strapi (paginated)| `data/raw/bcparks-strapi/<ts>/page-NNN.json` |
-| `parks-national`  | USGS PAD-US FeatureServer (paginated)   | `data/raw/padus-np/<ts>/page-NNN.json` |
-| `parks-state`     | USGS PAD-US FeatureServer (paginated)   | `data/raw/padus-sp/<ts>/page-NNN.json` |
-| `aspira-maps`     | Aspira `/api/maps` × 3 hosts (PC/BC/WA) | `data/raw/aspira-maps-{pc,bc,wa}/<ts>.json` |
-| `tesla-index`     | tesla.com get-locations (curl-impersonate) | `data/raw/tesla-index/<ts>.json` |
-| `tesla-locations` | tesla.com get-charger-details, per-slug, cache-aware (~30d freshness) | `data/raw/tesla-locations/<slug>/<ts>.json` |
+| Source                | Upstream                                | Output dir |
+|-----------------------|-----------------------------------------|------------|
+| `osm-pf`              | OSM Overpass — Planet Fitness           | `data/raw/osm-pf/<ts>.json` |
+| `uscampgrounds`       | uscampgrounds.info regional CSVs        | `data/raw/uscampgrounds/<ts>/{west,…}.json` |
+| `bcparks-strapi`      | bcparks.api.gov.bc.ca (paginated)       | `data/raw/bcparks-strapi/<ts>/page-NNN.json` |
+| `padus-np` / `padus-sp` | USGS PAD-US FeatureServer (paginated) | `data/raw/padus-np/<ts>/page-NNN.json`, `data/raw/padus-sp/…` |
+| `aspira-maps-{pc,bc,wa}` | Aspira `/api/maps` (one row per host) | `data/raw/aspira-maps-pc/<ts>.json`, `…-bc`, `…-wa` |
+| `reserveamerica-abpp` | Active Network ReserveAmerica (Alberta) | `data/raw/reserveamerica-abpp/<ts>/{directory-*,park-*}.json` |
+| `tesla-index`         | tesla.com get-locations (curl-impersonate) | `data/raw/tesla-index/<ts>.json` |
+| `tesla-locations`     | tesla.com per-slug, cache-aware (~30d)  | `data/raw/tesla-locations/<slug>/<ts>.json` |
 
-**Curated repo data** (no fetch step) lives at `data/curated/`:
-`parks-canada-{bc,ab}.json`, `alberta-provincial.json`. The Kotlin
-importer reads these directly.
+`config/poi-registry.yaml` is the source of truth for both governing
+bodies (NPS, USFS, BC Parks, Alberta Parks, …) and booking providers
+(rec.gov, Aspira × 3 hosts, ReserveAmerica). Backend boot UPSERTs the
+two dimension tables from YAML and refuses to start if a deletion would
+orphan an existing POI's FK.
 
 **Raw cache.** `data/raw/` is gitignored — captures are append-only on
 the host running the poller. Crawling Aspira/Tesla is expensive (Azure
@@ -139,19 +142,17 @@ Recovery on a fresh checkout: re-run the fetchers, or run
 `scripts/_migrate_tesla_cache.py` to bootstrap Tesla from the legacy
 `data/pricing-cache/` if it's still around.
 
-### Bridge period
-
-While the Kotlin ETL is being built, the existing importer still reads
-the **frozen** `data/*.geojson` snapshots — running fetchers populates
-`data/raw/` but doesn't mutate the geojson files, and the map keeps
-serving the snapshot. Once the Kotlin ETL ships, the importer reads
-from `data/raw/` and the geojson files retire.
+**Curated repo data** (no fetch step) lives at `data/curated/`:
+`parks-canada-{bc,ab}.json`, `alberta-provincial.json`. The Kotlin
+importer reads these directly. New POIs should come from a poller, not
+from new entries here — these files are tech debt to retire as fetchers
+land for each gap (Alberta now covered by the ReserveAmerica fetcher).
 
 ### `/api/docs` — interactive API browser
 
 Swagger UI at `/api/docs`, OpenAPI 3.1 spec at `/api/docs/openapi.json`.
 Built from the live routing tree at boot, so the doc reflects whatever's
-mounted (issue #47). To document a new route, replace the `io.ktor.server.routing.{get,post}`
+mounted. To document a new route, replace the `io.ktor.server.routing.{get,post}`
 import with `io.github.smiley4.ktorswaggerui.dsl.routing.{get,post}` and pass
 a doc block:
 
@@ -165,7 +166,7 @@ get("/api/foo", {
 Routes without a doc block still appear in the spec (untitled). The page is
 public — paths and summaries only, no secrets.
 
-### Admin API surface (RFC 0004)
+### Admin API surface
 
 | Verb | Path | Returns |
 |------|------|---------|

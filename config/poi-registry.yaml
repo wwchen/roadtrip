@@ -90,6 +90,8 @@ governing_bodies:
         fetcher: fetch_reserveamerica
         # Tenant config lives in the Python fetcher's TENANTS map; default
         # walks every configured tenant. Pass --tenant=ABPP to scope.
+        args:
+          tenant: ABPP
         booking_provider: { vendor: reserveamerica, host: shop.albertaparks.ca }
 
   # ----- Corporate -----
