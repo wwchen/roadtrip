@@ -8,6 +8,11 @@ import ca.floo.roadtrip.etl.TransformCtx
 import ca.floo.roadtrip.etl.ValidationResult
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 
 // BC Parks Strapi feed → Poi.Campground (provincial bucket).
@@ -28,12 +33,25 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
     override fun parse(inputs: InputBundle): BcParksDto {
         val envelopes = inputs.soleEnvelopes()
         require(envelopes.isNotEmpty()) { "$etlSlug: no pages" }
-        val rows = mutableListOf<BcParksRow>()
+        // Two passes per envelope: typed for the hot fields (orcs, name,
+        // lat/lng) and raw JsonObject keyed by ORCS for the full payload —
+        // the drawer's "Upstream data" accordion reads it through Poi.*.extras.
+        val typed = mutableListOf<BcParksRow>()
+        val rawById = mutableMapOf<Long, JsonObject>()
         for (env in envelopes) {
             val page = json.decodeFromJsonElement(BcParksPageDto.serializer(), env.payload)
-            rows += page.data
+            typed += page.data
+            val rawArr = env.payload.jsonObject["data"]?.jsonArray ?: continue
+            for (entry in rawArr) {
+                val obj = entry.jsonObject
+                val id =
+                    obj["orcs"]?.let { v ->
+                        kotlin.runCatching { v.jsonPrimitive.content.toLong() }.getOrNull()
+                    } ?: continue
+                rawById[id] = obj
+            }
         }
-        return BcParksDto(rows = rows, fetchedAt = parseFetchedAt(envelopes.first()))
+        return BcParksDto(rows = typed, rawById = rawById, fetchedAt = parseFetchedAt(envelopes.first()))
     }
 
     override fun validate(dto: BcParksDto): ValidationResult<BcParksDto> {
@@ -47,11 +65,14 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
         ctx: TransformCtx,
     ): List<Poi.Campground> {
         val bucket = ctx.subcategoryFor(etlSlug)
-        return dto.rows.mapNotNull { transformRow(it, dto.fetchedAt, bucket) }
+        return dto.rows.mapNotNull { row ->
+            transformRow(row, dto.rawById[row.orcs], dto.fetchedAt, bucket)
+        }
     }
 
     private fun transformRow(
         row: BcParksRow,
+        raw: JsonElement?,
         fetchedAt: Instant,
         bucket: String?,
     ): Poi.Campground? {
@@ -90,6 +111,7 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
             cellCoverage = null,
             ratingReviews = null,
             subcategory = bucket,
+            extras = raw,
         )
     }
 
@@ -126,5 +148,6 @@ data class BcParksRow(
 
 data class BcParksDto(
     val rows: List<BcParksRow>,
+    val rawById: Map<Long, JsonObject>,
     val fetchedAt: Instant,
 )

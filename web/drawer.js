@@ -76,7 +76,7 @@ function normalizeAspira(f) {
 
 // MapLibre stringifies nested-object properties on the way out of a GeoJSON
 // source. Parse the ones the drawer reads; primitives survive untouched.
-function reviveJsonProp(p, key) {
+export function reviveJsonProp(p, key) {
   const v = p?.[key];
   if (typeof v !== 'string') return;
   try { p[key] = JSON.parse(v); } catch { p[key] = null; }
@@ -290,7 +290,7 @@ function renderShell(f) {
   `;
 }
 
-function upstreamHTML(upstream) {
+export function upstreamHTML(upstream) {
   if (!upstream || typeof upstream !== 'object') return '';
   const entries = Object.entries(upstream).filter(([, v]) => {
     if (v === null || v === undefined) return false;

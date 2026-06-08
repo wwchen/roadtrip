@@ -8,6 +8,13 @@ import ca.floo.roadtrip.etl.TransformCtx
 import ca.floo.roadtrip.etl.ValidationResult
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.time.Instant
@@ -32,7 +39,25 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
     override fun parse(inputs: InputBundle): TeslaIndexDto {
         val envelope = inputs.soleEnvelopes().single()
         val raw = json.decodeFromJsonElement(TeslaIndexEnvelope.serializer(), envelope.payload)
-        return TeslaIndexDto(rows = raw.data.data, fetchedAt = parseFetchedAt(envelope))
+        // Two passes: typed for the hot fields + raw JsonObject by slug
+        // for the full payload. Drives Poi.Supercharger.extras so the
+        // drawer's "Upstream data" accordion has every Tesla index field.
+        val rawBySlug = mutableMapOf<String, JsonObject>()
+        val rawArr =
+            envelope.payload.jsonObject["data"]
+                ?.jsonObject
+                ?.get("data")
+                ?.jsonArray
+        if (rawArr != null) {
+            for (entry in rawArr) {
+                val obj = entry.jsonObject
+                val slug =
+                    obj["location_url_slug"]?.let { kotlin.runCatching { it.jsonPrimitive.content }.getOrNull() }
+                        ?: continue
+                if (slug.isNotBlank()) rawBySlug[slug] = obj
+            }
+        }
+        return TeslaIndexDto(rows = raw.data.data, rawBySlug = rawBySlug, fetchedAt = parseFetchedAt(envelope))
     }
 
     override fun validate(dto: TeslaIndexDto): ValidationResult<TeslaIndexDto> {
@@ -51,11 +76,15 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
         // from ctx.rawDir directly; the YAML keeps it as a sibling
         // data_source so fetch + cache-clear flows still address it.
         val locationsDir = File(ctx.rawDir, "tesla-locations-raw")
-        return dto.rows.mapNotNull { transformRow(it, dto.fetchedAt, locationsDir) }
+        return dto.rows.mapNotNull { row ->
+            val rawIndex = row.locationUrlSlug?.let { dto.rawBySlug[it] }
+            transformRow(row, rawIndex, dto.fetchedAt, locationsDir)
+        }
     }
 
     private fun transformRow(
         row: TeslaIndexRow,
+        rawIndex: JsonObject?,
         fetchedAt: Instant,
         locationsDir: File,
     ): Poi.Supercharger? {
@@ -65,7 +94,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
         val lat = row.latitude ?: return null
         val lon = row.longitude ?: return null
 
-        val detail = loadDetail(locationsDir, slug)
+        val (detail, rawDetail) = loadDetail(locationsDir, slug)
 
         // Detail's `name` is "Woodburn, OR"-style; index `title` is the
         // useless string "locations". Prefer detail; fall back to a
@@ -93,24 +122,39 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
             maxPowerKw = detail?.maxPowerKw ?: 0,
             facility = detail?.accessType?.takeIf { it.isNotBlank() },
             pricebooks = detail?.effectivePricebooks ?: emptyList(),
+            extras =
+                buildJsonObject {
+                    put("index", rawIndex ?: JsonNull)
+                    put("detail", rawDetail ?: JsonNull)
+                },
         )
     }
 
+    /**
+     * Returns (typed detail, raw detail JsonObject). Either component is
+     * null when the per-slug capture is missing or unparseable.
+     */
     private fun loadDetail(
         locationsDir: File,
         slug: String,
-    ): TeslaLocationDetail? {
+    ): Pair<TeslaLocationDetail?, JsonObject?> {
         val slugDir = File(locationsDir, slug)
-        if (!slugDir.isDirectory) return null
+        if (!slugDir.isDirectory) return null to null
         val newest =
             slugDir
                 .listFiles { f -> f.isFile && f.name.endsWith(".json") }
                 ?.maxByOrNull { it.name }
-                ?: return null
+                ?: return null to null
         return runCatching {
             val env = json.decodeFromString(Envelope.serializer(), newest.readText())
-            json.decodeFromJsonElement(TeslaDetailEnvelope.serializer(), env.payload).data.data
-        }.onFailure { log.warn("tesla-locations parse failed for slug={}: {}", slug, it.message) }.getOrNull()
+            val typed = json.decodeFromJsonElement(TeslaDetailEnvelope.serializer(), env.payload).data.data
+            val raw =
+                env.payload.jsonObject["data"]
+                    ?.jsonObject
+                    ?.get("data")
+                    ?.jsonObject
+            typed to raw
+        }.onFailure { log.warn("tesla-locations parse failed for slug={}: {}", slug, it.message) }.getOrDefault(null to null)
     }
 
     private fun regionCountryOf(detail: TeslaLocationDetail?): Pair<String?, String?> {
@@ -181,6 +225,7 @@ data class TeslaIndexRow(
 
 data class TeslaIndexDto(
     val rows: List<TeslaIndexRow>,
+    val rawBySlug: Map<String, JsonObject>,
     val fetchedAt: Instant,
 )
 
