@@ -126,7 +126,6 @@ data class GoverningBodyEntry(
 data class SourceEntry(
     val id: String, // matches data/raw/<id>/, also pois.source
     val fetcher: String, // scripts/<fetcher>.py
-    val provides: String, // 'campground' | 'planet-fitness' | 'aspira-id-index' | etc.
     val args: Map<String, String> = emptyMap(),
     @kotlinx.serialization.SerialName("booking_provider")
     val bookingProvider: BookingProviderRef? = null,

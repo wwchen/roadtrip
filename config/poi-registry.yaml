@@ -27,7 +27,6 @@ governing_bodies:
         fetcher: fetch_parks
         args:
           layer: national-parks
-        provides: park-polygon
 
   - slug: usfs
     name: US Forest Service
@@ -87,13 +86,11 @@ governing_bodies:
         fetcher: fetch_parks
         args:
           layer: state-parks
-        provides: park-polygon
       - id: aspira-maps-wa
         fetcher: fetch_aspira_maps
         args:
           host: washington.goingtocamp.com
           source: aspira-maps-wa
-        provides: aspira-id-index
         booking_provider: { vendor: aspira, host: washington.goingtocamp.com }
 
   - slug: us-state-rec
@@ -153,7 +150,6 @@ governing_bodies:
         args:
           host: reservation.pc.gc.ca
           source: aspira-maps-pc
-        provides: aspira-id-index
         booking_provider: { vendor: aspira, host: reservation.pc.gc.ca }
 
   - slug: bc-parks
@@ -164,13 +160,11 @@ governing_bodies:
     sources:
       - id: bcparks-strapi
         fetcher: fetch_bc_parks   # scripts/fetch_bc_parks.py
-        provides: campground
       - id: aspira-maps-bc
         fetcher: fetch_aspira_maps
         args:
           host: camping.bcparks.ca
           source: aspira-maps-bc
-        provides: aspira-id-index
         booking_provider: { vendor: aspira, host: camping.bcparks.ca }
 
   - slug: alberta-parks
@@ -183,7 +177,6 @@ governing_bodies:
         fetcher: fetch_reserveamerica
         # Tenant config lives in the Python fetcher's TENANTS map; default
         # walks every configured tenant. Pass --tenant=ABPP to scope.
-        provides: campground
         booking_provider: { vendor: reserveamerica, host: shop.albertaparks.ca }
 
   # ----- Corporate -----
@@ -193,10 +186,8 @@ governing_bodies:
     sources:
       - id: tesla-index
         fetcher: fetch_tesla_index
-        provides: tesla-index
       - id: tesla-locations
         fetcher: fetch_tesla_locations
-        provides: supercharger
         depends_on: [tesla-index]   # locations script reads the index
 
   - slug: pf
@@ -206,7 +197,6 @@ governing_bodies:
     sources:
       - id: osm-pf
         fetcher: fetch_planet_fitness
-        provides: planet-fitness
 
 # ----------------------------------------------------------------------
 # Booking providers: the reservation systems the FE deeplinks/heat-strips
