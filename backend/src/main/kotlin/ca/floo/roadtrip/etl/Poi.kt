@@ -60,6 +60,13 @@ sealed class Poi {
         // or stamp per-row from the upstream's own classification
         // (uscampgrounds).
         val subcategory: String?,
+        // Verbatim upstream payload for the row, merged into the FE
+        // properties bag under `properties.upstream`. Lets the drawer
+        // surface every field the ETL didn't promote — descriptions,
+        // directions, fees, stay limits, accessibility text, media,
+        // activities — without touching the schema each time. Null when
+        // the source has nothing extra worth carrying.
+        val extras: kotlinx.serialization.json.JsonElement? = null,
     ) : Poi()
 
     data class Supercharger(
@@ -210,6 +217,7 @@ private fun perTypeProperties(poi: Poi): JsonObject =
                 // pois.category column says "campground"; this stamps
                 // the FE-relevant detail (federal/state/local/provincial).
                 poi.subcategory?.let { put("subcategory", JsonPrimitive(it)) }
+                poi.extras?.let { put("upstream", it) }
             }
         is Poi.Supercharger ->
             buildJsonObject {

@@ -330,6 +330,10 @@ internal data class PoiRow(
     // JSONB ::text — null when the row has no address bag (most parks).
     // Surfaced verbatim to FE; popups read it directly.
     val addressJson: String?,
+    // JSONB ::text — null for non-bookable POIs (PF, parks). Carries the
+    // sealed ProviderRef variant so the drawer can render booking deep
+    // links + availability heat strips for the matching adapter.
+    val providerRefJson: String? = null,
     val geomJson: String,
     val propertiesJson: String,
 )
@@ -364,6 +368,7 @@ internal fun fetchPois(
                     SELECT id, source, source_id, category, name, region, unit_name,
                            reserve_url, phone, info_url,
                            address::text AS address_text,
+                           provider_ref::text AS provider_ref_text,
                            ST_AsGeoJSON(geom) AS geom_json,
                            properties::text AS properties_text
                     FROM pois
@@ -422,6 +427,7 @@ internal fun fetchPois(
             phone = r.get("phone") as String?,
             infoUrl = r.get("info_url") as String?,
             addressJson = r.get("address_text") as String?,
+            providerRefJson = r.get("provider_ref_text") as String?,
             geomJson = r.get("geom_json") as String,
             propertiesJson = r.get("properties_text") as String,
         )
@@ -457,6 +463,7 @@ internal fun buildFeatureCollection(
         if (r.phone != null) sb.append(""","phone":""").append(jsonString(r.phone))
         if (r.infoUrl != null) sb.append(""","info_url":""").append(jsonString(r.infoUrl))
         if (r.addressJson != null) sb.append(""","address":""").append(r.addressJson)
+        if (r.providerRefJson != null) sb.append(""","provider_ref":""").append(r.providerRefJson)
         sb.append(""","raw":""").append(r.propertiesJson)
         sb.append("}}")
     }
