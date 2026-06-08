@@ -111,6 +111,25 @@ data class WaypointSchema(
     val lng: Double,
 )
 
+// /api/pois/search response. One row per match; consumer (the topbar) needs
+// just enough to render the dropdown row + drive a flyTo + synthesized
+// click. Anything richer (full feature payload) can be fetched on click via
+// the existing bbox endpoint once the pin paints.
+@Serializable
+data class PoiSearchHitSchema(
+    val id: Long,
+    val name: String,
+    val category: String,
+    val region: String? = null,
+    val lng: Double,
+    val lat: Double,
+)
+
+@Serializable
+data class PoiSearchResponseSchema(
+    val results: List<PoiSearchHitSchema>,
+)
+
 // Concrete examples surfaced in Swagger UI alongside the schema. Typed
 // instances so they share the same field-name contract as the schemas
 // above — drift between schema and example is a compile error, not a
