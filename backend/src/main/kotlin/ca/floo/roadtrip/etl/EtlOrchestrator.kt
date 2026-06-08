@@ -98,6 +98,21 @@ class EtlOrchestrator(
                 "reserveamerica-abpp" to
                     ca.floo.roadtrip.etl.reserveamerica
                         .ReserveAmericaEtl(),
+                // RIDB (recreation.gov backend) — one ETL instance per
+                // agency slug. The transformer is identical; the slug
+                // arg drives source labelling + raw cache path.
+                "nps-campgrounds" to
+                    ca.floo.roadtrip.etl.recgov
+                        .RecGovCampgroundsEtl("nps-campgrounds"),
+                "usfs-campgrounds" to
+                    ca.floo.roadtrip.etl.recgov
+                        .RecGovCampgroundsEtl("usfs-campgrounds"),
+                "blm-campgrounds" to
+                    ca.floo.roadtrip.etl.recgov
+                        .RecGovCampgroundsEtl("blm-campgrounds"),
+                "usace-campgrounds" to
+                    ca.floo.roadtrip.etl.recgov
+                        .RecGovCampgroundsEtl("usace-campgrounds"),
             )
     }
 }
