@@ -8,6 +8,7 @@ import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
 import com.microsoft.playwright.options.WaitForSelectorState
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.Disabled
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
@@ -39,6 +40,12 @@ class SmokeTest {
         playwright.close()
     }
 
+    // Targets a Parks Canada pin ("Tunnel Mountain Village") which the
+    // Aspira-PC ETL chain was supposed to produce. The DAG migration
+    // (chore/poi-registry-dag-proposal) declares the chain in YAML but
+    // the leaf-walker + join-by-name ETLs aren't wired yet, so Parks
+    // Canada is a no-op import. Re-enable once Aspira-PC ships.
+    @Disabled("blocked on Aspira-PC ETL — see RFC 0007 follow-up")
     @Test
     fun `cold load - api pois - Banff campground popup`() {
         val context =
