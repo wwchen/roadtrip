@@ -36,33 +36,75 @@ private const val MAX_POLYGON_VERTICES: Int = 2000
 
 // POST /api/pois
 //
-// Request body (JSON):
-//   {
-//     "bbox": [west, south, east, north],            // required
-//     "zoom": 8,                                     // optional; gates CG below CG_MIN_ZOOM
-//     "categories": ["campground", ...],             // optional; defaults to all
-//     "polygon": {                                   // optional
-//       "type": "Polygon",
-//       "coordinates": [[[lng,lat], [lng,lat], ...]]
-//     }
-//   }
+// Returns a GeoJSON FeatureCollection of POIs in the requested bbox (and
+// inside the optional corridor polygon). One round-trip per pan — the FE
+// debounces moveend by 250ms.
 //
-// Returns a GeoJSON FeatureCollection with truncated:true when the bbox spans
-// more rows than POI_LIMIT.  When polygon is present, results are filtered to
-// pois inside it (ST_Within) — used by the trip-planner corridor view.
+// Categories default to {campground, state-park, national-park,
+// planet-fitness, supercharger}. Each requested category gets its own
+// budget out of POI_LIMIT so dense datasets (Planet Fitness ~1.5k rows)
+// can't starve sparser ones; truncated:true tells the client to ask the
+// user to zoom in.
 //
-// Why POST: the polygon for a long routed corridor is too big for a query
-// string (encoded ~tens of kb after turf.buffer). POST removes URL length as
-// a constraint and we trade HTTP cacheability for it; the FE bbox-on-pan is
-// already debounced 250ms so the cache loss is negligible.
+// Why POST: a long-corridor polygon (turf.buffer of a multi-waypoint
+// route) is too big for a query string. POST removes URL length as a
+// constraint; the moveend debounce makes the loss of HTTP caching
+// negligible.
 fun Route.poiRoutes(ctx: DSLContext) {
     post("/api/pois", {
         tags = listOf("poi")
-        summary = "GeoJSON FeatureCollection within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"
-        description = "Body is JSON: { bbox, zoom?, categories?, polygon? }. polygon filters to POIs inside the corridor."
+        summary = "POIs within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"
+        description =
+            "Body: { bbox: [w,s,e,n], zoom?, categories?, polygon? }. " +
+            "categories defaults to {campground, state-park, national-park, planet-fitness, supercharger}. " +
+            "polygon (GeoJSON Polygon) filters to POIs inside the corridor. " +
+            "zoom < $CG_MIN_ZOOM suppresses campgrounds even when requested."
+        request {
+            body<PoisRequestSchema> {
+                mediaTypes(io.ktor.http.ContentType.Application.Json)
+                example("simple bbox") {
+                    value =
+                        PoisRequestSchema(
+                            bbox = listOf(-122.6, 37.4, -121.6, 38.0),
+                            zoom = 10,
+                        )
+                }
+                example("filtered categories") {
+                    value =
+                        PoisRequestSchema(
+                            bbox = listOf(-122.6, 37.4, -121.6, 38.0),
+                            zoom = 10,
+                            categories = listOf("state-park", "national-park"),
+                        )
+                }
+                example("with corridor polygon") {
+                    value =
+                        PoisRequestSchema(
+                            bbox = listOf(-122.6, 37.4, -121.6, 38.0),
+                            zoom = 10,
+                            polygon =
+                                GeoJsonPolygonSchema(
+                                    type = "Polygon",
+                                    coordinates =
+                                        listOf(
+                                            listOf(
+                                                listOf(-122.6, 37.4),
+                                                listOf(-121.6, 37.4),
+                                                listOf(-121.6, 38.0),
+                                                listOf(-122.6, 38.0),
+                                                listOf(-122.6, 37.4),
+                                            ),
+                                        ),
+                                ),
+                        )
+                }
+            }
+        }
         response {
             code(io.ktor.http.HttpStatusCode.OK) {
-                description = "GeoJSON FeatureCollection."
+                description =
+                    "GeoJSON FeatureCollection. truncated:true when the bbox span exceeded the cap. " +
+                    "corridor:true when the request supplied a polygon."
                 body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
             }
             code(io.ktor.http.HttpStatusCode.BadRequest) {

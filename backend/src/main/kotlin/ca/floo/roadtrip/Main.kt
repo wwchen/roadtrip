@@ -7,7 +7,6 @@ import ca.floo.roadtrip.api.healthRoutes
 import ca.floo.roadtrip.api.poiRoutes
 import ca.floo.roadtrip.api.pricingRoutes
 import ca.floo.roadtrip.api.routeRoutes
-import ca.floo.roadtrip.api.superchargersRoutes
 import ca.floo.roadtrip.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.aspira.CachedAspiraAvailability
 import ca.floo.roadtrip.aspira.aspiraAvailabilityRoutes
@@ -197,7 +196,6 @@ fun Application.module() {
         routeRoutes(mapboxDirections)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes(pricingCache)
-        superchargersRoutes(File(staticDir, "data"))
         aspiraAvailabilityRoutes(aspiraCache)
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)

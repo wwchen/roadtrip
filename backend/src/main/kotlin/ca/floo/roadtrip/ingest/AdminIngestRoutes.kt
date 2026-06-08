@@ -1,5 +1,13 @@
 package ca.floo.roadtrip.ingest
 
+import ca.floo.roadtrip.api.ErrorNotFoundSchema
+import ca.floo.roadtrip.api.ErrorTargetBusySchema
+import ca.floo.roadtrip.api.ErrorUnknownTargetSchema
+import ca.floo.roadtrip.api.FanOutResponseSchema
+import ca.floo.roadtrip.api.HealthResponseSchema
+import ca.floo.roadtrip.api.RunDetailSchema
+import ca.floo.roadtrip.api.RunOutcomeSchema
+import ca.floo.roadtrip.api.RunsListSchema
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
@@ -47,44 +55,19 @@ fun Route.adminIngestRoutes(
             response {
                 code(HttpStatusCode.OK) {
                     description = "Fetch completed (or no-op for fetch-less targets)"
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("completed") {
-                            value = """{"run_id":42,"target":"campgrounds","kind":"fetch","status":"completed"}"""
-                        }
-                        example("noop (no fetch phases)") {
-                            value = """{"run_id":42,"target":"parks-canada-curated","kind":"fetch","status":"noop"}"""
-                        }
-                    }
+                    body<RunOutcomeSchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.NotFound) {
                     description = "Target name is not in the static map"
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("unknown") {
-                            value =
-                                """{"error":"unknown target","target":"nope","known":["alberta-provincial","campgrounds","national-parks","parks-canada-curated","planet-fitness","state-parks","tesla-pricing"]}"""
-                        }
-                    }
+                    body<ErrorUnknownTargetSchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.Conflict) {
                     description = "A run for this target is already in flight"
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("busy") {
-                            value = """{"error":"target busy","target":"campgrounds","running_run_id":41}"""
-                        }
-                    }
+                    body<ErrorTargetBusySchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.InternalServerError) {
                     description = "A phase failed; failed_phase identifies which"
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("failed") {
-                            value =
-                                """{"run_id":42,"target":"campgrounds","kind":"fetch","status":"failed","failed_phase":"fetch_bc_parks.py"}"""
-                        }
-                    }
+                    body<RunOutcomeSchema> { mediaTypes(ContentType.Application.Json) }
                 }
             }
         }) { runOne(controller, RunKind.FETCH) }
@@ -100,24 +83,16 @@ fun Route.adminIngestRoutes(
             response {
                 code(HttpStatusCode.OK) {
                     description = "Import completed (or no-op for import-less targets)"
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("completed") {
-                            value = """{"run_id":42,"target":"planet-fitness","kind":"import","status":"completed"}"""
-                        }
-                        example("noop (no import phases)") {
-                            value = """{"run_id":42,"target":"tesla-pricing","kind":"import","status":"noop"}"""
-                        }
-                    }
+                    body<RunOutcomeSchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.NotFound) {
-                    body<String> { mediaTypes(ContentType.Application.Json) }
+                    body<ErrorUnknownTargetSchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.Conflict) {
-                    body<String> { mediaTypes(ContentType.Application.Json) }
+                    body<ErrorTargetBusySchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.InternalServerError) {
-                    body<String> { mediaTypes(ContentType.Application.Json) }
+                    body<RunOutcomeSchema> { mediaTypes(ContentType.Application.Json) }
                 }
             }
         }) { runOne(controller, RunKind.IMPORT) }
@@ -129,17 +104,11 @@ fun Route.adminIngestRoutes(
             response {
                 code(HttpStatusCode.OK) {
                     description = "All targets succeeded (or were no-ops)"
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("fan-out") {
-                            value =
-                                """{"kind":"fetch","outcomes":[{"run_id":1,"target":"alberta-provincial","kind":"fetch","status":"noop"},{"run_id":2,"target":"campgrounds","kind":"fetch","status":"completed"},{"run_id":3,"target":"planet-fitness","kind":"fetch","status":"completed"}]}"""
-                        }
-                    }
+                    body<FanOutResponseSchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.InternalServerError) {
                     description = "At least one target failed; outcomes shows per-target status"
-                    body<String> { mediaTypes(ContentType.Application.Json) }
+                    body<FanOutResponseSchema> { mediaTypes(ContentType.Application.Json) }
                 }
             }
         }) { runAll(controller, RunKind.FETCH) }
@@ -149,16 +118,10 @@ fun Route.adminIngestRoutes(
             summary = "Import data/ files for every known target (sequential fan-out)"
             response {
                 code(HttpStatusCode.OK) {
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("fan-out") {
-                            value =
-                                """{"kind":"import","outcomes":[{"run_id":4,"target":"campgrounds","kind":"import","status":"completed"},{"run_id":5,"target":"planet-fitness","kind":"import","status":"completed"}]}"""
-                        }
-                    }
+                    body<FanOutResponseSchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.InternalServerError) {
-                    body<String> { mediaTypes(ContentType.Application.Json) }
+                    body<FanOutResponseSchema> { mediaTypes(ContentType.Application.Json) }
                 }
             }
         }) { runAll(controller, RunKind.IMPORT) }
@@ -175,13 +138,7 @@ fun Route.adminIngestRoutes(
             }
             response {
                 code(HttpStatusCode.OK) {
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("two runs") {
-                            value =
-                                """{"runs":[{"id":42,"target":"campgrounds","kind":"fetch","status":"completed","triggered_by":"admin-api","started_at":"2026-06-06T19:14:02Z","completed_at":"2026-06-06T19:18:31Z"},{"id":41,"target":"planet-fitness","kind":"import","status":"completed","triggered_by":"admin-api","started_at":"2026-06-06T19:13:44Z","completed_at":"2026-06-06T19:13:46Z"}]}"""
-                        }
-                    }
+                    body<RunsListSchema> { mediaTypes(ContentType.Application.Json) }
                 }
             }
         }) {
@@ -197,25 +154,13 @@ fun Route.adminIngestRoutes(
             }
             response {
                 code(HttpStatusCode.OK) {
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("with phases") {
-                            value =
-                                """{"id":42,"target":"campgrounds","kind":"fetch","status":"completed","triggered_by":"admin-api","started_at":"2026-06-06T19:14:02Z","completed_at":"2026-06-06T19:18:31Z","phases":[{"id":43,"phase":"fetch_campgrounds.py","phase_kind":"fetch","status":"completed","exit_code":0,"started_at":"2026-06-06T19:14:02Z","completed_at":"2026-06-06T19:14:55Z","counts":{"exit_code":0}},{"id":44,"phase":"fetch_bc_parks.py","phase_kind":"fetch","status":"completed","exit_code":0,"started_at":"2026-06-06T19:14:55Z","completed_at":"2026-06-06T19:15:30Z","counts":{"exit_code":0}}]}"""
-                        }
-                    }
+                    body<RunDetailSchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.BadRequest) {
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("bad id") { value = """{"error":"bad id"}""" }
-                    }
+                    body<ErrorNotFoundSchema> { mediaTypes(ContentType.Application.Json) }
                 }
                 code(HttpStatusCode.NotFound) {
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("not found") { value = """{"error":"not found","id":99}""" }
-                    }
+                    body<ErrorNotFoundSchema> { mediaTypes(ContentType.Application.Json) }
                 }
             }
         }) {
@@ -241,13 +186,7 @@ fun Route.adminIngestRoutes(
             summary = "Per-target last-completed run + age in seconds"
             response {
                 code(HttpStatusCode.OK) {
-                    body<String> {
-                        mediaTypes(ContentType.Application.Json)
-                        example("two targets") {
-                            value =
-                                """{"targets":[{"target":"campgrounds","last_run":42,"kind":"fetch","status":"completed","age_sec":3742},{"target":"planet-fitness","last_run":null,"kind":null,"status":null,"age_sec":null}]}"""
-                        }
-                    }
+                    body<HealthResponseSchema> { mediaTypes(ContentType.Application.Json) }
                 }
             }
         }) {
