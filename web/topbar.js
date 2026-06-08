@@ -104,6 +104,55 @@ export function initTopbar(map, getPinSearchIndex) {
   // app.js calls this on every bbox refresh with the latest campground feature
   // list. We dedupe + sort + render only when a route is active.
   window.__rtSetTripPois = (cgFeatures) => setTripPois(cgFeatures);
+
+  // Drawer + popups read these to render a per-POI Directions button. We
+  // expose globals (vs. an import) because the drawer module is downstream
+  // from popups.js and shouldn't pull topbar.js into its dependency graph.
+  window.__rtTripMode = () => trip.mode;
+  window.__rtAddTripStop = (stop) => addTripStopFromExternal(stop);
+}
+
+/**
+ * Add a POI as a stop without going through the search flow. Called by the
+ * drawer's per-POI Directions button.
+ *
+ *  - browse mode: enter directions mode with the POI as the *origin*. The
+ *    destination row stays empty and gets focus so the user can immediately
+ *    type "to where?". This matches the "directions FROM this place" flow
+ *    the per-POI button reads as.
+ *  - directions mode + destination empty: fill the destination so the user
+ *    gets an immediate route. They can still add vias afterwards.
+ *  - directions mode + destination filled: insert as a via just before
+ *    the destination so the user-chosen endpoint stays the endpoint.
+ */
+function addTripStopFromExternal(stop) {
+  if (!stop || !Number.isFinite(stop.lng) || !Number.isFinite(stop.lat)) return;
+  const s = { name: stop.name || 'Selected place', lng: stop.lng, lat: stop.lat, kind: stop.kind || 'PLACE' };
+  if (trip.mode === 'browse') {
+    // Reset stops so any leftover row-0 pin click from browse mode doesn't
+    // double up. The POI becomes the origin; destination is empty + focused.
+    trip.stops = [s, null];
+    trip.mode = 'directions';
+    rerender();
+    setTimeout(() => {
+      const el = document.querySelector('.tb-row[data-i="1"] .tb-input');
+      if (el) { activeRowIdx = 1; el.focus(); }
+    }, 0);
+    return;
+  }
+  // directions mode
+  const last = trip.stops.length - 1;
+  if (trip.stops[last] == null) {
+    // Destination still empty — fill it. The user clicked "Add stop" but
+    // we don't have an endpoint yet, so this is the most useful slot to
+    // populate (route fires immediately if origin is also filled).
+    setStop(last, s);
+  } else {
+    if (trip.stops.length >= MAX_STOPS) return;
+    trip.stops.splice(last, 0, s);
+  }
+  rerender();
+  if (allStopsFilled()) tryFetchRoute();
 }
 
 // --- DOM scaffolding -----------------------------------------------------
@@ -501,31 +550,64 @@ function onInput(rowIdx, value) {
 
 async function runQuery(q) {
   const pinResults = pinSearch(q);
-  let geocodeResults = [];
-  try {
-    geocodeAbort = new AbortController();
-    const c = mapRef.getCenter();
-    const proximity = state.userLocation
-      ? `&proximity=${state.userLocation.lng},${state.userLocation.lat}`
-      : `&proximity=${c.lng.toFixed(4)},${c.lat.toFixed(4)}`;
-    const r = await fetch(
-      `/api/geocode?q=${encodeURIComponent(q)}&autocomplete=1&limit=5${proximity}`,
-      { signal: geocodeAbort.signal });
-    if (r.ok) {
-      const j = await r.json();
-      geocodeResults = (j.results || []).map(it => ({
+  geocodeAbort = new AbortController();
+  const signal = geocodeAbort.signal;
+  const c = mapRef.getCenter();
+  const proximity = state.userLocation
+    ? `&proximity=${state.userLocation.lng},${state.userLocation.lat}`
+    : `&proximity=${c.lng.toFixed(4)},${c.lat.toFixed(4)}`;
+
+  // Backend POI search runs in parallel with geocode. The local pinSearch
+  // only knows what's been loaded into the current viewport; the backend
+  // path lets the user find a POI nationwide (e.g. "upper pines" while
+  // looking at the East Coast).
+  const [backendPoiResults, geocodeResults] = await Promise.all([
+    fetch(`/api/pois/search?q=${encodeURIComponent(q)}&limit=8`, { signal })
+      .then(r => r.ok ? r.json() : { results: [] })
+      .then(j => (j.results || []).map(it => ({
+        kind: kindForCategory(it.category),
+        name: it.name,
+        sub: it.region || '',
+        lng: it.lng, lat: it.lat,
+        category: it.category,
+        poiId: it.id,
+        source: 'backend-poi',
+      })))
+      .catch(e => { if (e.name !== 'AbortError') console.warn('[topbar] poi search failed', e); return []; }),
+    fetch(`/api/geocode?q=${encodeURIComponent(q)}&autocomplete=1&limit=5${proximity}`, { signal })
+      .then(r => r.ok ? r.json() : { results: [] })
+      .then(j => (j.results || []).map(it => ({
         kind: it.place_type === 'address' ? 'ADDR' : 'PLACE',
         name: it.place_name,
         lng: it.lng, lat: it.lat,
         source: 'geocode',
-      }));
-    }
-  } catch (e) {
-    if (e.name !== 'AbortError') console.warn('[topbar] geocode failed', e);
-  }
-  currentResults = [...geocodeResults, ...pinResults].slice(0, 12);
+      })))
+      .catch(e => { if (e.name !== 'AbortError') console.warn('[topbar] geocode failed', e); return []; }),
+  ]);
+
+  // Dedupe: a backend POI hit might also be in the local pin index after a
+  // viewport visit. Prefer the local pin entry (carries onSelect, faster
+  // pick path) when ids overlap.
+  const localIds = new Set(pinResults.filter(r => r.pinItem?.id != null).map(r => r.pinItem.id));
+  const backendDeduped = backendPoiResults.filter(r => !localIds.has(r.poiId));
+
+  // POI-first: locally indexed > backend-search > geocode. Local pin items
+  // already carry onSelect; backend-search is a network round-trip away from
+  // a synthesized click. Geocoding stays the long-tail fallback.
+  currentResults = [...pinResults, ...backendDeduped, ...geocodeResults].slice(0, 12);
   dropdownIdx = -1;
   renderDropdown();
+}
+
+function kindForCategory(category) {
+  switch (category) {
+    case 'campground': return 'CG';
+    case 'national-park': return 'NP';
+    case 'state-park': return 'SP';
+    case 'planet-fitness': return 'PF';
+    case 'supercharger': return 'SC';
+    default: return 'PLACE';
+  }
 }
 
 function pinSearch(q) {
@@ -559,7 +641,10 @@ function renderDropdown() {
   let html = '';
   let prevSection = null;
   currentResults.forEach((r, i) => {
-    const section = (r.source === 'geocode') ? 'Places' : 'Map pins';
+    const section =
+      r.source === 'geocode' ? 'Places' :
+      r.source === 'backend-poi' ? 'POIs' :
+      'Map pins';
     if (section !== prevSection) {
       html += `<div class="tb-section">${section}</div>`;
       prevSection = section;
@@ -606,6 +691,10 @@ function onInputKey(e, rowIdx) {
 function pickResult(result) {
   if (!result) return;
   closeDropdown();
+
+  // Every dropdown pick fills the row the user was typing in. The drawer's
+  // "Add stop" button is the path that inserts a *new* via (via
+  // addTripStopFromExternal); pickResult always overwrites the active row.
   const i = Math.max(activeRowIdx, 0);
   setStop(i, {
     name: result.name,
@@ -614,11 +703,13 @@ function pickResult(result) {
     pinItem: result.pinItem || null,
   });
 
-  // In browse mode, fly to the place. If it was a pin search result, also
-  // open the existing drawer/popup via fitAndSelect.
+  // In browse mode, fly to the place. POI hits also open the drawer; for
+  // a geocoded result there's nothing more to render than the flyTo.
   if (trip.mode === 'browse') {
     if (result.source === 'pin' && result.pinItem) {
       fitAndSelect(result.pinItem);
+    } else if (result.source === 'backend-poi') {
+      flyAndOpenBackendPoi(result);
     } else {
       const zoom = result.kind === 'ADDR' ? 14 : 10;
       mapRef.flyTo({ center: [result.lng, result.lat], zoom, speed: 1.6 });
@@ -627,6 +718,73 @@ function pickResult(result) {
 
   rerender();
   if (trip.mode === 'directions' && allStopsFilled()) tryFetchRoute();
+}
+
+const BACKEND_POI_LAYERS = {
+  CG: ['cg-points-hit', 'cg-points'],
+  NP: ['np-pts-hit', 'np-fill'],
+  SP: ['sp-pts-hit', 'sp-fill'],
+  PF: ['pf-points-hit', 'pf-points'],
+  SC: ['sc-points-hit'],
+};
+
+const BACKEND_POI_TOGGLES = {
+  CG: 'f-cg-federal',
+  NP: 'f-np',
+  SP: 'f-sp',
+  PF: 'f-pf',
+  SC: 'f-open',
+};
+
+/**
+ * Fly to a backend search hit and open its drawer once the pin has loaded
+ * into the visible layer. The bbox-refresh is debounced 250ms after moveend
+ * and then waits on /api/pois (~100-500ms), so we can't hang on a single
+ * `idle` event — instead we poll queryRenderedFeatures on a short interval
+ * after flyTo settles, up to a 4s budget. As soon as the pin is hittable,
+ * synthesize the click so the existing layer handlers open the drawer.
+ */
+function flyAndOpenBackendPoi(result) {
+  // Make sure the destination layer is visible — otherwise queryRenderedFeatures
+  // returns nothing and the synthesized click is silently dropped.
+  const toggleId = BACKEND_POI_TOGGLES[result.kind];
+  if (toggleId) {
+    const el = document.getElementById(toggleId);
+    if (el && !el.checked) {
+      el.checked = true;
+      el.dispatchEvent(new Event('change'));
+    }
+  }
+  const layers = BACKEND_POI_LAYERS[result.kind] || ['cg-points-hit', 'cg-points'];
+  const center = [result.lng, result.lat];
+  // Zoom 13: tight enough that the pin is the only feature near the click
+  // point but still shows a bit of context. Higher zooms (14+) sometimes
+  // hide adjacent pins via spider-collision.
+  mapRef.flyTo({ center, zoom: 13, speed: 1.6 });
+
+  mapRef.once('moveend', () => {
+    // Nudge the bbox refresh in case the auto moveend handler hasn't fired
+    // yet (it's debounced inside app.js). Idempotent — coalesces with any
+    // already-pending refresh.
+    if (typeof window.__rtRefreshBbox === 'function') window.__rtRefreshBbox();
+
+    const deadline = Date.now() + 4000;
+    const poll = () => {
+      const present = layers.filter(id => mapRef.getLayer(id));
+      if (present.length) {
+        const pt = mapRef.project(center);
+        const hits = mapRef.queryRenderedFeatures(pt, { layers: present });
+        if (hits.length) {
+          synthesizeClick(layers, center);
+          return;
+        }
+      }
+      if (Date.now() < deadline) setTimeout(poll, 200);
+    };
+    // 200ms first delay covers the bbox-refresh debounce + first network
+    // round-trip; subsequent ticks ride the same cadence.
+    setTimeout(poll, 200);
+  });
 }
 
 function setStop(i, stop) {
@@ -678,8 +836,15 @@ function onClearAll() {
 }
 
 function onRowX(i, wasFilled) {
-  if (wasFilled) {
-    // Filled row → clear text + value, keep the row
+  // Vias are removable; origin (0) and destination (last) are structural
+  // slots that always exist in directions mode, so we clear-but-keep them.
+  const isStructural =
+    trip.mode !== 'directions' ||
+    i === 0 ||
+    i === trip.stops.length - 1;
+
+  if (wasFilled && isStructural) {
+    // Filled origin/destination → clear text + value, keep the row
     trip.stops[i] = null;
     rerender();
     removeRouteLayer();
@@ -689,18 +854,44 @@ function onRowX(i, wasFilled) {
       const el = document.querySelector(`.tb-row[data-i="${i}"] .tb-input`);
       if (el) { activeRowIdx = i; el.focus(); }
     }, 0);
-  } else {
-    // Empty row → remove if allowed (>= 2 stops in directions mode)
-    if (trip.mode === 'directions' && trip.stops.length <= 2) return;
-    trip.stops.splice(i, 1);
-    if (trip.stops.length === 0) {
-      onClearAll();
-      return;
-    }
-    rerender();
-    if (allStopsFilled()) tryFetchRoute();
-    else { removeRouteLayer(); hideStatus(); notifyCorridorChanged(); }
+    return;
   }
+
+  // Via (filled or empty) → remove the row entirely. Also handles browse-mode
+  // single-row clears and the "remove an extra empty stop" case.
+  if (trip.mode === 'directions' && trip.stops.length <= 2) {
+    // Can't drop below origin + destination — clear text but keep the row.
+    if (wasFilled) {
+      trip.stops[i] = null;
+      rerender();
+      removeRouteLayer();
+      hideStatus();
+      notifyCorridorChanged();
+    }
+    return;
+  }
+  trip.stops.splice(i, 1);
+  if (trip.stops.length === 0) {
+    onClearAll();
+    return;
+  }
+  // Only one stop left → fall back to browse mode. Directions mode is
+  // meaningless with a single waypoint; the lone stop becomes the current
+  // browse selection (or null/empty if the removed row was the filled one).
+  if (trip.stops.length === 1) {
+    if (trip.routeAbort) trip.routeAbort.abort();
+    trip.mode = 'browse';
+    trip.route = null;
+    trip.generation++;
+    removeRouteLayer();
+    hideStatus();
+    notifyCorridorChanged();
+    rerender();
+    return;
+  }
+  rerender();
+  if (allStopsFilled()) tryFetchRoute();
+  else { removeRouteLayer(); hideStatus(); notifyCorridorChanged(); }
 }
 
 /** Tell app.js the corridor has changed so it re-fetches /api/pois with the
@@ -1023,7 +1214,10 @@ function renderRows() {
     }
   }
 
-  // Buttons visibility
+  // Buttons visibility. The search-bar Directions button is the entry
+  // point in browse mode whenever row 0 is filled (works for geocoded
+  // picks where there's no drawer Directions button to click). In
+  // directions mode it stays hidden — auto-fetch covers that flow.
   document.getElementById('tb-directions').hidden = isDirections || !trip.stops[0];
   document.getElementById('tb-clear').hidden = !trip.stops[0];
   document.getElementById('tb-add').hidden = !isDirections || trip.stops.length >= MAX_STOPS;

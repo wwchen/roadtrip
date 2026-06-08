@@ -13,6 +13,25 @@ function distanceTo(lng, lat) {
     : '';
 }
 
+/**
+ * Per-POI Directions button. Same visual slot in every drawer; the click is
+ * picked up by a delegated listener in drawer.js that routes through
+ * window.__rtAddTripStop. Label flips based on current trip mode so the
+ * button reads "Add stop" once a route is being built.
+ */
+export function directionsButtonHTML({ name, lng, lat, kind = 'PLACE' }) {
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return '';
+  const mode = (typeof window !== 'undefined' && typeof window.__rtTripMode === 'function')
+    ? window.__rtTripMode() : 'browse';
+  const label = mode === 'directions' ? 'Add stop' : 'Directions';
+  const icon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 10l-7 7-3-3-9 9"/><path d="M14 10h7v7"/></svg>`;
+  return `<button type="button" class="cg-btn cg-btn-secondary rt-poi-directions"
+    data-name="${escapeHtml(name || '')}"
+    data-lng="${lng}"
+    data-lat="${lat}"
+    data-kind="${escapeHtml(kind)}">${icon}${label}</button>`;
+}
+
 /** Drawer header: name + subline + optional verdict. cg-* classes match drawer.js. */
 function drawerHeader(name, sub, verdictHtml = '') {
   return `
@@ -107,9 +126,10 @@ export function openParkPopup(kind, feature, lngLat) {
   const primaryBtn = url
     ? `<a class="cg-btn cg-btn-primary" href="${url}" target="_blank" rel="noreferrer">${escapeHtml(label === 'nps.gov' ? 'Open on nps.gov' : 'Search ' + label)}</a>`
     : '';
+  const dirBtn = directionsButtonHTML({ name, lng: lngLat.lng, lat: lngLat.lat, kind: kind === 'np' ? 'NP' : 'SP' });
   openDrawer(`
     ${drawerHeader(name, sub)}
-    ${primaryBtn ? `<div class="cg-actions">${primaryBtn}</div>` : ''}
+    <div class="cg-actions">${dirBtn}${primaryBtn}</div>
     ${pills ? `<div class="pills">${pills}</div>` : ''}
     ${upstreamHTML(p.upstream)}
   `);
@@ -143,9 +163,11 @@ export function openPlanetFitnessPopup(f) {
     p.opening_hours ? `<span class="pill">${escapeHtml(p.opening_hours)}</span>` : '',
   ].filter(Boolean).join(' ');
 
+  const dirBtn = directionsButtonHTML({ name: p.name || 'Planet Fitness', lng, lat, kind: 'PF' });
   openDrawer(`
     ${drawerHeader(p.name || 'Planet Fitness', sub)}
     <div class="cg-actions">
+      ${dirBtn}
       <a class="cg-btn cg-btn-primary" href="${gmapsUrl}" target="_blank" rel="noopener">Open in Google Maps</a>
       <a class="cg-btn cg-btn-secondary" href="${pfUrl}" target="_blank" rel="noreferrer">Planet Fitness page</a>
       ${callBtns}
@@ -181,9 +203,10 @@ export function openSuperchargerPopup(f) {
   // tesla-locations capture that gives us name/stalls/kW). No second
   // round-trip; render synchronously.
   const pricingHtml = renderPricing(p.pricebooks);
+  const dirBtn = directionsButtonHTML({ name: p.name || 'Supercharger', lng, lat, kind: 'SC' });
   openDrawer(`
     ${drawerHeader(p.name || '', sub)}
-    <div class="cg-actions">${primaryBtn}</div>
+    <div class="cg-actions">${dirBtn}${primaryBtn}</div>
     ${tags ? `<div style="margin-top:6px">${tags}</div>` : ''}
     ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
     ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}

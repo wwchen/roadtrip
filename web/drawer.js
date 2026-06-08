@@ -32,6 +32,7 @@ import {
   reserveButtonHTML,
 } from './campground-card.js';
 import { upstreamDecorations } from './upstream-html.js';
+import { directionsButtonHTML } from './popups.js';
 
 const DRAWER_ROOT_ID = 'cg-drawer';
 const BACKDROP_ID = 'cg-drawer-backdrop';
@@ -171,6 +172,42 @@ function ensureDrawerDOM() {
   `;
   document.body.appendChild(root);
 
+  // Backdrop is intentionally pointer-events:none — MapLibre still needs to
+  // receive pan/zoom gestures even with the drawer open. Instead, listen
+  // for a map click that misses every interactive POI layer and treat it
+  // as "click outside POI → close drawer." Layer-specific click handlers
+  // run before this catch-all because we use queryRenderedFeatures to test.
+  if (state.map) {
+    const POI_LAYERS = ['cg-points-hit', 'sc-points-hit', 'pf-points-hit', 'np-pts-hit', 'sp-pts-hit', 'np-fill', 'sp-fill'];
+    state.map.on('click', (e) => {
+      if (!root.classList.contains('open')) return;
+      const present = POI_LAYERS.filter(id => state.map.getLayer(id));
+      if (!present.length) { closeDrawer(); return; }
+      const hits = state.map.queryRenderedFeatures(e.point, { layers: present });
+      if (!hits.length) closeDrawer();
+    });
+  }
+
+  // Delegated handler for the per-POI Directions button. Bound once at DOM
+  // creation so it survives the innerHTML rewrites in renderShell/openDrawer.
+  // Routes through window.__rtAddTripStop (set up by topbar.js) so the
+  // drawer doesn't depend on the topbar module.
+  root.querySelector('.cg-drawer-content').addEventListener('click', (e) => {
+    const btn = e.target.closest?.('.rt-poi-directions');
+    if (!btn) return;
+    e.preventDefault();
+    const lng = Number(btn.dataset.lng);
+    const lat = Number(btn.dataset.lat);
+    if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    if (typeof window.__rtAddTripStop !== 'function') return;
+    window.__rtAddTripStop({
+      name: btn.dataset.name || 'Selected place',
+      lng, lat,
+      kind: btn.dataset.kind || 'PLACE',
+    });
+    closeDrawer();
+  });
+
   // iOS Safari: visualViewport.resize fires on URL-bar collapse, keyboard,
   // and zoom. Filter for URL-bar (large height delta, no zoom change).
   if (window.visualViewport) {
@@ -253,14 +290,17 @@ function renderShell(f) {
       </section>`
     : '';
 
+  const dirBtn = directionsButtonHTML({ name: p.name, lng, lat, kind: 'CG' });
   const actions = p.recgov_id
     ? `
       <div class="cg-actions">
+        ${dirBtn}
         <a class="cg-btn cg-btn-primary" href="/campsite?campground=${encodeURIComponent(p.recgov_id)}" data-cta="watch">Watch for openings</a>
         <a class="cg-btn cg-btn-secondary" href="https://www.recreation.gov/camping/campgrounds/${encodeURIComponent(p.recgov_id)}" target="_blank" rel="noreferrer" data-cta="reserve">Reserve on rec.gov</a>
       </div>`
     : `
       <div class="cg-actions">
+        ${dirBtn}
         ${reserveButtonHTML(p, 'cg-btn')}
       </div>`;
 
