@@ -33,7 +33,7 @@ class EtlOrchestrator(
         val etl = registry[source] ?: error("no ETL registered for source=$source")
         log.info("etl source={} starting", source)
 
-        val transformCtx = TransformCtx.load(ctx)
+        val transformCtx = TransformCtx.load(ctx, rawDir)
         val pois = runOneSource(etl, transformCtx)
         val ups = upsert.run(setOf(source), pois)
 

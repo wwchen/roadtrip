@@ -7,6 +7,8 @@ import ca.floo.roadtrip.etl.TransformCtx
 import ca.floo.roadtrip.etl.ValidationResult
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import org.slf4j.LoggerFactory
+import java.io.File
 import java.time.Instant
 
 // Tesla bulk locations feed → Poi.Supercharger.
@@ -16,10 +18,13 @@ import java.time.Instant
 // Tesla site globally — superchargers, destination chargers, sales,
 // service. We filter to location_type ∈ {supercharger, megacharger}.
 //
-// stallCount + maxPowerKw need per-slug detail from the tesla-locations
-// fetcher (separate ETL); the index only ships lat/lon and a slug. We
-// emit stallCount=0, maxPowerKw=0 and let the locations ETL fill them
-// in on its merge pass.
+// Per-site enrichment: when data/raw/tesla-locations/<slug>/<ts>.json
+// exists for a row, we read the newest detail capture and pull out the
+// nice name ("Woodburn, OR"), street address, public stall count,
+// max kW, and access type. Rows without a cached detail page still
+// render with placeholder fields — the index alone is enough to put a
+// pin on the map. The cache lifetime is governed by the offline
+// refresh worker (`make refresh-superchargers`); rows go stale gracefully.
 class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
     override val sourceName = "tesla-index"
 
@@ -39,13 +44,15 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
         ctx: TransformCtx,
     ): List<Poi.Supercharger> {
         val gbId = ctx.governingBodyId("tesla")
-        return dto.rows.mapNotNull { transformRow(it, gbId, dto.fetchedAt) }
+        val locationsDir = File(ctx.rawDir, "tesla-locations")
+        return dto.rows.mapNotNull { transformRow(it, gbId, dto.fetchedAt, locationsDir) }
     }
 
     private fun transformRow(
         row: TeslaIndexRow,
         gbId: Long,
         fetchedAt: Instant,
+        locationsDir: File,
     ): Poi.Supercharger? {
         val types = row.locationType ?: return null
         if (CHARGER_TYPES.none { it in types }) return null
@@ -53,28 +60,80 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
         val lat = row.latitude ?: return null
         val lon = row.longitude ?: return null
 
-        // The index doesn't ship a name string for superchargers —
-        // location_url_slug is the canonical handle and matches the
-        // tesla-locations dir name. Fall back to slug-derived label so
-        // the row is rendered usefully even before locations enrichment.
-        val name = row.title?.takeIf { it.isNotBlank() && it != "locations" } ?: "Supercharger $slug"
+        val detail = loadDetail(locationsDir, slug)
+
+        // Detail's `name` is "Woodburn, OR"-style; index `title` is the
+        // useless string "locations". Prefer detail; fall back to a
+        // slug-derived label so unenriched rows still render usefully.
+        val name =
+            detail?.name?.takeIf { it.isNotBlank() }
+                ?: row.title?.takeIf { it.isNotBlank() && it != "locations" }
+                ?: "Supercharger $slug"
+
+        val (region, country) = regionCountryOf(detail)
 
         return Poi.Supercharger(
             source = sourceName,
             sourceId = sanitizeSlug(slug),
             name = name,
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
-            region = null,
-            country = null,
+            region = region,
+            country = country,
             governingBodyId = gbId,
             phone = null,
-            address = null,
+            address = addressOf(detail),
             infoUrl = "https://www.tesla.com/findus?location=$slug",
             fetchedAt = fetchedAt,
             lastVerified = null,
-            stallCount = 0,
-            maxPowerKw = 0,
-            facility = null,
+            stallCount = detail?.publicStallCount ?: 0,
+            maxPowerKw = detail?.maxPowerKw ?: 0,
+            facility = detail?.accessType?.takeIf { it.isNotBlank() },
+        )
+    }
+
+    private fun loadDetail(
+        locationsDir: File,
+        slug: String,
+    ): TeslaLocationDetail? {
+        val slugDir = File(locationsDir, slug)
+        if (!slugDir.isDirectory) return null
+        val newest =
+            slugDir
+                .listFiles { f -> f.isFile && f.name.endsWith(".json") }
+                ?.maxByOrNull { it.name }
+                ?: return null
+        return runCatching {
+            val env = json.decodeFromString(Envelope.serializer(), newest.readText())
+            json.decodeFromJsonElement(TeslaDetailEnvelope.serializer(), env.payload).data.data
+        }.onFailure { log.warn("tesla-locations parse failed for slug={}: {}", slug, it.message) }.getOrNull()
+    }
+
+    private fun regionCountryOf(detail: TeslaLocationDetail?): Pair<String?, String?> {
+        val addr = detail?.address ?: return null to null
+        return addr.state?.takeIf { it.isNotBlank() } to addr.countryCode?.takeIf { it.isNotBlank() }
+    }
+
+    private fun addressOf(detail: TeslaLocationDetail?): ca.floo.roadtrip.etl.Address? {
+        val addr = detail?.address ?: return null
+        val street =
+            listOfNotNull(addr.streetNumber, addr.street)
+                .filter { it.isNotBlank() }
+                .joinToString(" ")
+                .takeIf { it.isNotBlank() }
+        if (street == null &&
+            addr.city.isNullOrBlank() &&
+            addr.state.isNullOrBlank() &&
+            addr.postalCode.isNullOrBlank() &&
+            addr.countryCode.isNullOrBlank()
+        ) {
+            return null
+        }
+        return ca.floo.roadtrip.etl.Address(
+            street = street,
+            city = addr.city?.takeIf { it.isNotBlank() },
+            state = addr.state?.takeIf { it.isNotBlank() },
+            postcode = addr.postalCode?.takeIf { it.isNotBlank() },
+            country = addr.countryCode?.takeIf { it.isNotBlank() },
         )
     }
 
@@ -90,6 +149,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, Poi.Supercharger> {
         }
 
     companion object {
+        private val log = LoggerFactory.getLogger(TeslaIndexEtl::class.java)
         private val json = Json { ignoreUnknownKeys = true }
         private val CHARGER_TYPES = setOf("supercharger", "megacharger")
     }
@@ -117,4 +177,35 @@ data class TeslaIndexRow(
 data class TeslaIndexDto(
     val rows: List<TeslaIndexRow>,
     val fetchedAt: Instant,
+)
+
+// Tesla per-slug detail envelope shape: payload.data.data.{name, address, …}.
+@Serializable
+data class TeslaDetailEnvelope(
+    val data: TeslaDetailInner = TeslaDetailInner(),
+)
+
+@Serializable
+data class TeslaDetailInner(
+    val data: TeslaLocationDetail = TeslaLocationDetail(),
+)
+
+@Serializable
+data class TeslaLocationDetail(
+    val name: String? = null,
+    val address: TeslaAddress? = null,
+    val publicStallCount: Int? = null,
+    val maxPowerKw: Int? = null,
+    val accessType: String? = null,
+    val openToNonTeslas: Boolean? = null,
+)
+
+@Serializable
+data class TeslaAddress(
+    val street: String? = null,
+    val streetNumber: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val postalCode: String? = null,
+    val countryCode: String? = null,
 )
