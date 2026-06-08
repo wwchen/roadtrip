@@ -1,154 +1,115 @@
-# POI registry — source of truth for governing bodies + booking providers
-# + the per-source fetcher recipes.
+# config/poi-registry.yaml
 #
-# Both Python (bin/refresh) and Kotlin (backend boot) read this. Backend
-# UPSERTs governing_body + booking_provider rows from here on every boot;
-# runs that reference a slug not declared here fail loudly. Adding a new
-# vendor = one entry here + a Kotlin ETL impl + maybe a fetcher script.
-# No Flyway migration to add a vendor.
-#
-# Contract:
-#   slugs are stable, kebab-case, never change without coordinated cleanup
-#   booking_providers are declared once globally; governing-body source
-#   rows reference them by (vendor, host)
+# One file. Both Python (scripts/_envelope.py) and Kotlin (PoiRegistry.kt)
+# read it. Adding a new vendor = one entry under data_sources + one
+# Kotlin ETL class registered in EtlOrchestrator.registry.
 
-governing_bodies:
-  # ----- US federal — all route through Recreation.gov -----
-  # Operating-agency → booking-system facts that don't change. The drawer-
-  # payload assembler reads these to compose CTAs ("Reserve on rec.gov")
-  # without per-vendor branches.
-  - slug: nps
-    name: National Park Service
-    kind: federal
-    country: US
-    booking_provider: { vendor: recgov, host: www.recreation.gov }
-    sources:
-      - id: padus-np
-        fetcher: fetch_parks
-        args:
-          layer: national-parks
+data_sources:
+  - slug: nps-national-parks
+    name: US National Parks
+    enabled: true
+    category: national-park
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_recgov.py
+      args: { agency: NPS, entity_type: recarea }
+      output_dir_prefix: data/raw/nps-national-parks
+    etl_adapter: RecGovParksEtl
+    data_provider:
+      vendor: recgov
+      host: www.recreation.gov
+      name: Recreation.gov
+      adapter: RecGovAdapter
 
-  # Other recgov-routed federal agencies (USFS, BLM, COE, USFW, BOR, TVA,
-  # NM, NRA) and unbookable US state/local/private buckets used to live
-  # here as empty placeholders. Removed: a body with no source can't
-  # populate any POIs, and the empty entries just clutter the contract.
-  # Re-add when there's a fetcher for that agency.
+  - slug: padus-national-parks
+    name: US National Parks (PAD-US polygons)
+    enabled: false
+    category: national-park
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_parks.py
+      args: { layer: national-parks }
+      output_dir_prefix: data/raw/padus-national-parks
+    etl_adapter: PadusNpEtl
 
-  # ----- US state -----
-  - slug: us-state-park
-    name: US State Parks
-    kind: state
-    country: US
-    sources:
-      - id: padus-sp
-        fetcher: fetch_parks
-        args:
-          layer: state-parks
-      - id: aspira-maps-wa
-        fetcher: fetch_aspira_maps
-        args:
-          host: washington.goingtocamp.com
-          source: aspira-maps-wa
-        booking_provider: { vendor: aspira, host: washington.goingtocamp.com }
+  - slug: padus-state-parks
+    name: US State Parks (PAD-US polygons)
+    enabled: false
+    category: state-park
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_parks.py
+      args: { layer: state-parks }
+      output_dir_prefix: data/raw/padus-state-parks
+    etl_adapter: PadusSpEtl
 
-  # ----- Canada -----
-  - slug: parks-canada
-    name: Parks Canada
-    kind: federal
-    country: CA
-    booking_provider: { vendor: aspira, host: reservation.pc.gc.ca }
-    sources:
-      - id: aspira-maps-pc
-        fetcher: fetch_aspira_maps
-        args:
-          host: reservation.pc.gc.ca
-          source: aspira-maps-pc
-        booking_provider: { vendor: aspira, host: reservation.pc.gc.ca }
+  - slug: bcparks-strapi
+    name: BC Provincial Parks
+    enabled: true
+    category: state-park
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_bc_parks.py
+      output_dir_prefix: data/raw/bcparks-strapi
+    etl_adapter: BcParksStrapiEtl
+    data_provider:
+      vendor: aspira
+      host: camping.bcparks.ca
+      name: Aspira (BC Parks)
+      adapter: AspiraAdapter
 
-  - slug: bc-parks
-    name: BC Parks
-    kind: provincial
-    country: CA
-    booking_provider: { vendor: aspira, host: camping.bcparks.ca }
-    sources:
-      - id: bcparks-strapi
-        fetcher: fetch_bc_parks   # scripts/fetch_bc_parks.py
-      - id: aspira-maps-bc
-        fetcher: fetch_aspira_maps
-        args:
-          host: camping.bcparks.ca
-          source: aspira-maps-bc
-        booking_provider: { vendor: aspira, host: camping.bcparks.ca }
+  - slug: reserveamerica-abpp
+    name: Alberta Provincial Parks
+    enabled: true
+    category: campground
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_reserveamerica.py
+      args: { tenant: ABPP }
+      output_dir_prefix: data/raw/reserveamerica-abpp
+    etl_adapter: ReserveAmericaEtl
+    data_provider:
+      vendor: reserveamerica
+      host: shop.albertaparks.ca
+      name: ReserveAmerica (Alberta)
+      adapter: ""
 
-  - slug: alberta-parks
-    name: Alberta Parks
-    kind: provincial
-    country: CA
-    booking_provider: { vendor: reserveamerica, host: shop.albertaparks.ca }
-    sources:
-      - id: reserveamerica-abpp
-        fetcher: fetch_reserveamerica
-        # Tenant config lives in the Python fetcher's TENANTS map; default
-        # walks every configured tenant. Pass --tenant=ABPP to scope.
-        args:
-          tenant: ABPP
-        booking_provider: { vendor: reserveamerica, host: shop.albertaparks.ca }
+  - slug: uscampgrounds
+    name: US Campgrounds (uscampgrounds.info)
+    enabled: false
+    category: campground
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_campgrounds.py
+      output_dir_prefix: data/raw/uscampgrounds
+    etl_adapter: UsCampgroundsEtl
 
-  # ----- Corporate -----
-  - slug: tesla
-    name: Tesla
-    kind: corporate
-    sources:
-      # Both tesla-* sources need curl-impersonate + fresh Akamai cookies,
-      # both bound to the host that minted them. Run via
-      # `make refresh-superchargers` (docker image with curl-impersonate
-      # baked in) after `make refresh-cookies-local`. Excluded from the
-      # `make data-fetch` fan-out so routine refreshes don't burn the
-      # Akamai budget on a fetcher that's going to fail anyway.
-      - id: tesla-index
-        fetcher: fetch_tesla_index
-        manual: true
-      - id: tesla-locations
-        fetcher: fetch_tesla_locations
-        depends_on: [tesla-index]   # locations script reads the index
-        manual: true
+  - slug: osm-pf
+    name: Planet Fitness
+    enabled: true
+    category: planet-fitness
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_planet_fitness.py
+      output_dir_prefix: data/raw/osm-pf
+    etl_adapter: PlanetFitnessEtl
 
-  - slug: pf
-    name: Planet Fitness Corp
-    kind: corporate
-    country: US
-    sources:
-      - id: osm-pf
-        fetcher: fetch_planet_fitness
+  - slug: tesla-index
+    name: Tesla Superchargers
+    enabled: true
+    category: supercharger
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_tesla_index.py
+      output_dir_prefix: data/raw/tesla-index
+    etl_adapter: TeslaIndexEtl
 
-# ----------------------------------------------------------------------
-# Booking providers: the reservation systems the FE deeplinks/heat-strips
-# against. Vendor + host is the unique key. Adapter class is the Kotlin
-# class the availability route loads (PR 4); empty string = no adapter
-# yet, availability returns no_provider.
-# ----------------------------------------------------------------------
-booking_providers:
-  - vendor: recgov
-    host: www.recreation.gov
-    name: Recreation.gov
-    adapter_class: RecGovAdapter
-
-  - vendor: aspira
-    host: reservation.pc.gc.ca
-    name: Aspira NextGen (Parks Canada)
-    adapter_class: AspiraAdapter
-
-  - vendor: aspira
-    host: camping.bcparks.ca
-    name: Aspira NextGen (BC Parks)
-    adapter_class: AspiraAdapter
-
-  - vendor: aspira
-    host: washington.goingtocamp.com
-    name: Aspira NextGen (WA State Parks)
-    adapter_class: AspiraAdapter
-
-  - vendor: reserveamerica
-    host: shop.albertaparks.ca
-    name: ReserveAmerica (Alberta Parks)
-    adapter_class: ""   # not implemented; row exists so AB data can FK to it. Vendor is Active Network's ReserveAmerica platform.
+  - slug: tesla-locations
+    name: Tesla Supercharger details
+    enabled: true
+    category: supercharger
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_tesla_locations.py
+      output_dir_prefix: data/raw/tesla-locations
+    depends_on: [tesla-index]

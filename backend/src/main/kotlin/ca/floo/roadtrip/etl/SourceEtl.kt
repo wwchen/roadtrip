@@ -30,9 +30,9 @@ interface SourceEtl<DTO, OUT : Poi> {
     // Bad rows are counted but don't fail the run.
     fun validate(dto: DTO): ValidationResult<DTO>
 
-    // DTO → domain Poi. Resolves dim-table FKs (governing_body,
-    // booking_provider) via the context. Pure except for the read-only
-    // dim-table lookups TransformCtx provides.
+    // DTO → domain Poi. Resolves the booking_provider dim-table FK via
+    // the context when needed. Pure except for the read-only dim-table
+    // lookups TransformCtx provides.
     fun transform(
         dto: DTO,
         ctx: TransformCtx,

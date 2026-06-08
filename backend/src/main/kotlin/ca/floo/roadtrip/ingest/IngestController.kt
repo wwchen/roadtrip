@@ -84,14 +84,10 @@ class IngestController(
     fun knownTargets(): Set<String> = targets.keys
 
     /**
-     * Targets eligible for the no-target fan-out. Excludes:
-     *   - aggregate targets (governing-body slugs that bundle multiple
-     *     per-source targets) — would run the same source twice.
-     *   - manual targets (e.g. tesla-*) — need host-side setup
-     *     (curl-impersonate, fresh cookies) the backend can't do.
-     * Both remain reachable via explicit `TARGET=<slug>` calls.
+     * Targets eligible for the no-target fan-out. Today: all known
+     * targets (one per enabled data_source).
      */
-    fun fanOutTargets(): Set<String> = targets.filterValues { !it.aggregate && !it.manual }.keys
+    fun fanOutTargets(): Set<String> = targets.keys
 
     suspend fun startRun(
         targetName: String,

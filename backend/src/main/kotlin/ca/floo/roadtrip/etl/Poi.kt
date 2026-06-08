@@ -24,7 +24,6 @@ sealed class Poi {
     abstract val geomGeoJson: String
     abstract val region: String?
     abstract val country: String?
-    abstract val governingBodyId: Long
     abstract val phone: String?
     abstract val address: Address?
     abstract val infoUrl: String?
@@ -40,7 +39,6 @@ sealed class Poi {
         override val geomGeoJson: String,
         override val region: String?,
         override val country: String?,
-        override val governingBodyId: Long,
         override val phone: String?,
         override val address: Address?,
         override val infoUrl: String?,
@@ -64,7 +62,6 @@ sealed class Poi {
         override val geomGeoJson: String,
         override val region: String?,
         override val country: String?,
-        override val governingBodyId: Long,
         override val phone: String?,
         override val address: Address?,
         override val infoUrl: String?,
@@ -87,7 +84,6 @@ sealed class Poi {
         override val geomGeoJson: String,
         override val region: String?,
         override val country: String?,
-        override val governingBodyId: Long,
         override val phone: String?,
         override val address: Address?,
         override val infoUrl: String?,
@@ -106,7 +102,6 @@ sealed class Poi {
         override val geomGeoJson: String,
         override val region: String?,
         override val country: String?,
-        override val governingBodyId: Long,
         override val phone: String?,
         override val address: Address?,
         override val infoUrl: String?,

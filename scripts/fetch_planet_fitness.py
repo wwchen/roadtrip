@@ -14,7 +14,16 @@ import urllib.parse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from _envelope import err, http_post_text, parse_payload, write_envelope  # noqa: E402
+from _envelope import (  # noqa: E402
+    err,
+    http_post_text,
+    load_source,
+    parse_payload,
+    write_envelope,
+)
+
+SLUG = "osm-pf"
+SOURCE = load_source(SLUG)
 
 OVERPASS_URL = "https://overpass-api.de/api/interpreter"
 BBOX = "24.5,-125.0,49.5,-66.5"  # continental US + a bit
@@ -43,7 +52,7 @@ def main() -> int:
 
     payload = parse_payload(resp_headers.get("content-type", ""), body)
     out = write_envelope(
-        source="osm-pf",
+        source_obj=SOURCE,
         fetcher=FETCHER,
         fetcher_version=FETCHER_VERSION,
         request_url=OVERPASS_URL,

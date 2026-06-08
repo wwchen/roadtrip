@@ -30,11 +30,21 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import tesla_client  # noqa: E402
-from _envelope import RAW_ROOT, err, parse_payload, write_envelope  # noqa: E402
+from _envelope import (  # noqa: E402
+    LoadedSource,
+    err,
+    load_source,
+    write_envelope,
+)
+
+SLUG = "tesla-locations"
+INDEX_SLUG = "tesla-index"
+SOURCE = load_source(SLUG)
+INDEX_SOURCE = load_source(INDEX_SLUG)
 
 ROOT = Path(__file__).parent.parent
-INDEX_DIR = RAW_ROOT / "tesla-index"
-LOCATIONS_DIR = RAW_ROOT / "tesla-locations"
+INDEX_DIR = INDEX_SOURCE.output_dir_prefix
+LOCATIONS_DIR = SOURCE.output_dir_prefix
 
 NA_BBOX = (14, 72, -180, -52)  # min_lat, max_lat, min_lng, max_lng — NA + Caribbean
 SLEEP_S = 1.0
@@ -138,9 +148,15 @@ def main() -> int:
             time.sleep(SLEEP_S)
             continue
         # Per-slug captures live at data/raw/tesla-locations/<slug>/<ts>.json
-        # — Path() join on `source` produces the subdirectory.
+        # — synthesize a LoadedSource that re-roots under <slug>/.
+        per_slug = LoadedSource(
+            slug=f"{SLUG}/{slug}",
+            name=f"{SOURCE.name} ({slug})",
+            output_dir_prefix=LOCATIONS_DIR / slug,
+            args={},
+        )
         write_envelope(
-            source=f"tesla-locations/{slug}",
+            source_obj=per_slug,
             fetcher=FETCHER,
             fetcher_version=FETCHER_VERSION,
             request_url=(

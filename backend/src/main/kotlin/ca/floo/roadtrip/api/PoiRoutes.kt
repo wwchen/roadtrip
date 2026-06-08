@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.api
 
+import ca.floo.roadtrip.etl.registry.PoiRegistry
 import ca.floo.roadtrip.route.RouteCache
 import ca.floo.roadtrip.route.RoutingException
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
@@ -63,13 +64,23 @@ private const val MILES_TO_METERS = 1609.34
 fun Route.poiRoutes(
     ctx: DSLContext,
     routeCache: RouteCache,
+    registry: PoiRegistry,
 ) {
+    // Default category list derives from the YAML registry so a new
+    // data_source category surfaces without code changes.
+    val defaultCategories: List<String> =
+        registry
+            .enabledSources()
+            .map { it.category }
+            .toSet()
+            .toList()
     post("/api/pois", {
         tags = listOf("poi")
         summary = "POIs within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"
         description =
             "Body: { bbox: [w,s,e,n], zoom?, categories?, route? }. " +
-            "categories defaults to {campground, state-park, national-park, planet-fitness, supercharger}. " +
+            "categories defaults to the union of `category` values from every enabled data_source " +
+            "in config/poi-registry.yaml. " +
             "When route is present (waypoints + radius_miles), the BE looks up the cached polyline " +
             "from /api/route and buffers server-side, narrowing results to the corridor. " +
             "zoom < $CG_MIN_ZOOM suppresses campgrounds even when requested."
@@ -178,6 +189,7 @@ fun Route.poiRoutes(
                         ctx = ctx,
                         bbox = req.bbox,
                         categories = categories,
+                        defaultCategories = defaultCategories,
                         corridorLineGeoJson = corridorLineGeoJson,
                         corridorRadiusMeters = corridorRadiusMeters,
                         limit = POI_LIMIT + 1,
@@ -190,6 +202,7 @@ fun Route.poiRoutes(
                             ctx = ctx,
                             bbox = req.bbox,
                             categories = categories,
+                            defaultCategories = defaultCategories,
                             corridorLineGeoJson = null,
                             corridorRadiusMeters = 0.0,
                             limit = POI_LIMIT + 1,
@@ -320,6 +333,7 @@ internal fun fetchPois(
     ctx: DSLContext,
     bbox: Bbox,
     categories: List<String>?,
+    defaultCategories: List<String>,
     corridorLineGeoJson: String? = null,
     corridorRadiusMeters: Double = 0.0,
     limit: Int,
@@ -327,14 +341,7 @@ internal fun fetchPois(
     // Per-category limit: each requested category gets its own slot budget,
     // so a dataset like Planet Fitness (1.5k rows) can't starve Superchargers
     // or Campgrounds when bbox is continental.
-    val cats =
-        categories ?: listOf(
-            "campground",
-            "state-park",
-            "national-park",
-            "planet-fitness",
-            "supercharger",
-        )
+    val cats = categories ?: defaultCategories
     if (cats.isEmpty()) return emptyList()
 
     val perCategoryLimit = (limit / cats.size).coerceAtLeast(1)

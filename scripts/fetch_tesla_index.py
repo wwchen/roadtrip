@@ -23,7 +23,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
 import tesla_client  # noqa: E402
-from _envelope import err, parse_payload, write_envelope  # noqa: E402
+from _envelope import (  # noqa: E402
+    err,
+    load_source,
+    parse_payload,
+    write_envelope,
+)
+
+SLUG = "tesla-index"
+SOURCE = load_source(SLUG)
 
 URL = "https://www.tesla.com/api/findus/get-locations?country=US&view=map"
 FETCHER = "fetch_tesla_index"
@@ -73,7 +81,7 @@ def main() -> int:
         return 1
     payload = parse_payload("application/json", body)
     write_envelope(
-        source="tesla-index",
+        source_obj=SOURCE,
         fetcher=FETCHER,
         fetcher_version=FETCHER_VERSION,
         request_url=URL,

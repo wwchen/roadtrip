@@ -25,10 +25,14 @@ sys.path.insert(0, str(Path(__file__).parent))
 from _envelope import (  # noqa: E402
     err,
     http_get_text,
+    load_source,
     parse_payload,
     utc_ts,
     write_envelope,
 )
+
+SLUG_NP = "padus-national-parks"
+SLUG_SP = "padus-state-parks"
 
 SVC = "https://services.arcgis.com/v01gqwM5QqNysAAi/ArcGIS/rest/services/Manager_Name_PADUS/FeatureServer/0"
 FIELDS = "Unit_Nm,Loc_Nm,State_Nm,Mang_Name,Des_Tp,GIS_Acres"
@@ -39,11 +43,12 @@ FETCHER = "fetch_parks"
 FETCHER_VERSION = "2"
 
 
-def capture_target(where: str, source: str) -> int:
+def capture_target(where: str, slug: str) -> int:
     """Paginated capture for one PAD-US filter. All pages in this run share
     the same `ts` directory so the ETL can stitch them as one logical
     capture; later runs land under a new directory.
     """
+    source_obj = load_source(slug)
     ts = utc_ts()
     pages_written = 0
     total = 0
@@ -61,17 +66,17 @@ def capture_target(where: str, source: str) -> int:
             "resultRecordCount": PAGE_SIZE,
         }
         url = f"{SVC}/query?{urllib.parse.urlencode(params)}"
-        err(f"  {source} offset={offset}…")
+        err(f"  {slug} offset={offset}…")
         try:
             status, headers, body = http_get_text(url, timeout=120)
         except Exception as e:  # noqa: BLE001
-            err(f"  {source} page {pages_written + 1} failed: {e}")
+            err(f"  {slug} page {pages_written + 1} failed: {e}")
             return -1
 
         payload = parse_payload(headers.get("content-type", ""), body)
         pages_written += 1
         write_envelope(
-            source=source,
+            source_obj=source_obj,
             fetcher=FETCHER,
             fetcher_version=FETCHER_VERSION,
             request_url=url,
@@ -90,7 +95,7 @@ def capture_target(where: str, source: str) -> int:
         offset += PAGE_SIZE
         time.sleep(0.2)
 
-    err(f"  {source}: {pages_written} pages, {total} features (ts={ts})")
+    err(f"  {slug}: {pages_written} pages, {total} features (ts={ts})")
     return total
 
 
@@ -106,12 +111,12 @@ def main() -> int:
 
     rc = 0
     if args.layer in ("national-parks", "all"):
-        err("padus-np: National Parks (Des_Tp='NP')…")
-        if capture_target("Des_Tp='NP'", "padus-np") < 0:
+        err(f"{SLUG_NP}: National Parks (Des_Tp='NP')…")
+        if capture_target("Des_Tp='NP'", SLUG_NP) < 0:
             rc = 1
     if args.layer in ("state-parks", "all"):
-        err("padus-sp: State Parks (Des_Tp='SP' AND Mang_Type='STAT')…")
-        if capture_target("Des_Tp='SP' AND Mang_Type='STAT'", "padus-sp") < 0:
+        err(f"{SLUG_SP}: State Parks (Des_Tp='SP' AND Mang_Type='STAT')…")
+        if capture_target("Des_Tp='SP' AND Mang_Type='STAT'", SLUG_SP) < 0:
             rc = 1
     return rc
 

@@ -27,7 +27,8 @@ class EtlOrchestrator(
     /**
      * Run a single source's ETL pipeline against the newest capture in
      * `data/raw/<source>/`. Throws if the source isn't registered or if
-     * the upsert tripwire fires.
+     * the upsert tripwire fires. Callers that want a no-op behavior for
+     * missing adapters should pre-check `source in registry`.
      */
     fun runSource(source: String): Stats {
         val etl = registry[source] ?: error("no ETL registered for source=$source")
@@ -83,10 +84,10 @@ class EtlOrchestrator(
                 "osm-pf" to
                     ca.floo.roadtrip.etl.osmpf
                         .PlanetFitnessEtl(),
-                "padus-np" to
+                "padus-national-parks" to
                     ca.floo.roadtrip.etl.padus
                         .PadusNpEtl(),
-                "padus-sp" to
+                "padus-state-parks" to
                     ca.floo.roadtrip.etl.padus
                         .PadusSpEtl(),
                 "bcparks-strapi" to

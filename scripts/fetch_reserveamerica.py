@@ -50,6 +50,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent))
 from _envelope import (  # noqa: E402
     err,
+    load_source,
     parse_payload,
     utc_ts,
     write_envelope,
@@ -142,7 +143,8 @@ def park_detail_url(host: str, contract: str, park_id: str) -> str:
 
 
 def fetch_tenant(tenant: Tenant, ts: str) -> int:
-    source = f"reserveamerica-{tenant.contract.lower()}"
+    slug = f"reserveamerica-{tenant.contract.lower()}"
+    source_obj = load_source(slug)
     welcome_url = f"https://{tenant.host}/welcome.do"
     opener = make_session(tenant.host)
 
@@ -174,7 +176,7 @@ def fetch_tenant(tenant: Tenant, ts: str) -> int:
                 # Empty letter or past-end pagination — stop walking this letter.
                 break
             write_envelope(
-                source=source,
+                source_obj=source_obj,
                 fetcher=FETCHER,
                 fetcher_version=FETCHER_VERSION,
                 request_url=url,
@@ -217,7 +219,7 @@ def fetch_tenant(tenant: Tenant, ts: str) -> int:
             continue
         payload = parse_payload(resp_headers.get("content-type", ""), body)
         write_envelope(
-            source=source,
+            source_obj=source_obj,
             fetcher=FETCHER,
             fetcher_version=FETCHER_VERSION,
             request_url=url,

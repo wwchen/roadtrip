@@ -52,14 +52,10 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, Poi.PlanetFitness> {
     override fun transform(
         dto: PlanetFitnessRawDto,
         ctx: TransformCtx,
-    ): List<Poi.PlanetFitness> {
-        val gbId = ctx.governingBodyId("pf")
-        return dto.elements.mapNotNull { el -> transformElement(el, gbId, dto._fetchedAt) }
-    }
+    ): List<Poi.PlanetFitness> = dto.elements.mapNotNull { el -> transformElement(el, dto._fetchedAt) }
 
     private fun transformElement(
         el: OverpassElement,
-        gbId: Long,
         fetchedAt: Instant,
     ): Poi.PlanetFitness? {
         // Resolve lat/lon: nodes have it directly, ways/relations have it
@@ -82,7 +78,6 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, Poi.PlanetFitness> {
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
             region = tags["addr:state"]?.takeIf { it.isNotBlank() },
             country = "US", // OSM-PF poller's bbox is continental US; safe default
-            governingBodyId = gbId,
             phone = tags["phone"]?.takeIf { it.isNotBlank() },
             address = address,
             infoUrl = tags["website"]?.takeIf { it.isNotBlank() },
