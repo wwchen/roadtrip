@@ -89,6 +89,9 @@ class EtlOrchestrator(
                 "padus-sp" to
                     ca.floo.roadtrip.etl.padus
                         .PadusSpEtl(),
+                "bcparks-strapi" to
+                    ca.floo.roadtrip.etl.bcparks
+                        .BcParksStrapiEtl(),
             )
     }
 }
