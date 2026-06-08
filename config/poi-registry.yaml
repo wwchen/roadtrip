@@ -184,11 +184,19 @@ governing_bodies:
     name: Tesla
     kind: corporate
     sources:
+      # Both tesla-* sources need curl-impersonate + fresh Akamai cookies,
+      # both bound to the host that minted them. Run via
+      # `make refresh-superchargers` (docker image with curl-impersonate
+      # baked in) after `make refresh-cookies-local`. Excluded from the
+      # `make data-fetch` fan-out so routine refreshes don't burn the
+      # Akamai budget on a fetcher that's going to fail anyway.
       - id: tesla-index
         fetcher: fetch_tesla_index
+        manual: true
       - id: tesla-locations
         fetcher: fetch_tesla_locations
         depends_on: [tesla-index]   # locations script reads the index
+        manual: true
 
   - slug: pf
     name: Planet Fitness Corp

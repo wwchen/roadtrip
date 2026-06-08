@@ -131,6 +131,12 @@ data class SourceEntry(
     val bookingProvider: BookingProviderRef? = null,
     @kotlinx.serialization.SerialName("depends_on")
     val dependsOn: List<String> = emptyList(),
+    // Skip in the no-target fan-out (`make data-fetch`). The source still
+    // works via explicit `TARGET=<id>`. Use for fetchers that need
+    // host-only setup (curl-impersonate, fresh cookies) or strict rate
+    // budgets — running them on every routine refresh either fails on
+    // missing dependencies or burns an external WAF allowance.
+    val manual: Boolean = false,
 )
 
 @Serializable

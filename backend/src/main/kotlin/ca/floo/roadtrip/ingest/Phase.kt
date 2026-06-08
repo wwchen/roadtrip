@@ -37,4 +37,10 @@ data class Target(
     // calls still work — `/api/admin/data/fetch/alberta-parks` runs every
     // phase under that body.
     val aggregate: Boolean = false,
+    // Manual targets are also excluded from the fan-out, but for a
+    // different reason: their fetcher needs setup the backend can't do on
+    // its own (e.g. tesla-* needs curl-impersonate + fresh Akamai cookies,
+    // both bound to the host that minted them). Run via explicit
+    // `TARGET=<id>` after the operator has the prereqs.
+    val manual: Boolean = false,
 )
