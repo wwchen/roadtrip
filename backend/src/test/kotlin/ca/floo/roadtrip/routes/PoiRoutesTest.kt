@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.client.MapboxDirections
-import ca.floo.roadtrip.client.RouteResponse
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.migrate
@@ -345,77 +344,6 @@ class PoiRoutesTest {
         }
 
     @Test
-    fun `route corridor filter excludes points outside the buffered polyline`() =
-        testApplication {
-            // Three points: two near a Vancouver→Seattle line, one far east.
-            // Corridor = 30mi buffer around the line — the eastern point
-            // (Spokane-ish) should fall outside.
-            seed(
-                listOf(
-                    row("inside-1", "Inside A", -123.0, 49.05, "campground"),
-                    row("inside-2", "Inside B", -122.5, 48.0, "campground"),
-                    row("outside-1", "Outside East", -118.0, 47.0, "campground"),
-                ),
-            )
-
-            // Pre-seed RouteCache with a polyline running Vancouver → Seattle.
-            // The PoiRoutes handler reads this instead of calling Mapbox.
-            val routeCache = RouteCache(MapboxDirections(token = null))
-            val waypoints = listOf(-123.1 to 49.28, -122.33 to 47.61)
-            routeCache.put(
-                waypoints,
-                RouteResponse(
-                    coordinates =
-                        listOf(
-                            listOf(-123.1, 49.28),
-                            listOf(-122.7, 48.4),
-                            listOf(-122.33, 47.61),
-                        ),
-                    distanceMeters = 230_000.0,
-                    durationSeconds = 9_900.0,
-                    legs = emptyList(),
-                ),
-            )
-            application { routing { poiRoutes(ctx, routeCache, testRegistry) } }
-
-            val routeBody =
-                """{"waypoints":[{"lat":49.28,"lng":-123.1},{"lat":47.61,"lng":-122.33}],"radius_miles":30}"""
-            val resp =
-                client.post("/api/pois") {
-                    contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-117,51", route = routeBody))
-                }
-            assertEquals(HttpStatusCode.OK, resp.status)
-            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            // Slim shape: assert by coordinates (the seeded inside fixtures).
-            val coords =
-                parsed["features"]!!
-                    .jsonArray
-                    .map {
-                        val c = it.jsonObject["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
-                        c[0].jsonPrimitive.content.toDouble() to c[1].jsonPrimitive.content.toDouble()
-                    }.toSet()
-            assertEquals(setOf(-123.0 to 49.05, -122.5 to 48.0), coords)
-            // corridor:true tells the FE the response was scoped to the route.
-            assertEquals(true, parsed["corridor"]?.jsonPrimitive?.boolean)
-        }
-
-    @Test
-    fun `route with radius out of range returns 400`() =
-        testApplication {
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
-            // 0.1mi is below MIN_RADIUS_MILES (1.0).
-            val routeBody =
-                """{"waypoints":[{"lat":49,"lng":-123},{"lat":48,"lng":-122}],"radius_miles":0.1}"""
-            val resp =
-                client.post("/api/pois") {
-                    contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-117,51", route = routeBody))
-                }
-            assertEquals(HttpStatusCode.BadRequest, resp.status)
-        }
-
-    @Test
     fun `zoom below CG_MIN_ZOOM drops campground from results`() =
         testApplication {
             seed(
@@ -553,8 +481,6 @@ class PoiRoutesTest {
         bbox: String, // "west,south,east,north"
         categories: List<String>? = null,
         zoom: Int? = null,
-        // route: raw JSON string for the {waypoints, radius_miles} object.
-        route: String? = null,
     ): String {
         val parts = bbox.split(",")
         val sb = StringBuilder()
@@ -568,7 +494,6 @@ class PoiRoutesTest {
             }
             sb.append("]")
         }
-        if (route != null) sb.append(""","route":$route""")
         sb.append("}")
         return sb.toString()
     }

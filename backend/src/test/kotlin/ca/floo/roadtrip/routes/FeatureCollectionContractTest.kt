@@ -60,12 +60,32 @@ class FeatureCollectionContractTest {
     }
 
     @Test
-    fun `corridor true surfaces when route was supplied`() {
-        val out = buildFeatureCollection(emptyList(), truncated = false, corridorActive = true)
-        assertEquals(
-            """{"type":"FeatureCollection","truncated":false,"corridor":true,"features":[]}""",
-            out,
+    fun `on-route feature collection carries route_km on each feature`() {
+        val rows =
+            listOf(
+                OnRouteRow(
+                    id = 7,
+                    category = "campground",
+                    subcategory = "federal",
+                    lng = -122.7,
+                    lat = 48.4,
+                    routeKm = 95.5,
+                ),
+            )
+        val expected = (
+            """{"type":"FeatureCollection","features":[""" +
+                """{"type":"Feature","id":7,""" +
+                """"geometry":{"type":"Point","coordinates":[-122.7,48.4]},""" +
+                """"properties":{"category":"campground","subcategory":"federal","route_km":95.5}}""" +
+                """]}"""
         )
+        assertEquals(expected, buildOnRouteFeatureCollection(rows))
+    }
+
+    @Test
+    fun `on-route empty input produces empty feature list with no truncated flag`() {
+        val out = buildOnRouteFeatureCollection(emptyList())
+        assertEquals("""{"type":"FeatureCollection","features":[]}""", out)
     }
 
     @Test

@@ -87,22 +87,24 @@ data class ErrorNotFoundSchema(
 )
 
 // /api/pois request body — bbox is required (4 numbers, [w,s,e,n]),
-// zoom + categories + route optional. When route is present, the BE
-// looks up the cached polyline (seeded by /api/route) and buffers it
-// server-side for the corridor predicate; the FE doesn't ship a
-// pre-buffered polygon over the wire.
+// zoom + categories optional. Corridor filtering is no longer part of
+// this endpoint; the FE drives the corridor card list through the
+// dedicated POST /api/pois/on-route call.
 @Serializable
 data class PoisRequestSchema(
     val bbox: List<Double>,
     val zoom: Int? = null,
     val categories: List<String>? = null,
-    val route: RouteSchema? = null,
 )
 
+// /api/pois/on-route request body. Same {waypoints, radius_miles}
+// shape the trip planner already uses; categories optional and
+// defaults to all enabled poi_data categories on the server.
 @Serializable
-data class RouteSchema(
+data class PoisOnRouteRequestSchema(
     val waypoints: List<WaypointSchema>,
     val radius_miles: Double,
+    val categories: List<String>? = null,
 )
 
 @Serializable
