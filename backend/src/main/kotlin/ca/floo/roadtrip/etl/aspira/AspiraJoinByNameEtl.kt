@@ -175,6 +175,7 @@ class AspiraJoinByNameEtl(
                     cellCoverage = null,
                     ratingReviews = null,
                     subcategory = subcategory,
+                    agency = aspiraAgencyForHost(host),
                     extras = leafExtras(leaf, host, matchKind),
                 )
         }
@@ -230,6 +231,19 @@ class AspiraJoinByNameEtl(
         private const val FUZZY_THRESHOLD = 0.5
     }
 }
+
+/**
+ * Display-name for Poi.Campground.agency, derived from the booking host.
+ * Falls back to the host string for hosts we haven't classified — better
+ * than null, and the FE can still show *something* useful.
+ */
+private fun aspiraAgencyForHost(host: String): String =
+    when (host) {
+        "reservation.pc.gc.ca" -> "Parks Canada"
+        "camping.bcparks.ca" -> "BC Parks"
+        "washington.goingtocamp.com" -> "WA State Parks"
+        else -> host
+    }
 
 // ---- DTO + per-source strategies ------------------------------------------
 

@@ -77,6 +77,7 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
                 cellCoverage = null,
                 ratingReviews = null,
                 subcategory = bucket,
+                agency = "Alberta Parks",
                 extras = parkExtras(park),
             )
         }
