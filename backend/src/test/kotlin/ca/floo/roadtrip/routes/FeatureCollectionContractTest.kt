@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.repo.OnRouteRow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 

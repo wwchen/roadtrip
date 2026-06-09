@@ -4,6 +4,8 @@ import ca.floo.roadtrip.client.RoutingException
 import ca.floo.roadtrip.models.api.PoisOnRouteRequestSchema
 import ca.floo.roadtrip.models.api.WaypointSchema
 import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.repo.OnRoutePoiRepo
+import ca.floo.roadtrip.repo.OnRouteRow
 import ca.floo.roadtrip.repo.RouteCache
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -12,15 +14,23 @@ import io.ktor.server.application.call
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.jooq.exception.DataAccessException
 import org.slf4j.LoggerFactory
+
+@OptIn(ExperimentalSerializationApi::class)
+private val onRouteJson =
+    Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 private val onRouteLog = LoggerFactory.getLogger("PoisOnRouteRoutes")
 
@@ -51,6 +61,7 @@ fun Route.poisOnRouteRoutes(
             .map { it.category }
             .toSet()
             .toList()
+    val onRoutePoiRepo = OnRoutePoiRepo(ctx)
 
     post("/api/pois/on-route", {
         tags = listOf("poi")
@@ -97,7 +108,9 @@ fun Route.poisOnRouteRoutes(
                 parseOnRouteRequest(bodyText)
             } catch (e: Exception) {
                 call.respondText(
-                    """{"error":"bad_request","detail":"${escapeJsonInline(e.message ?: "parse failed")}"}""",
+                    onRouteJson.encodeToString(
+                        ErrorResponseDto(error = "bad_request", detail = e.message ?: "parse failed"),
+                    ),
                     ContentType.Application.Json,
                     HttpStatusCode.BadRequest,
                 )
@@ -111,7 +124,7 @@ fun Route.poisOnRouteRoutes(
             } catch (e: RoutingException) {
                 onRouteLog.warn("on-route lookup failed: {}", e.message)
                 call.respondText(
-                    """{"error":"routing_unavailable"}""",
+                    onRouteJson.encodeToString(ErrorResponseDto(error = "routing_unavailable")),
                     ContentType.Application.Json,
                     HttpStatusCode.ServiceUnavailable,
                 )
@@ -126,7 +139,7 @@ fun Route.poisOnRouteRoutes(
                 emptyList()
             } else {
                 try {
-                    fetchOnRoute(ctx, cats, corridorLineGeoJson, corridorRadiusMeters)
+                    onRoutePoiRepo.fetch(cats, corridorLineGeoJson, corridorRadiusMeters)
                 } catch (e: DataAccessException) {
                     val cause = e.cause?.message.orEmpty()
                     if (cause.contains("TopologyException")) {
@@ -156,180 +169,113 @@ private data class Waypoint(
     val lng: Double,
 )
 
-private fun parseOnRouteRequest(bodyText: String): OnRouteRequest {
-    val root = Json.parseToJsonElement(bodyText).jsonObject
-
-    val wpsArr = root["waypoints"]?.jsonArray ?: error("waypoints required")
-    require(wpsArr.size in 2..MAX_WAYPOINTS) {
-        "waypoints must have 2..$MAX_WAYPOINTS entries (got ${wpsArr.size})"
-    }
-    val waypoints =
-        wpsArr.mapIndexed { i, el ->
-            val o = el.jsonObject
-            val lat = o["lat"]?.jsonPrimitive?.doubleOrNull ?: error("waypoint[$i].lat is missing or not a number")
-            val lng = o["lng"]?.jsonPrimitive?.doubleOrNull ?: error("waypoint[$i].lng is missing or not a number")
-            require(lat in -90.0..90.0) { "waypoint[$i].lat out of range" }
-            require(lng in -180.0..180.0) { "waypoint[$i].lng out of range" }
-            Waypoint(lat = lat, lng = lng)
+@Serializable
+private data class OnRouteRequestDto(
+    val waypoints: List<WaypointDto> = emptyList(),
+    @SerialName("radius_miles") val radiusMiles: Double? = null,
+    val categories: List<String>? = null,
+) {
+    fun validated(): OnRouteRequest {
+        require(waypoints.size in 2..MAX_WAYPOINTS) {
+            "waypoints must have 2..$MAX_WAYPOINTS entries (got ${waypoints.size})"
         }
-
-    val radius =
-        root["radius_miles"]?.jsonPrimitive?.doubleOrNull
-            ?: error("radius_miles is missing or not a number")
-    require(radius in MIN_RADIUS_MILES..MAX_RADIUS_MILES) {
-        "radius_miles must be in [$MIN_RADIUS_MILES, $MAX_RADIUS_MILES] (got $radius)"
-    }
-
-    val categories =
-        root["categories"]
-            ?.jsonArray
-            ?.mapNotNull {
-                it.jsonPrimitive.contentOrNull
-                    ?.trim()
-                    ?.takeIf { c -> c.isNotEmpty() }
-            }?.takeIf { it.isNotEmpty() }
-
-    return OnRouteRequest(waypoints = waypoints, radiusMiles = radius, categories = categories)
-}
-
-// Slim per-row shape for /api/pois/on-route. Same id + category +
-// lat/lng + subcategory as the bbox endpoint, plus along-route distance
-// in km so the FE can sort without re-projecting client-side.
-internal data class OnRouteRow(
-    val id: Long,
-    val category: String,
-    val subcategory: String?,
-    val lng: Double,
-    val lat: Double,
-    val routeKm: Double,
-)
-
-// Sampling strategy slot for the on-route endpoint. Today we always
-// return everything inside the corridor; future variants (even-along-
-// route, score-weighted, time-bucketed) plug in here without touching
-// the route handler.
-internal sealed interface OnRouteSamplingStrategy {
-    data object None : OnRouteSamplingStrategy
-}
-
-internal fun fetchOnRoute(
-    ctx: DSLContext,
-    categories: List<String>,
-    corridorLineGeoJson: String,
-    corridorRadiusMeters: Double,
-    strategy: OnRouteSamplingStrategy = OnRouteSamplingStrategy.None,
-): List<OnRouteRow> {
-    if (categories.isEmpty()) return emptyList()
-    val placeholders = categories.joinToString(",") { "?" }
-
-    // Build the corridor LineString once and reuse it for the predicate
-    // and the along-route distance projection. ST_LineLocatePoint returns
-    // a 0..1 fraction; multiply by ST_Length(::geography) (meters) and
-    // divide by 1000 to get km.
-    val sql =
-        when (strategy) {
-            OnRouteSamplingStrategy.None ->
-                """
-                WITH corridor AS (
-                  SELECT
-                    ST_SetSRID(ST_GeomFromGeoJSON(?), 4326) AS line,
-                    ST_CollectionExtract(
-                      ST_MakeValid(
-                        ST_Buffer(
-                          ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)::geography,
-                          ?
-                        )::geometry
-                      ),
-                      3
-                    ) AS poly,
-                    ST_Length(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)::geography) / 1000.0 AS len_km
-                )
-                SELECT id, category, subcategory,
-                       ST_X(ST_Centroid(geom)) AS lng,
-                       ST_Y(ST_Centroid(geom)) AS lat,
-                       ST_LineLocatePoint(corridor.line, ST_Centroid(geom)) * corridor.len_km AS route_km
-                FROM pois, corridor
-                WHERE deleted_at IS NULL
-                  AND category IN ($placeholders)
-                  AND ST_Intersects(geom, corridor.poly)
-                ORDER BY route_km ASC, id ASC
-                """.trimIndent()
+        val radius = radiusMiles ?: error("radius_miles is missing or not a number")
+        require(radius in MIN_RADIUS_MILES..MAX_RADIUS_MILES) {
+            "radius_miles must be in [$MIN_RADIUS_MILES, $MAX_RADIUS_MILES] (got $radius)"
         }
-
-    val args = mutableListOf<Any>()
-    args.add(corridorLineGeoJson) // corridor.line
-    args.add(corridorLineGeoJson) // ST_Buffer input
-    args.add(corridorRadiusMeters)
-    args.add(corridorLineGeoJson) // len_km
-    args.addAll(categories)
-
-    return ctx.fetch(sql, *args.toTypedArray()).map { r ->
-        OnRouteRow(
-            id = (r.get("id") as Number).toLong(),
-            category = r.get("category") as String,
-            subcategory = r.get("subcategory") as String?,
-            lng = (r.get("lng") as Number).toDouble(),
-            lat = (r.get("lat") as Number).toDouble(),
-            routeKm = (r.get("route_km") as Number).toDouble(),
+        val parsedCategories =
+            categories
+                ?.mapNotNull {
+                    it.trim().takeIf { category -> category.isNotEmpty() }
+                }?.takeIf { it.isNotEmpty() }
+        return OnRouteRequest(
+            waypoints = waypoints.mapIndexed { index, waypoint -> waypoint.validated(index) },
+            radiusMiles = radius,
+            categories = parsedCategories,
         )
     }
 }
+
+@Serializable
+private data class WaypointDto(
+    val lat: Double? = null,
+    val lng: Double? = null,
+) {
+    fun validated(index: Int): Waypoint {
+        val parsedLat = lat ?: error("waypoint[$index].lat is missing or not a number")
+        val parsedLng = lng ?: error("waypoint[$index].lng is missing or not a number")
+        require(parsedLat in -90.0..90.0) { "waypoint[$index].lat out of range" }
+        require(parsedLng in -180.0..180.0) { "waypoint[$index].lng out of range" }
+        return Waypoint(lat = parsedLat, lng = parsedLng)
+    }
+}
+
+private fun parseOnRouteRequest(bodyText: String): OnRouteRequest = onRouteJson.decodeFromString<OnRouteRequestDto>(bodyText).validated()
+
+@Serializable
+private data class ErrorResponseDto(
+    val error: String,
+    val detail: String? = null,
+)
+
+@Serializable
+private data class OnRouteFeatureCollectionDto(
+    val type: String = "FeatureCollection",
+    val features: List<OnRouteFeatureDto>,
+) {
+    companion object {
+        fun fromRows(rows: List<OnRouteRow>): OnRouteFeatureCollectionDto =
+            OnRouteFeatureCollectionDto(features = rows.map { OnRouteFeatureDto.fromRow(it) })
+    }
+}
+
+@Serializable
+private data class OnRouteFeatureDto(
+    val type: String = "Feature",
+    val id: Long,
+    val geometry: PointGeometryDto,
+    val properties: OnRouteFeaturePropertiesDto,
+) {
+    companion object {
+        fun fromRow(row: OnRouteRow): OnRouteFeatureDto =
+            OnRouteFeatureDto(
+                id = row.id,
+                geometry = PointGeometryDto(coordinates = listOf(row.lng, row.lat)),
+                properties =
+                    OnRouteFeaturePropertiesDto(
+                        category = row.category,
+                        subcategory = row.subcategory,
+                        routeKm = row.routeKm,
+                    ),
+            )
+    }
+}
+
+@Serializable
+private data class PointGeometryDto(
+    val type: String = "Point",
+    val coordinates: List<Double>,
+)
+
+@Serializable
+private data class OnRouteFeaturePropertiesDto(
+    val category: String,
+    val subcategory: String? = null,
+    @SerialName("route_km") val routeKm: Double,
+)
+
+@Serializable
+private data class LineStringGeometryDto(
+    val type: String = "LineString",
+    val coordinates: List<List<Double>>,
+)
 
 /**
  * On-route FeatureCollection. Same per-feature shape as the bbox endpoint
  * (id + Point + category[+subcategory]) plus a `route_km` property so the
  * FE can sort or label without re-projecting on the client.
  */
-internal fun buildOnRouteFeatureCollection(rows: List<OnRouteRow>): String {
-    val sb = StringBuilder()
-    sb.append("""{"type":"FeatureCollection","features":[""")
-    for ((i, r) in rows.withIndex()) {
-        if (i > 0) sb.append(',')
-        sb.append("""{"type":"Feature","id":""").append(r.id)
-        sb
-            .append(""","geometry":{"type":"Point","coordinates":[""")
-            .append(r.lng)
-            .append(',')
-            .append(r.lat)
-            .append("]}")
-        sb.append(""","properties":{"category":""").append(jsonString(r.category))
-        if (r.subcategory != null) sb.append(""","subcategory":""").append(jsonString(r.subcategory))
-        sb.append(""","route_km":""").append(r.routeKm)
-        sb.append("}}")
-    }
-    sb.append("]}")
-    return sb.toString()
-}
+internal fun buildOnRouteFeatureCollection(rows: List<OnRouteRow>): String =
+    onRouteJson.encodeToString(OnRouteFeatureCollectionDto.fromRows(rows))
 
-private fun lineStringGeoJson(coords: List<List<Double>>): String =
-    buildString {
-        append("""{"type":"LineString","coordinates":[""")
-        for ((i, c) in coords.withIndex()) {
-            if (i > 0) append(',')
-            append('[')
-                .append(c[0])
-                .append(',')
-                .append(c[1])
-                .append(']')
-        }
-        append("]}")
-    }
-
-private fun jsonString(s: String): String {
-    val sb = StringBuilder(s.length + 2)
-    sb.append('"')
-    for (c in s) {
-        when (c) {
-            '"' -> sb.append("\\\"")
-            '\\' -> sb.append("\\\\")
-            '\n' -> sb.append("\\n")
-            '\r' -> sb.append("\\r")
-            '\t' -> sb.append("\\t")
-            else -> if (c.code < 0x20) sb.append("\\u%04x".format(c.code)) else sb.append(c)
-        }
-    }
-    sb.append('"')
-    return sb.toString()
-}
-
-private fun escapeJsonInline(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+private fun lineStringGeoJson(coords: List<List<Double>>): String = onRouteJson.encodeToString(LineStringGeometryDto(coordinates = coords))
