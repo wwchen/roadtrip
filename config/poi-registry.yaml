@@ -90,30 +90,30 @@ data_sources:
   # One capture covers every RIDB-publishing agency (NPS, USFS, BLM, USACE,
   # FWS, BOR, TVA, …). Per-row agency lands on Poi.Campground.agency at
   # transform time from ORGANIZATION[0].OrgAbbrevName.
-  - slug: recgov-campgrounds-raw
+  - slug: recgov-campgrounds
     name: Federal campgrounds via RIDB (all agencies)
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov.py
-      args: { slug: recgov-campgrounds-raw }
-      output_dir_prefix: data/raw/recgov-campgrounds-raw
+      args: { slug: recgov-campgrounds }
+      output_dir_prefix: data/raw/recgov-campgrounds
 
   # --- Alberta provincial parks ----------------------------------------------
-  - slug: reserveamerica-abpp-raw
+  - slug: reserveamerica-abpp
     name: ReserveAmerica Alberta park HTML
     fetcher:
       executor: python3
       filename: scripts/fetch_reserveamerica.py
       args: { tenant: ABPP }
-      output_dir_prefix: data/raw/reserveamerica-abpp-raw
+      output_dir_prefix: data/raw/reserveamerica-abpp
 
   # --- Planet Fitness --------------------------------------------------------
-  - slug: osm-pf-raw
+  - slug: osm-pf
     name: Planet Fitness via OSM
     fetcher:
       executor: python3
       filename: scripts/fetch_planet_fitness.py
-      output_dir_prefix: data/raw/osm-pf-raw
+      output_dir_prefix: data/raw/osm-pf
 
   # --- Tesla superchargers ---------------------------------------------------
   # Akamai blocks fetch; rely on the existing data/raw/ cache. Fan-out fetch
@@ -143,9 +143,9 @@ poi_data:
     category: campground
     subcategory: federal
     etls:
-      - slug: recgov-campgrounds
+      - slug: federal-campgrounds
         adapter: RecGovCampgroundsEtl
-        inputs: [recgov-campgrounds-raw]
+        inputs: [recgov-campgrounds]
 
   - name: Washington State Parks
     category: campground
@@ -192,16 +192,16 @@ poi_data:
     category: campground
     subcategory: provincial
     etls:
-      - slug: reserveamerica-abpp
+      - slug: alberta-provincial
         adapter: ReserveAmericaEtl
-        inputs: [reserveamerica-abpp-raw]
+        inputs: [reserveamerica-abpp]
 
   - name: Planet Fitness
     category: planet-fitness
     etls:
-      - slug: osm-pf
+      - slug: planet-fitness
         adapter: PlanetFitnessEtl
-        inputs: [osm-pf-raw]
+        inputs: [osm-pf]
 
   - name: Tesla Superchargers
     # Akamai blocks the fetch; fan-out import would just see stale data

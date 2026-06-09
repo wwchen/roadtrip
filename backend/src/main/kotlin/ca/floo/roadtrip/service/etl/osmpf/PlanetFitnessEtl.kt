@@ -30,7 +30,7 @@ import java.time.Instant
 // center` directive). Some entries have neither — those get dropped at
 // validate.
 class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>> {
-    override val etlSlug = "osm-pf"
+    override val etlSlug = "planet-fitness"
 
     override fun parse(inputs: InputBundle): PlanetFitnessRawDto {
         val envelope = inputs.soleEnvelopes().single()

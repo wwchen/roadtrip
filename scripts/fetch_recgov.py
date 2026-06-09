@@ -14,7 +14,7 @@ Auth: RIDB_API_KEY env var. Free key, register at
 https://ridb.recreation.gov.
 
 Run:
-  python3 scripts/fetch_recgov.py --slug recgov-campgrounds-raw
+  python3 scripts/fetch_recgov.py --slug recgov-campgrounds
 """
 from __future__ import annotations
 
