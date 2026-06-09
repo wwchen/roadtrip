@@ -185,9 +185,12 @@ function ensureDrawerDOM() {
     state.map.on('click', (e) => {
       if (!root.classList.contains('open')) return;
       const present = POI_LAYERS.filter(id => state.map.getLayer(id));
-      if (!present.length) { closeDrawer(); return; }
-      const hits = state.map.queryRenderedFeatures(e.point, { layers: present });
-      if (!hits.length) closeDrawer();
+      const hits = present.length ? state.map.queryRenderedFeatures(e.point, { layers: present }) : [];
+      if (!hits.length) {
+        closeDrawer();
+        // Also drop any sticky browse-mode pin (row 0 + "A" marker).
+        if (typeof window.__rtClearBrowsePin === 'function') window.__rtClearBrowsePin();
+      }
     });
   }
 
