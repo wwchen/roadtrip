@@ -88,12 +88,18 @@ def is_fresh(slug: str, max_age_days: int) -> bool:
 def na_supercharger_slugs(index_path: Path) -> list[str]:
     """Walk the bulk locations payload, return slugs of NA supercharger pins.
 
-    Oracle is `supercharger_function` populated + `show_on_find_us == "1"`,
-    not the location_type tags. Tesla's own findus map uses the function
-    block; the type tags are inconsistent — many real superchargers come
-    back tagged only as `["nacs"]` or `["party"]` (V4 / Magic Dock sites)
-    instead of `"supercharger"`. ~4k sites would be silently skipped if
-    we filtered on type.
+    Oracle is `supercharger_function` populated, full stop. Tesla's
+    bulk feed has two fields that look like filters but aren't:
+      - `location_type`: inconsistent. Real superchargers come back
+        tagged ['nacs'] (Magic Dock / NACS partner) or ['party'] (V4)
+        instead of ['supercharger']. ~4k NA rows.
+      - `show_on_find_us='0'`: editorial. Tesla doesn't promote these
+        on tesla.com/findus, but they're still site_status='open' and
+        access_type='Public' — a Tesla driver can plug in. ~268 NA rows
+        (Magic Dock / partner-launch sites). Famous example: 32648
+        (El Paso Cielo Vista).
+    Trusting `supercharger_function` alone matches "every real
+    supercharger a Tesla driver could use today."
     """
     d = json.loads(index_path.read_text())
     payload = d.get("payload") or d  # tolerate envelope or bare
@@ -102,8 +108,6 @@ def na_supercharger_slugs(index_path: Path) -> list[str]:
     for item in items:
         sf = item.get("supercharger_function") or {}
         if not sf:
-            continue
-        if sf.get("show_on_find_us") == "0":
             continue
         lat = item.get("latitude")
         lng = item.get("longitude")
