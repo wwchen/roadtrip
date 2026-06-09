@@ -242,7 +242,11 @@ export function openSuperchargerPopup(f) {
     ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
     ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}
     ${featurePills ? `<div class="pills" style="margin-top:6px">${featurePills}</div>` : ''}
-    ${amenityPills ? `<div class="pills" style="margin-top:6px">${amenityPills}</div>` : ''}
+    ${amenityPills ? `
+      <div class="sc-row" style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+        <span class="meta" style="font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:0.06em">Amenities</span>
+        <span class="pills" style="display:inline-flex;flex-wrap:wrap;gap:4px">${amenityPills}</span>
+      </div>` : ''}
     ${busyHtml}
     ${p.dateOpened ? `<div class="footer">Opened ${escapeHtml(p.dateOpened)}</div>` : ''}
     <div class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
@@ -267,16 +271,36 @@ function buildSCFeaturePills(detail) {
 // AMENITIES_TWENTY_FOUR_HOUR, etc. Strip the AMENITIES_ prefix and
 // title-case the rest. Capped at 8 so a long list doesn't blow up the
 // drawer height.
+// Special-case overrides for amenity strings that don't title-case cleanly.
+// Add new entries here when Tesla ships a clunky one. TWENTY_FOUR_HOUR is
+// dropped entirely because the 24/7 capability pill already covers it.
+const AMENITY_OVERRIDES = {
+  AMENITIES_WIFI: 'Wi-Fi',
+  AMENITIES_RESTROOMS: 'Restrooms',
+  AMENITIES_CAFE: 'Café',
+  AMENITIES_RESTAURANT: 'Restaurant',
+  AMENITIES_SHOPPING: 'Shopping',
+  AMENITIES_LODGING: 'Lodging',
+  AMENITIES_TWENTY_FOUR_HOUR: null, // skip — duplicates the 24/7 capability pill
+};
+
 function buildSCAmenityPills(detail) {
   const am = Array.isArray(detail?.amenities) ? detail.amenities : null;
   if (!am || !am.length) return '';
-  return am.slice(0, 8).map(a => scPill(prettifyAmenity(a))).join('');
+  const labels = am
+    .map(a => prettifyAmenity(a))
+    .filter(Boolean);
+  return labels.slice(0, 8).map(l => scPill(l)).join('');
 }
 
 function prettifyAmenity(raw) {
-  // "AMENITIES_TWENTY_FOUR_HOUR" → "Twenty Four Hour"
-  // "AMENITIES_WIFI" → "Wifi"
-  // "restrooms" (legacy lowercase form) → "Restrooms"
+  const key = String(raw).toUpperCase();
+  if (Object.prototype.hasOwnProperty.call(AMENITY_OVERRIDES, key)) {
+    // Override returns null when we want to skip the amenity entirely.
+    return AMENITY_OVERRIDES[key];
+  }
+  // Fallback: strip AMENITIES_ prefix, title-case underscore-separated words.
+  // "AMENITIES_FOO_BAR" → "Foo Bar"; legacy lowercase "wifi" → "Wifi".
   const stripped = String(raw).replace(/^AMENITIES_/i, '');
   return stripped
     .toLowerCase()
