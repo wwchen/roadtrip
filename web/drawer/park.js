@@ -10,6 +10,7 @@ import {
   directionsButtonHTML,
   openHydratedDrawer,
   reviveJsonProp,
+  updatePoiAddressUrl,
   upstreamHTML,
 } from './shared.js';
 
@@ -26,6 +27,7 @@ function externalParkLink(kind, name, stateName) {
 }
 
 export function openParkDrawer(kind, feature, lngLat) {
+  updatePoiAddressUrl(feature);
   // Slim /api/pois ships only id + geometry + category. Hydrate the wide
   // row before rendering. openHydratedDrawer pops a Loading… placeholder,
   // fetches /api/pois/{id}, flattens the wide shape via flattenHydratedPoi,

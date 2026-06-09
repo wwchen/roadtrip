@@ -5,6 +5,7 @@
 //   - hydratePoi / loadingDrawerHtml — per-id GET + skeleton state
 
 import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';
+import { poiShareUrl, replaceVisibleUrl } from '../share-links.js';
 
 /** Compose subline from arbitrary parts: "Loop · State · 2.4 km away". */
 export function buildSubline(parts) {
@@ -40,6 +41,12 @@ export function directionsButtonHTML({ name, lng, lat, kind = 'PLACE' }) {
     data-lng="${lng}"
     data-lat="${lat}"
     data-kind="${escapeHtml(kind)}">${icon}</button>`;
+}
+
+export function updatePoiAddressUrl(featureOrId) {
+  const id = featureOrId?.id ?? featureOrId?.properties?.id ?? featureOrId;
+  if (id == null || id === '') return;
+  replaceVisibleUrl(poiShareUrl(id));
 }
 
 /** Drawer header: name + subline + optional verdict. cg-* classes match chrome.js. */

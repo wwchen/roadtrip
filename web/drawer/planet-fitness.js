@@ -11,10 +11,12 @@ import {
   directionsButtonHTML,
   openHydratedDrawer,
   reviveJsonProp,
+  updatePoiAddressUrl,
   upstreamHTML,
 } from './shared.js';
 
 export function openPlanetFitnessDrawer(f) {
+  updatePoiAddressUrl(f);
   // Slim /api/pois ships only id + geometry + category. Hydrate first.
   openHydratedDrawer(f, openDrawer, renderPlanetFitnessDrawer);
 }

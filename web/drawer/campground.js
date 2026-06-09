@@ -37,6 +37,7 @@ import {
 } from './chrome.js';
 import {
   directionsButtonHTML,
+  updatePoiAddressUrl,
   reviveJsonProp,
   normalizeAspira,
   upstreamHTML,
@@ -48,6 +49,7 @@ import {
  */
 export function openCampgroundDrawer(f) {
   ensureDrawerDOM();
+  updatePoiAddressUrl(f);
   const root = document.getElementById(DRAWER_ROOT_ID);
 
   // MapLibre's GeoJSON source serializes nested-object properties to JSON
