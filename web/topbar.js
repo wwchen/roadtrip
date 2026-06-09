@@ -78,14 +78,29 @@ let geocodeTimer = null;
 // reads this and skips its "fill active row with pin name" side effect.
 let suppressPinClick = false;
 
+function isMobileViewport() {
+  return typeof window !== 'undefined' &&
+    !!window.matchMedia?.('(max-width: 768px)').matches;
+}
+
 // On mobile, programmatic focus on a search input pops the soft keyboard,
-// which covers the drawer the user is currently looking at. Skip the
-// auto-focus there and let the user tap the input themselves when they're
-// ready to type. Restoring focus across an innerHTML rewrite is fine —
-// that's preserving existing focus, not creating new focus.
+// which covers the map/drawer. Skip auto-focus there and let the user tap
+// the input themselves when they're ready to type.
 function shouldAutoFocus() {
-  return typeof window === 'undefined' ||
-    !window.matchMedia?.('(max-width: 768px)').matches;
+  return !isMobileViewport();
+}
+
+function activeTopbarInput() {
+  const el = document.activeElement;
+  const topbar = document.getElementById('topbar');
+  return el?.classList?.contains('tb-input') && topbar?.contains(el) ? el : null;
+}
+
+function blurTopbarInputOnMobile() {
+  if (!isMobileViewport()) return;
+  const el = activeTopbarInput();
+  if (el) el.blur();
+  closeDropdown();
 }
 
 function localYmd(date) {
@@ -686,8 +701,13 @@ function bindEvents() {
   });
 
   document.addEventListener('click', (e) => {
-    if (!document.getElementById('topbar').contains(e.target)) closeDropdown();
+    if (!document.getElementById('topbar').contains(e.target)) {
+      closeDropdown();
+      blurTopbarInputOnMobile();
+    }
   });
+
+  mapRef.getCanvas().addEventListener('pointerdown', blurTopbarInputOnMobile, { passive: true });
 }
 
 function bindPinClicks() {
@@ -896,6 +916,7 @@ function onInputKey(e, rowIdx) {
 function pickResult(result) {
   if (!result) return;
   closeDropdown();
+  blurTopbarInputOnMobile();
 
   // Every dropdown pick fills the row the user was typing in. The drawer's
   // "Add stop" button is the path that inserts a *new* via (via
@@ -1381,14 +1402,12 @@ function renderRows() {
   // Always render at least 1 row (browse mode) or trip.stops.length rows.
   const rows = Math.max(trip.stops.length, 1);
 
-  // Save focus state so we can restore after innerHTML rewrite
-  const focusedI = activeRowIdx;
-  const focusedSel = (focusedI >= 0)
-    ? (() => {
-        const el = stops.querySelector(`.tb-row[data-i="${focusedI}"] .tb-input`);
-        return el ? { start: el.selectionStart, end: el.selectionEnd } : null;
-      })()
-    : null;
+  // Preserve focus only when an input is actually focused. `activeRowIdx`
+  // can remain set after blur; using it here would steal focus back during
+  // ordinary map/drawer rerenders and reopen the mobile keyboard.
+  const focusedEl = activeTopbarInput();
+  const focusedI = focusedEl ? Number(focusedEl.dataset.i) : -1;
+  const focusedSel = focusedEl ? { start: focusedEl.selectionStart, end: focusedEl.selectionEnd } : null;
 
   let html = '';
   for (let i = 0; i < rows; i++) {
