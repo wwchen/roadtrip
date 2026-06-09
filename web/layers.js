@@ -260,7 +260,8 @@ export function installPFLayer(geojson) {
     source: 'pf',
     paint: {
       'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 3, 6, 5, 10, 7],
-      'circle-color': '#7b4bb5',
+      // Planet Fitness brand purple.
+      'circle-color': '#7F3D97',
       'circle-stroke-color': '#fff',
       'circle-stroke-width': 1.5,
       'circle-opacity': 0.95,
@@ -301,7 +302,10 @@ export function installSCLayer(geojson) {
     source: 'sc',
     paint: {
       'circle-radius': ['interpolate', ['linear'], ['zoom'], 3, 3, 6, 5, 10, 7],
-      'circle-color': ['get', 'color'],
+      // Tesla brand red. Was data-driven via ['get', 'color'] from a per-row
+      // property, but the slim /api/pois response (PR #123) doesn't ship
+      // that any more — paint resolved to null and pins came back black.
+      'circle-color': '#E31937',
       'circle-stroke-color': '#fff',
       'circle-stroke-width': 1,
       'circle-opacity': 0.9,
