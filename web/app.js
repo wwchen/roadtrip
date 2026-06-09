@@ -20,7 +20,7 @@ import {
   synthesizeClick,
 } from './layers.js';
 import { initSearch, registerSearchItems, getSearchIndex } from './search.js';
-import { closeDrawer } from './drawer.js';
+import { closeDrawer } from './drawer/chrome.js';
 import { initTopbar } from './topbar.js';
 
 const initialKey = getInitialBasemapKey();
