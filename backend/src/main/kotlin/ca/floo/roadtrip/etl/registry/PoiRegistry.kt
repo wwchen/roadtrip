@@ -57,11 +57,11 @@ data class PoiRegistry(
      *     data_source slug (single namespace because inputs: resolves to
      *     either kind)
      *   - data_sources.depends_on references a declared data_source
-     *   - poi_data.etls is non-empty and has a terminal entry (the last
-     *     one); intermediates declare output_dir_prefix, terminals don't
-     *     need to (they emit straight to pois)
+     *   - poi_data.etls is non-empty (terminal is the last entry)
      *   - within each row's etls, every input is either a data_source slug
-     *     OR an earlier sibling (forward references rejected)
+     *     OR an earlier sibling in the SAME row (forward refs + cross-row
+     *     etl refs both rejected — orchestrator hands intermediates over
+     *     in memory; nothing crosses row boundaries)
      *   - no cycles in the global DAG (data_sources → etls)
      */
     fun validate() {
@@ -93,35 +93,35 @@ data class PoiRegistry(
                     errs += "duplicate etl slug='${e.slug}' (in poi_data '${row.name}')"
                 }
             }
-            // Per-row forward-reference check.
+            // Per-row forward-reference check. Cross-row etl refs fall in
+            // the same bucket: orchestrator hands intermediates over in
+            // memory, so an input has to be either a data_source or a
+            // prior sibling in this row's chain.
             val priorSiblings = mutableSetOf<String>()
             for ((i, e) in row.etls.withIndex()) {
                 for (input in e.inputs) {
                     val resolvesToDataSource = input in dsSlugs
                     val resolvesToPriorSibling = input in priorSiblings
                     if (!resolvesToDataSource && !resolvesToPriorSibling) {
-                        // Could still be forward-reference (declared after
-                        // this entry) or completely dangling. Distinguish
-                        // for a clearer error.
                         val laterSibling =
                             row.etls.drop(i + 1).any { it.slug == input }
+                        val crossRow =
+                            !laterSibling &&
+                                poiData.any { other ->
+                                    other !== row && other.etls.any { it.slug == input }
+                                }
                         errs +=
-                            if (laterSibling) {
-                                "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is a later sibling (forward reference)"
-                            } else {
-                                "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is neither a data_source nor a prior sibling"
+                            when {
+                                laterSibling ->
+                                    "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is a later sibling (forward reference)"
+                                crossRow ->
+                                    "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is an etl in a different poi_data row (cross-row refs not supported)"
+                                else ->
+                                    "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is neither a data_source nor a prior sibling"
                             }
                     }
                 }
                 priorSiblings += e.slug
-            }
-            // Intermediate entries must declare an output_dir_prefix; the
-            // terminal (last) does not — it goes straight to pois.
-            for ((i, e) in row.etls.withIndex()) {
-                val isTerminal = i == row.etls.lastIndex
-                if (!isTerminal && e.outputDirPrefix.isNullOrBlank()) {
-                    errs += "poi_data '${row.name}' etl[$i] '${e.slug}' is intermediate but missing output_dir_prefix"
-                }
             }
         }
 
@@ -252,8 +252,4 @@ data class EtlEntry(
     val adapter: String,
     val inputs: List<String> = emptyList(),
     val args: Map<String, String> = emptyMap(),
-    // Required for intermediate ETLs (typed payload materializes here).
-    // Omitted for the terminal — its output goes straight to pois.
-    @kotlinx.serialization.SerialName("output_dir_prefix")
-    val outputDirPrefix: String? = null,
 )

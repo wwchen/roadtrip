@@ -29,7 +29,6 @@ class EtlOrchestratorTest {
     private lateinit var ds: HikariDataSource
     private lateinit var ctx: DSLContext
     private lateinit var rawDir: File
-    private lateinit var etlOutDir: File
     private lateinit var poiRegistry: PoiRegistry
 
     @BeforeAll
@@ -67,8 +66,6 @@ class EtlOrchestratorTest {
                     .toURI(),
             )
         src.copyTo(File(source, "2026-06-07T21-47-54Z.json"))
-
-        etlOutDir = Files.createTempDirectory("etl-orch-out-").toFile()
     }
 
     @AfterAll
@@ -76,10 +73,9 @@ class EtlOrchestratorTest {
         ds.close()
         pg.stop()
         rawDir.deleteRecursively()
-        etlOutDir.deleteRecursively()
     }
 
-    private fun newOrchestrator() = EtlOrchestrator(ctx, rawDir, etlOutDir, poiRegistry)
+    private fun newOrchestrator() = EtlOrchestrator(ctx, rawDir, poiRegistry)
 
     @Test
     fun `runPoiData(Planet Fitness) parses fixture and upserts rows into pois`() {

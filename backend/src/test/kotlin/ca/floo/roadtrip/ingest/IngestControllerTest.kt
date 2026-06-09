@@ -411,7 +411,6 @@ class IngestControllerTest {
                 ca.floo.roadtrip.etl.EtlOrchestrator(
                     ctx,
                     dataDir,
-                    File(dataDir, "etl-out"),
                     ca.floo.roadtrip.etl.registry
                         .PoiRegistry(emptyList(), emptyList()),
                 ),

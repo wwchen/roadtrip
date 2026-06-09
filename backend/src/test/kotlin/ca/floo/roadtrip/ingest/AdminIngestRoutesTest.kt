@@ -276,7 +276,6 @@ class AdminIngestRoutesTest {
                 ca.floo.roadtrip.etl.EtlOrchestrator(
                     ctx,
                     File("/tmp"),
-                    File("/tmp/etl-out"),
                     ca.floo.roadtrip.etl.registry
                         .PoiRegistry(emptyList(), emptyList()),
                 ),

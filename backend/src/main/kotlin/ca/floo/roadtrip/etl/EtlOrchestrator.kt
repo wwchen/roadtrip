@@ -7,19 +7,18 @@ import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.io.File
-import java.time.Instant
-import java.time.ZoneOffset
-import java.time.format.DateTimeFormatter
 
 // Orchestrates one poi_data row's ETL chain end-to-end.
 //
 // Per-row sequence (declared etls: list, in order):
 //   1. Resolve each etls entry's `inputs:` slug into either:
 //        - data_source: newest envelope(s) under data/raw/<slug>/
-//        - earlier sibling etl: newest typed payload under data/etl-out/<slug>/
+//        - earlier sibling etl in the SAME poi_data row: typed payload
+//          handed off in-memory by the previous stage.
 //   2. Hand the InputBundle to the etl.parse → validate → transform stages.
-//   3. If the etl is intermediate (not the last in the row), serialize OUT
-//      as JSON to data/etl-out/<etl-slug>/<UTC-ts>.json.
+//   3. If the etl is intermediate (not the last in the row), keep OUT in
+//      the per-run map for later siblings to consume. No disk persistence —
+//      every ETL is f(inputs) → output, so re-running an import recomputes.
 //   4. If terminal, expect OUT = List<Poi.*> and run Upsert (sweep scoped
 //      to source = etl-slug).
 //
@@ -29,7 +28,6 @@ import java.time.format.DateTimeFormatter
 class EtlOrchestrator(
     private val ctx: DSLContext,
     private val rawDir: File,
-    private val etlOutDir: File,
     private val poiRegistry: PoiRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -83,9 +81,7 @@ class EtlOrchestrator(
             if (isTerminal) {
                 terminalStats = runTerminal(row, etl, bundle, transformCtx)
             } else {
-                val output = runIntermediate(etl, bundle, transformCtx)
-                writeIntermediate(entry.slug, output)
-                intermediateOutputs[entry.slug] = output
+                intermediateOutputs[entry.slug] = runIntermediate(etl, bundle, transformCtx)
             }
         }
 
@@ -168,13 +164,14 @@ class EtlOrchestrator(
                 // data_source input: load envelope(s) from data/raw/<slug>/
                 raw[slug] = loadDataSourceEnvelopes(slug)
             } else if (slug in intermediateOutputs) {
-                // sibling intermediate from this run
+                // sibling intermediate from earlier in this same row's
+                // etls: chain. PoiRegistry's validator rejects cross-row
+                // refs, so anything not here-or-data_source is unreachable.
                 etls[slug] = intermediateOutputs[slug]!!
             } else {
-                // sibling intermediate from a prior run (cross-row case is
-                // possible in principle; today no row imports another
-                // row's intermediate)
-                etls[slug] = loadIntermediateOutput(slug)
+                error(
+                    "input '$slug' is neither a data_source nor a prior sibling etl in this row — should have been caught by PoiRegistry.validate()",
+                )
             }
         }
         return InputBundle(raw, etls)
@@ -201,31 +198,7 @@ class EtlOrchestrator(
         }
     }
 
-    private fun loadIntermediateOutput(etlSlug: String): JsonElement {
-        val dir = File(etlOutDir, etlSlug)
-        if (!dir.isDirectory) throw NoCaptureException("$dir is not a directory; intermediate '$etlSlug' has no prior output")
-        val newest =
-            dir
-                .listFiles { f -> f.isFile && f.name.endsWith(".json") }
-                ?.maxByOrNull { it.name }
-                ?: throw NoCaptureException("no outputs under $dir")
-        return Json.Default.parseToJsonElement(newest.readText())
-    }
-
-    private fun writeIntermediate(
-        etlSlug: String,
-        payload: JsonElement,
-    ) {
-        val dir = File(etlOutDir, etlSlug).also { it.mkdirs() }
-        val ts = Instant.now().atOffset(ZoneOffset.UTC).format(TS_FORMAT)
-        val file = File(dir, "$ts.json")
-        file.writeText(Json.Default.encodeToString(JsonElement.serializer(), payload))
-        log.info("  wrote intermediate {} -> {}", etlSlug, file.relativeTo(etlOutDir.parentFile))
-    }
-
     companion object {
-        private val TS_FORMAT = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH-mm-ss'Z'")
-
         // Map of etl slug → adapter. Adding a new ETL = appending one line.
         // Map keys MUST match the YAML poi_data.etls[*].slug exactly.
         val registry: Map<String, SourceEtl<*, *>> =
