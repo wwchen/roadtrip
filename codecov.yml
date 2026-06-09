@@ -6,11 +6,11 @@ coverage:
   status:
     project:
       default:
-        # Match the Kover floor loosely while still allowing tiny PR-to-PR
-        # movement. Kover is the local hard gate; Codecov makes drift visible
-        # in PRs and on master.
-        target: 45%
-        threshold: 1%
+        # Codecov's denominator differs from Kover's local line metric; this
+        # keeps the project gate above the current master baseline while Kover
+        # remains the stricter local hard gate.
+        target: 43%
+        threshold: 0.5%
     patch:
       default:
         # New/changed backend code should carry tests. Keep a small threshold
