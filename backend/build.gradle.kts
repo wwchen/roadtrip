@@ -289,5 +289,5 @@ tasks.test {
     System.getenv("QA_BASE_URL")?.let { environment("QA_BASE_URL", it) }
     // Playwright's JSON reader thread parses large evaluate() / page-event
     // payloads in the worker JVM; default 512m OOMs once the map state grows.
-    maxHeapSize = "2g"
+    maxHeapSize = "4g"
 }
