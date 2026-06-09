@@ -6,21 +6,17 @@ coverage:
   status:
     project:
       default:
-        # Allow tiny drops without failing — the koverVerify floor in
-        # backend/build.gradle.kts is the hard gate. Codecov's job is to
-        # surface drift, not duplicate the gate.
-        target: auto
-        threshold: 1%
+        # Codecov's denominator differs from Kover's local line metric; this
+        # keeps the project gate above the current master baseline while Kover
+        # remains the stricter local hard gate.
+        target: 43%
+        threshold: 0.5%
     patch:
       default:
-        # Patch coverage is informational only — surface it in the PR comment
-        # so reviewers see the diff hit-rate, but don't fail the check.
-        # koverVerify in backend/build.gradle.kts is the hard gate, and
-        # patch failures here mostly fire on PRs that are themselves test +
-        # build-config (not new product code) where the metric is noise.
-        target: 70%
+        # New/changed backend code should carry tests. Keep a small threshold
+        # for docs/config/test-only patches, but fail real untested code drift.
+        target: 60%
         threshold: 5%
-        informational: true
 
 comment:
   layout: "diff, files, footer"

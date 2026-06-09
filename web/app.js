@@ -267,9 +267,71 @@ async function load() {
     while (viewportCache.length > VIEWPORT_CACHE_MAX) viewportCache.shift();
   }
 
+  function routePoiModeActive() {
+    return typeof window.__rtRouteActive === 'function' && window.__rtRouteActive();
+  }
+
+  function paintPois(fc, { wantCG = false } = {}) {
+    const np = [], sp = [], pf = [], cg = [], sc = [];
+    for (const raw of fc.features || []) {
+      const f = flattenPoi(raw);
+      const c = raw.properties?.category;
+      if (c === 'national-park') np.push(f);
+      else if (c === 'state-park') sp.push(f);
+      else if (c === 'planet-fitness') pf.push(f);
+      else if (c === 'campground') cg.push(f);
+      else if (c === 'supercharger') sc.push(f);
+    }
+    setNPData({ type: 'FeatureCollection', features: np });
+    setSPData({ type: 'FeatureCollection', features: sp });
+    setPFData({ type: 'FeatureCollection', features: pf });
+    setCGData({ type: 'FeatureCollection', features: cg });
+    setSCData({ type: 'FeatureCollection', features: sc });
+
+    state.overlayData.np = { type: 'FeatureCollection', features: np };
+    state.overlayData.sp = { type: 'FeatureCollection', features: sp };
+    state.overlayData.pf = { type: 'FeatureCollection', features: pf };
+    state.overlayData.cg = { type: 'FeatureCollection', features: cg };
+    state.overlayData.sc = { type: 'FeatureCollection', features: sc };
+
+    setCount('c-np', np.length);
+    setCount('c-sp', sp.length);
+    setCount('c-pf', pf.length);
+    setCount('c-open', sc.length);
+    cgCounts.federal = 0; cgCounts.state = 0; cgCounts.local = 0;
+    cgCounts.provincial = 0; cgCounts.other = 0;
+    cg.forEach(f => {
+      const cat = f.properties.category;
+      cgCounts[cat] = (cgCounts[cat] || cgCounts.other) + 1;
+    });
+    for (const [k, v] of Object.entries(cgCounts)) setCount('c-cg-' + k, v);
+    if (wantCG) {
+      const hint = document.getElementById('cg-load-hint');
+      if (hint) hint.remove();
+    }
+  }
+
+  // When a route is active, the topbar owns POI selection through
+  // /api/pois/on-route. Keep the map sources in sync with that route-scoped
+  // response and prevent stale viewport /api/pois responses from repainting.
+  window.__rtSetRoutePois = (features) => {
+    if (inflight) {
+      inflight.abort();
+      inflight = null;
+    }
+    paintPois({ type: 'FeatureCollection', features: features || [] }, { wantCG: true });
+  };
+
   async function refreshBbox() {
     const m = state.map;
     if (!m) return;
+    if (routePoiModeActive()) {
+      if (inflight) {
+        inflight.abort();
+        inflight = null;
+      }
+      return;
+    }
     const b = m.getBounds();
     const west = b.getWest(), south = b.getSouth(), east = b.getEast(), north = b.getNorth();
     const zoom = Math.floor(m.getZoom());
@@ -316,49 +378,14 @@ async function load() {
         return;
       }
       inflight = null;
+      if (routePoiModeActive()) return;
       // Only cache full responses. truncated:true means features beyond the
       // POI_LIMIT budget were dropped server-side, so a contained sub-view
       // would render fewer pins than a real fetch would return.
       if (!fc.truncated) viewportCachePut(currentBbox, catsKey, fc);
     }
 
-    const np = [], sp = [], pf = [], cg = [], sc = [];
-    for (const raw of fc.features) {
-      const f = flattenPoi(raw);
-      const c = raw.properties?.category;
-      if (c === 'national-park') np.push(f);
-      else if (c === 'state-park') sp.push(f);
-      else if (c === 'planet-fitness') pf.push(f);
-      else if (c === 'campground') cg.push(f);
-      else if (c === 'supercharger') sc.push(f);
-    }
-    setNPData({ type: 'FeatureCollection', features: np });
-    setSPData({ type: 'FeatureCollection', features: sp });
-    setPFData({ type: 'FeatureCollection', features: pf });
-    setCGData({ type: 'FeatureCollection', features: cg });
-    setSCData({ type: 'FeatureCollection', features: sc });
-
-    state.overlayData.np = { type: 'FeatureCollection', features: np };
-    state.overlayData.sp = { type: 'FeatureCollection', features: sp };
-    state.overlayData.pf = { type: 'FeatureCollection', features: pf };
-    state.overlayData.cg = { type: 'FeatureCollection', features: cg };
-    state.overlayData.sc = { type: 'FeatureCollection', features: sc };
-
-    setCount('c-np', np.length);
-    setCount('c-sp', sp.length);
-    setCount('c-pf', pf.length);
-    setCount('c-open', sc.length);
-    cgCounts.federal = 0; cgCounts.state = 0; cgCounts.local = 0;
-    cgCounts.provincial = 0; cgCounts.other = 0;
-    cg.forEach(f => {
-      const cat = f.properties.category;
-      cgCounts[cat] = (cgCounts[cat] || cgCounts.other) + 1;
-    });
-    for (const [k, v] of Object.entries(cgCounts)) setCount('c-cg-' + k, v);
-    if (wantCG) {
-      const hint = document.getElementById('cg-load-hint');
-      if (hint) hint.remove();
-    }
+    paintPois(fc, { wantCG });
 
     // Local pin search index: removed. The slim /api/pois response no
     // longer ships names, so a client-side text index would be empty.

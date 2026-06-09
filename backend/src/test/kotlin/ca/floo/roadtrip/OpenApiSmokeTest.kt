@@ -1,8 +1,18 @@
 package ca.floo.roadtrip
 
+import ca.floo.campsite.recgov.booker.availability.CachedAvailability
+import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
+import ca.floo.roadtrip.client.AspiraAvailabilityClient
+import ca.floo.roadtrip.client.MapboxDirections
+import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.RouteCache
+import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
+import ca.floo.roadtrip.routes.healthRoutes
+import ca.floo.roadtrip.routes.poiRoutes
+import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
-import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
 import io.ktor.client.request.get
@@ -16,6 +26,9 @@ import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import org.jooq.SQLDialect
+import org.jooq.impl.DSL
+import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -55,20 +68,23 @@ class OpenApiSmokeTest {
         }
 
     @Test
-    fun `openapi spec lists annotated paths with summaries and tags`() =
+    fun `openapi spec lists representative real routes with summaries and tags`() =
         testApplication {
             application {
                 install(SwaggerUI)
+                val ctx = DSL.using(SQLDialect.POSTGRES)
+                val registry = PoiRegistry.load(File("../config/poi-registry.yaml"))
                 routing {
                     route("/api/docs/openapi.json") { openApiSpec() }
-                    get("/api/health", {
-                        tags = listOf("health")
-                        summary = "Liveness probe"
-                    }) { call.respondText("ok") }
-                    post("/api/admin/data/fetch", {
-                        tags = listOf("admin")
-                        summary = "Fetch upstream data"
-                    }) { call.respondText("ok") }
+                    healthRoutes(File("../data/raw"))
+                    poiRoutes(ctx, registry)
+                    poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), registry)
+                    campsiteAvailabilityRoutes(
+                        ctx,
+                        CachedAvailability(AvailabilityClient()),
+                        CachedAspiraAvailability(AspiraAvailabilityClient()),
+                        registry,
+                    )
                 }
             }
 
@@ -79,10 +95,9 @@ class OpenApiSmokeTest {
             assertNotNull(spec["openapi"], "spec missing openapi version")
             val paths = spec["paths"]!!.jsonObject
 
-            // /api/health under "get"
             val healthGet =
                 paths["/api/health"]!!.jsonObject["get"]!!.jsonObject
-            assertEquals("Liveness probe", healthGet["summary"]!!.jsonPrimitive.content)
+            assertEquals("Liveness probe + supercharger detail cache size", healthGet["summary"]!!.jsonPrimitive.content)
             assertEquals(
                 "health",
                 healthGet["tags"]!!
@@ -92,10 +107,26 @@ class OpenApiSmokeTest {
                     .trim('"'),
             )
 
-            // /api/admin/data/fetch under "post"
-            val fetchPost =
-                paths["/api/admin/data/fetch"]!!.jsonObject["post"]!!.jsonObject
-            assertEquals("Fetch upstream data", fetchPost["summary"]!!.jsonPrimitive.content)
+            val poisPost =
+                paths["/api/pois"]!!.jsonObject["post"]!!.jsonObject
+            assertEquals(
+                "POIs within bbox; capped at 2000 features (truncated:true on overflow)",
+                poisPost["summary"]!!.jsonPrimitive.content,
+            )
+
+            val onRoutePost =
+                paths["/api/pois/on-route"]!!.jsonObject["post"]!!.jsonObject
+            assertEquals(
+                "Slim POIs inside a buffered route corridor (no viewport, no truncation)",
+                onRoutePost["summary"]!!.jsonPrimitive.content,
+            )
+
+            val bulkPost =
+                paths["/api/campsite/availability/bulk"]!!.jsonObject["post"]!!.jsonObject
+            assertEquals(
+                "Bulk per-day availability for many campgrounds in a date window (poi-id keyed)",
+                bulkPost["summary"]!!.jsonPrimitive.content,
+            )
         }
 
     @Test

@@ -23,50 +23,20 @@ import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
 import { openSuperchargerDrawer } from './drawer/supercharger.js';
 import { hydratePoi } from './drawer/shared.js';
-
-// --- constants -------------------------------------------------------------
-
-const ROUTE_COLOR = '#4285F4';   // Google-Maps-blue
-const GEOCODE_DEBOUNCE_MS = 220;
-const MAX_STOPS = 25;
-
-// Corridor: a buffered polygon around the active route, used to filter
-// /api/pois server-side. 30 mi default — wide enough to catch realistic
-// detour-worthy stops, narrow enough that the corridor is meaningful.
-// User-adjustable via the topbar slider; range 5..100 mi.
-// MAX_POLYGON_VERTICES is the backend cap (2000); we simplify aggressively
-// to stay well under so even cross-country routes fit in one POST body.
-const CORRIDOR_DEFAULT_MILES = 30;
-const CORRIDOR_MIN_MILES = 5;
-const CORRIDOR_MAX_MILES = 100;
-const CORRIDOR_STEP_MILES = 5;
-const CORRIDOR_SIMPLIFY_TOLERANCE = 0.02;  // degrees — ~2km at mid-latitudes
-
-const KIND_COLOR = {
-  PLACE: '#3a7bd5',
-  ADDR:  '#5a6a8a',
-  CG:    '#2e7d32',
-  SC:    '#e82127',
-  NP:    '#2e7d32',
-  SP:    '#8d6e63',
-  PF:    '#7b4bb5',
-};
+import {
+  CORRIDOR_DEFAULT_MILES,
+  CORRIDOR_MAX_MILES,
+  CORRIDOR_MIN_MILES,
+  CORRIDOR_SIMPLIFY_TOLERANCE,
+  CORRIDOR_STEP_MILES,
+  GEOCODE_DEBOUNCE_MS,
+  KIND_COLOR,
+  MAX_STOPS,
+  ROUTE_COLOR,
+  trip,
+} from './topbar/state.js';
 
 // --- module state ----------------------------------------------------------
-
-const trip = {
-  // 'browse'      — single search bar, no route
-  // 'directions'  — N >= 2 slots, route fetched when all filled
-  mode: 'browse',
-  // Each stop is { name, lng, lat, kind, pinItem? } or null (empty slot)
-  stops: [],
-  route: null,        // GeoJSON FeatureCollection from /api/route
-  corridor: null,     // GeoJSON Polygon from turf.buffer(route, corridorMiles)
-  corridorMiles: CORRIDOR_DEFAULT_MILES,
-  routeAbort: null,
-  generation: 0,
-  endpointMarkers: [], // parallel to stops; null for empty slots
-};
 
 let mapRef = null;
 let pinSearchIndex = null;
@@ -111,6 +81,92 @@ function localYmd(date) {
   return `${y}-${m}-${d}`;
 }
 
+function currentLocationStop(lng, lat) {
+  return { name: 'Current location', lng, lat, kind: 'PLACE' };
+}
+
+function afterStopLocationChanged(stop) {
+  rerender();
+  if (trip.mode === 'browse') {
+    if (stop && mapRef) {
+      mapRef.flyTo({ center: [stop.lng, stop.lat], zoom: 13, speed: 1.6 });
+    }
+    return;
+  }
+  if (allStopsFilled()) {
+    tryFetchRoute();
+  } else {
+    removeRouteLayer();
+    hideStatus();
+    notifyCorridorChanged();
+  }
+}
+
+function rowCanUseCurrentLocation(rowIdx, { onlyIfEmpty, requireDirections }) {
+  if (requireDirections && trip.mode !== 'directions') return false;
+  const cur = trip.stops[rowIdx];
+  return !onlyIfEmpty || cur == null || cur._pending;
+}
+
+function fillRowWithCurrentLocation(rowIdx, opts = {}) {
+  const options = {
+    onlyIfEmpty: false,
+    requireDirections: false,
+    silent: false,
+    ...opts,
+  };
+  if (!Number.isInteger(rowIdx) || rowIdx < 0) return;
+  if (!rowCanUseCurrentLocation(rowIdx, options)) return;
+
+  activeRowIdx = rowIdx;
+  closeDropdown();
+
+  const apply = (idx, lng, lat) => {
+    if (!rowCanUseCurrentLocation(idx, options)) return;
+    const stop = currentLocationStop(lng, lat);
+    setStop(idx, stop);
+    afterStopLocationChanged(stop);
+  };
+
+  if (state.userLocation && Number.isFinite(state.userLocation.lng) && Number.isFinite(state.userLocation.lat)) {
+    apply(rowIdx, state.userLocation.lng, state.userLocation.lat);
+    return;
+  }
+  if (typeof navigator === 'undefined' || !navigator.geolocation) {
+    if (!options.silent) showStatus('Current location is not available.', { error: true });
+    return;
+  }
+
+  const token = {};
+  setStop(rowIdx, {
+    name: 'Locating you…',
+    lng: 0,
+    lat: 0,
+    kind: 'PLACE',
+    _pending: true,
+    _locatingToken: token,
+  });
+  afterStopLocationChanged(null);
+
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      const idx = trip.stops.findIndex(s => s?._locatingToken === token);
+      if (idx < 0) return;
+      state.userLocation = { lng: pos.coords.longitude, lat: pos.coords.latitude };
+      apply(idx, pos.coords.longitude, pos.coords.latitude);
+    },
+    () => {
+      const idx = trip.stops.findIndex(s => s?._locatingToken === token);
+      if (idx >= 0) {
+        trip.stops[idx] = null;
+        rerender();
+      }
+      if (!options.silent) showStatus('Could not get current location.', { error: true });
+    },
+    { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 },
+  );
+}
+
 /**
  * Fill row 0 with the user's current location, async. Used by the mobile
  * Drawer-Directions path so a phone tap goes straight to "from current
@@ -127,45 +183,11 @@ function localYmd(date) {
  * started and when the geolocation resolves — don't clobber their input.
  */
 function tryFillOriginWithCurrentLocation() {
-  const fill = (lng, lat) => {
-    // Race guard: only fill if row 0 is still empty AND we're still in
-    // directions mode (user might've hit Clear All in the interim).
-    if (trip.mode !== 'directions') return;
-    if (trip.stops[0] != null) return;
-    setStop(0, { name: 'Current location', lng, lat, kind: 'PLACE' });
-    rerender();
-    if (allStopsFilled()) tryFetchRoute();
-  };
-  if (state.userLocation && Number.isFinite(state.userLocation.lng) && Number.isFinite(state.userLocation.lat)) {
-    fill(state.userLocation.lng, state.userLocation.lat);
-    return;
-  }
-  if (typeof navigator === 'undefined' || !navigator.geolocation) return;
-  // Show a placeholder name so row 0 doesn't look empty during the prompt.
-  // Actual position usually arrives in <2s on a phone with location on.
-  setStop(0, { name: 'Locating you…', lng: 0, lat: 0, kind: 'PLACE', _pending: true });
-  rerender();
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      // Only swap if we still own the pending placeholder. If the user
-      // typed or cleared in the interim, the slot now has different
-      // contents and we should not overwrite.
-      const cur = trip.stops[0];
-      if (!cur?._pending) return;
-      state.userLocation = { lng: pos.coords.longitude, lat: pos.coords.latitude };
-      fill(pos.coords.longitude, pos.coords.latitude);
-    },
-    () => {
-      // Denied / timeout / position-unavailable. Clear the placeholder so
-      // the row reads empty again.
-      const cur = trip.stops[0];
-      if (cur?._pending) {
-        trip.stops[0] = null;
-        rerender();
-      }
-    },
-    { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 },
-  );
+  fillRowWithCurrentLocation(0, {
+    onlyIfEmpty: true,
+    requireDirections: true,
+    silent: true,
+  });
 }
 
 // --- public --------------------------------------------------------------
@@ -184,6 +206,7 @@ export function initTopbar(map, getPinSearchIndex) {
   // expose globals (vs. an import) because the drawer module is downstream
   // from popups.js and shouldn't pull topbar.js into its dependency graph.
   window.__rtTripMode = () => trip.mode;
+  window.__rtRouteActive = () => trip.mode === 'directions' && !!trip.route && allStopsFilled();
   window.__rtAddTripStop = (stop) => addTripStopFromExternal(stop);
 
   // app.js's map-empty-space click handler calls this to clear the
@@ -327,6 +350,16 @@ function injectStyles() {
     display: grid; place-items: center;
   }
   .tb-x:hover { color: var(--cg-error); background: var(--cg-bg-hover); }
+
+  .tb-locate {
+    flex-shrink: 0;
+    width: 24px; height: 24px;
+    background: transparent; border: 0; color: var(--cg-faint);
+    border-radius: 4px; cursor: pointer;
+    display: grid; place-items: center;
+  }
+  .tb-locate:hover { color: var(--cg-accent); background: var(--cg-bg-hover); }
+  .tb-locate:disabled { opacity: 0.55; cursor: wait; }
 
   /* Action row */
   #tb-actions { display: flex; align-items: center; gap: 6px; padding: 0 6px 6px; }
@@ -1144,7 +1177,12 @@ function refreshOnRoutePois() {
 async function refreshOnRoutePoisNow() {
   if (trip.mode !== 'directions' || !allStopsFilled()) {
     setTripPois([]);
+    if (typeof window.__rtSetRoutePois === 'function') window.__rtSetRoutePois([]);
+    if (typeof window.__rtRefreshBbox === 'function') window.__rtRefreshBbox();
     return;
+  }
+  if (typeof window.__rtSetRoutePois === 'function' && trip.route) {
+    window.__rtSetRoutePois([]);
   }
   if (onRouteAbort) onRouteAbort.abort();
   onRouteAbort = new AbortController();
@@ -1174,6 +1212,7 @@ async function refreshOnRoutePoisNow() {
   }
   if (signal.aborted) return;
   setTripPois(fc.features || []);
+  if (typeof window.__rtSetRoutePois === 'function') window.__rtSetRoutePois(fc.features || []);
 }
 
 // --- route fetch + render ----------------------------------------------
@@ -1458,6 +1497,7 @@ function renderRows() {
     const canRemove = !isDirections || rows >= 3;
     const showX = isFilled || canRemove;
     const draggable = (isDirections && rows >= 2) ? 'true' : 'false';
+    const locating = !!stop?._pending;
 
     html += `
       <div class="tb-row" data-i="${i}" draggable="${draggable}">
@@ -1467,6 +1507,10 @@ function renderRows() {
                aria-label="${escapeHtml(placeholder)}"
                value="${escapeHtml(value)}"
                data-i="${i}">
+        <button class="tb-locate" type="button" data-i="${i}" ${locating ? 'disabled' : ''}
+                title="Use current location" aria-label="Use current location">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3"/><path d="M12 19v3"/><path d="M2 12h3"/><path d="M19 12h3"/><path d="M18.4 5.6l-2.1 2.1"/><path d="M7.7 16.3l-2.1 2.1"/><path d="M5.6 5.6l2.1 2.1"/><path d="M16.3 16.3l2.1 2.1"/></svg>
+        </button>
         ${showX ? `<button class="tb-x" type="button" data-i="${i}" data-filled="${isFilled ? '1' : '0'}" aria-label="${isFilled ? 'Clear' : 'Remove stop'}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>` : ''}
@@ -1496,6 +1540,13 @@ function renderRows() {
       const i = Number(btn.dataset.i);
       const wasFilled = btn.dataset.filled === '1';
       onRowX(i, wasFilled);
+      e.preventDefault();
+      e.stopPropagation();
+    });
+  });
+  stops.querySelectorAll('.tb-locate').forEach((btn) => {
+    btn.addEventListener('click', (e) => {
+      fillRowWithCurrentLocation(Number(btn.dataset.i));
       e.preventDefault();
       e.stopPropagation();
     });
