@@ -120,6 +120,20 @@ export function initTopbar(map, getPinSearchIndex) {
   // from popups.js and shouldn't pull topbar.js into its dependency graph.
   window.__rtTripMode = () => trip.mode;
   window.__rtAddTripStop = (stop) => addTripStopFromExternal(stop);
+
+  // app.js's map-empty-space click handler calls this to clear the
+  // browse-mode pin selection (row 0 + the "A" marker on the map) so
+  // map clicks don't leave sticky state behind. No-op in directions
+  // mode — the user has a real itinerary, don't blow it away.
+  window.__rtClearBrowsePin = () => clearBrowsePin();
+}
+
+function clearBrowsePin() {
+  if (trip.mode !== 'browse') return;
+  if (trip.stops.length === 0 || trip.stops[0] == null) return;
+  trip.stops = [];
+  removeAllMarkers();
+  rerender();
 }
 
 /**

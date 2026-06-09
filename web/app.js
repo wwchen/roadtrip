@@ -60,7 +60,14 @@ const INTERACTIVE_LAYERS = [
 map.on('click', (e) => {
   const layers = INTERACTIVE_LAYERS.filter(id => map.getLayer(id));
   const hits = layers.length ? map.queryRenderedFeatures(e.point, { layers }) : [];
-  if (hits.length === 0) closeDrawer();
+  if (hits.length === 0) {
+    closeDrawer();
+    // Also clear any sticky browse-mode pin selection (row 0 in the topbar
+    // + the "A" marker on the map). Pin clicks populate row 0; without this
+    // an empty-space click would close the drawer but leave row 0 + marker
+    // behind. No-op in directions mode.
+    if (typeof window.__rtClearBrowsePin === 'function') window.__rtClearBrowsePin();
+  }
 });
 
 // Single source of truth for "where am I" — popups read this for distance,
