@@ -480,7 +480,23 @@
      Secondary — translucent white fill, subtle border. Companion actions.
      Tertiary  — transparent, no border, hover-only background. Tap actions
                  like phone numbers that shouldn't compete for attention. */
-  .cg-actions { display: flex; flex-direction: column; gap: 8px; }
+  /* Side-by-side action row. Default: each button takes content width
+     plus equal share of remaining space. Directions opts out of the
+     equal-share behavior so its label doesn't get clipped at half-width
+     drawers — it stays content-sized while the primary CTA grows. */
+  .cg-actions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; }
+  .cg-actions > .cg-btn { flex: 1 1 auto; }
+  /* Directions is icon-only — square aspect ratio, fixed width, no
+     padding-driven sizing. flex:0 0 auto keeps it from being squeezed
+     by the primary CTA next to it. */
+  .cg-actions > .rt-poi-directions {
+    flex: 0 0 auto;
+    width: 40px;
+    padding: 0;
+  }
+  @media (max-width: 767px) {
+    .cg-actions > .rt-poi-directions { width: 44px; }
+  }
   .cg-btn {
     padding: 0 16px;
     height: 40px;
