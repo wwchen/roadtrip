@@ -86,14 +86,24 @@ def is_fresh(slug: str, max_age_days: int) -> bool:
 
 
 def na_supercharger_slugs(index_path: Path) -> list[str]:
-    """Walk the bulk locations payload, return slugs of NA supercharger pins."""
+    """Walk the bulk locations payload, return slugs of NA supercharger pins.
+
+    Oracle is `supercharger_function` populated + `show_on_find_us == "1"`,
+    not the location_type tags. Tesla's own findus map uses the function
+    block; the type tags are inconsistent — many real superchargers come
+    back tagged only as `["nacs"]` or `["party"]` (V4 / Magic Dock sites)
+    instead of `"supercharger"`. ~4k sites would be silently skipped if
+    we filtered on type.
+    """
     d = json.loads(index_path.read_text())
     payload = d.get("payload") or d  # tolerate envelope or bare
     items = ((payload.get("data") or {}).get("data") or [])
     out = []
     for item in items:
-        types = item.get("location_type") or []
-        if "supercharger" not in types and "coming_soon_supercharger" not in types:
+        sf = item.get("supercharger_function") or {}
+        if not sf:
+            continue
+        if sf.get("show_on_find_us") == "0":
             continue
         lat = item.get("latitude")
         lng = item.get("longitude")
@@ -103,9 +113,6 @@ def na_supercharger_slugs(index_path: Path) -> list[str]:
             continue
         slug = item.get("location_url_slug")
         if not slug:
-            continue
-        sf = item.get("supercharger_function") or {}
-        if sf.get("show_on_find_us") == "0":
             continue
         out.append(slug)
     return out
