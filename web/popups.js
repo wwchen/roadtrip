@@ -262,14 +262,28 @@ function buildSCFeaturePills(detail) {
   return pills.join('');
 }
 
-// amenities is sometimes null, sometimes an array of short strings
-// ("restrooms", "wifi", "shopping", "restaurant", "food_service", …).
-// One pill per entry, underscore-separators stripped, capped at 8 so a
-// long list doesn't blow up the drawer height.
+// amenities is sometimes null, sometimes an array of Tesla-flavoured
+// SCREAMING_SNAKE strings: AMENITIES_RESTROOMS, AMENITIES_CAFE,
+// AMENITIES_TWENTY_FOUR_HOUR, etc. Strip the AMENITIES_ prefix and
+// title-case the rest. Capped at 8 so a long list doesn't blow up the
+// drawer height.
 function buildSCAmenityPills(detail) {
   const am = Array.isArray(detail?.amenities) ? detail.amenities : null;
   if (!am || !am.length) return '';
-  return am.slice(0, 8).map(a => scPill(String(a).replace(/_/g, ' '))).join('');
+  return am.slice(0, 8).map(a => scPill(prettifyAmenity(a))).join('');
+}
+
+function prettifyAmenity(raw) {
+  // "AMENITIES_TWENTY_FOUR_HOUR" → "Twenty Four Hour"
+  // "AMENITIES_WIFI" → "Wifi"
+  // "restrooms" (legacy lowercase form) → "Restrooms"
+  const stripped = String(raw).replace(/^AMENITIES_/i, '');
+  return stripped
+    .toLowerCase()
+    .split('_')
+    .map(w => w ? w[0].toUpperCase() + w.slice(1) : '')
+    .join(' ')
+    .trim();
 }
 
 function scPill(label, title = '') {

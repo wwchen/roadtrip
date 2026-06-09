@@ -481,6 +481,11 @@
      Tertiary  — transparent, no border, hover-only background. Tap actions
                  like phone numbers that shouldn't compete for attention. */
   .cg-actions { display: flex; flex-direction: column; gap: 8px; }
+  /* Buttons inside .cg-actions stretch full-width so they read as clean
+     stacked rows. Without align-self:stretch, .cg-btn (display:flex) sits
+     at content-width, leaving Directions (~120px) and Google Maps (~180px)
+     looking ragged. */
+  .cg-actions > .cg-btn { align-self: stretch; }
   .cg-btn {
     padding: 0 16px;
     height: 40px;
