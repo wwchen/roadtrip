@@ -119,6 +119,10 @@ class Upsert(
         val providerRefJson = providerRefJsonFor(poi)
         val addressJson = poi.address?.let { JSONB.valueOf(addressToJson(it)) }
         val propertiesJson = JSONB.valueOf(poi.propertiesJson().toString())
+        // Subcategory is currently a Campground-only concept (federal /
+        // state / local / provincial). Promoted to a column in V9 so
+        // POST /api/pois can project it cheaply for the FE legend bucket.
+        val subcategoryValue = (poi as? Poi.Campground)?.subcategory
 
         // PostGIS geometry constructor — jOOQ OSS has no typed builder for
         // ST_GeomFromGeoJSON, so this stays as a parameterized DSL field.
@@ -135,6 +139,7 @@ class Upsert(
             .set(POIS.SOURCE, poi.source)
             .set(POIS.SOURCE_ID, poi.sourceId)
             .set(POIS.CATEGORY, poi.categorySql())
+            .set(POIS.SUBCATEGORY, subcategoryValue)
             .set(POIS.NAME, poi.name)
             .set(POIS.GEOM, geomField)
             .set(POIS.REGION, poi.region)
@@ -155,6 +160,7 @@ class Upsert(
             // EXCLUDED.* refers to the row that would have been inserted.
             // jOOQ's onDuplicateKeyUpdate idiom uses DSL.excluded(field).
             .set(POIS.CATEGORY, DSL.excluded(POIS.CATEGORY))
+            .set(POIS.SUBCATEGORY, DSL.excluded(POIS.SUBCATEGORY))
             .set(POIS.NAME, DSL.excluded(POIS.NAME))
             .set(POIS.GEOM, DSL.excluded(POIS.GEOM))
             .set(POIS.REGION, DSL.excluded(POIS.REGION))

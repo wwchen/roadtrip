@@ -10,7 +10,7 @@
 //   → secondary CTA → "Details" divider → below-fold (photos, amenities,
 //   cell, ratings, last_verified) — pulled in from web/campground-card.js
 
-import { state, distanceKm, formatDistance, escapeHtml } from '../core.js';
+import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';
 import {
   parseAmenities,
   parseCellCoverage,
@@ -61,18 +61,94 @@ export function openCampgroundDrawer(f) {
 
   const signal = beginSession(f);
 
-  renderShell(f);
   show();
-  // Backend dispatches by provider_ref on its end; the FE just hands over the
-  // poi id (f.id, the pois.id PK). Skip the fetch for features without an id —
-  // those are synthetic / not from /api/pois (the existing drawer can be
-  // opened with a hand-crafted feature in some test paths).
-  if (f.id != null) {
-    fetchAvailability(f, signal);
-  }
-
   root.querySelector('.cg-drawer-close')?.addEventListener('click', closeDrawer);
   attachDragHandlers(root);
+
+  // Slim /api/pois doesn't ship the wide property set the campground shell
+  // needs (name, region, photo_url, parent_name, recgov_id, raw upstream).
+  // If we got a slim feature, render a loading placeholder, fetch the wide
+  // row, and then re-render with availability. If the feature is already
+  // wide (legacy paths / tests / map-click with full data), render
+  // synchronously.
+  if (isSlimFeature(f)) {
+    renderLoadingShell();
+    hydrateFromApi(f, signal);
+  } else {
+    renderShell(f);
+    if (f.id != null) fetchAvailability(f, signal);
+  }
+}
+
+/**
+ * Slim features carry only category/subcategory in properties. Wide ones
+ * have name/source/etc. Tell them apart so the drawer knows whether a
+ * /api/pois/{id} round-trip is needed.
+ */
+function isSlimFeature(f) {
+  const p = f?.properties;
+  if (!p) return true;
+  // Wide features always have a name. Slim ones never do.
+  return p.name == null && p.source == null;
+}
+
+function renderLoadingShell() {
+  const content = document.querySelector(`#${DRAWER_ROOT_ID} .cg-drawer-content`);
+  if (!content) return;
+  content.innerHTML = `
+    <header class="cg-drawer-head">
+      <h2 style="opacity:0.5">Loading…</h2>
+    </header>
+  `;
+}
+
+async function hydrateFromApi(f, signal) {
+  if (f.id == null) return;
+  let detail = null;
+  try {
+    const r = await fetch(`/api/pois/${encodeURIComponent(f.id)}`, { signal });
+    if (!r.ok) {
+      // /api/pois/{id} 404 / 5xx — render whatever we already have rather
+      // than blocking the user, and let availability still try (some test
+      // paths use a hand-crafted feature with no DB row).
+      if (!isActiveFeature(f)) return;
+      renderShell(f);
+      fetchAvailability(f, signal);
+      return;
+    }
+    detail = await r.json();
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (!isActiveFeature(f)) return;
+    renderShell(f);
+    return;
+  }
+  // The user clicked a different pin in the time the detail fetch took —
+  // `signal` is aborted and `activeFeature` is something else. Bail.
+  if (signal.aborted || !isActiveFeature(f)) return;
+
+  // Merge detail.properties on top of what we had. Keep id + geometry from
+  // the input feature (the slim shape's centroid coords match the wide
+  // shape's geometry for points; for polygons the wide shape wins).
+  const merged = {
+    type: 'Feature',
+    id: f.id,
+    geometry: detail.geometry || f.geometry,
+    properties: { ...(f.properties || {}), ...(detail.properties || {}) },
+  };
+  // Run the same revivers the synchronous path applies, then promote the
+  // wide nested shape into the flat keys the renderShell + campground-card
+  // helpers read (recgov_id, aspira, Unit_Nm, photo_url alias, etc.).
+  merged.properties.upstream != null && reviveJsonProp(merged.properties, 'upstream');
+  merged.properties.provider_ref != null && reviveJsonProp(merged.properties, 'provider_ref');
+  const hydrated = flattenHydratedPoi(merged);
+  // Re-stake the hydrated feature as the active one so the availability
+  // fetch's isActiveFeature() check passes against the new identity. Same
+  // signal — beginSession aborts the prior controller, but that's our own
+  // (already used) one, so no in-flight is lost.
+  const availSignal = beginSession(hydrated);
+  renderShell(hydrated);
+  fetchAvailability(hydrated, availSignal);
 }
 
 /** Render the static parts (name, subline, verdict, CTAs) from the feature. */

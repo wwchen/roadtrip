@@ -2,8 +2,9 @@
 //   - drawerHeader / directionsButtonHTML — slot-shared chrome HTML
 //   - upstreamHTML / reviveJsonProp — JSON-property plumbing for MapLibre
 //   - buildSubline / distanceTo / normalizeAspira — small composers
+//   - hydratePoi / loadingDrawerHtml — per-id GET + skeleton state
 
-import { state, distanceKm, formatDistance, escapeHtml } from '../core.js';
+import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';
 
 /** Compose subline from arbitrary parts: "Loop · State · 2.4 km away". */
 export function buildSubline(parts) {
@@ -79,6 +80,75 @@ export function normalizeAspira(f) {
  * Always collapsed by default — this is a "what's available" surface,
  * not the primary read.
  */
+// Per-process detail cache for /api/pois/{id}. The slim bbox endpoint ships
+// only id + lng/lat + category + subcategory; the wide fields the popups
+// need (name, address, provider_ref, raw upstream blob) live behind this
+// per-id GET. Keying by id collapses repeat-clicks of the same pin to a
+// single round-trip per session. The browser HTTP cache (Cache-Control:
+// max-age=300, stale-while-revalidate=3600) handles cross-session reuse.
+const poiDetailCache = new Map(); // id -> Promise<Feature>
+
+/**
+ * Fetch the full /api/pois/{id} payload and merge it into the input
+ * feature, returning a wide-shape feature ready for `flattenHydratedPoi`.
+ * Slim features (no `properties.name`) trigger the round-trip; wide ones
+ * (legacy paths, tests) are returned as-is. Failures fall through with
+ * the slim feature — caller decides how to render the partial state.
+ */
+export function hydratePoi(f) {
+  if (f?.properties && (f.properties.name != null || f.properties.source != null)) {
+    return Promise.resolve(f);
+  }
+  const id = f?.id;
+  if (id == null) return Promise.resolve(f);
+  let inflight = poiDetailCache.get(id);
+  if (!inflight) {
+    inflight = fetch(`/api/pois/${encodeURIComponent(id)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(detail => {
+        if (!detail) return f;
+        return {
+          type: 'Feature',
+          id,
+          geometry: detail.geometry || f.geometry,
+          properties: { ...(f.properties || {}), ...(detail.properties || {}) },
+        };
+      })
+      .catch(err => {
+        // On network failure, drop the cache entry so a retry clicks fresh.
+        poiDetailCache.delete(id);
+        throw err;
+      });
+    poiDetailCache.set(id, inflight);
+  }
+  return inflight;
+}
+
+/** Skeleton drawer HTML shown while /api/pois/{id} is in flight. */
+export function loadingDrawerHtml() {
+  return `
+    <header class="cg-drawer-head">
+      <h2 style="opacity:0.5">Loading…</h2>
+    </header>
+  `;
+}
+
+/**
+ * Convenience: open a drawer in the loading state, fetch /api/pois/{id},
+ * flatten the wide shape, and call `render(f)` with the result. Used by
+ * park / planet-fitness / supercharger drawers — wide features render
+ * synchronously without hitting the network.
+ */
+export function openHydratedDrawer(f, openDrawer, render) {
+  // Slim feature: open with a placeholder, hydrate, then call render.
+  if (!(f?.properties && (f.properties.name != null || f.properties.source != null))) {
+    openDrawer(loadingDrawerHtml());
+    hydratePoi(f).then(hydrated => render(flattenHydratedPoi(hydrated)));
+    return;
+  }
+  render(flattenHydratedPoi(f));
+}
+
 export function upstreamHTML(upstream) {
   if (!upstream || typeof upstream !== 'object') return '';
   const entries = Object.entries(upstream).filter(([, v]) => {
