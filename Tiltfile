@@ -67,7 +67,7 @@ local_resource(
         timeout_secs=8,
         exec=exec_action([
             'docker', 'exec',
-            'roadtrip-map-postgres-1',
+            'roadtrip-postgres-1',
             'pg_isready', '-U', 'roadtrip', '-d', 'roadtrip',
         ]),
     ),
