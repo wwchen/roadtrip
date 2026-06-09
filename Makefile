@@ -76,11 +76,15 @@ fetch-tesla-supercharger-pricing:
 # host with ADMIN_BASE for remote deploys (e.g. ADMIN_BASE=https://… make data-fetch).
 ADMIN_BASE ?= http://127.0.0.1:$(PORT)
 
+# poi_data names like `Federal Campgrounds` contain spaces; wrap the URL
+# in single quotes and url-encode the path segment so curl gets one arg.
+# python3 is the simplest portable url-encoder; falls back to the bare
+# value when TARGET is unset.
 data-fetch:
-	curl --fail-with-body -sS --max-time 1800 -X POST $(ADMIN_BASE)/api/admin/data/fetch$(if $(TARGET),/$(TARGET))
+	curl --fail-with-body -sS --max-time 1800 -X POST '$(ADMIN_BASE)/api/admin/data/fetch$(if $(TARGET),/$(shell python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=''))" "$(TARGET)"))'
 
 data-import:
-	curl --fail-with-body -sS --max-time 1800 -X POST $(ADMIN_BASE)/api/admin/data/import$(if $(TARGET),/$(TARGET))
+	curl --fail-with-body -sS --max-time 1800 -X POST '$(ADMIN_BASE)/api/admin/data/import$(if $(TARGET),/$(shell python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=''))" "$(TARGET)"))'
 
 # RFC 0007 raw poller. One entry point for every thin fetcher; uses fzf
 # to pick a source unless SOURCE=<name> or SOURCE=--all is set. Prints
