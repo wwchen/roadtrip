@@ -88,8 +88,13 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
         fetchedAt: Instant,
         locationsDir: File,
     ): Poi.Supercharger? {
-        val types = row.locationType ?: return null
-        if (CHARGER_TYPES.none { it in types }) return null
+        // Filter mirrors scripts/fetch_tesla_locations.py:na_supercharger_slugs.
+        // Trust supercharger_function over location_type — Tesla's bulk index
+        // sometimes labels real Supercharger sites with surprising types
+        // ("party" for Calgary AB Macleod Trail SE = 4001402, etc.). The
+        // metadata block is the load-bearing signal.
+        val sf = row.superchargerFunction ?: return null
+        if (sf.showOnFindUs == "0") return null
         val slug = row.locationUrlSlug?.takeIf { it.isNotBlank() } ?: return null
         val lat = row.latitude ?: return null
         val lon = row.longitude ?: return null
@@ -200,7 +205,6 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
     companion object {
         private val log = LoggerFactory.getLogger(TeslaIndexEtl::class.java)
         private val json = Json { ignoreUnknownKeys = true }
-        private val CHARGER_TYPES = setOf("supercharger", "megacharger")
     }
 }
 
@@ -221,6 +225,13 @@ data class TeslaIndexRow(
     val title: String? = null,
     @kotlinx.serialization.SerialName("location_type") val locationType: List<String>? = null,
     @kotlinx.serialization.SerialName("location_url_slug") val locationUrlSlug: String? = null,
+    @kotlinx.serialization.SerialName("supercharger_function") val superchargerFunction: TeslaSuperchargerFunction? = null,
+)
+
+@Serializable
+data class TeslaSuperchargerFunction(
+    @kotlinx.serialization.SerialName("show_on_find_us") val showOnFindUs: String? = null,
+    @kotlinx.serialization.SerialName("site_status") val siteStatus: String? = null,
 )
 
 data class TeslaIndexDto(
