@@ -191,9 +191,9 @@ fun Route.poiRoutes(
         // intersection pathology that PostGIS GEOS rejects with
         // TopologyException. Catch that, log it, and degrade to bbox-only —
         // the user sees more POIs than ideal, but never a 500.
-        val rows =
+        val result =
             if (categories?.isEmpty() == true) {
-                emptyList()
+                PoiResult(emptyList(), truncated = false)
             } else {
                 try {
                     fetchPois(
@@ -203,7 +203,7 @@ fun Route.poiRoutes(
                         defaultCategories = defaultCategories,
                         corridorLineGeoJson = corridorLineGeoJson,
                         corridorRadiusMeters = corridorRadiusMeters,
-                        limit = POI_LIMIT + 1,
+                        limit = POI_LIMIT,
                     )
                 } catch (e: org.jooq.exception.DataAccessException) {
                     val cause = e.cause?.message.orEmpty()
@@ -216,18 +216,16 @@ fun Route.poiRoutes(
                             defaultCategories = defaultCategories,
                             corridorLineGeoJson = null,
                             corridorRadiusMeters = 0.0,
-                            limit = POI_LIMIT + 1,
+                            limit = POI_LIMIT,
                         )
                     } else {
                         throw e
                     }
                 }
             }
-        val truncated = rows.size > POI_LIMIT
-        val effective = if (truncated) rows.take(POI_LIMIT) else rows
 
         call.respondText(
-            buildFeatureCollection(effective, truncated, corridorActive),
+            buildFeatureCollection(result.rows, result.truncated, corridorActive),
             io.ktor.http.ContentType.Application.Json,
         )
     }
@@ -509,6 +507,26 @@ internal data class PoiDetailRow(
     val propertiesJson: String,
 )
 
+// Outcome of a sampled bbox fetch. `truncated` is true whenever the raw
+// count exceeded the global cap — even if the sample fits under it — so
+// the FE can show "zoom in for more" honestly.
+internal data class PoiResult(
+    val rows: List<PoiRow>,
+    val truncated: Boolean,
+)
+
+// Spatial sampling grid. 10x10 = 100 cells. Each (cell, category) gets up
+// to ceil(category_allocation / GRID_CELLS) rows, so the slim payload comes
+// back spread across the viewport instead of clumped wherever Postgres's
+// row order happened to put the first matches.
+private const val SAMPLE_GRID_DIM: Int = 10
+private const val SAMPLE_GRID_CELLS: Int = SAMPLE_GRID_DIM * SAMPLE_GRID_DIM
+
+// Even when one category dominates the viewport (e.g. campgrounds at
+// continental zoom), every present category gets at least this many slots
+// so the legend's sparse layers don't disappear from the response.
+private const val MIN_PER_CATEGORY_ALLOCATION: Int = 50
+
 internal fun fetchPois(
     ctx: DSLContext,
     bbox: Bbox,
@@ -517,32 +535,153 @@ internal fun fetchPois(
     corridorLineGeoJson: String? = null,
     corridorRadiusMeters: Double = 0.0,
     limit: Int,
-): List<PoiRow> {
-    // Per-category limit: each requested category gets its own slot budget,
-    // so a dataset like Planet Fitness (1.5k rows) can't starve Superchargers
-    // or Campgrounds when bbox is continental.
+): PoiResult {
     val cats = categories ?: defaultCategories
+    if (cats.isEmpty()) return PoiResult(emptyList(), truncated = false)
+
+    // Step 1: cheap per-category COUNT in the bbox/corridor. GIST-only on
+    // the geom predicate, no row reads beyond the index. Drives both the
+    // truncation flag and the proportional allocation in step 2.
+    val countByCat = countByCategory(ctx, cats, bbox, corridorLineGeoJson, corridorRadiusMeters)
+    val rawTotal = countByCat.values.sum()
+    val present = cats.filter { (countByCat[it] ?: 0) > 0 }
+    if (present.isEmpty()) return PoiResult(emptyList(), truncated = false)
+
+    // Step 2: distribute the cap across present categories proportional to
+    // viewport presence. Each present category gets a minimum guarantee so
+    // sparse layers (e.g. 5 superchargers in a campground-heavy region)
+    // don't get rounded to zero. Remainder split by share of the rest.
+    val allocation = allocateBudget(present.associateWith { countByCat[it] ?: 0 }, limit)
+
+    // Step 3: pull the actual rows. Each per-category subquery uses a
+    // row_number() window partitioned by a SAMPLE_GRID_DIM x SAMPLE_GRID_DIM
+    // spatial bucket to spread the sample across the viewport. UNION ALL
+    // collapses the per-cat results into one round-trip.
+    val rows =
+        fetchSampled(
+            ctx = ctx,
+            bbox = bbox,
+            allocation = allocation,
+            corridorLineGeoJson = corridorLineGeoJson,
+            corridorRadiusMeters = corridorRadiusMeters,
+        )
+    // truncated = "we returned fewer rows than the viewport contains" —
+    // covers both the cap-overflow case (raw > limit) and the spatial-
+    // bucket case (raw fits but sampling thinned a tight cluster).
+    val truncated = rows.size < rawTotal
+    return PoiResult(rows, truncated)
+}
+
+private fun countByCategory(
+    ctx: DSLContext,
+    cats: List<String>,
+    bbox: Bbox,
+    corridorLineGeoJson: String?,
+    corridorRadiusMeters: Double,
+): Map<String, Int> {
+    if (cats.isEmpty()) return emptyMap()
+    val placeholders = cats.joinToString(",") { "?" }
+    val sql =
+        buildString {
+            append(
+                """
+                SELECT category, COUNT(*) AS n
+                FROM pois
+                WHERE deleted_at IS NULL
+                  AND category IN ($placeholders)
+                  AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
+                """.trimIndent(),
+            )
+            if (corridorLineGeoJson != null) {
+                append(
+                    "\n      AND ST_Intersects(geom, " +
+                        "ST_CollectionExtract(ST_MakeValid(" +
+                        "ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)::geography, ?)::geometry" +
+                        "), 3))",
+                )
+            }
+            append("\nGROUP BY category")
+        }
+    val args = mutableListOf<Any>()
+    args.addAll(cats)
+    args.add(bbox.west)
+    args.add(bbox.south)
+    args.add(bbox.east)
+    args.add(bbox.north)
+    if (corridorLineGeoJson != null) {
+        args.add(corridorLineGeoJson)
+        args.add(corridorRadiusMeters)
+    }
+    val out = mutableMapOf<String, Int>()
+    for (r in ctx.fetch(sql, *args.toTypedArray())) {
+        out[r.get("category") as String] = (r.get("n") as Number).toInt()
+    }
+    return out
+}
+
+/**
+ * Distribute a global cap across categories with viewport presence:
+ *
+ *   - Sparse layers get `MIN_PER_CATEGORY_ALLOCATION` (or their full count if
+ *     less) so they remain visible in legends even when one category swamps.
+ *   - Remaining budget split proportional to (count - already-allocated)
+ *     across the categories above the minimum.
+ *
+ * Returns a map of category → max-rows. Sum of values <= cap.
+ */
+private fun allocateBudget(
+    presentCounts: Map<String, Int>,
+    cap: Int,
+): Map<String, Int> {
+    val baseline = presentCounts.mapValues { (_, n) -> minOf(n, MIN_PER_CATEGORY_ALLOCATION) }
+    val baselineSum = baseline.values.sum()
+    if (baselineSum >= cap) {
+        // The cap is so small we can't even fund every category's minimum.
+        // Still cover them; a tiny over-allocation in pathological cases is
+        // fine — the per-cat LIMIT still bounds each subquery.
+        return baseline
+    }
+    val remaining = cap - baselineSum
+    val excess = presentCounts.mapValues { (k, n) -> (n - baseline.getValue(k)).coerceAtLeast(0) }
+    val excessTotal = excess.values.sum()
+    if (excessTotal == 0) return baseline
+    val extra =
+        excess.mapValues { (_, e) ->
+            ((e.toLong() * remaining) / excessTotal).toInt()
+        }
+    return presentCounts.mapValues { (k, _) -> baseline.getValue(k) + (extra[k] ?: 0) }
+}
+
+private fun fetchSampled(
+    ctx: DSLContext,
+    bbox: Bbox,
+    allocation: Map<String, Int>,
+    corridorLineGeoJson: String?,
+    corridorRadiusMeters: Double,
+): List<PoiRow> {
+    val cats = allocation.keys.toList()
     if (cats.isEmpty()) return emptyList()
 
-    val perCategoryLimit = (limit / cats.size).coerceAtLeast(1)
-
-    // UNION ALL across N category-scoped subqueries, each capped. Same
-    // total round-trip cost as a single query, but truncation is per-cat
-    // instead of "first to the row planner."
-    //
-    // Slim projection: id, category, subcategory, ST_X/ST_Y(geom). Roughly
-    // ~10× smaller per-row vs the legacy wide projection; the FE fetches
-    // the rest on click via GET /api/pois/{id}.
+    // Cell width/height in degrees for the spatial bucket window. Matches
+    // SAMPLE_GRID_DIM cells across the bbox in each axis.
+    val dx = (bbox.east - bbox.west) / SAMPLE_GRID_DIM
+    val dy = (bbox.north - bbox.south) / SAMPLE_GRID_DIM
     val sql =
         buildString {
             cats.forEachIndexed { idx, _ ->
                 if (idx > 0) append("\nUNION ALL\n")
-                append("(")
+                append("(SELECT id, category, subcategory, lng, lat FROM (")
                 append(
                     """
                     SELECT id, category, subcategory,
                            ST_X(ST_Centroid(geom)) AS lng,
-                           ST_Y(ST_Centroid(geom)) AS lat
+                           ST_Y(ST_Centroid(geom)) AS lat,
+                           row_number() OVER (
+                             PARTITION BY
+                               floor((ST_X(ST_Centroid(geom)) - ?) / ?)::int,
+                               floor((ST_Y(ST_Centroid(geom)) - ?) / ?)::int
+                             ORDER BY id
+                           ) AS rn
                     FROM pois
                     WHERE deleted_at IS NULL
                       AND category = ?
@@ -550,16 +689,6 @@ internal fun fetchPois(
                     """.trimIndent(),
                 )
                 if (corridorLineGeoJson != null) {
-                    // Cast to geography so ST_Buffer takes meters (Web
-                    // Mercator buffering distorts hugely at high latitudes;
-                    // geography path is correct everywhere). Cast back to
-                    // geometry for the index-friendly ST_Intersects.
-                    //
-                    // ST_MakeValid + ST_CollectionExtract guard against the
-                    // self-intersection pathology that buffering a route
-                    // doubling back can produce. CollectionExtract(_, 3)
-                    // keeps only polygonal parts so the predicate evaluates
-                    // cleanly even when ST_MakeValid emits a GeometryCollection.
                     append(
                         "\n      AND ST_Intersects(geom, " +
                             "ST_CollectionExtract(ST_MakeValid(" +
@@ -567,13 +696,19 @@ internal fun fetchPois(
                             "), 3))",
                     )
                 }
-                append("\n    LIMIT ?")
-                append(")")
+                append("\n) sub WHERE rn <= ? LIMIT ?)")
             }
         }
 
     val args = mutableListOf<Any>()
     for (cat in cats) {
+        // 4 args for the spatial-bucket math: (west, dx, south, dy). dy=0
+        // would only happen on a zero-height bbox, which the validator
+        // already rejects.
+        args.add(bbox.west)
+        args.add(dx)
+        args.add(bbox.south)
+        args.add(dy)
         args.add(cat)
         args.add(bbox.west)
         args.add(bbox.south)
@@ -583,7 +718,23 @@ internal fun fetchPois(
             args.add(corridorLineGeoJson)
             args.add(corridorRadiusMeters)
         }
-        args.add(perCategoryLimit)
+        val cap = allocation.getValue(cat).coerceAtLeast(1)
+        // Per-cell cap. ceil(cap / cells) so we don't undershoot when cap
+        // doesn't divide evenly. When the cap comfortably covers everything
+        // (cap >= total cells * something reasonable), the spatial sampling
+        // becomes a soft cap; the LIMIT clause is the actual ceiling.
+        // Use cap itself for perCell when cap is small relative to cells —
+        // a tight cluster of e.g. 50 points shouldn't get rn-filtered down
+        // to 1 per cell.
+        val perCell =
+            if (cap <= SAMPLE_GRID_CELLS) {
+                // Tight cluster / small allocation: don't sample; let LIMIT win.
+                cap
+            } else {
+                (cap + SAMPLE_GRID_CELLS - 1) / SAMPLE_GRID_CELLS
+            }
+        args.add(perCell.coerceAtLeast(1))
+        args.add(cap)
     }
 
     return ctx.fetch(sql, *args.toTypedArray()).map { r ->

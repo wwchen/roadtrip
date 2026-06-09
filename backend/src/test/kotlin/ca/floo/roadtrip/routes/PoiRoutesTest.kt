@@ -33,6 +33,7 @@ import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 import java.io.File as IoFile
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -168,25 +169,25 @@ class PoiRoutesTest {
         }
 
     @Test
-    fun `truncation kicks in above the per-category cap`() =
+    fun `truncated flag flips when raw count exceeds the cap`() =
         testApplication {
-            // Seed POI_LIMIT + 5 campground rows in a tight bbox. Per-category
-            // cap is POI_LIMIT/N where N is the number of distinct categories
-            // in the default set (varies with which YAML data_sources are
-            // enabled), so we should see exactly that many.
-            val defaultCatCount =
-                testRegistry
-                    .enabledPoiData()
-                    .map { it.category }
-                    .toSet()
-                    .size
+            // Seed POI_LIMIT + 5 campground rows spread evenly across the
+            // viewport (so the spatial bucketed sample can return up to the
+            // full per-category budget). Asserting on the truncated flag is
+            // the stable contract here — exact row count depends on the
+            // sampling math (perCell = ceil(cap / 100), 100 cells).
+            val n = POI_LIMIT + 5
             val rows =
-                (1..(POI_LIMIT + 5)).map { i ->
+                (1..n).map { i ->
+                    // Spread points across the bbox in a 50x40 lattice so
+                    // every spatial bucket has at least one candidate.
+                    val col = (i - 1) % 50
+                    val rowIdx = (i - 1) / 50
                     row(
                         sourceId = "bulk-$i-${"%04x".format(i)}",
                         name = "Site $i",
-                        lon = -123.0 + (i * 0.0001),
-                        lat = 49.0 + (i * 0.0001),
+                        lon = -125.0 + col * (5.0 / 50),
+                        lat = 47.0 + rowIdx * (4.0 / 41),
                         category = "campground",
                     )
                 }
@@ -196,24 +197,45 @@ class PoiRoutesTest {
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-120,51"))
+                    setBody(body("-125,47,-120,51", categories = listOf("campground")))
                 }
             val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            // BE asks fetchPois for (POI_LIMIT + 1) as its overall budget so
-            // it can detect a boundary truncation; per-cat is that / N.
-            assertEquals((POI_LIMIT + 1) / defaultCatCount, parsed["features"]!!.jsonArray.size)
+            assertEquals(true, parsed["truncated"]!!.jsonPrimitive.boolean)
+            // Sample stays under the global cap.
+            val featureCount = parsed["features"]!!.jsonArray.size
+            assertTrue(featureCount in 1..POI_LIMIT)
+        }
 
-            // When the caller scopes to a single category, that category gets
-            // the full POI_LIMIT slot — and global truncation kicks in only
-            // when total rows >= POI_LIMIT + 1.
-            val respScoped =
+    @Test
+    fun `under-cap raw count clears the truncated flag`() =
+        testApplication {
+            // 100 rows spread across the bbox in a 10x10 lattice — every
+            // spatial-sample cell gets exactly one. Allocation comfortably
+            // covers the count, and per-cell cap is high enough that all
+            // rows pass. truncated=false, all 100 returned.
+            val rows = mutableListOf<TestRow>()
+            for (rIdx in 0 until 10) {
+                for (cIdx in 0 until 10) {
+                    rows +=
+                        row(
+                            sourceId = "lattice-$rIdx-$cIdx",
+                            name = "Site $rIdx $cIdx",
+                            lon = -125.0 + cIdx * (5.0 / 10) + 0.05,
+                            lat = 47.0 + rIdx * (4.0 / 10) + 0.05,
+                            category = "campground",
+                        )
+                }
+            }
+            seed(rows)
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
                     setBody(body("-125,47,-120,51", categories = listOf("campground")))
                 }
-            val parsedScoped = Json.parseToJsonElement(respScoped.bodyAsText()).jsonObject
-            assertEquals(true, parsedScoped["truncated"]!!.jsonPrimitive.boolean)
-            assertEquals(POI_LIMIT, parsedScoped["features"]!!.jsonArray.size)
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(false, parsed["truncated"]!!.jsonPrimitive.boolean)
+            assertEquals(100, parsed["features"]!!.jsonArray.size)
         }
 
     @Test
