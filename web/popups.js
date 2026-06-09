@@ -198,9 +198,6 @@ export function openSuperchargerPopup(f) {
     ? detail.commonSiteName : '';
   const sub = buildSubline([addrLine, distanceTo(lng, lat)]);
 
-  const stalls = [p.v2 && `V2×${p.v2}`, p.v3 && `V3×${p.v3}`, p.v4 && `V4×${p.v4}`].filter(Boolean).join(' · ');
-  const plugs = [p.nacs && `NACS×${p.nacs}`, p.tpc && `TPC×${p.tpc}`].filter(Boolean).join(' · ');
-
   // Primary CTA: Google Maps. Use a coords + label query so the dropped
   // pin is right at the supercharger — Google routes from the user's
   // current location and works whether they're on iOS, Android, or web.
@@ -208,19 +205,24 @@ export function openSuperchargerPopup(f) {
   const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&query_place_id=&query=${gmapsLabel}%20${lat},${lng}`;
   const primaryBtn = `<a class="cg-btn cg-btn-primary" href="${gmapsUrl}" target="_blank" rel="noopener">Open in Google Maps</a>`;
 
-  const tags = [
-    p.stallCount ? `<span class="tag">${p.stallCount} stalls</span>` : '',
-    p.powerKilowatt ? `<span class="tag">${p.powerKilowatt} kW</span>` : '',
-  ].filter(Boolean).join(' ');
-
-  // Feature pills sourced from upstream.detail. These are the concrete
-  // road-trip-relevant boolean flags: hours, NACS adapter compat, RV/
-  // trailer pull-through. Each pill is conditional — sparse sites stay
-  // sparse rather than rendering empty placeholders.
+  // One spec-pills row covers everything about the site itself:
+  // stall count, charger power, hardware mix (V2/V3/V4), connector
+  // mix (NACS/TPC), 24/7, Magic Dock, Trailer-friendly. All conditional
+  // — sparse sites stay sparse rather than rendering empty placeholders.
+  const specPills = [
+    p.stallCount ? `${p.stallCount} stalls` : '',
+    p.powerKilowatt ? `${p.powerKilowatt} kW` : '',
+    p.v2 && `V2×${p.v2}`,
+    p.v3 && `V3×${p.v3}`,
+    p.v4 && `V4×${p.v4}`,
+    p.nacs && `NACS×${p.nacs}`,
+    p.tpc && `TPC×${p.tpc}`,
+  ].filter(Boolean).map(label => scPill(label)).join('');
   const featurePills = buildSCFeaturePills(detail);
+
   // Amenities is its own row so the pill set is scannable as "what's
   // here" (cafe, restrooms, restaurant, …) without mixing in the
-  // capability flags above.
+  // hardware/capability flags above.
   const amenityPills = buildSCAmenityPills(detail);
 
   // Pricing now arrives inline on the feature properties (RFC 0007 — same
@@ -238,10 +240,7 @@ export function openSuperchargerPopup(f) {
     ${drawerHeader(p.name || '', sub)}
     ${commonSite ? `<div class="meta" style="margin-top:-4px">${escapeHtml(commonSite)}</div>` : ''}
     <div class="cg-actions">${dirBtn}${primaryBtn}</div>
-    ${tags ? `<div style="margin-top:6px">${tags}</div>` : ''}
-    ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
-    ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}
-    ${featurePills ? `<div class="pills" style="margin-top:6px">${featurePills}</div>` : ''}
+    ${(specPills || featurePills) ? `<div class="pills" style="margin-top:6px">${specPills}${featurePills}</div>` : ''}
     ${amenityPills ? `
       <div class="sc-row" style="margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
         <span class="meta" style="font-weight:600;text-transform:uppercase;font-size:10px;letter-spacing:0.06em">Amenities</span>
@@ -340,8 +339,20 @@ function renderBusyHours(ap, siteTz) {
   const peakHour = today.indexOf(peak);
   const peakLabel = formatHourLabel(peakHour);
 
+  // Current hour at the site's local timezone (browser TZ as fallback) so
+  // the highlight tracks "now" wherever the user is reading from.
+  let nowHour;
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', hour12: false, timeZone: siteTz || undefined });
+    nowHour = parseInt(fmt.format(new Date()), 10);
+  } catch (_) {
+    nowHour = new Date().getHours();
+  }
+
   // Visual scale: every bar is height = 4–28px proportional to value/peak.
-  // A bar even at value=0 shows 4px so the floor is visible.
+  // A bar even at value=0 shows 4px so the floor is visible. The current
+  // hour gets a red outline so the user can read "right now" against the
+  // day's profile at a glance.
   const bars = today.map((v, h) => {
     const ratio = v / peak;
     const height = 4 + Math.round(ratio * 24);
@@ -349,7 +360,10 @@ function renderBusyHours(ap, siteTz) {
       : ratio >= 0.5 ? 'var(--cg-accent, #2e7d32)'
       : 'var(--cg-muted, #888)';
     const tip = `${formatHourLabel(h)} · ${Math.round(v * 100)}% busy`;
-    return `<span class="sc-bar" title="${escapeHtml(tip)}" style="height:${height}px;background:${color}"></span>`;
+    const outline = h === nowHour
+      ? 'outline:2px solid var(--cg-warn, #c0392b);outline-offset:1px;'
+      : '';
+    return `<span class="sc-bar" title="${escapeHtml(tip)}" style="height:${height}px;background:${color};${outline}"></span>`;
   }).join('');
 
   // X-axis ticks at 6/12/18 for orientation without cluttering. Inline
