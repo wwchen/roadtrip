@@ -1,3 +1,9 @@
+# Pin the compose project name so container names don't drift with the
+# parent directory. `roadtrip-postgres-1` regardless of whether the repo is
+# checked out as roadtrip/, roadtrip-map/, or a worktree. The Tiltfile's
+# readiness probe uses the literal container name.
+name: roadtrip
+
 services:
   # Expose Postgres on the host for the importer + jOOQ codegen, local-only.
   # The backend runs on the host (`make run` or `tilt up`), not in Docker;
