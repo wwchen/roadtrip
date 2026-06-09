@@ -21,7 +21,6 @@ import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
@@ -33,7 +32,6 @@ import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 import java.io.File as IoFile
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -169,13 +167,11 @@ class PoiRoutesTest {
         }
 
     @Test
-    fun `truncated flag flips when raw count exceeds the cap`() =
+    fun `truncated flag flips and the cap is filled when raw count exceeds it`() =
         testApplication {
             // Seed POI_LIMIT + 5 campground rows spread evenly across the
-            // viewport (so the spatial bucketed sample can return up to the
-            // full per-category budget). Asserting on the truncated flag is
-            // the stable contract here — exact row count depends on the
-            // sampling math (perCell = ceil(cap / 100), 100 cells).
+            // viewport. Round-robin sampling should return exactly POI_LIMIT
+            // (the global cap), not undershoot from a per-cell ceiling.
             val n = POI_LIMIT + 5
             val rows =
                 (1..n).map { i ->
@@ -201,9 +197,43 @@ class PoiRoutesTest {
                 }
             val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(true, parsed["truncated"]!!.jsonPrimitive.boolean)
-            // Sample stays under the global cap.
-            val featureCount = parsed["features"]!!.jsonArray.size
-            assertTrue(featureCount in 1..POI_LIMIT)
+            assertEquals(POI_LIMIT, parsed["features"]!!.jsonArray.size)
+        }
+
+    @Test
+    fun `dense cluster fills cap by absorbing budget from empty cells`() =
+        testApplication {
+            // Pre-fix regression: 99 of the 100 spatial cells are empty
+            // (everything in one corner). The old uniform per-cell ceiling
+            // capped each populated cell at ceil(POI_LIMIT/100) = 20, so
+            // the response returned ~20 rows for thousands of available
+            // points. Round-robin sampling lets the dense cell absorb
+            // budget the empty cells leave on the table, returning exactly
+            // POI_LIMIT.
+            val n = POI_LIMIT + 200
+            val rows =
+                (1..n).map { i ->
+                    // All inside the SW-corner cell (10x10 grid → cell
+                    // size is 0.5 deg in lng, 0.4 deg in lat for this bbox).
+                    row(
+                        sourceId = "dense-$i-${"%04x".format(i)}",
+                        name = "Site $i",
+                        lon = -124.99 + (i % 50) * 0.001,
+                        lat = 47.01 + (i / 50) * 0.001,
+                        category = "campground",
+                    )
+                }
+            seed(rows)
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51", categories = listOf("campground")))
+                }
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(true, parsed["truncated"]!!.jsonPrimitive.boolean)
+            assertEquals(POI_LIMIT, parsed["features"]!!.jsonArray.size)
         }
 
     @Test

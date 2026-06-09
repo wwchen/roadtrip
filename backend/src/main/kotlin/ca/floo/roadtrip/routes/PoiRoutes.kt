@@ -531,12 +531,11 @@ internal data class PoiResult(
     val truncated: Boolean,
 )
 
-// Spatial sampling grid. 10x10 = 100 cells. Each (cell, category) gets up
-// to ceil(category_allocation / GRID_CELLS) rows, so the slim payload comes
-// back spread across the viewport instead of clumped wherever Postgres's
-// row order happened to put the first matches.
+// Spatial sampling grid. 10x10 = 100 cells. row_number() PARTITION BY cell
+// + ORDER BY rn round-robins across cells, so the slim payload comes back
+// spread across the viewport instead of clumped wherever Postgres's row
+// order happened to put the first matches.
 private const val SAMPLE_GRID_DIM: Int = 10
-private const val SAMPLE_GRID_CELLS: Int = SAMPLE_GRID_DIM * SAMPLE_GRID_DIM
 
 // Even when one category dominates the viewport (e.g. campgrounds at
 // continental zoom), every present category gets at least this many slots
@@ -682,6 +681,15 @@ private fun fetchSampled(
     // SAMPLE_GRID_DIM cells across the bbox in each axis.
     val dx = (bbox.east - bbox.west) / SAMPLE_GRID_DIM
     val dy = (bbox.north - bbox.south) / SAMPLE_GRID_DIM
+    // Cell-round-robin sample: row_number() partitions rows into per-cell
+    // ranks (rn=1 is the first row in each cell, rn=2 the second, …).
+    // ORDER BY rn ASC, id ASC + LIMIT ? takes one row from every populated
+    // cell before taking a second from any. Spreads spatially exactly as
+    // a fixed perCell cap did, but dense cells absorb the budget left
+    // unused by sparse/empty cells, so the response actually fills `cap`
+    // when raw count exceeds it. Uniform cell math (capping each cell at
+    // ceil(cap / 100)) was leaving ~30-50% of the budget unspent at
+    // continental zoom because most cells are empty (Pacific, deserts).
     val sql =
         buildString {
             cats.forEachIndexed { idx, _ ->
@@ -712,7 +720,7 @@ private fun fetchSampled(
                             "), 3))",
                     )
                 }
-                append("\n) sub WHERE rn <= ? LIMIT ?)")
+                append("\n) sub ORDER BY rn ASC, id ASC LIMIT ?)")
             }
         }
 
@@ -734,23 +742,7 @@ private fun fetchSampled(
             args.add(corridorLineGeoJson)
             args.add(corridorRadiusMeters)
         }
-        val cap = allocation.getValue(cat).coerceAtLeast(1)
-        // Per-cell cap. ceil(cap / cells) so we don't undershoot when cap
-        // doesn't divide evenly. When the cap comfortably covers everything
-        // (cap >= total cells * something reasonable), the spatial sampling
-        // becomes a soft cap; the LIMIT clause is the actual ceiling.
-        // Use cap itself for perCell when cap is small relative to cells —
-        // a tight cluster of e.g. 50 points shouldn't get rn-filtered down
-        // to 1 per cell.
-        val perCell =
-            if (cap <= SAMPLE_GRID_CELLS) {
-                // Tight cluster / small allocation: don't sample; let LIMIT win.
-                cap
-            } else {
-                (cap + SAMPLE_GRID_CELLS - 1) / SAMPLE_GRID_CELLS
-            }
-        args.add(perCell.coerceAtLeast(1))
-        args.add(cap)
+        args.add(allocation.getValue(cat).coerceAtLeast(1))
     }
 
     return ctx.fetch(sql, *args.toTypedArray()).map { r ->
