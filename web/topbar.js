@@ -74,6 +74,16 @@ let geocodeTimer = null;
 // reads this and skips its "fill active row with pin name" side effect.
 let suppressPinClick = false;
 
+// On mobile, programmatic focus on a search input pops the soft keyboard,
+// which covers the drawer the user is currently looking at. Skip the
+// auto-focus there and let the user tap the input themselves when they're
+// ready to type. Restoring focus across an innerHTML rewrite is fine —
+// that's preserving existing focus, not creating new focus.
+function shouldAutoFocus() {
+  return typeof window === 'undefined' ||
+    !window.matchMedia?.('(max-width: 768px)').matches;
+}
+
 // --- public --------------------------------------------------------------
 
 export function initTopbar(map, getPinSearchIndex) {
@@ -116,10 +126,10 @@ export function initTopbar(map, getPinSearchIndex) {
  * Add a POI as a stop without going through the search flow. Called by the
  * drawer's per-POI Directions button.
  *
- *  - browse mode: enter directions mode with the POI as the *origin*. The
- *    destination row stays empty and gets focus so the user can immediately
- *    type "to where?". This matches the "directions FROM this place" flow
- *    the per-POI button reads as.
+ *  - browse mode: enter directions mode with the POI as the *destination*.
+ *    Origin row 0 stays empty and gets focus so the user can immediately
+ *    type "from where?". This matches the "directions TO this place" reading
+ *    of the per-POI button.
  *  - directions mode + destination empty: fill the destination so the user
  *    gets an immediate route. They can still add vias afterwards.
  *  - directions mode + destination filled: insert as a via just before
@@ -130,14 +140,16 @@ function addTripStopFromExternal(stop) {
   const s = { name: stop.name || 'Selected place', lng: stop.lng, lat: stop.lat, kind: stop.kind || 'PLACE' };
   if (trip.mode === 'browse') {
     // Reset stops so any leftover row-0 pin click from browse mode doesn't
-    // double up. The POI becomes the origin; destination is empty + focused.
-    trip.stops = [s, null];
+    // double up. POI is the destination; origin is empty + focused.
+    trip.stops = [null, s];
     trip.mode = 'directions';
     rerender();
-    setTimeout(() => {
-      const el = document.querySelector('.tb-row[data-i="1"] .tb-input');
-      if (el) { activeRowIdx = 1; el.focus(); }
-    }, 0);
+    if (shouldAutoFocus()) {
+      setTimeout(() => {
+        const el = document.querySelector('.tb-row[data-i="0"] .tb-input');
+        if (el) { activeRowIdx = 0; el.focus(); }
+      }, 0);
+    }
     return;
   }
   // directions mode
@@ -898,7 +910,8 @@ function onDirections() {
   trip.mode = 'directions';
   while (trip.stops.length < 2) trip.stops.push(null);
   rerender();
-  // Focus the first empty input
+  // Focus the first empty input (desktop only; mobile keyboard would cover the drawer).
+  if (!shouldAutoFocus()) return;
   const firstEmpty = trip.stops.findIndex(s => s == null);
   setTimeout(() => {
     const el = document.querySelector(`.tb-row[data-i="${firstEmpty}"] .tb-input`);
@@ -910,6 +923,7 @@ function onAddStop() {
   if (trip.stops.length >= MAX_STOPS) return;
   trip.stops.push(null);
   rerender();
+  if (!shouldAutoFocus()) return;
   const i = trip.stops.length - 1;
   setTimeout(() => {
     const el = document.querySelector(`.tb-row[data-i="${i}"] .tb-input`);
@@ -951,10 +965,12 @@ function onRowX(i, wasFilled) {
     removeRouteLayer();
     hideStatus();
     notifyCorridorChanged();
-    setTimeout(() => {
-      const el = document.querySelector(`.tb-row[data-i="${i}"] .tb-input`);
-      if (el) { activeRowIdx = i; el.focus(); }
-    }, 0);
+    if (shouldAutoFocus()) {
+      setTimeout(() => {
+        const el = document.querySelector(`.tb-row[data-i="${i}"] .tb-input`);
+        if (el) { activeRowIdx = i; el.focus(); }
+      }, 0);
+    }
     return;
   }
 
