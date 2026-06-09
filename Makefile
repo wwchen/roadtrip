@@ -1,4 +1,4 @@
-.PHONY: help run deploy stop check-pushed fetch-tesla-supercharger-pricing refresh-tesla-cookies refresh-superchargers data-fetch data-import poll-raw qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed fetch-tesla-supercharger-pricing refresh-tesla-cookies refresh-image data-fetch data-import poll-raw qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -17,9 +17,8 @@ help:
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make stop             Stop all compose services locally"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
-	@echo "  make fetch-tesla-supercharger-pricing  End-to-end: mint cookies → smoke-test → run full pricing fetch (loops on 403/429)"
+	@echo "  make fetch-tesla-supercharger-pricing  End-to-end: mint cookies → smoke-test → bulk index + per-slug detail (loops on 403/429)"
 	@echo "  make refresh-tesla-cookies  Mint Tesla cookies into .env only (no smoke test, no fetch)"
-	@echo "  make refresh-superchargers  Full Tesla pricing fetch assuming cookies are good (bulk index + per-slug detail)"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
@@ -59,14 +58,14 @@ deploy: check-pushed
 stop:
 	- docker compose -f docker-compose.yml -f docker-compose.local.yml --profile pois down
 
-# Build the offline-refresh image (curl-impersonate baked in). Needed before
-# refresh-superchargers. Idempotent — if the image
-# exists, this is a no-op.
+# Build the offline-refresh image (curl-impersonate baked in). Used by
+# fetch-tesla-supercharger-pricing. Idempotent — if the image exists, this
+# is a no-op.
 refresh-image:
 	docker build -t roadtrip-refresh:local -f scripts/Dockerfile.refresh scripts/
 
-# Mint Tesla cookies from Safari into THIS repo's .env. Use before any
-# Tesla-touching refresh (fetch_tesla_index.py, refresh-superchargers).
+# Mint Tesla cookies from Safari into THIS repo's .env. Standalone — use
+# `make fetch-tesla-supercharger-pricing` for the full end-to-end flow.
 # Cookies are bound to this laptop's egress IP so they only work locally.
 refresh-tesla-cookies:
 	@scripts/refresh-tesla-cookies.sh
@@ -78,19 +77,6 @@ refresh-tesla-cookies:
 # walk than fail mid-run.
 fetch-tesla-supercharger-pricing:
 	@scripts/fetch-tesla-supercharger-pricing.sh
-
-# Full network refresh of Tesla data — bulk get-locations + per-slug
-# get-charger-details. Network-bound (~1 req/sec). Cache-first behavior
-# lives in fetch_tesla_locations.py (--max-age-days controls freshness).
-# RFC 0007: writes envelope-wrapped raw to data/raw/tesla-{index,locations}/.
-refresh-superchargers: refresh-image
-	docker run --rm --env-file .env \
-	  -v "$(PWD)/data:/app/data" \
-	  -v "$(PWD)/scripts:/app/scripts" \
-	  -v "$(PWD)/config:/app/config:ro" \
-	  -v "$(PWD)/.env:/app/.env:ro" \
-	  roadtrip-refresh:local sh -c \
-	  "python3 /app/scripts/fetch_tesla_index.py && python3 /app/scripts/fetch_tesla_locations.py"
 
 # Two-step refresh through the backend's admin API (RFC 0004 / issue #44):
 #   make data-fetch                       # all targets

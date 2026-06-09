@@ -95,7 +95,13 @@ while (( attempt <= MAX_ATTEMPTS )); do
 done
 
 echo
-echo "→ Running full Tesla refresh (bulk index already written; now per-slug detail)…"
-make refresh-superchargers
+echo "→ Bulk index written by the smoke test. Walking per-slug detail now…"
+docker run --rm --env-file .env \
+  -v "$(pwd)/data:/app/data" \
+  -v "$(pwd)/scripts:/app/scripts" \
+  -v "$(pwd)/config:/app/config:ro" \
+  -v "$(pwd)/.env:/app/.env:ro" \
+  roadtrip-refresh:local \
+  python3 /app/scripts/fetch_tesla_locations.py
 echo
 echo "✓ Done."
