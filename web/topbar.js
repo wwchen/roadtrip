@@ -603,10 +603,26 @@ function injectStyles() {
     box-shadow: 0 0 0 1px rgba(255,255,255,0.16);
   }
   .tb-card-body { flex: 1; min-width: 0; }
+  .tb-card-head {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+    min-width: 0;
+  }
   .tb-card-name {
+    flex: 1;
+    min-width: 0;
     color: var(--cg-text);
     font-size: 13px; font-weight: 500; line-height: 1.3;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .tb-card-location {
+    flex-shrink: 0;
+    color: var(--cg-muted);
+    font-size: 11px;
+    line-height: 1.3;
+    font-weight: 500;
+    white-space: nowrap;
   }
   .tb-card-sub {
     color: var(--cg-muted);
@@ -1231,7 +1247,7 @@ async function tryFetchRoute() {
   showStatus('Computing route…');
 
   const coords = trip.stops.map(s => `${s.lng},${s.lat}`).join(';');
-  const url = `/api/route?coords=${encodeURIComponent(coords)}`;
+  const url = `/api/route?coords=${encodeURIComponent(coords)}&radius_miles=${encodeURIComponent(String(trip.corridorMiles))}`;
   let r;
   try {
     r = await fetch(url, { signal: trip.routeAbort.signal });
@@ -1270,12 +1286,12 @@ function drawRoute() {
   removeRouteLayer();
   if (!trip.route) return;
   const lineGeo = trip.route.features[0].geometry;
+  const serverCorridor = trip.route.features.find(f => f?.properties?.role === 'corridor')?.geometry;
 
-  // Compute the corridor polygon BEFORE adding the route line, so we can add
-  // the corridor fill underneath. Failure to buffer (turf missing or weird
-  // input) is non-fatal — we just skip the corridor fill and the bbox
-  // refresh won't include polygon, behaving as if there's no corridor.
-  trip.corridor = computeCorridor(lineGeo);
+  // Prefer the backend corridor polygon returned by /api/route so the first
+  // rendered fill matches the server-side /api/pois/on-route spatial filter.
+  // Turf remains the fallback for mocked route responses and slider updates.
+  trip.corridor = serverCorridor || computeCorridor(lineGeo);
 
   if (trip.corridor) {
     mapRef.addSource('trip-corridor', {
@@ -1342,8 +1358,8 @@ function updateCorridor() {
 
 /**
  * Buffer the route polyline into a corridor polygon, then simplify so the
- * polygon stays well under the backend's MAX_POLYGON_VERTICES cap (2000).
- * Returns a GeoJSON Polygon (or MultiPolygon if the buffer self-intersects)
+ * polygon stays light enough to redraw while the user drags the slider.
+ * Returns a GeoJSON Polygon or MultiPolygon geometry
  * geometry, or null if turf is unavailable / the input is degenerate.
  */
 function computeCorridor(lineGeo) {
@@ -1748,6 +1764,7 @@ function setTripPois(cgFeatures) {
       id,
       name: 'Campground',
       sub: '',
+      location: '',
       category: subcat === 'campground' ? 'other' : subcat,
       sites: null,
       season: null,
@@ -1801,7 +1818,8 @@ async function hydrateTripCards(cards) {
       const live = tripResults.byId.get(card.id);
       if (!live) return;
       live.name = p.name || 'Campground';
-      live.sub = [p.typeLabel, p.state || p.country].filter(Boolean).join(' · ');
+      live.sub = p.typeLabel || '';
+      live.location = p.state || p.country || '';
       live.sites = Number.isFinite(Number(p.sites)) ? Number(p.sites) : null;
       live.season = p.season || null;
       live.reservable = p.reservable;
@@ -2110,7 +2128,10 @@ function renderResults() {
     body += `<div class="tb-card" data-id="${escapeHtml(String(c.id))}">
       <span class="tb-card-dot" style="background:${color}"></span>
       <div class="tb-card-body">
-        <div class="tb-card-name">${escapeHtml(c.name)}</div>
+        <div class="tb-card-head">
+          <div class="tb-card-name">${escapeHtml(c.name)}</div>
+          ${c.location ? `<div class="tb-card-location">${escapeHtml(c.location)}</div>` : ''}
+        </div>
         ${c.sub ? `<div class="tb-card-sub">${escapeHtml(c.sub)}</div>` : ''}
         <div class="tb-card-meta">
           <span class="tb-card-dist">${formatRouteKm(c.routeKm)}</span>

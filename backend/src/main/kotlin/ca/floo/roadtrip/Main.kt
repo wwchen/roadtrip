@@ -73,9 +73,9 @@ fun Application.module() {
     val mapboxToken = System.getenv("MAPBOX_TOKEN")
     val mapboxDirections = MapboxDirections(token = mapboxToken)
     val mapboxGeocoder = MapboxGeocoder(token = mapboxToken)
-    // /api/route seeds the cache; /api/pois reads it for corridor filtering
-    // so the FE doesn't have to ship a turf.buffer polygon over the wire on
-    // every pan. See RouteCache.kt.
+    // /api/route seeds the cache; /api/pois/on-route reads it for corridor
+    // filtering so the FE doesn't have to ship a turf.buffer polygon over
+    // the wire. See RouteCache.kt.
     val routeCache = RouteCache(mapboxDirections)
 
     // POI registry — config/poi-registry.yaml is the source of truth for
@@ -199,7 +199,7 @@ fun Application.module() {
 
         poiRoutes(ctx, poiRegistry)
         poisOnRouteRoutes(ctx, routeCache, poiRegistry)
-        routeRoutes(routeCache)
+        routeRoutes(routeCache, ctx)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes(rawDataDir)
         campsiteAvailabilityRoutes(ctx, campsite.cachedAvailability, aspiraCache, poiRegistry)

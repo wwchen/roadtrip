@@ -7,6 +7,7 @@ import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -159,6 +160,89 @@ class PoisOnRouteRoutesTest {
         }
 
     @Test
+    fun `corridor uniques campground rows by provider campground id`() =
+        testApplication {
+            seed(
+                listOf(
+                    row(
+                        sourceId = "recgov-near",
+                        lon = -122.7,
+                        lat = 48.4,
+                        category = "campground",
+                        source = "federal-campgrounds",
+                        providerRefJson = """{"recgov_id":"12345"}""",
+                    ),
+                    row(
+                        sourceId = "recgov-duplicate",
+                        lon = -122.4,
+                        lat = 47.7,
+                        category = "campground",
+                        source = "alternate-campgrounds",
+                        providerRefJson = """{"recgov_id":"12345"}""",
+                    ),
+                    row(
+                        sourceId = "recgov-other",
+                        lon = -123.05,
+                        lat = 49.2,
+                        category = "campground",
+                        source = "federal-campgrounds",
+                        providerRefJson = """{"recgov_id":"67890"}""",
+                    ),
+                ),
+            )
+            val routeCache = primedRoute()
+            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry) } }
+
+            val resp =
+                client.post("/api/pois/on-route") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """{"waypoints":[{"lat":49.28,"lng":-123.1},{"lat":47.61,"lng":-122.33}],""" +
+                            """"radius_miles":30,"categories":["campground"]}""",
+                    )
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val features = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["features"]!!.jsonArray
+            assertEquals(2, features.size)
+            val coords =
+                features
+                    .map {
+                        val c = it.jsonObject["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
+                        c[0].jsonPrimitive.content.toDouble() to c[1].jsonPrimitive.content.toDouble()
+                    }.toSet()
+            assertEquals(setOf(-122.7 to 48.4, -123.05 to 49.2), coords)
+        }
+
+    @Test
+    fun `route endpoint can include buffered corridor polygon`() =
+        testApplication {
+            val routeCache = primedRoute(token = "test-token")
+            application { routing { routeRoutes(routeCache, ctx) } }
+
+            val resp = client.get("/api/route?coords=-123.1,49.28%3B-122.33,47.61&radius_miles=5")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val features = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["features"]!!.jsonArray
+            val routeGeometry = features[0].jsonObject["geometry"]!!.jsonObject
+            val corridorGeometry = features[1].jsonObject["geometry"]!!.jsonObject
+            val corridorProperties = features[1].jsonObject["properties"]!!.jsonObject
+            assertEquals(2, features.size)
+            assertEquals(
+                "LineString",
+                routeGeometry["type"]!!.jsonPrimitive.content,
+            )
+            assertEquals(
+                "corridor",
+                corridorProperties["role"]!!.jsonPrimitive.content,
+            )
+            assertTrue(
+                corridorGeometry["type"]!!
+                    .jsonPrimitive
+                    .content
+                    .endsWith("Polygon"),
+            )
+        }
+
+    @Test
     fun `empty corridor returns empty feature list`() =
         testApplication {
             seed(listOf(row("far-east", -100.0, 40.0, "campground")))
@@ -238,8 +322,8 @@ class PoisOnRouteRoutesTest {
         }
 
     /** Pre-seed a RouteCache with the Vancouver → Seattle line used by these tests. */
-    private fun primedRoute(): RouteCache {
-        val routeCache = RouteCache(MapboxDirections(token = null))
+    private fun primedRoute(token: String? = null): RouteCache {
+        val routeCache = RouteCache(MapboxDirections(token = token))
         val waypoints = listOf(-123.1 to 49.28, -122.33 to 47.61)
         routeCache.put(
             waypoints,
@@ -263,6 +347,8 @@ class PoisOnRouteRoutesTest {
         val category: String,
         val name: String,
         val geomGeoJson: String,
+        val source: String,
+        val providerRefJson: String?,
     )
 
     private fun row(
@@ -270,12 +356,16 @@ class PoisOnRouteRoutesTest {
         lon: Double,
         lat: Double,
         category: String,
+        source: String = "test",
+        providerRefJson: String? = null,
     ): TestRow =
         TestRow(
             sourceId = sourceId,
             category = category,
             name = sourceId,
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
+            source = source,
+            providerRefJson = providerRefJson,
         )
 
     private fun seed(rows: List<TestRow>) {
@@ -283,18 +373,20 @@ class PoisOnRouteRoutesTest {
             ctx.execute(
                 """
                 INSERT INTO pois (
-                    source, source_id, category, name, geom, fetched_at
+                    source, source_id, category, name, geom, provider_ref, fetched_at
                 ) VALUES (
                     ?, ?, ?, ?,
                     ST_SetSRID(ST_GeomFromGeoJSON(?), 4326),
+                    ?::jsonb,
                     '2026-06-01 00:00:00+00'::timestamptz
                 )
                 """.trimIndent(),
-                "test",
+                r.source,
                 r.sourceId,
                 r.category,
                 r.name,
                 r.geomGeoJson,
+                r.providerRefJson,
             )
         }
     }

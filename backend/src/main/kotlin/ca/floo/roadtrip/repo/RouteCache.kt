@@ -9,10 +9,10 @@ import java.util.concurrent.ConcurrentHashMap
 
 // In-memory cache for Mapbox Directions responses keyed by waypoints.
 // /api/route populates the cache as a side-effect of serving the FE; the
-// matching /api/pois call (with the same waypoints) then reads the cached
-// polyline server-side and buffers it for ST_Intersects, instead of asking
-// the FE to ship a turf.buffer-derived polygon back over the wire (which
-// regenerates several KB of data the BE could compute in tens of microseconds).
+// matching /api/pois/on-route call (with the same waypoints) then reads the
+// cached polyline and asks RouteCorridorRepo for the server-side corridor
+// polygon, instead of asking the FE to ship a turf.buffer-derived polygon
+// back over the wire.
 //
 // TTL is generous because the cache key already includes every waypoint; a
 // route invalidates when the user changes any stop. Exhaustion strategy is

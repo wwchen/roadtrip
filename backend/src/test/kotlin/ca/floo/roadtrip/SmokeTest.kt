@@ -299,6 +299,8 @@ class SmokeTest {
 
             page.locator("#tb-directions").click()
             page.waitForSelector(".tb-row[data-i=\"1\"] .tb-input")
+            assertThat(page.locator("#tb-corridor-range")).hasValue("5")
+            assertThat(page.locator("#tb-corridor-value")).containsText("5 mi")
             page.evaluate(
                 "() => globalThis.__rtAddTripStop({ name: 'Route Destination', lng: -121.5, lat: 48.1, kind: 'PLACE' })",
             )
@@ -313,6 +315,9 @@ class SmokeTest {
                 null,
                 Page.WaitForFunctionOptions().setTimeout(10_000.0),
             )
+            val firstCard = page.locator(".tb-card").first()
+            assertThat(firstCard.locator(".tb-card-head")).containsText("On-route Campground")
+            assertThat(firstCard.locator(".tb-card-location")).containsText("WA")
 
             val viewportCallsAfterRoute = viewportPoiCalls.get()
             page.evaluate(

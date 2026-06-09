@@ -7,6 +7,7 @@ import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.OnRoutePoiRepo
 import ca.floo.roadtrip.repo.OnRouteRow
 import ca.floo.roadtrip.repo.RouteCache
+import ca.floo.roadtrip.repo.RouteCorridorRepo
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -34,17 +35,6 @@ private val onRouteJson =
 
 private val onRouteLog = LoggerFactory.getLogger("PoisOnRouteRoutes")
 
-// Mapbox cap. We mirror it client-side so a request that would 400 at
-// /api/route 400s here too without hitting Mapbox.
-private const val MAX_WAYPOINTS = 25
-
-// Clamp on radius. Below ~5mi the corridor is too narrow to be useful;
-// above ~100mi it's basically a bbox already and PostGIS spends its time
-// in the spatial predicate instead of the index.
-private const val MIN_RADIUS_MILES = 1.0
-private const val MAX_RADIUS_MILES = 100.0
-private const val MILES_TO_METERS = 1609.34
-
 // POST /api/pois/on-route
 //
 // Returns every POI inside the buffered route corridor — no viewport bound,
@@ -62,18 +52,20 @@ fun Route.poisOnRouteRoutes(
             .toSet()
             .toList()
     val onRoutePoiRepo = OnRoutePoiRepo(ctx)
+    val routeCorridorRepo = RouteCorridorRepo(ctx)
 
     post("/api/pois/on-route", {
         tags = listOf("poi")
         summary = "Slim POIs inside a buffered route corridor (no viewport, no truncation)"
         description =
-            "Body: { waypoints: [{lat,lng}…2..$MAX_WAYPOINTS], radius_miles: ${MIN_RADIUS_MILES}..$MAX_RADIUS_MILES, categories? }. " +
+            "Body: { waypoints: [{lat,lng}…2..$MAX_ROUTE_WAYPOINTS], " +
+            "radius_miles: ${MIN_ROUTE_CORRIDOR_RADIUS_MILES}..$MAX_ROUTE_CORRIDOR_RADIUS_MILES, categories? }. " +
             "Returns a GeoJSON FeatureCollection ordered by route_km. " +
             "Backed by RouteCache; the FE typically primes it via /api/route just before this call."
         request {
             body<PoisOnRouteRequestSchema> {
                 mediaTypes(ContentType.Application.Json)
-                example("Vancouver → Seattle, 30mi corridor, campgrounds") {
+                example("Vancouver → Seattle, 5mi corridor, campgrounds") {
                     value =
                         PoisOnRouteRequestSchema(
                             waypoints =
@@ -81,7 +73,7 @@ fun Route.poisOnRouteRoutes(
                                     WaypointSchema(lat = 49.28, lng = -123.10),
                                     WaypointSchema(lat = 47.61, lng = -122.33),
                                 ),
-                            radius_miles = 30.0,
+                            radius_miles = 5.0,
                             categories = listOf("campground"),
                         )
                 }
@@ -131,7 +123,6 @@ fun Route.poisOnRouteRoutes(
                 return@post
             }
         val corridorLineGeoJson = lineStringGeoJson(polylineCoords)
-        val corridorRadiusMeters = req.radiusMiles * MILES_TO_METERS
 
         val cats = req.categories ?: defaultCategories
         val rows =
@@ -139,7 +130,12 @@ fun Route.poisOnRouteRoutes(
                 emptyList()
             } else {
                 try {
-                    onRoutePoiRepo.fetch(cats, corridorLineGeoJson, corridorRadiusMeters)
+                    val corridorPolygonGeoJson =
+                        routeCorridorRepo.bufferedPolygonGeoJson(
+                            corridorLineGeoJson,
+                            routeCorridorRadiusMeters(req.radiusMiles),
+                        )
+                    onRoutePoiRepo.fetch(cats, corridorLineGeoJson, corridorPolygonGeoJson)
                 } catch (e: DataAccessException) {
                     val cause = e.cause?.message.orEmpty()
                     if (cause.contains("TopologyException")) {
@@ -176,12 +172,12 @@ private data class OnRouteRequestDto(
     val categories: List<String>? = null,
 ) {
     fun validated(): OnRouteRequest {
-        require(waypoints.size in 2..MAX_WAYPOINTS) {
-            "waypoints must have 2..$MAX_WAYPOINTS entries (got ${waypoints.size})"
+        require(waypoints.size in 2..MAX_ROUTE_WAYPOINTS) {
+            "waypoints must have 2..$MAX_ROUTE_WAYPOINTS entries (got ${waypoints.size})"
         }
         val radius = radiusMiles ?: error("radius_miles is missing or not a number")
-        require(radius in MIN_RADIUS_MILES..MAX_RADIUS_MILES) {
-            "radius_miles must be in [$MIN_RADIUS_MILES, $MAX_RADIUS_MILES] (got $radius)"
+        require(radius in MIN_ROUTE_CORRIDOR_RADIUS_MILES..MAX_ROUTE_CORRIDOR_RADIUS_MILES) {
+            "radius_miles must be in [$MIN_ROUTE_CORRIDOR_RADIUS_MILES, $MAX_ROUTE_CORRIDOR_RADIUS_MILES] (got $radius)"
         }
         val parsedCategories =
             categories
@@ -264,12 +260,6 @@ private data class OnRouteFeaturePropertiesDto(
     @SerialName("route_km") val routeKm: Double,
 )
 
-@Serializable
-private data class LineStringGeometryDto(
-    val type: String = "LineString",
-    val coordinates: List<List<Double>>,
-)
-
 /**
  * On-route FeatureCollection. Same per-feature shape as the bbox endpoint
  * (id + Point + category[+subcategory]) plus a `route_km` property so the
@@ -277,5 +267,3 @@ private data class LineStringGeometryDto(
  */
 internal fun buildOnRouteFeatureCollection(rows: List<OnRouteRow>): String =
     onRouteJson.encodeToString(OnRouteFeatureCollectionDto.fromRows(rows))
-
-private fun lineStringGeoJson(coords: List<List<Double>>): String = onRouteJson.encodeToString(LineStringGeometryDto(coordinates = coords))
