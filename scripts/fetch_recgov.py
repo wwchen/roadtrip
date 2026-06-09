@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Capture federal campgrounds from RIDB (recreation.gov backend).
 
-One data_source per agency. --agency is the literal RIDB
-OrgAbbrevName (NPS, FS, BLM, USACE, FWS, BOR, TVA — see
-GET /organizations); the fetcher resolves it to an orgId once at
-startup, then walks GET /organizations/<orgId>/facilities filtered
-to camping facilities.
+One data_source for every agency at once. RIDB's /facilities endpoint
+(no orgId scope) returns the union — NPS + USFS + BLM + USACE + FWS +
+BOR + TVA + everyone else publishing to RIDB. The per-row agency lands
+on Poi.Campground.agency at transform time, sourced from the inline
+ORGANIZATION[0].OrgAbbrevName that ?full=true ships with each record.
 
 Multi-part output: one envelope per page under
   data/raw/<slug>/<UTC-ts>/page-NNN.json
@@ -14,7 +14,7 @@ Auth: RIDB_API_KEY env var. Free key, register at
 https://ridb.recreation.gov.
 
 Run:
-  python3 scripts/fetch_recgov.py --agency NPS --slug nps-campgrounds
+  python3 scripts/fetch_recgov.py --slug recgov-campgrounds-raw
 """
 from __future__ import annotations
 
@@ -38,25 +38,12 @@ API_BASE = "https://ridb.recreation.gov/api/v1"
 PAGE_SIZE = 50  # RIDB cap
 
 FETCHER = "fetch_recgov"
-FETCHER_VERSION = "2"  # v2: full=true → inline RECAREA + ORGANIZATION arrays
-
-
-def resolve_org_id(api_key: str, agency_abbrev: str) -> int:
-    url = f"{API_BASE}/organizations?limit=50"
-    headers = {"apikey": api_key}
-    status, _, body = http_get_text(url, timeout=30, headers=headers)
-    if status != 200:
-        raise RuntimeError(f"RIDB /organizations HTTP {status}: {body[:200]}")
-    payload = parse_payload("application/json", body)
-    for org in payload.get("RECDATA") or []:
-        if org.get("OrgAbbrevName") == agency_abbrev:
-            return int(org["OrgID"])
-    raise RuntimeError(f"agency abbreviation {agency_abbrev!r} not found in RIDB /organizations")
+# v3: agency-agnostic — hits /facilities directly, no orgId scoping.
+FETCHER_VERSION = "3"
 
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--agency", required=True, help="RIDB OrgAbbrevName, e.g. NPS")
     parser.add_argument("--slug", required=True, help="data_source slug from poi-registry.yaml")
     args = parser.parse_args()
 
@@ -67,10 +54,6 @@ def main() -> int:
 
     src = load_source(args.slug)
 
-    err(f"resolving orgId for agency={args.agency}…")
-    org_id = resolve_org_id(api_key, args.agency)
-    err(f"  orgId={org_id} agency={args.agency}")
-
     ts = utc_ts()
     pages_written = 0
     total_seen = 0
@@ -78,12 +61,13 @@ def main() -> int:
     headers = {"apikey": api_key}
 
     while True:
-        # full=true expands the inline RECAREA + ORGANIZATION arrays so the
-        # facility row carries the parent park's name (e.g. "Buffalo National
-        # River") and the agency's display name. The drawer reads these to
-        # render "<Facility Name> · <Park Name>" sublines.
+        # full=true expands the inline RECAREA + ORGANIZATION arrays so each
+        # facility row carries the parent park's name + the managing agency
+        # (NPS, FS, BLM, USACE, …). The ETL reads ORGANIZATION[0].OrgAbbrevName
+        # into Poi.Campground.agency so the FE can label/colour by agency
+        # without us splitting the dataset upstream.
         params = {"activity": "CAMPING", "full": "true", "limit": PAGE_SIZE, "offset": offset}
-        url = f"{API_BASE}/organizations/{org_id}/facilities?{urllib.parse.urlencode(params)}"
+        url = f"{API_BASE}/facilities?{urllib.parse.urlencode(params)}"
         err(f"  page {pages_written + 1}: offset={offset}")
         try:
             status, resp_headers, body = http_get_text(url, timeout=60, headers=headers)

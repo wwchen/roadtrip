@@ -87,13 +87,16 @@ data_sources:
       output_dir_prefix: data/raw/apca-places
 
   # --- Federal campgrounds (RIDB) --------------------------------------------
-  - slug: nps-campgrounds-raw
-    name: NPS campgrounds via RIDB
+  # One capture covers every RIDB-publishing agency (NPS, USFS, BLM, USACE,
+  # FWS, BOR, TVA, …). Per-row agency lands on Poi.Campground.agency at
+  # transform time from ORGANIZATION[0].OrgAbbrevName.
+  - slug: recgov-campgrounds-raw
+    name: Federal campgrounds via RIDB (all agencies)
     fetcher:
       executor: python3
       filename: scripts/fetch_recgov.py
-      args: { agency: NPS, slug: nps-campgrounds-raw }
-      output_dir_prefix: data/raw/nps-campgrounds-raw
+      args: { slug: recgov-campgrounds-raw }
+      output_dir_prefix: data/raw/recgov-campgrounds-raw
 
   # --- Alberta provincial parks ----------------------------------------------
   - slug: reserveamerica-abpp-raw
@@ -136,13 +139,13 @@ data_sources:
 # last `etls:` entry's slug. Upsert sweep scope follows.
 # ============================================================================
 poi_data:
-  - name: NPS Campgrounds
+  - name: Federal Campgrounds
     category: campground
     subcategory: federal
     etls:
-      - slug: nps-campgrounds
+      - slug: recgov-campgrounds
         adapter: RecGovCampgroundsEtl
-        inputs: [nps-campgrounds-raw]
+        inputs: [recgov-campgrounds-raw]
 
   - name: Washington State Parks
     category: campground

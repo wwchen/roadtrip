@@ -60,6 +60,13 @@ sealed class Poi {
         // or stamp per-row from the upstream's own classification
         // (uscampgrounds).
         val subcategory: String?,
+        // Managing body abbreviation. Per-row, not per-source — RIDB ships
+        // NPS / FS / BLM / USACE / FWS / BOR / TVA in one feed, and the
+        // ETL stamps each row from ORGANIZATION[0].OrgAbbrevName. Other
+        // ETLs (BC Parks, Aspira tenants, Alberta) hard-code their constant
+        // because the upstream is implicitly single-agency. Null only when
+        // the upstream omits it; FE can label or filter when present.
+        val agency: String?,
         // Verbatim upstream payload for the row, merged into the FE
         // properties bag under `properties.upstream`. Lets the drawer
         // surface every field the ETL didn't promote — descriptions,
@@ -220,6 +227,7 @@ private fun perTypeProperties(poi: Poi): JsonObject =
                 // pois.category column says "campground"; this stamps
                 // the FE-relevant detail (federal/state/local/provincial).
                 poi.subcategory?.let { put("subcategory", JsonPrimitive(it)) }
+                poi.agency?.let { put("agency", JsonPrimitive(it)) }
                 poi.extras?.let { put("upstream", it) }
             }
         is Poi.Supercharger ->

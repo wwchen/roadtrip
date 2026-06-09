@@ -12,8 +12,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 
 // RIDB facilities feed → Poi.Campground.
@@ -80,6 +82,19 @@ class RecGovCampgroundsEtl(
         fetchedAt: Instant,
         bucket: String?,
     ): Poi.Campground? {
+        // RIDB ships ORGANIZATION[0].OrgAbbrevName per row when full=true.
+        // Stamps each campground with its actual managing agency (NPS, FS,
+        // BLM, USACE, FWS, BOR, TVA, …) without us splitting the dataset.
+        val agency =
+            (raw as? JsonObject)
+                ?.get("ORGANIZATION")
+                ?.jsonArray
+                ?.firstOrNull()
+                ?.jsonObject
+                ?.get("OrgAbbrevName")
+                ?.jsonPrimitive
+                ?.contentOrNull
+                ?.takeIf { it.isNotBlank() }
         val name = row.FacilityName?.takeIf { it.isNotBlank() } ?: return null
         val lat = row.FacilityLatitude
         val lon = row.FacilityLongitude
@@ -125,6 +140,7 @@ class RecGovCampgroundsEtl(
             cellCoverage = null,
             ratingReviews = null,
             subcategory = bucket,
+            agency = agency,
             extras = raw,
         )
     }

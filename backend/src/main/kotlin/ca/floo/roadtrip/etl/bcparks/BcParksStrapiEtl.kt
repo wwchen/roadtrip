@@ -111,6 +111,7 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
             cellCoverage = null,
             ratingReviews = null,
             subcategory = bucket,
+            agency = "BC Parks",
             extras = raw,
         )
     }

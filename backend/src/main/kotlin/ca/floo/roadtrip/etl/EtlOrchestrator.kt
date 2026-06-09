@@ -215,12 +215,13 @@ class EtlOrchestrator(
                 "reserveamerica-abpp" to
                     ca.floo.roadtrip.etl.reserveamerica
                         .ReserveAmericaEtl(),
-                // RIDB (recreation.gov backend) — one ETL instance per
-                // agency slug. The transformer is identical; the slug
-                // arg drives source labelling.
-                "nps-campgrounds" to
+                // RIDB (recreation.gov backend) — one ETL covers every
+                // publishing agency (NPS, USFS, BLM, USACE, FWS, BOR, TVA, …).
+                // Per-row agency stamped on Poi.Campground.agency at
+                // transform time from ORGANIZATION[0].OrgAbbrevName.
+                "recgov-campgrounds" to
                     ca.floo.roadtrip.etl.recgov
-                        .RecGovCampgroundsEtl("nps-campgrounds"),
+                        .RecGovCampgroundsEtl("recgov-campgrounds"),
                 // Aspira NextGen — one leaf-walker + one join-by-name
                 // emitter per tenant. Both classes take the slug as a
                 // constructor arg so a fourth tenant is two YAML rows +
