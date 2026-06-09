@@ -50,6 +50,13 @@ NA_BBOX = (14, 72, -180, -52)  # min_lat, max_lat, min_lng, max_lng — NA + Car
 SLEEP_S = 1.0
 DEFAULT_FRESHNESS_DAYS = 30
 
+# Once Akamai's bot wall fires, every subsequent slug 429s. Bailing fast lets
+# the wrapper re-mint cookies (loop back to the cookie-paste stage) and
+# resume — is_fresh() skips slugs we already captured this window, so
+# nothing is re-fetched on the second try.
+CONSECUTIVE_429_LIMIT = 3
+EXIT_RATE_LIMITED = 2
+
 FETCHER = "fetch_tesla_locations"
 FETCHER_VERSION = "1"
 
@@ -136,6 +143,7 @@ def main() -> int:
     fetched = 0
     skipped = 0
     failed = 0
+    consecutive_429 = 0
     started = time.time()
     for i, slug in enumerate(slugs, 1):
         if not args.refresh_all and is_fresh(slug, args.max_age_days):
@@ -145,8 +153,20 @@ def main() -> int:
         if status != 200 or not isinstance(payload, dict):
             failed += 1
             err(f"  fail {slug}: HTTP {status}")
+            if status == 429:
+                consecutive_429 += 1
+                if consecutive_429 >= CONSECUTIVE_429_LIMIT:
+                    err(
+                        f"  {consecutive_429} consecutive 429s — Akamai is blocking us. "
+                        f"Bailing. Re-mint cookies and re-run; is_fresh skips slugs already "
+                        f"captured this window. fetched={fetched} skipped={skipped} failed={failed}"
+                    )
+                    return EXIT_RATE_LIMITED
+            else:
+                consecutive_429 = 0
             time.sleep(SLEEP_S)
             continue
+        consecutive_429 = 0
         # Per-slug captures live at data/raw/tesla-locations/<slug>/<ts>.json
         # — synthesize a LoadedSource that re-roots under <slug>/.
         per_slug = LoadedSource(
