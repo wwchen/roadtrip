@@ -15,7 +15,7 @@
 
   #panel-toggle {
     display: none;
-    position: absolute; z-index: 2;
+    position: absolute; z-index: 20;
     top: max(10px, env(safe-area-inset-top)); right: 10px;
     width: 40px; height: 40px; padding: 0;
     background: var(--cg-surface); color: var(--cg-text);
@@ -24,7 +24,7 @@
     font-size: 20px; cursor: pointer;
   }
   #panel {
-    position: absolute; top: 10px; right: 10px; z-index: 1;
+    position: absolute; top: 10px; right: 10px; z-index: 20;
     background: var(--cg-surface); color: var(--cg-text);
     padding: 12px 14px; border-radius: 10px;
     border: 1px solid var(--cg-border);
@@ -48,7 +48,7 @@
   #panel h1 { padding-right: 28px; }
   #panel-show {
     display: none;
-    position: absolute; z-index: 2;
+    position: absolute; z-index: 20;
     top: max(10px, env(safe-area-inset-top)); right: 10px;
     width: 36px; height: 36px; padding: 0;
     background: var(--cg-surface); color: var(--cg-text);
