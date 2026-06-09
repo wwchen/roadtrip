@@ -1,7 +1,6 @@
 package ca.floo.campsite.recgov.booker
 
 import ca.floo.campsite.recgov.booker.api.alertRoutes
-import ca.floo.campsite.recgov.booker.api.availabilityPublicRoutes
 import ca.floo.campsite.recgov.booker.api.campgroundSearchRoutes
 import ca.floo.campsite.recgov.booker.api.companionRoutes
 import ca.floo.campsite.recgov.booker.api.eventsRoutes
@@ -181,7 +180,8 @@ fun Route.campsiteRoutes(s: CampsiteServices) {
     statusRoutes(s.settings, s.tokenManager, s.statusMonitor)
     recgovTokenRoutes(s.tokenManager)
     workRoutes(s.matches)
-    availabilityPublicRoutes(s.cachedAvailability)
+    // availabilityPublicRoutes — replaced by campsiteAvailabilityRoutes in Main.kt
+    // (single dispatch endpoint keyed by poi_id, dispatches to recgov or aspira).
     campgroundSearchRoutes()
     pollRoutes(s.poller, s.bus, s.eventDriven)
     companionRoutes(s.companions, s.bus)

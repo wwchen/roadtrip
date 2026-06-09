@@ -2,13 +2,13 @@ package ca.floo.roadtrip
 
 import ca.floo.campsite.recgov.booker.campsiteModule
 import ca.floo.campsite.recgov.booker.campsiteRoutes
+import ca.floo.roadtrip.api.campsiteAvailabilityRoutes
 import ca.floo.roadtrip.api.geocodeRoutes
 import ca.floo.roadtrip.api.healthRoutes
 import ca.floo.roadtrip.api.poiRoutes
 import ca.floo.roadtrip.api.routeRoutes
 import ca.floo.roadtrip.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.aspira.CachedAspiraAvailability
-import ca.floo.roadtrip.aspira.aspiraAvailabilityRoutes
 import ca.floo.roadtrip.db.DbConfig
 import ca.floo.roadtrip.db.dataSourceFor
 import ca.floo.roadtrip.db.dsl
@@ -201,7 +201,7 @@ fun Application.module() {
         routeRoutes(routeCache)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes(rawDataDir)
-        aspiraAvailabilityRoutes(aspiraCache)
+        campsiteAvailabilityRoutes(ctx, campsite.cachedAvailability, aspiraCache, poiRegistry)
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
         // Static site. /web/* and /data/* serve directly from the repo

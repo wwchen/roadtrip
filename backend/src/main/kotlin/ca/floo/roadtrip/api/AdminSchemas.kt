@@ -130,6 +130,31 @@ data class PoiSearchResponseSchema(
     val results: List<PoiSearchHitSchema>,
 )
 
+// /api/campsite/availability/bulk — trip-planner endpoint. ids are pois.id
+// (not provider-specific keys); the BE dispatches to the right cache by
+// provider_ref. Per-id failures land as a non-200 `status` on that entry's
+// record; the rest of the call still succeeds.
+@Serializable
+data class BulkAvailRequestSchema(
+    val ids: List<Long>,
+    val start: String,
+    val nights: Int,
+)
+
+@Serializable
+data class BulkAvailEntrySchema(
+    val id: Long,
+    val status: Int,
+    val available_dates: List<String>,
+)
+
+@Serializable
+data class BulkAvailResponseSchema(
+    val start: String,
+    val nights: Int,
+    val results: List<BulkAvailEntrySchema>,
+)
+
 // Concrete examples surfaced in Swagger UI alongside the schema. Typed
 // instances so they share the same field-name contract as the schemas
 // above — drift between schema and example is a compile error, not a

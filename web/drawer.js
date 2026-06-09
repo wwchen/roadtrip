@@ -95,9 +95,10 @@ export function openCampgroundDrawer(f) {
   if (openController) openController.abort();
   openController = new AbortController();
   // MapLibre's GeoJSON source serializes nested-object properties to JSON
-  // strings when features round-trip through queryRenderedFeatures. `aspira`
-  // is the only nested object the drawer reads, so parse once at entry.
-  // Primitives like recgov_id survive the round-trip fine.
+  // strings when features round-trip through queryRenderedFeatures. Parse
+  // the nested ones we actually read here. The legacy flat `aspira` field
+  // is still used by campground-card.js (booking-system label, reserve URL)
+  // — it's not the availability dispatch path.
   f = normalizeAspira(f);
   reviveJsonProp(f.properties, 'upstream');
   reviveJsonProp(f.properties, 'provider_ref');
@@ -105,10 +106,12 @@ export function openCampgroundDrawer(f) {
 
   renderShell(f);
   show();
-  if (f.properties?.recgov_id) {
+  // Backend dispatches by provider_ref on its end; the FE just hands over the
+  // poi id (f.id, the pois.id PK). Skip the fetch for features without an id —
+  // those are synthetic / not from /api/pois (the existing drawer can be
+  // opened with a hand-crafted feature in some test paths).
+  if (f.id != null) {
     fetchAvailability(f, openController.signal);
-  } else if (f.properties?.aspira?.mapId != null) {
-    fetchAspiraAvailability(f, openController.signal);
   }
 
   root.querySelector('.cg-drawer-close')?.addEventListener('click', close);
@@ -267,9 +270,11 @@ function renderShell(f) {
 
   // Pins that have an availability provider (rec.gov or Aspira NextGen) get
   // the availability-first treatment: heat-strip, watch CTA, reserve as
-  // secondary. Other pins skip availability entirely and just surface the
-  // existing reserve button.
-  const hasAvailability = !!(p.recgov_id || p.aspira?.mapId);
+  // secondary. Detected via provider_ref (set on the row when an aspira or
+  // recgov ETL imported it); the legacy recgov_id / aspira flat fields are
+  // still on the feature for FE-only deeplinks below.
+  const pr = p.provider_ref;
+  const hasAvailability = !!(pr && (pr.recgov_id || pr.mapId != null));
   const availabilitySection = hasAvailability
     ? `
       <section class="cg-availability" aria-live="polite">
@@ -373,21 +378,11 @@ export function upstreamHTML(upstream) {
   `;
 }
 
-async function fetchAspiraAvailability(f, signal) {
-  // Same renderer as the rec.gov path; the API contract is intentionally
-  // identical (state, summary, availability[], cache). See
-  // backend/src/main/kotlin/ca/floo/roadtrip/aspira/AspiraAvailabilityRoutes.kt.
-  const a = f.properties.aspira;
-  const tx = a.transactionLocationId;
-  const mapId = a.mapId;
-  const host = a.host || 'reservation.pc.gc.ca';
-  const url = `/api/campsite/availability-aspira/${encodeURIComponent(tx)}/${encodeURIComponent(mapId)}?host=${encodeURIComponent(host)}&days=30`;
-  await runFetch(url, f, signal);
-}
-
 async function fetchAvailability(f, signal) {
-  const recgovId = f.properties.recgov_id;
-  const url = `/api/campsite/availability/${encodeURIComponent(recgovId)}?days=30`;
+  // Single dispatch endpoint keyed by pois.id. Backend reads provider_ref
+  // and routes to rec.gov or Aspira NextGen; response shape is the same
+  // either way. See CampsiteAvailabilityRoutes.kt.
+  const url = `/api/campsite/availability/${encodeURIComponent(f.id)}?days=30`;
   await runFetch(url, f, signal);
 }
 
@@ -497,11 +492,7 @@ function renderError(code, retryAfter, f) {
     if (openController) openController.abort();
     openController = new AbortController();
     renderShell(f);
-    if (f.properties?.recgov_id) {
-      fetchAvailability(f, openController.signal);
-    } else if (f.properties?.aspira?.mapId != null) {
-      fetchAspiraAvailability(f, openController.signal);
-    }
+    if (f.id != null) fetchAvailability(f, openController.signal);
   });
 }
 
