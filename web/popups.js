@@ -181,39 +181,158 @@ export function openSuperchargerPopup(f) {
   const p = f.properties;
   reviveJsonProp(p, 'upstream');
   const [lng, lat] = f.geometry.coordinates;
+  // The Tesla detail capture is verbatim under properties.upstream.detail
+  // (set in TeslaIndexEtl.transformRow). Read promoted fields from there
+  // so we don't need a backend schema change for each new pill.
+  const detail = (p.upstream && p.upstream.detail) || {};
+
   // Build the address line from the new tesla-locations enrichment.
   // street + city + state + postcode is the natural reading order; drop
   // any blank pieces so a missing postcode doesn't leave a stray comma.
   const addrLine = [p.street, p.city, [p.state, p.postcode].filter(Boolean).join(' ')]
     .filter(Boolean).join(', ');
+  // commonSiteName is Tesla's "where in the parking lot" label
+  // ("East Victoria Park - Lot 335"), often more useful than the
+  // city-level name for navigation. Render under the address.
+  const commonSite = detail.commonSiteName && detail.commonSiteName !== p.name
+    ? detail.commonSiteName : '';
   const sub = buildSubline([addrLine, distanceTo(lng, lat)]);
+
   const stalls = [p.v2 && `V2×${p.v2}`, p.v3 && `V3×${p.v3}`, p.v4 && `V4×${p.v4}`].filter(Boolean).join(' · ');
   const plugs = [p.nacs && `NACS×${p.nacs}`, p.tpc && `TPC×${p.tpc}`].filter(Boolean).join(' · ');
+
   // Primary CTA: Google Maps. Use a coords + label query so the dropped
   // pin is right at the supercharger — Google routes from the user's
   // current location and works whether they're on iOS, Android, or web.
   const gmapsLabel = encodeURIComponent(p.name || 'Supercharger');
   const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${lat},${lng}&query_place_id=&query=${gmapsLabel}%20${lat},${lng}`;
   const primaryBtn = `<a class="cg-btn cg-btn-primary" href="${gmapsUrl}" target="_blank" rel="noopener">Open in Google Maps</a>`;
+
   const tags = [
     p.stallCount ? `<span class="tag">${p.stallCount} stalls</span>` : '',
     p.powerKilowatt ? `<span class="tag">${p.powerKilowatt} kW</span>` : '',
   ].filter(Boolean).join(' ');
+
+  // Feature pills sourced from upstream.detail. These are the concrete
+  // road-trip-relevant flags: hours, NACS adapter compat, RV/trailer
+  // pull-through, on-site amenities. Each pill is conditional — sparse
+  // sites stay sparse rather than rendering empty placeholders.
+  const featurePills = buildSCFeaturePills(detail);
+
   // Pricing now arrives inline on the feature properties (RFC 0007 — same
   // tesla-locations capture that gives us name/stalls/kW). No second
   // round-trip; render synchronously.
   const pricingHtml = renderPricing(p.pricebooks);
+
+  // Busy-times sparkline. Tesla ships a 7×24 fractional-occupancy histogram
+  // in availabilityProfile.availabilityProfile.{day}.congestionValue.
+  // We render today's day-of-week as a 24-bar mini chart with a peak callout.
+  const busyHtml = renderBusyHours(detail.availabilityProfile, detail.timeZone);
+
   const dirBtn = directionsButtonHTML({ name: p.name || 'Supercharger', lng, lat, kind: 'SC' });
   openDrawer(`
     ${drawerHeader(p.name || '', sub)}
+    ${commonSite ? `<div class="meta" style="margin-top:-4px">${escapeHtml(commonSite)}</div>` : ''}
     <div class="cg-actions">${dirBtn}${primaryBtn}</div>
     ${tags ? `<div style="margin-top:6px">${tags}</div>` : ''}
     ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
     ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}
+    ${featurePills ? `<div class="pills" style="margin-top:6px">${featurePills}</div>` : ''}
+    ${busyHtml}
     ${p.dateOpened ? `<div class="footer">Opened ${escapeHtml(p.dateOpened)}</div>` : ''}
     <div class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
       ${pricingHtml}
     </div>
     ${upstreamHTML(p.upstream)}
   `);
+}
+
+// --- Tesla detail surfacing helpers -------------------------------------
+
+function buildSCFeaturePills(detail) {
+  const pills = [];
+  if (detail?.accessHours?.twentyFourSeven) pills.push(scPill('24/7'));
+  if (detail?.openToNonTeslas) pills.push(scPill('Magic Dock', 'NACS adapter built-in — works for non-Tesla EVs'));
+  if (detail?.isTrailerFriendly) pills.push(scPill('Trailer-friendly', 'Pull-through stalls'));
+  // amenities is sometimes null, sometimes an array of short strings
+  // ("restrooms", "wifi", "shopping", "restaurant", etc.). Render each
+  // as its own pill, stripping underscore-separators Tesla occasionally
+  // uses ("food_service" → "food service").
+  const am = Array.isArray(detail?.amenities) ? detail.amenities : null;
+  if (am && am.length) {
+    for (const a of am.slice(0, 6)) {
+      const label = String(a).replace(/_/g, ' ');
+      pills.push(scPill(label));
+    }
+  }
+  return pills.join('');
+}
+
+function scPill(label, title = '') {
+  const t = title ? ` title="${escapeHtml(title)}"` : '';
+  return `<span class="pill"${t}>${escapeHtml(label)}</span>`;
+}
+
+// 24h busy-times sparkline from Tesla's availabilityProfile. Uses today's
+// day-of-week (in the site's local timezone when known, otherwise the
+// browser's). Each bar is a fraction of the day's peak so the visual is
+// useful even at quiet sites; callout shows the peak hour.
+function renderBusyHours(ap, siteTz) {
+  if (!ap || typeof ap !== 'object') return '';
+  // Tesla nests once: availabilityProfile.availabilityProfile.{day}.
+  const days = ap.availabilityProfile || {};
+  const dayKeys = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  // Local-day-of-week at the site, falling back to browser TZ.
+  let dow;
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US', { weekday: 'long', timeZone: siteTz || undefined });
+    dow = fmt.format(new Date()).toLowerCase();
+  } catch (_) {
+    dow = dayKeys[new Date().getDay()];
+  }
+  const today = days[dow]?.congestionValue;
+  if (!Array.isArray(today) || today.length !== 24) return '';
+
+  const peak = Math.max(...today);
+  if (peak <= 0) return '';
+  const peakHour = today.indexOf(peak);
+  const peakLabel = formatHourLabel(peakHour);
+
+  // Visual scale: every bar is height = 4–28px proportional to value/peak.
+  // A bar even at value=0 shows 4px so the floor is visible.
+  const bars = today.map((v, h) => {
+    const ratio = v / peak;
+    const height = 4 + Math.round(ratio * 24);
+    const color = ratio >= 0.85 ? 'var(--cg-warn, #c0392b)'
+      : ratio >= 0.5 ? 'var(--cg-accent, #2e7d32)'
+      : 'var(--cg-muted, #888)';
+    const tip = `${formatHourLabel(h)} · ${Math.round(v * 100)}% busy`;
+    return `<span class="sc-bar" title="${escapeHtml(tip)}" style="height:${height}px;background:${color}"></span>`;
+  }).join('');
+
+  // X-axis ticks at 6/12/18 for orientation without cluttering. Inline
+  // styles keep this self-contained — no edit to index.html.
+  return `
+    <div class="sc-busy" style="margin-top:10px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px">
+        <span class="meta" style="font-weight:600">Today's busy hours</span>
+        <span class="meta">peak ${escapeHtml(peakLabel)}</span>
+      </div>
+      <div class="sc-bars" style="display:flex;align-items:flex-end;gap:1.5px;height:28px">
+        ${bars}
+      </div>
+      <div class="meta" style="display:flex;justify-content:space-between;font-size:10px;margin-top:2px">
+        <span>12a</span><span>6a</span><span>12p</span><span>6p</span><span>12a</span>
+      </div>
+    </div>
+    <style>
+      .sc-bar { flex: 1 1 0; border-radius: 1px; min-width: 0; }
+    </style>`;
+}
+
+function formatHourLabel(h) {
+  if (h === 0) return '12a';
+  if (h < 12) return `${h}a`;
+  if (h === 12) return '12p';
+  return `${h - 12}p`;
 }
