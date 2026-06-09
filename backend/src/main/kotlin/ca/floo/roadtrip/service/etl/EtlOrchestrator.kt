@@ -209,7 +209,7 @@ class EtlOrchestrator(
         // Map keys MUST match the YAML poi_data.etls[*].slug exactly.
         val registry: Map<String, SourceEtl<*, *>> =
             mapOf(
-                "osm-pf" to
+                "planet-fitness" to
                     ca.floo.roadtrip.service.etl.osmpf
                         .PlanetFitnessEtl(),
                 "bcparks-strapi" to
@@ -218,16 +218,16 @@ class EtlOrchestrator(
                 "tesla-superchargers" to
                     ca.floo.roadtrip.service.etl.tesla
                         .TeslaIndexEtl(),
-                "reserveamerica-abpp" to
+                "alberta-provincial" to
                     ca.floo.roadtrip.service.etl.reserveamerica
                         .ReserveAmericaEtl(),
                 // RIDB (recreation.gov backend) — one ETL covers every
                 // publishing agency (NPS, USFS, BLM, USACE, FWS, BOR, TVA, …).
                 // Per-row agency stamped on Poi.Campground.agency at
                 // transform time from ORGANIZATION[0].OrgAbbrevName.
-                "recgov-campgrounds" to
+                "federal-campgrounds" to
                     ca.floo.roadtrip.service.etl.recgov
-                        .RecGovCampgroundsEtl("recgov-campgrounds"),
+                        .RecGovCampgroundsEtl("federal-campgrounds"),
                 // Aspira NextGen — one leaf-walker + one join-by-name
                 // emitter per tenant. Both classes take the slug as a
                 // constructor arg so a fourth tenant is two YAML rows +

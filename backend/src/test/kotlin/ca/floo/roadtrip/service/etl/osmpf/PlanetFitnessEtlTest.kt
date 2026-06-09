@@ -37,7 +37,7 @@ class PlanetFitnessEtlTest {
 
     private fun bundle(envelope: Envelope): InputBundle =
         InputBundle(
-            rawCaptures = linkedMapOf("osm-pf-raw" to listOf(envelope)),
+            rawCaptures = linkedMapOf("osm-pf" to listOf(envelope)),
             etlOutputs = linkedMapOf(),
         )
 
@@ -74,7 +74,7 @@ class PlanetFitnessEtlTest {
                 p.sourceId.matches(Regex("^(node|way|relation)-\\d+$")),
                 "unexpected sourceId=${p.sourceId}",
             )
-            assertEquals("osm-pf", p.source)
+            assertEquals("planet-fitness", p.source)
             assertEquals("US", p.country)
             assertNotNull(p.geomGeoJson)
             assertTrue(p.geomGeoJson.contains("\"Point\""))

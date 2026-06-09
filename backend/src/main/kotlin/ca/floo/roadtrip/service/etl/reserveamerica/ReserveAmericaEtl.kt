@@ -26,7 +26,7 @@ import java.time.Instant
 // Brittle to a redesign of shop.albertaparks.ca but cheap and obvious;
 // a redesign would shake out as a validation drop, not silent corruption.
 class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
-    override val etlSlug = "reserveamerica-abpp"
+    override val etlSlug = "alberta-provincial"
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): ReserveAmericaDto {

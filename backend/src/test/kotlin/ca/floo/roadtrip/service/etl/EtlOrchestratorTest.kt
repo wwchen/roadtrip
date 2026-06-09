@@ -54,10 +54,10 @@ class EtlOrchestratorTest {
                 .canonicalFile
         poiRegistry = PoiRegistry.load(yamlPath)
 
-        // Mirror data/raw/osm-pf-raw/<ts>.json under a tempdir so the
+        // Mirror data/raw/osm-pf/<ts>.json under a tempdir so the
         // orchestrator can find it via the data_source slug.
         rawDir = Files.createTempDirectory("etl-orch-raw-").toFile()
-        val source = File(rawDir, "osm-pf-raw")
+        val source = File(rawDir, "osm-pf")
         source.mkdirs()
         val src =
             File(
@@ -89,9 +89,9 @@ class EtlOrchestratorTest {
         val rowCount =
             ctx.fetchCount(
                 POIS,
-                POIS.SOURCE.eq("osm-pf").and(POIS.DELETED_AT.isNull),
+                POIS.SOURCE.eq("planet-fitness").and(POIS.DELETED_AT.isNull),
             )
-        assertEquals(5, rowCount, "expected 5 osm-pf rows after first import")
+        assertEquals(5, rowCount, "expected 5 planet-fitness rows after first import")
     }
 
     @Test
@@ -106,7 +106,7 @@ class EtlOrchestratorTest {
         val rowCount =
             ctx.fetchCount(
                 POIS,
-                POIS.SOURCE.eq("osm-pf").and(POIS.DELETED_AT.isNull),
+                POIS.SOURCE.eq("planet-fitness").and(POIS.DELETED_AT.isNull),
             )
         assertEquals(5, rowCount, "re-running must not duplicate rows")
     }
@@ -120,7 +120,7 @@ class EtlOrchestratorTest {
             ctx
                 .select(POIS.NAME, POIS.CATEGORY, POIS.COUNTRY)
                 .from(POIS)
-                .where(POIS.SOURCE.eq("osm-pf"))
+                .where(POIS.SOURCE.eq("planet-fitness"))
                 .and(POIS.DELETED_AT.isNull)
                 .limit(1)
                 .fetchOne()
