@@ -5,12 +5,12 @@ export const GEOCODE_DEBOUNCE_MS = 220;
 export const MAX_STOPS = 25;
 
 // Corridor: a buffered polygon around the active route, used to filter
-// /api/pois server-side. 30 mi default — wide enough to catch realistic
-// detour-worthy stops, narrow enough that the corridor is meaningful.
+// /api/pois server-side. 5 mi default keeps "along route" tight; the user
+// can widen it when they are willing to detour.
 // User-adjustable via the topbar slider; range 5..100 mi.
 // MAX_POLYGON_VERTICES is the backend cap (2000); we simplify aggressively
 // to stay well under so even cross-country routes fit in one POST body.
-export const CORRIDOR_DEFAULT_MILES = 30;
+export const CORRIDOR_DEFAULT_MILES = 5;
 export const CORRIDOR_MIN_MILES = 5;
 export const CORRIDOR_MAX_MILES = 100;
 export const CORRIDOR_STEP_MILES = 5;
