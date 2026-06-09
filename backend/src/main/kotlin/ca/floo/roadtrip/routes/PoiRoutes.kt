@@ -351,9 +351,17 @@ fun Route.poiRoutes(
                 ?.toIntOrNull()
                 ?.coerceIn(1, 25)
                 ?: 10
-        val escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-        val pattern = "%$escaped%"
-        val prefix = "$escaped%"
+        val terms = splitPoiSearchTerms(q)
+        if (terms.isEmpty()) {
+            call.respondText(
+                Json.encodeToString(PoiSearchResponseSchema(results = emptyList())),
+                io.ktor.http.ContentType.Application.Json,
+            )
+            return@get
+        }
+        val termPredicate = terms.joinToString("\n                      AND ") { "name ILIKE ? ESCAPE '\\'" }
+        val patterns = terms.map { "%${escapeLikePattern(it)}%" }
+        val prefix = "${escapeLikePattern(terms.first())}%"
         val hits =
             ctx
                 .fetch(
@@ -362,11 +370,11 @@ fun Route.poiRoutes(
                            ST_X(geom) AS lng, ST_Y(geom) AS lat
                     FROM pois
                     WHERE deleted_at IS NULL
-                      AND name ILIKE ?
-                    ORDER BY (name ILIKE ?) DESC, length(name) ASC, name ASC
+                      AND $termPredicate
+                    ORDER BY (name ILIKE ? ESCAPE '\') DESC, length(name) ASC, name ASC
                     LIMIT ?
                     """.trimIndent(),
-                    pattern,
+                    *patterns.toTypedArray(),
                     prefix,
                     limit,
                 ).map { r ->
@@ -385,6 +393,14 @@ fun Route.poiRoutes(
         )
     }
 }
+
+private fun splitPoiSearchTerms(q: String): List<String> =
+    q.split(Regex("\\s+"))
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+
+private fun escapeLikePattern(s: String): String =
+    s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 private data class PoiRequest(
     val bbox: Bbox,
