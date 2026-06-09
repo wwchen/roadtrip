@@ -1,8 +1,6 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.models.registry.PoiRegistry
-import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -88,7 +86,7 @@ class PoiRoutesTest {
                     row("outside-fl", "Miami Park", -80.0, 25.0, "campground"),
                 ),
             )
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -122,7 +120,7 @@ class PoiRoutesTest {
                     row("vancouver", "Vancouver Park", -123.0, 49.0, "campground"),
                 ),
             )
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -146,7 +144,7 @@ class PoiRoutesTest {
                     row("pf-1", "PF Vancouver", -123.1, 49.1, "planet-fitness"),
                 ),
             )
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -187,7 +185,7 @@ class PoiRoutesTest {
                     )
                 }
             seed(rows)
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -223,7 +221,7 @@ class PoiRoutesTest {
                     )
                 }
             seed(rows)
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -256,7 +254,7 @@ class PoiRoutesTest {
                 }
             }
             seed(rows)
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
@@ -270,7 +268,7 @@ class PoiRoutesTest {
     @Test
     fun `malformed body returns 400`() =
         testApplication {
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             // Empty body
             assertEquals(
@@ -325,7 +323,7 @@ class PoiRoutesTest {
             // west=170, east=-170 (the bbox wraps the antimeridian). PostGIS
             // ST_MakeEnvelope can't express a wrapping envelope without splitting,
             // so we reject at the API layer instead of returning misleading rows.
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
             assertEquals(
                 HttpStatusCode.BadRequest,
                 client
@@ -337,10 +335,10 @@ class PoiRoutesTest {
         }
 
     @Test
-    fun `health route still serves`() =
+    fun `accidental poi health route no longer returns ok`() =
         testApplication {
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
-            assertEquals(HttpStatusCode.OK, client.get("/api/pois/health").status)
+            application { routing { poiRoutes(ctx, testRegistry) } }
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/pois/health").status)
         }
 
     @Test
@@ -352,7 +350,7 @@ class PoiRoutesTest {
                     row("sp-1", "Park", -123.05, 49.05, "state-park"),
                 ),
             )
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             // Zoom 4 < CG_MIN_ZOOM=6 → campground category dropped server-side
             // even when explicitly requested.
@@ -388,7 +386,7 @@ class PoiRoutesTest {
                     row("banff-trailer", "Tunnel Mountain Trailer Court", -115.52, 51.18, "campground"),
                 ),
             )
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             val resp = client.get("/api/pois/search?q=tunnel%20mountain%20village&limit=5")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -416,7 +414,7 @@ class PoiRoutesTest {
                     }
                 }
             seed(rows)
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             val resp =
                 client.post("/api/pois") {
@@ -458,7 +456,7 @@ class PoiRoutesTest {
                     ),
                 ),
             )
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poiRoutes(ctx, testRegistry) } }
 
             // state-park isn't in the default category set today (the
             // PAD-US sources are disabled), so explicitly request it.

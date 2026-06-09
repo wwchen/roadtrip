@@ -17,6 +17,7 @@ import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
 import ca.floo.roadtrip.routes.geocodeRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
+import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.service.etl.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.IngestController
@@ -196,7 +197,8 @@ fun Application.module() {
             openApiSpec()
         }
 
-        poiRoutes(ctx, routeCache, poiRegistry)
+        poiRoutes(ctx, poiRegistry)
+        poisOnRouteRoutes(ctx, routeCache, poiRegistry)
         routeRoutes(routeCache)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes(rawDataDir)

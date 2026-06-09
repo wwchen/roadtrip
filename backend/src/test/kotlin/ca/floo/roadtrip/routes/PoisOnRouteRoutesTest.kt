@@ -97,7 +97,7 @@ class PoisOnRouteRoutesTest {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poiRoutes(ctx, routeCache, testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -136,7 +136,7 @@ class PoisOnRouteRoutesTest {
                 ),
             )
             val routeCache = primedRoute()
-            application { routing { poiRoutes(ctx, routeCache, testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -163,7 +163,7 @@ class PoisOnRouteRoutesTest {
         testApplication {
             seed(listOf(row("far-east", -100.0, 40.0, "campground")))
             val routeCache = primedRoute()
-            application { routing { poiRoutes(ctx, routeCache, testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, routeCache, testRegistry) } }
 
             val resp =
                 client.post("/api/pois/on-route") {
@@ -181,7 +181,7 @@ class PoisOnRouteRoutesTest {
     @Test
     fun `radius below MIN returns 400`() =
         testApplication {
-            application { routing { poiRoutes(ctx, primedRoute(), testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -196,7 +196,7 @@ class PoisOnRouteRoutesTest {
     @Test
     fun `radius above MAX returns 400`() =
         testApplication {
-            application { routing { poiRoutes(ctx, primedRoute(), testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -211,7 +211,7 @@ class PoisOnRouteRoutesTest {
     @Test
     fun `single waypoint returns 400`() =
         testApplication {
-            application { routing { poiRoutes(ctx, primedRoute(), testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, primedRoute(), testRegistry) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)
@@ -225,7 +225,7 @@ class PoisOnRouteRoutesTest {
         testApplication {
             // Empty route cache + null Mapbox token → directions() throws,
             // handler should surface 503.
-            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+            application { routing { poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
             val resp =
                 client.post("/api/pois/on-route") {
                     contentType(ContentType.Application.Json)

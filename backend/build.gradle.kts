@@ -260,16 +260,11 @@ kover {
                 )
             }
         }
-        // Floor effectively disabled for now (1%). The previous 45 →
-        // 44 → 43 dance kept catching drift from commits that weren't
-        // about coverage; the gate was costing more than it caught.
-        // koverXmlReport still runs and Codecov still tracks the trend,
-        // so regressions are visible — they just don't fail CI. Restore
-        // a meaningful floor once we have a story for incrementally
-        // raising it on real coverage gains.
+        // Keep this floor slightly below measured line coverage so it catches
+        // real drift without making every small cleanup PR a coverage chore.
         verify {
             rule {
-                minBound(1)
+                minBound(45)
             }
         }
     }
