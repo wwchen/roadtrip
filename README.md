@@ -18,7 +18,7 @@ tilt up                  # full dev stack (postgres in Docker, backend + compani
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make companion           # campsite Playwright companion against the local backend
 make deploy              # ssh to the mini, git pull, docker compose up
-make refresh-cookies     # push Tesla cookies from clipboard → mini (offline refresh worker only)
+make refresh-tesla-cookies  # mint Tesla cookies into .env (offline refresh worker only)
 ```
 
 Local dev runs the backend on the host (Gradle), with only Postgres in
@@ -79,7 +79,7 @@ To populate/refresh the cache, run `make refresh-superchargers` (or
 `make poll-raw SOURCE=tesla-locations` for a cache-aware re-fetch
 without the bulk index). That worker
 needs Tesla cookies in `.env` — see `README_PRICING.md` and
-`make refresh-cookies` / `make refresh-cookies-local`.
+`make refresh-tesla-cookies`.
 
 ## Refresh POI data
 
@@ -224,10 +224,11 @@ from your laptop browser will work from the Docker host **only if the Docker
 host egresses from the same public IP** — i.e., same home network. If the
 Docker host is elsewhere, either grab cookies from a browser *on* that
 network, or have your laptop egress through the host's IP via Tailscale
-exit node, then `make refresh-cookies`.
+exit node before running `make refresh-tesla-cookies`. Production hosts
+mint their own cookies out-of-band.
 
 Cookies expire every day or so. When pricing starts returning 403 or 429,
-re-run `make refresh-cookies`.
+re-run `make refresh-tesla-cookies`.
 
 ## Architecture notes
 

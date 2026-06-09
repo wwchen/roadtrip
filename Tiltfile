@@ -155,9 +155,9 @@ local_resource(
 # - 'refresh-image' builds the Dockerized Python runtime that the supercharger
 #   refreshers use. It's a one-shot prereq; subsequent runs are a no-op until
 #   scripts/Dockerfile.refresh changes.
-# - 'refresh-cookies-local' mints Tesla cookies into THIS repo's .env. The
-#   prod equivalent ('make refresh-cookies', remote-host) intentionally is
-#   not surfaced here — it's a deploy-machine concern.
+# - 'refresh-tesla-cookies' mints Tesla cookies into THIS repo's .env.
+#   Production hosts mint their own cookies out-of-band; nothing in this
+#   Tiltfile or repo orchestrates that.
 # - 'data-fetch' / 'data-import' POST to the backend's RFC 0004 admin API.
 #   Two-step refresh: fetch upstream into data/*.{json,geojson}, then import
 #   into Postgres. Both fan out across every target; per-target mutex keeps
@@ -185,7 +185,7 @@ local_resource(
     # the backend's TokenManager (see RFC 0001 / PR #22). This row mints fresh
     # _abck cookies for the Tesla supercharger scraper into this repo's .env.
     'refresh-tesla-cookies',
-    cmd='make refresh-cookies-local',
+    cmd='make refresh-tesla-cookies',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
     labels=['data'],
