@@ -140,23 +140,11 @@ function addTripStopFromExternal(stop) {
   const s = { name: stop.name || 'Selected place', lng: stop.lng, lat: stop.lat, kind: stop.kind || 'PLACE' };
   if (trip.mode === 'browse') {
     // Reset stops so any leftover row-0 pin click from browse mode doesn't
-<<<<<<< HEAD
     // double up. POI is the destination; origin is empty + focused.
     trip.stops = [null, s];
     trip.mode = 'directions';
     rerender();
     if (shouldAutoFocus()) {
-=======
-    // double up. The POI becomes the destination; origin is empty.
-    trip.stops = [null, s];
-    trip.mode = 'directions';
-    rerender();
-    // Auto-focus the empty origin on desktop (saves a click) but NOT on
-    // touch devices — mobile keyboards popping up over the map is jarring
-    // when the user just wanted to see the route they tapped on. They can
-    // tap the origin row to type when they're ready.
-    if (!isTouchDevice()) {
->>>>>>> b7ec4e7 (fix: don't auto-focus topbar inputs on touch devices)
       setTimeout(() => {
         const el = document.querySelector('.tb-row[data-i="0"] .tb-input');
         if (el) { activeRowIdx = 0; el.focus(); }
@@ -177,22 +165,6 @@ function addTripStopFromExternal(stop) {
   }
   rerender();
   if (allStopsFilled()) tryFetchRoute();
-}
-
-// Touch detection. Suppresses auto-focus on mobile so the soft keyboard
-// doesn't pop up over the map when the user is just exploring (tapping
-// pins, opening drawers, hitting Directions). Desktop keeps the auto-
-// focus convenience.
-//
-// Best-effort heuristic: pointer:coarse OR maxTouchPoints>0. iPad-as-
-// desktop-mode might escape this in rare configurations; if it does the
-// downside is desktop-style focus on a tablet, which is an acceptable
-// degenerate case.
-function isTouchDevice() {
-  if (typeof window === 'undefined') return false;
-  const mql = window.matchMedia?.('(pointer: coarse)');
-  if (mql && mql.matches) return true;
-  return (navigator.maxTouchPoints || 0) > 0;
 }
 
 // --- DOM scaffolding -----------------------------------------------------
@@ -941,13 +913,8 @@ function onDirections() {
   trip.mode = 'directions';
   while (trip.stops.length < 2) trip.stops.push(null);
   rerender();
-<<<<<<< HEAD
   // Focus the first empty input (desktop only; mobile keyboard would cover the drawer).
   if (!shouldAutoFocus()) return;
-=======
-  // Focus the first empty input on desktop only — see isTouchDevice().
-  if (isTouchDevice()) return;
->>>>>>> b7ec4e7 (fix: don't auto-focus topbar inputs on touch devices)
   const firstEmpty = trip.stops.findIndex(s => s == null);
   setTimeout(() => {
     const el = document.querySelector(`.tb-row[data-i="${firstEmpty}"] .tb-input`);
@@ -959,11 +926,7 @@ function onAddStop() {
   if (trip.stops.length >= MAX_STOPS) return;
   trip.stops.push(null);
   rerender();
-<<<<<<< HEAD
   if (!shouldAutoFocus()) return;
-=======
-  if (isTouchDevice()) return;
->>>>>>> b7ec4e7 (fix: don't auto-focus topbar inputs on touch devices)
   const i = trip.stops.length - 1;
   setTimeout(() => {
     const el = document.querySelector(`.tb-row[data-i="${i}"] .tb-input`);
@@ -1005,20 +968,12 @@ function onRowX(i, wasFilled) {
     removeRouteLayer();
     hideStatus();
     notifyCorridorChanged();
-<<<<<<< HEAD
     if (shouldAutoFocus()) {
       setTimeout(() => {
         const el = document.querySelector(`.tb-row[data-i="${i}"] .tb-input`);
         if (el) { activeRowIdx = i; el.focus(); }
       }, 0);
     }
-=======
-    if (isTouchDevice()) return;
-    setTimeout(() => {
-      const el = document.querySelector(`.tb-row[data-i="${i}"] .tb-input`);
-      if (el) { activeRowIdx = i; el.focus(); }
-    }, 0);
->>>>>>> b7ec4e7 (fix: don't auto-focus topbar inputs on touch devices)
     return;
   }
 
