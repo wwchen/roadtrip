@@ -87,6 +87,7 @@ refresh-superchargers: refresh-image
 	docker run --rm --env-file .env \
 	  -v "$(PWD)/data:/app/data" \
 	  -v "$(PWD)/scripts:/app/scripts" \
+	  -v "$(PWD)/config:/app/config:ro" \
 	  -v "$(PWD)/.env:/app/.env:ro" \
 	  roadtrip-refresh:local sh -c \
 	  "python3 /app/scripts/fetch_tesla_index.py && python3 /app/scripts/fetch_tesla_locations.py"
