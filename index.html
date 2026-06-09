@@ -480,11 +480,13 @@
      Secondary — translucent white fill, subtle border. Companion actions.
      Tertiary  — transparent, no border, hover-only background. Tap actions
                  like phone numbers that shouldn't compete for attention. */
-  /* Side-by-side action row. Each .cg-btn flex:1 so Directions and the
-     primary CTA share width. Wraps to multiple rows if the drawer is
-     narrow or there's a third button. */
+  /* Side-by-side action row. Default: each button takes content width
+     plus equal share of remaining space. Directions opts out of the
+     equal-share behavior so its label doesn't get clipped at half-width
+     drawers — it stays content-sized while the primary CTA grows. */
   .cg-actions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; }
-  .cg-actions > .cg-btn { flex: 1 1 0; min-width: 0; }
+  .cg-actions > .cg-btn { flex: 1 1 auto; }
+  .cg-actions > .rt-poi-directions { flex: 0 0 auto; padding: 0 14px; }
   .cg-btn {
     padding: 0 16px;
     height: 40px;
