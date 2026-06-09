@@ -70,12 +70,12 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
         dto: TeslaIndexDto,
         ctx: TransformCtx,
     ): List<Poi.Supercharger> {
-        // tesla-locations-raw is laid out as data/raw/tesla-locations-raw/
+        // tesla-locations is laid out as data/raw/tesla-locations/
         // <slug>/<UTC-ts>.json (one subdir per supercharger), which doesn't
         // fit the InputBundle's flat list-of-envelopes contract. Side-load
         // from ctx.rawDir directly; the YAML keeps it as a sibling
         // data_source so fetch + cache-clear flows still address it.
-        val locationsDir = File(ctx.rawDir, "tesla-locations-raw")
+        val locationsDir = File(ctx.rawDir, "tesla-locations")
         return dto.rows.mapNotNull { row ->
             val rawIndex = row.locationUrlSlug?.let { dto.rawBySlug[it] }
             transformRow(row, rawIndex, dto.fetchedAt, locationsDir)

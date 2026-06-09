@@ -119,20 +119,20 @@ data_sources:
   # Akamai blocks fetch; rely on the existing data/raw/ cache. Fan-out fetch
   # will mark these targets failed; the poi_data row is enabled: false so
   # fan-out import skips them.
-  - slug: tesla-index-raw
+  - slug: tesla-index
     name: Tesla supercharger index
     fetcher:
       executor: python3
       filename: scripts/fetch_tesla_index.py
-      output_dir_prefix: data/raw/tesla-index-raw
+      output_dir_prefix: data/raw/tesla-index
 
-  - slug: tesla-locations-raw
+  - slug: tesla-locations
     name: Tesla supercharger detail pages
     fetcher:
       executor: python3
       filename: scripts/fetch_tesla_locations.py
-      output_dir_prefix: data/raw/tesla-locations-raw
-    depends_on: [tesla-index-raw]
+      output_dir_prefix: data/raw/tesla-locations
+    depends_on: [tesla-index]
 
 # ============================================================================
 # poi_data — POI datasets. Each row owns its ETL chain. pois.source = the
@@ -210,9 +210,9 @@ poi_data:
     enabled: false
     category: supercharger
     etls:
-      # tesla-locations-raw is side-loaded from ctx.rawDir per-slug rather
+      # tesla-locations is side-loaded from ctx.rawDir per-slug rather
       # than declared as an input, because the per-slug filesystem layout
       # doesn't fit the InputBundle's flat envelope contract.
       - slug: tesla-superchargers
         adapter: TeslaIndexEtl
-        inputs: [tesla-index-raw]
+        inputs: [tesla-index]
