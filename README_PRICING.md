@@ -22,19 +22,18 @@ live in `.env` as `TESLA_COOKIES=…`.
 ## One-time setup (or refresh when expired)
 
 ```sh
-make refresh-cookies         # mint cookies on this laptop, push them to the deploy host
-make refresh-cookies-local   # mint cookies into THIS repo's .env (laptop-only egress)
+make refresh-tesla-cookies   # mint cookies into THIS repo's .env (laptop-only egress)
 ```
 
-Both flows mint cookies from Safari on the laptop and smoke-test them. The
-remote variant pushes the cookie to `$DEPLOY_HOST` and restarts the deployed
-backend; the local variant just writes `.env` here for iterating on the
-fetcher script in local Docker.
+Mints cookies from Safari on the laptop, smoke-tests them, and writes
+`.env` here for iterating on the fetcher script in local Docker.
+Production hosts mint their own cookies out-of-band — there's no longer
+a one-shot remote-push target in this repo.
 
 ## When cookies expire
 
 Akamai cookies last on the order of a day; they're also IP-bound.
-If a refresh run starts returning 403/429, re-run `make refresh-cookies`.
+If a refresh run starts returning 403/429, re-run `make refresh-tesla-cookies`.
 (The user-facing site is unaffected — it serves the existing cache; only the
 *next* refresh is blocked.)
 

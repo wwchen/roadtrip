@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 #
-# Mirror of refresh-cookies-remote.sh but writes cookies into THIS repo's
-# .env instead of pushing to the mini. Use when iterating on a script that
-# runs in local Docker (e.g. fetch_tesla_index.py / fetch_tesla_locations.py smoke tests).
+# Mint Tesla cookies into this repo's .env. Use before any Tesla-touching
+# refresh (fetch_tesla_index.py / fetch_tesla_locations.py / refresh-superchargers).
 #
 # Akamai binds _abck to the egress IP that minted it, so cookies captured
-# here only work for fetches that egress from this laptop's IP. That matches
-# `docker run` on the laptop. If you Tailscale-exit through the mini,
-# capture there instead via `make refresh-cookies`.
+# here only work for fetches that egress from this laptop's IP — which
+# matches `docker run` on the laptop. There's no longer a remote/prod
+# variant of this script; production refresh runs on a host that mints
+# its own cookies out-of-band.
 #
 # Usage: open tesla.com/findus in Chrome/Safari, click any Supercharger,
 #   DevTools → Network → right-click get-charger-details → Copy as cURL,

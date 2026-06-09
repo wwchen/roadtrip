@@ -1,4 +1,4 @@
-.PHONY: help run deploy stop check-pushed refresh-cookies refresh-cookies-local refresh-superchargers data-fetch data-import poll-raw qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed refresh-tesla-cookies refresh-superchargers data-fetch data-import poll-raw qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -17,8 +17,7 @@ help:
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make stop             Stop all compose services locally"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
-	@echo "  make refresh-cookies  Push Tesla cookies from clipboard → $(DEPLOY_HOST) (Tailscale exit node recommended)"
-	@echo "  make refresh-cookies-local  Mint cookies into THIS repo's .env (laptop-only egress)"
+	@echo "  make refresh-tesla-cookies  Mint Tesla cookies into THIS repo's .env (laptop-only egress)"
 	@echo "  make refresh-superchargers  Full Tesla refresh: bulk index + per-slug detail (RFC 0007 raw captures)"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
@@ -65,18 +64,11 @@ stop:
 refresh-image:
 	docker build -t roadtrip-refresh:local -f scripts/Dockerfile.refresh scripts/
 
-# Mint cookies from Safari on this laptop (must be Tailscale-egressing via
-# the mini so Akamai binds _abck to the mini's IP), then push to the mini
-# and restart the app container.
-refresh-cookies:
-	@scripts/refresh-cookies-remote.sh "$(DEPLOY_HOST)" "$(DEPLOY_USER)" "$(DEPLOY_DIR)"
-
-# Same flow but writes cookies into THIS repo's .env. Use when iterating on a
-# script that runs in local Docker (e.g. fetch_tesla_index.py). Cookies
-# are bound to this laptop's egress IP so they only work locally — production
-# still needs `make refresh-cookies`.
-refresh-cookies-local:
-	@scripts/refresh-cookies-local.sh
+# Mint Tesla cookies from Safari into THIS repo's .env. Use before any
+# Tesla-touching refresh (fetch_tesla_index.py, refresh-superchargers).
+# Cookies are bound to this laptop's egress IP so they only work locally.
+refresh-tesla-cookies:
+	@scripts/refresh-tesla-cookies.sh
 
 # Full network refresh of Tesla data — bulk get-locations + per-slug
 # get-charger-details. Network-bound (~1 req/sec). Cache-first behavior
