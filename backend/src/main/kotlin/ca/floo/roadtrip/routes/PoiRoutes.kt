@@ -236,6 +236,60 @@ fun Route.poiRoutes(
         call.respondText("""{"status":"ok"}""", io.ktor.http.ContentType.Application.Json)
     }
 
+    // GET /api/pois/{id}
+    //
+    // Per-row detail. The bbox endpoint ships only id + lat/lng + category +
+    // subcategory; this endpoint backs the popup/drawer "I clicked a pin"
+    // flow with the full feature shape (name, address, provider_ref, raw
+    // properties blob — everything the legacy bbox response carried).
+    //
+    // Cache-Control gives the browser a 5-minute fresh window plus 1h SWR.
+    // Per-row content rarely changes day-to-day; this collapses repeat-
+    // clicks of the same pin to a single network round-trip per session.
+    get("/api/pois/{id}", {
+        tags = listOf("poi")
+        summary = "Full per-row POI detail (the slim bbox endpoint omits these fields)"
+        description =
+            "Returns one GeoJSON Feature with the wide property set. " +
+            "Cacheable: max-age=300, stale-while-revalidate=3600."
+        request {
+            pathParameter<Long>("id") { description = "pois.id primary key" }
+        }
+        response {
+            code(io.ktor.http.HttpStatusCode.OK) {
+                description = "GeoJSON Feature with full properties."
+                body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+            }
+            code(io.ktor.http.HttpStatusCode.NotFound) {
+                description = "No row with that id (or it was soft-deleted)."
+                body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+            }
+        }
+    }) {
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@get call.respondText(
+                    """{"error":"bad_id"}""",
+                    io.ktor.http.ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
+                )
+        val row =
+            fetchPoiById(ctx, id)
+                ?: return@get call.respondText(
+                    """{"error":"not_found"}""",
+                    io.ktor.http.ContentType.Application.Json,
+                    HttpStatusCode.NotFound,
+                )
+        call.response.headers.append(
+            "Cache-Control",
+            "public, max-age=300, stale-while-revalidate=3600",
+        )
+        call.respondText(
+            buildSingleFeatureJson(row),
+            io.ktor.http.ContentType.Application.Json,
+        )
+    }
+
     // GET /api/pois/search?q=...&limit=10
     //
     // Text-search across the full pois table by name. Used by the topbar
@@ -417,11 +471,28 @@ internal fun parseBbox(raw: String): Bbox? {
     return Bbox(w, s, e, n)
 }
 
+// Slim row shape for the bbox endpoint. Just enough for MapLibre to place
+// + color a pin: id, lat/lng, category for color band, subcategory for the
+// campground sub-bucket. Everything richer (name, address, provider_ref,
+// raw properties) lives behind GET /api/pois/{id} and is fetched lazily on
+// pin click.
 internal data class PoiRow(
+    val id: Long,
+    val category: String,
+    val subcategory: String?,
+    val lng: Double,
+    val lat: Double,
+)
+
+// Wide row shape returned by GET /api/pois/{id}. Same projection the bbox
+// endpoint used to ship for every row; now paid for only when the user
+// actually opens a pin.
+internal data class PoiDetailRow(
     val id: Long,
     val source: String,
     val sourceId: String,
     val category: String,
+    val subcategory: String?,
     val name: String,
     val region: String?,
     val unitName: String?,
@@ -429,7 +500,6 @@ internal data class PoiRow(
     val phone: String?,
     val infoUrl: String?,
     // JSONB ::text — null when the row has no address bag (most parks).
-    // Surfaced verbatim to FE; popups read it directly.
     val addressJson: String?,
     // JSONB ::text — null for non-bookable POIs (PF, parks). Carries the
     // sealed ProviderRef variant so the drawer can render booking deep
@@ -459,6 +529,10 @@ internal fun fetchPois(
     // UNION ALL across N category-scoped subqueries, each capped. Same
     // total round-trip cost as a single query, but truncation is per-cat
     // instead of "first to the row planner."
+    //
+    // Slim projection: id, category, subcategory, ST_X/ST_Y(geom). Roughly
+    // ~10× smaller per-row vs the legacy wide projection; the FE fetches
+    // the rest on click via GET /api/pois/{id}.
     val sql =
         buildString {
             cats.forEachIndexed { idx, _ ->
@@ -466,12 +540,9 @@ internal fun fetchPois(
                 append("(")
                 append(
                     """
-                    SELECT id, source, source_id, category, name, region, unit_name,
-                           reserve_url, phone, info_url,
-                           address::text AS address_text,
-                           provider_ref::text AS provider_ref_text,
-                           ST_AsGeoJSON(geom) AS geom_json,
-                           properties::text AS properties_text
+                    SELECT id, category, subcategory,
+                           ST_X(ST_Centroid(geom)) AS lng,
+                           ST_Y(ST_Centroid(geom)) AS lat
                     FROM pois
                     WHERE deleted_at IS NULL
                       AND category = ?
@@ -518,32 +589,76 @@ internal fun fetchPois(
     return ctx.fetch(sql, *args.toTypedArray()).map { r ->
         PoiRow(
             id = (r.get("id") as Number).toLong(),
-            source = r.get("source") as String,
-            sourceId = r.get("source_id") as String,
             category = r.get("category") as String,
-            name = r.get("name") as String,
-            region = r.get("region") as String?,
-            unitName = r.get("unit_name") as String?,
-            reserveUrl = r.get("reserve_url") as String?,
-            phone = r.get("phone") as String?,
-            infoUrl = r.get("info_url") as String?,
-            addressJson = r.get("address_text") as String?,
-            providerRefJson = r.get("provider_ref_text") as String?,
-            geomJson = r.get("geom_json") as String,
-            propertiesJson = r.get("properties_text") as String,
+            subcategory = r.get("subcategory") as String?,
+            lng = (r.get("lng") as Number).toDouble(),
+            lat = (r.get("lat") as Number).toDouble(),
         )
     }
 }
 
+/**
+ * Fetch the full, drawer-ready row for one POI. Returns null when the id
+ * is unknown or the row is soft-deleted. Mirrors the wide projection the
+ * bbox endpoint used to ship for every row.
+ */
+internal fun fetchPoiById(
+    ctx: DSLContext,
+    poiId: Long,
+): PoiDetailRow? {
+    val r =
+        ctx.fetchOne(
+            """
+            SELECT id, source, source_id, category, subcategory, name,
+                   region, unit_name, reserve_url, phone, info_url,
+                   address::text AS address_text,
+                   provider_ref::text AS provider_ref_text,
+                   ST_AsGeoJSON(geom) AS geom_json,
+                   properties::text AS properties_text
+            FROM pois
+            WHERE id = ?
+              AND deleted_at IS NULL
+            """.trimIndent(),
+            poiId,
+        ) ?: return null
+    return PoiDetailRow(
+        id = (r.get("id") as Number).toLong(),
+        source = r.get("source") as String,
+        sourceId = r.get("source_id") as String,
+        category = r.get("category") as String,
+        subcategory = r.get("subcategory") as String?,
+        name = r.get("name") as String,
+        region = r.get("region") as String?,
+        unitName = r.get("unit_name") as String?,
+        reserveUrl = r.get("reserve_url") as String?,
+        phone = r.get("phone") as String?,
+        infoUrl = r.get("info_url") as String?,
+        addressJson = r.get("address_text") as String?,
+        providerRefJson = r.get("provider_ref_text") as String?,
+        geomJson = r.get("geom_json") as String,
+        propertiesJson = r.get("properties_text") as String,
+    )
+}
+
+/**
+ * Slim FeatureCollection for the bbox endpoint. Hand-built JSON; the goal
+ * is to ship the smallest possible payload that still drives the map's pin
+ * placement + color logic.
+ *
+ * Per-feature shape:
+ *
+ *     {"type":"Feature","id":42,
+ *      "geometry":{"type":"Point","coordinates":[lng,lat]},
+ *      "properties":{"category":"campground","subcategory":"federal"}}
+ *
+ * No name, no address, no provider_ref, no raw blob — the FE fetches that
+ * lazily via GET /api/pois/{id} when a pin is clicked.
+ */
 internal fun buildFeatureCollection(
     rows: List<PoiRow>,
     truncated: Boolean,
     corridorActive: Boolean = false,
 ): String {
-    // Hand-built JSON. Properties come in as a JSONB ::text and are merged
-    // into the feature's properties object — building this with kotlinx
-    // would require parsing+re-serializing the JSONB on every row, and the
-    // bbox endpoint is hot.
     val sb = StringBuilder()
     sb
         .append("""{"type":"FeatureCollection","truncated":""")
@@ -553,22 +668,43 @@ internal fun buildFeatureCollection(
     for ((i, r) in rows.withIndex()) {
         if (i > 0) sb.append(',')
         sb.append("""{"type":"Feature","id":""").append(r.id)
-        sb.append(""","geometry":""").append(r.geomJson)
-        sb.append(""","properties":{"source":""").append(jsonString(r.source))
-        sb.append(""","source_id":""").append(jsonString(r.sourceId))
-        sb.append(""","category":""").append(jsonString(r.category))
-        sb.append(""","name":""").append(jsonString(r.name))
-        if (r.region != null) sb.append(""","region":""").append(jsonString(r.region))
-        if (r.unitName != null) sb.append(""","unit_name":""").append(jsonString(r.unitName))
-        if (r.reserveUrl != null) sb.append(""","reserve_url":""").append(jsonString(r.reserveUrl))
-        if (r.phone != null) sb.append(""","phone":""").append(jsonString(r.phone))
-        if (r.infoUrl != null) sb.append(""","info_url":""").append(jsonString(r.infoUrl))
-        if (r.addressJson != null) sb.append(""","address":""").append(r.addressJson)
-        if (r.providerRefJson != null) sb.append(""","provider_ref":""").append(r.providerRefJson)
-        sb.append(""","raw":""").append(r.propertiesJson)
+        sb
+            .append(""","geometry":{"type":"Point","coordinates":[""")
+            .append(r.lng)
+            .append(',')
+            .append(r.lat)
+            .append("]}")
+        sb.append(""","properties":{"category":""").append(jsonString(r.category))
+        if (r.subcategory != null) sb.append(""","subcategory":""").append(jsonString(r.subcategory))
         sb.append("}}")
     }
     sb.append("]}")
+    return sb.toString()
+}
+
+/**
+ * Per-id detail JSON: the wide shape the bbox endpoint used to ship every
+ * row. Same hand-built renderer + the same property merging logic; this
+ * lives behind GET /api/pois/{id} so the FE only pays the cost on click.
+ */
+internal fun buildSingleFeatureJson(r: PoiDetailRow): String {
+    val sb = StringBuilder()
+    sb.append("""{"type":"Feature","id":""").append(r.id)
+    sb.append(""","geometry":""").append(r.geomJson)
+    sb.append(""","properties":{"source":""").append(jsonString(r.source))
+    sb.append(""","source_id":""").append(jsonString(r.sourceId))
+    sb.append(""","category":""").append(jsonString(r.category))
+    if (r.subcategory != null) sb.append(""","subcategory":""").append(jsonString(r.subcategory))
+    sb.append(""","name":""").append(jsonString(r.name))
+    if (r.region != null) sb.append(""","region":""").append(jsonString(r.region))
+    if (r.unitName != null) sb.append(""","unit_name":""").append(jsonString(r.unitName))
+    if (r.reserveUrl != null) sb.append(""","reserve_url":""").append(jsonString(r.reserveUrl))
+    if (r.phone != null) sb.append(""","phone":""").append(jsonString(r.phone))
+    if (r.infoUrl != null) sb.append(""","info_url":""").append(jsonString(r.infoUrl))
+    if (r.addressJson != null) sb.append(""","address":""").append(r.addressJson)
+    if (r.providerRefJson != null) sb.append(""","provider_ref":""").append(r.providerRefJson)
+    sb.append(""","raw":""").append(r.propertiesJson)
+    sb.append("}}")
     return sb.toString()
 }
 

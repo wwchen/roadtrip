@@ -103,14 +103,15 @@ class PoiRoutesTest {
             assertEquals(false, body["truncated"]!!.jsonPrimitive.boolean)
             val features = body["features"]!!.jsonArray
             assertEquals(2, features.size)
-            val names =
+            // Slim /api/pois ships id + lng/lat + category. Names live behind
+            // GET /api/pois/{id}; assert on coordinates here instead.
+            val coords =
                 features
                     .map {
-                        it.jsonObject["properties"]!!
-                            .jsonObject["name"]!!
-                            .jsonPrimitive.content
+                        val c = it.jsonObject["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
+                        c[0].jsonPrimitive.content.toDouble() to c[1].jsonPrimitive.content.toDouble()
                     }.toSet()
-            assertEquals(setOf("Vancouver Park", "Whistler Camp"), names)
+            assertEquals(setOf(-123.0 to 49.0, -122.95 to 50.1), coords)
         }
 
     @Test
@@ -334,15 +335,15 @@ class PoiRoutesTest {
                 }
             assertEquals(HttpStatusCode.OK, resp.status)
             val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            val names =
+            // Slim shape: assert by coordinates (the seeded inside fixtures).
+            val coords =
                 parsed["features"]!!
                     .jsonArray
                     .map {
-                        it.jsonObject["properties"]!!
-                            .jsonObject["name"]!!
-                            .jsonPrimitive.content
+                        val c = it.jsonObject["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
+                        c[0].jsonPrimitive.content.toDouble() to c[1].jsonPrimitive.content.toDouble()
                     }.toSet()
-            assertEquals(setOf("Inside A", "Inside B"), names)
+            assertEquals(setOf(-123.0 to 49.05, -122.5 to 48.0), coords)
             // corridor:true tells the FE the response was scoped to the route.
             assertEquals(true, parsed["corridor"]?.jsonPrimitive?.boolean)
         }
@@ -429,10 +430,12 @@ class PoiRoutesTest {
         }
 
     @Test
-    fun `polygon geometry rendered as Polygon GeoJSON`() =
+    fun `polygon geometry collapses to centroid Point in the slim shape`() =
         testApplication {
-            // State park with a tiny polygon — result must come back as GeoJSON
-            // Polygon, not WKT and not just the bounding point.
+            // Slim /api/pois ships a Point centroid for every row, even when
+            // the source geometry is a Polygon. Polygon rendering for parks
+            // (when it comes back) will go through a separate tile/render
+            // path; the slim endpoint stays Point-only.
             val ring = "[[[-123.1,49.1],[-122.9,49.1],[-122.9,49.3],[-123.1,49.3],[-123.1,49.1]]]"
             val polygonGeoJson = """{"type":"Polygon","coordinates":$ring}"""
             seed(
@@ -458,7 +461,11 @@ class PoiRoutesTest {
                 }
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val feat = body["features"]!!.jsonArray.single().jsonObject
-            assertEquals("Polygon", feat["geometry"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+            assertEquals("Point", feat["geometry"]!!.jsonObject["type"]!!.jsonPrimitive.content)
+            // Centroid of the unit square ring is (-123.0, 49.2).
+            val coords = feat["geometry"]!!.jsonObject["coordinates"]!!.jsonArray
+            assertEquals(-123.0, coords[0].jsonPrimitive.content.toDouble())
+            assertEquals(49.2, coords[1].jsonPrimitive.content.toDouble())
         }
 
     /** Build a JSON request body for POST /api/pois. */

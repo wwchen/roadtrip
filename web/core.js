@@ -132,3 +132,78 @@ export function zoomForBbox(bbox) {
 export function reinstallOverlays() {
   if (state.mapReady) state.map.fire('style.load');
 }
+
+// Wide-shape flatten — runs after a /api/pois/{id} hydration. Promotes the
+// rich nested structure into the flat property names the popups, drawer,
+// and campground-card.js read directly. Idempotent.
+//
+// Lives in core.js (vs app.js) so popups.js can import it without
+// creating a popups → app → layers → popups cycle. The slim path through
+// the bbox endpoint uses flattenPoi (in app.js), which only does the
+// campground category-promote.
+export function flattenHydratedPoi(f) {
+  const p = f.properties || {};
+  const raw = p.raw || {};
+  const flat = { id: f.id, ...raw, ...p };
+  delete flat.raw;
+
+  // Address arrives as a nested object from /api/pois/{id} (the JSONB
+  // column). Flatten its parts onto the top of properties for every
+  // category that surfaces an address — popups read them directly.
+  const addr = p.address || {};
+  flat.street = addr.street || '';
+  flat.city = addr.city || '';
+  flat.state = addr.state || p.region || '';
+  flat.postcode = addr.postcode || '';
+
+  // info_url is the BE's canonical "open this in upstream" link
+  // (Tesla findus, planetfitness.com gym page, BC Parks page, …).
+  // Popups read p.website / p.infoUrl — keep both names alive.
+  flat.website = p.info_url || p.website || '';
+  flat.infoUrl = p.info_url || '';
+
+  if (p.category === 'campground' && (p.subcategory || raw.subcategory)) {
+    flat.category = p.subcategory || raw.subcategory;
+  }
+  // Promote provider-ref discriminants to flat keys the drawer + campground
+  // card already read (recgov_id for the rec.gov heat-strip path; aspira for
+  // the NextGen path). Backend ships provider_ref as one nested object;
+  // legacy code shape stays. host comes from raw.upstream.host (the join-by
+  // -name ETL stuffs it there) so the drawer can hit the right Aspira tenant.
+  const pref = p.provider_ref;
+  if (pref && typeof pref === 'object') {
+    if (pref.recgov_id && !flat.recgov_id) flat.recgov_id = pref.recgov_id;
+    if (pref.transactionLocationId != null && !flat.aspira) {
+      flat.aspira = {
+        transactionLocationId: pref.transactionLocationId,
+        mapId: pref.mapId,
+        resourceLocationId: pref.resourceLocationId ?? null,
+        host: raw?.upstream?.host || null,
+      };
+    }
+  }
+  if (p.category === 'national-park' || p.category === 'state-park') {
+    // Park layers + popups read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres /
+    // Mang_Name — the field names PAD-US used. The new ETL stores the
+    // facts under different keys (acres, official_name, designation,
+    // region, source); map them here so the rendering code stays put.
+    flat.Unit_Nm = raw.Unit_Nm || p.unit_name || p.name;
+    flat.State_Nm = raw.State_Nm || p.region || '';
+    flat.Loc_Nm = raw.Loc_Nm || raw.official_name || '';
+    flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
+    flat.Mang_Name = raw.Mang_Name || raw.designation || '';
+  }
+  if (p.category === 'planet-fitness') {
+    flat.opening_hours = raw.opening_hours || '';
+  }
+  if (p.category === 'supercharger') {
+    flat.locationId = p.source_id;
+    flat.stallCount = raw.stall_count ?? 0;
+    flat.powerKilowatt = raw.max_power_kw ?? 0;
+    flat.color = raw.color || '#e82127';
+    flat.status = raw.status || 'OPEN';
+    flat.pricebooks = raw.pricebooks || [];
+  }
+  flat.name = p.name || raw.name || flat.name;
+  return { ...f, properties: flat };
+}

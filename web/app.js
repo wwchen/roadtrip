@@ -1,4 +1,4 @@
-import { state, fetchJSON, setCount, geomCenter, zoomForBbox, reinstallOverlays } from './core.js';
+import { state, fetchJSON, setCount, reinstallOverlays } from './core.js';
 import {
   BASEMAPS,
   getInitialBasemapKey,
@@ -19,7 +19,7 @@ import {
   setSPData,
   synthesizeClick,
 } from './layers.js';
-import { initSearch, registerSearchItems, getSearchIndex } from './search.js';
+import { initSearch, getSearchIndex } from './search.js';
 import { closeDrawer } from './drawer/chrome.js';
 import { initTopbar } from './topbar.js';
 
@@ -182,77 +182,26 @@ map.on('style.load', () => {
 // (so the schema is one row in Postgres) but the rest of the webapp predates
 // that — keep the boundary here and the inside stays simple.
 //
-// For campgrounds: `raw.subcategory` is federal/state/local/provincial —
-// that's the value the legend toggles + circle-color match against, so we
-// promote it to the top-level `category`. The API's coarser
-// `category: "campground"` is dropped on the way through.
+// For campgrounds: `subcategory` is federal/state/local/provincial — the
+// value the legend toggles + circle-color match against. Promote it to the
+// top-level `category` so layers.js filter expressions stay simple.
+//
+// Slim path (POST /api/pois): properties carries only category +
+// subcategory. We rewrite category here for the legend filter; everything
+// richer (name, address, provider_ref, raw upstream) is fetched on click
+// via GET /api/pois/{id} and re-runs this function in flattenHydrated().
+//
+// Hydrated path (GET /api/pois/{id}): properties carries the wide row.
+// flattenHydrated calls into this same function so the post-hydration
+// shape matches what popups read.
 function flattenPoi(f) {
   const p = f.properties || {};
-  const raw = p.raw || {};
-  const flat = { id: f.id, ...raw, ...p };
-  delete flat.raw;
-
-  // Address arrives as a nested object from /api/pois (the JSONB column).
-  // Flatten its parts onto the top of properties for every category that
-  // surfaces an address — popups read them directly instead of digging.
-  const addr = p.address || {};
-  flat.street = addr.street || '';
-  flat.city = addr.city || '';
-  flat.state = addr.state || p.region || '';
-  flat.postcode = addr.postcode || '';
-
-  // info_url is the BE's canonical "open this in upstream" link
-  // (Tesla findus, planetfitness.com gym page, BC Parks page, …).
-  // Popups read p.website / p.infoUrl — keep both names alive.
-  flat.website = p.info_url || p.website || '';
-  flat.infoUrl = p.info_url || '';
-
-  if (p.category === 'campground' && raw.subcategory) flat.category = raw.subcategory;
-  // Promote provider-ref discriminants to flat keys the drawer + campground
-  // card already read (recgov_id for the rec.gov heat-strip path; aspira for
-  // the NextGen path). Backend ships provider_ref as one nested object;
-  // legacy code shape stays. host comes from raw.upstream.host (the join-by
-  // -name ETL stuffs it there) so the drawer can hit the right Aspira tenant.
-  const pref = p.provider_ref;
-  if (pref && typeof pref === 'object') {
-    if (pref.recgov_id && !flat.recgov_id) flat.recgov_id = pref.recgov_id;
-    if (pref.transactionLocationId != null && !flat.aspira) {
-      flat.aspira = {
-        transactionLocationId: pref.transactionLocationId,
-        mapId: pref.mapId,
-        resourceLocationId: pref.resourceLocationId ?? null,
-        host: raw?.upstream?.host || null,
-      };
-    }
+  if (p.category === 'campground' && p.subcategory) {
+    return { ...f, properties: { ...p, category: p.subcategory } };
   }
-  if (p.category === 'national-park' || p.category === 'state-park') {
-    // Park layers + popups read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres /
-    // Mang_Name — the field names PAD-US used. The new ETL stores the
-    // facts under different keys (acres, official_name, designation,
-    // region, source); map them here so the rendering code stays put.
-    flat.Unit_Nm = raw.Unit_Nm || p.unit_name || p.name;
-    flat.State_Nm = raw.State_Nm || p.region || '';
-    flat.Loc_Nm = raw.Loc_Nm || raw.official_name || '';
-    flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
-    flat.Mang_Name = raw.Mang_Name || raw.designation || '';
-  }
-  if (p.category === 'planet-fitness') {
-    // OSM Overpass tags → flat fields the popup reads.
-    flat.opening_hours = raw.opening_hours || '';
-  }
-  if (p.category === 'supercharger') {
-    flat.locationId = p.source_id;
-    flat.stallCount = raw.stall_count ?? 0;
-    flat.powerKilowatt = raw.max_power_kw ?? 0;
-    flat.color = raw.color || '#e82127';   // Tesla red — the legacy file's open-status default
-    flat.status = raw.status || 'OPEN';    // pre-enrichment rows don't carry status
-    // Pricing is inlined on the row (replaces the old /api/pricing fetch);
-    // popups.js renders synchronously off this list.
-    flat.pricebooks = raw.pricebooks || [];
-  }
-  flat.name = p.name || raw.name || flat.name;
-  return { ...f, properties: flat };
+  return f;
 }
+
 
 const EMPTY_FC = { type: 'FeatureCollection', features: [] };
 
@@ -281,7 +230,6 @@ async function load() {
   // doesn't fire mid-gesture. AbortController kills the in-flight request
   // when the user keeps panning. Counts on the legend reflect the current
   // viewport, not a global total.
-  const seenSearchIds = { CG: new Set(), NP: new Set(), SP: new Set(), PF: new Set(), SC: new Set() };
   const cgCounts = { federal: 0, state: 0, local: 0, provincial: 0, other: 0 };
   const CG_ZOOM_THRESHOLD = 6;
   let cgUnlocked = false;
@@ -426,79 +374,10 @@ async function load() {
       if (hint) hint.remove();
     }
 
-    // Append-only search index: each viewport adds whatever's new without
-    // wiping prior entries, so panning back to a previous area still has
-    // those POIs searchable. Dedupe by db id.
-    const indexAdd = (items) => items.length && registerSearchItems(items);
-    const npNew = [], spNew = [], pfNew = [], cgNew = [], scNew = [];
-    for (const f of np) {
-      if (seenSearchIds.NP.has(f.id)) continue;
-      seenSearchIds.NP.add(f.id);
-      const [lng, lat, bbox] = geomCenter(f.geometry);
-      const p = f.properties;
-      npNew.push({
-        name: p.Unit_Nm || p.name || 'Park',
-        sub: p.State_Nm || '',
-        kind: 'NP', color: '#2e7d32',
-        lng, lat, zoom: zoomForBbox(bbox),
-        onSelect: () => synthesizeClick(['np-pts-hit', 'np-fill'], [lng, lat]),
-      });
-    }
-    for (const f of sp) {
-      if (seenSearchIds.SP.has(f.id)) continue;
-      seenSearchIds.SP.add(f.id);
-      const [lng, lat, bbox] = geomCenter(f.geometry);
-      const p = f.properties;
-      spNew.push({
-        name: p.Unit_Nm || p.name || 'Park',
-        sub: p.State_Nm || '',
-        kind: 'SP', color: '#8d6e63',
-        lng, lat, zoom: zoomForBbox(bbox),
-        onSelect: () => synthesizeClick(['sp-pts-hit', 'sp-fill'], [lng, lat]),
-      });
-    }
-    for (const f of pf) {
-      if (seenSearchIds.PF.has(f.id)) continue;
-      seenSearchIds.PF.add(f.id);
-      const [lng, lat] = f.geometry.coordinates;
-      const p = f.properties;
-      pfNew.push({
-        name: p.name || 'Planet Fitness',
-        sub: [p.city, p.state].filter(Boolean).join(', '),
-        kind: 'PF', color: '#7b4bb5',
-        lng, lat, zoom: 14,
-        onSelect: () => synthesizeClick(['pf-points-hit', 'pf-points'], [lng, lat]),
-      });
-    }
-    for (const f of cg) {
-      if (seenSearchIds.CG.has(f.id)) continue;
-      seenSearchIds.CG.add(f.id);
-      const [lng, lat] = f.geometry.coordinates;
-      const p = f.properties;
-      cgNew.push({
-        name: p.name,
-        sub: [p.typeLabel, p.state].filter(Boolean).join(' · '),
-        kind: 'CG', color: '#2e7d32',
-        cgCategory: p.category,
-        lng, lat, zoom: 13,
-        onSelect: () => synthesizeClick(['cg-points-hit', 'cg-points'], [lng, lat]),
-      });
-    }
-    for (const f of sc) {
-      const id = f.properties?.id || f.id;
-      if (id == null || seenSearchIds.SC.has(id)) continue;
-      seenSearchIds.SC.add(id);
-      const [lng, lat] = f.geometry.coordinates;
-      const p = f.properties || {};
-      scNew.push({
-        name: p.name || '',
-        sub: [p.city, p.state].filter(Boolean).join(', '),
-        kind: 'SC', color: '#e82127',
-        lng, lat, zoom: 13,
-        onSelect: () => synthesizeClick(['sc-points-hit', 'sc-points'], [lng, lat]),
-      });
-    }
-    indexAdd(npNew); indexAdd(spNew); indexAdd(pfNew); indexAdd(cgNew); indexAdd(scNew);
+    // Local pin search index: removed. The slim /api/pois response no
+    // longer ships names, so a client-side text index would be empty.
+    // Cross-viewport text search runs through the backend's
+    // /api/pois/search endpoint via topbar.js — no duplicate index needed.
   }
 
   function scheduleBboxRefresh() {

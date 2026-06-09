@@ -8,6 +8,7 @@ import {
   distanceTo,
   drawerHeader,
   directionsButtonHTML,
+  openHydratedDrawer,
   reviveJsonProp,
   upstreamHTML,
 } from './shared.js';
@@ -25,6 +26,14 @@ function externalParkLink(kind, name, stateName) {
 }
 
 export function openParkDrawer(kind, feature, lngLat) {
+  // Slim /api/pois ships only id + geometry + category. Hydrate the wide
+  // row before rendering. openHydratedDrawer pops a Loading… placeholder,
+  // fetches /api/pois/{id}, flattens the wide shape via flattenHydratedPoi,
+  // then calls our renderer.
+  openHydratedDrawer(feature, openDrawer, hydrated => renderParkDrawer(kind, hydrated, lngLat));
+}
+
+function renderParkDrawer(kind, feature, lngLat) {
   const p = feature.properties;
   reviveJsonProp(p, 'upstream');
   const name = p.Unit_Nm || p.Loc_Nm || 'Park';

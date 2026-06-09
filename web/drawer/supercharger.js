@@ -9,11 +9,17 @@ import {
   distanceTo,
   drawerHeader,
   directionsButtonHTML,
+  openHydratedDrawer,
   reviveJsonProp,
   upstreamHTML,
 } from './shared.js';
 
 export function openSuperchargerDrawer(f) {
+  // Slim /api/pois ships only id + geometry + category. Hydrate first.
+  openHydratedDrawer(f, openDrawer, renderSuperchargerDrawer);
+}
+
+function renderSuperchargerDrawer(f) {
   const p = f.properties;
   reviveJsonProp(p, 'upstream');
   const [lng, lat] = f.geometry.coordinates;
