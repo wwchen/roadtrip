@@ -36,6 +36,7 @@ smoke_test() {
   if ! out="$(docker run --rm --env-file .env \
     -v "$(pwd)/data:/app/data" \
     -v "$(pwd)/scripts:/app/scripts" \
+    -v "$(pwd)/config:/app/config:ro" \
     roadtrip-refresh:local \
     python3 /app/scripts/fetch_tesla_index.py 2>&1)"; then
     printf '%s\n' "$out"
