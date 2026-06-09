@@ -28,14 +28,14 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class CachedAvailability(
     private val fetchMonth: suspend (campgroundId: String, month: String) -> Map<String, Campsite>,
-    private val ttl: Duration = Duration.ofMinutes(10),
+    private val ttl: Duration = Duration.ofHours(2),
     private val clock: Clock = Clock.systemUTC(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     /** Convenience constructor wired to a real [AvailabilityClient]. */
     constructor(
         client: AvailabilityClient,
-        ttl: Duration = Duration.ofMinutes(10),
+        ttl: Duration = Duration.ofHours(2),
         clock: Clock = Clock.systemUTC(),
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     ) : this(client::fetchMonth, ttl, clock, scope)

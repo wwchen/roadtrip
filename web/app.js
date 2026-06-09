@@ -281,6 +281,38 @@ async function load() {
   let inflight = null;
   let debounceTimer = null;
 
+  // Viewport FeatureCollection cache. Each entry holds the bbox + categories
+  // that produced a non-truncated FC; a subsequent pan into a sub-bbox with
+  // the same category set skips the /api/pois round-trip and re-renders
+  // from memory. Skipped when a corridor route is active (the predicate
+  // changes) and when the prior response was truncated (features outside
+  // the per-cat budget weren't returned, so a contained sub-view could be
+  // missing pins). Ring buffer of 8 keeps the working set across normal
+  // pan/zoom-out behavior without unbounded growth.
+  const VIEWPORT_CACHE_TTL_MS = 5 * 60 * 1000;
+  const VIEWPORT_CACHE_MAX = 8;
+  const viewportCache = [];
+  function bboxContains(outer, inner) {
+    return outer[0] <= inner[0] && outer[1] <= inner[1] &&
+           outer[2] >= inner[2] && outer[3] >= inner[3];
+  }
+  function viewportCacheLookup(bbox, catsKey) {
+    const now = Date.now();
+    // Evict stale entries first so the search loop sees a clean slate.
+    for (let i = viewportCache.length - 1; i >= 0; i--) {
+      if (now - viewportCache[i].t > VIEWPORT_CACHE_TTL_MS) viewportCache.splice(i, 1);
+    }
+    for (let i = viewportCache.length - 1; i >= 0; i--) {
+      const e = viewportCache[i];
+      if (e.catsKey === catsKey && bboxContains(e.bbox, bbox)) return e.fc;
+    }
+    return null;
+  }
+  function viewportCachePut(bbox, catsKey, fc) {
+    viewportCache.push({ bbox, catsKey, fc, t: Date.now() });
+    while (viewportCache.length > VIEWPORT_CACHE_MAX) viewportCache.shift();
+  }
+
   async function refreshBbox() {
     const m = state.map;
     if (!m) return;
@@ -306,27 +338,46 @@ async function load() {
     const cats = ['planet-fitness', 'supercharger'];
     if (wantCG) cats.push('campground');
 
-    if (inflight) inflight.abort();
-    inflight = new AbortController();
-    const poisBody = { bbox: [west, south, east, north], zoom, categories: cats };
-    if (route) poisBody.route = route;
+    const currentBbox = [west, south, east, north];
+    const catsKey = cats.slice().sort().join(',');
 
-    let fc;
-    try {
-      const poisRes = await fetch('/api/pois', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(poisBody),
-        signal: inflight.signal,
-      });
-      if (!poisRes.ok) throw new Error(`/api/pois HTTP ${poisRes.status}`);
-      fc = await poisRes.json();
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      console.error('bbox fetch failed:', err);
-      return;
+    // Cache short-circuit: only when no corridor (the route polyline is part
+    // of the predicate, not just the bbox). The cached FC may carry features
+    // outside the new viewport — that's fine, MapLibre filters by geometry
+    // intersection at render time and the layer only paints what's visible.
+    let fc = null;
+    let fromCache = false;
+    if (!route) {
+      const cached = viewportCacheLookup(currentBbox, catsKey);
+      if (cached) { fc = cached; fromCache = true; }
     }
-    inflight = null;
+
+    if (!fc) {
+      if (inflight) inflight.abort();
+      inflight = new AbortController();
+      const poisBody = { bbox: currentBbox, zoom, categories: cats };
+      if (route) poisBody.route = route;
+
+      try {
+        const poisRes = await fetch('/api/pois', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(poisBody),
+          signal: inflight.signal,
+        });
+        if (!poisRes.ok) throw new Error(`/api/pois HTTP ${poisRes.status}`);
+        fc = await poisRes.json();
+      } catch (err) {
+        if (err.name === 'AbortError') return;
+        console.error('bbox fetch failed:', err);
+        return;
+      }
+      inflight = null;
+      // Only cache full responses. truncated:true means features beyond the
+      // POI_LIMIT budget were dropped server-side, so a contained sub-view
+      // would render fewer pins than a real fetch would return.
+      if (!route && !fc.truncated) viewportCachePut(currentBbox, catsKey, fc);
+    }
 
     const np = [], sp = [], pf = [], cg = [], sc = [];
     for (const raw of fc.features) {

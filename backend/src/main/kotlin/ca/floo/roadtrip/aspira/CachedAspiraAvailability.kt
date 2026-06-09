@@ -23,13 +23,13 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class CachedAspiraAvailability(
     private val fetcher: suspend (host: String, mapId: Int, startDate: LocalDate, endDate: LocalDate) -> AspiraAvailability,
-    private val ttl: Duration = Duration.ofMinutes(10),
+    private val ttl: Duration = Duration.ofHours(2),
     private val clock: Clock = Clock.systemUTC(),
     scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
 ) {
     constructor(
         client: AspiraAvailabilityClient,
-        ttl: Duration = Duration.ofMinutes(10),
+        ttl: Duration = Duration.ofHours(2),
         clock: Clock = Clock.systemUTC(),
         scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
     ) : this(client::fetch, ttl, clock, scope)

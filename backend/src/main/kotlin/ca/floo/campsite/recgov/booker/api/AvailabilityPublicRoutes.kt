@@ -181,7 +181,7 @@ private fun aggregateCacheBlock(results: List<CachedResult>): JsonObject =
     buildJsonObject {
         put("hit", results.all { it.hit })
         put("age_seconds", results.maxOfOrNull { it.ageSeconds } ?: 0L)
-        put("ttl_seconds", results.firstOrNull()?.ttlSeconds ?: 600L)
+        put("ttl_seconds", results.firstOrNull()?.ttlSeconds ?: 7200L)
     }
 
 fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, String> {
