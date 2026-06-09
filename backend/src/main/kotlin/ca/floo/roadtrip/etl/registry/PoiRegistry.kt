@@ -184,6 +184,24 @@ data class PoiRegistry(
         }
         return out
     }
+
+    /**
+     * Aspira upstream host keyed by terminal etl slug (== pois.source).
+     * Returns the `host` arg from the terminal AspiraJoinByNameEtl row.
+     * Used by the unified availability endpoint to dispatch aspira-backed
+     * pois to the right reservation host (Parks Canada / BC / WA) without
+     * the FE having to know the mapping.
+     */
+    fun aspiraHostBySource(): Map<String, String> {
+        val out = mutableMapOf<String, String>()
+        for (row in poiData) {
+            val terminal = row.etls.lastOrNull() ?: continue
+            if (!terminal.adapter.startsWith("Aspira")) continue
+            val host = terminal.args["host"] ?: continue
+            out[terminal.slug] = host
+        }
+        return out
+    }
 }
 
 private fun detectCycles(edges: Map<String, Set<String>>): List<List<String>> {
