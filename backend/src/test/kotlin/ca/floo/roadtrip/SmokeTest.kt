@@ -4,6 +4,7 @@ import com.microsoft.playwright.Browser
 import com.microsoft.playwright.BrowserType
 import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
+import com.microsoft.playwright.Route
 import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
 import com.microsoft.playwright.options.WaitForSelectorState
 import org.junit.jupiter.api.AfterAll
@@ -11,7 +12,9 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 // Trip-critical smoke. Mirrors the deleted qa/smoke.spec.mjs: cold load →
@@ -154,6 +157,185 @@ class SmokeTest {
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test
+    fun `route mode uses current location and paints only on-route pois`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val viewportPoiCalls = AtomicInteger(0)
+        val onRoutePoiCalls = AtomicInteger(0)
+        val routeCalls = AtomicInteger(0)
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        context.route("**/api/pois") { route: Route ->
+            viewportPoiCalls.incrementAndGet()
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "FeatureCollection",
+                          "features": [{
+                            "type": "Feature",
+                            "id": 7,
+                            "geometry": { "type": "Point", "coordinates": [-90.0, 40.0] },
+                            "properties": { "category": "supercharger" }
+                          }],
+                          "truncated": false
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/route?**") { route: Route ->
+            routeCalls.incrementAndGet()
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "FeatureCollection",
+                          "features": [{
+                            "type": "Feature",
+                            "geometry": {
+                              "type": "LineString",
+                              "coordinates": [[-122.33, 47.61], [-121.50, 48.10]]
+                            },
+                            "properties": {
+                              "distance_m": 100000,
+                              "duration_s": 7200,
+                              "legs": [{ "distance_m": 100000, "duration_s": 7200 }]
+                            }
+                          }]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/pois/on-route") { route: Route ->
+            onRoutePoiCalls.incrementAndGet()
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "FeatureCollection",
+                          "features": [{
+                            "type": "Feature",
+                            "id": 999,
+                            "geometry": { "type": "Point", "coordinates": [-122.0, 47.8] },
+                            "properties": {
+                              "category": "campground",
+                              "subcategory": "federal",
+                              "route_km": 25.0
+                            }
+                          }]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/pois/999") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "Feature",
+                          "id": 999,
+                          "geometry": { "type": "Point", "coordinates": [-122.0, 47.8] },
+                          "properties": {
+                            "category": "campground",
+                            "subcategory": "federal",
+                            "name": "On-route Campground",
+                            "region": "WA"
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+
+        try {
+            page.navigate("/")
+            page.waitForFunction(
+                "() => globalThis.__rtState?.mapReady === true",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(15_000.0),
+            )
+
+            page.evaluate(
+                "() => { globalThis.__rtState.userLocation = { lng: -122.33, lat: 47.61 }; }",
+            )
+            page.locator(".tb-row[data-i=\"0\"] .tb-locate").click()
+            assertThat(page.locator(".tb-row[data-i=\"0\"] .tb-input")).hasValue("Current location")
+
+            page.locator("#tb-directions").click()
+            page.waitForSelector(".tb-row[data-i=\"1\"] .tb-input")
+            page.evaluate(
+                "() => globalThis.__rtAddTripStop({ name: 'Route Destination', lng: -121.5, lat: 48.1, kind: 'PLACE' })",
+            )
+
+            page.waitForFunction(
+                "() => globalThis.__rtRouteActive?.() === true",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(10_000.0),
+            )
+            page.waitForFunction(
+                "() => globalThis.__rtState?.overlayData?.cg?.features?.[0]?.id === 999",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(10_000.0),
+            )
+
+            val viewportCallsAfterRoute = viewportPoiCalls.get()
+            page.evaluate(
+                "() => globalThis.__rtMap.jumpTo({ center: [-120.5, 48.0], zoom: 10 })",
+            )
+            page.waitForTimeout(750.0)
+
+            assertEquals(1, routeCalls.get(), "route should be fetched once")
+            assertTrue(onRoutePoiCalls.get() >= 1, "route mode should fetch /api/pois/on-route")
+            assertEquals(
+                viewportCallsAfterRoute,
+                viewportPoiCalls.get(),
+                "viewport /api/pois should not refetch while a route is active",
+            )
+            assertEquals(
+                "999",
+                page.evaluate("() => String(globalThis.__rtState.overlayData.cg.features[0].id)"),
+            )
+            assertEquals(
+                "0",
+                page.evaluate("() => String(globalThis.__rtState.overlayData.sc.features.length)"),
+                "route-scoped map paint should clear viewport supercharger POIs",
+            )
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during route smoke: ${pageErrors.joinToString(" | ")}",
             )
         } finally {
             context.close()
