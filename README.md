@@ -33,10 +33,11 @@ host Node process so Playwright can drive a real Chromium. Tilt UI is at
 <http://localhost:10350>.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
-(none auto-run on `tilt up`): `refresh-superchargers` for the Tesla
-fetcher pair (index + per-slug), `refresh-tesla-cookies` to mint fresh
+(none auto-run on `tilt up`): `refresh-tesla-cookies` to mint fresh
 `_abck` cookies into `.env`, and `refresh-image` (one-shot prereq for the
-supercharger refresher). Click the row, watch logs in the right pane.
+supercharger fetcher). Click the row, watch logs in the right pane. The
+full Supercharger pricing fetch is interactive — run it from a terminal
+via `make fetch-tesla-supercharger-pricing`.
 
 POI data refresh goes through the backend's admin API. Two-step flow,
 two Tilt buttons under the `data` cluster, two make targets:
@@ -75,11 +76,11 @@ make install        # Homebrew deps + companion (npm + playwright) + git hooks
 Pricing is served from the on-disk cache (`data/pricing-cache/`). Tesla is
 never called from the user request path — the backend just reads cached JSON
 and 404s with `{"error":"not_cached"}` for sites that haven't been crawled.
-To populate/refresh the cache, run `make refresh-superchargers` (or
-`make poll-raw SOURCE=tesla-locations` for a cache-aware re-fetch
-without the bulk index). That worker
-needs Tesla cookies in `.env` — see `README_PRICING.md` and
-`make refresh-tesla-cookies`.
+To populate/refresh the cache, run `make fetch-tesla-supercharger-pricing`,
+which mints fresh cookies, smoke-tests them, and walks the bulk index +
+per-slug detail. (For a cache-aware locations-only re-fetch use
+`make poll-raw SOURCE=tesla-locations`.) See `README_PRICING.md` for
+cookie details.
 
 ## Refresh POI data
 
@@ -247,7 +248,7 @@ re-run `make refresh-tesla-cookies`.
 - **Pricing cache.** `/api/pricing/{slug}` is read-only against
   `data/pricing-cache/{slug}.json`. Misses return 404 with
   `{"error":"not_cached"}`. Cache is populated offline by
-  `scripts/fetch_tesla_index.py` + `scripts/fetch_tesla_locations.py` (run via `make refresh-superchargers`),
+  `scripts/fetch_tesla_index.py` + `scripts/fetch_tesla_locations.py` (run via `make fetch-tesla-supercharger-pricing`),
   which shells out to `curl-impersonate` because Akamai fingerprints TLS
   ClientHello + HTTP/2 SETTINGS — stock OpenSSL curl gets 403.
 - **Map** — MapLibre GL, vector and raster basemaps, runtime style-swap.

@@ -153,11 +153,13 @@ local_resource(
 #
 # Notes:
 # - 'refresh-image' builds the Dockerized Python runtime that the supercharger
-#   refreshers use. It's a one-shot prereq; subsequent runs are a no-op until
+#   fetcher uses. It's a one-shot prereq; subsequent runs are a no-op until
 #   scripts/Dockerfile.refresh changes.
 # - 'refresh-tesla-cookies' mints Tesla cookies into THIS repo's .env.
 #   Production hosts mint their own cookies out-of-band; nothing in this
-#   Tiltfile or repo orchestrates that.
+#   Tiltfile or repo orchestrates that. The full Supercharger pricing fetch
+#   (`make fetch-tesla-supercharger-pricing`) is interactive — runs from a
+#   terminal, not from this Tilt UI.
 # - 'data-fetch' / 'data-import' POST to the backend's RFC 0004 admin API.
 #   Two-step refresh: fetch upstream into data/*.{json,geojson}, then import
 #   into Postgres. Both fan out across every target; per-target mutex keeps
@@ -168,15 +170,6 @@ local_resource(
     cmd='make refresh-image',
     auto_init=False,
     trigger_mode=TRIGGER_MODE_MANUAL,
-    labels=['data'],
-)
-
-local_resource(
-    'refresh-superchargers',
-    cmd='make refresh-superchargers',
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    resource_deps=['refresh-image'],
     labels=['data'],
 )
 

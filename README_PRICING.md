@@ -2,10 +2,12 @@
 
 Supercharger pricing is served read-only from `data/pricing-cache/{slug}.json`.
 The cache is populated **offline** by `scripts/fetch_tesla_index.py` +
-`scripts/fetch_tesla_locations.py` (run via `make refresh-superchargers`,
-or pick interactively with `make poll-raw`); the Kotlin backend never
-calls Tesla on the request path. Misses on `/api/pricing/{slug}` return
-HTTP 404 with `{"error":"not_cached"}`.
+`scripts/fetch_tesla_locations.py` (run via
+`make fetch-tesla-supercharger-pricing`, which mints cookies, smoke-tests
+them, and walks the full fetch; or pick a single fetcher interactively
+with `make poll-raw`). The Kotlin backend never calls Tesla on the
+request path. Misses on `/api/pricing/{slug}` return HTTP 404 with
+`{"error":"not_cached"}`.
 
 > Captures also land in envelope-wrapped form under
 > `data/raw/tesla-locations/<slug>/<ts>.json`. `/api/pricing/{slug}`

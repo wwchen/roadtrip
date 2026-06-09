@@ -32,7 +32,7 @@ import java.time.Instant
 // max kW, and access type. Rows without a cached detail page still
 // render with placeholder fields — the index alone is enough to put a
 // pin on the map. The cache lifetime is governed by the offline
-// refresh worker (`make refresh-superchargers`); rows go stale gracefully.
+// fetch worker (`make fetch-tesla-supercharger-pricing`); rows go stale gracefully.
 class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
     override val etlSlug = "tesla-superchargers"
 
