@@ -3,8 +3,8 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.client.RoutingException
 import ca.floo.roadtrip.models.api.PoiSearchHitSchema
 import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
+import ca.floo.roadtrip.models.api.PoisOnRouteRequestSchema
 import ca.floo.roadtrip.models.api.PoisRequestSchema
-import ca.floo.roadtrip.models.api.RouteSchema
 import ca.floo.roadtrip.models.api.WaypointSchema
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.RouteCache
@@ -51,9 +51,8 @@ private const val MILES_TO_METERS = 1609.34
 
 // POST /api/pois
 //
-// Returns a GeoJSON FeatureCollection of POIs in the requested bbox (and,
-// when a route is supplied, inside the corridor around it). One round-trip
-// per pan — the FE debounces moveend by 250ms.
+// Returns a GeoJSON FeatureCollection of POIs in the requested bbox.
+// One round-trip per pan — the FE debounces moveend by 250ms.
 //
 // Categories are picked by the FE; default (when omitted) is the full set
 // {campground, state-park, national-park, planet-fitness, supercharger}.
@@ -61,12 +60,10 @@ private const val MILES_TO_METERS = 1609.34
 // dense layer (Planet Fitness ~1.5k rows) can't starve sparser ones;
 // truncated:true tells the client to ask the user to zoom in further.
 //
-// Corridor filtering: the FE passes `route: { waypoints, radius_miles }`,
-// not a pre-buffered polygon. The polyline already lives in RouteCache
-// (seeded by /api/route a moment earlier), so the BE buffers it on the
-// fly via PostGIS ST_Buffer((line)::geography, meters)::geometry. Saves
-// the FE from shipping several KB of buffered polygon over the wire on
-// every pan.
+// Corridor filtering moved to POST /api/pois/on-route — the trip
+// planner's "campgrounds along route" list needs the full set, not a
+// viewport slice + per-cat sample, so the two paths have different
+// truncation rules and live in different endpoints.
 fun Route.poiRoutes(
     ctx: DSLContext,
     routeCache: RouteCache,
@@ -84,12 +81,11 @@ fun Route.poiRoutes(
         tags = listOf("poi")
         summary = "POIs within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"
         description =
-            "Body: { bbox: [w,s,e,n], zoom?, categories?, route? }. " +
+            "Body: { bbox: [w,s,e,n], zoom?, categories? }. " +
             "categories defaults to the union of `category` values from every enabled data_source " +
             "in config/poi-registry.yaml. " +
-            "When route is present (waypoints + radius_miles), the BE looks up the cached polyline " +
-            "from /api/route and buffers server-side, narrowing results to the corridor. " +
-            "zoom < $CG_MIN_ZOOM suppresses campgrounds even when requested."
+            "zoom < $CG_MIN_ZOOM suppresses campgrounds even when requested. " +
+            "Corridor filtering has moved to POST /api/pois/on-route."
         request {
             body<PoisRequestSchema> {
                 mediaTypes(io.ktor.http.ContentType.Application.Json)
@@ -108,34 +104,16 @@ fun Route.poiRoutes(
                             categories = listOf("planet-fitness", "supercharger"),
                         )
                 }
-                example("with corridor (3-stop route, 30mi radius)") {
-                    value =
-                        PoisRequestSchema(
-                            bbox = listOf(-117.0, 32.5, -111.0, 35.0),
-                            zoom = 7,
-                            route =
-                                RouteSchema(
-                                    waypoints =
-                                        listOf(
-                                            WaypointSchema(lat = 33.96, lng = -117.39),
-                                            WaypointSchema(lat = 33.45, lng = -112.07),
-                                            WaypointSchema(lat = 32.22, lng = -110.92),
-                                        ),
-                                    radius_miles = 30.0,
-                                ),
-                        )
-                }
             }
         }
         response {
             code(io.ktor.http.HttpStatusCode.OK) {
                 description =
-                    "GeoJSON FeatureCollection. truncated:true when the bbox span exceeded the cap. " +
-                    "corridor:true when a route was supplied."
+                    "GeoJSON FeatureCollection. truncated:true when the bbox span exceeded the cap."
                 body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
             }
             code(io.ktor.http.HttpStatusCode.BadRequest) {
-                description = "Malformed body, missing bbox, or invalid waypoints/radius."
+                description = "Malformed body or missing bbox."
                 body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
             }
         }
@@ -154,70 +132,138 @@ fun Route.poiRoutes(
             }
 
         val rawCategories = req.categories
-        // The CG zoom gate exists because at continental zoom (z<6) the
-        // ~12k campground rows nationwide would dominate the per-category
-        // budget. With a corridor active the spatial predicate already
-        // narrows results to the route, so the gate isn't needed —
-        // bypass it so campgrounds along a long road trip render at z=4.
+        // CG zoom gate: at continental zoom (z<6) the ~12k campground rows
+        // nationwide would dominate the per-category budget. The trip
+        // planner's "campgrounds along route" view bypasses this entirely
+        // by going through /api/pois/on-route, so the gate here is a pure
+        // viewport-rendering decision.
         val categories =
-            if (req.route == null && rawCategories != null && req.zoom != null && req.zoom < CG_MIN_ZOOM) {
+            if (rawCategories != null && req.zoom != null && req.zoom < CG_MIN_ZOOM) {
                 rawCategories.filter { it != "campground" }.takeIf { it.isNotEmpty() }
             } else {
                 rawCategories
             }
 
-        // Resolve the route to a LineString GeoJSON we can hand to
-        // ST_GeomFromGeoJSON. RouteCache hits Mapbox only on miss; the
-        // FE almost always primes the cache with a /api/route call right
-        // before this. If the cache lookup fails (Mapbox unreachable,
-        // bad waypoints), drop the corridor and serve bbox-only — better
-        // to show too many POIs than to 5xx the whole pan.
-        val (corridorLineGeoJson, corridorRadiusMeters) =
-            if (req.route != null) {
-                try {
-                    val pairs = req.route.waypoints.map { it.lng to it.lat }
-                    val polyline = routeCache.directions(pairs).coordinates
-                    lineStringGeoJson(polyline) to (req.route.radiusMiles * MILES_TO_METERS)
-                } catch (e: RoutingException) {
-                    log.warn("route lookup failed, falling back to bbox-only: {}", e.message)
-                    null to 0.0
-                }
-            } else {
-                null to 0.0
-            }
-        val corridorActive = corridorLineGeoJson != null
-
-        // Polygon corridors via ST_Buffer can rarely produce a self-
-        // intersection pathology that PostGIS GEOS rejects with
-        // TopologyException. Catch that, log it, and degrade to bbox-only —
-        // the user sees more POIs than ideal, but never a 500.
         val result =
             if (categories?.isEmpty() == true) {
                 PoiResult(emptyList(), truncated = false)
             } else {
+                fetchPois(
+                    ctx = ctx,
+                    bbox = req.bbox,
+                    categories = categories,
+                    defaultCategories = defaultCategories,
+                    limit = POI_LIMIT,
+                )
+            }
+
+        call.respondText(
+            buildFeatureCollection(result.rows, result.truncated),
+            io.ktor.http.ContentType.Application.Json,
+        )
+    }
+
+    get("/api/pois/health") {
+        call.respondText("""{"status":"ok"}""", io.ktor.http.ContentType.Application.Json)
+    }
+
+    // POST /api/pois/on-route
+    //
+    // Returns every POI inside the buffered route corridor — no viewport
+    // bound, no per-category cap. Drives the trip planner's "campgrounds
+    // along route" card list, which the user wants to scan end-to-end
+    // instead of pan-by-pan.
+    //
+    // Request: { waypoints: [{lat,lng}…], radius_miles, categories? }.
+    // Response: slim FeatureCollection (id, geometry, category,
+    // subcategory) plus `route_km` per feature so the FE can sort by
+    // along-route distance without re-projecting client-side.
+    //
+    // RouteCache is seeded by /api/route a moment earlier; if the cache
+    // miss path fails (Mapbox unreachable) we 503. No bbox fallback —
+    // unlike /api/pois, an empty result here is meaningful (the user
+    // sees "no campgrounds along route"), so silently widening the
+    // search would be confusing.
+    post("/api/pois/on-route", {
+        tags = listOf("poi")
+        summary = "Slim POIs inside a buffered route corridor (no viewport, no truncation)"
+        description =
+            "Body: { waypoints: [{lat,lng}…2..$MAX_WAYPOINTS], radius_miles: ${MIN_RADIUS_MILES}..$MAX_RADIUS_MILES, categories? }. " +
+            "Returns a GeoJSON FeatureCollection ordered by route_km. " +
+            "Backed by RouteCache; the FE typically primes it via /api/route just before this call."
+        request {
+            body<PoisOnRouteRequestSchema> {
+                mediaTypes(io.ktor.http.ContentType.Application.Json)
+                example("Vancouver → Seattle, 30mi corridor, campgrounds") {
+                    value =
+                        PoisOnRouteRequestSchema(
+                            waypoints =
+                                listOf(
+                                    WaypointSchema(lat = 49.28, lng = -123.10),
+                                    WaypointSchema(lat = 47.61, lng = -122.33),
+                                ),
+                            radius_miles = 30.0,
+                            categories = listOf("campground"),
+                        )
+                }
+            }
+        }
+        response {
+            code(io.ktor.http.HttpStatusCode.OK) {
+                description = "FeatureCollection of slim features (+ route_km), sorted by route_km."
+                body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+            }
+            code(io.ktor.http.HttpStatusCode.BadRequest) {
+                description = "Malformed body, bad waypoints, or radius out of range."
+                body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+            }
+            code(io.ktor.http.HttpStatusCode.ServiceUnavailable) {
+                description = "Route lookup failed (Mapbox unreachable / cache miss)."
+                body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+            }
+        }
+    }) {
+        val bodyText = call.receiveText()
+        val req =
+            try {
+                parseOnRouteRequest(bodyText)
+            } catch (e: Exception) {
+                call.respondText(
+                    """{"error":"bad_request","detail":"${escapeJsonInline(e.message ?: "parse failed")}"}""",
+                    io.ktor.http.ContentType.Application.Json,
+                    HttpStatusCode.BadRequest,
+                )
+                return@post
+            }
+
+        val polylineCoords =
+            try {
+                val pairs = req.waypoints.map { it.lng to it.lat }
+                routeCache.directions(pairs).coordinates
+            } catch (e: RoutingException) {
+                log.warn("on-route lookup failed: {}", e.message)
+                call.respondText(
+                    """{"error":"routing_unavailable"}""",
+                    io.ktor.http.ContentType.Application.Json,
+                    HttpStatusCode.ServiceUnavailable,
+                )
+                return@post
+            }
+        val corridorLineGeoJson = lineStringGeoJson(polylineCoords)
+        val corridorRadiusMeters = req.radiusMiles * MILES_TO_METERS
+
+        val cats = req.categories ?: defaultCategories
+        val rows =
+            if (cats.isEmpty()) {
+                emptyList()
+            } else {
                 try {
-                    fetchPois(
-                        ctx = ctx,
-                        bbox = req.bbox,
-                        categories = categories,
-                        defaultCategories = defaultCategories,
-                        corridorLineGeoJson = corridorLineGeoJson,
-                        corridorRadiusMeters = corridorRadiusMeters,
-                        limit = POI_LIMIT,
-                    )
+                    fetchOnRoute(ctx, cats, corridorLineGeoJson, corridorRadiusMeters)
                 } catch (e: org.jooq.exception.DataAccessException) {
                     val cause = e.cause?.message.orEmpty()
-                    if (corridorLineGeoJson != null && cause.contains("TopologyException")) {
-                        log.warn("corridor GEOS topology fault, falling back to bbox-only: {}", cause)
-                        fetchPois(
-                            ctx = ctx,
-                            bbox = req.bbox,
-                            categories = categories,
-                            defaultCategories = defaultCategories,
-                            corridorLineGeoJson = null,
-                            corridorRadiusMeters = 0.0,
-                            limit = POI_LIMIT,
-                        )
+                    if (cause.contains("TopologyException")) {
+                        log.warn("on-route GEOS topology fault, returning empty: {}", cause)
+                        emptyList()
                     } else {
                         throw e
                     }
@@ -225,13 +271,9 @@ fun Route.poiRoutes(
             }
 
         call.respondText(
-            buildFeatureCollection(result.rows, result.truncated, corridorActive),
+            buildOnRouteFeatureCollection(rows),
             io.ktor.http.ContentType.Application.Json,
         )
-    }
-
-    get("/api/pois/health") {
-        call.respondText("""{"status":"ok"}""", io.ktor.http.ContentType.Application.Json)
     }
 
     // GET /api/pois/{id}
@@ -404,12 +446,12 @@ private data class PoiRequest(
     val bbox: Bbox,
     val zoom: Int?,
     val categories: List<String>?,
-    val route: RouteRequest?,
 )
 
-private data class RouteRequest(
+private data class OnRouteRequest(
     val waypoints: List<Waypoint>,
     val radiusMiles: Double,
+    val categories: List<String>?,
 )
 
 private data class Waypoint(
@@ -440,31 +482,43 @@ private fun parseRequest(bodyText: String): PoiRequest {
                     ?.takeIf { c -> c.isNotEmpty() }
             }?.takeIf { it.isNotEmpty() }
 
-    val route =
-        root["route"]?.jsonObject?.let { obj ->
-            val wpsArr = obj["waypoints"]?.jsonArray ?: error("route.waypoints required")
-            require(wpsArr.size in 2..MAX_WAYPOINTS) {
-                "route.waypoints must have 2..$MAX_WAYPOINTS entries (got ${wpsArr.size})"
-            }
-            val waypoints =
-                wpsArr.mapIndexed { i, el ->
-                    val o = el.jsonObject
-                    val lat = o["lat"]?.jsonPrimitive?.doubleOrNull ?: error("waypoint[$i].lat is missing or not a number")
-                    val lng = o["lng"]?.jsonPrimitive?.doubleOrNull ?: error("waypoint[$i].lng is missing or not a number")
-                    require(lat in -90.0..90.0) { "waypoint[$i].lat out of range" }
-                    require(lng in -180.0..180.0) { "waypoint[$i].lng out of range" }
-                    Waypoint(lat = lat, lng = lng)
-                }
-            val radius =
-                obj["radius_miles"]?.jsonPrimitive?.doubleOrNull
-                    ?: error("route.radius_miles is missing or not a number")
-            require(radius in MIN_RADIUS_MILES..MAX_RADIUS_MILES) {
-                "route.radius_miles must be in [$MIN_RADIUS_MILES, $MAX_RADIUS_MILES] (got $radius)"
-            }
-            RouteRequest(waypoints = waypoints, radiusMiles = radius)
+    return PoiRequest(bbox, zoom, categories)
+}
+
+private fun parseOnRouteRequest(bodyText: String): OnRouteRequest {
+    val root = Json.parseToJsonElement(bodyText).jsonObject
+
+    val wpsArr = root["waypoints"]?.jsonArray ?: error("waypoints required")
+    require(wpsArr.size in 2..MAX_WAYPOINTS) {
+        "waypoints must have 2..$MAX_WAYPOINTS entries (got ${wpsArr.size})"
+    }
+    val waypoints =
+        wpsArr.mapIndexed { i, el ->
+            val o = el.jsonObject
+            val lat = o["lat"]?.jsonPrimitive?.doubleOrNull ?: error("waypoint[$i].lat is missing or not a number")
+            val lng = o["lng"]?.jsonPrimitive?.doubleOrNull ?: error("waypoint[$i].lng is missing or not a number")
+            require(lat in -90.0..90.0) { "waypoint[$i].lat out of range" }
+            require(lng in -180.0..180.0) { "waypoint[$i].lng out of range" }
+            Waypoint(lat = lat, lng = lng)
         }
 
-    return PoiRequest(bbox, zoom, categories, route)
+    val radius =
+        root["radius_miles"]?.jsonPrimitive?.doubleOrNull
+            ?: error("radius_miles is missing or not a number")
+    require(radius in MIN_RADIUS_MILES..MAX_RADIUS_MILES) {
+        "radius_miles must be in [$MIN_RADIUS_MILES, $MAX_RADIUS_MILES] (got $radius)"
+    }
+
+    val categories =
+        root["categories"]
+            ?.jsonArray
+            ?.mapNotNull {
+                it.jsonPrimitive.contentOrNull
+                    ?.trim()
+                    ?.takeIf { c -> c.isNotEmpty() }
+            }?.takeIf { it.isNotEmpty() }
+
+    return OnRouteRequest(waypoints = waypoints, radiusMiles = radius, categories = categories)
 }
 
 data class Bbox(
@@ -547,17 +601,15 @@ internal fun fetchPois(
     bbox: Bbox,
     categories: List<String>?,
     defaultCategories: List<String>,
-    corridorLineGeoJson: String? = null,
-    corridorRadiusMeters: Double = 0.0,
     limit: Int,
 ): PoiResult {
     val cats = categories ?: defaultCategories
     if (cats.isEmpty()) return PoiResult(emptyList(), truncated = false)
 
-    // Step 1: cheap per-category COUNT in the bbox/corridor. GIST-only on
-    // the geom predicate, no row reads beyond the index. Drives both the
-    // truncation flag and the proportional allocation in step 2.
-    val countByCat = countByCategory(ctx, cats, bbox, corridorLineGeoJson, corridorRadiusMeters)
+    // Step 1: cheap per-category COUNT in the bbox. GIST-only on the geom
+    // predicate, no row reads beyond the index. Drives both the truncation
+    // flag and the proportional allocation in step 2.
+    val countByCat = countByCategory(ctx, cats, bbox)
     val rawTotal = countByCat.values.sum()
     val present = cats.filter { (countByCat[it] ?: 0) > 0 }
     if (present.isEmpty()) return PoiResult(emptyList(), truncated = false)
@@ -572,14 +624,7 @@ internal fun fetchPois(
     // row_number() window partitioned by a SAMPLE_GRID_DIM x SAMPLE_GRID_DIM
     // spatial bucket to spread the sample across the viewport. UNION ALL
     // collapses the per-cat results into one round-trip.
-    val rows =
-        fetchSampled(
-            ctx = ctx,
-            bbox = bbox,
-            allocation = allocation,
-            corridorLineGeoJson = corridorLineGeoJson,
-            corridorRadiusMeters = corridorRadiusMeters,
-        )
+    val rows = fetchSampled(ctx = ctx, bbox = bbox, allocation = allocation)
     // truncated = "we returned fewer rows than the viewport contains" —
     // covers both the cap-overflow case (raw > limit) and the spatial-
     // bucket case (raw fits but sampling thinned a tight cluster).
@@ -591,42 +636,24 @@ private fun countByCategory(
     ctx: DSLContext,
     cats: List<String>,
     bbox: Bbox,
-    corridorLineGeoJson: String?,
-    corridorRadiusMeters: Double,
 ): Map<String, Int> {
     if (cats.isEmpty()) return emptyMap()
     val placeholders = cats.joinToString(",") { "?" }
     val sql =
-        buildString {
-            append(
-                """
-                SELECT category, COUNT(*) AS n
-                FROM pois
-                WHERE deleted_at IS NULL
-                  AND category IN ($placeholders)
-                  AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
-                """.trimIndent(),
-            )
-            if (corridorLineGeoJson != null) {
-                append(
-                    "\n      AND ST_Intersects(geom, " +
-                        "ST_CollectionExtract(ST_MakeValid(" +
-                        "ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)::geography, ?)::geometry" +
-                        "), 3))",
-                )
-            }
-            append("\nGROUP BY category")
-        }
+        """
+        SELECT category, COUNT(*) AS n
+        FROM pois
+        WHERE deleted_at IS NULL
+          AND category IN ($placeholders)
+          AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
+        GROUP BY category
+        """.trimIndent()
     val args = mutableListOf<Any>()
     args.addAll(cats)
     args.add(bbox.west)
     args.add(bbox.south)
     args.add(bbox.east)
     args.add(bbox.north)
-    if (corridorLineGeoJson != null) {
-        args.add(corridorLineGeoJson)
-        args.add(corridorRadiusMeters)
-    }
     val out = mutableMapOf<String, Int>()
     for (r in ctx.fetch(sql, *args.toTypedArray())) {
         out[r.get("category") as String] = (r.get("n") as Number).toInt()
@@ -671,8 +698,6 @@ private fun fetchSampled(
     ctx: DSLContext,
     bbox: Bbox,
     allocation: Map<String, Int>,
-    corridorLineGeoJson: String?,
-    corridorRadiusMeters: Double,
 ): List<PoiRow> {
     val cats = allocation.keys.toList()
     if (cats.isEmpty()) return emptyList()
@@ -712,14 +737,6 @@ private fun fetchSampled(
                       AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
                     """.trimIndent(),
                 )
-                if (corridorLineGeoJson != null) {
-                    append(
-                        "\n      AND ST_Intersects(geom, " +
-                            "ST_CollectionExtract(ST_MakeValid(" +
-                            "ST_Buffer(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)::geography, ?)::geometry" +
-                            "), 3))",
-                    )
-                }
                 append("\n) sub ORDER BY rn ASC, id ASC LIMIT ?)")
             }
         }
@@ -738,10 +755,6 @@ private fun fetchSampled(
         args.add(bbox.south)
         args.add(bbox.east)
         args.add(bbox.north)
-        if (corridorLineGeoJson != null) {
-            args.add(corridorLineGeoJson)
-            args.add(corridorRadiusMeters)
-        }
         args.add(allocation.getValue(cat).coerceAtLeast(1))
     }
 
@@ -752,6 +765,89 @@ private fun fetchSampled(
             subcategory = r.get("subcategory") as String?,
             lng = (r.get("lng") as Number).toDouble(),
             lat = (r.get("lat") as Number).toDouble(),
+        )
+    }
+}
+
+// Slim per-row shape for /api/pois/on-route. Same id + category +
+// lat/lng + subcategory as the bbox endpoint, plus along-route distance
+// in km so the FE can sort without re-projecting client-side.
+internal data class OnRouteRow(
+    val id: Long,
+    val category: String,
+    val subcategory: String?,
+    val lng: Double,
+    val lat: Double,
+    val routeKm: Double,
+)
+
+// Sampling strategy slot for the on-route endpoint. Today we always
+// return everything inside the corridor; future variants (even-along-
+// route, score-weighted, time-bucketed) plug in here without touching
+// the route handler.
+internal sealed interface OnRouteSamplingStrategy {
+    data object None : OnRouteSamplingStrategy
+}
+
+internal fun fetchOnRoute(
+    ctx: DSLContext,
+    categories: List<String>,
+    corridorLineGeoJson: String,
+    corridorRadiusMeters: Double,
+    strategy: OnRouteSamplingStrategy = OnRouteSamplingStrategy.None,
+): List<OnRouteRow> {
+    if (categories.isEmpty()) return emptyList()
+    val placeholders = categories.joinToString(",") { "?" }
+
+    // Build the corridor LineString once and reuse it for the predicate
+    // and the along-route distance projection. ST_LineLocatePoint returns
+    // a 0..1 fraction; multiply by ST_Length(::geography) (meters) and
+    // divide by 1000 to get km.
+    val sql =
+        when (strategy) {
+            OnRouteSamplingStrategy.None ->
+                """
+                WITH corridor AS (
+                  SELECT
+                    ST_SetSRID(ST_GeomFromGeoJSON(?), 4326) AS line,
+                    ST_CollectionExtract(
+                      ST_MakeValid(
+                        ST_Buffer(
+                          ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)::geography,
+                          ?
+                        )::geometry
+                      ),
+                      3
+                    ) AS poly,
+                    ST_Length(ST_SetSRID(ST_GeomFromGeoJSON(?), 4326)::geography) / 1000.0 AS len_km
+                )
+                SELECT id, category, subcategory,
+                       ST_X(ST_Centroid(geom)) AS lng,
+                       ST_Y(ST_Centroid(geom)) AS lat,
+                       ST_LineLocatePoint(corridor.line, ST_Centroid(geom)) * corridor.len_km AS route_km
+                FROM pois, corridor
+                WHERE deleted_at IS NULL
+                  AND category IN ($placeholders)
+                  AND ST_Intersects(geom, corridor.poly)
+                ORDER BY route_km ASC, id ASC
+                """.trimIndent()
+        }
+
+    val args = mutableListOf<Any>()
+    args.add(corridorLineGeoJson) // corridor.line
+    args.add(corridorLineGeoJson) // ST_Buffer input
+    args.add(corridorRadiusMeters)
+    args.add(corridorLineGeoJson) // len_km
+    args.addAll(categories)
+
+    return ctx.fetch(sql, *args.toTypedArray()).map { r ->
+        OnRouteRow(
+            id = (r.get("id") as Number).toLong(),
+            category = r.get("category") as String,
+            subcategory = r.get("subcategory") as String?,
+            lng = (r.get("lng") as Number).toDouble(),
+            lat = (r.get("lat") as Number).toDouble(),
+            routeKm = (r.get("route_km") as Number).toDouble(),
         )
     }
 }
@@ -816,13 +912,11 @@ internal fun fetchPoiById(
 internal fun buildFeatureCollection(
     rows: List<PoiRow>,
     truncated: Boolean,
-    corridorActive: Boolean = false,
 ): String {
     val sb = StringBuilder()
     sb
         .append("""{"type":"FeatureCollection","truncated":""")
         .append(truncated)
-    if (corridorActive) sb.append(""","corridor":true""")
     sb.append(""","features":[""")
     for ((i, r) in rows.withIndex()) {
         if (i > 0) sb.append(',')
@@ -835,6 +929,32 @@ internal fun buildFeatureCollection(
             .append("]}")
         sb.append(""","properties":{"category":""").append(jsonString(r.category))
         if (r.subcategory != null) sb.append(""","subcategory":""").append(jsonString(r.subcategory))
+        sb.append("}}")
+    }
+    sb.append("]}")
+    return sb.toString()
+}
+
+/**
+ * On-route FeatureCollection. Same per-feature shape as the bbox endpoint
+ * (id + Point + category[+subcategory]) plus a `route_km` property so the
+ * FE can sort or label without re-projecting on the client.
+ */
+internal fun buildOnRouteFeatureCollection(rows: List<OnRouteRow>): String {
+    val sb = StringBuilder()
+    sb.append("""{"type":"FeatureCollection","features":[""")
+    for ((i, r) in rows.withIndex()) {
+        if (i > 0) sb.append(',')
+        sb.append("""{"type":"Feature","id":""").append(r.id)
+        sb
+            .append(""","geometry":{"type":"Point","coordinates":[""")
+            .append(r.lng)
+            .append(',')
+            .append(r.lat)
+            .append("]}")
+        sb.append(""","properties":{"category":""").append(jsonString(r.category))
+        if (r.subcategory != null) sb.append(""","subcategory":""").append(jsonString(r.subcategory))
+        sb.append(""","route_km":""").append(r.routeKm)
         sb.append("}}")
     }
     sb.append("]}")

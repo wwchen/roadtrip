@@ -239,11 +239,10 @@ async function load() {
   // Viewport FeatureCollection cache. Each entry holds the bbox + categories
   // that produced a non-truncated FC; a subsequent pan into a sub-bbox with
   // the same category set skips the /api/pois round-trip and re-renders
-  // from memory. Skipped when a corridor route is active (the predicate
-  // changes) and when the prior response was truncated (features outside
-  // the per-cat budget weren't returned, so a contained sub-view could be
-  // missing pins). Ring buffer of 8 keeps the working set across normal
-  // pan/zoom-out behavior without unbounded growth.
+  // from memory. Skipped when the prior response was truncated (features
+  // outside the per-cat budget weren't returned, so a contained sub-view
+  // could be missing pins). Ring buffer of 8 keeps the working set across
+  // normal pan/zoom-out behavior without unbounded growth.
   const VIEWPORT_CACHE_TTL_MS = 5 * 60 * 1000;
   const VIEWPORT_CACHE_MAX = 8;
   const viewportCache = [];
@@ -274,18 +273,12 @@ async function load() {
     const b = m.getBounds();
     const west = b.getWest(), south = b.getSouth(), east = b.getEast(), north = b.getNorth();
     const zoom = Math.floor(m.getZoom());
-    // When a trip route is active, topbar exposes its waypoints + radius
-    // via window.__rtTripRoute. The BE looks the polyline up from
-    // RouteCache (seeded by /api/route) and buffers server-side.
-    const route = (typeof window.__rtTripRoute === 'function')
-      ? window.__rtTripRoute()
-      : null;
 
     // CG zoom gating still tracked client-side for cgUnlocked + counts UI;
-    // the server enforces its own gate at zoom < 6 anyway. Bypass the
-    // gate when a route is active — campgrounds are exactly the kind of
-    // POI the user wants to see along the corridor regardless of zoom.
-    const wantCG = !!route || m.getZoom() >= CG_ZOOM_THRESHOLD || cgUnlocked;
+    // the server enforces its own gate at zoom < 6 anyway. The trip
+    // corridor card list goes through /api/pois/on-route now, so this
+    // gate purely controls what gets painted on the map.
+    const wantCG = m.getZoom() >= CG_ZOOM_THRESHOLD || cgUnlocked;
     if (wantCG) cgUnlocked = true;
     // Defaults: just the point-geom layers. Park polygons (NP/SP) are
     // expensive to ship and clutter at low zoom — leave them out for now;
@@ -296,22 +289,17 @@ async function load() {
     const currentBbox = [west, south, east, north];
     const catsKey = cats.slice().sort().join(',');
 
-    // Cache short-circuit: only when no corridor (the route polyline is part
-    // of the predicate, not just the bbox). The cached FC may carry features
-    // outside the new viewport — that's fine, MapLibre filters by geometry
-    // intersection at render time and the layer only paints what's visible.
+    // Cache short-circuit. The cached FC may carry features outside the new
+    // viewport — that's fine, MapLibre filters by geometry intersection at
+    // render time and the layer only paints what's visible.
     let fc = null;
-    let fromCache = false;
-    if (!route) {
-      const cached = viewportCacheLookup(currentBbox, catsKey);
-      if (cached) { fc = cached; fromCache = true; }
-    }
+    const cached = viewportCacheLookup(currentBbox, catsKey);
+    if (cached) fc = cached;
 
     if (!fc) {
       if (inflight) inflight.abort();
       inflight = new AbortController();
       const poisBody = { bbox: currentBbox, zoom, categories: cats };
-      if (route) poisBody.route = route;
 
       try {
         const poisRes = await fetch('/api/pois', {
@@ -331,7 +319,7 @@ async function load() {
       // Only cache full responses. truncated:true means features beyond the
       // POI_LIMIT budget were dropped server-side, so a contained sub-view
       // would render fewer pins than a real fetch would return.
-      if (!route && !fc.truncated) viewportCachePut(currentBbox, catsKey, fc);
+      if (!fc.truncated) viewportCachePut(currentBbox, catsKey, fc);
     }
 
     const np = [], sp = [], pf = [], cg = [], sc = [];
@@ -350,8 +338,6 @@ async function load() {
     setCGData({ type: 'FeatureCollection', features: cg });
     setSCData({ type: 'FeatureCollection', features: sc });
 
-    // Trip-corridor card list reads from this hook on each refresh.
-    if (typeof window.__rtSetTripPois === 'function') window.__rtSetTripPois(cg);
     state.overlayData.np = { type: 'FeatureCollection', features: np };
     state.overlayData.sp = { type: 'FeatureCollection', features: sp };
     state.overlayData.pf = { type: 'FeatureCollection', features: pf };

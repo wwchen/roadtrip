@@ -15,13 +15,14 @@
 //   initTopbar(map, getPinSearchIndex)
 //   The module otherwise owns its DOM and state internally.
 
-import { state, distanceKm, formatDistance } from './core.js';
+import { state, distanceKm, formatDistance, flattenHydratedPoi } from './core.js';
 import { fitAndSelect } from './search.js';
 import { synthesizeClick } from './layers.js';
 import { openCampgroundDrawer } from './drawer/campground.js';
 import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
 import { openSuperchargerDrawer } from './drawer/supercharger.js';
+import { hydratePoi } from './drawer/shared.js';
 
 // --- constants -------------------------------------------------------------
 
@@ -178,25 +179,6 @@ export function initTopbar(map, getPinSearchIndex) {
   bindEvents();
   bindPinClicks();
   renderRows();
-
-  // Expose the active route (waypoints + radius) to app.js's bbox refresh
-  // so it can include it in the POST /api/pois body. The BE looks the
-  // polyline up server-side from RouteCache and buffers there — we do NOT
-  // send the buffered polygon back over the wire; that's a kilobytes-of-
-  // regurgitation per pan. Returns null when no route is active.
-  // The visual corridor (trip.corridor) is still computed client-side
-  // via turf.buffer for the on-map fill — different consumer, different shape.
-  window.__rtTripRoute = () => {
-    if (trip.mode !== 'directions' || !allStopsFilled()) return null;
-    return {
-      waypoints: trip.stops.map(s => ({ lat: s.lat, lng: s.lng })),
-      radius_miles: trip.corridorMiles,
-    };
-  };
-
-  // app.js calls this on every bbox refresh with the latest campground feature
-  // list. We dedupe + sort + render only when a route is active.
-  window.__rtSetTripPois = (cgFeatures) => setTripPois(cgFeatures);
 
   // Drawer + popups read these to render a per-POI Directions button. We
   // expose globals (vs. an import) because the drawer module is downstream
@@ -1132,13 +1114,66 @@ function onRowX(i, wasFilled) {
   else { removeRouteLayer(); hideStatus(); notifyCorridorChanged(); }
 }
 
-/** Tell app.js the corridor has changed so it re-fetches /api/pois with the
- *  new polygon (or no polygon if the route was cleared). Debounced inside
- *  app.js (250ms), so calling it multiple times in quick succession is fine. */
+/** Trigger the corridor card-list refresh. Debounced via the AbortController
+ *  pattern in refreshOnRoutePois — calling this multiple times in quick
+ *  succession (radius slider drag) settles on the latest call. The map
+ *  rendering pipeline runs independently through __rtRefreshBbox; both
+ *  fire because corridor changes affect both consumers. */
 function notifyCorridorChanged() {
+  refreshOnRoutePois();
   if (typeof window.__rtRefreshBbox === 'function') {
     window.__rtRefreshBbox();
   }
+}
+
+// In-flight on-route fetch. Aborted + replaced on every refresh so a
+// rapid radius drag doesn't pile up requests; we settle on the latest.
+let onRouteAbort = null;
+
+const ON_ROUTE_DEBOUNCE_MS = 250;
+let onRouteDebounce = null;
+
+/** Fetch /api/pois/on-route for the active route and hand the slim
+ *  features to setTripPois. No-op when no route is active; fires
+ *  through the same setTripPois clear path so the card list empties. */
+function refreshOnRoutePois() {
+  clearTimeout(onRouteDebounce);
+  onRouteDebounce = setTimeout(refreshOnRoutePoisNow, ON_ROUTE_DEBOUNCE_MS);
+}
+
+async function refreshOnRoutePoisNow() {
+  if (trip.mode !== 'directions' || !allStopsFilled()) {
+    setTripPois([]);
+    return;
+  }
+  if (onRouteAbort) onRouteAbort.abort();
+  onRouteAbort = new AbortController();
+  const signal = onRouteAbort.signal;
+
+  const body = {
+    waypoints: trip.stops.map(s => ({ lat: s.lat, lng: s.lng })),
+    radius_miles: trip.corridorMiles,
+    categories: ['campground'],
+  };
+  let fc;
+  try {
+    const r = await fetch('/api/pois/on-route', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal,
+    });
+    if (!r.ok) {
+      console.warn('[topbar] /api/pois/on-route failed', r.status);
+      return;
+    }
+    fc = await r.json();
+  } catch (e) {
+    if (e.name !== 'AbortError') console.warn('[topbar] on-route fetch failed', e);
+    return;
+  }
+  if (signal.aborted) return;
+  setTripPois(fc.features || []);
 }
 
 // --- route fetch + render ----------------------------------------------
@@ -1623,9 +1658,10 @@ function distanceAlongRouteKm(lng, lat) {
   return cum[bestSeg] + bestT * segLen;
 }
 
-/** Called by app.js after every bbox refresh. We accumulate dedupe-by-id so
- *  campgrounds discovered in earlier viewports stay in the list, and re-sort
- *  whenever the origin moves (route added/cleared/reordered). */
+/** Replace the corridor card list wholesale from a fresh /api/pois/on-route
+ *  response. Slim features carry only id, lng/lat, category, subcategory,
+ *  and route_km; the richer fields the cards display (name, sites, season,
+ *  rating) arrive asynchronously via per-card hydratePoi. */
 function setTripPois(cgFeatures) {
   if (trip.mode !== 'directions' || !trip.route || !trip.stops[0]) {
     tripResults.cards = [];
@@ -1635,52 +1671,93 @@ function setTripPois(cgFeatures) {
     return;
   }
   // Refresh route index — the route polyline may have changed since the
-  // last call (added/removed/reordered stops).
+  // last call (added/removed/reordered stops). Used as a fallback when a
+  // feature lacks a server-supplied route_km.
   indexRoute(trip.route.features[0].geometry);
 
   const origin = trip.stops[0];
-  let added = false;
+  tripResults.cards = [];
+  tripResults.byId.clear();
+  tripResults.availabilityByPoiId.clear();
+
   for (const f of cgFeatures || []) {
     const id = f.id ?? f.properties?.id;
-    if (id == null || tripResults.byId.has(id)) continue;
-    added = true;
+    if (id == null) continue;
     const [lng, lat] = f.geometry?.coordinates || [];
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     const p = f.properties || {};
-    // rating_reviews can be either an array (already parsed by /api/pois)
-    // or a JSON string (legacy popups path) — handle both.
-    let rating = null;
-    if (Array.isArray(p.rating_reviews)) rating = p.rating_reviews;
-    else if (typeof p.rating_reviews === 'string') {
-      try { rating = JSON.parse(p.rating_reviews); } catch { /* ignore */ }
-    }
+    const subcat = p.subcategory || p.category || 'other';
     const card = {
       id,
-      name: p.name || 'Campground',
-      sub: [p.typeLabel, p.state || p.country].filter(Boolean).join(' · '),
-      category: p.category || 'other',
-      sites: Number.isFinite(Number(p.sites)) ? Number(p.sites) : null,
-      season: p.season || null,
-      reservable: p.reservable,
-      rating: Array.isArray(rating) ? rating : null,
+      name: 'Campground',
+      sub: '',
+      category: subcat === 'campground' ? 'other' : subcat,
+      sites: null,
+      season: null,
+      reservable: undefined,
+      rating: null,
       lng, lat,
+      // Prefer the BE-supplied along-route distance — the FE projection
+      // only knows about the cached polyline and may disagree on long
+      // routes where Mapbox's geometry differs from a straight LineString.
+      routeKm: Number.isFinite(p.route_km) ? p.route_km : distanceAlongRouteKm(lng, lat),
+      distKm: distanceKm(origin.lat, origin.lng, lat, lng),
       feature: f,
+      hydrated: false,
     };
     tripResults.byId.set(id, card);
     tripResults.cards.push(card);
   }
-  // Recompute distances every refresh — origin or route geometry may have changed.
-  for (const c of tripResults.cards) {
-    c.distKm = distanceKm(origin.lat, origin.lng, c.lat, c.lng);
-    c.routeKm = distanceAlongRouteKm(c.lng, c.lat);
-  }
   tripResults.cards.sort((a, b) => a.routeKm - b.routeKm);
   renderResults();
-  // New cards landed → refresh availability for them. Debounced so a flurry
-  // of bbox refreshes (zoom/pan) collapses into one bulk call.
-  if (added && tripResults.tripStart && tripResults.tripEnd) {
+
+  // Per-card lazy hydration. Promise.allSettled — each card swap-in is
+  // independent; one slow request shouldn't hold the rest. The browser
+  // HTTP cache (Cache-Control on /api/pois/{id}) absorbs cross-pan
+  // repeats so dragging the radius slider rehydrates from disk cache.
+  if (tripResults.cards.length > 0) {
+    hydrateTripCards(tripResults.cards.slice());
+  }
+
+  // Cards changed → refresh availability. Debounced so a rapid sequence
+  // (route fetch + radius drag) collapses into one bulk call.
+  if (tripResults.tripStart && tripResults.tripEnd) {
     scheduleAvailabilityRefresh();
   }
+}
+
+/** Hydrate each card via /api/pois/{id}. Runs in parallel; renderResults
+ *  fires once at the end so the card list re-paints with the names. */
+async function hydrateTripCards(cards) {
+  const promises = cards.map(async (card) => {
+    try {
+      const detailFeature = await hydratePoi(card.feature);
+      const flat = flattenHydratedPoi(detailFeature);
+      const p = flat.properties || {};
+      let rating = null;
+      if (Array.isArray(p.rating_reviews)) rating = p.rating_reviews;
+      else if (typeof p.rating_reviews === 'string') {
+        try { rating = JSON.parse(p.rating_reviews); } catch { /* ignore */ }
+      }
+      // The card may have been replaced (next refresh wholesale-replaced
+      // tripResults.cards) — only mutate if our id is still in the list.
+      const live = tripResults.byId.get(card.id);
+      if (!live) return;
+      live.name = p.name || 'Campground';
+      live.sub = [p.typeLabel, p.state || p.country].filter(Boolean).join(' · ');
+      live.sites = Number.isFinite(Number(p.sites)) ? Number(p.sites) : null;
+      live.season = p.season || null;
+      live.reservable = p.reservable;
+      live.rating = Array.isArray(rating) ? rating : null;
+      live.feature = flat;
+      live.hydrated = true;
+    } catch (_) {
+      // Leave the placeholder card. Next refresh re-tries; the browser
+      // cache means a transient blip doesn't keep us in placeholder land.
+    }
+  });
+  await Promise.allSettled(promises);
+  renderResults();
 }
 
 /** Wire up the trip-date inputs once. innerHTML rewrites inside #tb-results
