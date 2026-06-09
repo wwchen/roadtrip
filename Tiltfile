@@ -151,38 +151,15 @@ local_resource(
 # tail per resource — much friendlier than remembering Make targets in a
 # separate shell.
 #
+# Tesla Supercharger pricing has no Tilt row: the fetch is interactive
+# (cURL paste → smoke-test → loop on 403/429) and doesn't fit Tilt's log
+# pane. Run `make fetch-tesla-supercharger-pricing` from a terminal.
+#
 # Notes:
-# - 'refresh-image' builds the Dockerized Python runtime that the supercharger
-#   fetcher uses. It's a one-shot prereq; subsequent runs are a no-op until
-#   scripts/Dockerfile.refresh changes.
-# - 'refresh-tesla-cookies' mints Tesla cookies into THIS repo's .env.
-#   Production hosts mint their own cookies out-of-band; nothing in this
-#   Tiltfile or repo orchestrates that. The full Supercharger pricing fetch
-#   (`make fetch-tesla-supercharger-pricing`) is interactive — runs from a
-#   terminal, not from this Tilt UI.
 # - 'data-fetch' / 'data-import' POST to the backend's RFC 0004 admin API.
 #   Two-step refresh: fetch upstream into data/*.{json,geojson}, then import
 #   into Postgres. Both fan out across every target; per-target mutex keeps
 #   them ordered.
-
-local_resource(
-    'refresh-image',
-    cmd='make refresh-image',
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    labels=['data'],
-)
-
-local_resource(
-    # Tesla-specific cookie refresh, NOT recreation.gov. Recgov auth lives in
-    # the backend's TokenManager (see RFC 0001 / PR #22). This row mints fresh
-    # _abck cookies for the Tesla supercharger scraper into this repo's .env.
-    'refresh-tesla-cookies',
-    cmd='make refresh-tesla-cookies',
-    auto_init=False,
-    trigger_mode=TRIGGER_MODE_MANUAL,
-    labels=['data'],
-)
 
 # --- Data refresh (RFC 0004 / issue #44) -------------------------------------
 # Two buttons. data-fetch pulls upstream JSON/GeoJSON into data/<target>.*

@@ -1,4 +1,4 @@
-.PHONY: help run deploy stop check-pushed fetch-tesla-supercharger-pricing refresh-tesla-cookies refresh-image data-fetch data-import poll-raw qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed fetch-tesla-supercharger-pricing data-fetch data-import poll-raw qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -17,8 +17,7 @@ help:
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make stop             Stop all compose services locally"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
-	@echo "  make fetch-tesla-supercharger-pricing  End-to-end: mint cookies → smoke-test → bulk index + per-slug detail (loops on 403/429)"
-	@echo "  make refresh-tesla-cookies  Mint Tesla cookies into .env only (no smoke test, no fetch)"
+	@echo "  make fetch-tesla-supercharger-pricing  Mint Tesla cookies → smoke-test → bulk index + per-slug detail (interactive, loops on 403/429)"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
@@ -58,23 +57,11 @@ deploy: check-pushed
 stop:
 	- docker compose -f docker-compose.yml -f docker-compose.local.yml --profile pois down
 
-# Build the offline-refresh image (curl-impersonate baked in). Used by
-# fetch-tesla-supercharger-pricing. Idempotent — if the image exists, this
-# is a no-op.
-refresh-image:
-	docker build -t roadtrip-refresh:local -f scripts/Dockerfile.refresh scripts/
-
-# Mint Tesla cookies from Safari into THIS repo's .env. Standalone — use
-# `make fetch-tesla-supercharger-pricing` for the full end-to-end flow.
-# Cookies are bound to this laptop's egress IP so they only work locally.
-refresh-tesla-cookies:
-	@scripts/refresh-tesla-cookies.sh
-
-# End-to-end Tesla Supercharger pricing fetch: mint cookies → smoke-test
-# (one bulk-index call) → run full fetch on success, loop on 403/429.
-# Cookie minting is interactive and Akamai sometimes rejects the first try,
-# so we'd rather catch a bad cookie before kicking off the long per-slug
-# walk than fail mid-run.
+# End-to-end Tesla Supercharger pricing fetch: build the curl-impersonate
+# image (no-op if cached), mint cookies, smoke-test, walk bulk index +
+# per-slug detail. Loops on 403/429. Akamai fingerprints stock OpenSSL
+# curl, so the image bundles curl-impersonate-chrome — that's why this is
+# a Docker'd flow at all.
 fetch-tesla-supercharger-pricing:
 	@scripts/fetch-tesla-supercharger-pricing.sh
 

@@ -24,20 +24,22 @@ live in `.env` as `TESLA_COOKIES=…`.
 ## One-time setup (or refresh when expired)
 
 ```sh
-make refresh-tesla-cookies   # mint cookies into THIS repo's .env (laptop-only egress)
+make fetch-tesla-supercharger-pricing   # mint cookies + run the full fetch
 ```
 
-Mints cookies from Safari on the laptop, smoke-tests them, and writes
-`.env` here for iterating on the fetcher script in local Docker.
-Production hosts mint their own cookies out-of-band — there's no longer
-a one-shot remote-push target in this repo.
+Interactive flow: prompts for a Safari cURL paste, mints cookies into
+`.env`, smoke-tests them with one bulk-index call, and on success walks
+the per-slug detail. On 403/429 it loops back and asks for a fresh paste
+(up to 5 attempts). Production hosts mint their own cookies out-of-band
+— there's no remote-push target in this repo.
 
 ## When cookies expire
 
 Akamai cookies last on the order of a day; they're also IP-bound.
-If a refresh run starts returning 403/429, re-run `make refresh-tesla-cookies`.
-(The user-facing site is unaffected — it serves the existing cache; only the
-*next* refresh is blocked.)
+When pricing starts returning 403/429, re-run
+`make fetch-tesla-supercharger-pricing` — the loop handles the re-mint.
+(The user-facing site is unaffected — it serves the existing cache; only
+the *next* fetch is blocked.)
 
 ## What gets cached
 

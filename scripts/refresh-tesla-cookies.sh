@@ -47,10 +47,3 @@ printf 'TESLA_COOKIES=%s\n' "$cookies" >> "$tmp"
 mv "$tmp" .env
 chmod 600 .env
 echo "✓ wrote .env (TESLA_COOKIES=${#cookies} chars)"
-echo
-echo "Test now:"
-echo "  make refresh-image"
-echo "  docker run --rm --env-file .env \\"
-echo "    -v \"\$(pwd)/data:/app/data\" -v \"\$(pwd)/scripts:/app/scripts\" \\"
-echo "    -v \"\$(pwd)/config:/app/config:ro\" \\"
-echo "    roadtrip-refresh:local python3 /app/scripts/fetch_tesla_index.py && python3 /app/scripts/fetch_tesla_locations.py --limit 3"

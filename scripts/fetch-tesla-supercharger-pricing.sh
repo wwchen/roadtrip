@@ -49,8 +49,8 @@ smoke_test() {
   return 0
 }
 
-echo "→ Building refresh image (no-op if already built)…"
-make refresh-image >/dev/null
+echo "→ Building roadtrip-refresh:local (no-op if already built)…"
+docker build -q -t roadtrip-refresh:local -f scripts/Dockerfile.refresh scripts/ >/dev/null
 
 attempt=1
 while (( attempt <= MAX_ATTEMPTS )); do
