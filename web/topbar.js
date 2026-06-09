@@ -18,6 +18,10 @@
 import { state, distanceKm, formatDistance } from './core.js';
 import { fitAndSelect } from './search.js';
 import { synthesizeClick } from './layers.js';
+import { openCampgroundDrawer } from './drawer/campground.js';
+import { openParkDrawer } from './drawer/park.js';
+import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
+import { openSuperchargerDrawer } from './drawer/supercharger.js';
 
 // --- constants -------------------------------------------------------------
 
@@ -921,14 +925,6 @@ function pickResult(result) {
   if (trip.mode === 'directions' && allStopsFilled()) tryFetchRoute();
 }
 
-const BACKEND_POI_LAYERS = {
-  CG: ['cg-points-hit', 'cg-points'],
-  NP: ['np-pts-hit', 'np-fill'],
-  SP: ['sp-pts-hit', 'sp-fill'],
-  PF: ['pf-points-hit', 'pf-points'],
-  SC: ['sc-points-hit'],
-};
-
 const BACKEND_POI_TOGGLES = {
   CG: 'f-cg-federal',
   NP: 'f-np',
@@ -938,16 +934,12 @@ const BACKEND_POI_TOGGLES = {
 };
 
 /**
- * Fly to a backend search hit and open its drawer once the pin has loaded
- * into the visible layer. The bbox-refresh is debounced 250ms after moveend
- * and then waits on /api/pois (~100-500ms), so we can't hang on a single
- * `idle` event — instead we poll queryRenderedFeatures on a short interval
- * after flyTo settles, up to a 4s budget. As soon as the pin is hittable,
- * synthesize the click so the existing layer handlers open the drawer.
+ * Fly to a backend search hit and open its drawer by id. Backend POI hits
+ * can be outside the current slim bbox payload, so waiting for a rendered
+ * layer feature is inherently racy; the drawers already know how to hydrate
+ * slim id-only features through GET /api/pois/{id}.
  */
 function flyAndOpenBackendPoi(result) {
-  // Make sure the destination layer is visible — otherwise queryRenderedFeatures
-  // returns nothing and the synthesized click is silently dropped.
   const toggleId = BACKEND_POI_TOGGLES[result.kind];
   if (toggleId) {
     const el = document.getElementById(toggleId);
@@ -956,36 +948,50 @@ function flyAndOpenBackendPoi(result) {
       el.dispatchEvent(new Event('change'));
     }
   }
-  const layers = BACKEND_POI_LAYERS[result.kind] || ['cg-points-hit', 'cg-points'];
   const center = [result.lng, result.lat];
   // Zoom 13: tight enough that the pin is the only feature near the click
   // point but still shows a bit of context. Higher zooms (14+) sometimes
   // hide adjacent pins via spider-collision.
   mapRef.flyTo({ center, zoom: 13, speed: 1.6 });
+  openBackendPoiDrawer(result);
 
   mapRef.once('moveend', () => {
     // Nudge the bbox refresh in case the auto moveend handler hasn't fired
     // yet (it's debounced inside app.js). Idempotent — coalesces with any
     // already-pending refresh.
     if (typeof window.__rtRefreshBbox === 'function') window.__rtRefreshBbox();
-
-    const deadline = Date.now() + 4000;
-    const poll = () => {
-      const present = layers.filter(id => mapRef.getLayer(id));
-      if (present.length) {
-        const pt = mapRef.project(center);
-        const hits = mapRef.queryRenderedFeatures(pt, { layers: present });
-        if (hits.length) {
-          synthesizeClick(layers, center);
-          return;
-        }
-      }
-      if (Date.now() < deadline) setTimeout(poll, 200);
-    };
-    // 200ms first delay covers the bbox-refresh debounce + first network
-    // round-trip; subsequent ticks ride the same cadence.
-    setTimeout(poll, 200);
   });
+}
+
+function backendPoiFeature(result) {
+  return {
+    type: 'Feature',
+    id: result.poiId,
+    geometry: { type: 'Point', coordinates: [result.lng, result.lat] },
+    properties: { category: result.category },
+  };
+}
+
+function openBackendPoiDrawer(result) {
+  const f = backendPoiFeature(result);
+  const lngLat = { lng: result.lng, lat: result.lat };
+  switch (result.kind) {
+    case 'CG':
+      openCampgroundDrawer(f);
+      break;
+    case 'NP':
+      openParkDrawer('np', f, lngLat);
+      break;
+    case 'SP':
+      openParkDrawer('sp', f, lngLat);
+      break;
+    case 'PF':
+      openPlanetFitnessDrawer(f);
+      break;
+    case 'SC':
+      openSuperchargerDrawer(f);
+      break;
+  }
 }
 
 function setStop(i, stop) {
