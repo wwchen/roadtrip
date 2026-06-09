@@ -7,10 +7,12 @@
 # 2. poi_data    — POI datasets. Each row carries `name`, optional `enabled`
 #    (default true), `category`, optional `subcategory`, and an ordered
 #    `etls:` list. The LAST entry in `etls:` is the POI emitter (must output
-#    Poi.*); earlier entries are intermediates that serialize typed payloads
-#    to data/etl-out/<etl-slug>/. List order is dependency order — entry N
-#    may only reference data_source slugs OR earlier `etls:` siblings via
-#    `inputs:`. Cycles + forward references are rejected at boot.
+#    Poi.*); earlier entries are intermediates whose typed payload is handed
+#    to the next stage in memory (every ETL is f(inputs) → output, so re-
+#    running is the recovery path; nothing materializes to disk). List order
+#    is dependency order — entry N may only reference data_source slugs OR
+#    earlier `etls:` siblings in the SAME row via `inputs:`. Cycles, forward
+#    references, and cross-row etl refs are rejected at boot.
 #    `enabled: false` skips the row in fan-out import; per-name imports still
 #    run it on request.
 #
@@ -149,7 +151,6 @@ poi_data:
       - slug: aspira-leaves-wa
         adapter: AspiraLeavesEtl
         inputs: [aspira-maps-wa]
-        output_dir_prefix: data/etl-out/aspira-leaves-wa
       - slug: aspira-wa-pins
         adapter: AspiraJoinByNameEtl
         inputs: [aspira-leaves-wa, uscampgrounds]
@@ -164,7 +165,6 @@ poi_data:
       - slug: aspira-leaves-bc
         adapter: AspiraLeavesEtl
         inputs: [aspira-maps-bc]
-        output_dir_prefix: data/etl-out/aspira-leaves-bc
       - slug: aspira-bc-pins
         adapter: AspiraJoinByNameEtl
         inputs: [aspira-leaves-bc, bcparks-strapi]
@@ -178,7 +178,6 @@ poi_data:
       - slug: aspira-leaves-pc
         adapter: AspiraLeavesEtl
         inputs: [aspira-maps-pc]
-        output_dir_prefix: data/etl-out/aspira-leaves-pc
       - slug: aspira-pc-pins
         adapter: AspiraJoinByNameEtl
         inputs: [aspira-leaves-pc, apca-accommodation, apca-places]

@@ -97,7 +97,6 @@ fun Application.module() {
                 EtlOrchestrator(
                     ctx,
                     File(staticDir, "data/raw"),
-                    File(staticDir, "data/etl-out"),
                     poiRegistry,
                 ),
             fetchTargets = fetchTargetsFromRegistry(poiRegistry, staticDir),
