@@ -2,26 +2,27 @@ package ca.floo.roadtrip
 
 import ca.floo.campsite.recgov.booker.campsiteModule
 import ca.floo.campsite.recgov.booker.campsiteRoutes
-import ca.floo.roadtrip.api.campsiteAvailabilityRoutes
-import ca.floo.roadtrip.api.geocodeRoutes
-import ca.floo.roadtrip.api.healthRoutes
-import ca.floo.roadtrip.api.poiRoutes
-import ca.floo.roadtrip.api.routeRoutes
-import ca.floo.roadtrip.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.aspira.CachedAspiraAvailability
-import ca.floo.roadtrip.db.DbConfig
-import ca.floo.roadtrip.db.dataSourceFor
-import ca.floo.roadtrip.db.dsl
-import ca.floo.roadtrip.db.migrate
-import ca.floo.roadtrip.etl.EtlOrchestrator
-import ca.floo.roadtrip.etl.registry.PoiRegistry
-import ca.floo.roadtrip.geocode.MapboxGeocoder
-import ca.floo.roadtrip.ingest.IngestController
-import ca.floo.roadtrip.ingest.adminIngestRoutes
-import ca.floo.roadtrip.ingest.fetchTargetsFromRegistry
-import ca.floo.roadtrip.ingest.importTargetsFromRegistry
-import ca.floo.roadtrip.ingest.sweepStaleIngestRuns
-import ca.floo.roadtrip.route.MapboxDirections
+import ca.floo.roadtrip.client.AspiraAvailabilityClient
+import ca.floo.roadtrip.client.MapboxDirections
+import ca.floo.roadtrip.client.MapboxGeocoder
+import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.DbConfig
+import ca.floo.roadtrip.repo.RouteCache
+import ca.floo.roadtrip.repo.dataSourceFor
+import ca.floo.roadtrip.repo.dsl
+import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.routes.adminIngestRoutes
+import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
+import ca.floo.roadtrip.routes.geocodeRoutes
+import ca.floo.roadtrip.routes.healthRoutes
+import ca.floo.roadtrip.routes.poiRoutes
+import ca.floo.roadtrip.routes.routeRoutes
+import ca.floo.roadtrip.service.etl.EtlOrchestrator
+import ca.floo.roadtrip.service.etl.IngestController
+import ca.floo.roadtrip.service.etl.fetchTargetsFromRegistry
+import ca.floo.roadtrip.service.etl.importTargetsFromRegistry
+import ca.floo.roadtrip.service.etl.sweepStaleIngestRuns
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
@@ -74,9 +75,7 @@ fun Application.module() {
     // /api/route seeds the cache; /api/pois reads it for corridor filtering
     // so the FE doesn't have to ship a turf.buffer polygon over the wire on
     // every pan. See RouteCache.kt.
-    val routeCache =
-        ca.floo.roadtrip.route
-            .RouteCache(mapboxDirections)
+    val routeCache = RouteCache(mapboxDirections)
 
     // POI registry — config/poi-registry.yaml is the source of truth for
     // the per-data_source fetch recipes and the per-poi_data ETL chains.

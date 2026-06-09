@@ -3,10 +3,10 @@ package ca.floo.campsite.recgov.booker.api
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.campsite.recgov.booker.availability.CachedResult
 import ca.floo.campsite.recgov.booker.poller.Campsite
-import ca.floo.roadtrip.api.DayClassification
-import ca.floo.roadtrip.api.classifyWindowState
-import ca.floo.roadtrip.api.renderAvailabilityJson
-import ca.floo.roadtrip.api.summarizeWindow
+import ca.floo.roadtrip.service.api.DayClassification
+import ca.floo.roadtrip.service.api.classifyWindowState
+import ca.floo.roadtrip.service.api.renderAvailabilityJson
+import ca.floo.roadtrip.service.api.summarizeWindow
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 // keyed by poi_id); this file holds the rec.gov classification + fetch
 // helpers it calls. Splitting keeps the two providers' upstream details
 // isolated while letting them share one wire contract via
-// ca.floo.roadtrip.api.AvailabilityResponse.
+// ca.floo.roadtrip.service.api.AvailabilityResponse.
 
 internal val RECGOV_ID_RE = Regex("^[0-9]{1,10}$")
 

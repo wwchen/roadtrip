@@ -1,7 +1,7 @@
 package ca.floo.campsite.recgov.booker.db
 
-import ca.floo.roadtrip.db.dsl
-import ca.floo.roadtrip.db.migrate
+import ca.floo.roadtrip.repo.dsl
+import ca.floo.roadtrip.repo.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.junit.jupiter.api.AfterAll
