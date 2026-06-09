@@ -1,4 +1,4 @@
-.PHONY: help run deploy stop check-pushed refresh-tesla-cookies refresh-superchargers data-fetch data-import poll-raw qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed fetch-tesla-supercharger-pricing refresh-tesla-cookies refresh-superchargers data-fetch data-import poll-raw qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -17,8 +17,9 @@ help:
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make stop             Stop all compose services locally"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
-	@echo "  make refresh-tesla-cookies  Mint Tesla cookies into THIS repo's .env (laptop-only egress)"
-	@echo "  make refresh-superchargers  Full Tesla refresh: bulk index + per-slug detail (RFC 0007 raw captures)"
+	@echo "  make fetch-tesla-supercharger-pricing  End-to-end: mint cookies → smoke-test → run full pricing fetch (loops on 403/429)"
+	@echo "  make refresh-tesla-cookies  Mint Tesla cookies into .env only (no smoke test, no fetch)"
+	@echo "  make refresh-superchargers  Full Tesla pricing fetch assuming cookies are good (bulk index + per-slug detail)"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
@@ -69,6 +70,14 @@ refresh-image:
 # Cookies are bound to this laptop's egress IP so they only work locally.
 refresh-tesla-cookies:
 	@scripts/refresh-tesla-cookies.sh
+
+# End-to-end Tesla Supercharger pricing fetch: mint cookies → smoke-test
+# (one bulk-index call) → run full fetch on success, loop on 403/429.
+# Cookie minting is interactive and Akamai sometimes rejects the first try,
+# so we'd rather catch a bad cookie before kicking off the long per-slug
+# walk than fail mid-run.
+fetch-tesla-supercharger-pricing:
+	@scripts/fetch-tesla-supercharger-pricing.sh
 
 # Full network refresh of Tesla data — bulk get-locations + per-slug
 # get-charger-details. Network-bound (~1 req/sec). Cache-first behavior
