@@ -214,10 +214,14 @@ export function openSuperchargerPopup(f) {
   ].filter(Boolean).join(' ');
 
   // Feature pills sourced from upstream.detail. These are the concrete
-  // road-trip-relevant flags: hours, NACS adapter compat, RV/trailer
-  // pull-through, on-site amenities. Each pill is conditional — sparse
-  // sites stay sparse rather than rendering empty placeholders.
+  // road-trip-relevant boolean flags: hours, NACS adapter compat, RV/
+  // trailer pull-through. Each pill is conditional — sparse sites stay
+  // sparse rather than rendering empty placeholders.
   const featurePills = buildSCFeaturePills(detail);
+  // Amenities is its own row so the pill set is scannable as "what's
+  // here" (cafe, restrooms, restaurant, …) without mixing in the
+  // capability flags above.
+  const amenityPills = buildSCAmenityPills(detail);
 
   // Pricing now arrives inline on the feature properties (RFC 0007 — same
   // tesla-locations capture that gives us name/stalls/kW). No second
@@ -238,6 +242,7 @@ export function openSuperchargerPopup(f) {
     ${stalls ? `<div class="pills"><span class="pill">${escapeHtml(stalls)}</span></div>` : ''}
     ${plugs ? `<div class="pills"><span class="pill">${escapeHtml(plugs)}</span></div>` : ''}
     ${featurePills ? `<div class="pills" style="margin-top:6px">${featurePills}</div>` : ''}
+    ${amenityPills ? `<div class="pills" style="margin-top:6px">${amenityPills}</div>` : ''}
     ${busyHtml}
     ${p.dateOpened ? `<div class="footer">Opened ${escapeHtml(p.dateOpened)}</div>` : ''}
     <div class="pricing" style="margin-top:8px; padding-top:6px; border-top:1px solid #eee;">
@@ -254,18 +259,17 @@ function buildSCFeaturePills(detail) {
   if (detail?.accessHours?.twentyFourSeven) pills.push(scPill('24/7'));
   if (detail?.openToNonTeslas) pills.push(scPill('Magic Dock', 'NACS adapter built-in — works for non-Tesla EVs'));
   if (detail?.isTrailerFriendly) pills.push(scPill('Trailer-friendly', 'Pull-through stalls'));
-  // amenities is sometimes null, sometimes an array of short strings
-  // ("restrooms", "wifi", "shopping", "restaurant", etc.). Render each
-  // as its own pill, stripping underscore-separators Tesla occasionally
-  // uses ("food_service" → "food service").
-  const am = Array.isArray(detail?.amenities) ? detail.amenities : null;
-  if (am && am.length) {
-    for (const a of am.slice(0, 6)) {
-      const label = String(a).replace(/_/g, ' ');
-      pills.push(scPill(label));
-    }
-  }
   return pills.join('');
+}
+
+// amenities is sometimes null, sometimes an array of short strings
+// ("restrooms", "wifi", "shopping", "restaurant", "food_service", …).
+// One pill per entry, underscore-separators stripped, capped at 8 so a
+// long list doesn't blow up the drawer height.
+function buildSCAmenityPills(detail) {
+  const am = Array.isArray(detail?.amenities) ? detail.amenities : null;
+  if (!am || !am.length) return '';
+  return am.slice(0, 8).map(a => scPill(String(a).replace(/_/g, ' '))).join('');
 }
 
 function scPill(label, title = '') {
