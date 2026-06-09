@@ -84,6 +84,63 @@ function shouldAutoFocus() {
     !window.matchMedia?.('(max-width: 768px)').matches;
 }
 
+/**
+ * Fill row 0 with the user's current location, async. Used by the mobile
+ * Drawer-Directions path so a phone tap goes straight to "from current
+ * location → POI."
+ *
+ *   - state.userLocation already set (geolocate puck used earlier this
+ *     session): fill immediately, no permission prompt.
+ *   - state.userLocation null: ask the browser. iOS prompts on first
+ *     ask per session; subsequent asks reuse the grant.
+ *   - permission denied / timeout / unsupported: silently leave row 0
+ *     empty. The destination is still set; user can type the origin.
+ *
+ * Aborts if the user already filled or cleared row 0 between when we
+ * started and when the geolocation resolves — don't clobber their input.
+ */
+function tryFillOriginWithCurrentLocation() {
+  const fill = (lng, lat) => {
+    // Race guard: only fill if row 0 is still empty AND we're still in
+    // directions mode (user might've hit Clear All in the interim).
+    if (trip.mode !== 'directions') return;
+    if (trip.stops[0] != null) return;
+    setStop(0, { name: 'Current location', lng, lat, kind: 'PLACE' });
+    rerender();
+    if (allStopsFilled()) tryFetchRoute();
+  };
+  if (state.userLocation && Number.isFinite(state.userLocation.lng) && Number.isFinite(state.userLocation.lat)) {
+    fill(state.userLocation.lng, state.userLocation.lat);
+    return;
+  }
+  if (typeof navigator === 'undefined' || !navigator.geolocation) return;
+  // Show a placeholder name so row 0 doesn't look empty during the prompt.
+  // Actual position usually arrives in <2s on a phone with location on.
+  setStop(0, { name: 'Locating you…', lng: 0, lat: 0, kind: 'PLACE', _pending: true });
+  rerender();
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      // Only swap if we still own the pending placeholder. If the user
+      // typed or cleared in the interim, the slot now has different
+      // contents and we should not overwrite.
+      const cur = trip.stops[0];
+      if (!cur?._pending) return;
+      state.userLocation = { lng: pos.coords.longitude, lat: pos.coords.latitude };
+      fill(pos.coords.longitude, pos.coords.latitude);
+    },
+    () => {
+      // Denied / timeout / position-unavailable. Clear the placeholder so
+      // the row reads empty again.
+      const cur = trip.stops[0];
+      if (cur?._pending) {
+        trip.stops[0] = null;
+        rerender();
+      }
+    },
+    { enableHighAccuracy: false, timeout: 8000, maximumAge: 60_000 },
+  );
+}
+
 // --- public --------------------------------------------------------------
 
 export function initTopbar(map, getPinSearchIndex) {
@@ -140,11 +197,14 @@ function clearBrowsePin() {
  * Add a POI as a stop without going through the search flow. Called by the
  * drawer's per-POI Directions button.
  *
- *  - browse mode: enter directions mode with the POI as the *destination*.
- *    The origin row stays empty and gets focus so the user can immediately
- *    type "from where?". The drawer's "Directions" CTA reads as "directions
- *    TO this place" — most users want to go to the campground they're
- *    looking at, not start from it.
+ *  - browse mode + mobile: POI as destination. Origin auto-fills from
+ *    state.userLocation (or a fresh getCurrentPosition if not yet known) —
+ *    on a phone, "Directions to this campground" almost always means "from
+ *    where I'm standing." Soft-keyboard would cover the drawer anyway, so
+ *    no auto-focus.
+ *  - browse mode + desktop: POI as destination, origin empty + focused.
+ *    Desktop users typically plan trips from places other than their
+ *    current location, so we don't auto-fill.
  *  - directions mode + destination empty: fill the destination.
  *  - directions mode + destination filled: insert as a via just before the
  *    destination so the user-chosen endpoint stays the endpoint.
@@ -154,15 +214,22 @@ function addTripStopFromExternal(stop) {
   const s = { name: stop.name || 'Selected place', lng: stop.lng, lat: stop.lat, kind: stop.kind || 'PLACE' };
   if (trip.mode === 'browse') {
     // Reset stops so any leftover row-0 pin click from browse mode doesn't
-    // double up. POI is the destination; origin is empty + focused.
+    // double up. POI is the destination; origin is the user's location
+    // on mobile (when available), empty + focused on desktop.
     trip.stops = [null, s];
     trip.mode = 'directions';
     rerender();
     if (shouldAutoFocus()) {
+      // Desktop: focus the empty origin so the user can type their start.
       setTimeout(() => {
         const el = document.querySelector('.tb-row[data-i="0"] .tb-input');
         if (el) { activeRowIdx = 0; el.focus(); }
       }, 0);
+    } else {
+      // Mobile: try to fill origin from current location. tryFillOriginWithCurrentLocation
+      // handles the "already-known", "ask the browser", and "denied/timeout" cases —
+      // failures fall through to "origin stays empty," which is fine.
+      tryFillOriginWithCurrentLocation();
     }
     return;
   }
@@ -920,7 +987,10 @@ function setStop(i, stop) {
 }
 
 function allStopsFilled() {
-  return trip.stops.length >= 2 && trip.stops.every(s => s != null);
+  // Pending placeholders (e.g. "Locating you…" while geolocation is resolving)
+  // count as "not filled" — we don't want tryFetchRoute / corridor refresh
+  // firing on (0,0) coords. The real entry will replace it shortly.
+  return trip.stops.length >= 2 && trip.stops.every(s => s != null && !s._pending);
 }
 
 function onDirections() {
@@ -1249,7 +1319,10 @@ function syncMarkers() {
     if (m) m.remove();
   }
   trip.stops.forEach((stop, i) => {
-    if (!stop) {
+    if (!stop || stop._pending) {
+      // Pending placeholder (e.g. "Locating you…") — don't draw a marker
+      // at (0,0); the real coords arrive when geolocation resolves and a
+      // subsequent rerender will place the marker correctly.
       if (trip.endpointMarkers[i]) {
         trip.endpointMarkers[i].remove();
         trip.endpointMarkers[i] = null;
@@ -1337,7 +1410,18 @@ function renderRows() {
   stops.querySelectorAll('.tb-input').forEach((inp) => {
     const i = Number(inp.dataset.i);
     inp.addEventListener('input', (e) => onInput(i, e.target.value));
-    inp.addEventListener('focus', () => { activeRowIdx = i; });
+    inp.addEventListener('focus', () => {
+      activeRowIdx = i;
+      // User tapped a "Locating you…" placeholder — they want to type
+      // their own origin. Drop the placeholder so the in-flight
+      // geolocation callback can't clobber what they're typing.
+      const cur = trip.stops[i];
+      if (cur?._pending) {
+        trip.stops[i] = null;
+        inp.value = '';
+        inp.placeholder = i === 0 ? 'Origin' : (i === trip.stops.length - 1 ? 'Destination' : `Stop ${i}`);
+      }
+    });
     inp.addEventListener('keydown', (e) => onInputKey(e, i));
   });
   stops.querySelectorAll('.tb-x').forEach((btn) => {
