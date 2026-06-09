@@ -326,6 +326,91 @@ function injectStyles() {
     cursor: pointer;
     margin: 0;
   }
+  /* Route distance + duration headline. Lives on the corridor row to save a
+     vertical slot on mobile. The per-leg breakdown (3+ stops) still goes in
+     #tb-status below. */
+  #tb-corridor .tb-corridor-summary {
+    color: var(--cg-text);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    flex-shrink: 0;
+    padding-left: 10px;
+    margin-left: 4px;
+    border-left: 1px solid var(--cg-border-strong);
+  }
+  #tb-corridor .tb-corridor-summary:empty {
+    display: none;
+  }
+  #tb-corridor .tb-corridor-summary .tb-stat-sep {
+    color: var(--cg-faint);
+    margin: 0 6px;
+  }
+
+  /* Trip-date inputs — visible only when a route is active. Drives the bulk
+     availability check that lights up each card with per-night status. */
+  #tb-trip-dates {
+    display: none;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 12px;
+    border-top: 1px solid var(--cg-border);
+    font-size: 11px; color: var(--cg-muted);
+  }
+  #tb-trip-dates.visible { display: flex; }
+  #tb-trip-dates .tb-trip-dates-label { white-space: nowrap; flex-shrink: 0; }
+  #tb-trip-dates input[type=date] {
+    background: var(--cg-bg-subtle);
+    color: var(--cg-text);
+    border: 1px solid var(--cg-border-strong);
+    border-radius: 4px;
+    padding: 2px 4px;
+    font-size: 11px; font-family: inherit;
+    color-scheme: dark;
+    min-width: 0;
+  }
+  #tb-trip-dates input[type=date]:focus {
+    outline: none;
+    border-color: var(--cg-accent);
+  }
+  #tb-trip-dates .tb-trip-dates-sep { color: var(--cg-faint); }
+  #tb-trip-dates .tb-trip-dates-status {
+    margin-left: auto;
+    color: var(--cg-faint);
+    font-size: 10px;
+  }
+  #tb-trip-dates .tb-trip-dates-status.error { color: var(--cg-error); }
+
+  /* Per-card availability badge + per-night dot strip. The badge is the
+     at-a-glance signal; the strip shows which subset of nights work. */
+  .tb-card-avail {
+    display: flex; align-items: center; gap: 6px;
+    margin-top: 4px;
+    font-size: 10px;
+  }
+  .tb-card-avail-badge {
+    display: inline-flex; align-items: center; gap: 3px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-weight: 600;
+    font-size: 10px;
+    line-height: 1.4;
+  }
+  .tb-card-avail-badge.all       { background: rgba(76,175,80,0.18); color: #82d186; }
+  .tb-card-avail-badge.some      { background: rgba(245,166,35,0.18); color: #f5a623; }
+  .tb-card-avail-badge.none      { background: rgba(160,160,160,0.18); color: var(--cg-muted); }
+  .tb-card-avail-badge.unknown   { background: rgba(160,160,160,0.10); color: var(--cg-faint); }
+  .tb-card-avail-badge.err       { background: rgba(245,101,101,0.18); color: var(--cg-error); }
+  .tb-card-avail-strip {
+    display: inline-flex; gap: 2px;
+    flex-wrap: wrap;
+  }
+  .tb-card-avail-cell {
+    width: 8px; height: 8px;
+    border-radius: 1px;
+    background: rgba(255,255,255,0.06);
+  }
+  .tb-card-avail-cell.avail { background: #4caf50; }
+  .tb-card-avail-cell.miss  { background: rgba(160,160,160,0.45); }
 
   /* Campground results — appears when a route is active. */
   #tb-results {
@@ -411,6 +496,11 @@ function injectStyles() {
     /* On a phone, the card list eats the whole screen if expanded by default
        — start collapsed so the map is visible after computing a route. */
     #tb-results.collapsed { max-height: none; }
+    /* Tighter corridor row so distance + duration fit alongside the slider
+       without wrapping. */
+    #tb-corridor { padding: 6px 10px; gap: 6px; }
+    #tb-corridor label { display: none; }
+    #tb-corridor .tb-corridor-summary { padding-left: 8px; margin-left: 2px; }
   }
   `;
   const tag = document.createElement('style');
@@ -448,6 +538,14 @@ function injectDom() {
         aria-label="Corridor radius in miles"
       >
       <span class="tb-corridor-value" id="tb-corridor-value">${CORRIDOR_DEFAULT_MILES} mi</span>
+      <span class="tb-corridor-summary" id="tb-corridor-summary"></span>
+    </div>
+    <div id="tb-trip-dates">
+      <label class="tb-trip-dates-label">Travel dates</label>
+      <input type="date" id="tb-trip-start" aria-label="Start date">
+      <span class="tb-trip-dates-sep">→</span>
+      <input type="date" id="tb-trip-end" aria-label="End date">
+      <span class="tb-trip-dates-status" id="tb-trip-dates-status"></span>
     </div>
     <div id="tb-results"></div>
   `;
@@ -832,6 +930,9 @@ function onClearAll() {
   notifyCorridorChanged();
   tripResults.cards = [];
   tripResults.byId.clear();
+  tripResults.availabilityByPoiId.clear();
+  if (tripResults.availabilityAbort) tripResults.availabilityAbort.abort();
+  setAvailabilityStatus('');
   renderResults();
 }
 
@@ -988,6 +1089,8 @@ function drawRoute() {
   });
 
   document.getElementById('tb-corridor').classList.add('visible');
+  document.getElementById('tb-trip-dates').classList.add('visible');
+  bindTripDateInputs();
 }
 
 function removeRouteLayer() {
@@ -999,6 +1102,10 @@ function removeRouteLayer() {
   trip.corridor = null;
   const slider = document.getElementById('tb-corridor');
   if (slider) slider.classList.remove('visible');
+  const dates = document.getElementById('tb-trip-dates');
+  if (dates) dates.classList.remove('visible');
+  const summary = document.getElementById('tb-corridor-summary');
+  if (summary) summary.innerHTML = '';
 }
 
 /** Recompute the corridor polygon from the existing route + current radius,
@@ -1073,19 +1180,25 @@ function showRouteSummary() {
   const distKm = (props.distance_m ?? 0) / 1000;
   const durHrs = (props.duration_s ?? 0) / 3600;
   const legs = props.legs || [];
+  // Headline rides on the corridor row to save vertical space on mobile.
   const head = `<strong>${distKm.toFixed(0)} km</strong>` +
     `<span class="tb-stat-sep">·</span>${formatDuration(durHrs)}`;
-  let body = '';
+  const summaryEl = document.getElementById('tb-corridor-summary');
+  if (summaryEl) summaryEl.innerHTML = head;
+  // Per-leg breakdown is only useful for 3+ stops; it stays in the status
+  // slot below. Hide status entirely for the simple 2-stop case.
   if (legs.length > 1) {
-    body = '<div style="margin-top:4px; font-size:10px; color:var(--cg-faint);">';
+    let body = '<div style="font-size:10px; color:var(--cg-faint);">';
     legs.forEach((l, i) => {
       const km = (l.distance_m / 1000).toFixed(0);
       const min = Math.round(l.duration_s / 60);
       body += `${escapeHtml(stopLabel(i))} → ${escapeHtml(stopLabel(i + 1))}: ${km} km · ${min} min<br>`;
     });
     body += '</div>';
+    showStatus(body);
+  } else {
+    hideStatus();
   }
-  showStatus(head + body);
 }
 
 function stopLabel(i) {
@@ -1295,7 +1408,26 @@ const tripResults = {
   // Collapse state. Starts collapsed on mobile so the map isn't covered
   // by a long card list, expanded on desktop where there's room.
   collapsed: typeof window !== 'undefined' && window.matchMedia?.('(max-width: 768px)').matches,
+  // Trip-date availability state. tripStart/tripEnd are 'YYYY-MM-DD' or null.
+  // availabilityByPoiId maps poi.id → { status: number, dates: string[] }, or
+  // 'pending' / 'error' for in-flight / failed ids. dateBound is true once
+  // the date inputs are wired (they outlive innerHTML rewrites of #tb-results).
+  tripStart: null,
+  tripEnd: null,
+  availabilityByPoiId: new Map(),
+  availabilityAbort: null,
+  availabilityDebounce: null,
+  dateBound: false,
 };
+
+// Bulk endpoint cap — keep in sync with MAX_BULK_IDS in CampsiteAvailabilityRoutes.kt.
+const BULK_AVAILABILITY_PAGE = 50;
+const AVAIL_DEBOUNCE_MS = 500;
+// Backend rejects nights > 14. Long road trips just clamp the window to the
+// first 14 nights for the badge — visiting Yellowstone on night 6 of a
+// 21-day trip is the realistic case, and the bulk badge for night 18 is
+// almost always "we don't know" anyway.
+const MAX_TRIP_NIGHTS = 14;
 
 /** Build the cumulative-km index for the active route polyline. */
 function indexRoute(lineGeo) {
@@ -1349,6 +1481,7 @@ function setTripPois(cgFeatures) {
   if (trip.mode !== 'directions' || !trip.route || !trip.stops[0]) {
     tripResults.cards = [];
     tripResults.byId.clear();
+    tripResults.availabilityByPoiId.clear();
     renderResults();
     return;
   }
@@ -1357,9 +1490,11 @@ function setTripPois(cgFeatures) {
   indexRoute(trip.route.features[0].geometry);
 
   const origin = trip.stops[0];
+  let added = false;
   for (const f of cgFeatures || []) {
     const id = f.id ?? f.properties?.id;
     if (id == null || tripResults.byId.has(id)) continue;
+    added = true;
     const [lng, lat] = f.geometry?.coordinates || [];
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     const p = f.properties || {};
@@ -1392,6 +1527,203 @@ function setTripPois(cgFeatures) {
   }
   tripResults.cards.sort((a, b) => a.routeKm - b.routeKm);
   renderResults();
+  // New cards landed → refresh availability for them. Debounced so a flurry
+  // of bbox refreshes (zoom/pan) collapses into one bulk call.
+  if (added && tripResults.tripStart && tripResults.tripEnd) {
+    scheduleAvailabilityRefresh();
+  }
+}
+
+/** Wire up the trip-date inputs once. innerHTML rewrites inside #tb-results
+ *  blow away listeners, but #tb-trip-dates is a sibling — wire and forget. */
+function bindTripDateInputs() {
+  if (tripResults.dateBound) return;
+  tripResults.dateBound = true;
+  const startEl = document.getElementById('tb-trip-start');
+  const endEl = document.getElementById('tb-trip-end');
+  // Default the start to tomorrow — most of our cache window is in the
+  // future. End stays empty so the user has to think about trip length.
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  startEl.value = tomorrow.toISOString().slice(0, 10);
+  startEl.min = new Date().toISOString().slice(0, 10);
+  endEl.min = startEl.value;
+  // Restore prior values if user has set them this session.
+  if (tripResults.tripStart) startEl.value = tripResults.tripStart;
+  if (tripResults.tripEnd) endEl.value = tripResults.tripEnd;
+
+  const onChange = () => {
+    tripResults.tripStart = startEl.value || null;
+    tripResults.tripEnd = endEl.value || null;
+    // Keep `end >= start` enforceable in the picker.
+    if (tripResults.tripStart) endEl.min = tripResults.tripStart;
+    // Clear stale per-card data so cards show "pending" while we refetch.
+    tripResults.availabilityByPoiId.clear();
+    renderResults();
+    if (tripResults.tripStart && tripResults.tripEnd) {
+      scheduleAvailabilityRefresh();
+    } else {
+      setAvailabilityStatus('');
+    }
+  };
+  startEl.addEventListener('change', onChange);
+  endEl.addEventListener('change', onChange);
+}
+
+function setAvailabilityStatus(text, { error = false } = {}) {
+  const el = document.getElementById('tb-trip-dates-status');
+  if (!el) return;
+  el.textContent = text;
+  el.classList.toggle('error', error);
+}
+
+/** Nights between check-in (`start`) and check-out (`end`) — i.e., end-start
+ *  in days. A Jul 4 → Jul 7 trip is 3 nights (you sleep on the 4th, 5th, 6th
+ *  and check out the morning of the 7th). Returns 0 on bad/non-positive input. */
+function nightsBetween(startStr, endStr) {
+  const s = new Date(startStr + 'T00:00:00Z');
+  const e = new Date(endStr + 'T00:00:00Z');
+  if (!Number.isFinite(s.getTime()) || !Number.isFinite(e.getTime())) return 0;
+  const n = Math.round((e - s) / 86400000);
+  return n > 0 ? n : 0;
+}
+
+function scheduleAvailabilityRefresh() {
+  clearTimeout(tripResults.availabilityDebounce);
+  tripResults.availabilityDebounce = setTimeout(refreshAvailability, AVAIL_DEBOUNCE_MS);
+}
+
+/**
+ * Hit POST /api/campsite/availability/bulk for every visible card id and
+ * paint the per-card badges + dot strips. Aborts the previous in-flight
+ * request when called again, so a rapid date-flick or pan settles on the
+ * latest input.
+ */
+async function refreshAvailability() {
+  const start = tripResults.tripStart;
+  const end = tripResults.tripEnd;
+  if (!start || !end) return;
+  let nights = nightsBetween(start, end);
+  if (nights <= 0) {
+    setAvailabilityStatus('End date must be on or after start.', { error: true });
+    return;
+  }
+  if (nights > MAX_TRIP_NIGHTS) {
+    // Backend rejects > 14; clamp the badge window and warn the user.
+    setAvailabilityStatus(`Showing first ${MAX_TRIP_NIGHTS} nights.`);
+    nights = MAX_TRIP_NIGHTS;
+  }
+  const ids = visibleCards()
+    .map(c => Number(c.id))
+    .filter(Number.isFinite);
+  if (!ids.length) {
+    setAvailabilityStatus('');
+    return;
+  }
+
+  if (tripResults.availabilityAbort) tripResults.availabilityAbort.abort();
+  tripResults.availabilityAbort = new AbortController();
+  const signal = tripResults.availabilityAbort.signal;
+  setAvailabilityStatus('Checking availability…');
+
+  // Mark every requested id as pending so the UI swaps from a stale "all"
+  // badge to a neutral "—" while we wait.
+  for (const id of ids) tripResults.availabilityByPoiId.set(id, 'pending');
+  renderResults();
+
+  try {
+    // Backend caps each call at 50 ids; chunk so a 200-card corridor still works.
+    for (let i = 0; i < ids.length; i += BULK_AVAILABILITY_PAGE) {
+      const slice = ids.slice(i, i + BULK_AVAILABILITY_PAGE);
+      const r = await fetch('/api/campsite/availability/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ids: slice, start, nights }),
+        signal,
+      });
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      const j = await r.json();
+      for (const entry of j.results || []) {
+        if (entry.status === 200) {
+          tripResults.availabilityByPoiId.set(Number(entry.id), {
+            status: 200,
+            dates: entry.available_dates || [],
+          });
+        } else {
+          tripResults.availabilityByPoiId.set(Number(entry.id), {
+            status: entry.status,
+            dates: [],
+          });
+        }
+      }
+      renderResults();
+    }
+    setAvailabilityStatus(nights > MAX_TRIP_NIGHTS ? `Showing first ${MAX_TRIP_NIGHTS} nights.` : '');
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    console.warn('[topbar] availability bulk failed', e);
+    // Keep the per-id pending markers as 'error' so cards show a useful badge.
+    for (const id of ids) {
+      const cur = tripResults.availabilityByPoiId.get(id);
+      if (cur === 'pending') tripResults.availabilityByPoiId.set(id, 'error');
+    }
+    setAvailabilityStatus('Could not check availability.', { error: true });
+    renderResults();
+  }
+}
+
+/** Render-time helper: turn the cached availability entry for a card into
+ *  the badge/strip HTML pair. Pure function of (entry, nights). */
+function availabilityHtml(entry, start, nights) {
+  if (entry == null) return '';
+  if (entry === 'pending') {
+    return `<div class="tb-card-avail">
+      <span class="tb-card-avail-badge unknown">Checking…</span>
+    </div>`;
+  }
+  if (entry === 'error') {
+    return `<div class="tb-card-avail">
+      <span class="tb-card-avail-badge err">No data</span>
+    </div>`;
+  }
+  if (entry.status === 404) {
+    return `<div class="tb-card-avail">
+      <span class="tb-card-avail-badge unknown">Not in DB</span>
+    </div>`;
+  }
+  if (entry.status !== 200) {
+    return `<div class="tb-card-avail">
+      <span class="tb-card-avail-badge err">Upstream ${entry.status}</span>
+    </div>`;
+  }
+  const availableSet = new Set(entry.dates);
+  const cells = [];
+  const startDate = new Date(start + 'T00:00:00Z');
+  const dotsToShow = Math.min(nights, MAX_TRIP_NIGHTS);
+  let availCount = 0;
+  for (let i = 0; i < dotsToShow; i++) {
+    const d = new Date(startDate);
+    d.setUTCDate(startDate.getUTCDate() + i);
+    const ymd = d.toISOString().slice(0, 10);
+    const open = availableSet.has(ymd);
+    if (open) availCount++;
+    cells.push(`<span class="tb-card-avail-cell ${open ? 'avail' : 'miss'}" title="${ymd}: ${open ? 'open' : 'no'}"></span>`);
+  }
+  let badgeClass; let badgeText;
+  if (availCount === 0) {
+    badgeClass = 'none';
+    badgeText = 'No nights';
+  } else if (availCount === dotsToShow) {
+    badgeClass = 'all';
+    badgeText = `All ${dotsToShow} nights`;
+  } else {
+    badgeClass = 'some';
+    badgeText = `${availCount} of ${dotsToShow}`;
+  }
+  return `<div class="tb-card-avail">
+    <span class="tb-card-avail-badge ${badgeClass}">${badgeText}</span>
+    <span class="tb-card-avail-strip">${cells.join('')}</span>
+  </div>`;
 }
 
 /** Compact season label: "Open through Oct 25" / "Closed until May 5" /
@@ -1482,6 +1814,17 @@ function renderResults() {
       : '';
     const seasonStr = compactSeasonLabel(c.season, c.reservable);
     const seasonHtml = seasonStr ? `<span class="tb-card-season">${escapeHtml(seasonStr)}</span>` : '';
+    let availHtml = '';
+    if (tripResults.tripStart && tripResults.tripEnd) {
+      const nights = Math.min(
+        nightsBetween(tripResults.tripStart, tripResults.tripEnd),
+        MAX_TRIP_NIGHTS,
+      );
+      if (nights > 0) {
+        const entry = tripResults.availabilityByPoiId.get(Number(c.id));
+        availHtml = availabilityHtml(entry, tripResults.tripStart, nights);
+      }
+    }
     body += `<div class="tb-card" data-id="${escapeHtml(String(c.id))}">
       <span class="tb-card-dot" style="background:${color}"></span>
       <div class="tb-card-body">
@@ -1491,6 +1834,7 @@ function renderResults() {
           <span class="tb-card-dist">${formatRouteKm(c.routeKm)}</span>
           ${ratingHtml}${sitesHtml}${seasonHtml}
         </div>
+        ${availHtml}
       </div>
     </div>`;
   }
