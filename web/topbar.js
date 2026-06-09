@@ -503,7 +503,10 @@ function injectStyles() {
   }
 
   @media (max-width: 768px) {
-    #topbar { left: 8px; right: 8px; width: auto; max-width: none; }
+    /* Reserve 56px on the right for the layers-panel hamburger
+       (#panel-toggle is 40px + 10px right offset + breathing room).
+       Without this, the topbar spans full-width and covers the toggle. */
+    #topbar { left: 8px; right: 56px; width: auto; max-width: none; }
     #tb-results { max-height: 40vh; }
     /* On a phone, the card list eats the whole screen if expanded by default
        — start collapsed so the map is visible after computing a route. */
