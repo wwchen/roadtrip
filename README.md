@@ -18,7 +18,7 @@ tilt up                  # full dev stack (postgres in Docker, backend + compani
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make companion           # campsite Playwright companion against the local backend
 make deploy              # ssh to the mini, git pull, docker compose up
-make refresh-tesla-cookies  # mint Tesla cookies into .env (offline refresh worker only)
+make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
 ```
 
 Local dev runs the backend on the host (Gradle), with only Postgres in
@@ -33,11 +33,9 @@ host Node process so Playwright can drive a real Chromium. Tilt UI is at
 <http://localhost:10350>.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
-(none auto-run on `tilt up`): `refresh-tesla-cookies` to mint fresh
-`_abck` cookies into `.env`, and `refresh-image` (one-shot prereq for the
-supercharger fetcher). Click the row, watch logs in the right pane. The
-full Supercharger pricing fetch is interactive — run it from a terminal
-via `make fetch-tesla-supercharger-pricing`.
+(none auto-run on `tilt up`) for POI refresh. Tesla Supercharger pricing
+isn't surfaced there — the fetch is interactive (cURL paste) and runs
+from a terminal via `make fetch-tesla-supercharger-pricing`.
 
 POI data refresh goes through the backend's admin API. Two-step flow,
 two Tilt buttons under the `data` cluster, two make targets:
@@ -225,11 +223,12 @@ from your laptop browser will work from the Docker host **only if the Docker
 host egresses from the same public IP** — i.e., same home network. If the
 Docker host is elsewhere, either grab cookies from a browser *on* that
 network, or have your laptop egress through the host's IP via Tailscale
-exit node before running `make refresh-tesla-cookies`. Production hosts
-mint their own cookies out-of-band.
+exit node before running `make fetch-tesla-supercharger-pricing`.
+Production hosts mint their own cookies out-of-band.
 
 Cookies expire every day or so. When pricing starts returning 403 or 429,
-re-run `make refresh-tesla-cookies`.
+re-run `make fetch-tesla-supercharger-pricing` — its loop will mint fresh
+ones automatically.
 
 ## Architecture notes
 
