@@ -416,6 +416,34 @@ class PoiRoutesTest {
         }
 
     @Test
+    fun `poi search matches all query terms across punctuation`() =
+        testApplication {
+            seed(
+                listOf(
+                    TestRow(
+                        sourceId = "banff-village-1",
+                        category = "campground",
+                        name = "Tunnel Mountain - Village 1",
+                        geomGeoJson = """{"type":"Point","coordinates":[-115.5309,51.1917]}""",
+                        region = "AB",
+                    ),
+                    row("banff-trailer", "Tunnel Mountain Trailer Court", -115.52, 51.18, "campground"),
+                ),
+            )
+            application { routing { poiRoutes(ctx, RouteCache(MapboxDirections(token = null)), testRegistry) } }
+
+            val resp = client.get("/api/pois/search?q=tunnel%20mountain%20village&limit=5")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val results = parsed["results"]!!.jsonArray
+            assertEquals(1, results.size)
+            val hit = results[0].jsonObject
+            assertEquals("Tunnel Mountain - Village 1", hit["name"]!!.jsonPrimitive.content)
+            assertEquals("campground", hit["category"]!!.jsonPrimitive.content)
+            assertEquals("AB", hit["region"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `per-category limit gives each category its own slot budget`() =
         testApplication {
             // Seed 50 PF + 50 CG + 50 SP all in tight bbox. With per-cat limit
