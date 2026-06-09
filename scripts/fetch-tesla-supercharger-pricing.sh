@@ -21,16 +21,31 @@ cd "$(dirname "$0")/.."
 
 MAX_ATTEMPTS=${MAX_ATTEMPTS:-5}
 
-# Smoke test: bulk-index endpoint via the same Docker image the full refresh
-# uses. Fails fast (one HTTP call) on bad cookies; succeeds in a few seconds.
-# The script returns 1 on 403/429 / missing TESLA_COOKIES, which is what we
-# want — we don't want to write a bogus envelope to data/raw/ either.
+# Smoke test: bulk-index endpoint via the same Docker image the full
+# fetch uses. Fails fast (one HTTP call) on bad cookies; succeeds in a few
+# seconds. fetch_tesla_index.py returns 1 on missing TESLA_COOKIES /
+# 403 / 429 — exactly the failure modes that warrant a fresh cookie mint.
+#
+# We capture stdout+stderr and tee them so the user still sees curl-impersonate's
+# output, but we also pattern-match on the captured text so we can tell a
+# cookie failure (loop) apart from an environment failure (abort). Stock
+# Python tracebacks, missing modules, missing image, etc. should NOT trigger
+# another cookie-mint round-trip — that's just user-hostile.
 smoke_test() {
-  docker run --rm --env-file .env \
+  local out
+  if ! out="$(docker run --rm --env-file .env \
     -v "$(pwd)/data:/app/data" \
     -v "$(pwd)/scripts:/app/scripts" \
     roadtrip-refresh:local \
-    python3 /app/scripts/fetch_tesla_index.py
+    python3 /app/scripts/fetch_tesla_index.py 2>&1)"; then
+    printf '%s\n' "$out"
+    if grep -qE 'upstream HTTP (403|429)|Access Denied' <<<"$out"; then
+      return 2  # cookie failure — loop
+    fi
+    return 3    # environment failure — abort
+  fi
+  printf '%s\n' "$out"
+  return 0
 }
 
 echo "→ Building refresh image (no-op if already built)…"
@@ -49,14 +64,28 @@ while (( attempt <= MAX_ATTEMPTS )); do
 
   echo
   echo "→ Smoke-testing cookies (fetch bulk index)…"
-  if smoke_test; then
-    echo "✓ Cookies work."
-    break
-  fi
+  set +e
+  smoke_test
+  rc=$?
+  set -e
 
-  echo "✗ Smoke test failed (likely 403/429 — Akamai pinned to wrong IP, or"
-  echo "  cookies missing _abck). Re-mint from the same browser session and"
-  echo "  try again."
+  case $rc in
+    0)
+      echo "✓ Cookies work."
+      break
+      ;;
+    2)
+      echo "✗ Smoke test failed: 403/429 from Tesla. Cookies are bound to the"
+      echo "  wrong IP, expired, or missing _abck. Re-mint from the same"
+      echo "  browser session and try again."
+      ;;
+    *)
+      echo "✗ Smoke test failed for a non-cookie reason (Python error, missing"
+      echo "  dep, Docker issue). See output above. Bailing — this isn't"
+      echo "  something a fresh cookie mint will fix."
+      exit "$rc"
+      ;;
+  esac
   if (( attempt == MAX_ATTEMPTS )); then
     echo "  Gave up after $MAX_ATTEMPTS attempts." >&2
     exit 1

@@ -27,6 +27,10 @@ RUN apt-get update \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
 
+# scripts/_envelope.py reads scripts/sources.yaml at runtime to populate the
+# RFC 0007 envelope; PyYAML is the only Python runtime dep we need.
+RUN pip install --no-cache-dir pyyaml==6.0.2
+
 ENV PYTHONUNBUFFERED=1
 # data/ + scripts/ are bind-mounted at runtime so a fresh-cookie .env on the
 # host is picked up without rebuilding the image.
