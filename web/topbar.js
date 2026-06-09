@@ -84,6 +84,13 @@ function shouldAutoFocus() {
     !window.matchMedia?.('(max-width: 768px)').matches;
 }
 
+function localYmd(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 /**
  * Fill row 0 with the user's current location, async. Used by the mobile
  * Drawer-Directions path so a phone tap goes straight to "from current
@@ -1658,12 +1665,11 @@ function bindTripDateInputs() {
   tripResults.dateBound = true;
   const startEl = document.getElementById('tb-trip-start');
   const endEl = document.getElementById('tb-trip-end');
-  // Default the start to tomorrow — most of our cache window is in the
-  // future. End stays empty so the user has to think about trip length.
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  startEl.value = tomorrow.toISOString().slice(0, 10);
-  startEl.min = new Date().toISOString().slice(0, 10);
+  // Default the start to the user's local calendar date. Date inputs are
+  // date-only values; formatting via UTC can jump a day in western timezones.
+  const today = localYmd(new Date());
+  startEl.value = today;
+  startEl.min = today;
   endEl.min = startEl.value;
   // Restore prior values if user has set them this session.
   if (tripResults.tripStart) startEl.value = tripResults.tripStart;

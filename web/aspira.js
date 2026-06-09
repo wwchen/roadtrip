@@ -10,6 +10,21 @@
 // `mapId`, and the dates are per-trip. Dates default to today/tomorrow so the
 // user lands on a usable booking page they can adjust.
 
+function localYmd(date) {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const d = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function localTimestampMillis(date) {
+  const ymd = localYmd(date);
+  const h = String(date.getHours()).padStart(2, '0');
+  const m = String(date.getMinutes()).padStart(2, '0');
+  const s = String(date.getSeconds()).padStart(2, '0');
+  return `${ymd}T${h}:${m}:${s}.000`;
+}
+
 export function buildAspiraDeeplink({
   host,
   transactionLocationId,
@@ -19,23 +34,23 @@ export function buildAspiraDeeplink({
   endDate,
 }) {
   const today = new Date();
-  const tomorrow = new Date(today.getTime() + 86_400_000);
-  const ymd = (d) => d.toISOString().slice(0, 10);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
   // Aspira's `searchTime` is naive ISO without trailing Z (local-shaped).
   // Servers don't validate the shape; matching the working URL just keeps
   // the wire bytes recognizable.
-  const searchTime = today.toISOString().replace(/\.\d+Z$/, '.000');
+  const searchTime = localTimestampMillis(today);
   // WA's results-page redirect logic refuses to render unless flexibleSearch
   // carries a real anchor date; null breaks it. Use today, format YYYY-MM-DD.
-  const flexAnchor = ymd(today);
+  const flexAnchor = localYmd(today);
 
   const fields = {
     transactionLocationId: String(transactionLocationId),
     mapId: String(mapId),
     searchTabGroupId: '0',
     bookingCategoryId: '0',
-    startDate: startDate || ymd(today),
-    endDate: endDate || ymd(tomorrow),
+    startDate: startDate || localYmd(today),
+    endDate: endDate || localYmd(tomorrow),
     nights: '1',
     isReserving: 'true',
     equipmentId: '-32768',                // Aspira sentinel for "any equipment"
