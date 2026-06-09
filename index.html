@@ -76,7 +76,7 @@
 
   @media (max-width: 640px) {
     #panel-toggle { display: block; }
-    #panel-collapse, #panel-show.visible { display: none !important; }
+    #panel-show.visible { display: none !important; }
     #panel {
       top: max(10px, env(safe-area-inset-top)); right: 10px; left: 10px;
       max-width: none; max-height: 75vh;
@@ -85,6 +85,17 @@
       transform: translateY(-110%); transition: transform 0.2s ease;
     }
     #panel.open { transform: translateY(0); }
+    #panel-collapse {
+      display: grid;
+      width: 40px; height: 40px;
+      top: 8px; right: 10px;
+      font-size: 22px;
+      background: var(--cg-bg-subtle);
+      border: 1px solid var(--cg-border-strong);
+      visibility: hidden;
+    }
+    #panel.open #panel-collapse { visibility: visible; }
+    #panel h1 { padding-right: 48px; }
     #panel label { margin: 8px 0; padding: 2px 0; }
     #panel label input { width: 18px; height: 18px; margin-right: 10px; }
     .legend-dot { width: 12px; height: 12px; }
@@ -526,6 +537,11 @@
   }
   .cg-btn-secondary:hover { background: var(--cg-bg-hover); }
   .cg-btn-secondary:active { background: var(--cg-bg-active); }
+  .cg-btn.copied,
+  .tb-icon-btn.copied {
+    border-color: var(--cg-accent);
+    color: var(--cg-accent);
+  }
 
   .cg-btn-tertiary {
     background: transparent; color: var(--cg-muted);

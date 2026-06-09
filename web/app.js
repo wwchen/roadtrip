@@ -133,8 +133,21 @@ initTopbar(map, getSearchIndex);
   const panel = document.getElementById('panel');
   const collapseBtn = document.getElementById('panel-collapse');
   const showBtn = document.getElementById('panel-show');
+  const mobileToggle = document.getElementById('panel-toggle');
   if (!panel || !collapseBtn || !showBtn) return;
+  const isMobile = () => window.matchMedia?.('(max-width: 640px)').matches;
+  const closeMobilePanel = () => {
+    panel.classList.remove('open');
+    if (mobileToggle) {
+      mobileToggle.textContent = '☰';
+      mobileToggle.setAttribute('aria-expanded', 'false');
+    }
+  };
   collapseBtn.addEventListener('click', () => {
+    if (isMobile()) {
+      closeMobilePanel();
+      return;
+    }
     panel.classList.add('collapsed');
     showBtn.classList.add('visible');
   });
@@ -149,15 +162,16 @@ initTopbar(map, getSearchIndex);
   const btn = document.getElementById('panel-toggle');
   const panel = document.getElementById('panel');
   if (!btn || !panel) return;
-  btn.addEventListener('click', () => {
-    panel.classList.toggle('open');
-    btn.textContent = panel.classList.contains('open') ? '✕' : '☰';
-  });
+  const setOpen = (open) => {
+    panel.classList.toggle('open', open);
+    btn.textContent = open ? '✕' : '☰';
+    btn.setAttribute('aria-expanded', String(open));
+  };
+  btn.addEventListener('click', () => setOpen(!panel.classList.contains('open')));
   // Tapping map closes drawer on mobile
   document.getElementById('map').addEventListener('click', () => {
     if (panel.classList.contains('open')) {
-      panel.classList.remove('open');
-      btn.textContent = '☰';
+      setOpen(false);
     }
   });
 })();

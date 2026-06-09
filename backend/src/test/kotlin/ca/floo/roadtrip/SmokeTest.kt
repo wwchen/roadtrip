@@ -138,6 +138,7 @@ class SmokeTest {
             // Mountain" prefix is enough to confirm we landed on the
             // right cluster regardless of which sibling sort-orders first.
             assertThat(drawer.locator("h2")).containsText("Tunnel Mountain")
+            assertTrue(page.url().contains("poi="), "opening a POI should update the visible URL")
 
             val reserveBtn = drawer.locator("a.cg-btn-primary")
             assertThat(reserveBtn).isVisible()
@@ -159,6 +160,210 @@ class SmokeTest {
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    @Test
+    fun `mobile layers panel can close after opening`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(390, 844),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        try {
+            page.navigate("/")
+            page.waitForFunction(
+                "() => globalThis.__rtState?.mapReady === true",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(15_000.0),
+            )
+
+            page.locator("#panel-toggle").click()
+            page.waitForFunction(
+                "() => document.getElementById('panel')?.classList.contains('open') === true",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+            )
+            assertThat(page.locator("#panel-collapse")).isVisible()
+
+            page.locator("#panel-collapse").click()
+            page.waitForFunction(
+                "() => document.getElementById('panel')?.classList.contains('open') === false",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+            )
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during layers panel smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    @Test
+    fun `poi share link opens drawer by id`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        context.route("**/api/pois") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"type":"FeatureCollection","features":[],"truncated":false}"""),
+            )
+        }
+        context.route("**/api/pois/4242") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "Feature",
+                          "id": 4242,
+                          "geometry": { "type": "Point", "coordinates": [-122.31, 47.62] },
+                          "properties": {
+                            "category": "planet-fitness",
+                            "name": "Shared Gym",
+                            "address": { "street": "123 Test Way", "city": "Seattle", "state": "WA", "postcode": "98101" }
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+
+        try {
+            page.navigate("/?poi=4242")
+            val drawer = page.locator("#cg-drawer.open")
+            assertThat(drawer).isVisible(
+                com.microsoft.playwright.assertions.LocatorAssertions
+                    .IsVisibleOptions()
+                    .setTimeout(15_000.0),
+            )
+            assertThat(drawer.locator("h2")).containsText("Shared Gym")
+            assertThat(drawer.locator(".rt-poi-share")).hasCount(0)
+            assertTrue(page.url().contains("poi=4242"), "shared POI should be represented by the visible URL")
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during POI share smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    fun `route share link restores stops and route`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val routeCalls = AtomicInteger(0)
+        val onRoutePoiCalls = AtomicInteger(0)
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        context.route("**/api/pois") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"type":"FeatureCollection","features":[],"truncated":false}"""),
+            )
+        }
+        context.route("**/api/route?**") { route: Route ->
+            routeCalls.incrementAndGet()
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "FeatureCollection",
+                          "features": [{
+                            "type": "Feature",
+                            "geometry": {
+                              "type": "LineString",
+                              "coordinates": [[-123.12, 49.28], [-122.33, 47.61]]
+                            },
+                            "properties": {
+                              "distance_m": 230000,
+                              "duration_s": 9000,
+                              "legs": [{ "distance_m": 230000, "duration_s": 9000 }]
+                            }
+                          }]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/pois/on-route") { route: Route ->
+            onRoutePoiCalls.incrementAndGet()
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"type":"FeatureCollection","features":[]}"""),
+            )
+        }
+
+        val routeParam =
+            "eyJ2IjoxLCJyYWRpdXNfbWlsZXMiOjUsInN0b3BzIjpbeyJuYW1lIjoiVmFuY291dmVyIiwibG5nIjotMTIzLjEyLCJsYXQiOjQ5LjI4LCJraW5kIjoiUExBQ0UifSx7Im5hbWUiOiJTZWF0dGxlIiwibG5nIjotMTIyLjMzLCJsYXQiOjQ3LjYxLCJraW5kIjoiUExBQ0UifV19"
+
+        try {
+            page.navigate("/?route=$routeParam")
+            page.waitForFunction(
+                "() => globalThis.__rtRouteActive?.() === true",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(15_000.0),
+            )
+            assertThat(page.locator(".tb-row[data-i=\"0\"] .tb-input")).hasValue("Vancouver")
+            assertThat(page.locator(".tb-row[data-i=\"1\"] .tb-input")).hasValue("Seattle")
+            assertThat(page.locator("#tb-corridor-value")).containsText("5 mi")
+            assertThat(page.locator("#tb-share-route")).isVisible()
+            val copiedRouteUrl = page.evaluate("() => globalThis.__rtRouteShareUrl?.() || ''").toString()
+            assertTrue(copiedRouteUrl.contains("route="), "route share URL should include route param")
+            assertEquals(1, routeCalls.get(), "shared route should fetch /api/route once")
+            page.waitForTimeout(750.0)
+            assertTrue(onRoutePoiCalls.get() >= 1, "shared route should fetch /api/pois/on-route")
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during route share smoke: ${pageErrors.joinToString(" | ")}",
             )
         } finally {
             page.close()
@@ -310,6 +515,7 @@ class SmokeTest {
                 null,
                 Page.WaitForFunctionOptions().setTimeout(10_000.0),
             )
+            assertTrue(page.url().contains("route="), "active route should update the visible URL")
             page.waitForFunction(
                 "() => globalThis.__rtState?.overlayData?.cg?.features?.[0]?.id === 999",
                 null,

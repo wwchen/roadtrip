@@ -15,7 +15,7 @@
 //   initTopbar(map, getPinSearchIndex)
 //   The module otherwise owns its DOM and state internally.
 
-import { state, distanceKm, formatDistance, flattenHydratedPoi } from './core.js';
+import { state, distanceKm, formatDistance, flattenHydratedPoi, geomCenter, zoomForBbox } from './core.js';
 import { fitAndSelect } from './search.js';
 import { synthesizeClick } from './layers.js';
 import { openCampgroundDrawer } from './drawer/campground.js';
@@ -35,6 +35,7 @@ import {
   ROUTE_COLOR,
   trip,
 } from './topbar/state.js';
+import { clearVisibleShareUrl, copyShareUrl, decodeRouteState, replaceVisibleUrl, routeShareUrl } from './share-links.js';
 
 // --- module state ----------------------------------------------------------
 
@@ -220,6 +221,10 @@ export function initTopbar(map, getPinSearchIndex) {
   // map clicks don't leave sticky state behind. No-op in directions
   // mode — the user has a real itinerary, don't blow it away.
   window.__rtClearBrowsePin = () => clearBrowsePin();
+  window.__rtOpenPoiById = (id) => openPoiById(id);
+  window.__rtRouteShareUrl = () => routeShareUrl(trip.stops, trip.corridorMiles);
+
+  restoreSharedLinkFromUrl();
 }
 
 function clearBrowsePin() {
@@ -400,6 +405,10 @@ function injectStyles() {
   }
   .tb-icon-btn.primary:hover { background: #2b6dd1; }
   .tb-icon-btn[hidden] { display: none; }
+  .tb-icon-btn.copied {
+    border-color: var(--cg-accent);
+    color: var(--cg-accent);
+  }
 
   /* Dropdown */
   #tb-dropdown {
@@ -679,6 +688,9 @@ function injectDom() {
       <button id="tb-directions" class="tb-icon-btn primary" type="button" hidden title="Get directions" aria-label="Get directions">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10l-7 7-3-3-9 9"/><path d="M14 10h7v7"/></svg>
       </button>
+      <button id="tb-share-route" class="tb-icon-btn" type="button" hidden title="Copy route link" aria-label="Copy route link">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"/></svg>
+      </button>
       <button id="tb-clear" class="tb-icon-btn" type="button" hidden title="Clear" aria-label="Clear">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
@@ -716,6 +728,7 @@ function injectDom() {
 function bindEvents() {
   document.getElementById('tb-add').addEventListener('click', onAddStop);
   document.getElementById('tb-directions').addEventListener('click', onDirections);
+  document.getElementById('tb-share-route').addEventListener('click', onShareRoute);
   document.getElementById('tb-clear').addEventListener('click', onClearAll);
 
   document.getElementById('tb-dropdown').addEventListener('mousedown', (e) => {
@@ -1052,6 +1065,63 @@ function openBackendPoiDrawer(result) {
   }
 }
 
+function enablePoiToggle(category, feature) {
+  let id = null;
+  if (category === 'campground') {
+    const cat = feature?.properties?.subcategory || feature?.properties?.category || 'federal';
+    id = `f-cg-${cat === 'other' ? 'federal' : cat}`;
+  } else if (category === 'national-park') id = 'f-np';
+  else if (category === 'state-park') id = 'f-sp';
+  else if (category === 'planet-fitness') id = 'f-pf';
+  else if (category === 'supercharger') id = 'f-open';
+  const el = id ? document.getElementById(id) : null;
+  if (el && !el.checked) {
+    el.checked = true;
+    el.dispatchEvent(new Event('change'));
+  }
+}
+
+function openSharedPoiFeature(detail) {
+  const category = detail?.properties?.category;
+  const feature = flattenHydratedPoi(detail);
+  const [lng, lat, bbox] = geomCenter(feature.geometry);
+  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return;
+
+  enablePoiToggle(category, feature);
+  const isPark = category === 'national-park' || category === 'state-park';
+  mapRef.flyTo({ center: [lng, lat], zoom: isPark ? zoomForBbox(bbox) : 13, speed: 1.6 });
+  const lngLat = { lng, lat };
+  switch (category) {
+    case 'campground':
+      openCampgroundDrawer(feature);
+      break;
+    case 'national-park':
+      openParkDrawer('np', feature, lngLat);
+      break;
+    case 'state-park':
+      openParkDrawer('sp', feature, lngLat);
+      break;
+    case 'planet-fitness':
+      openPlanetFitnessDrawer(feature);
+      break;
+    case 'supercharger':
+      openSuperchargerDrawer(feature);
+      break;
+  }
+}
+
+async function openPoiById(id) {
+  if (id == null || id === '') return;
+  try {
+    const r = await fetch(`/api/pois/${encodeURIComponent(id)}`);
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    openSharedPoiFeature(await r.json());
+  } catch (e) {
+    console.warn('[topbar] shared POI restore failed', e);
+    showStatus('Could not open shared POI link.', { error: true });
+  }
+}
+
 function setStop(i, stop) {
   while (trip.stops.length <= i) trip.stops.push(null);
   trip.stops[i] = stop;
@@ -1075,6 +1145,14 @@ function onDirections() {
     const el = document.querySelector(`.tb-row[data-i="${firstEmpty}"] .tb-input`);
     if (el) { activeRowIdx = firstEmpty; el.focus(); }
   }, 0);
+}
+
+function onShareRoute(e) {
+  copyShareUrl(routeShareUrl(trip.stops, trip.corridorMiles), { sourceEl: e.currentTarget });
+}
+
+function updateRouteAddressUrl() {
+  replaceVisibleUrl(routeShareUrl(trip.stops, trip.corridorMiles));
 }
 
 function onAddStop() {
@@ -1106,6 +1184,7 @@ function onClearAll() {
   if (tripResults.availabilityAbort) tripResults.availabilityAbort.abort();
   setAvailabilityStatus('');
   renderResults();
+  clearVisibleShareUrl();
 }
 
 function onRowX(i, wasFilled) {
@@ -1278,6 +1357,8 @@ async function tryFetchRoute() {
   drawRoute();
   fitMapToRoute();
   showRouteSummary();
+  updateRouteAddressUrl();
+  rerender();
   notifyCorridorChanged();
   renderResults();
 }
@@ -1353,6 +1434,7 @@ function updateCorridor() {
   if (trip.corridor && src) {
     src.setData({ type: 'Feature', geometry: trip.corridor, properties: {} });
   }
+  updateRouteAddressUrl();
   notifyCorridorChanged();
 }
 
@@ -1589,8 +1671,53 @@ function renderRows() {
   // picks where there's no drawer Directions button to click). In
   // directions mode it stays hidden — auto-fetch covers that flow.
   document.getElementById('tb-directions').hidden = isDirections || !trip.stops[0];
+  document.getElementById('tb-share-route').hidden = !(isDirections && trip.route && allStopsFilled());
   document.getElementById('tb-clear').hidden = !trip.stops[0];
   document.getElementById('tb-add').hidden = !isDirections || trip.stops.length >= MAX_STOPS;
+}
+
+function clampCorridorMiles(miles) {
+  if (!Number.isFinite(miles)) return CORRIDOR_DEFAULT_MILES;
+  return Math.max(CORRIDOR_MIN_MILES, Math.min(CORRIDOR_MAX_MILES, Math.round(miles / CORRIDOR_STEP_MILES) * CORRIDOR_STEP_MILES));
+}
+
+function syncCorridorInput() {
+  const range = document.getElementById('tb-corridor-range');
+  const value = document.getElementById('tb-corridor-value');
+  if (range) range.value = String(trip.corridorMiles);
+  if (value) value.textContent = `${trip.corridorMiles} mi`;
+}
+
+function restoreSharedLinkFromUrl() {
+  if (typeof window === 'undefined') return;
+  const params = new URLSearchParams(window.location.search);
+  const run = () => {
+    const routeParam = params.get('route');
+    if (routeParam) {
+      const shared = decodeRouteState(routeParam);
+      if (!shared) {
+        showStatus('Shared route link is invalid.', { error: true });
+        return;
+      }
+      trip.mode = 'directions';
+      trip.stops = shared.stops;
+      trip.route = null;
+      trip.corridorMiles = clampCorridorMiles(shared.corridorMiles ?? CORRIDOR_DEFAULT_MILES);
+      syncCorridorInput();
+      rerender();
+      tryFetchRoute();
+      return;
+    }
+
+    const poiId = params.get('poi');
+    if (poiId) openPoiById(poiId);
+  };
+
+  if (state.mapReady) {
+    setTimeout(run, 0);
+  } else {
+    mapRef.once('style.load', run);
+  }
 }
 
 // --- row drag (HTML5 DnD reorder) --------------------------------------
