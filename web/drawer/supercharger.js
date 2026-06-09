@@ -1,188 +1,19 @@
-import { state, distanceKm, formatDistance, escapeHtml, callButtonsHTML } from './core.js';
-import { openCampgroundDrawer, openDrawer, upstreamHTML, reviveJsonProp } from './drawer.js';
+// Tesla Supercharger drawer. Renders site capability pills, amenities,
+// pricing (Tesla pricebooks), and a 24h "busy hours" sparkline derived from
+// availabilityProfile.
 
-/** Compose subline from arbitrary parts: "Loop · State · 2.4 km away". */
-function buildSubline(parts) {
-  return parts.filter(Boolean).join(' · ');
-}
+import { escapeHtml } from '../core.js';
+import { openDrawer } from './chrome.js';
+import {
+  buildSubline,
+  distanceTo,
+  drawerHeader,
+  directionsButtonHTML,
+  reviveJsonProp,
+  upstreamHTML,
+} from './shared.js';
 
-/** Distance string from user to lng/lat, or '' when location is off. */
-function distanceTo(lng, lat) {
-  return state.userLocation
-    ? formatDistance(distanceKm(state.userLocation.lat, state.userLocation.lng, lat, lng))
-    : '';
-}
-
-/**
- * Per-POI Directions button. Same visual slot in every drawer; the click is
- * picked up by a delegated listener in drawer.js that routes through
- * window.__rtAddTripStop. Label flips based on current trip mode so the
- * button reads "Add stop" once a route is being built.
- */
-export function directionsButtonHTML({ name, lng, lat, kind = 'PLACE' }) {
-  if (!Number.isFinite(lng) || !Number.isFinite(lat)) return '';
-  const mode = (typeof window !== 'undefined' && typeof window.__rtTripMode === 'function')
-    ? window.__rtTripMode() : 'browse';
-  // Icon-only button. The aria-label keeps it a11y-readable, and the
-  // tooltip flips between Directions / Add stop based on trip mode so a
-  // hover (desktop) discloses what's about to happen.
-  const a11yLabel = mode === 'directions' ? 'Add stop' : 'Directions';
-  const icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10l-7 7-3-3-9 9"/><path d="M14 10h7v7"/></svg>`;
-  return `<button type="button" class="cg-btn cg-btn-secondary rt-poi-directions"
-    aria-label="${escapeHtml(a11yLabel)}"
-    title="${escapeHtml(a11yLabel)}"
-    data-name="${escapeHtml(name || '')}"
-    data-lng="${lng}"
-    data-lat="${lat}"
-    data-kind="${escapeHtml(kind)}">${icon}</button>`;
-}
-
-/** Drawer header: name + subline + optional verdict. cg-* classes match drawer.js. */
-function drawerHeader(name, sub, verdictHtml = '') {
-  return `
-    <header class="cg-drawer-head">
-      <h2>${escapeHtml(name)}</h2>
-      ${sub ? `<div class="cg-sub">${escapeHtml(sub)}</div>` : ''}
-      ${verdictHtml ? `<div class="cg-verdict-row">${verdictHtml}</div>` : ''}
-    </header>`;
-}
-
-function renderPricing(books) {
-  // MapLibre serializes nested feature properties to JSON strings when
-  // they live on its source; the pricebooks list comes back stringified
-  // by the time we read it from a click event. Parse on the way in.
-  if (typeof books === 'string') {
-    try { books = JSON.parse(books); } catch { books = []; }
-  }
-  if (!books || !books.length) return '<div class="meta">No pricing on file.</div>';
-
-  const tslaCharging = books.filter(b => b.feeType === 'CHARGING' && b.vehicleMakeType === 'TSLA');
-  const congestion = books.filter(b => b.feeType === 'CONGESTION');
-
-  const rows = [];
-  rows.push(renderRateGroup('Tesla', tslaCharging));
-  if (congestion.length) {
-    const c = congestion[0];
-    rows.push(`<div class="rate-row"><span class="rate-label">Idle/congestion</span><span class="rate-val">${formatRate(c)}</span></div>`);
-  }
-  return '<div class="rates">' + rows.join('') + '</div>';
-}
-
-// Most currencies render fine with Intl.NumberFormat's default symbol. For
-// USD/CAD we strip the locale-prefix ("US$", "CA$", "$") and keep just "$"
-// with a currency-code tag trailing the first Tesla row — cleaner for a popup.
-function formatRate(b) {
-  const cc = b.currencyCode || 'USD';
-  const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: cc, currencyDisplay: 'narrowSymbol' }).format(b.rateBase);
-  return `${amount}/${b.uom}`;
-}
-
-function renderRateGroup(label, books) {
-  if (!books.length) return '';
-  const flat = books.find(b => !b.isTou);
-  const tou = books.filter(b => b.isTou).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
-  const cc = books[0].currencyCode;
-  const ccTag = cc && cc !== 'USD' ? ` <span class="meta" style="font-size:10px">${cc}</span>` : '';
-  const lines = [];
-  lines.push(`<div class="rate-row rate-header"><span class="rate-label">${label}${ccTag}</span>${flat ? `<span class="rate-val">${formatRate(flat)}</span>` : ''}</div>`);
-  for (const b of tou) {
-    const win = `${b.startTime}–${b.endTime === '00:00' ? '24:00' : b.endTime}`;
-    lines.push(`<div class="rate-row rate-tou"><span class="rate-label">&nbsp;&nbsp;${win}</span><span class="rate-val">${formatRate(b)}</span></div>`);
-  }
-  return lines.join('');
-}
-
-// Campground click → drawer (RFC 0003). Drawer renders availability for
-// recgov pins and skips it for everything else. Re-exported under the old
-// name so app.js doesn't need to change.
-export function openCampgroundPopup(f) {
-  openCampgroundDrawer(f);
-}
-
-// Build a reasonable external link for a park by name.
-function externalParkLink(kind, name, stateName) {
-  if (kind === 'np') {
-    // NPS doesn't expose a deterministic slug, so a search URL is reliable.
-    const q = encodeURIComponent(name);
-    return [`https://www.nps.gov/findapark/advanced-search.htm?q=${q}`, 'nps.gov'];
-  }
-  // State Parks — no unified URL; do a Google search scoped to name + state
-  const q = encodeURIComponent(`${name} ${stateName} state park`);
-  return [`https://www.google.com/search?q=${q}`, 'search'];
-}
-
-export function openParkPopup(kind, feature, lngLat) {
-  const p = feature.properties;
-  reviveJsonProp(p, 'upstream');
-  const name = p.Unit_Nm || p.Loc_Nm || 'Park';
-  const stateName = p.State_Nm || '';
-  const acres = p.GIS_Acres ? Number(p.GIS_Acres).toLocaleString() + ' acres' : '';
-  const mgr = p.Mang_Name || '';
-  const [url, label] = externalParkLink(kind, name, stateName);
-  const sub = buildSubline([
-    kind === 'np' ? 'National Park' : 'State Park',
-    stateName,
-    distanceTo(lngLat.lng, lngLat.lat),
-  ]);
-  const pills = [
-    mgr && mgr !== 'National Park Service' ? `<span class="pill">${escapeHtml(mgr)}</span>` : '',
-    acres ? `<span class="pill">${escapeHtml(acres)}</span>` : '',
-  ].filter(Boolean).join('');
-  const primaryBtn = url
-    ? `<a class="cg-btn cg-btn-primary" href="${url}" target="_blank" rel="noreferrer">${escapeHtml(label === 'nps.gov' ? 'Open on nps.gov' : 'Search ' + label)}</a>`
-    : '';
-  const dirBtn = directionsButtonHTML({ name, lng: lngLat.lng, lat: lngLat.lat, kind: kind === 'np' ? 'NP' : 'SP' });
-  openDrawer(`
-    ${drawerHeader(name, sub)}
-    <div class="cg-actions">${dirBtn}${primaryBtn}</div>
-    ${pills ? `<div class="pills">${pills}</div>` : ''}
-    ${upstreamHTML(p.upstream)}
-  `);
-}
-
-export function openPlanetFitnessPopup(f) {
-  const p = f.properties;
-  reviveJsonProp(p, 'upstream');
-  const [lng, lat] = f.geometry.coordinates;
-  // Reading order matches the SC drawer: street, then city, then state+zip
-  // as a single token. Empty pieces drop out so a missing zip doesn't
-  // leave a stray ", ".
-  const addrLine = [p.street, p.city, [p.state, p.postcode].filter(Boolean).join(' ')]
-    .filter(Boolean).join(', ');
-  const sub = buildSubline([addrLine, distanceTo(lng, lat)]);
-  // Primary CTA is Google Maps — same coords-query trick as superchargers,
-  // works on iOS/Android/web and routes from the user's current location.
-  const gmapsLabel = encodeURIComponent('Planet Fitness');
-  const gmapsUrl = `https://www.google.com/maps/search/?api=1&query=${gmapsLabel}%20${lat},${lng}`;
-  // Secondary: the OSM website tag if upstream had one; otherwise the
-  // planetfitness.com search by city/state.
-  const pfSearch =
-    'https://www.planetfitness.com/gyms?q=' + encodeURIComponent([p.city, p.state].filter(Boolean).join(' '));
-  const pfUrl = p.website || pfSearch;
-  const callBtns = callButtonsHTML(p.phone);
-
-  // Pills row: 24/7 / hours / wheelchair access. Each is dropped if the
-  // upstream OSM tag is absent — sparse data should render sparse, not
-  // with empty placeholder pills.
-  const pills = [
-    p.opening_hours ? `<span class="pill">${escapeHtml(p.opening_hours)}</span>` : '',
-  ].filter(Boolean).join(' ');
-
-  const dirBtn = directionsButtonHTML({ name: p.name || 'Planet Fitness', lng, lat, kind: 'PF' });
-  openDrawer(`
-    ${drawerHeader(p.name || 'Planet Fitness', sub)}
-    <div class="cg-actions">
-      ${dirBtn}
-      <a class="cg-btn cg-btn-primary" href="${gmapsUrl}" target="_blank" rel="noopener">Open in Google Maps</a>
-      <a class="cg-btn cg-btn-secondary" href="${pfUrl}" target="_blank" rel="noreferrer">Planet Fitness page</a>
-      ${callBtns}
-    </div>
-    ${pills ? `<div class="pills">${pills}</div>` : ''}
-    ${upstreamHTML(p.upstream)}
-  `);
-}
-
-export function openSuperchargerPopup(f) {
+export function openSuperchargerDrawer(f) {
   const p = f.properties;
   reviveJsonProp(p, 'upstream');
   const [lng, lat] = f.geometry.coordinates;
@@ -261,6 +92,51 @@ export function openSuperchargerPopup(f) {
 }
 
 // --- Tesla detail surfacing helpers -------------------------------------
+
+function renderPricing(books) {
+  // MapLibre serializes nested feature properties to JSON strings when
+  // they live on its source; the pricebooks list comes back stringified
+  // by the time we read it from a click event. Parse on the way in.
+  if (typeof books === 'string') {
+    try { books = JSON.parse(books); } catch { books = []; }
+  }
+  if (!books || !books.length) return '<div class="meta">No pricing on file.</div>';
+
+  const tslaCharging = books.filter(b => b.feeType === 'CHARGING' && b.vehicleMakeType === 'TSLA');
+  const congestion = books.filter(b => b.feeType === 'CONGESTION');
+
+  const rows = [];
+  rows.push(renderRateGroup('Tesla', tslaCharging));
+  if (congestion.length) {
+    const c = congestion[0];
+    rows.push(`<div class="rate-row"><span class="rate-label">Idle/congestion</span><span class="rate-val">${formatRate(c)}</span></div>`);
+  }
+  return '<div class="rates">' + rows.join('') + '</div>';
+}
+
+// Most currencies render fine with Intl.NumberFormat's default symbol. For
+// USD/CAD we strip the locale-prefix ("US$", "CA$", "$") and keep just "$"
+// with a currency-code tag trailing the first Tesla row — cleaner for a popup.
+function formatRate(b) {
+  const cc = b.currencyCode || 'USD';
+  const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: cc, currencyDisplay: 'narrowSymbol' }).format(b.rateBase);
+  return `${amount}/${b.uom}`;
+}
+
+function renderRateGroup(label, books) {
+  if (!books.length) return '';
+  const flat = books.find(b => !b.isTou);
+  const tou = books.filter(b => b.isTou).sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+  const cc = books[0].currencyCode;
+  const ccTag = cc && cc !== 'USD' ? ` <span class="meta" style="font-size:10px">${cc}</span>` : '';
+  const lines = [];
+  lines.push(`<div class="rate-row rate-header"><span class="rate-label">${label}${ccTag}</span>${flat ? `<span class="rate-val">${formatRate(flat)}</span>` : ''}</div>`);
+  for (const b of tou) {
+    const win = `${b.startTime}–${b.endTime === '00:00' ? '24:00' : b.endTime}`;
+    lines.push(`<div class="rate-row rate-tou"><span class="rate-label">&nbsp;&nbsp;${win}</span><span class="rate-val">${formatRate(b)}</span></div>`);
+  }
+  return lines.join('');
+}
 
 function buildSCFeaturePills(detail) {
   const pills = [];

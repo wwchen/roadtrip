@@ -1,10 +1,8 @@
 import { state, geomCenter } from './core.js';
-import {
-  openCampgroundPopup,
-  openParkPopup,
-  openPlanetFitnessPopup,
-  openSuperchargerPopup,
-} from './popups.js';
+import { openCampgroundDrawer } from './drawer/campground.js';
+import { openParkDrawer } from './drawer/park.js';
+import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
+import { openSuperchargerDrawer } from './drawer/supercharger.js';
 
 // Remove a source if present, plus any layers that reference it. Used before
 // re-adding on style.load to avoid "source already exists" errors while still
@@ -107,7 +105,7 @@ export function installCGLayer(geojson) {
   // the click.
   map.on('click', 'cg-points-hit', (e) => {
     const f = e.features[0];
-    openCampgroundPopup(f);
+    openCampgroundDrawer(f);
   });
   bindCursor('cg-points-hit');
 
@@ -238,7 +236,7 @@ export function installParkLayers(np, sp) {
   applyParkVis();
 
   const parkClick = (kind) => (e) => {
-    openParkPopup(kind, e.features[0], e.lngLat);
+    openParkDrawer(kind, e.features[0], e.lngLat);
   };
   map.on('click', 'np-fill', parkClick('np'));
   map.on('click', 'sp-fill', parkClick('sp'));
@@ -284,7 +282,7 @@ export function installPFLayer(geojson) {
 
   map.on('click', 'pf-points-hit', (e) => {
     const f = e.features[0];
-    openPlanetFitnessPopup(f);
+    openPlanetFitnessDrawer(f);
   });
   bindCursor('pf-points-hit');
 
@@ -318,7 +316,7 @@ export function installSCLayer(geojson) {
   updateFilter();
 
   map.on('click', 'sc-points-hit', (e) => {
-    openSuperchargerPopup(e.features[0]);
+    openSuperchargerDrawer(e.features[0]);
   });
   bindCursor('sc-points-hit');
 
