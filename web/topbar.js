@@ -208,6 +208,12 @@ export function initTopbar(map, getPinSearchIndex) {
   window.__rtTripMode = () => trip.mode;
   window.__rtRouteActive = () => trip.mode === 'directions' && !!trip.route && allStopsFilled();
   window.__rtAddTripStop = (stop) => addTripStopFromExternal(stop);
+  window.__rtUseCurrentLocationForTripStop = (rowIdx, loc) => {
+    if (loc && Number.isFinite(loc.lng) && Number.isFinite(loc.lat)) {
+      state.userLocation = { lng: loc.lng, lat: loc.lat };
+    }
+    fillRowWithCurrentLocation(rowIdx);
+  };
 
   // app.js's map-empty-space click handler calls this to clear the
   // browse-mode pin selection (row 0 + the "A" marker on the map) so
