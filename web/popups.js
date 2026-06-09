@@ -23,13 +23,18 @@ export function directionsButtonHTML({ name, lng, lat, kind = 'PLACE' }) {
   if (!Number.isFinite(lng) || !Number.isFinite(lat)) return '';
   const mode = (typeof window !== 'undefined' && typeof window.__rtTripMode === 'function')
     ? window.__rtTripMode() : 'browse';
-  const label = mode === 'directions' ? 'Add stop' : 'Directions';
-  const icon = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M21 10l-7 7-3-3-9 9"/><path d="M14 10h7v7"/></svg>`;
+  // Icon-only button. The aria-label keeps it a11y-readable, and the
+  // tooltip flips between Directions / Add stop based on trip mode so a
+  // hover (desktop) discloses what's about to happen.
+  const a11yLabel = mode === 'directions' ? 'Add stop' : 'Directions';
+  const icon = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10l-7 7-3-3-9 9"/><path d="M14 10h7v7"/></svg>`;
   return `<button type="button" class="cg-btn cg-btn-secondary rt-poi-directions"
+    aria-label="${escapeHtml(a11yLabel)}"
+    title="${escapeHtml(a11yLabel)}"
     data-name="${escapeHtml(name || '')}"
     data-lng="${lng}"
     data-lat="${lat}"
-    data-kind="${escapeHtml(kind)}">${icon}${label}</button>`;
+    data-kind="${escapeHtml(kind)}">${icon}</button>`;
 }
 
 /** Drawer header: name + subline + optional verdict. cg-* classes match drawer.js. */

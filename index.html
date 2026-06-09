@@ -486,7 +486,17 @@
      drawers — it stays content-sized while the primary CTA grows. */
   .cg-actions { display: flex; flex-direction: row; flex-wrap: wrap; gap: 8px; }
   .cg-actions > .cg-btn { flex: 1 1 auto; }
-  .cg-actions > .rt-poi-directions { flex: 0 0 auto; padding: 0 14px; }
+  /* Directions is icon-only — square aspect ratio, fixed width, no
+     padding-driven sizing. flex:0 0 auto keeps it from being squeezed
+     by the primary CTA next to it. */
+  .cg-actions > .rt-poi-directions {
+    flex: 0 0 auto;
+    width: 40px;
+    padding: 0;
+  }
+  @media (max-width: 767px) {
+    .cg-actions > .rt-poi-directions { width: 44px; }
+  }
   .cg-btn {
     padding: 0 16px;
     height: 40px;
