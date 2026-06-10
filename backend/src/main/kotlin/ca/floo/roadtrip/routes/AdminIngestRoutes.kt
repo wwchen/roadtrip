@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND_BAD_ID
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_TARGET_BUSY
@@ -28,6 +27,11 @@ import ca.floo.roadtrip.models.api.StatusResponseSchema
 import ca.floo.roadtrip.models.api.TargetStatusSchema
 import ca.floo.roadtrip.models.ingest.RunKind
 import ca.floo.roadtrip.models.ingest.RunOutcome
+import ca.floo.roadtrip.repo.AdminIngestReadRepo
+import ca.floo.roadtrip.repo.IngestRunDetailRow
+import ca.floo.roadtrip.repo.IngestRunListItemRow
+import ca.floo.roadtrip.repo.IngestRunPhaseRow
+import ca.floo.roadtrip.repo.TargetIngestStatusRow
 import ca.floo.roadtrip.service.etl.IngestController
 import ca.floo.roadtrip.service.etl.TargetBusyException
 import ca.floo.roadtrip.service.etl.TargetNotFoundException
@@ -44,8 +48,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 
 @OptIn(ExperimentalSerializationApi::class)
 private val adminIngestJson =
@@ -74,6 +76,8 @@ fun Route.adminIngestRoutes(
     controller: IngestController,
     ctx: DSLContext,
 ) {
+    val readRepo = AdminIngestReadRepo(ctx)
+
     route("/api/admin/data") {
         // One target — sync default; ?async=1 fires-and-forgets.
         post("/fetch/{target}", {
@@ -217,7 +221,7 @@ fun Route.adminIngestRoutes(
             }
         }) {
             val target = call.request.queryParameters["target"]
-            call.respondAdminJson(listRecent(ctx, target, limit = 50))
+            call.respondAdminJson(listRecent(readRepo, target, limit = 50))
         }
 
         get("/runs/{id}", {
@@ -252,7 +256,7 @@ fun Route.adminIngestRoutes(
                 call.respondAdminJson(ErrorNotFoundSchema(error = "bad id"), HttpStatusCode.BadRequest)
                 return@get
             }
-            val body = runDetail(ctx, id)
+            val body = runDetail(readRepo, id)
             if (body == null) {
                 call.respondAdminJson(ErrorNotFoundSchema(error = "not found", id = id), HttpStatusCode.NotFound)
             } else {
@@ -272,7 +276,7 @@ fun Route.adminIngestRoutes(
                 }
             }
         }) {
-            call.respondAdminJson(statusByTarget(ctx, controller.knownTargets()))
+            call.respondAdminJson(statusByTarget(readRepo, controller.knownTargets()))
         }
     }
 }
@@ -367,127 +371,26 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
 }
 
 private fun listRecent(
-    ctx: DSLContext,
+    readRepo: AdminIngestReadRepo,
     target: String?,
     limit: Int,
-): RunsListSchema {
-    val q =
-        ctx
-            .select(
-                INGEST_RUNS.ID,
-                INGEST_RUNS.TARGET,
-                INGEST_RUNS.PHASE,
-                INGEST_RUNS.PHASE_KIND,
-                INGEST_RUNS.PARENT_RUN_ID,
-                INGEST_RUNS.STATUS,
-                INGEST_RUNS.STARTED_AT,
-                INGEST_RUNS.COMPLETED_AT,
-                INGEST_RUNS.EXIT_CODE,
-                INGEST_RUNS.TRIGGERED_BY,
-            ).from(INGEST_RUNS)
-            // Parent rows only — phase detail comes via /runs/{id}.
-            .where(INGEST_RUNS.PHASE_KIND.eq("target"))
-            .apply { if (target != null) and(INGEST_RUNS.TARGET.eq(target)) }
-            .orderBy(INGEST_RUNS.STARTED_AT.desc())
-            .limit(limit)
-            .fetch()
-
-    return RunsListSchema(
-        runs =
-            q.map { r ->
-                IngestRunListItemSchema(
-                    id = r.get(INGEST_RUNS.ID)!!,
-                    target = r.get(INGEST_RUNS.TARGET)!!,
-                    // Parent row's `phase` column carries the run kind (fetch | import).
-                    kind = r.get(INGEST_RUNS.PHASE)!!,
-                    status = r.get(INGEST_RUNS.STATUS)!!,
-                    triggered_by = r.get(INGEST_RUNS.TRIGGERED_BY)!!,
-                    started_at = r.get(INGEST_RUNS.STARTED_AT)!!.toString(),
-                    completed_at = r.get(INGEST_RUNS.COMPLETED_AT)?.toString(),
-                )
-            },
+): RunsListSchema =
+    RunsListSchema(
+        runs = readRepo.listRecent(target, limit).map { it.toSchema() },
     )
-}
 
 private fun runDetail(
-    ctx: DSLContext,
+    readRepo: AdminIngestReadRepo,
     id: Long,
-): RunDetailSchema? {
-    val parent =
-        ctx
-            .selectFrom(INGEST_RUNS)
-            .where(INGEST_RUNS.ID.eq(id))
-            .and(INGEST_RUNS.PHASE_KIND.eq("target"))
-            .fetchOne() ?: return null
-
-    val phases =
-        ctx
-            .selectFrom(INGEST_RUNS)
-            .where(INGEST_RUNS.PARENT_RUN_ID.eq(id))
-            .orderBy(INGEST_RUNS.ID.asc())
-            .fetch()
-
-    return RunDetailSchema(
-        id = parent.id!!,
-        target = parent.target!!,
-        kind = parent.phase!!,
-        status = parent.status!!,
-        triggered_by = parent.triggeredBy!!,
-        started_at = parent.startedAt!!.toString(),
-        completed_at = parent.completedAt?.toString(),
-        notes = parent.notes,
-        phases =
-            phases.map { p ->
-                IngestRunPhaseSchema(
-                    id = p.id!!,
-                    phase = p.phase!!,
-                    phase_kind = p.phaseKind!!,
-                    status = p.status!!,
-                    exit_code = p.exitCode,
-                    started_at = p.startedAt!!.toString(),
-                    completed_at = p.completedAt?.toString(),
-                    counts = p.counts?.let { adminIngestJson.parseToJsonElement(it.data()) },
-                    notes = p.notes,
-                )
-            },
-    )
-}
+): RunDetailSchema? = readRepo.runDetail(id)?.toSchema()
 
 private fun statusByTarget(
-    ctx: DSLContext,
+    readRepo: AdminIngestReadRepo,
     targets: Set<String>,
-): StatusResponseSchema {
-    val now = OffsetDateTime.now(ZoneOffset.UTC)
-    return StatusResponseSchema(
-        targets =
-            targets.sorted().map { target ->
-                val latest =
-                    ctx
-                        .selectFrom(INGEST_RUNS)
-                        .where(INGEST_RUNS.TARGET.eq(target))
-                        .and(INGEST_RUNS.PHASE_KIND.eq("target"))
-                        .and(INGEST_RUNS.STATUS.`in`("completed", "failed"))
-                        .orderBy(INGEST_RUNS.STARTED_AT.desc())
-                        .limit(1)
-                        .fetchOne()
-                if (latest == null) {
-                    TargetStatusSchema(target = target)
-                } else {
-                    val ageSec =
-                        java.time.Duration
-                            .between(latest.completedAt ?: latest.startedAt, now)
-                            .seconds
-                    TargetStatusSchema(
-                        target = target,
-                        last_run = latest.id,
-                        kind = latest.phase!!,
-                        status = latest.status!!,
-                        age_sec = ageSec,
-                    )
-                }
-            },
+): StatusResponseSchema =
+    StatusResponseSchema(
+        targets = readRepo.statusByTarget(targets).map { it.toSchema() },
     )
-}
 
 private suspend inline fun <reified T> ApplicationCall.respondAdminJson(
     value: T,
@@ -503,4 +406,50 @@ private fun RunOutcome.toSchema(): RunOutcomeSchema =
         kind = kind.rowValue,
         status = status,
         failed_phase = failedPhase,
+    )
+
+private fun IngestRunListItemRow.toSchema(): IngestRunListItemSchema =
+    IngestRunListItemSchema(
+        id = id,
+        target = target,
+        kind = kind,
+        status = status,
+        triggered_by = triggeredBy,
+        started_at = startedAt.toString(),
+        completed_at = completedAt?.toString(),
+    )
+
+private fun IngestRunDetailRow.toSchema(): RunDetailSchema =
+    RunDetailSchema(
+        id = id,
+        target = target,
+        kind = kind,
+        status = status,
+        triggered_by = triggeredBy,
+        started_at = startedAt.toString(),
+        completed_at = completedAt?.toString(),
+        notes = notes,
+        phases = phases.map { it.toSchema() },
+    )
+
+private fun IngestRunPhaseRow.toSchema(): IngestRunPhaseSchema =
+    IngestRunPhaseSchema(
+        id = id,
+        phase = phase,
+        phase_kind = phaseKind,
+        status = status,
+        exit_code = exitCode,
+        started_at = startedAt.toString(),
+        completed_at = completedAt?.toString(),
+        counts = countsJson?.let { adminIngestJson.parseToJsonElement(it) },
+        notes = notes,
+    )
+
+private fun TargetIngestStatusRow.toSchema(): TargetStatusSchema =
+    TargetStatusSchema(
+        target = target,
+        last_run = lastRun,
+        kind = kind,
+        status = status,
+        age_sec = ageSec,
     )
