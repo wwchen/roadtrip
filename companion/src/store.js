@@ -2,7 +2,7 @@
 //
 // As of RFC 0001 / PR 6, the companion no longer stores recgov tokens or
 // refresh creds — the backend's TokenManager owns those, and companion
-// fetches a fresh recaccount via GET /api/campsite/recgov/fresh-token on
+// fetches a fresh recaccount via GET /api/campsite/booking/session/fresh-token on
 // every Playwright session setup.
 //
 // What still lives here: `recgov_cookies` (paste-derived cookie string used

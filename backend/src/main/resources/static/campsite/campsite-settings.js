@@ -138,7 +138,7 @@
       resultEl.textContent = 'Testing...';
       resultEl.style.color = 'var(--text3)';
       try {
-        const result = await api('POST', '/api/campsite/settings/test-cookies', { raw });
+        const result = await api('POST', '/api/campsite/booking/session/import', { raw });
         const tokenStatus = result.hasBearer
           ? (result.tokenExpired ? '\u26a0 Bearer token expired' : `Bearer token expires ${new Date(result.tokenExpires).toLocaleString()}`)
           : 'no Bearer token found';
@@ -149,9 +149,6 @@
         } else {
           resultEl.textContent = `\u2717 Not logged in \u2014 ${tokenStatus}`;
           resultEl.style.color = 'var(--red)';
-        }
-        if (raw) {
-          await api('POST', '/api/campsite/settings', { recgov_cookies: raw }).catch(() => {});
         }
         refreshStatus();
         loadTokenExpiry();
@@ -179,8 +176,8 @@
     async function clearSession() {
       if (!confirm('Clear saved browser session? You will need to log in again.')) return;
       try {
-        await api('POST', '/api/campsite/settings/clear-session', {});
-        el('chrome-test-result').textContent = 'Session cleared \u2014 log in again via Test browser session';
+        await api('POST', '/api/campsite/booking/session/clear', {});
+        el('chrome-test-result').textContent = 'Session cleared \u2014 paste credentials again before validating';
         el('chrome-test-result').style.color = 'var(--text3)';
         showToast('Session cleared', 'info');
       } catch (err) {
@@ -192,7 +189,7 @@
       const resultEl = el('chrome-test-result');
       resultEl.textContent = 'Validating token...';
       try {
-        const result = await api('POST', '/api/campsite/settings/test-chrome', {});
+        const result = await api('POST', '/api/campsite/booking/session/validate', {});
         if (result.loggedIn) {
           const exp = result.tokenExpires ? ` (expires ${new Date(result.tokenExpires).toLocaleString()})` : '';
           resultEl.textContent = result.refreshed
@@ -255,7 +252,7 @@
       btn.disabled = true;
       if (countdownEl) countdownEl.className = 'token-countdown refreshing';
       try {
-        const result = await api('POST', '/api/campsite/settings/refresh-token');
+        const result = await api('POST', '/api/campsite/booking/session/refresh');
         const exp = result.expires ? new Date(result.expires).toLocaleString() : 'unknown';
         showToast(`Token refreshed \u2014 expires ${exp}`, 'success');
         await loadTokenExpiry();

@@ -159,7 +159,7 @@ class MatchRepoIT {
         assertTrue(released.isEmpty())
     }
 
-    // ----- nextWorkItem (the planner SQL behind /api/campsite/work/next) -----
+    // ----- nextWorkItem (the planner SQL behind /api/campsite/companion/work/next) -----
 
     private fun seedAlert(
         autoCart: Boolean = true,

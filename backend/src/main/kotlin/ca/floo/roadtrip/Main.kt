@@ -7,9 +7,11 @@ import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.client.MapboxGeocoder
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
+import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.dataSourceFor
@@ -31,7 +33,6 @@ import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
 import io.ktor.http.ContentType
-import io.ktor.http.content.CachingOptions
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
@@ -44,6 +45,7 @@ import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.compression.matchContentType
 import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
+import io.ktor.server.request.path
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import java.io.File
@@ -146,51 +148,8 @@ fun Application.module() {
         }
     }
     install(CachingHeaders) {
-        options { _, content ->
-            // index.html stays no-cache so the deploy you just shipped is what
-            // loads. JS/CSS also no-cache so deploys propagate instantly;
-            // ConditionalHeaders + Last-Modified still let the server answer
-            // 304 Not Modified, so bytes-on-the-wire are ~0 when unchanged.
-            // Data/asset files get a day so the trip is offline-tolerant.
-            //
-            // We match on (type, subtype) strings instead of `ContentType`
-            // constants because Ktor's static-file plugin returns
-            // `text/javascript` for .js (the modern MIME), while the
-            // `ContentType.Application.JavaScript` constant is
-            // `application/javascript` — `==` would miss it and the cache
-            // header would silently never apply.
-            val ct = content.contentType?.withoutParameters() ?: return@options null
-            val type = ct.contentType
-            val subtype = ct.contentSubtype
-            when {
-                type == "text" && subtype == "html" ->
-                    CachingOptions(
-                        io.ktor.http.CacheControl
-                            .NoCache(null),
-                    )
-                // JS: text/javascript OR application/javascript. CSS: text/css.
-                (type == "text" || type == "application") && subtype == "javascript" ->
-                    CachingOptions(
-                        io.ktor.http.CacheControl
-                            .NoCache(null),
-                    )
-                type == "text" && subtype == "css" ->
-                    CachingOptions(
-                        io.ktor.http.CacheControl
-                            .NoCache(null),
-                    )
-                type == "application" && (subtype == "json" || subtype == "geo+json") ->
-                    CachingOptions(
-                        io.ktor.http.CacheControl
-                            .MaxAge(86400),
-                    )
-                type == "image" ->
-                    CachingOptions(
-                        io.ktor.http.CacheControl
-                            .MaxAge(86400),
-                    )
-                else -> null
-            }
+        options { call, content ->
+            cacheOptionsFor(call.request.path(), content.contentType)
         }
     }
 
@@ -221,7 +180,7 @@ fun Application.module() {
         routeRoutes(routeCache, ctx)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
-        campsiteAvailabilityRoutes(ctx, campsite.cachedAvailability, aspiraCache, poiRegistry)
+        campsiteAvailabilityRoutes(CampsiteProviderRepo(ctx), campsite.cachedAvailability, aspiraCache, poiRegistry)
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
         // Static site. /web/* and /data/* serve directly from the repo

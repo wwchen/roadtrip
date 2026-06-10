@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.collect
 
 fun Route.eventsRoutes(bus: EventBus) {
     documentation({
-        tags = listOf("campsite")
+        tags = listOf("campsite-events")
         summary = "Live campsite event stream (SSE)"
         description =
             "Server-Sent Events stream for campsite alert lifecycle updates: " +

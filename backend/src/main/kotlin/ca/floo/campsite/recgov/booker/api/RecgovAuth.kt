@@ -139,7 +139,7 @@ object RecgovAuth {
      * Variant of [refreshAccessToken] that returns the full recaccount-shaped
      * response JSON (`{access_token, expiration, account: {...}, ...}`) instead
      * of just the bearer string. Used by the companion-facing
-     * `/api/campsite/recgov/fresh-token` endpoint and TokenManager's cache.
+     * `/api/campsite/booking/session/fresh-token` endpoint and TokenManager's cache.
      */
     suspend fun refreshRecaccount(
         token: String,
@@ -167,7 +167,7 @@ object RecgovAuth {
      * Build a recaccount-shaped object directly from a JWT, when no refresh has
      * happened yet (or refresh creds are missing). Mirrors
      * companion/auth.js buildRecaccountFromToken — used as a fallback so the
-     * `/recgov/fresh-token` endpoint always returns a usable shape if there's
+     * `/booking/session/fresh-token` endpoint always returns a usable shape if there's
      * any non-expired token at all.
      */
     fun buildRecaccountFromToken(token: String): JsonObject? {

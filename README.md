@@ -268,7 +268,7 @@ emits SSE `match` events, and tracks lease state.
 
 - **`companion/`** — Node 20+ Playwright client. Subscribes to the backend
   SSE stream at `/api/campsite/events`, claims matches via
-  `POST /api/campsite/matches/{id}/claim`, drives Chromium to add the site
+  `POST /api/campsite/companion/matches/{id}/claim`, drives Chromium to add the site
   to the operator's rec.gov cart, reports the result, then PATCHes the
   cart-extend endpoint every 5 minutes to hold the reservation. Heartbeats
   to `/api/campsite/companion/heartbeat` every 30 s.

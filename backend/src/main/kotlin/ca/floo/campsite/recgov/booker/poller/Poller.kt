@@ -90,7 +90,7 @@ class Poller(
                     if (newMatches.isNotEmpty()) {
                         log.info("MATCH: Alert {} \"{}\" — {} site(s)", alert.id, alert.campgroundName, newMatches.size)
                         // Publish per-match for the frontend toast UX. Companion
-                        // ignores the payload and re-queries /api/campsite/work/next
+                        // ignores the payload and re-queries /api/campsite/companion/work/next
                         // — the DB is the source of truth for what to ATC.
                         for (m in newMatches) {
                             bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(m)))

@@ -1,7 +1,7 @@
 // Companion main loop:
 //   1. Subscribes to backend SSE /api/campsite/events for wakeup signals.
 //   2. On any wakeup (match/result/lease_expired/companion_online), calls
-//      backend's planner: GET /api/campsite/work/next. If it returns a match,
+//      backend's planner: GET /api/campsite/companion/work/next. If it returns a match,
 //      the companion claims, ATCs, and reports the result. The DB is the
 //      source of truth for ATC orchestration; SSE event payloads are ignored.
 //   3. Strict serial: only one ATC at a time across the whole companion.
@@ -33,7 +33,7 @@ let busy = false // strict serial: one ATC at a time across the whole companion
 function log (...xs) { console.log(new Date().toISOString(), '[' + COMPANION_ID + ']', ...xs) }
 
 // Ask the backend "is there work for me?" and run it. The backend's
-// /work/next endpoint is the single source of truth for what's pickable —
+// /companion/work/next endpoint is the single source of truth for what's pickable —
 // SSE events are just wakeup hints. Loops until the backend says null
 // (nothing more to do) or a claim/ATC fails.
 async function pickAndRunWork () {
@@ -86,7 +86,7 @@ async function pickAndRunWork () {
       if (result?.page) await result.page.close().catch(() => {})
 
       // Loop continues — if there's another pickable match (e.g. ATC failed
-      // here, or this was a different alert), the next /work/next call
+      // here, or this was a different alert), the next /companion/work/next call
       // returns it. If not, we exit cleanly.
     }
   } finally {
@@ -133,7 +133,7 @@ function subscribe () {
   })
 
   // Wakeup signals: any of these mean "the set of pickable matches may have
-  // changed; re-query /work/next." Match payload is ignored — backend decides.
+  // changed; re-query /companion/work/next." Match payload is ignored — backend decides.
   const wakeupEvents = new Set(['match', 'result', 'lease_expired', 'companion_online'])
   const allEvents = ['connected', 'tick', 'match', 'claimed', 'result', 'lease_expired', 'companion_offline', 'companion_online']
   for (const name of allEvents) {

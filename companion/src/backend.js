@@ -24,11 +24,11 @@ async function getJson (path) {
 }
 
 export async function claimMatch (matchId, companionId) {
-  return postJson(`/api/campsite/matches/${matchId}/claim`, { companion_id: companionId })
+  return postJson(`/api/campsite/companion/matches/${matchId}/claim`, { companion_id: companionId })
 }
 
 export async function reportResult (matchId, cartAdded) {
-  return postJson(`/api/campsite/matches/${matchId}/result`, { cart_added: cartAdded })
+  return postJson(`/api/campsite/companion/matches/${matchId}/result`, { cart_added: cartAdded })
 }
 
 export async function heartbeat (companionId) {
@@ -45,7 +45,7 @@ export async function getMatch (matchId) {
 // saved (paste hasn't happened) or the call fails — companion fails closed.
 export async function fetchFreshRecaccount () {
   try {
-    const r = await getJson('/api/campsite/recgov/fresh-token')
+    const r = await getJson('/api/campsite/booking/session/fresh-token')
     if (r.status !== 200 || !r.json) return null
     return r.json
   } catch { return null }
@@ -56,7 +56,7 @@ export async function fetchFreshRecaccount () {
 // SSE event, plus a 30s safety-net interval). The DB is the source of truth
 // for ATC orchestration; this endpoint just reads it.
 export async function getNextWork () {
-  return getJson('/api/campsite/work/next')
+  return getJson('/api/campsite/companion/work/next')
 }
 
 export function backendBase () { return BASE }

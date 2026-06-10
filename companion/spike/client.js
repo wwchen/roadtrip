@@ -42,7 +42,7 @@ async function postJson (path, body) {
 
 async function claim (matchId) {
   if (CLAIM_DELAY > 0) await sleep(CLAIM_DELAY)
-  const r = await postJson(`/api/campsite/matches/${matchId}/claim`, { companion_id: COMPANION_ID })
+  const r = await postJson(`/api/campsite/companion/matches/${matchId}/claim`, { companion_id: COMPANION_ID })
   log('claim', matchId, '→', r.status, r.body)
   if (r.status !== 200) return false
   if (!SEND_RESULT) {
@@ -51,7 +51,7 @@ async function claim (matchId) {
   }
   // tiny delay to simulate ATC work
   await sleep(500)
-  const r2 = await postJson(`/api/campsite/matches/${matchId}/result`, { cart_added: CART_RESULT })
+  const r2 = await postJson(`/api/campsite/companion/matches/${matchId}/result`, { cart_added: CART_RESULT })
   log('result', matchId, '→', r2.status, r2.body)
   return true
 }

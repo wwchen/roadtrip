@@ -110,7 +110,7 @@ class CampsiteSmokeTest {
                 page.evaluate(
                     """
                     async () => {
-                      const resp = await fetch('/api/campsite/spike/synth-match', {
+                      const resp = await fetch('/api/admin/campsite/debug/synth-match', {
                         method: 'POST',
                         headers: { 'content-type': 'application/json' },
                         body: JSON.stringify({
@@ -229,7 +229,7 @@ class CampsiteSmokeTest {
                     ),
             )
         }
-        context.route("**/api/campsite/settings/test-chrome") { route: Route ->
+        context.route("**/api/campsite/booking/session/validate") { route: Route ->
             Thread.sleep(1_000)
             route.fulfill(
                 Route

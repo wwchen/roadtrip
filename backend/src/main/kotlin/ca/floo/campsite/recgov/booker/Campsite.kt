@@ -1,16 +1,18 @@
 package ca.floo.campsite.recgov.booker
 
 import ca.floo.campsite.recgov.booker.api.alertRoutes
+import ca.floo.campsite.recgov.booker.api.bookingCartRoutes
+import ca.floo.campsite.recgov.booker.api.bookingSessionRoutes
 import ca.floo.campsite.recgov.booker.api.campgroundSearchRoutes
+import ca.floo.campsite.recgov.booker.api.campsiteDebugRoutes
 import ca.floo.campsite.recgov.booker.api.companionRoutes
+import ca.floo.campsite.recgov.booker.api.companionWorkRoutes
 import ca.floo.campsite.recgov.booker.api.eventsRoutes
 import ca.floo.campsite.recgov.booker.api.extendCartHold
 import ca.floo.campsite.recgov.booker.api.matchRoutes
 import ca.floo.campsite.recgov.booker.api.pollRoutes
-import ca.floo.campsite.recgov.booker.api.recgovTokenRoutes
 import ca.floo.campsite.recgov.booker.api.settingsRoutes
 import ca.floo.campsite.recgov.booker.api.statusRoutes
-import ca.floo.campsite.recgov.booker.api.workRoutes
 import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.availability.AvailabilityManager
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
@@ -134,7 +136,7 @@ fun Application.campsiteModule(
                     val released = matches.sweepExpiredLeases()
                     released.forEach { bus.publish(CampsiteEvent.LeaseExpired(matchId = it.id)) }
                     // The sweep just freed some claims — wake the companion so
-                    // it re-queries /work/next and picks up the orphaned matches.
+                    // it re-queries /companion/work/next and picks up the orphaned matches.
                     released.map { it.alertId }.distinct().forEach {
                         bus.publish(CampsiteEvent.WorkMaybeAvailable(alertId = it))
                     }
@@ -186,14 +188,16 @@ fun Application.campsiteModule(
 fun Route.campsiteRoutes(s: CampsiteServices) {
     eventsRoutes(s.bus)
     alertRoutes(s.alerts, s.poller, s.scheduler, s.bus, s.eventDriven)
-    matchRoutes(s.alerts, s.matches, s.bus, s.availability, s.settings, s.leaseDuration, s.tokenManager)
-    settingsRoutes(s.settings, s.slack, s.tokenManager)
+    matchRoutes(s.matches, s.availability)
+    companionWorkRoutes(s.alerts, s.matches, s.bus, s.leaseDuration)
+    bookingSessionRoutes(s.settings, s.tokenManager)
+    bookingCartRoutes(s.matches, s.bus, s.settings, s.tokenManager)
+    settingsRoutes(s.settings, s.slack)
     statusRoutes(s.settings, s.tokenManager, s.statusMonitor)
-    recgovTokenRoutes(s.tokenManager)
-    workRoutes(s.matches)
     // availabilityPublicRoutes — replaced by campsiteAvailabilityRoutes in Main.kt
     // (single dispatch endpoint keyed by poi_id, dispatches to recgov or aspira).
     campgroundSearchRoutes()
     pollRoutes(s.poller, s.bus, s.eventDriven)
     companionRoutes(s.companions, s.bus)
+    campsiteDebugRoutes(s.alerts, s.matches, s.bus)
 }

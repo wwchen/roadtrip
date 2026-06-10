@@ -14,7 +14,7 @@ fun Route.statusRoutes(
     monitor: StatusMonitor? = null,
 ) {
     get("/api/campsite/status", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-status")
         summary = "Recreation.gov reachability + JWT login state"
         response {
             code(io.ktor.http.HttpStatusCode.OK) {

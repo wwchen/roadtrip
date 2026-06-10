@@ -25,12 +25,12 @@ before(async () => {
       } else if (req.url.match(/^\/api\/campsite\/matches\/\d+$/)) {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({ id: 42, campgroundId: '232447', campsiteId: '12345', firstDate: '2026-07-01', availableDates: ['2026-07-01'], site: 'A12' }))
-      } else if (req.url === '/api/campsite/work/next') {
+      } else if (req.url === '/api/campsite/companion/work/next') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({
           match: { id: 7, alertId: 1, campgroundId: '232447', campsiteId: '100', firstDate: '2026-07-01', availableDates: ['2026-07-01'], site: 'A12' },
         }))
-      } else if (req.url === '/api/campsite/recgov/fresh-token') {
+      } else if (req.url === '/api/campsite/booking/session/fresh-token') {
         res.writeHead(200, { 'content-type': 'application/json' })
         res.end(JSON.stringify({
           access_token: 'fake-jwt',
@@ -61,7 +61,7 @@ test('claimMatch posts companion_id', async () => {
   assert.equal(r.json.leaseExpires, '2026-06-04T13:00:00Z')
   const last = log.pop()
   assert.equal(last.method, 'POST')
-  assert.equal(last.url, '/api/campsite/matches/42/claim')
+  assert.equal(last.url, '/api/campsite/companion/matches/42/claim')
   assert.deepEqual(JSON.parse(last.body), { companion_id: 'companion-A' })
 })
 
@@ -70,7 +70,7 @@ test('reportResult posts cart_added boolean', async () => {
   const r = await reportResult(42, true)
   assert.equal(r.status, 200)
   const last = log.pop()
-  assert.equal(last.url, '/api/campsite/matches/42/result')
+  assert.equal(last.url, '/api/campsite/companion/matches/42/result')
   assert.deepEqual(JSON.parse(last.body), { cart_added: true })
 })
 

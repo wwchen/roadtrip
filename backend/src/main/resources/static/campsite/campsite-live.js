@@ -7,6 +7,7 @@
     let pollIntervalMs = 60000;
     let isPollingNow = false;
     let matchesAutoRefreshInterval = null;
+    let eventSource = null;
 
     function updateDataStatus(state) {
       const dot = el('status-data');
@@ -108,7 +109,7 @@
           extendHoldBtn.disabled = true;
           extendHoldBtn.textContent = '\u2026';
           try {
-            await api('POST', '/api/campsite/cart/extend');
+            await api('POST', '/api/campsite/booking/cart/extend');
             showToast('Cart hold extended \u2713', 'success');
           } catch (err) {
             showToast(`Extend failed: ${err.message}`, 'error');
@@ -121,7 +122,9 @@
     }
 
     function connectSSE() {
-      const es = new EventSource('/api/campsite/events');
+      if (eventSource) eventSource.close();
+      eventSource = new EventSource('/api/campsite/events');
+      const es = eventSource;
 
       const parse = e => {
         try { return JSON.parse(e.data || '{}'); } catch { return {}; }

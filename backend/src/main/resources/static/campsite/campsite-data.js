@@ -157,7 +157,7 @@
 
     async function openMatch(id) {
       try {
-        const result = await api('POST', `/api/campsite/matches/${id}/cart`, { action: 'open' });
+        const result = await api('POST', `/api/campsite/booking/matches/${id}/cart`, { action: 'open' });
         if (result.url) root.open(result.url, '_blank');
       } catch (err) {
         showToast(`Error: ${err.message}`, 'error');
@@ -167,7 +167,7 @@
     async function cartMatch(id) {
       showToast('Queuing add-to-cart for companion\u2026', 'info');
       try {
-        const result = await api('POST', `/api/campsite/matches/${id}/cart`, {});
+        const result = await api('POST', `/api/campsite/booking/matches/${id}/cart`, {});
         if (result.cart_added) {
           showToast('Added to cart! Complete checkout in browser.', 'success', 6000);
         } else if (result.queued) {

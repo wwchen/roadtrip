@@ -1,13 +1,17 @@
 package ca.floo.roadtrip
 
+import ca.floo.campsite.recgov.booker.api.campsiteDebugRoutes
 import ca.floo.campsite.recgov.booker.api.eventsRoutes
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
+import ca.floo.campsite.recgov.booker.db.AlertRepo
+import ca.floo.campsite.recgov.booker.db.MatchRepo
 import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import ca.floo.roadtrip.client.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
 import ca.floo.roadtrip.routes.healthRoutes
@@ -79,18 +83,20 @@ class OpenApiSmokeTest {
                 install(SSE)
                 val ctx = DSL.using(SQLDialect.POSTGRES)
                 val registry = PoiRegistry.load(File("../config/poi-registry.yaml"))
+                val bus = EventBus()
                 routing {
                     route("/api/docs/openapi.json") { openApiSpec() }
                     healthRoutes()
                     poiRoutes(ctx, registry)
                     poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), registry)
                     campsiteAvailabilityRoutes(
-                        ctx,
+                        CampsiteProviderRepo(ctx),
                         CachedAvailability(AvailabilityClient()),
                         CachedAspiraAvailability(AspiraAvailabilityClient()),
                         registry,
                     )
-                    eventsRoutes(EventBus())
+                    eventsRoutes(bus)
+                    campsiteDebugRoutes(AlertRepo(ctx), MatchRepo(ctx), bus)
                 }
             }
 
@@ -141,8 +147,23 @@ class OpenApiSmokeTest {
                 campsiteEventsGet["summary"]!!.jsonPrimitive.content,
             )
             assertEquals(
-                "campsite",
+                "campsite-events",
                 campsiteEventsGet["tags"]!!
+                    .jsonArray
+                    .single()
+                    .jsonPrimitive
+                    .content,
+            )
+
+            val campsiteAdminPost =
+                paths["/api/admin/campsite/debug/synth-match"]!!.jsonObject["post"]!!.jsonObject
+            assertEquals(
+                "Debug-only: create an alert + match in one shot for protocol harness tests",
+                campsiteAdminPost["summary"]!!.jsonPrimitive.content,
+            )
+            assertEquals(
+                "campsite-admin",
+                campsiteAdminPost["tags"]!!
                     .jsonArray
                     .single()
                     .jsonPrimitive

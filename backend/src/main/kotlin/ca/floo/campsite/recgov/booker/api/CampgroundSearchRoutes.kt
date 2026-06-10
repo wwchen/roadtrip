@@ -45,7 +45,7 @@ private val NOISE =
 
 fun Route.campgroundSearchRoutes() {
     get("/api/campsite/campgrounds/search", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-campgrounds")
         summary = "Search rec.gov for parks + campgrounds matching ?q="
     }) {
         val q = call.request.queryParameters["q"]
@@ -74,7 +74,7 @@ fun Route.campgroundSearchRoutes() {
     }
 
     get("/api/campsite/campgrounds/in-park/{parkId}", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-campgrounds")
         summary = "Campgrounds nested under a rec.gov park (filtered by park name)"
     }) {
         val parkName = call.request.queryParameters["name"].orEmpty()
