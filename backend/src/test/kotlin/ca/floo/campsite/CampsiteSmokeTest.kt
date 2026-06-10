@@ -2,6 +2,7 @@ package ca.floo.campsite
 
 import com.microsoft.playwright.Browser
 import com.microsoft.playwright.BrowserType
+import com.microsoft.playwright.Page
 import com.microsoft.playwright.Playwright
 import com.microsoft.playwright.assertions.PlaywrightAssertions.assertThat
 import org.junit.jupiter.api.AfterAll
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable
+import java.util.regex.Pattern
 import kotlin.test.assertTrue
 
 // Trip-critical smoke for the campsite alert UI: cold load → header + alerts
@@ -73,6 +75,101 @@ class CampsiteSmokeTest {
                 "Page errors during campsite smoke: ${pageErrors.joinToString(" | ")}",
             )
         } finally {
+            context.close()
+        }
+    }
+
+    @Test
+    fun `SSE match event refreshes matches list`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+        var matchId: Long? = null
+        var alertId: Long? = null
+
+        try {
+            page.navigate("/campsite/")
+            page.waitForFunction(
+                "() => globalThis.__campsiteState?.sseConnected === true",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+            )
+
+            val created =
+                page.evaluate(
+                    """
+                    async () => {
+                      const resp = await fetch('/api/campsite/spike/synth-match', {
+                        method: 'POST',
+                        headers: { 'content-type': 'application/json' },
+                        body: JSON.stringify({
+                          campgroundId: '232447',
+                          campsiteId: 'e2e-sse-site',
+                          startDate: '2026-08-01',
+                          endDate: '2026-08-02'
+                        })
+                      });
+                      return await resp.text();
+                    }
+                    """.trimIndent(),
+                ) as String
+            matchId =
+                Pattern
+                    .compile(""""id"\s*:\s*(\d+)""")
+                    .matcher(created)
+                    .let { matcher ->
+                        if (matcher.find()) matcher.group(1).toLong() else null
+                    }
+            assertTrue(matchId != null, "synthetic match response did not contain id: $created")
+
+            assertThat(page.locator("#matches-list")).containsText(
+                "spike-232447",
+                com.microsoft.playwright.assertions.LocatorAssertions
+                    .ContainsTextOptions()
+                    .setTimeout(5_000.0),
+            )
+            assertThat(page.locator("#matches-list")).containsText("spike-site")
+
+            val matchJson =
+                page.evaluate(
+                    """
+                    async (id) => await (await fetch('/api/campsite/matches/' + id)).text()
+                    """.trimIndent(),
+                    matchId.toString(),
+                ) as String
+            alertId =
+                Pattern
+                    .compile(""""alertId"\s*:\s*(\d+)""")
+                    .matcher(matchJson)
+                    .let { matcher ->
+                        if (matcher.find()) matcher.group(1).toLong() else null
+                    }
+            assertTrue(alertId != null, "match payload did not contain alertId: $matchJson")
+
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during campsite SSE smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            matchId?.let {
+                page.evaluate(
+                    "async (id) => fetch('/api/campsite/matches/' + id, { method: 'DELETE' })",
+                    it.toString(),
+                )
+            }
+            alertId?.let {
+                page.evaluate(
+                    "async (id) => fetch('/api/campsite/alerts/' + id, { method: 'DELETE' })",
+                    it.toString(),
+                )
+            }
             context.close()
         }
     }
