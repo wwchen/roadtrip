@@ -120,6 +120,7 @@ class IngestControllerTest {
             assertEquals(1, phases.size)
             assertEquals("fetch", phases[0].phaseKind)
             assertEquals("completed", phases[0].status)
+            assertEquals("""{"exit_code": 0}""", phases[0].counts?.data())
         }
 
     @Test
