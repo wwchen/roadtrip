@@ -6,6 +6,7 @@ import ca.floo.roadtrip.models.ValidationResult
 import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
+import ca.floo.roadtrip.service.etl.pointGeoJson
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -152,7 +153,7 @@ class AspiraJoinByNameEtl(
                     source = etlSlug,
                     sourceId = "aspira-${leaf.transactionLocationId}-${leaf.mapId}",
                     name = leaf.name,
-                    geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
+                    geomGeoJson = pointGeoJson(lon, lat),
                     region = null,
                     country = null,
                     phone = null,

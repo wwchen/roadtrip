@@ -7,6 +7,7 @@ import ca.floo.roadtrip.models.ValidationResult
 import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
+import ca.floo.roadtrip.service.etl.pointGeoJson
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
@@ -59,7 +60,7 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
                 source = etlSlug,
                 sourceId = "ra-${park.parkId}",
                 name = park.name,
-                geomGeoJson = """{"type":"Point","coordinates":[${park.lon},${park.lat}]}""",
+                geomGeoJson = pointGeoJson(park.lon, park.lat),
                 region = "AB",
                 country = "CA",
                 phone = park.phone,
