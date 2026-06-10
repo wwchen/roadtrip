@@ -35,7 +35,7 @@ import {
   ROUTE_COLOR,
   trip,
 } from './topbar/state.js';
-import { clearVisibleShareUrl, copyShareUrl, decodeRouteState, replaceVisibleUrl, routeShareUrl } from './share-links.js';
+import { clearVisibleShareUrl, decodeRouteState, replaceVisibleUrl, routeShareUrl } from './share-links.js';
 
 // --- module state ----------------------------------------------------------
 
@@ -376,6 +376,7 @@ function injectStyles() {
   #tb-actions { display: flex; align-items: center; gap: 6px; padding: 0 6px 6px; }
 
   #tb-add {
+    flex-shrink: 0;
     background: transparent;
     border: 1px dashed var(--cg-border-strong);
     color: var(--cg-muted);
@@ -386,6 +387,26 @@ function injectStyles() {
   }
   #tb-add:hover { color: var(--cg-accent); border-color: var(--cg-accent); }
   #tb-add[hidden] { display: none; }
+
+  #tb-route-summary {
+    flex: 0 1 auto;
+    min-width: 0;
+    color: var(--cg-text);
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #tb-route-summary:empty { display: none; }
+  #tb-route-summary .tb-stat-sep {
+    color: var(--cg-faint);
+    margin: 0 6px;
+  }
+  .tb-actions-spacer {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
 
   .tb-icon-btn {
     width: 36px; height: 36px;
@@ -405,10 +426,6 @@ function injectStyles() {
   }
   .tb-icon-btn.primary:hover { background: #2b6dd1; }
   .tb-icon-btn[hidden] { display: none; }
-  .tb-icon-btn.copied {
-    border-color: var(--cg-accent);
-    color: var(--cg-accent);
-  }
 
   /* Dropdown */
   #tb-dropdown {
@@ -452,13 +469,11 @@ function injectStyles() {
   #tb-status .tb-stat-num { color: ${ROUTE_COLOR}; font-weight: 600; }
   #tb-status .tb-stat-sep { color: var(--cg-faint); margin: 0 8px; }
 
-  /* Corridor radius slider — visible only when a route is active. */
+  /* Corridor radius slider — visible inside the campgrounds collapsible. */
   #tb-corridor {
     display: none;
     align-items: center;
     gap: 10px;
-    padding: 8px 12px;
-    border-top: 1px solid var(--cg-border);
     font-size: 11px; color: var(--cg-muted);
   }
   #tb-corridor.visible { display: flex; }
@@ -475,34 +490,13 @@ function injectStyles() {
     cursor: pointer;
     margin: 0;
   }
-  /* Route distance + duration headline. Lives on the corridor row to save a
-     vertical slot on mobile. The per-leg breakdown (3+ stops) still goes in
-     #tb-status below. */
-  #tb-corridor .tb-corridor-summary {
-    color: var(--cg-text);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-    flex-shrink: 0;
-    padding-left: 10px;
-    margin-left: 4px;
-    border-left: 1px solid var(--cg-border-strong);
-  }
-  #tb-corridor .tb-corridor-summary:empty {
-    display: none;
-  }
-  #tb-corridor .tb-corridor-summary .tb-stat-sep {
-    color: var(--cg-faint);
-    margin: 0 6px;
-  }
 
-  /* Trip-date inputs — visible only when a route is active. Drives the bulk
-     availability check that lights up each card with per-night status. */
+  /* Trip-date inputs — visible inside the campgrounds collapsible. Drives the
+     bulk availability check that lights up each card with per-night status. */
   #tb-trip-dates {
     display: none;
     align-items: center;
     gap: 6px;
-    padding: 6px 12px;
-    border-top: 1px solid var(--cg-border);
     font-size: 11px; color: var(--cg-muted);
   }
   #tb-trip-dates.visible { display: flex; }
@@ -571,6 +565,10 @@ function injectStyles() {
     overscroll-behavior: contain;
   }
   #tb-results.visible { display: flex; }
+  .tb-results-body {
+    display: flex;
+    flex-direction: column;
+  }
   .tb-results-head {
     position: sticky; top: 0; z-index: 1;
     padding: 8px 12px;
@@ -596,6 +594,18 @@ function injectStyles() {
   /* Chevron points down when collapsed, up when expanded. */
   #tb-results.collapsed .tb-results-chevron { transform: rotate(180deg); }
   #tb-results.collapsed .tb-results-body { display: none; }
+  .tb-results-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--cg-border);
+    background: var(--cg-surface);
+  }
+  #tb-results-cards {
+    display: flex;
+    flex-direction: column;
+  }
   .tb-card {
     display: flex; gap: 10px;
     padding: 10px 12px;
@@ -664,11 +674,17 @@ function injectStyles() {
     /* On a phone, the card list eats the whole screen if expanded by default
        — start collapsed so the map is visible after computing a route. */
     #tb-results.collapsed { max-height: none; }
-    /* Tighter corridor row so distance + duration fit alongside the slider
-       without wrapping. */
+    #tb-actions { gap: 8px; }
+    #tb-route-summary { font-size: 10px; }
+    /* Tighter corridor row inside the collapsible controls. */
     #tb-corridor { padding: 6px 10px; gap: 6px; }
     #tb-corridor label { display: none; }
-    #tb-corridor .tb-corridor-summary { padding-left: 8px; margin-left: 2px; }
+    .tb-results-controls { padding: 8px 10px; }
+    #tb-trip-dates { flex-wrap: wrap; }
+    #tb-trip-dates .tb-trip-dates-status {
+      flex-basis: 100%;
+      margin-left: 0;
+    }
   }
   `;
   const tag = document.createElement('style');
@@ -684,12 +700,10 @@ function injectDom() {
     <div id="tb-stops"></div>
     <div id="tb-actions">
       <button id="tb-add" type="button" hidden>+ Add stop</button>
-      <div style="flex:1"></div>
+      <span id="tb-route-summary" aria-live="polite"></span>
+      <div class="tb-actions-spacer"></div>
       <button id="tb-directions" class="tb-icon-btn primary" type="button" hidden title="Get directions" aria-label="Get directions">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10l-7 7-3-3-9 9"/><path d="M14 10h7v7"/></svg>
-      </button>
-      <button id="tb-share-route" class="tb-icon-btn" type="button" hidden title="Copy route link" aria-label="Copy route link">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.1.1l2-2a5 5 0 0 0-7.1-7.1l-1.1 1.1"/><path d="M14 11a5 5 0 0 0-7.1-.1l-2 2a5 5 0 0 0 7.1 7.1l1.1-1.1"/></svg>
       </button>
       <button id="tb-clear" class="tb-icon-btn" type="button" hidden title="Clear" aria-label="Clear">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
@@ -697,28 +711,34 @@ function injectDom() {
     </div>
     <div id="tb-dropdown"></div>
     <div id="tb-status"></div>
-    <div id="tb-corridor">
-      <label for="tb-corridor-range">Corridor</label>
-      <input
-        type="range"
-        id="tb-corridor-range"
-        min="${CORRIDOR_MIN_MILES}"
-        max="${CORRIDOR_MAX_MILES}"
-        step="${CORRIDOR_STEP_MILES}"
-        value="${CORRIDOR_DEFAULT_MILES}"
-        aria-label="Corridor radius in miles"
-      >
-      <span class="tb-corridor-value" id="tb-corridor-value">${CORRIDOR_DEFAULT_MILES} mi</span>
-      <span class="tb-corridor-summary" id="tb-corridor-summary"></span>
+    <div id="tb-results">
+      <div class="tb-results-head" role="button" tabindex="0" aria-expanded="false"></div>
+      <div class="tb-results-body">
+        <div class="tb-results-controls">
+          <div id="tb-corridor">
+            <label for="tb-corridor-range">Corridor</label>
+            <input
+              type="range"
+              id="tb-corridor-range"
+              min="${CORRIDOR_MIN_MILES}"
+              max="${CORRIDOR_MAX_MILES}"
+              step="${CORRIDOR_STEP_MILES}"
+              value="${CORRIDOR_DEFAULT_MILES}"
+              aria-label="Corridor radius in miles"
+            >
+            <span class="tb-corridor-value" id="tb-corridor-value">${CORRIDOR_DEFAULT_MILES} mi</span>
+          </div>
+          <div id="tb-trip-dates">
+            <label class="tb-trip-dates-label">Travel dates</label>
+            <input type="date" id="tb-trip-start" aria-label="Start date">
+            <span class="tb-trip-dates-sep">→</span>
+            <input type="date" id="tb-trip-end" aria-label="End date">
+            <span class="tb-trip-dates-status" id="tb-trip-dates-status"></span>
+          </div>
+        </div>
+        <div id="tb-results-cards"></div>
+      </div>
     </div>
-    <div id="tb-trip-dates">
-      <label class="tb-trip-dates-label">Travel dates</label>
-      <input type="date" id="tb-trip-start" aria-label="Start date">
-      <span class="tb-trip-dates-sep">→</span>
-      <input type="date" id="tb-trip-end" aria-label="End date">
-      <span class="tb-trip-dates-status" id="tb-trip-dates-status"></span>
-    </div>
-    <div id="tb-results"></div>
   `;
   document.body.appendChild(el);
 }
@@ -728,7 +748,6 @@ function injectDom() {
 function bindEvents() {
   document.getElementById('tb-add').addEventListener('click', onAddStop);
   document.getElementById('tb-directions').addEventListener('click', onDirections);
-  document.getElementById('tb-share-route').addEventListener('click', onShareRoute);
   document.getElementById('tb-clear').addEventListener('click', onClearAll);
 
   document.getElementById('tb-dropdown').addEventListener('mousedown', (e) => {
@@ -1147,10 +1166,6 @@ function onDirections() {
   }, 0);
 }
 
-function onShareRoute(e) {
-  copyShareUrl(routeShareUrl(trip.stops, trip.corridorMiles), { sourceEl: e.currentTarget });
-}
-
 function updateRouteAddressUrl() {
   replaceVisibleUrl(routeShareUrl(trip.stops, trip.corridorMiles));
 }
@@ -1418,7 +1433,7 @@ function removeRouteLayer() {
   if (slider) slider.classList.remove('visible');
   const dates = document.getElementById('tb-trip-dates');
   if (dates) dates.classList.remove('visible');
-  const summary = document.getElementById('tb-corridor-summary');
+  const summary = document.getElementById('tb-route-summary');
   if (summary) summary.innerHTML = '';
 }
 
@@ -1495,10 +1510,9 @@ function showRouteSummary() {
   const distKm = (props.distance_m ?? 0) / 1000;
   const durHrs = (props.duration_s ?? 0) / 3600;
   const legs = props.legs || [];
-  // Headline rides on the corridor row to save vertical space on mobile.
   const head = `<strong>${distKm.toFixed(0)} km</strong>` +
     `<span class="tb-stat-sep">·</span>${formatDuration(durHrs)}`;
-  const summaryEl = document.getElementById('tb-corridor-summary');
+  const summaryEl = document.getElementById('tb-route-summary');
   if (summaryEl) summaryEl.innerHTML = head;
   // Per-leg breakdown is only useful for 3+ stops; it stays in the status
   // slot below. Hide status entirely for the simple 2-stop case.
@@ -1671,7 +1685,6 @@ function renderRows() {
   // picks where there's no drawer Directions button to click). In
   // directions mode it stays hidden — auto-fetch covers that flow.
   document.getElementById('tb-directions').hidden = isDirections || !trip.stops[0];
-  document.getElementById('tb-share-route').hidden = !(isDirections && trip.route && allStopsFilled());
   document.getElementById('tb-clear').hidden = !trip.stops[0];
   document.getElementById('tb-add').hidden = !isDirections || trip.stops.length >= MAX_STOPS;
 }
@@ -1962,8 +1975,8 @@ async function hydrateTripCards(cards) {
   renderResults();
 }
 
-/** Wire up the trip-date inputs once. innerHTML rewrites inside #tb-results
- *  blow away listeners, but #tb-trip-dates is a sibling — wire and forget. */
+/** Wire up the trip-date inputs once. The results container keeps these
+ *  controls mounted while the card list re-renders, so wire and forget. */
 function bindTripDateInputs() {
   if (tripResults.dateBound) return;
   tripResults.dateBound = true;
@@ -2173,6 +2186,11 @@ function compactSeasonLabel(seasonStr, reservable) {
 function bindResultsHead(el) {
   const head = el.querySelector('.tb-results-head');
   if (!head) return;
+  if (head.dataset.bound === '1') {
+    head.setAttribute('aria-expanded', String(!tripResults.collapsed));
+    return;
+  }
+  head.dataset.bound = '1';
   const toggle = () => {
     tripResults.collapsed = !tripResults.collapsed;
     el.classList.toggle('collapsed', tripResults.collapsed);
@@ -2197,10 +2215,13 @@ function visibleCards() {
 
 function renderResults() {
   const el = document.getElementById('tb-results');
+  const headEl = el?.querySelector('.tb-results-head');
+  const cardsEl = document.getElementById('tb-results-cards');
   if (!el) return;
   if (trip.mode !== 'directions' || !trip.route) {
     el.classList.remove('visible');
-    el.innerHTML = '';
+    if (headEl) headEl.innerHTML = '';
+    if (cardsEl) cardsEl.innerHTML = '';
     return;
   }
   // Save scroll position so a bbox-refresh re-render doesn't yank the user
@@ -2215,17 +2236,18 @@ function renderResults() {
     : ` <span class="tb-results-count">· ${total}</span>`;
   const chevron = `<svg class="tb-results-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 15 12 9 18 15"/></svg>`;
   const expanded = !tripResults.collapsed;
-  const head = `<div class="tb-results-head" role="button" tabindex="0" aria-expanded="${expanded}">
-    Campgrounds along route${filterNote}${chevron}
-  </div>`;
 
   el.classList.toggle('collapsed', tripResults.collapsed);
+  if (headEl) {
+    headEl.setAttribute('aria-expanded', String(expanded));
+    headEl.innerHTML = `Campgrounds along route${filterNote}${chevron}`;
+  }
 
   if (!cards.length) {
     const msg = total === 0
       ? 'Pan the map or widen the corridor to find campgrounds.'
       : 'All campgrounds hidden — re-enable a category in the legend.';
-    el.innerHTML = head + `<div class="tb-results-body"><div class="tb-card-empty">${msg}</div></div>`;
+    if (cardsEl) cardsEl.innerHTML = `<div class="tb-card-empty">${msg}</div>`;
     el.classList.add('visible');
     bindResultsHead(el);
     return;
@@ -2268,7 +2290,7 @@ function renderResults() {
       </div>
     </div>`;
   }
-  el.innerHTML = head + `<div class="tb-results-body">${body}</div>`;
+  if (cardsEl) cardsEl.innerHTML = body;
   el.classList.add('visible');
   el.scrollTop = scrollY;
   bindResultsHead(el);
