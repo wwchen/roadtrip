@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.repo.OnRouteRow
+import ca.floo.roadtrip.repo.PoiDetailRow
+import ca.floo.roadtrip.repo.PoiRow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
