@@ -6,7 +6,6 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -43,33 +42,36 @@ private val NOISE =
         "lakeshore",
     )
 
-fun Route.campgroundSearchRoutes() {
+fun interface CampgroundSearchFetcher {
+    suspend fun fetch(
+        q: String,
+        entityType: String,
+        size: Int,
+    ): List<JsonObject>
+}
+
+private val defaultCampgroundSearchFetcher =
+    CampgroundSearchFetcher { q, entityType, size ->
+        fetchSearch(q, entityType, size)
+    }
+
+fun Route.campgroundSearchRoutes(fetcher: CampgroundSearchFetcher = defaultCampgroundSearchFetcher) {
     get("/api/campsite/campgrounds/search", {
         tags = listOf("campsite-campgrounds")
         summary = "Search rec.gov for parks + campgrounds matching ?q="
     }) {
         val q = call.request.queryParameters["q"]
         if (q.isNullOrBlank()) {
-            return@get call.respondText("""{"parks":[],"campgrounds":[]}""")
+            return@get call.respondJsonElement(campgroundSearchResponse())
         }
         try {
             log.info("Search: rec.gov search \"{}\"", q)
-            val parks = fetchSearch(q, "recarea", 5).mapPark()
-            val campgrounds = fetchSearch(q, "campground", 15).mapCampground()
-            call.respondText(
-                buildJsonObject {
-                    put("parks", JsonArray(parks))
-                    put("campgrounds", JsonArray(campgrounds))
-                }.toString(),
-            )
+            val parks = fetcher.fetch(q, "recarea", 5).mapPark()
+            val campgrounds = fetcher.fetch(q, "campground", 15).mapCampground()
+            call.respondJsonElement(campgroundSearchResponse(parks, campgrounds))
         } catch (e: Exception) {
             // Fallback: if the input looks like an ID, return that as a single result.
-            val idMatch = Regex("\\d{5,7}").find(q)
-            if (idMatch != null) {
-                call.respondText("""{"parks":[],"campgrounds":[{"id":"${idMatch.value}","name":"Campground ${idMatch.value}"}]}""")
-            } else {
-                call.respondText("""{"parks":[],"campgrounds":[]}""")
-            }
+            call.respondJsonElement(fallbackCampgroundSearchResponse(q))
         }
     }
 
@@ -80,7 +82,7 @@ fun Route.campgroundSearchRoutes() {
         val parkName = call.request.queryParameters["name"].orEmpty()
         try {
             log.info("Search: rec.gov campgrounds in park \"{}\"", parkName)
-            var campgrounds = fetchSearch(parkName, "campground", 50).mapCampground()
+            var campgrounds = fetcher.fetch(parkName, "campground", 50).mapCampground()
             if (parkName.isNotEmpty()) {
                 val keywords =
                     parkName
@@ -101,11 +103,31 @@ fun Route.campgroundSearchRoutes() {
                 campgrounds.sortedByDescending { obj ->
                     ((obj as? JsonObject)?.get("reviews") as? JsonPrimitive)?.content?.toIntOrNull() ?: 0
                 }
-            call.respondText(JsonArray(sorted).toString())
+            call.respondJsonElement(JsonArray(sorted))
         } catch (e: Exception) {
-            call.respondText("""[]""")
+            call.respondJsonElement(JsonArray(emptyList()))
         }
     }
+}
+
+private fun campgroundSearchResponse(
+    parks: List<JsonObject> = emptyList(),
+    campgrounds: List<JsonObject> = emptyList(),
+): JsonObject =
+    buildJsonObject {
+        put("parks", JsonArray(parks))
+        put("campgrounds", JsonArray(campgrounds))
+    }
+
+private fun fallbackCampgroundSearchResponse(q: String): JsonObject {
+    val idMatch = Regex("\\d{5,7}").find(q)
+    if (idMatch == null) return campgroundSearchResponse()
+    val campground =
+        buildJsonObject {
+            put("id", idMatch.value)
+            put("name", "Campground ${idMatch.value}")
+        }
+    return campgroundSearchResponse(campgrounds = listOf(campground))
 }
 
 private suspend fun fetchSearch(
