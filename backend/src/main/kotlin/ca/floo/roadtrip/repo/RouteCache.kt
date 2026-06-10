@@ -2,6 +2,10 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.client.RouteResponse
+import ca.floo.roadtrip.config.ApiCacheEntity
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.decodeFromJsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
@@ -20,8 +24,10 @@ import java.util.concurrent.ConcurrentHashMap
 // the number of distinct routes the user explores per session (typically <10).
 class RouteCache(
     private val directions: MapboxDirections,
-    private val ttl: Duration = Duration.ofMinutes(10),
+    private val ttl: Duration = ApiCacheEntity.ROUTE.defaultTtl,
     private val now: () -> Instant = Instant::now,
+    private val persistentCache: PersistentCache = NoopPersistentCache,
+    private val json: Json = Json,
 ) {
     private data class Entry(
         val response: RouteResponse,
@@ -46,9 +52,26 @@ class RouteCache(
             }
             store.remove(key, entry)
         }
+        persistentCache.get(NAMESPACE, key)?.let { persisted ->
+            try {
+                val response = json.decodeFromJsonElement(RouteResponse.serializer(), persisted.payload)
+                store[key] = Entry(response, persisted.expiresAt)
+                log.debug("route persistent cache hit: key={}", key)
+                return response
+            } catch (e: Exception) {
+                log.warn("route persistent cache decode failed key={}", key)
+                persistentCache.delete(NAMESPACE, key)
+            }
+        }
         log.debug("route cache miss: key={}", key)
         val fresh = directions.directions(waypoints)
         store[key] = Entry(fresh, nowInstant.plus(ttl))
+        persistentCache.put(
+            NAMESPACE,
+            key,
+            json.encodeToJsonElement(RouteResponse.serializer(), fresh),
+            ttl,
+        )
         return fresh
     }
 
@@ -57,11 +80,22 @@ class RouteCache(
         waypoints: List<Pair<Double, Double>>,
         response: RouteResponse,
     ) {
-        store[waypointsKey(waypoints)] = Entry(response, now().plus(ttl))
+        val key = waypointsKey(waypoints)
+        store[key] = Entry(response, now().plus(ttl))
+        persistentCache.put(
+            NAMESPACE,
+            key,
+            json.encodeToJsonElement(RouteResponse.serializer(), response),
+            ttl,
+        )
     }
 
     val configured: Boolean get() = directions.configured
 
     private fun waypointsKey(waypoints: List<Pair<Double, Double>>): String =
         waypoints.joinToString(";") { (lng, lat) -> "%.6f,%.6f".format(lng, lat) }
+
+    companion object {
+        private val NAMESPACE = ApiCacheEntity.ROUTE.namespace
+    }
 }

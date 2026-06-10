@@ -26,6 +26,8 @@ import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
 import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import ca.floo.campsite.recgov.booker.poller.Poller
 import ca.floo.campsite.recgov.booker.scheduler.Scheduler
+import ca.floo.roadtrip.repo.NoopPersistentCache
+import ca.floo.roadtrip.repo.PersistentCache
 import io.ktor.server.application.Application
 import io.ktor.server.application.install
 import io.ktor.server.routing.Route
@@ -62,7 +64,11 @@ class CampsiteServices(
     val eventDriven: Boolean,
 )
 
-fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
+fun Application.campsiteModule(
+    ctx: DSLContext,
+    persistentCache: PersistentCache = NoopPersistentCache,
+    cachedAvailabilityTtl: Duration = Duration.ofHours(2),
+): CampsiteServices {
     val bus = EventBus()
     val leaseSec = System.getenv("CAMPSITE_LEASE_SEC")?.toLongOrNull()
     val offlineSec = System.getenv("CAMPSITE_OFFLINE_SEC")?.toLongOrNull()
@@ -80,7 +86,12 @@ fun Application.campsiteModule(ctx: DSLContext): CampsiteServices {
     // Public-route cache layer over rec.gov availability (RFC 0003). Wraps,
     // doesn't modify the underlying client — the poller continues calling
     // availability directly with its own freshness semantics.
-    val cachedAvailability = CachedAvailability(availability)
+    val cachedAvailability =
+        CachedAvailability(
+            availability,
+            ttl = cachedAvailabilityTtl,
+            persistentCache = persistentCache,
+        )
     val poller = Poller(alerts, matches, settings, bus, client = availability, slack = slack)
 
     // Single supervisor scope for all in-process background work (scheduler

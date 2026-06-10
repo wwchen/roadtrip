@@ -7,6 +7,7 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.encodeURLPathPart
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
@@ -134,6 +135,7 @@ class MapboxDirections(
 }
 
 /** Driving route. coordinates is `[[lng,lat], [lng,lat], ...]` GeoJSON-style. */
+@Serializable
 data class RouteResponse(
     val coordinates: List<List<Double>>,
     val distanceMeters: Double,
@@ -142,6 +144,7 @@ data class RouteResponse(
 )
 
 /** Per-leg summary (one entry per segment between adjacent waypoints). */
+@Serializable
 data class RouteLeg(
     val distanceMeters: Double,
     val durationSeconds: Double,
