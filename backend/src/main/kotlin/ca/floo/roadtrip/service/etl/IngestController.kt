@@ -12,6 +12,11 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 import org.jooq.JSONB
 import org.slf4j.LoggerFactory
@@ -21,6 +26,13 @@ import java.io.InputStreamReader
 import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+
+@OptIn(ExperimentalSerializationApi::class)
+private val ingestControllerJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 class TargetNotFoundException(
     name: String,
@@ -210,7 +222,7 @@ class IngestController(
                     stderrTail = synchronized(stderrTail) { stderrTail.toString() },
                 )
             }
-            JSONB.valueOf("""{"exit_code":0}""")
+            JSONB.valueOf(ingestControllerJson.encodeToString(FetchPhaseCountsDto(exitCode = 0)))
         }
 
     // -- Import phases (data/raw/ + data/etl-out/ → Postgres) -----------------
@@ -222,7 +234,14 @@ class IngestController(
         withContext(ioDispatcher) {
             val stats = etl.runPoiData(phase.poiDataName)
             JSONB.valueOf(
-                """{"import_run_id":${stats.upsertResult.runId},"seen":${stats.upsertResult.seenCount},"swept":${stats.upsertResult.sweptCount},"terminal_etl":"${stats.terminalEtlSlug}"}""",
+                ingestControllerJson.encodeToString(
+                    ImportPhaseCountsDto(
+                        importRunId = stats.upsertResult.runId,
+                        seen = stats.upsertResult.seenCount,
+                        swept = stats.upsertResult.sweptCount,
+                        terminalEtl = stats.terminalEtlSlug,
+                    ),
+                ),
             )
         }
 
@@ -330,6 +349,19 @@ class IngestController(
         const val STDERR_TAIL_BYTES = 4 * 1024
     }
 }
+
+@Serializable
+private data class FetchPhaseCountsDto(
+    @SerialName("exit_code") val exitCode: Int,
+)
+
+@Serializable
+private data class ImportPhaseCountsDto(
+    @SerialName("import_run_id") val importRunId: Long,
+    val seen: Int,
+    val swept: Int,
+    @SerialName("terminal_etl") val terminalEtl: String,
+)
 
 class FetchFailedException(
     val exitCode: Int,
