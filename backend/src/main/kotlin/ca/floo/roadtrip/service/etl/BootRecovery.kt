@@ -1,10 +1,8 @@
 package ca.floo.roadtrip.service.etl
 
-import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
+import ca.floo.roadtrip.repo.IngestRunRepo
 import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 
 // Backend restart mid-run leaves parent ingest_runs rows in 'started' forever
 // — the IngestController coroutine that owned them is gone. Sweep stale rows
@@ -19,17 +17,7 @@ fun sweepStaleIngestRuns(
     staleAfter: java.time.Duration = java.time.Duration.ofMinutes(30),
 ): Int {
     val log = LoggerFactory.getLogger("BootRecovery")
-    val cutoff = OffsetDateTime.now(ZoneOffset.UTC).minus(staleAfter)
-    val now = OffsetDateTime.now(ZoneOffset.UTC)
-    val swept =
-        ctx
-            .update(INGEST_RUNS)
-            .set(INGEST_RUNS.STATUS, "aborted")
-            .set(INGEST_RUNS.COMPLETED_AT, now)
-            .set(INGEST_RUNS.NOTES, "boot recovery; phase orphaned")
-            .where(INGEST_RUNS.STATUS.eq("started"))
-            .and(INGEST_RUNS.STARTED_AT.lt(cutoff))
-            .execute()
+    val swept = IngestRunRepo(ctx).abortStaleStartedRows(staleAfter)
     if (swept > 0) log.info("boot recovery: marked {} ingest_runs rows as aborted", swept)
     return swept
 }
