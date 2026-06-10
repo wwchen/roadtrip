@@ -3,18 +3,32 @@ name: Auto-rebase open PRs
 on:
   push:
     branches: [master]
+  issue_comment:
+    types: [created]
   workflow_dispatch:
+    inputs:
+      pr_number:
+        description: "PR number to rebase (blank = all conflicting)"
+        required: false
 
 permissions:
   contents: write
   pull-requests: write
 
 concurrency:
-  group: auto-rebase
+  group: auto-rebase-${{ github.event.issue.number || github.event.inputs.pr_number || 'master' }}
   cancel-in-progress: false
 
 jobs:
   rebase:
+    # Run on master push, /rebase PR comment, or manual dispatch.
+    if: >
+      github.event_name == 'push' ||
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' &&
+       github.event.issue.pull_request != null &&
+       github.event.comment.user.login == github.repository_owner &&
+       github.event.comment.body == '/rebase')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -27,26 +41,57 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Rebase open PRs onto master
+      - name: Pick target PRs
+        id: pick
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
+          COMMENT_PR: ${{ github.event.issue.number }}
+          DISPATCH_PR: ${{ github.event.inputs.pr_number }}
+        run: |
+          set -euo pipefail
+
+          if [ "$EVENT" = "issue_comment" ]; then
+            # Single PR from /rebase comment.
+            gh pr view "$COMMENT_PR" --repo "$REPO" \
+              --json number,headRefName,isCrossRepository,baseRefName \
+              --jq 'select(.isCrossRepository == false and .baseRefName == "master") | "\(.number) \(.headRefName)"' \
+              > prs.txt
+          elif [ "$EVENT" = "workflow_dispatch" ] && [ -n "$DISPATCH_PR" ]; then
+            gh pr view "$DISPATCH_PR" --repo "$REPO" \
+              --json number,headRefName,isCrossRepository,baseRefName \
+              --jq 'select(.isCrossRepository == false and .baseRefName == "master") | "\(.number) \(.headRefName)"' \
+              > prs.txt
+          else
+            # Push to master or manual dispatch w/o PR: only PRs whose merge
+            # is currently CONFLICTING (typical for stacked PRs after the
+            # bottom PR merges and GitHub retargets the next one to master).
+            gh pr list --repo "$REPO" --state open --base master \
+              --json number,headRefName,isCrossRepository,mergeable \
+              --jq '.[] | select(.isCrossRepository == false and .mergeable == "CONFLICTING") | "\(.number) \(.headRefName)"' \
+              > prs.txt
+          fi
+
+          if [ ! -s prs.txt ]; then
+            echo "No matching PRs."
+          else
+            cat prs.txt
+          fi
+
+      - name: Rebase
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
 
+          [ -s prs.txt ] || exit 0
+
           git fetch origin master
           master_sha=$(git rev-parse origin/master)
 
-          prs=$(gh pr list --repo "$REPO" --state open --base master \
-            --json number,headRefName,headRepositoryOwner,headRepository,isCrossRepository \
-            --jq '.[] | select(.isCrossRepository == false) | "\(.number) \(.headRefName)"')
-
-          if [ -z "$prs" ]; then
-            echo "No open same-repo PRs targeting master."
-            exit 0
-          fi
-
-          echo "$prs" | while read -r pr_number branch; do
+          while read -r pr_number branch; do
             [ -z "$pr_number" ] && continue
             echo "::group::PR #$pr_number ($branch)"
 
@@ -55,17 +100,19 @@ jobs:
 
             base=$(git merge-base HEAD "$master_sha")
             if [ "$base" = "$master_sha" ]; then
-              echo "Already up to date with master, skipping."
+              echo "Already up to date with master."
+              git checkout --detach "$master_sha"
               echo "::endgroup::"
               continue
             fi
 
+            # `git rebase master` drops patches already in master by patch-id,
+            # which is what un-sticks stacked PRs after their parent merges.
             if git rebase "$master_sha"; then
               if git push --force-with-lease origin "$branch"; then
                 echo "Rebased and pushed."
               else
-                echo "Push failed (branch likely moved). Skipping."
-                git rebase --abort 2>/dev/null || true
+                echo "Push rejected (branch moved). Skipping."
               fi
             else
               echo "Rebase conflict on PR #$pr_number; aborting."
@@ -78,4 +125,4 @@ jobs:
             git rebase --abort 2>/dev/null || true
             git checkout --detach "$master_sha"
             echo "::endgroup::"
-          done
+          done < prs.txt
