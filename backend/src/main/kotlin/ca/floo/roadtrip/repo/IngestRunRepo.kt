@@ -5,6 +5,7 @@ import ca.floo.roadtrip.models.ingest.Phase
 import ca.floo.roadtrip.models.ingest.RunKind
 import org.jooq.DSLContext
 import org.jooq.JSONB
+import java.time.Duration
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
@@ -99,6 +100,19 @@ class IngestRunRepo(
             .set(INGEST_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
             .set(INGEST_RUNS.NOTES, notes)
             .where(INGEST_RUNS.ID.eq(parentId))
+            .execute()
+    }
+
+    fun abortStaleStartedRows(staleAfter: Duration): Int {
+        val now = OffsetDateTime.now(ZoneOffset.UTC)
+        val cutoff = now.minus(staleAfter)
+        return ctx
+            .update(INGEST_RUNS)
+            .set(INGEST_RUNS.STATUS, "aborted")
+            .set(INGEST_RUNS.COMPLETED_AT, now)
+            .set(INGEST_RUNS.NOTES, "boot recovery; phase orphaned")
+            .where(INGEST_RUNS.STATUS.eq("started"))
+            .and(INGEST_RUNS.STARTED_AT.lt(cutoff))
             .execute()
     }
 }
