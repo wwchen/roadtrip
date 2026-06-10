@@ -6,6 +6,7 @@
 
 import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';
 import { poiShareUrl, replaceVisibleUrl } from '../share-links.js';
+import { requestPoiDetail } from '../api/poi-api.js';
 
 /** Compose subline from arbitrary parts: "Loop · State · 2.4 km away". */
 export function buildSubline(parts) {
@@ -110,7 +111,7 @@ export function hydratePoi(f) {
   if (id == null) return Promise.resolve(f);
   let inflight = poiDetailCache.get(id);
   if (!inflight) {
-    inflight = fetch(`/api/pois/${encodeURIComponent(id)}`)
+    inflight = requestPoiDetail(id)
       .then(r => r.ok ? r.json() : null)
       .then(detail => {
         if (!detail) return f;
