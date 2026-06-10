@@ -4,7 +4,6 @@ import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.monitoring.StatusMonitor
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import java.time.Instant
 
@@ -38,6 +37,12 @@ fun Route.statusRoutes(
         // touched. Falls back to settings for tests.
         val token = tokenManager?.peek() ?: settings.get("recgov_token").orEmpty()
         val loggedIn = token.isNotEmpty() && !RecgovAuth.tokenInfo(token).expired
-        call.respondText("""{"recgovReachable":$recgovReachable,"loggedIn":$loggedIn,"checkedAt":"$checkedAt"}""")
+        call.respondJson(
+            StatusDto(
+                recgovReachable = recgovReachable,
+                loggedIn = loggedIn,
+                checkedAt = checkedAt,
+            ),
+        )
     }
 }

@@ -4,9 +4,11 @@ import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.db.MatchRepo
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
+import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.CompanionRegistry
 import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
+import ca.floo.campsite.recgov.booker.poller.Poller
 import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
 import com.zaxxer.hikari.HikariConfig
@@ -141,6 +143,68 @@ class CampsiteApiRoutesIT {
                 }
             assertEquals(HttpStatusCode.OK, recovered.status)
             assertEquals(listOf("companion_online"), bus.replayBuffer().map { it.type })
+        }
+
+    @Test
+    fun `status route returns dto json with login state`() =
+        testApplication {
+            val settings = FakeSettings(mapOf("recgov_token" to fakeJwt(expSecondsFromNow = 60)))
+            application {
+                routing {
+                    statusRoutes(settings)
+                }
+            }
+
+            val status = client.get("/api/campsite/status")
+            assertEquals(HttpStatusCode.OK, status.status)
+            assertTrue(status.headers[HttpHeaders.ContentType]!!.startsWith("application/json"))
+            val body = json(status.bodyAsText())
+            assertEquals(true, body["recgovReachable"]!!.jsonPrimitive.boolean)
+            assertEquals(true, body["loggedIn"]!!.jsonPrimitive.boolean)
+            assertTrue(body["checkedAt"]!!.jsonPrimitive.content.isNotBlank())
+        }
+
+    @Test
+    fun `poll route returns queued dto when event driven`() =
+        testApplication {
+            val bus = EventBus()
+            val poller = Poller(alerts, matches, FakeSettings(), bus, availabilityClient())
+            application {
+                routing {
+                    pollRoutes(poller, bus, eventDriven = true)
+                }
+            }
+
+            val response = client.post("/api/campsite/poll")
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = json(response.bodyAsText())
+            assertEquals(true, body["ok"]!!.jsonPrimitive.boolean)
+            assertEquals("Poll queued", body["message"]!!.jsonPrimitive.content)
+            assertTrue(
+                bus
+                    .typedEvents
+                    .replayCache
+                    .single()
+                    .event is CampsiteEvent.UserPolledNow,
+            )
+        }
+
+    @Test
+    fun `poll route returns triggered dto when direct polling`() =
+        testApplication {
+            val bus = EventBus()
+            val poller = Poller(alerts, matches, FakeSettings(), bus, availabilityClient())
+            application {
+                routing {
+                    pollRoutes(poller)
+                }
+            }
+
+            val response = client.post("/api/campsite/poll")
+            assertEquals(HttpStatusCode.OK, response.status)
+            val body = json(response.bodyAsText())
+            assertEquals(true, body["ok"]!!.jsonPrimitive.boolean)
+            assertEquals("Poll triggered", body["message"]!!.jsonPrimitive.content)
         }
 
     @Test
