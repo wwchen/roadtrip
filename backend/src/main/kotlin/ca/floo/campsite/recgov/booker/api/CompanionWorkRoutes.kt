@@ -7,7 +7,6 @@ import ca.floo.campsite.recgov.booker.events.EventBus
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.request.receiveText
 import io.ktor.server.routing.Route
 import org.slf4j.LoggerFactory
 import java.time.Duration
@@ -35,9 +34,9 @@ fun Route.companionWorkRoutes(
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@post call.respondJson(ErrorDto("bad id"), status = HttpStatusCode.BadRequest)
-        val body = parseJson(call.receiveText())
+        val body = call.receiveCampsiteJson<CompanionClaimRequestDto>()
         val companion =
-            body.string("companion_id")
+            body.companionId
                 ?: return@post call.respondJson(ErrorDto("missing companion_id"), status = HttpStatusCode.BadRequest)
         val claimed =
             matches.claim(id, companion, leaseDuration)
@@ -62,9 +61,9 @@ fun Route.companionWorkRoutes(
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@post call.respondJson(ErrorDto("bad id"), status = HttpStatusCode.BadRequest)
-        val body = parseJson(call.receiveText())
+        val body = call.receiveCampsiteJson<CompanionResultRequestDto>()
         val cartAdded =
-            body.bool("cart_added")
+            body.cartAdded
                 ?: return@post call.respondJson(ErrorDto("missing cart_added"), status = HttpStatusCode.BadRequest)
         val updated =
             matches.result(id, cartAdded)

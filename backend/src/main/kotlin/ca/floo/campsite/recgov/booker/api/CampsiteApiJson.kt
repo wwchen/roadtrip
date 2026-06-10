@@ -204,6 +204,16 @@ internal data class CompanionStatusItemDto(
 )
 
 @Serializable
+internal data class CompanionClaimRequestDto(
+    @SerialName("companion_id") val companionId: String? = null,
+)
+
+@Serializable
+internal data class CompanionResultRequestDto(
+    @SerialName("cart_added") val cartAdded: Boolean? = null,
+)
+
+@Serializable
 internal data class DebugSynthMatchRequestDto(
     val campgroundId: String? = null,
     val campsiteId: String? = null,

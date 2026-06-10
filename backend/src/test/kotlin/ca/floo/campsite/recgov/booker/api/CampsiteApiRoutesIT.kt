@@ -391,10 +391,18 @@ class CampsiteApiRoutesIT {
                     .toLong(),
             )
 
+            val badClaim =
+                client.post("/api/campsite/companion/matches/$matchId/claim") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, badClaim.status)
+            assertEquals("missing companion_id", json(badClaim.bodyAsText())["error"]!!.jsonPrimitive.content)
+
             val claimed =
                 client.post("/api/campsite/companion/matches/$matchId/claim") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"companion_id":"companion-A"}""")
+                    setBody("""{"companion_id":"companion-A","ignored_by_dto":"compat"}""")
                 }
             assertEquals(HttpStatusCode.OK, claimed.status)
             assertTrue(json(claimed.bodyAsText())["leaseExpires"]!!.jsonPrimitive.content.isNotBlank())
@@ -407,10 +415,18 @@ class CampsiteApiRoutesIT {
             assertEquals(HttpStatusCode.Conflict, duplicate.status)
             assertEquals("already_claimed_or_done", json(duplicate.bodyAsText())["reason"]!!.jsonPrimitive.content)
 
+            val badResult =
+                client.post("/api/campsite/companion/matches/$matchId/result") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, badResult.status)
+            assertEquals("missing cart_added", json(badResult.bodyAsText())["error"]!!.jsonPrimitive.content)
+
             val result =
                 client.post("/api/campsite/companion/matches/$matchId/result") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"cart_added":true}""")
+                    setBody("""{"cart_added":true,"ignored_by_dto":"compat"}""")
                 }
             assertEquals(HttpStatusCode.OK, result.status)
             assertEquals(true, json(result.bodyAsText())["ok"]!!.jsonPrimitive.boolean)
