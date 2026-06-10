@@ -4,15 +4,17 @@ const {
   el,
   showToast,
   api,
-  fmtDate,
-  fmtTimestamp,
-  timeAgo,
   escapeHtml,
 } = window.Campsite;
 
 const campgroundSearch = window.Campsite.createCampgroundSearch();
 campgroundSearch.init();
 const selectedCampgrounds = campgroundSearch.selectedCampgrounds;
+const campsiteData = window.Campsite.createCampsiteData();
+campsiteData.installGlobals();
+const { loadAlerts, loadMatches } = campsiteData;
+const campsiteLive = window.Campsite.createCampsiteLive({ loadAlerts, loadMatches });
+campsiteLive.initControls();
 
 function clearCampground() {
   campgroundSearch.clear();
@@ -115,310 +117,6 @@ el('alert-form').addEventListener('submit', async e => {
     loadAlerts();
   } catch (err) {
     showToast(`Error: ${err.message}`, 'error');
-  }
-});
-
-// ---- Alerts List ----
-
-async function loadAlerts() {
-  const alerts = await api('GET', '/api/campsite/alerts');
-  const container = el('alerts-list');
-  el('alerts-count').textContent = alerts.filter(a => a.status === 'active').length;
-
-  if (alerts.length === 0) {
-    container.innerHTML = '<div class="empty-state">No alerts yet. Create one above.</div>';
-    return;
-  }
-
-  container.innerHTML = alerts.map(a => `
-    <div class="alert-card ${a.status}" id="alert-${a.id}">
-      <div class="alert-card-header">
-        <div>
-          <div class="alert-name">
-            <a href="https://www.recreation.gov/camping/campgrounds/${a.campground_id}" target="_blank" rel="noopener" class="card-link">${escapeHtml(a.campground_name)}</a>
-            <span style="color:var(--text3);font-size:12px;font-weight:400">#${a.campground_id}</span>
-          </div>
-          ${a.parent_name ? `<div class="alert-park"><a href="https://www.recreation.gov/camping/gateways/${a.parent_id}" target="_blank" rel="noopener" class="card-link-muted">${escapeHtml(a.parent_name)}</a></div>` : ''}
-          <div class="alert-meta">
-            <span>📅 ${fmtDate(a.start_date)} – ${fmtDate(a.end_date)}</span>
-            <span>🌙 ${a.min_nights}+ nights</span>
-            ${a.max_people ? `<span>👥 ${a.max_people} people</span>` : ''}
-            ${a.campsite_types?.length ? `<span>🏕 ${a.campsite_types.join(', ')}</span>` : ''}
-            ${a.auto_cart ? `<span style="color:var(--accent)">⚡ Auto-cart</span>` : ''}
-            <span class="badge badge-${a.status}">${a.status}</span>
-          </div>
-        </div>
-        <div class="alert-actions">
-          ${a.status === 'active'
-            ? `<button class="btn btn-sm btn-secondary" onclick="toggleAlert(${a.id}, 'paused')">Pause</button>`
-            : a.status === 'paused'
-              ? `<button class="btn btn-sm btn-primary" onclick="toggleAlert(${a.id}, 'active')">Resume</button>`
-              : ''}
-          <button class="btn btn-sm btn-ghost" onclick="openEditAlert(${a.id})">Edit</button>
-          <button class="btn btn-sm btn-danger" onclick="deleteAlert(${a.id})">Delete</button>
-        </div>
-      </div>
-      <div class="alert-footer">
-        <span class="rel-time" title="${fmtTimestamp(a.last_checked)}">Checked: ${a.last_checked ? timeAgo(a.last_checked) : 'not yet'}</span>
-        ${a.last_match ? `<span class="rel-time" style="color:var(--green)" title="${fmtTimestamp(a.last_match)}">Last match: ${timeAgo(a.last_match)}</span>` : ''}
-        <span class="rel-time" title="${fmtTimestamp(a.created_at)}">Created: ${timeAgo(a.created_at)}</span>
-      </div>
-    </div>
-  `).join('');
-}
-
-window.toggleAlert = async function (id, status) {
-  try {
-    await api('PATCH', `/api/campsite/alerts/${id}`, { status });
-    loadAlerts();
-  } catch (err) {
-    showToast(`Error: ${err.message}`, 'error');
-  }
-};
-
-window.deleteAlert = async function (id) {
-  if (!confirm('Delete this alert?')) return;
-  try {
-    await api('DELETE', `/api/campsite/alerts/${id}`);
-    showToast('Alert deleted', 'info');
-    loadAlerts();
-  } catch (err) {
-    showToast(`Error: ${err.message}`, 'error');
-  }
-};
-
-// ---- Matches List ----
-
-async function loadMatches({ checkAvail = true } = {}) {
-  const matches = await api('GET', '/api/campsite/matches?limit=30');
-  const container = el('matches-list');
-  el('matches-count').textContent = matches.length;
-
-  if (matches.length === 0) {
-    container.innerHTML = '<div class="empty-state">No matches yet — the poller will find open sites and show them here.</div>';
-    return;
-  }
-
-  // Preserve existing availability states so they survive re-renders when checkAvail=false
-  const prevAvail = {};
-  for (const m of matches) {
-    const card = document.getElementById(`match-card-${m.id}`);
-    if (card) {
-      const avail = ['available', 'unavailable', 'unqueryable'].find(s => card.classList.contains(s));
-      if (avail) prevAvail[m.id] = avail;
-    }
-  }
-
-  container.innerHTML = matches.map(m => `
-    <div class="match-card" id="match-card-${m.id}">
-      <div class="match-info">
-        <div class="match-title">
-          ${escapeHtml(m.campground_name)} — Site ${escapeHtml(m.campsite_site || m.campsite_id || '?')} ${m.campsite_loop ? `(${escapeHtml(m.campsite_loop)})` : ''}
-        </div>
-        <div class="match-dates">📅 ${m.available_dates.join(', ')} (${m.nights} night${m.nights > 1 ? 's' : ''})</div>
-        <div class="match-meta">${m.campsite_type || ''} ${m.notified ? '· ✉ notified' : ''} ${m.cart_added ? '· 🛒 cart added' : ''}</div>
-        <div class="match-found rel-time" title="${fmtTimestamp(m.found_at)}">Found ${timeAgo(m.found_at)}</div>
-      </div>
-      <div class="match-actions">
-        <button class="btn btn-sm btn-primary" onclick="openMatch(${m.id})">Open →</button>
-        <button class="btn btn-sm btn-secondary" onclick="cartMatch(${m.id})">Add to Cart</button>
-        <button class="btn btn-sm btn-ghost btn-icon" onclick="deleteMatch(${m.id})" title="Remove match">✕</button>
-      </div>
-    </div>
-  `).join('');
-
-  // Restore previously-known availability states so cards don't reset on re-render
-  for (const [id, status] of Object.entries(prevAvail)) {
-    const card = document.getElementById(`match-card-${id}`);
-    if (card) card.classList.add(status);
-  }
-
-  // Availability checks hit rec.gov — only run after a real poll cycle, not on every UI refresh.
-  if (checkAvail) checkAllMatchAvailability(matches);
-}
-
-const STATUS_LABELS = {
-  available:   'Still available',
-  unavailable: 'No longer available',
-  unqueryable: 'Cannot verify — no specific campsite ID',
-};
-
-async function checkAllMatchAvailability(matches) {
-  for (const m of matches) {
-    await checkMatchAvailability(m.id);
-    await new Promise(r => setTimeout(r, 400));
-  }
-}
-
-async function checkMatchAvailability(id) {
-  const card = document.getElementById(`match-card-${id}`);
-  if (!card) return;
-  try {
-    const { status } = await api('GET', `/api/campsite/matches/${id}/availability`);
-    card.classList.remove('available', 'unavailable', 'unqueryable');
-    card.classList.add(status);
-    card.title = STATUS_LABELS[status] ?? status;
-  } catch (err) {
-    console.warn(`[availability] match ${id} failed:`, err.message);
-    card.classList.remove('available', 'unavailable', 'unqueryable');
-    card.classList.add('unqueryable');
-  }
-}
-
-window.deleteMatch = async function (id) {
-  try {
-    await api('DELETE', `/api/campsite/matches/${id}`);
-    const card = document.getElementById(`match-card-${id}`);
-    if (card) card.remove();
-    const count = parseInt(el('matches-count').textContent || '0', 10);
-    el('matches-count').textContent = Math.max(0, count - 1);
-  } catch (err) {
-    showToast(`Error: ${err.message}`, 'error');
-  }
-};
-
-window.openMatch = async function (id) {
-  try {
-    const result = await api('POST', `/api/campsite/matches/${id}/cart`, { action: 'open' });
-    if (result.url) window.open(result.url, '_blank');
-  } catch (err) {
-    showToast(`Error: ${err.message}`, 'error');
-  }
-};
-
-window.cartMatch = async function (id) {
-  showToast('Queuing add-to-cart for companion…', 'info');
-  try {
-    const result = await api('POST', `/api/campsite/matches/${id}/cart`, {});
-    if (result.cart_added) {
-      showToast('Added to cart! Complete checkout in browser.', 'success', 6000);
-    } else if (result.queued) {
-      showToast('Match re-queued — companion will run ATC and report back via the matches list.', 'info', 6000);
-    } else {
-      showToast('Cart request accepted — see matches list for result.', 'info', 6000);
-    }
-    loadMatches({ checkAvail: false });
-  } catch (err) {
-    showToast(`Error: ${err.message}`, 'error');
-  }
-};
-
-// ---- Data-refresh status dot ----
-
-function updateDataStatus(state) {
-  const dot = el('status-data');
-  if (!dot) return;
-  dot.className = 'status-dot ' + state;
-  dot.title = {
-    ok:       'Data is fresh — server is polling normally',
-    err:      'Not receiving updates — connection to server may be lost',
-    checking: 'Waiting for first refresh…',
-  }[state] ?? state;
-}
-
-// ---- Poll countdown ----
-
-let nextPollAt = null;
-let pollIntervalMs = 60000; // loaded from settings; used for overdue threshold
-let isPollingNow = false;
-
-function updatePollCountdown() {
-  const el_ = el('poll-countdown');
-  if (!el_) return;
-  if (!nextPollAt && !isPollingNow) { el_.classList.add('hidden'); return; }
-
-  if (isPollingNow) {
-    el_.textContent = '…';
-    el_.className = 'poll-countdown refreshing';
-    el_.classList.remove('hidden');
-    return;
-  }
-
-  const msLeft = nextPollAt - Date.now();
-
-  if (msLeft < -pollIntervalMs) {
-    // More than one full interval overdue — connection likely lost
-    updateDataStatus('err');
-    el_.textContent = 'overdue';
-    el_.className = 'poll-countdown overdue';
-    el_.classList.remove('hidden');
-    return;
-  }
-
-  if (msLeft <= 0) {
-    el_.textContent = '0s';
-    el_.className = 'poll-countdown';
-    el_.classList.remove('hidden');
-    return;
-  }
-
-  const totalSec = Math.ceil(msLeft / 1000);
-  const mins = Math.floor(totalSec / 60);
-  const secs = totalSec % 60;
-  el_.textContent = mins > 0 ? `${mins}m${secs > 0 ? ` ${secs}s` : ''}` : `${secs}s`;
-  el_.className = 'poll-countdown'; // green
-  el_.classList.remove('hidden');
-}
-
-// ---- Poll Now ----
-
-el('poll-now-btn').addEventListener('click', async () => {
-  const btn = el('poll-now-btn');
-  btn.disabled = true;
-  try {
-    await api('POST', '/api/campsite/poll');
-  } catch (err) {
-    showToast(`Poll error: ${err.message}`, 'error');
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-// ---- Refresh Matches ----
-
-el('refresh-matches-btn').addEventListener('click', async () => {
-  const btn = el('refresh-matches-btn');
-  btn.disabled = true;
-  try {
-    await loadMatches({ checkAvail: false });
-  } finally {
-    btn.disabled = false;
-  }
-});
-
-let matchesAutoRefreshInterval = null;
-
-el('auto-refresh-matches-btn').addEventListener('click', () => {
-  const btn = el('auto-refresh-matches-btn');
-  if (matchesAutoRefreshInterval) {
-    clearInterval(matchesAutoRefreshInterval);
-    matchesAutoRefreshInterval = null;
-    btn.textContent = 'Auto-refresh: off';
-    btn.classList.remove('btn-primary');
-    btn.classList.add('btn-secondary');
-  } else {
-    matchesAutoRefreshInterval = setInterval(() => loadMatches({ checkAvail: false }), 30 * 1000);
-    btn.textContent = 'Auto-refresh: 30s';
-    btn.classList.remove('btn-secondary');
-    btn.classList.add('btn-primary');
-    loadMatches({ checkAvail: false }); // immediate refresh on enable
-  }
-});
-
-// ---- Extend Cart Hold ----
-
-el('extend-hold-btn').addEventListener('click', async () => {
-  const btn = el('extend-hold-btn');
-  btn.disabled = true;
-  btn.textContent = '…';
-  try {
-    await api('POST', '/api/campsite/cart/extend');
-    showToast('Cart hold extended ✓', 'success');
-  } catch (err) {
-    showToast(`Extend failed: ${err.message}`, 'error');
-  } finally {
-    btn.disabled = false;
-    btn.textContent = 'Extend Hold';
   }
 });
 
@@ -624,52 +322,6 @@ el('test-chrome-btn').addEventListener('click', async () => {
     showToast(`Token validation failed: ${err.message}`, 'error');
   }
 });
-
-// ---- Server-Sent Events ----
-
-function connectSSE() {
-  const es = new EventSource('/api/campsite/events');
-
-  const parse = e => {
-    try { return JSON.parse(e.data || '{}'); } catch { return {}; }
-  };
-
-  es.addEventListener('connected', () => {
-    updateDataStatus('ok');
-    globalThis.__campsiteState = { ...(globalThis.__campsiteState || {}), sseConnected: true };
-  });
-
-  es.addEventListener('poll_start', () => {
-    isPollingNow = true;
-    nextPollAt = null;
-    updatePollCountdown();
-  });
-
-  es.addEventListener('poll_done', e => {
-    const msg = parse(e);
-    isPollingNow = false;
-    updateDataStatus(msg.success === false ? 'err' : 'ok');
-    nextPollAt = msg.next_at || msg.nextPollAt || null;
-    updatePollCountdown();
-    loadAlerts();
-    loadMatches();
-  });
-
-  es.addEventListener('match', e => {
-    const m = parse(e);
-    const where = m.campgroundName || m.alert?.campground_name || m.campgroundId || 'campground';
-    showToast(`Site ${m.site || m.campsiteSite || m.campsiteId || '?'} available at ${where} - ${(m.availableDates || []).join(', ')}`, 'success', 8000);
-    loadMatches({ checkAvail: false });
-    loadAlerts();
-  });
-
-  es.addEventListener('result', () => loadMatches({ checkAvail: false }));
-  es.addEventListener('lease_expired', () => loadMatches({ checkAvail: false }));
-
-  es.onerror = () => {
-    updateDataStatus('err');
-  };
-}
 
 // ---- Edit Alert Modal ----
 
@@ -1126,11 +778,11 @@ el('settings-rerun-wizard').addEventListener('click', e => {
 async function init() {
   await Promise.all([loadAlerts(), loadMatches()]);
   await campgroundSearch.prefillFromUrl();
-  connectSSE();
+  campsiteLive.connectSSE();
   refreshStatus();
   loadTokenExpiry();
   const settingsForInit = await api('GET', '/api/campsite/settings').catch(() => ({}));
-  if (settingsForInit.poll_interval) pollIntervalMs = parseInt(settingsForInit.poll_interval, 10) * 1000;
+  if (settingsForInit.poll_interval) campsiteLive.setPollIntervalMs(parseInt(settingsForInit.poll_interval, 10) * 1000);
 
   // Slack UI hide based on saved flag (default true for backwards compat).
   const slackEnabled = settingsForInit.slack_enabled !== 'false';
@@ -1142,7 +794,7 @@ async function init() {
   if (isFirstRun) openOnboarding();
 
   // Tick countdowns every second
-  setInterval(() => { updateTokenCountdown(); updatePollCountdown(); }, 1000);
+  setInterval(() => { updateTokenCountdown(); campsiteLive.updatePollCountdown(); }, 1000);
 
   // Fallback full refresh every 5 min in case SSE poll_done is missed
   setInterval(() => { loadAlerts(); loadMatches(); }, 5 * 60 * 1000);
