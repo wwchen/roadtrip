@@ -1,5 +1,6 @@
 package ca.floo.campsite.recgov.booker.api
 
+import ca.floo.campsite.recgov.booker.domain.Alert
 import ca.floo.campsite.recgov.booker.domain.Match
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -21,11 +22,14 @@ internal fun matchEnvelopeDto(m: Match): MatchEnvelopeDto = m.toEnvelopeDto()
 
 internal fun matchListDtos(matches: List<Match>): List<MatchListItemDto> = matches.map { it.toListItemDto() }
 
+internal fun alertDtos(alerts: List<Alert>): List<AlertDto> = alerts.map { it.toDto() }
+
 @OptIn(ExperimentalSerializationApi::class)
 internal val campsiteApiJson: Json =
     Json {
         encodeDefaults = true
         explicitNulls = false
+        ignoreUnknownKeys = true
     }
 
 internal suspend inline fun <reified T> ApplicationCall.respondJson(
@@ -50,6 +54,69 @@ internal data class OkDto(
 @Serializable
 internal data class ErrorDto(
     val error: String,
+)
+
+@Serializable
+internal data class AlertCreateRequestDto(
+    @SerialName("campground_id") val campgroundId: String? = null,
+    @SerialName("campground_name") val campgroundName: String? = null,
+    @SerialName("parent_name") val parentName: String? = null,
+    @SerialName("parent_id") val parentId: String? = null,
+    @SerialName("start_date") val startDate: String? = null,
+    @SerialName("end_date") val endDate: String? = null,
+    @SerialName("min_nights") val minNights: Int = 1,
+    @SerialName("campsite_types") val campsiteTypes: List<String> = emptyList(),
+    @SerialName("equipment_types") val equipmentTypes: List<String> = emptyList(),
+    @SerialName("max_people") val maxPeople: Int? = null,
+    @SerialName("specific_sites") val specificSites: List<String> = emptyList(),
+    @SerialName("notify_slack") val notifySlack: Boolean = true,
+    @SerialName("auto_cart") val autoCart: Boolean = false,
+    @SerialName("stop_after_match") val stopAfterMatch: Boolean = true,
+    val notes: String? = null,
+)
+
+@Serializable
+internal data class AlertPatchRequestDto(
+    val status: String? = null,
+    @SerialName("start_date") val startDate: String? = null,
+    @SerialName("end_date") val endDate: String? = null,
+    @SerialName("min_nights") val minNights: Int? = null,
+    @SerialName("max_people") val maxPeople: Int? = null,
+    @SerialName("campsite_types") val campsiteTypes: List<String>? = null,
+    @SerialName("equipment_types") val equipmentTypes: List<String>? = null,
+    @SerialName("specific_sites") val specificSites: List<String>? = null,
+    @SerialName("notify_slack") val notifySlack: Boolean? = null,
+    @SerialName("auto_cart") val autoCart: Boolean? = null,
+    @SerialName("stop_after_match") val stopAfterMatch: Boolean? = null,
+)
+
+@Serializable
+internal data class AlertCreatedDto(
+    val id: Long,
+)
+
+@Serializable
+internal data class AlertDto(
+    val id: Long,
+    @SerialName("campground_id") val campgroundId: String,
+    @SerialName("campground_name") val campgroundName: String,
+    @SerialName("parent_name") val parentName: String,
+    @SerialName("parent_id") val parentId: String,
+    @SerialName("start_date") val startDate: String,
+    @SerialName("end_date") val endDate: String,
+    @SerialName("min_nights") val minNights: Int,
+    @SerialName("campsite_types") val campsiteTypes: List<String>,
+    @SerialName("equipment_types") val equipmentTypes: List<String>,
+    @SerialName("max_people") val maxPeople: Int,
+    @SerialName("specific_sites") val specificSites: List<String>,
+    @SerialName("notify_slack") val notifySlack: Boolean,
+    @SerialName("auto_cart") val autoCart: Boolean,
+    @SerialName("stop_after_match") val stopAfterMatch: Boolean,
+    val status: String,
+    @SerialName("last_checked") val lastChecked: String,
+    @SerialName("last_match") val lastMatch: String,
+    val notes: String,
+    @SerialName("created_at") val createdAt: String,
 )
 
 @Serializable
@@ -152,6 +219,30 @@ internal data class MatchListItemDto(
     @SerialName("alert_start") val alertStart: String,
     @SerialName("alert_end") val alertEnd: String,
 )
+
+private fun Alert.toDto(): AlertDto =
+    AlertDto(
+        id = id,
+        campgroundId = campgroundId,
+        campgroundName = campgroundName,
+        parentName = parentName ?: "",
+        parentId = parentId ?: "",
+        startDate = startDate,
+        endDate = endDate,
+        minNights = minNights,
+        campsiteTypes = campsiteTypes,
+        equipmentTypes = equipmentTypes,
+        maxPeople = maxPeople ?: 0,
+        specificSites = specificSites,
+        notifySlack = notifySlack,
+        autoCart = autoCart,
+        stopAfterMatch = stopAfterMatch,
+        status = status,
+        lastChecked = lastChecked ?: "",
+        lastMatch = lastMatch ?: "",
+        notes = notes ?: "",
+        createdAt = createdAt,
+    )
 
 private fun Match.toEnvelopeDto(): MatchEnvelopeDto =
     MatchEnvelopeDto(

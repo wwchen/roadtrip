@@ -1,7 +1,6 @@
 package ca.floo.campsite.recgov.booker.api
 
 import ca.floo.campsite.recgov.booker.db.AlertRepo
-import ca.floo.campsite.recgov.booker.domain.Alert
 import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.poller.Poller
@@ -11,14 +10,10 @@ import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.patch
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.request.receiveText
-import io.ktor.server.response.respond
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.decodeFromString
 
 fun Route.alertRoutes(
     alerts: AlertRepo,
@@ -31,22 +26,22 @@ fun Route.alertRoutes(
         tags = listOf("campsite-alerts")
         summary = "List every recreation.gov alert (any status)"
     }) {
-        call.respondText(JsonArray(alerts.list().map { alertJson(it) }).toString())
+        call.respondJson(alertDtos(alerts.list()))
     }
 
     post("/api/campsite/alerts", {
         tags = listOf("campsite-alerts")
         summary = "Create a new alert; triggers an immediate poll"
     }) {
-        val body = parseJson(call.receiveText())
-        val campgroundId = body.string("campground_id")
-        val campgroundName = body.string("campground_name")
-        val startDate = body.string("start_date")
-        val endDate = body.string("end_date")
+        val body = call.receiveDto<AlertCreateRequestDto>()
+        val campgroundId = body.campgroundId
+        val campgroundName = body.campgroundName
+        val startDate = body.startDate
+        val endDate = body.endDate
         if (campgroundId == null || campgroundName == null || startDate == null || endDate == null) {
-            return@post call.respond(
+            return@post call.respondJson(
+                ErrorDto("campground_id, campground_name, start_date, end_date are required"),
                 HttpStatusCode.BadRequest,
-                """{"error":"campground_id, campground_name, start_date, end_date are required"}""",
             )
         }
         val id =
@@ -54,19 +49,19 @@ fun Route.alertRoutes(
                 AlertRepo.CreateInput(
                     campgroundId = campgroundId,
                     campgroundName = campgroundName,
-                    parentName = body.string("parent_name"),
-                    parentId = body.string("parent_id"),
+                    parentName = body.parentName,
+                    parentId = body.parentId,
                     startDate = startDate,
                     endDate = endDate,
-                    minNights = body.int("min_nights") ?: 1,
-                    campsiteTypes = body.stringList("campsite_types"),
-                    equipmentTypes = body.stringList("equipment_types"),
-                    maxPeople = body.int("max_people"),
-                    specificSites = body.stringList("specific_sites"),
-                    notifySlack = body.bool("notify_slack") ?: true,
-                    autoCart = body.bool("auto_cart") ?: false,
-                    stopAfterMatch = body.bool("stop_after_match") ?: true,
-                    notes = body.string("notes"),
+                    minNights = body.minNights,
+                    campsiteTypes = body.campsiteTypes,
+                    equipmentTypes = body.equipmentTypes,
+                    maxPeople = body.maxPeople,
+                    specificSites = body.specificSites,
+                    notifySlack = body.notifySlack,
+                    autoCart = body.autoCart,
+                    stopAfterMatch = body.stopAfterMatch,
+                    notes = body.notes,
                 ),
             )
         scheduler?.upsertAlert(id)
@@ -75,7 +70,7 @@ fun Route.alertRoutes(
         } else {
             poller?.triggerNow()
         }
-        call.respondText("""{"id":$id}""")
+        call.respondJson(AlertCreatedDto(id))
     }
 
     patch("/api/campsite/alerts/{id}", {
@@ -84,30 +79,33 @@ fun Route.alertRoutes(
     }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
-                ?: return@patch call.respond(HttpStatusCode.BadRequest, "bad id")
-        val body = parseJson(call.receiveText())
+                ?: return@patch call.respondJson(ErrorDto("bad id"), HttpStatusCode.BadRequest)
+        val body = call.receiveDto<AlertPatchRequestDto>()
         val updates = mutableMapOf<String, Any?>()
-        body.string("status")?.let {
+        body.status?.let {
             if (it !in setOf("active", "paused", "done")) {
-                return@patch call.respond(HttpStatusCode.BadRequest, """{"error":"status must be active, paused, or done"}""")
+                return@patch call.respondJson(
+                    ErrorDto("status must be active, paused, or done"),
+                    HttpStatusCode.BadRequest,
+                )
             }
             updates["status"] = it
         }
-        body.string("start_date")?.let { updates["start_date"] = it }
-        body.string("end_date")?.let { updates["end_date"] = it }
-        body.int("min_nights")?.let { updates["min_nights"] = it }
-        body.int("max_people")?.let { updates["max_people"] = it }
-        body.array("campsite_types")?.let { updates["campsite_types"] = body.stringList("campsite_types") }
-        body.array("equipment_types")?.let { updates["equipment_types"] = body.stringList("equipment_types") }
-        body.array("specific_sites")?.let { updates["specific_sites"] = body.stringList("specific_sites") }
-        body.bool("notify_slack")?.let { updates["notify_slack"] = it }
-        body.bool("auto_cart")?.let { updates["auto_cart"] = it }
-        body.bool("stop_after_match")?.let { updates["stop_after_match"] = it }
+        body.startDate?.let { updates["start_date"] = it }
+        body.endDate?.let { updates["end_date"] = it }
+        body.minNights?.let { updates["min_nights"] = it }
+        body.maxPeople?.let { updates["max_people"] = it }
+        body.campsiteTypes?.let { updates["campsite_types"] = it }
+        body.equipmentTypes?.let { updates["equipment_types"] = it }
+        body.specificSites?.let { updates["specific_sites"] = it }
+        body.notifySlack?.let { updates["notify_slack"] = it }
+        body.autoCart?.let { updates["auto_cart"] = it }
+        body.stopAfterMatch?.let { updates["stop_after_match"] = it }
         alerts.patch(id, updates)
         // Status changes (active ↔ paused/done) require Scheduler to start/stop
         // the per-alert poll job. Calling upsertAlert is cheap and idempotent.
         if (updates.containsKey("status")) scheduler?.upsertAlert(id)
-        call.respondText("""{"ok":true}""")
+        call.respondJson(OkDto())
     }
 
     delete("/api/campsite/alerts/{id}", {
@@ -116,33 +114,14 @@ fun Route.alertRoutes(
     }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
-                ?: return@delete call.respond(HttpStatusCode.BadRequest, "bad id")
+                ?: return@delete call.respondJson(ErrorDto("bad id"), HttpStatusCode.BadRequest)
         alerts.delete(id)
         scheduler?.removeAlert(id)
-        call.respondText("""{"ok":true}""")
+        call.respondJson(OkDto())
     }
 }
 
-internal fun alertJson(a: Alert) =
-    buildJsonObject {
-        put("id", a.id)
-        put("campground_id", a.campgroundId)
-        put("campground_name", a.campgroundName)
-        put("parent_name", a.parentName ?: "")
-        put("parent_id", a.parentId ?: "")
-        put("start_date", a.startDate)
-        put("end_date", a.endDate)
-        put("min_nights", a.minNights)
-        put("campsite_types", JsonArray(a.campsiteTypes.map { JsonPrimitive(it) }))
-        put("equipment_types", JsonArray(a.equipmentTypes.map { JsonPrimitive(it) }))
-        put("max_people", a.maxPeople ?: 0)
-        put("specific_sites", JsonArray(a.specificSites.map { JsonPrimitive(it) }))
-        put("notify_slack", a.notifySlack)
-        put("auto_cart", a.autoCart)
-        put("stop_after_match", a.stopAfterMatch)
-        put("status", a.status)
-        put("last_checked", a.lastChecked ?: "")
-        put("last_match", a.lastMatch ?: "")
-        put("notes", a.notes ?: "")
-        put("created_at", a.createdAt)
-    }
+private suspend inline fun <reified T> ApplicationCall.receiveDto(): T =
+    campsiteApiJson.decodeFromString(
+        receiveText().ifBlank { "{}" },
+    )
