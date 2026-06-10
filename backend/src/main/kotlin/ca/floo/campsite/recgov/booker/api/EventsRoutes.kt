@@ -10,6 +10,9 @@ import io.ktor.server.sse.ServerSSESession
 import io.ktor.server.sse.sse
 import io.ktor.sse.ServerSentEvent
 import kotlinx.coroutines.flow.collect
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 
 fun Route.eventsRoutes(bus: EventBus) {
     documentation({
@@ -49,7 +52,7 @@ fun Route.eventsRoutes(bus: EventBus) {
             // Send a `connected` heartbeat first so the client knows the stream is up
             // even if there are no replay events. This event is NOT sequenced (id=null)
             // so it doesn't pollute the Last-Event-ID stream.
-            send(ServerSentEvent(event = "connected", data = """{"resumeFrom":$lastEventId}"""))
+            send(ServerSentEvent(event = "connected", data = connectedEventData(lastEventId)))
 
             // Replay any missed events. SharedFlow's replay buffer holds the most
             // recent N envelopes; we filter by id > lastEventId.
@@ -69,3 +72,10 @@ fun Route.eventsRoutes(bus: EventBus) {
 private suspend fun ServerSSESession.sendEnvelope(env: ca.floo.campsite.recgov.booker.events.Envelope) {
     send(ServerSentEvent(id = env.id.toString(), event = env.type, data = env.data))
 }
+
+internal fun connectedEventData(resumeFrom: Long): String = Json.encodeToString(ConnectedEventDto(resumeFrom = resumeFrom))
+
+@Serializable
+private data class ConnectedEventDto(
+    val resumeFrom: Long,
+)
