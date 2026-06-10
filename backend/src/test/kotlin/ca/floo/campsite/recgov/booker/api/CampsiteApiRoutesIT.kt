@@ -13,7 +13,9 @@ import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
 import io.ktor.client.engine.mock.respond
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -90,6 +92,113 @@ class CampsiteApiRoutesIT {
     fun cleanTables() {
         ctx.execute("TRUNCATE matches, alerts RESTART IDENTITY CASCADE")
     }
+
+    @Test
+    fun `alert routes create list patch and delete with dto json`() =
+        testApplication {
+            application {
+                routing {
+                    alertRoutes(alerts, poller = null)
+                }
+            }
+
+            val badCreate =
+                client.post("/api/campsite/alerts") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"campground_id":"232447"}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, badCreate.status)
+            assertEquals(
+                "campground_id, campground_name, start_date, end_date are required",
+                json(badCreate.bodyAsText())["error"]!!.jsonPrimitive.content,
+            )
+
+            val created =
+                client.post("/api/campsite/alerts") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {
+                          "campground_id":"232447",
+                          "campground_name":"Upper Pines",
+                          "parent_name":"Yosemite National Park",
+                          "parent_id":"2991",
+                          "start_date":"2026-07-01",
+                          "end_date":"2026-07-04",
+                          "min_nights":2,
+                          "campsite_types":["STANDARD NONELECTRIC"],
+                          "equipment_types":["Tent"],
+                          "max_people":4,
+                          "specific_sites":["001","012"],
+                          "notify_slack":false,
+                          "auto_cart":true,
+                          "stop_after_match":true,
+                          "notes":"main map",
+                          "ignored_by_dto":"compat"
+                        }
+                        """.trimIndent(),
+                    )
+                }
+            assertEquals(HttpStatusCode.OK, created.status)
+            val alertId = json(created.bodyAsText())["id"]!!.jsonPrimitive.content.toLong()
+
+            val list = client.get("/api/campsite/alerts")
+            assertEquals(HttpStatusCode.OK, list.status)
+            val item =
+                Json
+                    .parseToJsonElement(list.bodyAsText())
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals(alertId.toString(), item["id"]!!.jsonPrimitive.content)
+            assertEquals("232447", item["campground_id"]!!.jsonPrimitive.content)
+            assertEquals("Upper Pines", item["campground_name"]!!.jsonPrimitive.content)
+            assertEquals("Yosemite National Park", item["parent_name"]!!.jsonPrimitive.content)
+            assertEquals("2991", item["parent_id"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-01", item["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-04", item["end_date"]!!.jsonPrimitive.content)
+            assertEquals("2", item["min_nights"]!!.jsonPrimitive.content)
+            assertEquals("4", item["max_people"]!!.jsonPrimitive.content)
+            assertEquals(
+                "001",
+                item["specific_sites"]!!
+                    .jsonArray
+                    .first()
+                    .jsonPrimitive
+                    .content,
+            )
+            assertEquals(false, item["notify_slack"]!!.jsonPrimitive.boolean)
+            assertEquals(true, item["auto_cart"]!!.jsonPrimitive.boolean)
+            assertEquals(true, item["stop_after_match"]!!.jsonPrimitive.boolean)
+            assertEquals("active", item["status"]!!.jsonPrimitive.content)
+            assertEquals("main map", item["notes"]!!.jsonPrimitive.content)
+
+            val invalidPatch =
+                client.patch("/api/campsite/alerts/$alertId") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status":"bogus"}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, invalidPatch.status)
+            assertEquals(
+                "status must be active, paused, or done",
+                json(invalidPatch.bodyAsText())["error"]!!.jsonPrimitive.content,
+            )
+
+            val patched =
+                client.patch("/api/campsite/alerts/$alertId") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status":"paused","specific_sites":[]}""")
+                }
+            assertEquals(HttpStatusCode.OK, patched.status)
+            assertEquals(true, json(patched.bodyAsText())["ok"]!!.jsonPrimitive.boolean)
+            assertEquals("paused", alerts.get(alertId)!!.status)
+            assertTrue(alerts.get(alertId)!!.specificSites.isEmpty())
+
+            val deleted = client.delete("/api/campsite/alerts/$alertId")
+            assertEquals(HttpStatusCode.OK, deleted.status)
+            assertEquals(true, json(deleted.bodyAsText())["ok"]!!.jsonPrimitive.boolean)
+            assertNull(alerts.get(alertId))
+        }
 
     @Test
     fun `debug synth creates match exposed by list get and availability routes`() =
