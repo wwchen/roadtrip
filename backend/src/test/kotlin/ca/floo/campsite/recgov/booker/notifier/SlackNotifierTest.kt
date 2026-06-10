@@ -21,10 +21,9 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * SlackNotifier builds the chat.postMessage body via string interpolation, so
- * shape-regression coverage matters more than wire-format fidelity. We
- * intercept with MockEngine, parse the captured body back to JSON, and
- * assert on the structure the user actually receives.
+ * SlackNotifier sends a chat.postMessage JSON payload. We intercept with
+ * MockEngine, parse the captured body back to JSON, and assert on the
+ * structure the user actually receives.
  */
 class SlackNotifierTest {
     private val baseAlert =
@@ -78,9 +77,9 @@ class SlackNotifierTest {
                 },
             )
 
-        // SlackNotifier always builds via setBody(String), which Ktor wraps as
-        // TextContent. Anything else means SlackNotifier was rewritten and the
-        // tests need to follow.
+        // SlackNotifier sends JSON via setBody(String), which Ktor wraps as
+        // TextContent. Anything else means the transport changed and the test
+        // helper should follow it.
         private fun readBody(body: OutgoingContent): String =
             when (body) {
                 is TextContent -> body.text

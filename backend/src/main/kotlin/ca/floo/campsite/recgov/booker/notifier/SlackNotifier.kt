@@ -12,8 +12,11 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 
 class SlackNotifier(
@@ -42,6 +45,7 @@ class SlackNotifier(
         val count = matches.size
         val first = matches.first()
         val firstUrl = matchUrl(first)
+        val firstSite = first.campsiteSite.orEmpty()
         val text = "⛺ $count campsite${if (count > 1) "s" else ""} available at ${alert.campgroundName}"
 
         val siteLines =
@@ -51,20 +55,59 @@ class SlackNotifier(
                 "• Site *${m.campsiteSite}*$loop — ${m.availableDates.joinToString(", ")} _(${m.nights}n, $type)_"
             }
 
-        val blocks = """[
-            {"type":"header","text":{"type":"plain_text","text":"⛺ Campsites Available!","emoji":true}},
-            {"type":"section","fields":[
-                {"type":"mrkdwn","text":"*Campground*\n${esc(alert.campgroundName)}"},
-                {"type":"mrkdwn","text":"*Sites found*\n$count${if (count > 10) " (showing 10)" else ""}"},
-                {"type":"mrkdwn","text":"*Your window*\n${alert.startDate} → ${alert.endDate}"},
-                {"type":"mrkdwn","text":"*Min nights*\n${alert.minNights}"}
-            ]},
-            {"type":"section","text":{"type":"mrkdwn","text":"${esc(siteLines)}"}},
-            {"type":"actions","elements":[
-                {"type":"button","text":{"type":"plain_text","text":"Reserve Site ${esc(first.campsiteSite ?: "")} →","emoji":true},
-                 "url":"${esc(firstUrl)}","style":"primary"}
-            ]}
-        ]"""
+        val blocks =
+            JsonArray(
+                listOf(
+                    buildJsonObject {
+                        put("type", "header")
+                        put(
+                            "text",
+                            slackText(type = "plain_text", text = "⛺ Campsites Available!", emoji = true),
+                        )
+                    },
+                    buildJsonObject {
+                        put("type", "section")
+                        put(
+                            "fields",
+                            JsonArray(
+                                listOf(
+                                    mrkdwn("*Campground*\n${alert.campgroundName}"),
+                                    mrkdwn("*Sites found*\n$count${if (count > 10) " (showing 10)" else ""}"),
+                                    mrkdwn("*Your window*\n${alert.startDate} → ${alert.endDate}"),
+                                    mrkdwn("*Min nights*\n${alert.minNights}"),
+                                ),
+                            ),
+                        )
+                    },
+                    buildJsonObject {
+                        put("type", "section")
+                        put("text", mrkdwn(siteLines))
+                    },
+                    buildJsonObject {
+                        put("type", "actions")
+                        put(
+                            "elements",
+                            JsonArray(
+                                listOf(
+                                    buildJsonObject {
+                                        put("type", "button")
+                                        put(
+                                            "text",
+                                            slackText(
+                                                type = "plain_text",
+                                                text = "Reserve Site $firstSite →",
+                                                emoji = true,
+                                            ),
+                                        )
+                                        put("url", firstUrl)
+                                        put("style", "primary")
+                                    },
+                                ),
+                            ),
+                        )
+                    },
+                ),
+            )
 
         return runCatching { postSlack(token, channel, blocks, text) }
             .onSuccess { log.info("Slack notification sent to {}: {}", channel, text) }
@@ -86,21 +129,21 @@ class SlackNotifier(
     private suspend fun postSlack(
         token: String,
         channel: String,
-        blocks: String?,
+        blocks: JsonArray?,
         text: String,
     ) {
         log.info("Slack: POST chat.postMessage to {}", channel)
         val body =
-            if (blocks != null) {
-                """{"channel":"${esc(channel)}","text":"${esc(text)}","blocks":$blocks}"""
-            } else {
-                """{"channel":"${esc(channel)}","text":"${esc(text)}"}"""
+            buildJsonObject {
+                put("channel", channel)
+                put("text", text)
+                if (blocks != null) put("blocks", blocks)
             }
         val resp =
             client.post("https://slack.com/api/chat.postMessage") {
                 header("Authorization", "Bearer $token")
                 contentType(ContentType.Application.Json)
-                setBody(body)
+                setBody(body.toString())
             }
         val raw = resp.bodyAsText()
         val parsed = Json.parseToJsonElement(raw) as? JsonObject
@@ -121,22 +164,21 @@ class SlackNotifier(
     }
 }
 
+private fun slackText(
+    type: String,
+    text: String,
+    emoji: Boolean? = null,
+): JsonObject =
+    buildJsonObject {
+        put("type", type)
+        put("text", text)
+        if (emoji != null) put("emoji", emoji)
+    }
+
+private fun mrkdwn(text: String): JsonObject = slackText(type = "mrkdwn", text = text)
+
 internal fun toCheckoutDate(lastNight: String): String =
     java.time.LocalDate
         .parse(lastNight)
         .plusDays(1)
         .toString()
-
-private fun esc(s: String): String =
-    buildString(s.length) {
-        for (c in s) {
-            when (c) {
-                '"' -> append("\\\"")
-                '\\' -> append("\\\\")
-                '\n' -> append("\\n")
-                '\r' -> append("\\r")
-                '\t' -> append("\\t")
-                else -> if (c.code < 0x20) append("\\u%04x".format(c.code)) else append(c)
-            }
-        }
-    }
