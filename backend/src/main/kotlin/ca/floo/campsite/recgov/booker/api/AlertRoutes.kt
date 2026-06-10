@@ -10,10 +10,7 @@ import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.patch
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.application.ApplicationCall
-import io.ktor.server.request.receiveText
 import io.ktor.server.routing.Route
-import kotlinx.serialization.decodeFromString
 
 fun Route.alertRoutes(
     alerts: AlertRepo,
@@ -33,7 +30,7 @@ fun Route.alertRoutes(
         tags = listOf("campsite-alerts")
         summary = "Create a new alert; triggers an immediate poll"
     }) {
-        val body = call.receiveDto<AlertCreateRequestDto>()
+        val body = call.receiveCampsiteJson<AlertCreateRequestDto>()
         val campgroundId = body.campgroundId
         val campgroundName = body.campgroundName
         val startDate = body.startDate
@@ -80,7 +77,7 @@ fun Route.alertRoutes(
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@patch call.respondJson(ErrorDto("bad id"), HttpStatusCode.BadRequest)
-        val body = call.receiveDto<AlertPatchRequestDto>()
+        val body = call.receiveCampsiteJson<AlertPatchRequestDto>()
         val updates = mutableMapOf<String, Any?>()
         body.status?.let {
             if (it !in setOf("active", "paused", "done")) {
@@ -120,8 +117,3 @@ fun Route.alertRoutes(
         call.respondJson(OkDto())
     }
 }
-
-private suspend inline fun <reified T> ApplicationCall.receiveDto(): T =
-    campsiteApiJson.decodeFromString(
-        receiveText().ifBlank { "{}" },
-    )
