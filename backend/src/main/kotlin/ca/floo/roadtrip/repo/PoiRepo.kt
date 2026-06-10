@@ -7,6 +7,7 @@ import ca.floo.roadtrip.models.Poi
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.categorySql
 import ca.floo.roadtrip.models.propertiesJson
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
@@ -19,6 +20,12 @@ import org.jooq.impl.SQLDataType
 import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+
+@OptIn(ExperimentalSerializationApi::class)
+private val poiRepoOmitNullJson =
+    Json {
+        explicitNulls = false
+    }
 
 // Mark-and-sweep upsert into the v2 `pois` table. Same shape as the
 // legacy Importer.kt, generalized over the new sealed Poi types and
@@ -233,17 +240,15 @@ class Upsert(
         }
 
     private fun addressToJson(a: Address): String =
-        buildString {
-            append('{')
-            val parts = mutableListOf<String>()
-            a.street?.let { parts += """"street":"${it.replace("\"", "\\\"")}"""" }
-            a.city?.let { parts += """"city":"${it.replace("\"", "\\\"")}"""" }
-            a.state?.let { parts += """"state":"${it.replace("\"", "\\\"")}"""" }
-            a.postcode?.let { parts += """"postcode":"${it.replace("\"", "\\\"")}"""" }
-            a.country?.let { parts += """"country":"${it.replace("\"", "\\\"")}"""" }
-            append(parts.joinToString(","))
-            append('}')
-        }
+        poiRepoOmitNullJson.encodeToString(
+            AddressDto(
+                street = a.street,
+                city = a.city,
+                state = a.state,
+                postcode = a.postcode,
+                country = a.country,
+            ),
+        )
 }
 
 class UpsertException(
@@ -265,4 +270,13 @@ private data class AspiraProviderRefDto(
 @Serializable
 private data class CamisProviderRefDto(
     @SerialName("facility_id") val facilityId: String,
+)
+
+@Serializable
+private data class AddressDto(
+    val street: String? = null,
+    val city: String? = null,
+    val state: String? = null,
+    val postcode: String? = null,
+    val country: String? = null,
 )
