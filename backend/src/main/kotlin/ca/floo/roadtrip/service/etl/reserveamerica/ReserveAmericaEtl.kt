@@ -8,9 +8,12 @@ import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
 import ca.floo.roadtrip.service.etl.pointGeoJson
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 
@@ -90,15 +93,17 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
      * Upstream is HTML — there's no canonical row-shaped JSON.
      */
     private fun parkExtras(park: ParsedPark): JsonElement =
-        buildJsonObject {
-            put("park_id", JsonPrimitive(park.parkId))
-            put("name", JsonPrimitive(park.name))
-            put("latitude", JsonPrimitive(park.lat))
-            put("longitude", JsonPrimitive(park.lon))
-            park.phone?.let { put("phone", JsonPrimitive(it)) }
-            park.photoUrl?.let { put("photo_url", JsonPrimitive(it)) }
-            park.infoUrl?.let { put("info_url", JsonPrimitive(it)) }
-        }
+        reserveAmericaExtrasJson.encodeToJsonElement(
+            ReserveAmericaParkExtrasDto(
+                parkId = park.parkId,
+                name = park.name,
+                latitude = park.lat,
+                longitude = park.lon,
+                phone = park.phone,
+                photoUrl = park.photoUrl,
+                infoUrl = park.infoUrl,
+            ),
+        )
 
     private fun parsePark(
         parkId: Long,
@@ -168,6 +173,24 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
         private val TELEPHONE = Regex("""itemprop="telephone"[^>]*>([^<]+)""")
     }
 }
+
+@OptIn(ExperimentalSerializationApi::class)
+private val reserveAmericaExtrasJson =
+    Json {
+        encodeDefaults = false
+        explicitNulls = false
+    }
+
+@Serializable
+private data class ReserveAmericaParkExtrasDto(
+    @SerialName("park_id") val parkId: Long,
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    val phone: String? = null,
+    @SerialName("photo_url") val photoUrl: String? = null,
+    @SerialName("info_url") val infoUrl: String? = null,
+)
 
 data class ParsedPark(
     val parkId: Long,

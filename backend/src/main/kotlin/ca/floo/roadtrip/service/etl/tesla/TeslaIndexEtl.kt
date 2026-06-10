@@ -12,7 +12,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -129,10 +129,12 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
             facility = detail?.accessType?.takeIf { it.isNotBlank() },
             pricebooks = detail?.effectivePricebooks ?: emptyList(),
             extras =
-                buildJsonObject {
-                    put("index", rawIndex ?: JsonNull)
-                    put("detail", rawDetail ?: JsonNull)
-                },
+                json.encodeToJsonElement(
+                    TeslaExtrasDto(
+                        index = rawIndex ?: JsonNull,
+                        detail = rawDetail ?: JsonNull,
+                    ),
+                ),
         )
     }
 
@@ -241,6 +243,12 @@ data class TeslaIndexDto(
     val fetchedAt: Instant,
 )
 
+@Serializable
+private data class TeslaExtrasDto(
+    val index: JsonElement,
+    val detail: JsonElement,
+)
+
 // Tesla per-slug detail envelope shape: payload.data.data.{name, address, …}.
 @Serializable
 data class TeslaDetailEnvelope(
@@ -263,7 +271,7 @@ data class TeslaLocationDetail(
     // Pricebook entries Tesla returns alongside the location detail. Held
     // as raw JsonElements; the FE knows the shape and renders only the
     // entries it cares about (Tesla CHARGING, first CONGESTION row).
-    val effectivePricebooks: List<kotlinx.serialization.json.JsonElement> = emptyList(),
+    val effectivePricebooks: List<JsonElement> = emptyList(),
 )
 
 @Serializable
