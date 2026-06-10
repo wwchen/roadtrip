@@ -2,6 +2,7 @@ package ca.floo.campsite.recgov.booker.db
 
 import ca.floo.campsite.recgov.booker.domain.Alert
 import ca.floo.roadtrip.db.generated.tables.references.ALERTS
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
@@ -133,14 +134,7 @@ class AlertRepo(
 
 internal fun jsonbList(items: List<String>): JSONB =
     JSONB.valueOf(
-        buildString {
-            append('[')
-            items.forEachIndexed { i, s ->
-                if (i > 0) append(',')
-                append('"').append(s.replace("\\", "\\\\").replace("\"", "\\\"")).append('"')
-            }
-            append(']')
-        },
+        Json.encodeToString(items),
     )
 
 internal fun parseStringList(jsonb: JSONB?): List<String> {
