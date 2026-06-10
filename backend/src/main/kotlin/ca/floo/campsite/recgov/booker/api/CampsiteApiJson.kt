@@ -77,6 +77,21 @@ internal data class PollResponseDto(
 )
 
 @Serializable
+internal data class SettingsUpdateRequestDto(
+    @SerialName("poll_interval") val pollInterval: String? = null,
+    @SerialName("slack_token") val slackToken: String? = null,
+    @SerialName("slack_channel") val slackChannel: String? = null,
+    @SerialName("slack_enabled") val slackEnabled: String? = null,
+    @SerialName("ridb_api_key") val ridbApiKey: String? = null,
+)
+
+@Serializable
+internal data class SettingsTestSlackRequestDto(
+    @SerialName("slack_token") val slackToken: String? = null,
+    @SerialName("slack_channel") val slackChannel: String? = null,
+)
+
+@Serializable
 internal data class AlertCreateRequestDto(
     @SerialName("campground_id") val campgroundId: String? = null,
     @SerialName("campground_name") val campgroundName: String? = null,

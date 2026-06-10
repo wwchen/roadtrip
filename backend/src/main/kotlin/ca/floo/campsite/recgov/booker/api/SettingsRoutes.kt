@@ -5,8 +5,6 @@ import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.request.receiveText
-import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -38,24 +36,22 @@ fun Route.settingsRoutes(
                     put("recgov_token_expired", info.expired)
                 }
             }
-        call.respondText(masked.toString())
+        call.respondJsonElement(masked)
     }
 
     post("/api/campsite/settings", {
         tags = listOf("campsite-settings")
         summary = "Upsert one or more settings keys; preserves masked values when sent"
     }) {
-        val body = parseJson(call.receiveText())
-        val allowed = setOf("poll_interval", "slack_token", "slack_channel", "slack_enabled", "ridb_api_key")
+        val body = call.receiveCampsiteJson<SettingsUpdateRequestDto>()
         val updates = mutableMapOf<String, String>()
-        for (key in allowed) {
-            val v = body.string(key) ?: continue
-            // Skip masked sentinel — UI sends '••••••••' to mean "leave unchanged".
-            if (v == MASK) continue
-            updates[key] = v
-        }
+        updates.putIfUnmasked("poll_interval", body.pollInterval)
+        updates.putIfUnmasked("slack_token", body.slackToken)
+        updates.putIfUnmasked("slack_channel", body.slackChannel)
+        updates.putIfUnmasked("slack_enabled", body.slackEnabled)
+        updates.putIfUnmasked("ridb_api_key", body.ridbApiKey)
         if (updates.isNotEmpty()) settings.setMany(updates)
-        call.respondText("""{"ok":true}""")
+        call.respondJson(OkDto())
     }
 
     post("/api/campsite/settings/test-slack", {
@@ -65,14 +61,22 @@ fun Route.settingsRoutes(
         // Accepts optional {slack_token, slack_channel} in the body so the
         // onboarding wizard can prove credentials before persisting them.
         // Empty body falls back to saved settings (existing Settings-modal flow).
-        val body = parseJson(call.receiveText())
-        val candidateToken = body.string("slack_token")?.takeIf { it.isNotEmpty() && it != MASK }
-        val candidateChannel = body.string("slack_channel")?.takeIf { it.isNotEmpty() }
+        val body = call.receiveCampsiteJson<SettingsTestSlackRequestDto>()
+        val candidateToken = body.slackToken?.takeIf { it.isNotEmpty() && it != MASK }
+        val candidateChannel = body.slackChannel?.takeIf { it.isNotEmpty() }
         try {
             slack.sendTest(candidateToken, candidateChannel)
-            call.respondText("""{"ok":true}""")
+            call.respondJson(OkDto())
         } catch (e: Exception) {
-            call.respondText("""{"error":"${e.message}"}""", status = HttpStatusCode.InternalServerError)
+            call.respondJson(ErrorDto(e.message ?: "Slack test failed"), status = HttpStatusCode.InternalServerError)
         }
     }
+}
+
+private fun MutableMap<String, String>.putIfUnmasked(
+    key: String,
+    value: String?,
+) {
+    // Skip masked sentinel — UI sends it to mean "leave unchanged".
+    if (value != null && value != MASK) this[key] = value
 }
