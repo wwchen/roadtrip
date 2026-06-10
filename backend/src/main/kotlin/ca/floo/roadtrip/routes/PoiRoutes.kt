@@ -4,6 +4,10 @@ import ca.floo.roadtrip.models.api.PoiSearchHitSchema
 import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
 import ca.floo.roadtrip.models.api.PoisRequestSchema
 import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.repo.Bbox
+import ca.floo.roadtrip.repo.PoiDetailRow
+import ca.floo.roadtrip.repo.PoiRow
+import ca.floo.roadtrip.repo.PoiServingRepo
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
@@ -58,6 +62,7 @@ fun Route.poiRoutes(
             .map { it.category }
             .toSet()
             .toList()
+    val poiRepo = PoiServingRepo(ctx)
     post("/api/pois", {
         tags = listOf("poi")
         summary = "POIs within bbox; capped at $POI_LIMIT features (truncated:true on overflow)"
@@ -126,17 +131,12 @@ fun Route.poiRoutes(
             }
 
         val result =
-            if (categories?.isEmpty() == true) {
-                PoiResult(emptyList(), truncated = false)
-            } else {
-                fetchPois(
-                    ctx = ctx,
-                    bbox = req.bbox,
-                    categories = categories,
-                    defaultCategories = defaultCategories,
-                    limit = POI_LIMIT,
-                )
-            }
+            poiRepo.fetchPois(
+                bbox = req.bbox,
+                categories = categories,
+                defaultCategories = defaultCategories,
+                limit = POI_LIMIT,
+            )
 
         call.respondText(
             buildFeatureCollection(result.rows, result.truncated),
@@ -182,7 +182,7 @@ fun Route.poiRoutes(
                     HttpStatusCode.BadRequest,
                 )
         val row =
-            fetchPoiById(ctx, id)
+            poiRepo.fetchPoiById(id)
                 ?: return@get call.respondText(
                     """{"error":"not_found"}""",
                     io.ktor.http.ContentType.Application.Json,
@@ -267,51 +267,17 @@ fun Route.poiRoutes(
                     .getAll("categories")
                     .orEmpty(),
             )
-        val terms = splitPoiSearchTerms(q)
-        if (terms.isEmpty()) {
-            call.respondText(
-                Json.encodeToString(PoiSearchResponseSchema(results = emptyList())),
-                io.ktor.http.ContentType.Application.Json,
-            )
-            return@get
-        }
-        val termPredicate = terms.joinToString("\n                      AND ") { "name ILIKE ? ESCAPE '\\'" }
-        val patterns = terms.map { "%${escapeLikePattern(it)}%" }
-        val prefix = "${escapeLikePattern(terms.first())}%"
-        val categoryPredicate =
-            categories
-                .takeIf { it.isNotEmpty() }
-                ?.joinToString(prefix = "AND category IN (", postfix = ")") { "?" }
-                .orEmpty()
-        val args =
-            buildList<Any> {
-                addAll(patterns)
-                addAll(categories)
-                add(prefix)
-                add(limit)
-            }
         val hits =
-            ctx
-                .fetch(
-                    """
-                    SELECT id, name, category, region,
-                           ST_X(geom) AS lng, ST_Y(geom) AS lat
-                    FROM pois
-                    WHERE deleted_at IS NULL
-                      AND $termPredicate
-                      $categoryPredicate
-                    ORDER BY (name ILIKE ? ESCAPE '\') DESC, length(name) ASC, name ASC
-                    LIMIT ?
-                    """.trimIndent(),
-                    *args.toTypedArray(),
-                ).map { r ->
+            poiRepo
+                .search(query = q, categories = categories, limit = limit)
+                .map {
                     PoiSearchHitSchema(
-                        id = (r.get("id") as Number).toLong(),
-                        name = r.get("name") as String,
-                        category = r.get("category") as String,
-                        region = r.get("region") as String?,
-                        lng = (r.get("lng") as Number).toDouble(),
-                        lat = (r.get("lat") as Number).toDouble(),
+                        id = it.id,
+                        name = it.name,
+                        category = it.category,
+                        region = it.region,
+                        lng = it.lng,
+                        lat = it.lat,
                     )
                 }
         call.respondText(
@@ -321,20 +287,12 @@ fun Route.poiRoutes(
     }
 }
 
-private fun splitPoiSearchTerms(q: String): List<String> =
-    q
-        .split(Regex("\\s+"))
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-
 private fun parseSearchCategories(values: List<String>): List<String> =
     values
         .flatMap { it.split(",") }
         .map { it.trim() }
         .filter { it.isNotEmpty() }
         .distinct()
-
-private fun escapeLikePattern(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
 private data class PoiRequest(
     val bbox: Bbox,
@@ -366,297 +324,6 @@ private fun parseRequest(bodyText: String): PoiRequest {
             }?.takeIf { it.isNotEmpty() }
 
     return PoiRequest(bbox, zoom, categories)
-}
-
-data class Bbox(
-    val west: Double,
-    val south: Double,
-    val east: Double,
-    val north: Double,
-)
-
-internal fun parseBbox(raw: String): Bbox? {
-    val parts = raw.split(',')
-    if (parts.size != 4) return null
-    val nums = parts.map { it.trim().toDoubleOrNull() ?: return null }
-    val (w, s, e, n) = nums
-    if (w !in -180.0..180.0 || e !in -180.0..180.0) return null
-    if (s !in -90.0..90.0 || n !in -90.0..90.0) return null
-    if (w >= e || s >= n) return null
-    return Bbox(w, s, e, n)
-}
-
-// Slim row shape for the bbox endpoint. Just enough for MapLibre to place
-// + color a pin: id, lat/lng, category for color band, subcategory for the
-// campground sub-bucket. Everything richer (name, address, provider_ref,
-// raw properties) lives behind GET /api/pois/{id} and is fetched lazily on
-// pin click.
-internal data class PoiRow(
-    val id: Long,
-    val category: String,
-    val subcategory: String?,
-    val lng: Double,
-    val lat: Double,
-)
-
-// Wide row shape returned by GET /api/pois/{id}. Same projection the bbox
-// endpoint used to ship for every row; now paid for only when the user
-// actually opens a pin.
-internal data class PoiDetailRow(
-    val id: Long,
-    val source: String,
-    val sourceId: String,
-    val category: String,
-    val subcategory: String?,
-    val name: String,
-    val region: String?,
-    val unitName: String?,
-    val reserveUrl: String?,
-    val phone: String?,
-    val infoUrl: String?,
-    // JSONB ::text — null when the row has no address bag (most parks).
-    val addressJson: String?,
-    // JSONB ::text — null for non-bookable POIs (PF, parks). Carries the
-    // sealed ProviderRef variant so the drawer can render booking deep
-    // links + availability heat strips for the matching adapter.
-    val providerRefJson: String? = null,
-    val geomJson: String,
-    val propertiesJson: String,
-)
-
-// Outcome of a sampled bbox fetch. `truncated` is true whenever the raw
-// count exceeded the global cap — even if the sample fits under it — so
-// the FE can show "zoom in for more" honestly.
-internal data class PoiResult(
-    val rows: List<PoiRow>,
-    val truncated: Boolean,
-)
-
-// Spatial sampling grid. 10x10 = 100 cells. row_number() PARTITION BY cell
-// + ORDER BY rn round-robins across cells, so the slim payload comes back
-// spread across the viewport instead of clumped wherever Postgres's row
-// order happened to put the first matches.
-private const val SAMPLE_GRID_DIM: Int = 10
-
-// Even when one category dominates the viewport (e.g. campgrounds at
-// continental zoom), every present category gets at least this many slots
-// so the legend's sparse layers don't disappear from the response.
-private const val MIN_PER_CATEGORY_ALLOCATION: Int = 50
-
-internal fun fetchPois(
-    ctx: DSLContext,
-    bbox: Bbox,
-    categories: List<String>?,
-    defaultCategories: List<String>,
-    limit: Int,
-): PoiResult {
-    val cats = categories ?: defaultCategories
-    if (cats.isEmpty()) return PoiResult(emptyList(), truncated = false)
-
-    // Step 1: cheap per-category COUNT in the bbox. GIST-only on the geom
-    // predicate, no row reads beyond the index. Drives both the truncation
-    // flag and the proportional allocation in step 2.
-    val countByCat = countByCategory(ctx, cats, bbox)
-    val rawTotal = countByCat.values.sum()
-    val present = cats.filter { (countByCat[it] ?: 0) > 0 }
-    if (present.isEmpty()) return PoiResult(emptyList(), truncated = false)
-
-    // Step 2: distribute the cap across present categories proportional to
-    // viewport presence. Each present category gets a minimum guarantee so
-    // sparse layers (e.g. 5 superchargers in a campground-heavy region)
-    // don't get rounded to zero. Remainder split by share of the rest.
-    val allocation = allocateBudget(present.associateWith { countByCat[it] ?: 0 }, limit)
-
-    // Step 3: pull the actual rows. Each per-category subquery uses a
-    // row_number() window partitioned by a SAMPLE_GRID_DIM x SAMPLE_GRID_DIM
-    // spatial bucket to spread the sample across the viewport. UNION ALL
-    // collapses the per-cat results into one round-trip.
-    val rows = fetchSampled(ctx = ctx, bbox = bbox, allocation = allocation)
-    // truncated = "we returned fewer rows than the viewport contains" —
-    // covers both the cap-overflow case (raw > limit) and the spatial-
-    // bucket case (raw fits but sampling thinned a tight cluster).
-    val truncated = rows.size < rawTotal
-    return PoiResult(rows, truncated)
-}
-
-private fun countByCategory(
-    ctx: DSLContext,
-    cats: List<String>,
-    bbox: Bbox,
-): Map<String, Int> {
-    if (cats.isEmpty()) return emptyMap()
-    val placeholders = cats.joinToString(",") { "?" }
-    val sql =
-        """
-        SELECT category, COUNT(*) AS n
-        FROM pois
-        WHERE deleted_at IS NULL
-          AND category IN ($placeholders)
-          AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
-        GROUP BY category
-        """.trimIndent()
-    val args = mutableListOf<Any>()
-    args.addAll(cats)
-    args.add(bbox.west)
-    args.add(bbox.south)
-    args.add(bbox.east)
-    args.add(bbox.north)
-    val out = mutableMapOf<String, Int>()
-    for (r in ctx.fetch(sql, *args.toTypedArray())) {
-        out[r.get("category") as String] = (r.get("n") as Number).toInt()
-    }
-    return out
-}
-
-/**
- * Distribute a global cap across categories with viewport presence:
- *
- *   - Sparse layers get `MIN_PER_CATEGORY_ALLOCATION` (or their full count if
- *     less) so they remain visible in legends even when one category swamps.
- *   - Remaining budget split proportional to (count - already-allocated)
- *     across the categories above the minimum.
- *
- * Returns a map of category → max-rows. Sum of values <= cap.
- */
-private fun allocateBudget(
-    presentCounts: Map<String, Int>,
-    cap: Int,
-): Map<String, Int> {
-    val baseline = presentCounts.mapValues { (_, n) -> minOf(n, MIN_PER_CATEGORY_ALLOCATION) }
-    val baselineSum = baseline.values.sum()
-    if (baselineSum >= cap) {
-        // The cap is so small we can't even fund every category's minimum.
-        // Still cover them; a tiny over-allocation in pathological cases is
-        // fine — the per-cat LIMIT still bounds each subquery.
-        return baseline
-    }
-    val remaining = cap - baselineSum
-    val excess = presentCounts.mapValues { (k, n) -> (n - baseline.getValue(k)).coerceAtLeast(0) }
-    val excessTotal = excess.values.sum()
-    if (excessTotal == 0) return baseline
-    val extra =
-        excess.mapValues { (_, e) ->
-            ((e.toLong() * remaining) / excessTotal).toInt()
-        }
-    return presentCounts.mapValues { (k, _) -> baseline.getValue(k) + (extra[k] ?: 0) }
-}
-
-private fun fetchSampled(
-    ctx: DSLContext,
-    bbox: Bbox,
-    allocation: Map<String, Int>,
-): List<PoiRow> {
-    val cats = allocation.keys.toList()
-    if (cats.isEmpty()) return emptyList()
-
-    // Cell width/height in degrees for the spatial bucket window. Matches
-    // SAMPLE_GRID_DIM cells across the bbox in each axis.
-    val dx = (bbox.east - bbox.west) / SAMPLE_GRID_DIM
-    val dy = (bbox.north - bbox.south) / SAMPLE_GRID_DIM
-    // Cell-round-robin sample: row_number() partitions rows into per-cell
-    // ranks (rn=1 is the first row in each cell, rn=2 the second, …).
-    // ORDER BY rn ASC, id ASC + LIMIT ? takes one row from every populated
-    // cell before taking a second from any. Spreads spatially exactly as
-    // a fixed perCell cap did, but dense cells absorb the budget left
-    // unused by sparse/empty cells, so the response actually fills `cap`
-    // when raw count exceeds it. Uniform cell math (capping each cell at
-    // ceil(cap / 100)) was leaving ~30-50% of the budget unspent at
-    // continental zoom because most cells are empty (Pacific, deserts).
-    val sql =
-        buildString {
-            cats.forEachIndexed { idx, _ ->
-                if (idx > 0) append("\nUNION ALL\n")
-                append("(SELECT id, category, subcategory, lng, lat FROM (")
-                append(
-                    """
-                    SELECT id, category, subcategory,
-                           ST_X(ST_Centroid(geom)) AS lng,
-                           ST_Y(ST_Centroid(geom)) AS lat,
-                           row_number() OVER (
-                             PARTITION BY
-                               floor((ST_X(ST_Centroid(geom)) - ?) / ?)::int,
-                               floor((ST_Y(ST_Centroid(geom)) - ?) / ?)::int
-                             ORDER BY id
-                           ) AS rn
-                    FROM pois
-                    WHERE deleted_at IS NULL
-                      AND category = ?
-                      AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
-                    """.trimIndent(),
-                )
-                append("\n) sub ORDER BY rn ASC, id ASC LIMIT ?)")
-            }
-        }
-
-    val args = mutableListOf<Any>()
-    for (cat in cats) {
-        // 4 args for the spatial-bucket math: (west, dx, south, dy). dy=0
-        // would only happen on a zero-height bbox, which the validator
-        // already rejects.
-        args.add(bbox.west)
-        args.add(dx)
-        args.add(bbox.south)
-        args.add(dy)
-        args.add(cat)
-        args.add(bbox.west)
-        args.add(bbox.south)
-        args.add(bbox.east)
-        args.add(bbox.north)
-        args.add(allocation.getValue(cat).coerceAtLeast(1))
-    }
-
-    return ctx.fetch(sql, *args.toTypedArray()).map { r ->
-        PoiRow(
-            id = (r.get("id") as Number).toLong(),
-            category = r.get("category") as String,
-            subcategory = r.get("subcategory") as String?,
-            lng = (r.get("lng") as Number).toDouble(),
-            lat = (r.get("lat") as Number).toDouble(),
-        )
-    }
-}
-
-/**
- * Fetch the full, drawer-ready row for one POI. Returns null when the id
- * is unknown or the row is soft-deleted. Mirrors the wide projection the
- * bbox endpoint used to ship for every row.
- */
-internal fun fetchPoiById(
-    ctx: DSLContext,
-    poiId: Long,
-): PoiDetailRow? {
-    val r =
-        ctx.fetchOne(
-            """
-            SELECT id, source, source_id, category, subcategory, name,
-                   region, unit_name, reserve_url, phone, info_url,
-                   address::text AS address_text,
-                   provider_ref::text AS provider_ref_text,
-                   ST_AsGeoJSON(geom) AS geom_json,
-                   properties::text AS properties_text
-            FROM pois
-            WHERE id = ?
-              AND deleted_at IS NULL
-            """.trimIndent(),
-            poiId,
-        ) ?: return null
-    return PoiDetailRow(
-        id = (r.get("id") as Number).toLong(),
-        source = r.get("source") as String,
-        sourceId = r.get("source_id") as String,
-        category = r.get("category") as String,
-        subcategory = r.get("subcategory") as String?,
-        name = r.get("name") as String,
-        region = r.get("region") as String?,
-        unitName = r.get("unit_name") as String?,
-        reserveUrl = r.get("reserve_url") as String?,
-        phone = r.get("phone") as String?,
-        infoUrl = r.get("info_url") as String?,
-        addressJson = r.get("address_text") as String?,
-        providerRefJson = r.get("provider_ref_text") as String?,
-        geomJson = r.get("geom_json") as String,
-        propertiesJson = r.get("properties_text") as String,
-    )
 }
 
 /**
