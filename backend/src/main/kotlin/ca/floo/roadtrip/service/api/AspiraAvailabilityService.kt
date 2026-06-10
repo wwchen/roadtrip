@@ -140,12 +140,12 @@ fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, String> {
     return when {
         status == 429 ->
             HttpStatusCode.ServiceUnavailable to
-                """{"state":"error","error":"rate_limited","retry_after_s":60}"""
+                renderAvailabilityErrorJson("rate_limited", retryAfterS = 60)
         status == 503 || (e.message?.contains("WAF") == true) ->
             HttpStatusCode.ServiceUnavailable to
-                """{"state":"error","error":"upstream_blocked","retry_after_s":300}"""
+                renderAvailabilityErrorJson("upstream_blocked", retryAfterS = 300)
         else ->
             HttpStatusCode.ServiceUnavailable to
-                """{"state":"error","error":"upstream_5xx","retry_after_s":30}"""
+                renderAvailabilityErrorJson("upstream_5xx", retryAfterS = 30)
     }
 }
