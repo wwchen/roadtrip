@@ -44,6 +44,7 @@ import {
 } from './shared.js';
 import { requestCampsiteAvailability } from '../api/availability-api.js';
 import { requestPoiDetail } from '../api/poi-api.js';
+import { openCampsiteBookingPanel } from './campsite-booking-panel.js';
 
 /**
  * Campground-specific drawer. Renders availability for recgov pins and
@@ -229,7 +230,7 @@ function renderShell(f) {
     ? `
       <div class="cg-actions">
         ${dirBtn}
-        <a class="cg-btn cg-btn-primary" href="/campsite?campground=${encodeURIComponent(p.recgov_id)}" data-cta="watch">Watch for openings</a>
+        <button type="button" class="cg-btn cg-btn-primary" data-cta="watch">Watch for openings</button>
         <a class="cg-btn cg-btn-secondary" href="https://www.recreation.gov/camping/campgrounds/${encodeURIComponent(p.recgov_id)}" target="_blank" rel="noreferrer" data-cta="reserve">Reserve on rec.gov</a>
       </div>`
     : `
@@ -275,6 +276,22 @@ function renderShell(f) {
     ${detailsSection}
     ${upstreamSection}
   `;
+  wireRecgovWatchAction(content, f);
+}
+
+function wireRecgovWatchAction(content, f) {
+  content.querySelector('[data-cta="watch"]')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    const signal = restartController();
+    openCampsiteBookingPanel(f, {
+      signal,
+      onBack: () => {
+        const restoredSignal = beginSession(f);
+        renderShell(f);
+        if (f.id != null) fetchAvailability(f, restoredSignal);
+      },
+    });
+  });
 }
 
 async function fetchAvailability(f, signal) {
@@ -320,10 +337,9 @@ function renderState(json, f) {
   const stripEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-strip`);
   const labelEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-day-labels span:last-child`);
   const primaryBtn = document.querySelector(`#${DRAWER_ROOT_ID} .cg-btn-primary`);
-  // Watch / Snipe relabels are rec.gov-only — they point at /campsite, our
-  // openings tracker, which only knows recgov_ids. For Aspira pins the
-  // primary button is the upstream Reserve link; relabeling it to "Watch
-  // for openings" would just lie about where the click goes.
+  // Watch / Snipe relabels are rec.gov-only. For Aspira pins the primary
+  // button is the upstream Reserve link; relabeling it to "Watch for
+  // openings" would just lie about where the click goes.
   const isRecgov = !!f?.properties?.recgov_id;
 
   summaryEl.textContent = json.summary || '';

@@ -179,30 +179,27 @@ class CampsiteDrawerSmokeTest {
         }
     }
 
-    private fun routeCampgroundSearch(context: com.microsoft.playwright.BrowserContext) {
-        context.route("**/api/campsite/campgrounds/search**") { route: Route ->
+    private fun routeBookingPanelApis(
+        context: com.microsoft.playwright.BrowserContext,
+        alertBodies: MutableList<String>,
+    ) {
+        context.route("**/api/campsite/booking/session/validate") { route: Route ->
             route.fulfill(
                 Route
                     .FulfillOptions()
                     .setStatus(200)
                     .setContentType("application/json")
-                    .setBody(
-                        """
-                        {
-                          "parks": [],
-                          "campgrounds": [{
-                            "id": "$testRecgovId",
-                            "name": "$testCampgroundName",
-                            "parent_name": "Yosemite National Park",
-                            "parent_id": "2991",
-                            "city": "Yosemite National Park",
-                            "state": "CA",
-                            "rating": 4.8,
-                            "reviews": 1200
-                          }]
-                        }
-                        """.trimIndent(),
-                    ),
+                    .setBody("""{"loggedIn":true}"""),
+            )
+        }
+        context.route("**/api/campsite/alerts") { route: Route ->
+            alertBodies.add(route.request().postData() ?: "")
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"id":987}"""),
             )
         }
     }
@@ -220,10 +217,10 @@ class CampsiteDrawerSmokeTest {
             assertTrue(page.locator("#cg-drawer .cg-cell.cg-cell-available").count() > 0)
             // Summary mirrors backend.
             assertThat(page.locator("#cg-drawer .cg-summary")).containsText("nights available")
-            // Primary CTA copy + deeplink.
+            // Primary CTA copy + in-drawer alert action.
             val primary = page.locator("#cg-drawer .cg-btn-primary")
             assertThat(primary).hasText("Watch for openings")
-            assertEquals("/campsite?campground=$testRecgovId", primary.getAttribute("href"))
+            assertEquals("watch", primary.getAttribute("data-cta"))
             // Secondary CTA goes to rec.gov.
             assertEquals(
                 "https://www.recreation.gov/camping/campgrounds/$testRecgovId",
@@ -235,10 +232,11 @@ class CampsiteDrawerSmokeTest {
     }
 
     @Test
-    fun `drawer watch CTA opens campsite page with campground preselected`() {
+    fun `drawer watch CTA creates alert without leaving the map`() {
         val context = browser.newContext(newMobileContext())
         routeAvailabilityWith(context, zeroAvailableJson())
-        routeCampgroundSearch(context)
+        val alertBodies = mutableListOf<String>()
+        routeBookingPanelApis(context, alertBodies)
         val page = context.newPage()
         val pageErrors = mutableListOf<String>()
         page.onPageError { pageErrors.add(it) }
@@ -249,19 +247,28 @@ class CampsiteDrawerSmokeTest {
             assertThat(primary).hasText("Snipe a cancellation")
             primary.click()
 
-            page.waitForURL("**/campsite?campground=$testRecgovId")
-            assertThat(page.locator("#new-alert-panel h2")).containsText("New Alert")
-            assertThat(page.locator("#campground-search")).hasValue(
-                testCampgroundName,
-                com.microsoft.playwright.assertions.LocatorAssertions
-                    .HasValueOptions()
-                    .setTimeout(5_000.0),
+            assertTrue(
+                !page.url().contains("/campsite"),
+                "watch CTA should stay on map, got ${page.url()}",
             )
-            assertThat(page.locator("#selected-campgrounds .campground-chip")).containsText(testCampgroundName)
-            assertThat(page.locator("#selected-campgrounds .campground-chip")).containsText("#$testRecgovId")
+            assertThat(page.locator("#campground-booking-panel")).isVisible()
+            assertThat(page.locator("#cg-drawer .cg-drawer-head h2")).containsText(testCampgroundName)
+
+            page.fill("#cg-booking-start", "2026-07-01")
+            page.fill("#cg-booking-end", "2026-07-04")
+            page.locator("#campground-booking-panel summary").click()
+            page.fill("#cg-booking-specific-sites", "1, 12")
+            page.locator("#cg-booking-submit").click()
+            assertThat(page.locator("#cg-drawer .cg-form-status.success")).containsText("Alert #987 created")
+
+            assertEquals(1, alertBodies.size)
+            val alertBody = alertBodies.single()
+            assertTrue(alertBody.contains("\"campground_id\":\"$testRecgovId\""), alertBody)
+            assertTrue(alertBody.contains("\"campground_name\":\"$testCampgroundName"), alertBody)
+            assertTrue(alertBody.contains("\"specific_sites\":[\"001\",\"012\"]"), alertBody)
             assertTrue(
                 pageErrors.isEmpty(),
-                "Page errors during drawer → campsite handoff: ${pageErrors.joinToString(" | ")}",
+                "Page errors during drawer alert creation: ${pageErrors.joinToString(" | ")}",
             )
         } finally {
             context.close()
