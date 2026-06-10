@@ -6,7 +6,6 @@ import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.EventBus
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.request.receiveText
 import io.ktor.server.routing.Route
 
 fun Route.campsiteDebugRoutes(
@@ -18,11 +17,11 @@ fun Route.campsiteDebugRoutes(
         tags = listOf("campsite-admin")
         summary = "Debug-only: create an alert + match in one shot for protocol harness tests"
     }) {
-        val body = parseJson(call.receiveText())
-        val campgroundId = body.string("campgroundId") ?: "232447"
-        val campsiteId = body.string("campsiteId") ?: "0"
-        val startDate = body.string("startDate") ?: "2026-04-28"
-        val endDate = body.string("endDate") ?: "2026-04-29"
+        val body = call.receiveCampsiteJson<DebugSynthMatchRequestDto>()
+        val campgroundId = body.campgroundId ?: "232447"
+        val campsiteId = body.campsiteId ?: "0"
+        val startDate = body.startDate ?: "2026-04-28"
+        val endDate = body.endDate ?: "2026-04-29"
         val alertId =
             alerts.create(
                 AlertRepo.CreateInput(

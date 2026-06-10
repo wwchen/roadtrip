@@ -270,7 +270,8 @@ class CampsiteApiRoutesIT {
                           "campgroundId":"232447",
                           "campsiteId":"0",
                           "startDate":"2026-08-01",
-                          "endDate":"2026-08-02"
+                          "endDate":"2026-08-02",
+                          "ignoredByDto":"compat"
                         }
                         """.trimIndent(),
                     )
