@@ -1,9 +1,13 @@
 package ca.floo.roadtrip.models
 
-import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.jsonObject
 import java.time.Instant
 import java.time.LocalDate
 
@@ -73,7 +77,7 @@ sealed class Poi {
         // directions, fees, stay limits, accessibility text, media,
         // activities — without touching the schema each time. Null when
         // the source has nothing extra worth carrying.
-        val extras: kotlinx.serialization.json.JsonElement? = null,
+        val extras: JsonElement? = null,
     ) : Poi()
 
     data class Supercharger(
@@ -95,8 +99,8 @@ sealed class Poi {
         // currency, time-band). Whole array kept verbatim for the FE to
         // render. Empty list when the detail capture is missing or had no
         // pricebooks.
-        val pricebooks: List<kotlinx.serialization.json.JsonElement> = emptyList(),
-        val extras: kotlinx.serialization.json.JsonElement? = null,
+        val pricebooks: List<JsonElement> = emptyList(),
+        val extras: JsonElement? = null,
     ) : Poi()
 
     data class Park(
@@ -115,7 +119,7 @@ sealed class Poi {
         val designation: String,
         val officialName: String?,
         val acres: Double?,
-        val extras: kotlinx.serialization.json.JsonElement? = null,
+        val extras: JsonElement? = null,
     ) : Poi()
 
     data class PlanetFitness(
@@ -131,7 +135,7 @@ sealed class Poi {
         override val fetchedAt: Instant,
         override val lastVerified: LocalDate?,
         val openingHours: String?,
-        val extras: kotlinx.serialization.json.JsonElement? = null,
+        val extras: JsonElement? = null,
     ) : Poi()
 }
 
@@ -212,42 +216,94 @@ fun Poi.categorySql(): String =
 // promoting a field is a separate migration.
 fun Poi.propertiesJson(): JsonObject = perTypeProperties(this)
 
+@OptIn(ExperimentalSerializationApi::class)
+private val poiPropertiesJson =
+    Json {
+        encodeDefaults = false
+        explicitNulls = false
+    }
+
 private fun perTypeProperties(poi: Poi): JsonObject =
     when (poi) {
         is Poi.Campground ->
-            buildJsonObject {
-                put("amenities", JsonArray(poi.amenities.map { JsonPrimitive(it) }))
-                put("activities", JsonArray(poi.activities.map { JsonPrimitive(it) }))
-                poi.sites?.let { put("sites", JsonPrimitive(it)) }
-                poi.season?.let { put("season", JsonPrimitive(it)) }
-                poi.near?.let { put("near", JsonPrimitive(it)) }
-                poi.photoUrl?.let { put("photo_url", JsonPrimitive(it)) }
-                // FE reads `properties.subcategory` for the sub-bucket
-                // (legend toggles + circle-color match). Coarser
-                // pois.category column says "campground"; this stamps
-                // the FE-relevant detail (federal/state/local/provincial).
-                poi.subcategory?.let { put("subcategory", JsonPrimitive(it)) }
-                poi.agency?.let { put("agency", JsonPrimitive(it)) }
-                poi.extras?.let { put("upstream", it) }
-            }
+            poiPropertiesJson
+                .encodeToJsonElement(
+                    CampgroundPropertiesDto(
+                        amenities = poi.amenities,
+                        activities = poi.activities,
+                        sites = poi.sites,
+                        season = poi.season,
+                        near = poi.near,
+                        photoUrl = poi.photoUrl,
+                        subcategory = poi.subcategory,
+                        agency = poi.agency,
+                        upstream = poi.extras,
+                    ),
+                ).jsonObject
         is Poi.Supercharger ->
-            buildJsonObject {
-                put("stall_count", JsonPrimitive(poi.stallCount))
-                put("max_power_kw", JsonPrimitive(poi.maxPowerKw))
-                poi.facility?.let { put("facility", JsonPrimitive(it)) }
-                if (poi.pricebooks.isNotEmpty()) put("pricebooks", JsonArray(poi.pricebooks))
-                poi.extras?.let { put("upstream", it) }
-            }
+            poiPropertiesJson
+                .encodeToJsonElement(
+                    SuperchargerPropertiesDto(
+                        stallCount = poi.stallCount,
+                        maxPowerKw = poi.maxPowerKw,
+                        facility = poi.facility,
+                        pricebooks = poi.pricebooks.takeIf { it.isNotEmpty() },
+                        upstream = poi.extras,
+                    ),
+                ).jsonObject
         is Poi.Park ->
-            buildJsonObject {
-                put("designation", JsonPrimitive(poi.designation))
-                poi.officialName?.let { put("official_name", JsonPrimitive(it)) }
-                poi.acres?.let { put("acres", JsonPrimitive(it)) }
-                poi.extras?.let { put("upstream", it) }
-            }
+            poiPropertiesJson
+                .encodeToJsonElement(
+                    ParkPropertiesDto(
+                        designation = poi.designation,
+                        officialName = poi.officialName,
+                        acres = poi.acres,
+                        upstream = poi.extras,
+                    ),
+                ).jsonObject
         is Poi.PlanetFitness ->
-            buildJsonObject {
-                poi.openingHours?.let { put("opening_hours", JsonPrimitive(it)) }
-                poi.extras?.let { put("upstream", it) }
-            }
+            poiPropertiesJson
+                .encodeToJsonElement(
+                    PlanetFitnessPropertiesDto(
+                        openingHours = poi.openingHours,
+                        upstream = poi.extras,
+                    ),
+                ).jsonObject
     }
+
+@Serializable
+private data class CampgroundPropertiesDto(
+    val amenities: List<String>,
+    val activities: List<String>,
+    val sites: Int? = null,
+    val season: String? = null,
+    val near: String? = null,
+    @SerialName("photo_url") val photoUrl: String? = null,
+    // FE reads `properties.subcategory` for legend toggles and circle color.
+    val subcategory: String? = null,
+    val agency: String? = null,
+    val upstream: JsonElement? = null,
+)
+
+@Serializable
+private data class SuperchargerPropertiesDto(
+    @SerialName("stall_count") val stallCount: Int,
+    @SerialName("max_power_kw") val maxPowerKw: Int,
+    val facility: String? = null,
+    val pricebooks: List<JsonElement>? = null,
+    val upstream: JsonElement? = null,
+)
+
+@Serializable
+private data class ParkPropertiesDto(
+    val designation: String,
+    @SerialName("official_name") val officialName: String? = null,
+    val acres: Double? = null,
+    val upstream: JsonElement? = null,
+)
+
+@Serializable
+private data class PlanetFitnessPropertiesDto(
+    @SerialName("opening_hours") val openingHours: String? = null,
+    val upstream: JsonElement? = null,
+)
