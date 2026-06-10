@@ -1,11 +1,9 @@
 package ca.floo.roadtrip.models.api
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
-// Swagger schemas for the admin ingest API. These are *only* read by the
-// OpenAPI spec generator — actual responses are still hand-built JSON
-// strings (the hot paths stream out of jOOQ ResultSets, and we don't want
-// to re-shape every row into an instance).
+// Swagger + response DTOs for the admin ingest API.
 //
 // Field names match the wire format exactly (snake_case for the times,
 // kind/status, etc.) so the rendered Swagger doc reflects what the API
@@ -27,29 +25,45 @@ data class FanOutResponseSchema(
 )
 
 @Serializable
-data class IngestRunSchema(
+data class IngestRunListItemSchema(
     val id: Long,
     val target: String,
-    val phase: String,
-    val phase_kind: String,
-    val parent_run_id: Long? = null,
     val kind: String,
     val status: String,
     val triggered_by: String,
     val started_at: String,
     val completed_at: String? = null,
+)
+
+@Serializable
+data class IngestRunPhaseSchema(
+    val id: Long,
+    val phase: String,
+    val phase_kind: String,
+    val status: String,
     val exit_code: Int? = null,
+    val started_at: String,
+    val completed_at: String? = null,
+    val counts: JsonElement? = null,
+    val notes: String? = null,
 )
 
 @Serializable
 data class RunsListSchema(
-    val runs: List<IngestRunSchema>,
+    val runs: List<IngestRunListItemSchema>,
 )
 
 @Serializable
 data class RunDetailSchema(
-    val parent: IngestRunSchema,
-    val phases: List<IngestRunSchema>,
+    val id: Long,
+    val target: String,
+    val kind: String,
+    val status: String,
+    val triggered_by: String,
+    val started_at: String,
+    val completed_at: String? = null,
+    val notes: String? = null,
+    val phases: List<IngestRunPhaseSchema>,
 )
 
 @Serializable
@@ -83,7 +97,7 @@ data class ErrorTargetBusySchema(
 @Serializable
 data class ErrorNotFoundSchema(
     val error: String,
-    val id: Long,
+    val id: Long? = null,
 )
 
 // Concrete examples surfaced in Swagger UI alongside the schema. Typed
@@ -147,22 +161,18 @@ val EXAMPLE_RUNS_LIST =
     RunsListSchema(
         runs =
             listOf(
-                IngestRunSchema(
+                IngestRunListItemSchema(
                     id = 42,
                     target = "campgrounds",
-                    phase = "fetch",
-                    phase_kind = "target",
                     kind = "fetch",
                     status = "completed",
                     triggered_by = "admin-api",
                     started_at = "2026-06-06T19:14:02Z",
                     completed_at = "2026-06-06T19:18:31Z",
                 ),
-                IngestRunSchema(
+                IngestRunListItemSchema(
                     id = 41,
                     target = "planet-fitness",
-                    phase = "import",
-                    phase_kind = "target",
                     kind = "import",
                     status = "completed",
                     triggered_by = "admin-api",
@@ -174,42 +184,29 @@ val EXAMPLE_RUNS_LIST =
 
 val EXAMPLE_RUN_DETAIL =
     RunDetailSchema(
-        parent =
-            IngestRunSchema(
-                id = 42,
-                target = "campgrounds",
-                phase = "fetch",
-                phase_kind = "target",
-                kind = "fetch",
-                status = "completed",
-                triggered_by = "admin-api",
-                started_at = "2026-06-06T19:14:02Z",
-                completed_at = "2026-06-06T19:18:31Z",
-            ),
+        id = 42,
+        target = "campgrounds",
+        kind = "fetch",
+        status = "completed",
+        triggered_by = "admin-api",
+        started_at = "2026-06-06T19:14:02Z",
+        completed_at = "2026-06-06T19:18:31Z",
         phases =
             listOf(
-                IngestRunSchema(
+                IngestRunPhaseSchema(
                     id = 43,
-                    target = "campgrounds",
                     phase = "fetch_campgrounds.py",
                     phase_kind = "fetch",
-                    parent_run_id = 42,
-                    kind = "fetch",
                     status = "completed",
-                    triggered_by = "phase",
                     started_at = "2026-06-06T19:14:02Z",
                     completed_at = "2026-06-06T19:14:55Z",
                     exit_code = 0,
                 ),
-                IngestRunSchema(
+                IngestRunPhaseSchema(
                     id = 44,
-                    target = "campgrounds",
                     phase = "fetch_bc_parks.py",
                     phase_kind = "fetch",
-                    parent_run_id = 42,
-                    kind = "fetch",
                     status = "completed",
-                    triggered_by = "phase",
                     started_at = "2026-06-06T19:14:55Z",
                     completed_at = "2026-06-06T19:15:30Z",
                     exit_code = 0,
@@ -232,6 +229,6 @@ val EXAMPLE_STATUS =
             ),
     )
 
-val EXAMPLE_ERR_NOT_FOUND_BAD_ID = ErrorNotFoundSchema(error = "bad id", id = 0)
+val EXAMPLE_ERR_NOT_FOUND_BAD_ID = ErrorNotFoundSchema(error = "bad id")
 
 val EXAMPLE_ERR_NOT_FOUND = ErrorNotFoundSchema(error = "not found", id = 99)

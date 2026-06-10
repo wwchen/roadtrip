@@ -85,11 +85,11 @@ class AdminIngestRoutesTest {
             val controller = controllerWith(emptyMap())
             application { routing { adminIngestRoutes(controller, ctx) } }
 
-            val resp = client.post("/api/admin/data/fetch/nope")
+            val resp = client.post("/api/admin/data/fetch/bad%22target")
             assertEquals(HttpStatusCode.NotFound, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("unknown target", body["error"]!!.jsonPrimitive.content)
-            assertEquals("nope", body["target"]!!.jsonPrimitive.content)
+            assertEquals("bad\"target", body["target"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -128,8 +128,17 @@ class AdminIngestRoutesTest {
             val detail = client.get("/api/admin/data/runs/$runId")
             assertEquals(HttpStatusCode.OK, detail.status)
             val detailBody = Json.parseToJsonElement(detail.bodyAsText()).jsonObject
-            assertEquals(1, detailBody["phases"]!!.jsonArray.size)
+            val phases = detailBody["phases"]!!.jsonArray
+            assertEquals(1, phases.size)
             assertEquals("fetch", detailBody["kind"]!!.jsonPrimitive.content)
+            assertEquals(
+                "0",
+                phases[0]
+                    .jsonObject["counts"]!!
+                    .jsonObject["exit_code"]!!
+                    .jsonPrimitive
+                    .content,
+            )
         }
 
     @Test
