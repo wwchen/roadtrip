@@ -2,6 +2,7 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.client.RouteResponse
+import ca.floo.roadtrip.config.ApiCacheEntity
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.decodeFromJsonElement
 import kotlinx.serialization.json.encodeToJsonElement
@@ -23,7 +24,7 @@ import java.util.concurrent.ConcurrentHashMap
 // the number of distinct routes the user explores per session (typically <10).
 class RouteCache(
     private val directions: MapboxDirections,
-    private val ttl: Duration = Duration.ofMinutes(10),
+    private val ttl: Duration = ApiCacheEntity.ROUTE.defaultTtl,
     private val now: () -> Instant = Instant::now,
     private val persistentCache: PersistentCache = NoopPersistentCache,
     private val json: Json = Json,
@@ -95,6 +96,6 @@ class RouteCache(
         waypoints.joinToString(";") { (lng, lat) -> "%.6f,%.6f".format(lng, lat) }
 
     companion object {
-        private const val NAMESPACE = "route"
+        private val NAMESPACE = ApiCacheEntity.ROUTE.namespace
     }
 }

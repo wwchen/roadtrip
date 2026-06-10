@@ -67,6 +67,7 @@ class CampsiteServices(
 fun Application.campsiteModule(
     ctx: DSLContext,
     persistentCache: PersistentCache = NoopPersistentCache,
+    cachedAvailabilityTtl: Duration = Duration.ofHours(2),
 ): CampsiteServices {
     val bus = EventBus()
     val leaseSec = System.getenv("CAMPSITE_LEASE_SEC")?.toLongOrNull()
@@ -85,7 +86,12 @@ fun Application.campsiteModule(
     // Public-route cache layer over rec.gov availability (RFC 0003). Wraps,
     // doesn't modify the underlying client — the poller continues calling
     // availability directly with its own freshness semantics.
-    val cachedAvailability = CachedAvailability(availability, persistentCache = persistentCache)
+    val cachedAvailability =
+        CachedAvailability(
+            availability,
+            ttl = cachedAvailabilityTtl,
+            persistentCache = persistentCache,
+        )
     val poller = Poller(alerts, matches, settings, bus, client = availability, slack = slack)
 
     // Single supervisor scope for all in-process background work (scheduler

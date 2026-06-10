@@ -5,6 +5,8 @@ import ca.floo.campsite.recgov.booker.campsiteRoutes
 import ca.floo.roadtrip.client.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.client.MapboxGeocoder
+import ca.floo.roadtrip.config.ApiCacheEntity
+import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
@@ -52,6 +54,7 @@ fun main() {
 }
 
 fun Application.module() {
+    val appConfig = AppConfig.fromEnv()
     val ds = dataSourceFor(DbConfig.fromEnv())
     // Run Flyway in-process so the campsite tables (V2__campsite.sql) exist
     // before campsiteModule reads them. Roadtrip's V1__pois.sql is normally
@@ -60,7 +63,12 @@ fun Application.module() {
     migrate(ds)
     val ctx = dsl(ds)
     val persistentCache = ApiCacheRepo(ctx)
-    val campsite = campsiteModule(ctx, persistentCache)
+    val campsite =
+        campsiteModule(
+            ctx,
+            persistentCache,
+            cachedAvailabilityTtl = appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY),
+        )
 
     // ROADTRIP_STATIC_DIR points at the repo checkout when running locally
     // (gradle run) or at /app/static inside the container (bind-mounted from
@@ -78,7 +86,12 @@ fun Application.module() {
     // /api/route seeds the cache; /api/pois/on-route reads it for corridor
     // filtering so the FE doesn't have to ship a turf.buffer polygon over
     // the wire. See RouteCache.kt.
-    val routeCache = RouteCache(mapboxDirections, persistentCache = persistentCache)
+    val routeCache =
+        RouteCache(
+            mapboxDirections,
+            ttl = appConfig.cache.ttlFor(ApiCacheEntity.ROUTE),
+            persistentCache = persistentCache,
+        )
 
     // POI registry — config/poi-registry.yaml is the source of truth for
     // the per-data_source fetch recipes and the per-poi_data ETL chains.
@@ -183,12 +196,13 @@ fun Application.module() {
     }
 
     // Aspira NextGen availability (Parks Canada / WA State / BC Discover Camping).
-    // Same pattern as rec.gov's CachedAvailability — process-wide singleton with
-    // a 10-min TTL and a 1.5s mutex against Aspira's Azure WAF. See
-    // ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
+    // Same pattern as rec.gov's CachedAvailability — process-wide singleton
+    // with config-driven TTL and a 1.5s mutex against Aspira's Azure WAF.
+    // See ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
     val aspiraCache =
         CachedAspiraAvailability(
             AspiraAvailabilityClient(),
+            ttl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY),
             persistentCache = persistentCache,
         )
 

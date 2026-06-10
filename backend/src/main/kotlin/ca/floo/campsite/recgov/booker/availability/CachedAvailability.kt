@@ -2,6 +2,7 @@ package ca.floo.campsite.recgov.booker.availability
 
 import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import ca.floo.campsite.recgov.booker.poller.Campsite
+import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.repo.NoopPersistentCache
 import ca.floo.roadtrip.repo.PersistentCache
 import kotlinx.coroutines.CompletableDeferred
@@ -36,7 +37,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class CachedAvailability(
     private val fetchMonth: suspend (campgroundId: String, month: String) -> Map<String, Campsite>,
-    private val ttl: Duration = Duration.ofHours(2),
+    private val ttl: Duration = ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl,
     private val clock: Clock = Clock.systemUTC(),
     private val persistentCache: PersistentCache = NoopPersistentCache,
     private val json: Json = Json,
@@ -45,7 +46,7 @@ class CachedAvailability(
     /** Convenience constructor wired to a real [AvailabilityClient]. */
     constructor(
         client: AvailabilityClient,
-        ttl: Duration = Duration.ofHours(2),
+        ttl: Duration = ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl,
         clock: Clock = Clock.systemUTC(),
         persistentCache: PersistentCache = NoopPersistentCache,
         json: Json = Json,
@@ -161,7 +162,7 @@ class CachedAvailability(
     fun size(): Int = cache.size
 
     companion object {
-        private const val NAMESPACE = "recgov_availability"
+        private val NAMESPACE = ApiCacheEntity.RECGOV_AVAILABILITY.namespace
     }
 }
 

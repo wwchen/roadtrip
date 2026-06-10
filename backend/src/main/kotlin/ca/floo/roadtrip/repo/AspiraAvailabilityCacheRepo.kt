@@ -2,6 +2,7 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.client.AspiraAvailability
 import ca.floo.roadtrip.client.AspiraAvailabilityClient
+import ca.floo.roadtrip.config.ApiCacheEntity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Deferred
@@ -29,7 +30,7 @@ import java.util.concurrent.ConcurrentHashMap
  */
 class CachedAspiraAvailability(
     private val fetcher: suspend (host: String, mapId: Int, startDate: LocalDate, endDate: LocalDate) -> AspiraAvailability,
-    private val ttl: Duration = Duration.ofHours(2),
+    private val ttl: Duration = ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl,
     private val clock: Clock = Clock.systemUTC(),
     private val persistentCache: PersistentCache = NoopPersistentCache,
     private val json: Json = Json,
@@ -37,7 +38,7 @@ class CachedAspiraAvailability(
 ) {
     constructor(
         client: AspiraAvailabilityClient,
-        ttl: Duration = Duration.ofHours(2),
+        ttl: Duration = ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl,
         clock: Clock = Clock.systemUTC(),
         persistentCache: PersistentCache = NoopPersistentCache,
         json: Json = Json,
@@ -142,7 +143,7 @@ class CachedAspiraAvailability(
     }
 
     companion object {
-        private const val NAMESPACE = "aspira_availability"
+        private val NAMESPACE = ApiCacheEntity.ASPIRA_AVAILABILITY.namespace
     }
 }
 
