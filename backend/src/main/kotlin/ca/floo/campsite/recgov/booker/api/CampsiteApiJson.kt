@@ -64,6 +64,11 @@ internal data class ErrorDto(
 )
 
 @Serializable
+internal data class BookingSessionImportRequestDto(
+    val raw: String? = null,
+)
+
+@Serializable
 internal data class StatusDto(
     val recgovReachable: Boolean,
     val loggedIn: Boolean,
@@ -182,6 +187,11 @@ internal data class CartQueuedDto(
     val ok: Boolean = true,
     val queued: Boolean = true,
     @SerialName("cart_added") val cartAdded: Boolean = false,
+)
+
+@Serializable
+internal data class BookingCartRequestDto(
+    val action: String? = null,
 )
 
 @Serializable

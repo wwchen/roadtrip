@@ -9,7 +9,6 @@ import ca.floo.campsite.recgov.booker.events.EventBus
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
-import io.ktor.server.request.receiveText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
@@ -24,8 +23,8 @@ fun Route.bookingSessionRoutes(
         tags = listOf("campsite-booking")
         summary = "Import and validate a pasted rec.gov recaccount or cURL token"
     }) {
-        val body = parseJson(call.receiveText())
-        val raw = body.string("raw").orEmpty()
+        val body = call.receiveCampsiteJson<BookingSessionImportRequestDto>()
+        val raw = body.raw.orEmpty()
         if (raw.isEmpty()) {
             call.respondJson(
                 SessionProbeDto(
@@ -172,8 +171,8 @@ fun Route.bookingCartRoutes(
         val m =
             matches.get(id)
                 ?: return@post call.respondJson(ErrorDto("no such match"), status = HttpStatusCode.NotFound)
-        val body = parseJson(call.receiveText())
-        val action = body.string("action")
+        val body = call.receiveCampsiteJson<BookingCartRequestDto>()
+        val action = body.action
 
         if (action == "open") {
             val url = campsiteOpenUrl(m)
