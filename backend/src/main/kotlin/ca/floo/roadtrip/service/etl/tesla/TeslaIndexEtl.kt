@@ -6,6 +6,7 @@ import ca.floo.roadtrip.models.ValidationResult
 import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
+import ca.floo.roadtrip.service.etl.pointGeoJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -115,7 +116,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
             source = etlSlug,
             sourceId = sanitizeSlug(slug),
             name = name,
-            geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
+            geomGeoJson = pointGeoJson(lon, lat),
             region = region,
             country = country,
             phone = null,

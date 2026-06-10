@@ -8,6 +8,7 @@ import ca.floo.roadtrip.models.ValidationResult
 import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
+import ca.floo.roadtrip.service.etl.pointGeoJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -118,7 +119,7 @@ class RecGovCampgroundsEtl(
             source = etlSlug,
             sourceId = "recgov-${row.FacilityID}",
             name = name,
-            geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
+            geomGeoJson = pointGeoJson(lon, lat),
             region = address?.state ?: firstAddr?.AddressStateCode,
             country = address?.country ?: "US",
             phone = row.FacilityPhone?.takeIf { it.isNotBlank() },
