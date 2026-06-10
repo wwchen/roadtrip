@@ -8,12 +8,11 @@ import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
 import ca.floo.roadtrip.service.etl.pointGeoJson
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.encodeToJsonElement
 import java.time.Instant
 
 // OSM Overpass → Poi.PlanetFitness.
@@ -99,27 +98,16 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>>
     }
 
     private fun elementExtras(el: OverpassElement): JsonElement =
-        buildJsonObject {
-            put("type", JsonPrimitive(el.type))
-            put("id", JsonPrimitive(el.id))
-            el.lat?.let { put("lat", JsonPrimitive(it)) }
-            el.lon?.let { put("lon", JsonPrimitive(it)) }
-            el.center?.let {
-                put(
-                    "center",
-                    buildJsonObject {
-                        put("lat", JsonPrimitive(it.lat))
-                        put("lon", JsonPrimitive(it.lon))
-                    },
-                )
-            }
-            el.tags?.let { tags ->
-                put(
-                    "tags",
-                    JsonObject(tags.mapValues { (_, v) -> JsonPrimitive(v) }),
-                )
-            }
-        }
+        extrasJson.encodeToJsonElement(
+            OverpassElementExtrasDto(
+                type = el.type,
+                id = el.id,
+                lat = el.lat,
+                lon = el.lon,
+                center = el.center,
+                tags = el.tags,
+            ),
+        )
 
     private fun buildAddress(tags: Map<String, String>): Address? {
         val street =
@@ -143,8 +131,25 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>>
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
+
+        @OptIn(ExperimentalSerializationApi::class)
+        private val extrasJson =
+            Json {
+                encodeDefaults = false
+                explicitNulls = false
+            }
     }
 }
+
+@Serializable
+private data class OverpassElementExtrasDto(
+    val type: String,
+    val id: Long,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val center: OverpassCenter? = null,
+    val tags: Map<String, String>? = null,
+)
 
 // DTO mirroring Overpass's response shape. `_fetchedAt` is set by the ETL
 // after deserialization (it isn't on the wire — comes from the envelope).
