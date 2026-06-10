@@ -5,8 +5,6 @@ import ca.floo.roadtrip.client.AspiraException
 import ca.floo.roadtrip.models.aspira.AspiraStatus
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import io.ktor.http.HttpStatusCode
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import java.time.LocalDate
 
 // Provider-specific helpers for Aspira NextGen availability (Parks Canada,
@@ -42,11 +40,11 @@ suspend fun fetchAndClassifyAspira(
     val state = classifyWindowState(perDay)
     val summary = summarizeWindow(days, perDay, state)
     val cacheBlock =
-        buildJsonObject {
-            put("hit", cached.hit)
-            put("age_seconds", cached.ageSeconds)
-            put("ttl_seconds", cached.ttlSeconds)
-        }
+        AvailabilityCacheBlock(
+            hit = cached.hit,
+            ageSeconds = cached.ageSeconds,
+            ttlSeconds = cached.ttlSeconds,
+        )
     return renderAvailabilityJson(
         provider = "aspira",
         today = today,
@@ -56,7 +54,8 @@ suspend fun fetchAndClassifyAspira(
         summary = summary,
         seasonBlock = null, // Aspira doesn't expose reopen-date hints
         cacheBlock = cacheBlock,
-        extras = mapOf("host" to host, "map_id" to mapId.toString()),
+        host = host,
+        mapId = mapId.toString(),
     )
 }
 

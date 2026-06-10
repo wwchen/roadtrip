@@ -2,14 +2,13 @@ package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.json.encodeToJsonElement
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
@@ -76,51 +75,86 @@ fun summarizeWindow(
  *   - `provider`: "recgov" | "aspira" so the FE can pick provider-specific
  *     CTAs without having to keep its own classifier.
  *   - `season`: optional reopen-date hint; only rec.gov surfaces this today.
- *   - Provider-specific extras (recgov: campground_id; aspira: host, map_id)
- *     are added via [extras]. Pure additive — the FE ignores unknown fields.
+ *   - Provider-specific fields (recgov: campground_id; aspira: host, map_id)
+ *     are additive — the FE ignores unknown fields.
  */
-fun renderAvailabilityJson(
+internal fun renderAvailabilityJson(
     provider: String,
     today: LocalDate,
     days: Int,
     perDay: List<DayClassification>,
     state: String,
     summary: String,
-    seasonBlock: JsonObject?,
-    cacheBlock: JsonObject,
-    extras: Map<String, String> = emptyMap(),
+    seasonBlock: AvailabilitySeasonBlock?,
+    cacheBlock: AvailabilityCacheBlock,
+    campgroundId: String? = null,
+    host: String? = null,
+    mapId: String? = null,
 ): String =
-    buildJsonObject {
-        put("provider", provider)
-        for ((k, v) in extras) put(k, v)
-        put("checked_at", Instant.now().toString())
-        put(
-            "window",
-            buildJsonObject {
-                put("start", today.toString())
-                put("days", days)
-            },
-        )
-        put("summary", summary)
-        put("state", state)
-        if (seasonBlock != null) put("season", seasonBlock) else put("season", JsonNull)
-        put(
-            "availability",
-            buildJsonArray {
-                for (d in perDay) {
-                    add(
-                        buildJsonObject {
-                            put("date", d.date)
-                            put("status", d.status)
-                            put("available_count", d.availableCount)
-                            put("total", d.total)
-                        },
+    availabilityResponseJson.encodeToString(
+        AvailabilityResponseDto(
+            provider = provider,
+            campgroundId = campgroundId,
+            host = host,
+            mapId = mapId,
+            checkedAt = Instant.now().toString(),
+            window = AvailabilityWindowDto(start = today.toString(), days = days),
+            summary = summary,
+            state = state,
+            season = seasonBlock?.let { availabilityResponseJson.encodeToJsonElement(it) } ?: JsonNull,
+            availability =
+                perDay.map { day ->
+                    AvailabilityDayDto(
+                        date = day.date,
+                        status = day.status,
+                        availableCount = day.availableCount,
+                        total = day.total,
                     )
-                }
-            },
-        )
-        put("cache", cacheBlock)
-    }.toString()
+                },
+            cache = cacheBlock,
+        ),
+    )
+
+@Serializable
+private data class AvailabilityResponseDto(
+    val provider: String,
+    @SerialName("campground_id") val campgroundId: String? = null,
+    val host: String? = null,
+    @SerialName("map_id") val mapId: String? = null,
+    @SerialName("checked_at") val checkedAt: String,
+    val window: AvailabilityWindowDto,
+    val summary: String,
+    val state: String,
+    val season: JsonElement,
+    val availability: List<AvailabilityDayDto>,
+    val cache: AvailabilityCacheBlock,
+)
+
+@Serializable
+private data class AvailabilityWindowDto(
+    val start: String,
+    val days: Int,
+)
+
+@Serializable
+private data class AvailabilityDayDto(
+    val date: String,
+    val status: String,
+    @SerialName("available_count") val availableCount: Int,
+    val total: Int,
+)
+
+@Serializable
+internal data class AvailabilitySeasonBlock(
+    @SerialName("reopens_on") val reopensOn: String,
+)
+
+@Serializable
+internal data class AvailabilityCacheBlock(
+    val hit: Boolean,
+    @SerialName("age_seconds") val ageSeconds: Long,
+    @SerialName("ttl_seconds") val ttlSeconds: Long,
+)
 
 fun renderAvailabilityErrorJson(
     error: String,
