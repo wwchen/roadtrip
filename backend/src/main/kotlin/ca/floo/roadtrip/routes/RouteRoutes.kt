@@ -3,10 +3,15 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.client.RoutingException
 import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.RouteCorridorRepo
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
@@ -14,6 +19,13 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jooq.DSLContext
 import org.jooq.exception.DataAccessException
+
+@OptIn(ExperimentalSerializationApi::class)
+private val routeJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 /**
  * GET /api/route?coords=lng,lat;lng,lat;...
@@ -34,10 +46,10 @@ fun Route.routeRoutes(
 
     get("/api/route") {
         if (!routeCache.configured) {
-            call.respondText(
-                """{"error":"routing_unavailable","detail":"MAPBOX_TOKEN not set"}""",
-                io.ktor.http.ContentType.Application.Json,
-                HttpStatusCode.ServiceUnavailable,
+            call.respondRouteError(
+                error = "routing_unavailable",
+                detail = "MAPBOX_TOKEN not set",
+                status = HttpStatusCode.ServiceUnavailable,
             )
             return@get
         }
@@ -46,18 +58,18 @@ fun Route.routeRoutes(
         val pieces = raw.split(";").map { it.trim() }.filter { it.isNotEmpty() }
 
         if (pieces.size < 2) {
-            call.respondText(
-                """{"error":"too_few_points","detail":"need >= 2 waypoints in coords=lng,lat;lng,lat[;...]"}""",
-                io.ktor.http.ContentType.Application.Json,
-                HttpStatusCode.BadRequest,
+            call.respondRouteError(
+                error = "too_few_points",
+                detail = "need >= 2 waypoints in coords=lng,lat;lng,lat[;...]",
+                status = HttpStatusCode.BadRequest,
             )
             return@get
         }
         if (pieces.size > MAX_ROUTE_WAYPOINTS) {
-            call.respondText(
-                """{"error":"too_many_points","detail":"max $MAX_ROUTE_WAYPOINTS waypoints"}""",
-                io.ktor.http.ContentType.Application.Json,
-                HttpStatusCode.BadRequest,
+            call.respondRouteError(
+                error = "too_many_points",
+                detail = "max $MAX_ROUTE_WAYPOINTS waypoints",
+                status = HttpStatusCode.BadRequest,
             )
             return@get
         }
@@ -66,28 +78,28 @@ fun Route.routeRoutes(
         for ((i, p) in pieces.withIndex()) {
             val parts = p.split(",")
             if (parts.size != 2) {
-                call.respondText(
-                    """{"error":"bad_coords","detail":"point $i: '$p' is not 'lng,lat'"}""",
-                    io.ktor.http.ContentType.Application.Json,
-                    HttpStatusCode.BadRequest,
+                call.respondRouteError(
+                    error = "bad_coords",
+                    detail = "point $i: '$p' is not 'lng,lat'",
+                    status = HttpStatusCode.BadRequest,
                 )
                 return@get
             }
             val lng = parts[0].toDoubleOrNull()
             val lat = parts[1].toDoubleOrNull()
             if (lng == null || lat == null) {
-                call.respondText(
-                    """{"error":"bad_coords","detail":"point $i: '$p' is not 'lng,lat'"}""",
-                    io.ktor.http.ContentType.Application.Json,
-                    HttpStatusCode.BadRequest,
+                call.respondRouteError(
+                    error = "bad_coords",
+                    detail = "point $i: '$p' is not 'lng,lat'",
+                    status = HttpStatusCode.BadRequest,
                 )
                 return@get
             }
             if (lng !in -180.0..180.0 || lat !in -90.0..90.0) {
-                call.respondText(
-                    """{"error":"out_of_range","detail":"point $i out of lng/lat range"}""",
-                    io.ktor.http.ContentType.Application.Json,
-                    HttpStatusCode.BadRequest,
+                call.respondRouteError(
+                    error = "out_of_range",
+                    detail = "point $i out of lng/lat range",
+                    status = HttpStatusCode.BadRequest,
                 )
                 return@get
             }
@@ -97,16 +109,16 @@ fun Route.routeRoutes(
             call.request.queryParameters["radius_miles"]?.let { rawRadius ->
                 val radius =
                     rawRadius.toDoubleOrNull()
-                        ?: return@get call.respondText(
-                            """{"error":"bad_radius","detail":"radius_miles must be a number"}""",
-                            io.ktor.http.ContentType.Application.Json,
-                            HttpStatusCode.BadRequest,
+                        ?: return@get call.respondRouteError(
+                            error = "bad_radius",
+                            detail = "radius_miles must be a number",
+                            status = HttpStatusCode.BadRequest,
                         )
                 if (radius !in MIN_ROUTE_CORRIDOR_RADIUS_MILES..MAX_ROUTE_CORRIDOR_RADIUS_MILES) {
-                    return@get call.respondText(
-                        """{"error":"bad_radius","detail":"radius_miles must be in [$MIN_ROUTE_CORRIDOR_RADIUS_MILES, $MAX_ROUTE_CORRIDOR_RADIUS_MILES]"}""",
-                        io.ktor.http.ContentType.Application.Json,
-                        HttpStatusCode.BadRequest,
+                    return@get call.respondRouteError(
+                        error = "bad_radius",
+                        detail = "radius_miles must be in [$MIN_ROUTE_CORRIDOR_RADIUS_MILES, $MAX_ROUTE_CORRIDOR_RADIUS_MILES]",
+                        status = HttpStatusCode.BadRequest,
                     )
                 }
                 radius
@@ -115,10 +127,10 @@ fun Route.routeRoutes(
         // Catch it before the round-trip.
         for (i in 1 until coords.size) {
             if (coords[i] == coords[i - 1]) {
-                call.respondText(
-                    """{"error":"duplicate_adjacent","detail":"points $i and ${i - 1} are identical"}""",
-                    io.ktor.http.ContentType.Application.Json,
-                    HttpStatusCode.BadRequest,
+                call.respondRouteError(
+                    error = "duplicate_adjacent",
+                    detail = "points $i and ${i - 1} are identical",
+                    status = HttpStatusCode.BadRequest,
                 )
                 return@get
             }
@@ -128,10 +140,10 @@ fun Route.routeRoutes(
             try {
                 routeCache.directions(coords)
             } catch (e: RoutingException) {
-                call.respondText(
-                    """{"error":"routing_unavailable","detail":"${escapeJson(e.message ?: "")}"}""",
-                    io.ktor.http.ContentType.Application.Json,
-                    HttpStatusCode.ServiceUnavailable,
+                call.respondRouteError(
+                    error = "routing_unavailable",
+                    detail = e.message ?: "",
+                    status = HttpStatusCode.ServiceUnavailable,
                 )
                 return@get
             }
@@ -145,10 +157,10 @@ fun Route.routeRoutes(
                         routeCorridorRadiusMeters(radiusMiles),
                     )
                 } catch (e: DataAccessException) {
-                    call.respondText(
-                        """{"error":"corridor_unavailable","detail":"${escapeJson(e.message ?: "")}"}""",
-                        io.ktor.http.ContentType.Application.Json,
-                        HttpStatusCode.ServiceUnavailable,
+                    call.respondRouteError(
+                        error = "corridor_unavailable",
+                        detail = e.message ?: "",
+                        status = HttpStatusCode.ServiceUnavailable,
                     )
                     return@get
                 }
@@ -232,8 +244,24 @@ fun Route.routeRoutes(
                     },
                 )
             }
-        call.respondText(json.toString(), io.ktor.http.ContentType.Application.Json)
+        call.respondText(json.toString(), ContentType.Application.Json)
     }
 }
 
-private fun escapeJson(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+@Serializable
+private data class RouteErrorDto(
+    val error: String,
+    val detail: String,
+)
+
+private suspend fun ApplicationCall.respondRouteError(
+    error: String,
+    detail: String,
+    status: HttpStatusCode,
+) {
+    respondText(
+        routeJson.encodeToString(RouteErrorDto(error = error, detail = detail)),
+        ContentType.Application.Json,
+        status,
+    )
+}

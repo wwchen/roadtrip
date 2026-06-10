@@ -243,6 +243,23 @@ class PoisOnRouteRoutesTest {
         }
 
     @Test
+    fun `route endpoint returns structured json error for bad quoted coords`() =
+        testApplication {
+            val routeCache = primedRoute(token = "test-token")
+            application { routing { routeRoutes(routeCache, ctx) } }
+
+            val resp = client.get("/api/route?coords=-123.1,49.28%3Bbad%22point")
+
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("bad_coords", parsed["error"]!!.jsonPrimitive.content)
+            assertEquals(
+                "point 1: 'bad\"point' is not 'lng,lat'",
+                parsed["detail"]!!.jsonPrimitive.content,
+            )
+        }
+
+    @Test
     fun `empty corridor returns empty feature list`() =
         testApplication {
             seed(listOf(row("far-east", -100.0, 40.0, "campground")))
