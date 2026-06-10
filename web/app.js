@@ -22,6 +22,7 @@ import {
 import { initSearch, getSearchIndex } from './search.js';
 import { closeDrawer } from './drawer/chrome.js';
 import { initTopbar } from './topbar.js';
+import { fetchViewportPois } from './api/poi-api.js';
 
 const initialKey = getInitialBasemapKey();
 
@@ -375,17 +376,13 @@ async function load() {
     if (!fc) {
       if (inflight) inflight.abort();
       inflight = new AbortController();
-      const poisBody = { bbox: currentBbox, zoom, categories: cats };
-
       try {
-        const poisRes = await fetch('/api/pois', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(poisBody),
+        fc = await fetchViewportPois({
+          bbox: currentBbox,
+          zoom,
+          categories: cats,
           signal: inflight.signal,
         });
-        if (!poisRes.ok) throw new Error(`/api/pois HTTP ${poisRes.status}`);
-        fc = await poisRes.json();
       } catch (err) {
         if (err.name === 'AbortError') return;
         console.error('bbox fetch failed:', err);

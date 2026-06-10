@@ -42,6 +42,8 @@ import {
   normalizeAspira,
   upstreamHTML,
 } from './shared.js';
+import { requestCampsiteAvailability } from '../api/availability-api.js';
+import { requestPoiDetail } from '../api/poi-api.js';
 
 /**
  * Campground-specific drawer. Renders availability for recgov pins and
@@ -108,7 +110,7 @@ async function hydrateFromApi(f, signal) {
   if (f.id == null) return;
   let detail = null;
   try {
-    const r = await fetch(`/api/pois/${encodeURIComponent(f.id)}`, { signal });
+    const r = await requestPoiDetail(f.id, { signal });
     if (!r.ok) {
       // /api/pois/{id} 404 / 5xx — render whatever we already have rather
       // than blocking the user, and let availability still try (some test
@@ -279,13 +281,12 @@ async function fetchAvailability(f, signal) {
   // Single dispatch endpoint keyed by pois.id. Backend reads provider_ref
   // and routes to rec.gov or Aspira NextGen; response shape is the same
   // either way. See CampsiteAvailabilityRoutes.kt.
-  const url = `/api/campsite/availability/${encodeURIComponent(f.id)}?days=30`;
-  await runFetch(url, f, signal);
+  await runFetch(f, signal);
 }
 
-async function runFetch(url, f, signal) {
+async function runFetch(f, signal) {
   try {
-    const resp = await fetch(url, { signal });
+    const resp = await requestCampsiteAvailability(f.id, { days: 30, signal });
     const json = await resp.json().catch(() => null);
 
     // Discard stale response if the user has since selected a different pin.

@@ -23,6 +23,11 @@ import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
 import { openSuperchargerDrawer } from './drawer/supercharger.js';
 import { hydratePoi } from './drawer/shared.js';
+import { fetchBulkAvailability } from './api/availability-api.js';
+import { geocode } from './api/geocode-api.js';
+import { HttpError } from './api/http.js';
+import { fetchOnRoutePois, fetchPoiDetail, searchPois } from './api/poi-api.js';
+import { requestRoute } from './api/directions-api.js';
 import {
   CORRIDOR_DEFAULT_MILES,
   CORRIDOR_MAX_MILES,
@@ -848,16 +853,15 @@ async function runQuery(q) {
   const signal = geocodeAbort.signal;
   const c = mapRef.getCenter();
   const proximity = state.userLocation
-    ? `&proximity=${state.userLocation.lng},${state.userLocation.lat}`
-    : `&proximity=${c.lng.toFixed(4)},${c.lat.toFixed(4)}`;
+    ? `${state.userLocation.lng},${state.userLocation.lat}`
+    : `${c.lng.toFixed(4)},${c.lat.toFixed(4)}`;
 
   // Backend POI search runs in parallel with geocode. The local pinSearch
   // only knows what's been loaded into the current viewport; the backend
   // path lets the user find a POI nationwide (e.g. "upper pines" while
   // looking at the East Coast).
   const [backendPoiResults, geocodeResults] = await Promise.all([
-    fetch(`/api/pois/search?q=${encodeURIComponent(q)}&limit=8`, { signal })
-      .then(r => r.ok ? r.json() : { results: [] })
+    searchPois(q, { limit: 8, signal })
       .then(j => (j.results || []).map(it => ({
         kind: kindForCategory(it.category),
         name: it.name,
@@ -868,8 +872,7 @@ async function runQuery(q) {
         source: 'backend-poi',
       })))
       .catch(e => { if (e.name !== 'AbortError') console.warn('[topbar] poi search failed', e); return []; }),
-    fetch(`/api/geocode?q=${encodeURIComponent(q)}&autocomplete=1&limit=5${proximity}`, { signal })
-      .then(r => r.ok ? r.json() : { results: [] })
+    geocode(q, { autocomplete: true, limit: 5, proximity, signal })
       .then(j => (j.results || []).map(it => ({
         kind: it.place_type === 'address' ? 'ADDR' : 'PLACE',
         name: it.place_name,
@@ -1132,9 +1135,7 @@ function openSharedPoiFeature(detail) {
 async function openPoiById(id) {
   if (id == null || id === '') return;
   try {
-    const r = await fetch(`/api/pois/${encodeURIComponent(id)}`);
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    openSharedPoiFeature(await r.json());
+    openSharedPoiFeature(await fetchPoiDetail(id));
   } catch (e) {
     console.warn('[topbar] shared POI restore failed', e);
     showStatus('Could not open shared POI link.', { error: true });
@@ -1304,25 +1305,19 @@ async function refreshOnRoutePoisNow() {
   onRouteAbort = new AbortController();
   const signal = onRouteAbort.signal;
 
-  const body = {
-    waypoints: trip.stops.map(s => ({ lat: s.lat, lng: s.lng })),
-    radius_miles: trip.corridorMiles,
-    categories: ['campground'],
-  };
   let fc;
   try {
-    const r = await fetch('/api/pois/on-route', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
+    fc = await fetchOnRoutePois({
+      waypoints: trip.stops.map(s => ({ lat: s.lat, lng: s.lng })),
+      radiusMiles: trip.corridorMiles,
+      categories: ['campground'],
       signal,
     });
-    if (!r.ok) {
-      console.warn('[topbar] /api/pois/on-route failed', r.status);
+  } catch (e) {
+    if (e instanceof HttpError) {
+      console.warn('[topbar] /api/pois/on-route failed', e.status);
       return;
     }
-    fc = await r.json();
-  } catch (e) {
     if (e.name !== 'AbortError') console.warn('[topbar] on-route fetch failed', e);
     return;
   }
@@ -1340,11 +1335,13 @@ async function tryFetchRoute() {
   const myGen = ++trip.generation;
   showStatus('Computing route…');
 
-  const coords = trip.stops.map(s => `${s.lng},${s.lat}`).join(';');
-  const url = `/api/route?coords=${encodeURIComponent(coords)}&radius_miles=${encodeURIComponent(String(trip.corridorMiles))}`;
   let r;
   try {
-    r = await fetch(url, { signal: trip.routeAbort.signal });
+    r = await requestRoute({
+      stops: trip.stops,
+      radiusMiles: trip.corridorMiles,
+      signal: trip.routeAbort.signal,
+    });
   } catch (e) {
     if (e.name === 'AbortError') return;
     showStatus('Network error', { error: true });
@@ -2075,14 +2072,12 @@ async function refreshAvailability() {
     // Backend caps each call at 50 ids; chunk so a 200-card corridor still works.
     for (let i = 0; i < ids.length; i += BULK_AVAILABILITY_PAGE) {
       const slice = ids.slice(i, i + BULK_AVAILABILITY_PAGE);
-      const r = await fetch('/api/campsite/availability/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ids: slice, start, nights }),
+      const j = await fetchBulkAvailability({
+        ids: slice,
+        start,
+        nights,
         signal,
       });
-      if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      const j = await r.json();
       for (const entry of j.results || []) {
         if (entry.status === 200) {
           tripResults.availabilityByPoiId.set(Number(entry.id), {
