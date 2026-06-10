@@ -182,15 +182,29 @@ class SettingsRoutesTest {
                 client.post("/api/campsite/settings") {
                     contentType(ContentType.Application.Json)
                     setBody(
-                        """{"slack_token":"$mask","slack_channel":"#new","poll_interval":"30","not_allowed":"x"}""",
+                        """
+                        {
+                          "slack_token":"$mask",
+                          "slack_channel":"#new",
+                          "poll_interval":"30",
+                          "slack_enabled":"true",
+                          "ridb_api_key":"ridb-1",
+                          "not_allowed":"x",
+                          "ignored_by_dto":"compat"
+                        }
+                        """.trimIndent(),
                     )
                 }
             assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(true, body["ok"]?.jsonPrimitive?.boolean)
             // Channel updated, token preserved (sentinel = "leave unchanged"),
             // unknown key dropped.
             assertEquals("#new", settings.get("slack_channel"))
             assertEquals("xoxb-existing", settings.get("slack_token"))
             assertEquals("30", settings.get("poll_interval"))
+            assertEquals("true", settings.get("slack_enabled"))
+            assertEquals("ridb-1", settings.get("ridb_api_key"))
             assertTrue(settings.get("not_allowed").isNullOrEmpty())
         }
 
@@ -262,8 +276,30 @@ class SettingsRoutesTest {
             }
             val resp = client.post("/api/campsite/settings/test-slack")
             assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(true, body["ok"]?.jsonPrimitive?.boolean)
             assertEquals(1, slack.captured.size)
             assertTrue(slack.captured[0].contains("\"channel\":\"#saved\""))
+        }
+
+    @Test
+    fun `test-slack can use candidate creds from dto body without persisting`() =
+        testApplication {
+            val settings = FakeSettings(mapOf("slack_token" to "xoxb-saved", "slack_channel" to "#saved"))
+            val slack = FakeSlack(respondOk = true)
+            application {
+                routing { settingsRoutes(settings, SlackNotifier(settings, slack.client)) }
+            }
+            val resp =
+                client.post("/api/campsite/settings/test-slack") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"slack_token":"xoxb-candidate","slack_channel":"#candidate","ignored_by_dto":"compat"}""")
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            assertEquals(1, slack.captured.size)
+            assertTrue(slack.captured[0].contains("\"channel\":\"#candidate\""))
+            assertEquals("xoxb-saved", settings.get("slack_token"))
+            assertEquals("#saved", settings.get("slack_channel"))
         }
 
     @Test
@@ -276,6 +312,8 @@ class SettingsRoutesTest {
             }
             val resp = client.post("/api/campsite/settings/test-slack")
             assertEquals(HttpStatusCode.InternalServerError, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("Slack error: invalid_auth", body["error"]?.jsonPrimitive?.content)
             // Even on failure the saved creds must not be clobbered.
             assertEquals("xoxb-saved", settings.get("slack_token"))
         }
@@ -289,6 +327,8 @@ class SettingsRoutesTest {
             }
             val resp = client.post("/api/campsite/settings/test-slack")
             assertEquals(HttpStatusCode.InternalServerError, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("slack_token not configured", body["error"]?.jsonPrimitive?.content)
         }
 
     @Test
