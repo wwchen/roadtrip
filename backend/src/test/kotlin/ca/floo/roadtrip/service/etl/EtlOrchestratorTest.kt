@@ -1,10 +1,16 @@
 package ca.floo.roadtrip.service.etl
 
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
+import ca.floo.roadtrip.models.Poi
+import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.repo.Upsert
 import ca.floo.roadtrip.repo.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
@@ -16,6 +22,7 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import java.io.File
 import java.nio.file.Files
+import java.time.Instant
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 
@@ -127,5 +134,51 @@ class EtlOrchestratorTest {
         assertNotNull(sample)
         assertEquals("planet-fitness", sample.value2())
         assertEquals("US", sample.value3())
+    }
+
+    @Test
+    fun `campground provider refs are serialized with json dto escaping`() {
+        Upsert(ctx).run(
+            sources = setOf("provider-ref-test"),
+            pois =
+                listOf(
+                    Poi.Campground(
+                        source = "provider-ref-test",
+                        sourceId = "quoted-recgov",
+                        name = "Quoted RecGov Campground",
+                        geomGeoJson = """{"type":"Point","coordinates":[-123.1,49.2]}""",
+                        region = "BC",
+                        country = "CA",
+                        phone = null,
+                        address = null,
+                        infoUrl = null,
+                        fetchedAt = Instant.parse("2026-01-01T00:00:00Z"),
+                        lastVerified = null,
+                        providerRef = ProviderRef.RecGov("""12"345"""),
+                        amenities = emptyList(),
+                        activities = emptyList(),
+                        sites = null,
+                        season = null,
+                        near = null,
+                        photoUrl = null,
+                        cellCoverage = null,
+                        ratingReviews = null,
+                        subcategory = "federal",
+                        agency = null,
+                    ),
+                ),
+        )
+
+        val providerRef =
+            ctx
+                .select(POIS.PROVIDER_REF)
+                .from(POIS)
+                .where(POIS.SOURCE.eq("provider-ref-test"))
+                .and(POIS.SOURCE_ID.eq("quoted-recgov"))
+                .fetchOne(POIS.PROVIDER_REF)
+        assertNotNull(providerRef)
+
+        val providerRefJson = Json.parseToJsonElement(providerRef.data()).jsonObject
+        assertEquals("""12"345""", providerRefJson["recgov_id"]!!.jsonPrimitive.content)
     }
 }
