@@ -4,6 +4,7 @@ import ca.floo.roadtrip.models.aspira.AspiraStatus
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -169,6 +170,7 @@ class AspiraException(
  * each sub-area's daily-status array by its `childMapId` (string for JSON
  * compatibility — Aspira returns negative ints as object keys).
  */
+@Serializable
 data class AspiraAvailability(
     val mapId: Int,
     val parkRollup: List<Int>,

@@ -1,6 +1,7 @@
 package ca.floo.campsite.recgov.booker.availability
 
 import ca.floo.campsite.recgov.booker.poller.Campsite
+import ca.floo.roadtrip.repo.InMemoryPersistentCache
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -55,6 +56,38 @@ class CachedAvailabilityTest {
             assertEquals(false, a.hit)
             val b = cache.get("recgov", "232447", "2026-07-01")
             assertEquals(true, b.hit)
+            assertEquals(1, calls.get())
+        }
+
+    @Test
+    fun `persistent cache survives cache instance restart`() =
+        runBlocking {
+            val calls = AtomicInteger(0)
+            val persistentCache = InMemoryPersistentCache()
+            val first =
+                CachedAvailability(
+                    fetchMonth = { _, _ ->
+                        calls.incrementAndGet()
+                        fakeMap()
+                    },
+                    ttl = Duration.ofMinutes(10),
+                    persistentCache = persistentCache,
+                )
+            first.get("recgov", "232447", "2026-07-01")
+
+            val second =
+                CachedAvailability(
+                    fetchMonth = { _, _ ->
+                        calls.incrementAndGet()
+                        emptyMap()
+                    },
+                    ttl = Duration.ofMinutes(10),
+                    persistentCache = persistentCache,
+                )
+            val restored = second.get("recgov", "232447", "2026-07-01")
+
+            assertEquals(true, restored.hit)
+            assertEquals(fakeMap(), restored.data)
             assertEquals(1, calls.get())
         }
 

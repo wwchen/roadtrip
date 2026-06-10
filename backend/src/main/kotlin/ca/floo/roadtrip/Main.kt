@@ -6,6 +6,7 @@ import ca.floo.roadtrip.client.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.client.MapboxGeocoder
 import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.RouteCache
@@ -58,7 +59,8 @@ fun Application.module() {
     // safe whether the DB was hand-bootstrapped or fresh.
     migrate(ds)
     val ctx = dsl(ds)
-    val campsite = campsiteModule(ctx)
+    val persistentCache = ApiCacheRepo(ctx)
+    val campsite = campsiteModule(ctx, persistentCache)
 
     // ROADTRIP_STATIC_DIR points at the repo checkout when running locally
     // (gradle run) or at /app/static inside the container (bind-mounted from
@@ -76,7 +78,7 @@ fun Application.module() {
     // /api/route seeds the cache; /api/pois/on-route reads it for corridor
     // filtering so the FE doesn't have to ship a turf.buffer polygon over
     // the wire. See RouteCache.kt.
-    val routeCache = RouteCache(mapboxDirections)
+    val routeCache = RouteCache(mapboxDirections, persistentCache = persistentCache)
 
     // POI registry — config/poi-registry.yaml is the source of truth for
     // the per-data_source fetch recipes and the per-poi_data ETL chains.
@@ -184,7 +186,11 @@ fun Application.module() {
     // Same pattern as rec.gov's CachedAvailability — process-wide singleton with
     // a 10-min TTL and a 1.5s mutex against Aspira's Azure WAF. See
     // ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
-    val aspiraCache = CachedAspiraAvailability(AspiraAvailabilityClient())
+    val aspiraCache =
+        CachedAspiraAvailability(
+            AspiraAvailabilityClient(),
+            persistentCache = persistentCache,
+        )
 
     routing {
         // /api/docs — Swagger UI; /api/docs/openapi.json — the spec it loads.
