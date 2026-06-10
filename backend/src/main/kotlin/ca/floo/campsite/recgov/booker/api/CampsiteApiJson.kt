@@ -64,6 +64,19 @@ internal data class ErrorDto(
 )
 
 @Serializable
+internal data class StatusDto(
+    val recgovReachable: Boolean,
+    val loggedIn: Boolean,
+    val checkedAt: String,
+)
+
+@Serializable
+internal data class PollResponseDto(
+    val ok: Boolean = true,
+    val message: String,
+)
+
+@Serializable
 internal data class AlertCreateRequestDto(
     @SerialName("campground_id") val campgroundId: String? = null,
     @SerialName("campground_name") val campgroundName: String? = null,
