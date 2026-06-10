@@ -28,14 +28,14 @@ fun Route.alertRoutes(
     eventDriven: Boolean = false,
 ) {
     get("/api/campsite/alerts", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-alerts")
         summary = "List every recreation.gov alert (any status)"
     }) {
         call.respondText(JsonArray(alerts.list().map { alertJson(it) }).toString())
     }
 
     post("/api/campsite/alerts", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-alerts")
         summary = "Create a new alert; triggers an immediate poll"
     }) {
         val body = parseJson(call.receiveText())
@@ -79,7 +79,7 @@ fun Route.alertRoutes(
     }
 
     patch("/api/campsite/alerts/{id}", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-alerts")
         summary = "Patch one or more alert fields (status, dates, party size, …)"
     }) {
         val id =
@@ -111,7 +111,7 @@ fun Route.alertRoutes(
     }
 
     delete("/api/campsite/alerts/{id}", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-alerts")
         summary = "Hard-delete an alert and stop its poll job"
     }) {
         val id =

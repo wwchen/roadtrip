@@ -15,6 +15,8 @@ import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
 import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.CampsiteProviderRefRow
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.service.api.availableDatesAspira
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspira
 import ca.floo.roadtrip.service.api.mapAspiraUpstreamError
@@ -36,7 +38,6 @@ import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -62,7 +63,7 @@ private const val MAX_NIGHTS = 14
  * `/api/campsite/availability-aspira/{tx}/{mapId}` routes — those are gone.
  */
 fun Route.campsiteAvailabilityRoutes(
-    ctx: DSLContext,
+    providerRefs: CampsiteProviderRepo,
     recgovCache: CachedAvailability,
     aspiraCache: CachedAspiraAvailability,
     registry: PoiRegistry,
@@ -71,7 +72,7 @@ fun Route.campsiteAvailabilityRoutes(
     val aspiraHostBySource = registry.aspiraHostBySource()
 
     get("/api/campsite/availability/{poi_id}", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-availability")
         summary = "Per-day availability for one campground (cached, provider-dispatched)"
         description =
             "Path key is `pois.id`. Backend reads `provider_ref` from the row to dispatch " +
@@ -109,7 +110,7 @@ fun Route.campsiteAvailabilityRoutes(
             return@get
         }
 
-        val row = lookupProviderRef(ctx, poiId)
+        val row = providerRefs.findProviderRef(poiId)
         if (row == null) {
             call.respondText(
                 """{"state":"error","error":"unknown_campground"}""",
@@ -118,8 +119,7 @@ fun Route.campsiteAvailabilityRoutes(
             )
             return@get
         }
-        val (source, providerRefJson) = row
-        val variant = parseProviderRef(providerRefJson)
+        val variant = parseProviderRef(row.providerRefJson)
         if (variant == null) {
             // Camis or no provider_ref. The drawer's hasAvailability gate
             // should prevent this from being called for non-bookable rows;
@@ -142,9 +142,9 @@ fun Route.campsiteAvailabilityRoutes(
                     is ProviderVariant.RecGov ->
                         fetchAndClassifyRecgov(recgovCache, variant.recgovId, today, days, months, force)
                     is ProviderVariant.Aspira -> {
-                        val host = aspiraHostBySource[source]
+                        val host = aspiraHostBySource[row.source]
                         if (host == null) {
-                            log.warn("aspira poi {} has source={} with no host mapping", poiId, source)
+                            log.warn("aspira poi {} has source={} with no host mapping", poiId, row.source)
                             call.respondText(
                                 """{"state":"error","error":"unknown_aspira_host"}""",
                                 ContentType.Application.Json,
@@ -180,7 +180,7 @@ fun Route.campsiteAvailabilityRoutes(
     // of the call still succeeds. Mixed providers in one call are fine —
     // each id is dispatched by its own provider_ref.
     post("/api/campsite/availability/bulk", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-availability")
         summary = "Bulk per-day availability for many campgrounds in a date window (poi-id keyed)"
         description =
             "Body: { ids: number[], start: 'YYYY-MM-DD', nights: 1..$MAX_NIGHTS }. " +
@@ -276,7 +276,7 @@ fun Route.campsiteAvailabilityRoutes(
 
         // One DB hit for the whole batch — pull (id, source, provider_ref) for
         // every requested id at once. Missing ids surface as status:404.
-        val rowsById = lookupProviderRefs(ctx, req.ids)
+        val rowsById = providerRefs.findProviderRefs(req.ids)
 
         val results =
             coroutineScope {
@@ -311,7 +311,7 @@ fun Route.campsiteAvailabilityRoutes(
 
 private suspend fun fetchOneBulk(
     poiId: Long,
-    row: Pair<String, String>?,
+    row: CampsiteProviderRefRow?,
     aspiraHostBySource: Map<String, String>,
     recgovCache: CachedAvailability,
     aspiraCache: CachedAspiraAvailability,
@@ -321,9 +321,8 @@ private suspend fun fetchOneBulk(
     if (row == null) {
         return BulkAvailEntrySchema(id = poiId, status = 404, available_dates = emptyList())
     }
-    val (source, providerRefJson) = row
     val variant =
-        parseProviderRef(providerRefJson)
+        parseProviderRef(row.providerRefJson)
             ?: return BulkAvailEntrySchema(id = poiId, status = 422, available_dates = emptyList())
 
     return try {
@@ -332,9 +331,9 @@ private suspend fun fetchOneBulk(
                 is ProviderVariant.RecGov ->
                     availableDatesRecgov(recgovCache, variant.recgovId, start, nights)
                 is ProviderVariant.Aspira -> {
-                    val host = aspiraHostBySource[source]
+                    val host = aspiraHostBySource[row.source]
                     if (host == null) {
-                        log.warn("aspira poi {} has source={} with no host mapping", poiId, source)
+                        log.warn("aspira poi {} has source={} with no host mapping", poiId, row.source)
                         return BulkAvailEntrySchema(id = poiId, status = 500, available_dates = emptyList())
                     }
                     availableDatesAspira(aspiraCache, host, variant.mapId, start, nights)
@@ -349,56 +348,6 @@ private suspend fun fetchOneBulk(
         val status = if (e.message?.contains("429") == true) 429 else 503
         BulkAvailEntrySchema(id = poiId, status = status, available_dates = emptyList())
     }
-}
-
-/** (source, provider_ref::text) for a single poi_id, or null when not found / not a campground. */
-private fun lookupProviderRef(
-    ctx: DSLContext,
-    poiId: Long,
-): Pair<String, String>? {
-    val rec =
-        ctx
-            .fetchOne(
-                """
-                SELECT source, provider_ref::text AS pref
-                FROM pois
-                WHERE id = ?
-                  AND deleted_at IS NULL
-                  AND category = 'campground'
-                """.trimIndent(),
-                poiId,
-            ) ?: return null
-    val source = rec.get("source") as String
-    val pref = rec.get("pref") as String? ?: return null
-    return source to pref
-}
-
-/** Same as [lookupProviderRef] but for a batch — one DB round-trip. */
-private fun lookupProviderRefs(
-    ctx: DSLContext,
-    ids: List<Long>,
-): Map<Long, Pair<String, String>> {
-    if (ids.isEmpty()) return emptyMap()
-    // Build (?,?,?) placeholders. jOOQ's `inline` would be simpler but we
-    // keep parameterized for safety.
-    val placeholders = ids.joinToString(",") { "?" }
-    val sql =
-        """
-        SELECT id, source, provider_ref::text AS pref
-        FROM pois
-        WHERE id IN ($placeholders)
-          AND deleted_at IS NULL
-          AND category = 'campground'
-          AND provider_ref IS NOT NULL
-        """.trimIndent()
-    val out = mutableMapOf<Long, Pair<String, String>>()
-    for (r in ctx.fetch(sql, *ids.toTypedArray())) {
-        val id = (r.get("id") as Number).toLong()
-        val source = r.get("source") as String
-        val pref = r.get("pref") as String? ?: continue
-        out[id] = source to pref
-    }
-    return out
 }
 
 /**

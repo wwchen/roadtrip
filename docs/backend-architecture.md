@@ -20,7 +20,7 @@ models  →  (stdlib + serialization only)
 
 | Layer    | What lives here                                                                       | Depends on                                            |
 | -------- | ------------------------------------------------------------------------------------- | ----------------------------------------------------- |
-| `models` | Data classes, sealed types, validation results, request/response DTOs, upstream wire DTOs. **Pure types — no logic.** | stdlib + kotlinx.serialization + jOOQ generated types |
+| `models` | Data classes, sealed types, validation results, request/response DTOs, upstream wire DTOs. **Pure types — no logic.** Prefer these DTOs over hand-built JSON. | stdlib + kotlinx.serialization + jOOQ generated types |
 | `repo`   | Persistence + raw-capture I/O. SQL via jOOQ, filesystem reads/writes. **No HTTP, no business logic.** | `models`, `db`                                        |
 | `client` | Outbound network calls (Mapbox, Aspira availability, third-party APIs). **No DB, no HTTP routes.** | `models`                                              |
 | `service`| Business logic. ETL transforms, query composition, cache fall-through, corridor math. **No Ktor types, no SQL strings.** | `models`, `repo`, `client`                            |
@@ -220,6 +220,12 @@ because every ETL is `f(inputs) → output`.
 
 - **`routes` touching jOOQ or SQL strings.** Means business logic
   leaked into the HTTP shell. Push it into a service.
+- **SQL outside `repo`.** Raw SQL strings, jOOQ DSL query construction,
+  generated table references, and record mapping belong in repo classes.
+  Routes/services should call named repo methods.
+- **Hand-built route JSON.** If a route returns structured JSON, model the
+  shape as a typed DTO (`@Serializable` data class or existing schema class)
+  and serialize that instead of concatenating strings.
 - **`repo` knowing what an HTTP request looks like.** Means request
   parsing leaked downward. Repos take primitives + value types.
 - **`service` building Ktor responses.** Same problem from the other

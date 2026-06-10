@@ -1,6 +1,8 @@
 package ca.floo.campsite.recgov.booker.api
 
+import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
+import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.mock.MockEngine
@@ -16,6 +18,9 @@ import io.ktor.http.contentType
 import io.ktor.http.headersOf
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
@@ -28,14 +33,9 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
- * SettingsRoutes is the surface the onboarding wizard hits — sentinel masking
- * on GET, candidate creds on test-slack, cookie-paste extraction on
- * test-cookies, and clear-session. These tests stub SettingsRepo + the Slack
- * client so we don't need a Postgres container or a real Slack workspace.
- *
- * The TokenManager-dependent paths (refresh-token, test-chrome with expired
- * token) are not covered here on purpose; they're better tested where
- * TokenManager itself lives.
+ * SettingsRoutes and bookingSessionRoutes are the surface the onboarding
+ * wizard hits. These tests stub SettingsRepo + the Slack client so we don't
+ * need a Postgres container or a real Slack workspace.
  */
 class SettingsRoutesTest {
     private val mask = "••••••••"
@@ -102,6 +102,13 @@ class SettingsRoutesTest {
                 .encodeToString("""{"exp":$exp,"acct":{"account_id":"acct-1","email":"a@b.c"}}""".toByteArray())
         return "$header.$body.sig"
     }
+
+    private fun tokenManager(settings: FakeSettings): TokenManager =
+        TokenManager(
+            settings,
+            EventBus(),
+            CoroutineScope(SupervisorJob() + Dispatchers.Default),
+        )
 
     @Test
     fun `GET masks recgov_token, slack_token, cookies but echoes plain settings`() =
@@ -188,34 +195,34 @@ class SettingsRoutesTest {
         }
 
     @Test
-    fun `POST recgov_cookies extracts bearer token from a cURL paste`() =
+    fun `booking session import extracts bearer token from a cURL paste`() =
         testApplication {
             val settings = FakeSettings()
             application {
-                routing { settingsRoutes(settings, SlackNotifier(settings, FakeSlack().client)) }
+                routing { bookingSessionRoutes(settings, tokenManager(settings)) }
             }
             val token = fakeJwt(3600)
             val curl = """curl 'https://x' -H 'Authorization: Bearer $token' -H 'Cookie: a=1; b=2'"""
             val resp =
-                client.post("/api/campsite/settings") {
+                client.post("/api/campsite/booking/session/import") {
                     contentType(ContentType.Application.Json)
-                    setBody(buildJson("recgov_cookies", curl))
+                    setBody(buildJson("raw", curl))
                 }
             assertEquals(HttpStatusCode.OK, resp.status)
             assertEquals(token, settings.get("recgov_token"))
         }
 
     @Test
-    fun `test-cookies happy path returns loggedIn + token expiry`() =
+    fun `booking session import happy path returns loggedIn + token expiry`() =
         testApplication {
             val settings = FakeSettings()
             application {
-                routing { settingsRoutes(settings, SlackNotifier(settings, FakeSlack().client)) }
+                routing { bookingSessionRoutes(settings, tokenManager(settings)) }
             }
             val token = fakeJwt(3600)
             val curl = """curl 'https://x' -H 'Authorization: Bearer $token' -H 'Cookie: a=1; b=2'"""
             val resp =
-                client.post("/api/campsite/settings/test-cookies") {
+                client.post("/api/campsite/booking/session/import") {
                     contentType(ContentType.Application.Json)
                     setBody(buildJson("raw", curl))
                 }
@@ -228,14 +235,14 @@ class SettingsRoutesTest {
         }
 
     @Test
-    fun `test-cookies on empty input returns loggedIn=false without writing settings`() =
+    fun `booking session import on empty input returns loggedIn=false without writing settings`() =
         testApplication {
             val settings = FakeSettings()
             application {
-                routing { settingsRoutes(settings, SlackNotifier(settings, FakeSlack().client)) }
+                routing { bookingSessionRoutes(settings, tokenManager(settings)) }
             }
             val resp =
-                client.post("/api/campsite/settings/test-cookies") {
+                client.post("/api/campsite/booking/session/import") {
                     contentType(ContentType.Application.Json)
                     setBody("""{}""")
                 }
@@ -297,9 +304,9 @@ class SettingsRoutesTest {
                     ),
                 )
             application {
-                routing { settingsRoutes(settings, SlackNotifier(settings, FakeSlack().client)) }
+                routing { bookingSessionRoutes(settings, tokenManager(settings)) }
             }
-            val resp = client.post("/api/campsite/settings/clear-session")
+            val resp = client.post("/api/campsite/booking/session/clear")
             assertEquals(HttpStatusCode.OK, resp.status)
             assertEquals("", settings.get("recgov_token"))
             assertEquals("", settings.get("recgov_refresh_creds"))
@@ -309,40 +316,39 @@ class SettingsRoutesTest {
         }
 
     @Test
-    fun `test-chrome without a saved token returns loggedIn=false`() =
+    fun `booking session validate without a saved token returns loggedIn=false`() =
         testApplication {
             val settings = FakeSettings()
             application {
-                routing { settingsRoutes(settings, SlackNotifier(settings, FakeSlack().client)) }
+                routing { bookingSessionRoutes(settings, tokenManager(settings)) }
             }
-            val resp = client.post("/api/campsite/settings/test-chrome")
+            val resp = client.post("/api/campsite/booking/session/validate")
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(false, body["loggedIn"]?.jsonPrimitive?.boolean)
         }
 
     @Test
-    fun `test-chrome with a fresh token returns loggedIn=true without touching tokenManager`() =
+    fun `booking session validate with a fresh token returns loggedIn=true`() =
         testApplication {
-            // tokenManager is null — handler must not reach the refresh path.
             val settings = FakeSettings(mapOf("recgov_token" to fakeJwt(3600)))
             application {
-                routing { settingsRoutes(settings, SlackNotifier(settings, FakeSlack().client)) }
+                routing { bookingSessionRoutes(settings, tokenManager(settings)) }
             }
-            val resp = client.post("/api/campsite/settings/test-chrome")
+            val resp = client.post("/api/campsite/booking/session/validate")
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(true, body["loggedIn"]?.jsonPrimitive?.boolean)
             assertEquals(false, body["tokenExpired"]?.jsonPrimitive?.boolean)
         }
 
     @Test
-    fun `refresh-token returns 500 when no token manager is wired`() =
+    fun `booking session refresh without saved creds returns 400`() =
         testApplication {
             val settings = FakeSettings()
             application {
-                routing { settingsRoutes(settings, SlackNotifier(settings, FakeSlack().client)) }
+                routing { bookingSessionRoutes(settings, tokenManager(settings)) }
             }
-            val resp = client.post("/api/campsite/settings/refresh-token")
-            assertEquals(HttpStatusCode.InternalServerError, resp.status)
+            val resp = client.post("/api/campsite/booking/session/refresh")
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
         }
 
     private fun buildJson(

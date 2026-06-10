@@ -123,8 +123,8 @@ el('onboarding-recgov-validate').addEventListener('click', async () => {
   result.textContent = 'Validating…';
   result.style.color = 'var(--text3)';
   try {
-    // test-cookies persists what it parses, so a successful validate also saves.
-    const r = await api('POST', '/api/campsite/settings/test-cookies', { raw });
+    // Session import persists what it parses, so a successful validate also saves.
+    const r = await api('POST', '/api/campsite/booking/session/import', { raw });
     if (r.loggedIn) {
       const exp = r.tokenExpires ? new Date(r.tokenExpires).toLocaleString() : 'unknown';
       result.textContent = `✓ Connected, token valid until ${exp}`;

@@ -54,7 +54,7 @@ sealed interface CampsiteEvent {
 
     /**
      * Internal-only signal: "the set of pickable matches for this alert may
-     * have changed; companion should re-check via /api/campsite/work/next."
+     * have changed; companion should re-check via /api/campsite/companion/work/next."
      * No SSE projection — this is a backend → companion hint that piggybacks
      * on the existing match/result/lease_expired wire events for wakeup.
      *

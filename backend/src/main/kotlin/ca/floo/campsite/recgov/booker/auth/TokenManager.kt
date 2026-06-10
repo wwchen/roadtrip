@@ -96,7 +96,7 @@ class TokenManager(
     /** Like [getFreshToken] but returns the recaccount-shaped JSON. */
     suspend fun getFreshRecaccount(): JsonObject? = withFresh()
 
-    /** Drop the in-memory cache. Called by SettingsRoutes /clear-session after wiping the persisted token. */
+    /** Drop the in-memory cache after the booking-session clear endpoint wipes the persisted token. */
     fun clearCache() {
         cachedRecaccount = null
     }
@@ -112,7 +112,7 @@ class TokenManager(
         cachedRecaccount = if (token.isNotEmpty()) RecgovAuth.buildRecaccountFromToken(token) else null
     }
 
-    /** Explicit refresh, ignoring the freshness threshold. Used by SettingsRoutes /refresh-token. */
+    /** Explicit refresh, ignoring the freshness threshold. Used by the booking-session refresh endpoint. */
     suspend fun refreshNow(): RefreshResult =
         mutex.withLock {
             val token = currentToken() ?: return RefreshResult.NoToken

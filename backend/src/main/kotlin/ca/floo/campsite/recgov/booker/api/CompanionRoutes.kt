@@ -28,7 +28,7 @@ fun Route.companionRoutes(
     bus: EventBus,
 ) {
     post("/api/campsite/companion/heartbeat", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-companion")
         summary = "Heartbeat from a Playwright companion; flips offline → online"
     }) {
         val body = call.receiveText()
@@ -43,7 +43,7 @@ fun Route.companionRoutes(
     }
 
     get("/api/campsite/companion/status", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-companion")
         summary = "List registered companions and their last-seen / offline state"
     }) {
         val list =

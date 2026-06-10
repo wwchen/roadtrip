@@ -1,13 +1,11 @@
 package ca.floo.campsite.recgov.booker.api
 
-import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.request.receiveText
-import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.json.buildJsonObject
@@ -18,10 +16,9 @@ private const val MASK = "••••••••"
 fun Route.settingsRoutes(
     settings: SettingsRepo,
     slack: SlackNotifier,
-    tokenManager: TokenManager? = null,
 ) {
     get("/api/campsite/settings", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-settings")
         summary = "All campsite settings (masked); includes recgov_token expiry info"
     }) {
         val all = settings.all()
@@ -45,7 +42,7 @@ fun Route.settingsRoutes(
     }
 
     post("/api/campsite/settings", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-settings")
         summary = "Upsert one or more settings keys; preserves masked values when sent"
     }) {
         val body = parseJson(call.receiveText())
@@ -57,18 +54,12 @@ fun Route.settingsRoutes(
             if (v == MASK) continue
             updates[key] = v
         }
-        // recgov_cookies is a write-only field: parse it server-side and store
-        // the extracted token + refresh creds, never the raw paste.
-        body.string("recgov_cookies")?.takeIf { it.isNotEmpty() && it != MASK }?.let { raw ->
-            applyCookiePaste(settings, raw)
-            tokenManager?.reloadFromSettings()
-        }
         if (updates.isNotEmpty()) settings.setMany(updates)
         call.respondText("""{"ok":true}""")
     }
 
     post("/api/campsite/settings/test-slack", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-settings")
         summary = "Send a test message to the configured Slack webhook"
     }) {
         // Accepts optional {slack_token, slack_channel} in the body so the
@@ -81,162 +72,7 @@ fun Route.settingsRoutes(
             slack.sendTest(candidateToken, candidateChannel)
             call.respondText("""{"ok":true}""")
         } catch (e: Exception) {
-            call.respond(HttpStatusCode.InternalServerError, """{"error":"${e.message}"}""")
+            call.respondText("""{"error":"${e.message}"}""", status = HttpStatusCode.InternalServerError)
         }
     }
-
-    // Pure-parsing health check on a pasted cURL / recaccount JSON / cookie
-    // string. Saves whatever it can extract (Bearer token + refresh creds);
-    // does not hit recreation.gov. Returns counts the UI uses to render
-    // ✓/✗ next to the textarea.
-    post("/api/campsite/settings/test-cookies", {
-        tags = listOf("campsite")
-        summary = "Probe rec.gov with the saved cookies; reports loggedIn + token state"
-    }) {
-        val body = parseJson(call.receiveText())
-        val raw = body.string("raw").orEmpty()
-        if (raw.isEmpty()) {
-            call.respondText("""{"loggedIn":false,"count":0,"hasBearer":false,"error":"empty input"}""")
-            return@post
-        }
-
-        applyCookiePaste(settings, raw)
-        tokenManager?.reloadFromSettings()
-
-        val token = settings.get("recgov_token").orEmpty()
-        val info = RecgovAuth.tokenInfo(token)
-        val cookieStr = RecgovAuth.extractCookies(raw)
-        val count = RecgovAuth.countCookies(cookieStr)
-        val hasBearer = token.isNotEmpty()
-        val loggedIn = hasBearer && !info.expired
-        val resp =
-            buildJsonObject {
-                put("loggedIn", loggedIn)
-                put("count", count)
-                put("hasBearer", hasBearer)
-                info.expires?.let { put("tokenExpires", it.toString()) }
-                put("tokenExpired", info.expired)
-            }
-        call.respondText(resp.toString())
-    }
-
-    // "Test browser session" — repurposed: validate the stored token, and if
-    // it's expired but we have refresh creds, mint a fresh one. No browser.
-    // Delegates to TokenManager so all refresh paths share one mutex.
-    post("/api/campsite/settings/test-chrome", {
-        tags = listOf("campsite")
-        summary = "Spawn the Playwright companion to validate end-to-end auth"
-    }) {
-        val token = settings.get("recgov_token").orEmpty()
-        if (token.isEmpty()) {
-            call.respondText("""{"loggedIn":false,"error":"no token saved"}""")
-            return@post
-        }
-
-        val info = RecgovAuth.tokenInfo(token)
-        if (!info.expired) {
-            val resp =
-                buildJsonObject {
-                    put("loggedIn", true)
-                    info.expires?.let { put("tokenExpires", it.toString()) }
-                    put("tokenExpired", false)
-                }
-            call.respondText(resp.toString())
-            return@post
-        }
-
-        val mgr = tokenManager
-        if (mgr == null) {
-            call.respondText("""{"loggedIn":false,"tokenExpired":true,"error":"token manager not wired"}""")
-            return@post
-        }
-        when (val r = mgr.refreshNow()) {
-            is TokenManager.RefreshResult.Ok -> {
-                val resp =
-                    buildJsonObject {
-                        put("loggedIn", true)
-                        (r.recaccount["expiration"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.let {
-                            put("tokenExpires", it)
-                        }
-                        put("tokenExpired", false)
-                        put("refreshed", true)
-                    }
-                call.respondText(resp.toString())
-            }
-            is TokenManager.RefreshResult.NoCreds ->
-                call.respondText("""{"loggedIn":false,"tokenExpired":true,"error":"token expired and no refresh creds saved"}""")
-            is TokenManager.RefreshResult.NoToken ->
-                call.respondText("""{"loggedIn":false,"error":"no token saved"}""")
-            is TokenManager.RefreshResult.Failed ->
-                call.respondText("""{"loggedIn":false,"tokenExpired":true,"error":"${r.reason}"}""")
-        }
-    }
-
-    post("/api/campsite/settings/refresh-token", {
-        tags = listOf("campsite")
-        summary = "Force a rec.gov JWT refresh now (out-of-band from the scheduler)"
-    }) {
-        // Delegates to TokenManager so SettingsRoutes and the scheduler-fired
-        // TokenRefreshDue handler share one mutex'd refresh path. Returns
-        // synchronously — the UI button needs the answer.
-        val mgr = tokenManager
-        if (mgr == null) {
-            call.respond(HttpStatusCode.InternalServerError, """{"error":"token manager not wired"}""")
-            return@post
-        }
-        when (val r = mgr.refreshNow()) {
-            is TokenManager.RefreshResult.Ok -> {
-                val resp =
-                    buildJsonObject {
-                        put("ok", true)
-                        (r.recaccount["expiration"] as? kotlinx.serialization.json.JsonPrimitive)?.content?.let {
-                            put("expires", it)
-                        }
-                    }
-                call.respondText(resp.toString())
-            }
-            is TokenManager.RefreshResult.NoToken,
-            is TokenManager.RefreshResult.NoCreds,
-            -> call.respond(HttpStatusCode.BadRequest, """{"error":"no token or refresh creds saved"}""")
-            is TokenManager.RefreshResult.Failed ->
-                call.respond(HttpStatusCode.BadGateway, """{"error":"${r.reason}"}""")
-        }
-    }
-
-    post("/api/campsite/settings/clear-session", {
-        tags = listOf("campsite")
-        summary = "Wipe saved cookies + token; the next refresh has to bootstrap from cURL"
-    }) {
-        settings.setMany(
-            mapOf(
-                "recgov_token" to "",
-                "recgov_refresh_creds" to "",
-                "recgov_cookies" to "",
-            ),
-        )
-        tokenManager?.clearCache()
-        call.respondText("""{"ok":true}""")
-    }
-}
-
-/**
- * Parse a cURL trace, recaccount JSON, or raw cookie string and persist
- * whatever recreation.gov auth bits we can extract. Same logic both endpoints
- * use, so write-once paths agree.
- */
-private fun applyCookiePaste(
-    settings: SettingsRepo,
-    raw: String,
-) {
-    val updates = mutableMapOf<String, String>()
-    RecgovAuth.extractBearer(raw)?.takeIf { it.isNotEmpty() }?.let {
-        updates["recgov_token"] = it
-    }
-    RecgovAuth.extractAccessTokenFromRecaccount(raw)?.let {
-        updates["recgov_token"] = it
-    }
-    RecgovAuth.extractRefreshCreds(raw)?.let {
-        updates["recgov_refresh_creds"] = it.toJson()
-    }
-    if (updates.isNotEmpty()) settings.setMany(updates)
 }

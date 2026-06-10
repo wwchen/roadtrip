@@ -66,7 +66,7 @@ test('1) connected event fires immediately on subscribe', async () => {
 test('2) synth-match publishes a match event with monotonic id', async () => {
   const c = new SseClient(BASE + '/api/campsite/events')
   await c.waitFor((e) => e.type === 'connected')
-  const synth = await postJson('/api/campsite/spike/synth-match', { campgroundId: 'cg-1', campsiteId: 's-1', startDate: '2026-04-28', endDate: '2026-04-29' })
+  const synth = await postJson('/api/admin/campsite/debug/synth-match', { campgroundId: 'cg-1', campsiteId: 's-1', startDate: '2026-04-28', endDate: '2026-04-29' })
   assert.equal(synth.status, 200)
   const ev = await c.waitFor((e) => e.type === 'match' && e.data.id === synth.body.id)
   assert.ok(ev.id > 0, 'envelope id is monotonic')
@@ -76,17 +76,17 @@ test('2) synth-match publishes a match event with monotonic id', async () => {
 test('3) claim → result lease state machine; double-claim rejected', async () => {
   const c = new SseClient(BASE + '/api/campsite/events')
   await c.waitFor((e) => e.type === 'connected')
-  const synth = await postJson('/api/campsite/spike/synth-match', { campgroundId: 'cg-2', campsiteId: 's-2', startDate: '2026-05-01', endDate: '2026-05-02' })
+  const synth = await postJson('/api/admin/campsite/debug/synth-match', { campgroundId: 'cg-2', campsiteId: 's-2', startDate: '2026-05-01', endDate: '2026-05-02' })
   const matchId = synth.body.id
 
-  const claim1 = await postJson(`/api/campsite/matches/${matchId}/claim`, { companion_id: COMPANION })
+  const claim1 = await postJson(`/api/campsite/companion/matches/${matchId}/claim`, { companion_id: COMPANION })
   assert.equal(claim1.status, 200, 'first claim succeeds')
   await c.waitFor((e) => e.type === 'claimed' && e.data.id === matchId)
 
-  const claim2 = await postJson(`/api/campsite/matches/${matchId}/claim`, { companion_id: 'someone-else' })
+  const claim2 = await postJson(`/api/campsite/companion/matches/${matchId}/claim`, { companion_id: 'someone-else' })
   assert.equal(claim2.status, 409, 'second claim is rejected (already claimed)')
 
-  const result = await postJson(`/api/campsite/matches/${matchId}/result`, { cart_added: true })
+  const result = await postJson(`/api/campsite/companion/matches/${matchId}/result`, { cart_added: true })
   assert.equal(result.status, 200)
   const resEv = await c.waitFor((e) => e.type === 'result' && e.data.id === matchId)
   assert.equal(resEv.data.cartAdded, true)
@@ -98,13 +98,13 @@ test('4) reconnect with lastEventId replays missed events', async () => {
   await c1.waitFor((e) => e.type === 'connected')
 
   // Generate a few events while c1 is connected, capture their ids.
-  await postJson('/api/campsite/spike/synth-match', { campgroundId: 'cg-3', campsiteId: 's-1', startDate: '2026-06-01', endDate: '2026-06-02' })
+  await postJson('/api/admin/campsite/debug/synth-match', { campgroundId: 'cg-3', campsiteId: 's-1', startDate: '2026-06-01', endDate: '2026-06-02' })
   const ev1 = await c1.waitFor((e) => e.type === 'match' && e.data.campgroundId === 'cg-3')
   const replayFromId = ev1.id
   c1.close()
 
   // Now generate more events while disconnected.
-  const synth = await postJson('/api/campsite/spike/synth-match', { campgroundId: 'cg-4', campsiteId: 's-1', startDate: '2026-07-01', endDate: '2026-07-02' })
+  const synth = await postJson('/api/admin/campsite/debug/synth-match', { campgroundId: 'cg-4', campsiteId: 's-1', startDate: '2026-07-01', endDate: '2026-07-02' })
   const missedId = synth.body.id
 
   // Reconnect with lastEventId — should see the missed match in the replay.
@@ -125,9 +125,9 @@ test('5) lease expires when no result arrives in time', async () => {
   }
   const c = new SseClient(BASE + '/api/campsite/events')
   await c.waitFor((e) => e.type === 'connected')
-  const synth = await postJson('/api/campsite/spike/synth-match', { campgroundId: 'cg-5', campsiteId: 's-1', startDate: '2026-08-01', endDate: '2026-08-02' })
+  const synth = await postJson('/api/admin/campsite/debug/synth-match', { campgroundId: 'cg-5', campsiteId: 's-1', startDate: '2026-08-01', endDate: '2026-08-02' })
   const matchId = synth.body.id
-  await postJson(`/api/campsite/matches/${matchId}/claim`, { companion_id: COMPANION })
+  await postJson(`/api/campsite/companion/matches/${matchId}/claim`, { companion_id: COMPANION })
   await c.waitFor((e) => e.type === 'claimed' && e.data.id === matchId)
   // Don't send result. Wait for sweepExpiredLeases to fire.
   const expired = await c.waitFor((e) => e.type === 'lease_expired' && e.data.id === matchId, { timeoutMs: 15_000 })

@@ -25,7 +25,7 @@
 
       const [settings, loginResult] = await Promise.all([
         api('GET', '/api/campsite/settings'),
-        autoCart ? api('POST', '/api/campsite/settings/test-chrome', {}).catch(err => ({ error: err.message })) : null,
+        autoCart ? api('POST', '/api/campsite/booking/session/validate', {}).catch(err => ({ error: err.message })) : null,
       ]);
 
       if (notifySlack) {

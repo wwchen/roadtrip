@@ -13,7 +13,7 @@ fun Route.pollRoutes(
     eventDriven: Boolean = false,
 ) {
     post("/api/campsite/poll", {
-        tags = listOf("campsite")
+        tags = listOf("campsite-admin")
         summary = "Force an immediate availability poll across every active alert"
     }) {
         if (eventDriven && bus != null) {
