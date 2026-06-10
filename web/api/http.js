@@ -22,3 +22,8 @@ export async function jsonPostOk(url, body, options = {}) {
   return response.json();
 }
 
+export async function jsonGetOk(url, { signal } = {}) {
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new HttpError(url, response.status);
+  return response.json();
+}
