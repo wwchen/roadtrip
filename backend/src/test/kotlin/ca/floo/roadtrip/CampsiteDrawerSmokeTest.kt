@@ -160,7 +160,7 @@ class CampsiteDrawerSmokeTest {
                 .IsVisibleOptions()
                 .setTimeout(10_000.0),
         )
-        assertThat(page.locator("#cg-drawer h2")).containsText("Upper Pines")
+        assertThat(page.locator("#cg-drawer .cg-drawer-head h2")).containsText("Upper Pines")
     }
 
     private fun routeAvailabilityWith(
@@ -175,6 +175,34 @@ class CampsiteDrawerSmokeTest {
                     .setStatus(status)
                     .setContentType("application/json")
                     .setBody(body),
+            )
+        }
+    }
+
+    private fun routeCampgroundSearch(context: com.microsoft.playwright.BrowserContext) {
+        context.route("**/api/campsite/campgrounds/search**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "parks": [],
+                          "campgrounds": [{
+                            "id": "$testRecgovId",
+                            "name": "$testCampgroundName",
+                            "parent_name": "Yosemite National Park",
+                            "parent_id": "2991",
+                            "city": "Yosemite National Park",
+                            "state": "CA",
+                            "rating": 4.8,
+                            "reviews": 1200
+                          }]
+                        }
+                        """.trimIndent(),
+                    ),
             )
         }
     }
@@ -199,7 +227,41 @@ class CampsiteDrawerSmokeTest {
             // Secondary CTA goes to rec.gov.
             assertEquals(
                 "https://www.recreation.gov/camping/campgrounds/$testRecgovId",
-                page.locator("#cg-drawer .cg-btn-secondary").getAttribute("href"),
+                page.locator("#cg-drawer a.cg-btn-secondary[data-cta=\"reserve\"]").getAttribute("href"),
+            )
+        } finally {
+            context.close()
+        }
+    }
+
+    @Test
+    fun `drawer watch CTA opens campsite page with campground preselected`() {
+        val context = browser.newContext(newMobileContext())
+        routeAvailabilityWith(context, zeroAvailableJson())
+        routeCampgroundSearch(context)
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        try {
+            openDrawerFor(page)
+            val primary = page.locator("#cg-drawer .cg-btn-primary")
+            assertThat(primary).hasText("Snipe a cancellation")
+            primary.click()
+
+            page.waitForURL("**/campsite?campground=$testRecgovId")
+            assertThat(page.locator("#new-alert-panel h2")).containsText("New Alert")
+            assertThat(page.locator("#campground-search")).hasValue(
+                testCampgroundName,
+                com.microsoft.playwright.assertions.LocatorAssertions
+                    .HasValueOptions()
+                    .setTimeout(5_000.0),
+            )
+            assertThat(page.locator("#selected-campgrounds .campground-chip")).containsText(testCampgroundName)
+            assertThat(page.locator("#selected-campgrounds .campground-chip")).containsText("#$testRecgovId")
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during drawer → campsite handoff: ${pageErrors.joinToString(" | ")}",
             )
         } finally {
             context.close()
@@ -268,7 +330,7 @@ class CampsiteDrawerSmokeTest {
             assertThat(page.locator("#cg-drawer .cg-summary .cg-retry")).isVisible()
             // CTAs stay clickable — user can still open campsite page or rec.gov.
             assertThat(page.locator("#cg-drawer .cg-btn-primary")).isEnabled()
-            assertThat(page.locator("#cg-drawer .cg-btn-secondary")).isEnabled()
+            assertThat(page.locator("#cg-drawer a.cg-btn-secondary[data-cta=\"reserve\"]")).isEnabled()
         } finally {
             context.close()
         }

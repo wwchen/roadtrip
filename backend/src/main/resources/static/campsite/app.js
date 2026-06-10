@@ -252,6 +252,35 @@ function renderSelectedCampgrounds() {
   }
 }
 
+function selectCampground(cg) {
+  if (!cg?.id) return;
+  selectedCampgrounds.set(String(cg.id), cg);
+  renderSelectedCampgrounds();
+}
+
+function bestCampgroundResult(results, id) {
+  const campgrounds = Array.isArray(results?.campgrounds) ? results.campgrounds : [];
+  return campgrounds.find(cg => String(cg.id) === String(id)) || campgrounds[0] || null;
+}
+
+async function prefillCampgroundFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get('campground');
+  if (!id || selectedCampgrounds.has(id)) return;
+
+  try {
+    const results = await api('GET', `/api/campsite/campgrounds/search?q=${encodeURIComponent(id)}`);
+    const cg = bestCampgroundResult(results, id) || { id, name: `Campground ${id}` };
+    selectCampground(cg);
+    el('campground-search').value = cg.name || `Campground ${id}`;
+  } catch (err) {
+    const cg = { id, name: `Campground ${id}` };
+    selectCampground(cg);
+    el('campground-search').value = cg.name;
+    showToast(`Could not resolve campground ${id}: ${err.message}`, 'error', 6000);
+  }
+}
+
 window.clearCampground = function () {
   selectedCampgrounds.clear();
   expandedParks.clear();
@@ -876,33 +905,44 @@ el('test-chrome-btn').addEventListener('click', async () => {
 function connectSSE() {
   const es = new EventSource('/api/campsite/events');
 
-  es.onmessage = (e) => {
-    const msg = JSON.parse(e.data);
-    if (msg.type === 'connected') {
-      updateDataStatus(msg.next_poll_at ? 'ok' : 'checking');
-      if (msg.next_poll_at) { nextPollAt = msg.next_poll_at; updatePollCountdown(); }
-    } else if (msg.type === 'poll_start') {
-      isPollingNow = true;
-      nextPollAt = null;
-      updatePollCountdown();
-    } else if (msg.type === 'poll_done') {
-      isPollingNow = false;
-      updateDataStatus('ok');
-      nextPollAt = msg.next_at;
-      updatePollCountdown();
-      loadAlerts();
-      loadMatches();
-    } else if (msg.type === 'match') {
-      const m = msg.data;
-      showToast(`🏕 Site ${m.site} available at ${m.alert?.campground_name || m.campgroundId} — ${m.availableDates?.join(', ')}`, 'success', 8000);
-      loadMatches({ checkAvail: false });
-      loadAlerts();
-    }
+  const parse = e => {
+    try { return JSON.parse(e.data || '{}'); } catch { return {}; }
   };
+
+  es.addEventListener('connected', () => {
+    updateDataStatus('ok');
+    globalThis.__campsiteState = { ...(globalThis.__campsiteState || {}), sseConnected: true };
+  });
+
+  es.addEventListener('poll_start', () => {
+    isPollingNow = true;
+    nextPollAt = null;
+    updatePollCountdown();
+  });
+
+  es.addEventListener('poll_done', e => {
+    const msg = parse(e);
+    isPollingNow = false;
+    updateDataStatus(msg.success === false ? 'err' : 'ok');
+    nextPollAt = msg.next_at || msg.nextPollAt || null;
+    updatePollCountdown();
+    loadAlerts();
+    loadMatches();
+  });
+
+  es.addEventListener('match', e => {
+    const m = parse(e);
+    const where = m.campgroundName || m.alert?.campground_name || m.campgroundId || 'campground';
+    showToast(`Site ${m.site || m.campsiteSite || m.campsiteId || '?'} available at ${where} - ${(m.availableDates || []).join(', ')}`, 'success', 8000);
+    loadMatches({ checkAvail: false });
+    loadAlerts();
+  });
+
+  es.addEventListener('result', () => loadMatches({ checkAvail: false }));
+  es.addEventListener('lease_expired', () => loadMatches({ checkAvail: false }));
 
   es.onerror = () => {
     updateDataStatus('err');
-    setTimeout(connectSSE, 5000); // Reconnect
   };
 }
 
@@ -1360,6 +1400,7 @@ el('settings-rerun-wizard').addEventListener('click', e => {
 
 async function init() {
   await Promise.all([loadAlerts(), loadMatches()]);
+  await prefillCampgroundFromUrl();
   connectSSE();
   refreshStatus();
   loadTokenExpiry();
