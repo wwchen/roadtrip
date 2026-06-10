@@ -3,6 +3,8 @@ package ca.floo.campsite.recgov.booker.api
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.campsite.recgov.booker.availability.CachedResult
 import ca.floo.campsite.recgov.booker.poller.Campsite
+import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
+import ca.floo.roadtrip.service.api.AvailabilitySeasonBlock
 import ca.floo.roadtrip.service.api.DayClassification
 import ca.floo.roadtrip.service.api.classifyWindowState
 import ca.floo.roadtrip.service.api.renderAvailabilityErrorJson
@@ -12,9 +14,6 @@ import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneOffset
@@ -90,7 +89,7 @@ suspend fun fetchAndClassifyRecgov(
             summary = summary,
             seasonBlock = seasonBlock,
             cacheBlock = cacheBlock,
-            extras = mapOf("campground_id" to recgovId),
+            campgroundId = recgovId,
         )
     }
 
@@ -165,7 +164,7 @@ private fun classifyDay(
 private fun inferReopenDate(
     merged: Map<String, Map<String, String>>,
     today: LocalDate,
-): JsonObject? {
+): AvailabilitySeasonBlock? {
     val candidates =
         merged.values
             .flatMap { it.entries }
@@ -175,15 +174,15 @@ private fun inferReopenDate(
                 runCatching { LocalDate.parse(date) }.getOrNull()
             }.filter { !it.isBefore(today) }
     val earliest = candidates.minOrNull() ?: return null
-    return buildJsonObject { put("reopens_on", earliest.toString()) }
+    return AvailabilitySeasonBlock(reopensOn = earliest.toString())
 }
 
-private fun aggregateCacheBlock(results: List<CachedResult>): JsonObject =
-    buildJsonObject {
-        put("hit", results.all { it.hit })
-        put("age_seconds", results.maxOfOrNull { it.ageSeconds } ?: 0L)
-        put("ttl_seconds", results.firstOrNull()?.ttlSeconds ?: 7200L)
-    }
+private fun aggregateCacheBlock(results: List<CachedResult>): AvailabilityCacheBlock =
+    AvailabilityCacheBlock(
+        hit = results.all { it.hit },
+        ageSeconds = results.maxOfOrNull { it.ageSeconds } ?: 0L,
+        ttlSeconds = results.firstOrNull()?.ttlSeconds ?: 7200L,
+    )
 
 fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, String> {
     val msg = e.message.orEmpty()
