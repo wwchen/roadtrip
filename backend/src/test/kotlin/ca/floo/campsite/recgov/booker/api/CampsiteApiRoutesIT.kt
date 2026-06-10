@@ -4,6 +4,7 @@ import ca.floo.campsite.recgov.booker.auth.TokenManager
 import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.db.MatchRepo
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
+import ca.floo.campsite.recgov.booker.events.CompanionRegistry
 import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import ca.floo.roadtrip.repo.dsl
@@ -42,6 +43,7 @@ import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import java.time.Duration
+import java.time.Instant
 import java.util.Base64
 import java.util.concurrent.ConcurrentHashMap
 import javax.sql.DataSource
@@ -92,6 +94,54 @@ class CampsiteApiRoutesIT {
     fun cleanTables() {
         ctx.execute("TRUNCATE matches, alerts RESTART IDENTITY CASCADE")
     }
+
+    @Test
+    fun `companion routes heartbeat status and online event use dto json`() =
+        testApplication {
+            val bus = EventBus()
+            val companions = CompanionRegistry(Duration.ofSeconds(30))
+            application {
+                routing {
+                    companionRoutes(companions, bus)
+                }
+            }
+
+            val badHeartbeat =
+                client.post("/api/campsite/companion/heartbeat") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, badHeartbeat.status)
+            assertEquals("missing companion_id", json(badHeartbeat.bodyAsText())["error"]!!.jsonPrimitive.content)
+
+            val heartbeat =
+                client.post("/api/campsite/companion/heartbeat") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"companion_id":"companion-A","ignored_by_dto":"compat"}""")
+                }
+            assertEquals(HttpStatusCode.OK, heartbeat.status)
+            assertEquals(true, json(heartbeat.bodyAsText())["ok"]!!.jsonPrimitive.boolean)
+
+            val status = client.get("/api/campsite/companion/status")
+            assertEquals(HttpStatusCode.OK, status.status)
+            val companion =
+                json(status.bodyAsText())["companions"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertEquals("companion-A", companion["id"]!!.jsonPrimitive.content)
+            assertTrue(companion["lastSeen"]!!.jsonPrimitive.content.isNotBlank())
+            assertEquals(false, companion["offline"]!!.jsonPrimitive.boolean)
+
+            companions.sweepOffline(Instant.now().plusSeconds(60))
+            val recovered =
+                client.post("/api/campsite/companion/heartbeat") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"companion_id":"companion-A"}""")
+                }
+            assertEquals(HttpStatusCode.OK, recovered.status)
+            assertEquals(listOf("companion_online"), bus.replayBuffer().map { it.type })
+        }
 
     @Test
     fun `alert routes create list patch and delete with dto json`() =

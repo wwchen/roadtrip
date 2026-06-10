@@ -5,10 +5,12 @@ import ca.floo.campsite.recgov.booker.domain.Match
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
+import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -38,6 +40,11 @@ internal suspend inline fun <reified T> ApplicationCall.respondJson(
 ) {
     respondText(campsiteApiJson.encodeToString(value), ContentType.Application.Json, status)
 }
+
+internal suspend inline fun <reified T> ApplicationCall.receiveCampsiteJson(): T =
+    campsiteApiJson.decodeFromString(
+        receiveText().ifBlank { "{}" },
+    )
 
 internal suspend fun ApplicationCall.respondJsonElement(
     value: JsonElement,
@@ -164,6 +171,23 @@ internal data class ClaimDto(
 internal data class ConflictDto(
     val ok: Boolean = false,
     val reason: String,
+)
+
+@Serializable
+internal data class CompanionHeartbeatRequestDto(
+    @SerialName("companion_id") val companionId: String? = null,
+)
+
+@Serializable
+internal data class CompanionStatusDto(
+    val companions: List<CompanionStatusItemDto>,
+)
+
+@Serializable
+internal data class CompanionStatusItemDto(
+    val id: String,
+    val lastSeen: String,
+    val offline: Boolean,
 )
 
 @Serializable
