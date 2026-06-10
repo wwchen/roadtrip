@@ -7,6 +7,10 @@ import ca.floo.roadtrip.models.Poi
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.categorySql
 import ca.floo.roadtrip.models.propertiesJson
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 import org.jooq.Geometry
 import org.jooq.JSONB
@@ -215,11 +219,17 @@ class Upsert(
     private fun providerRefToJson(ref: ProviderRef): String =
         when (ref) {
             is ProviderRef.RecGov ->
-                """{"recgov_id":"${ref.recgovId.replace("\"", "\\\"")}"}"""
+                Json.encodeToString(RecGovProviderRefDto(recgovId = ref.recgovId))
             is ProviderRef.Aspira ->
-                """{"transactionLocationId":${ref.transactionLocationId},"mapId":${ref.mapId},"resourceLocationId":${ref.resourceLocationId ?: "null"}}"""
+                Json.encodeToString(
+                    AspiraProviderRefDto(
+                        transactionLocationId = ref.transactionLocationId,
+                        mapId = ref.mapId,
+                        resourceLocationId = ref.resourceLocationId,
+                    ),
+                )
             is ProviderRef.Camis ->
-                """{"facility_id":"${ref.facilityId.replace("\"", "\\\"")}"}"""
+                Json.encodeToString(CamisProviderRefDto(facilityId = ref.facilityId))
         }
 
     private fun addressToJson(a: Address): String =
@@ -239,3 +249,20 @@ class Upsert(
 class UpsertException(
     message: String,
 ) : RuntimeException(message)
+
+@Serializable
+private data class RecGovProviderRefDto(
+    @SerialName("recgov_id") val recgovId: String,
+)
+
+@Serializable
+private data class AspiraProviderRefDto(
+    val transactionLocationId: Long,
+    val mapId: Long,
+    val resourceLocationId: Long?,
+)
+
+@Serializable
+private data class CamisProviderRefDto(
+    @SerialName("facility_id") val facilityId: String,
+)
