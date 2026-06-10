@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.service.api
 
+import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.add
@@ -18,6 +22,13 @@ import java.time.LocalDate
 // into a List<DayClassification> via its own classifyDays() — only the
 // inputs differ (rec.gov: per-campsite per-day status strings; Aspira:
 // per-sub-area per-day status codes). Everything below is provider-agnostic.
+
+@OptIn(ExperimentalSerializationApi::class)
+private val availabilityResponseJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 data class DayClassification(
     val date: String,
@@ -110,3 +121,11 @@ fun renderAvailabilityJson(
         )
         put("cache", cacheBlock)
     }.toString()
+
+fun renderAvailabilityErrorJson(
+    error: String,
+    retryAfterS: Int,
+): String =
+    availabilityResponseJson.encodeToString(
+        AvailabilityErrorSchema(error = error, retry_after_s = retryAfterS),
+    )

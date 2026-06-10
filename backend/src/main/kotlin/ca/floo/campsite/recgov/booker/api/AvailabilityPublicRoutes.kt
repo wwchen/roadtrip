@@ -5,6 +5,7 @@ import ca.floo.campsite.recgov.booker.availability.CachedResult
 import ca.floo.campsite.recgov.booker.poller.Campsite
 import ca.floo.roadtrip.service.api.DayClassification
 import ca.floo.roadtrip.service.api.classifyWindowState
+import ca.floo.roadtrip.service.api.renderAvailabilityErrorJson
 import ca.floo.roadtrip.service.api.renderAvailabilityJson
 import ca.floo.roadtrip.service.api.summarizeWindow
 import io.ktor.http.HttpStatusCode
@@ -189,10 +190,10 @@ fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, String> {
     return when {
         msg.contains("429") ->
             HttpStatusCode.ServiceUnavailable to
-                """{"state":"error","error":"rate_limited","retry_after_s":60}"""
+                renderAvailabilityErrorJson("rate_limited", retryAfterS = 60)
         else ->
             HttpStatusCode.ServiceUnavailable to
-                """{"state":"error","error":"upstream_5xx","retry_after_s":30}"""
+                renderAvailabilityErrorJson("upstream_5xx", retryAfterS = 30)
     }
 }
 
