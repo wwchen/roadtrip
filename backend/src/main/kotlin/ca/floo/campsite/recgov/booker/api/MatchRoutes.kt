@@ -43,7 +43,7 @@ fun Route.matchRoutes(
     }) {
         val body = parseJson(call.receiveText())
         val campgroundId = body.string("campgroundId") ?: "232447"
-        val campsiteId = body.string("campsiteId") ?: "1"
+        val campsiteId = body.string("campsiteId") ?: "0"
         val startDate = body.string("startDate") ?: "2026-04-28"
         val endDate = body.string("endDate") ?: "2026-04-29"
         val alertId =
@@ -66,6 +66,9 @@ fun Route.matchRoutes(
                     notes = "spike",
                 ),
             )
+        // Keep spike artifacts from being picked up by the real poller if a
+        // browser smoke test is interrupted before cleanup runs.
+        alerts.patch(alertId, mapOf("status" to "paused"))
         val matchId =
             matches.create(
                 MatchRepo.CreateInput(

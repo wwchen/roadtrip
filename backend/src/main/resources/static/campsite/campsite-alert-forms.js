@@ -37,10 +37,9 @@
       }
 
       if (autoCart) {
-        if (loginResult?.error) {
-          errors.push(`Auto-cart check failed: ${loginResult.error}`);
-        } else if (!loginResult?.loggedIn) {
-          errors.push('Auto-cart requires a logged-in browser session \u2014 use "Test browser session" in Settings');
+        const hint = 'Auto-cart requires a valid rec.gov token. Paste a fresh recaccount token in Settings, then Validate token.';
+        if (!loginResult?.loggedIn) {
+          errors.push(loginResult?.error ? `${hint} (${loginResult.error})` : hint);
         }
       }
 
@@ -49,6 +48,7 @@
 
     async function submitAlertForm(e) {
       e.preventDefault();
+      const submit = e.submitter || e.target.querySelector('button[type="submit"]');
 
       if (selectedCampgrounds.size === 0) {
         showToast('Please select at least one campground', 'error');
@@ -87,12 +87,14 @@
       };
 
       try {
+        setSubmitBusy(submit, 'Checking...');
         showToast('Checking integrations\u2026', 'info', 3000);
         const errs = await preflightChecks(base.auto_cart, base.notify_slack);
         if (errs.length) {
           errs.forEach(msg => showToast(msg, 'error', 8000));
           return;
         }
+        setSubmitBusy(submit, 'Creating...');
         for (const [id, cg] of selectedCampgrounds) {
           await api('POST', '/api/campsite/alerts', { ...base, campground_id: id, campground_name: cg.name, parent_name: cg.parent_name || null, parent_id: cg.parent_id || null });
         }
@@ -105,6 +107,8 @@
         loadAlerts();
       } catch (err) {
         showToast(`Error: ${err.message}`, 'error');
+      } finally {
+        setSubmitIdle(submit);
       }
     }
 
@@ -151,6 +155,7 @@
 
     async function submitEditForm(e) {
       e.preventDefault();
+      const submit = e.submitter || e.target.querySelector('button[type="submit"]');
 
       const id = parseInt(el('edit-alert-id').value, 10);
       const startDate = el('edit-start-date').value;
@@ -182,19 +187,37 @@
       }
 
       try {
+        setSubmitBusy(submit, 'Checking...');
         showToast('Checking integrations\u2026', 'info', 3000);
         const errs = await preflightChecks(payload.auto_cart, payload.notify_slack);
         if (errs.length) {
           errs.forEach(msg => showToast(msg, 'error', 8000));
           return;
         }
+        setSubmitBusy(submit, 'Saving...');
         await api('PATCH', `/api/campsite/alerts/${id}`, payload);
         showToast('Alert updated', 'success');
         closeEditAlert();
         loadAlerts();
       } catch (err) {
         showToast(`Error: ${err.message}`, 'error');
+      } finally {
+        setSubmitIdle(submit);
       }
+    }
+
+    function setSubmitBusy(button, text) {
+      if (!button) return;
+      if (!button.dataset.originalText) button.dataset.originalText = button.textContent;
+      button.disabled = true;
+      button.textContent = text;
+    }
+
+    function setSubmitIdle(button) {
+      if (!button) return;
+      button.disabled = false;
+      button.textContent = button.dataset.originalText || button.textContent;
+      delete button.dataset.originalText;
     }
 
     return {
