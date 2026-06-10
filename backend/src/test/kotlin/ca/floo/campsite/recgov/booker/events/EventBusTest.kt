@@ -1,5 +1,9 @@
 package ca.floo.campsite.recgov.booker.events
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonNull
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -41,6 +45,34 @@ class EventBusTest {
         assertTrue(typed.wire.data.contains("\"companionId\":\"cmp-A\""))
         assertEquals(typed.id, typed.wire.id)
         assertEquals(listOf(typed.wire), bus.replayBuffer())
+    }
+
+    @Test
+    fun `structured sse payloads are valid json and escape strings`() {
+        val events =
+            listOf(
+                CampsiteEvent.LivenessTick,
+                CampsiteEvent.PollDone(alertId = null, success = true, endedAt = "2026-06-04T22:00:00Z"),
+                CampsiteEvent.LeaseExpired(matchId = 42),
+                CampsiteEvent.CompanionOffline(companionId = "cmp-\"A\"", lastSeen = "2026-06-04T22:00:00Z"),
+                CampsiteEvent.CompanionOnline(companionId = "cmp-\"A\""),
+                CampsiteEvent.TokenRefreshed(expires = "2026-06-04T22:00:00Z"),
+                CampsiteEvent.TokenRefreshFailed(reason = "bad \"token\""),
+                CampsiteEvent.RecgovDegraded(reason = "upstream \"blocked\""),
+                CampsiteEvent.RecgovRecovered(checkedAt = "2026-06-04T22:00:00Z"),
+            )
+
+        val payloads = events.map { Json.parseToJsonElement(it.sseData()).jsonObject }
+
+        assertNotNull(payloads[0]["at"]?.jsonPrimitive?.content)
+        assertEquals(JsonNull, payloads[1]["alertId"])
+        assertEquals("lease_expired", payloads[2]["reason"]?.jsonPrimitive?.content)
+        assertEquals("cmp-\"A\"", payloads[3]["companionId"]?.jsonPrimitive?.content)
+        assertEquals("cmp-\"A\"", payloads[4]["companionId"]?.jsonPrimitive?.content)
+        assertEquals("2026-06-04T22:00:00Z", payloads[5]["expires"]?.jsonPrimitive?.content)
+        assertEquals("bad \"token\"", payloads[6]["reason"]?.jsonPrimitive?.content)
+        assertEquals("upstream \"blocked\"", payloads[7]["reason"]?.jsonPrimitive?.content)
+        assertEquals("2026-06-04T22:00:00Z", payloads[8]["checkedAt"]?.jsonPrimitive?.content)
     }
 
     @Test
