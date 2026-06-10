@@ -191,6 +191,14 @@ internal data class CompanionStatusItemDto(
 )
 
 @Serializable
+internal data class DebugSynthMatchRequestDto(
+    val campgroundId: String? = null,
+    val campsiteId: String? = null,
+    val startDate: String? = null,
+    val endDate: String? = null,
+)
+
+@Serializable
 internal data class DebugSynthMatchDto(
     val ok: Boolean = true,
     val id: Long,
