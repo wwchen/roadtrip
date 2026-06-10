@@ -10,6 +10,9 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.http.isSuccess
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -43,8 +46,20 @@ data class RefreshCreds(
     val accountId: String,
     val refreshId: String,
 ) {
-    fun toJson(): String = """{"account_id":"$accountId","refresh_id":"$refreshId"}"""
+    fun toJson(): String =
+        Json.encodeToString(
+            RefreshCredsDto(
+                accountId = accountId,
+                refreshId = refreshId,
+            ),
+        )
 }
+
+@Serializable
+private data class RefreshCredsDto(
+    @SerialName("account_id") val accountId: String,
+    @SerialName("refresh_id") val refreshId: String,
+)
 
 data class TokenInfo(
     val expires: Instant?,

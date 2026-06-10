@@ -1,5 +1,8 @@
 package ca.floo.campsite.recgov.booker.api
 
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import java.util.Base64
 import kotlin.test.assertEquals
@@ -76,6 +79,15 @@ class RecgovAuthTest {
         assertNotNull(creds)
         assertEquals("A3", creds.accountId)
         assertEquals("R3", creds.refreshId)
+    }
+
+    @Test
+    fun `refresh creds toJson serializes with dto escaping`() {
+        val json = RefreshCreds(accountId = """A"3""", refreshId = """R\3""").toJson()
+        val parsed = Json.parseToJsonElement(json).jsonObject
+
+        assertEquals("""A"3""", parsed["account_id"]!!.jsonPrimitive.content)
+        assertEquals("""R\3""", parsed["refresh_id"]!!.jsonPrimitive.content)
     }
 
     @Test
