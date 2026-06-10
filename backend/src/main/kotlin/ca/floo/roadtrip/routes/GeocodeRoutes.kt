@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.client.GeocodeException
+import ca.floo.roadtrip.client.GeocodeResult
 import ca.floo.roadtrip.client.MapboxGeocoder
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import io.ktor.http.ContentType
@@ -10,12 +11,10 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 
 private val LNGLAT_RE = Regex("""^-?\d{1,3}(\.\d{1,8})?,-?\d{1,3}(\.\d{1,8})?$""")
 
@@ -70,28 +69,39 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
                 return@get
             }
 
-        val json =
-            buildJsonObject {
-                put(
-                    "results",
-                    buildJsonArray {
-                        for (r in results) {
-                            add(
-                                buildJsonObject {
-                                    put("id", r.id)
-                                    put("place_name", r.placeName)
-                                    put("place_type", r.placeType)
-                                    put("lng", r.lng)
-                                    put("lat", r.lat)
-                                },
-                            )
-                        }
-                    },
-                )
-            }
-        call.respondText(json.toString(), io.ktor.http.ContentType.Application.Json)
+        call.respondText(geocodeResponseJson(results), ContentType.Application.Json)
     }
 }
+
+internal fun geocodeResponseJson(results: List<GeocodeResult>): String =
+    geocodeRouteJson.encodeToString(
+        GeocodeResponseDto(
+            results =
+                results.map { result ->
+                    GeocodeResultDto(
+                        id = result.id,
+                        placeName = result.placeName,
+                        placeType = result.placeType,
+                        lng = result.lng,
+                        lat = result.lat,
+                    )
+                },
+        ),
+    )
+
+@Serializable
+private data class GeocodeResponseDto(
+    val results: List<GeocodeResultDto>,
+)
+
+@Serializable
+private data class GeocodeResultDto(
+    val id: String,
+    @SerialName("place_name") val placeName: String,
+    @SerialName("place_type") val placeType: String,
+    val lng: Double,
+    val lat: Double,
+)
 
 private suspend fun ApplicationCall.respondGeocodeError(
     error: String,
