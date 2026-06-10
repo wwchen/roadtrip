@@ -377,7 +377,7 @@ fixture envelope to pin down the regression.
 | Trigger fetch                       | `POST /api/admin/data/fetch/<data_source-slug>`                                                         |
 | Trigger import                      | `POST /api/admin/data/import/<poi_data-name>`                                                           |
 | Run history                         | `GET /api/admin/data/runs?target=<slug>`                                                                |
-| Health snapshot                     | `GET /api/admin/data/health`                                                                            |
+| Data status snapshot                | `GET /api/admin/data/status`                                                                            |
 | Add an env var                      | `.env.example` + `.env` + Tilt `serve_env` + compose `environment:`                                     |
 | Same fetcher, new tenant            | New `data_sources:` + new `poi_data:` row + new `EtlOrchestrator.registry` line. No new fetcher.        |
 | New intermediate stage              | Append a non-terminal entry to `etls:` (in dependency order) + register the adapter.                    |

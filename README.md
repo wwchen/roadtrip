@@ -174,7 +174,7 @@ public — paths and summaries only, no secrets.
 | POST | `/api/admin/data/import[/{target}]` | sync; runs the Kotlin importer phase(s). 200 on success/noop, 500 on phase failure |
 | GET  | `/api/admin/data/runs[?target=…]` | last 50 parent runs |
 | GET  | `/api/admin/data/runs/{id}` | parent + ordered phase rows |
-| GET  | `/api/admin/data/health` | per-target last completed status + age |
+| GET  | `/api/admin/data/status` | per-target last completed status + age |
 
 Without a `{target}`, fetch and import fan out across every known target
 sequentially. Per-target mutex means a fetch and an import on the same

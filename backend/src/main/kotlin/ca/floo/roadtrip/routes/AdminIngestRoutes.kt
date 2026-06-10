@@ -7,7 +7,6 @@ import ca.floo.roadtrip.models.api.EXAMPLE_ERR_TARGET_BUSY
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_UNKNOWN_TARGET
 import ca.floo.roadtrip.models.api.EXAMPLE_FAN_OUT_FETCH
 import ca.floo.roadtrip.models.api.EXAMPLE_FAN_OUT_IMPORT
-import ca.floo.roadtrip.models.api.EXAMPLE_HEALTH
 import ca.floo.roadtrip.models.api.EXAMPLE_RUNS_LIST
 import ca.floo.roadtrip.models.api.EXAMPLE_RUN_DETAIL
 import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_COMPLETED_FETCH
@@ -15,14 +14,15 @@ import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_COMPLETED_IMPORT
 import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_FAILED
 import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_NOOP
 import ca.floo.roadtrip.models.api.EXAMPLE_RUN_OUTCOME_NOOP_IMPORT
+import ca.floo.roadtrip.models.api.EXAMPLE_STATUS
 import ca.floo.roadtrip.models.api.ErrorNotFoundSchema
 import ca.floo.roadtrip.models.api.ErrorTargetBusySchema
 import ca.floo.roadtrip.models.api.ErrorUnknownTargetSchema
 import ca.floo.roadtrip.models.api.FanOutResponseSchema
-import ca.floo.roadtrip.models.api.HealthResponseSchema
 import ca.floo.roadtrip.models.api.RunDetailSchema
 import ca.floo.roadtrip.models.api.RunOutcomeSchema
 import ca.floo.roadtrip.models.api.RunsListSchema
+import ca.floo.roadtrip.models.api.StatusResponseSchema
 import ca.floo.roadtrip.models.ingest.RunKind
 import ca.floo.roadtrip.models.ingest.RunOutcome
 import ca.floo.roadtrip.service.etl.IngestController
@@ -46,7 +46,7 @@ import java.time.ZoneOffset
 //   POST /api/admin/data/fetch[/{target}]    web → data/<target>.{json,geojson}
 //   POST /api/admin/data/import[/{target}]   data/ → Postgres rows via Importer
 //   GET  /api/admin/data/runs[?target=…|/:id] history
-//   GET  /api/admin/data/health              per-target last-completed + age
+//   GET  /api/admin/data/status              per-target last-completed + age
 //
 // With no {target}, fetch and import fan out across every known target,
 // sequentially, in `targetsFromRegistry` order (see config/poi-registry.yaml). The response is the
@@ -67,7 +67,7 @@ fun Route.adminIngestRoutes(
             summary = "Fetch upstream data into data/{target}.* for one target"
             request {
                 pathParameter<String>("target") {
-                    description = "Target name from /api/admin/data/health"
+                    description = "Target name from /api/admin/data/status"
                     example("campgrounds") { value = "campgrounds" }
                 }
             }
@@ -250,19 +250,19 @@ fun Route.adminIngestRoutes(
             }
         }
 
-        get("/health", {
+        get("/status", {
             tags = listOf("admin")
-            summary = "Per-target last-completed run + age in seconds"
+            summary = "Per-target ingest run status + age in seconds"
             response {
                 code(HttpStatusCode.OK) {
-                    body<HealthResponseSchema> {
+                    body<StatusResponseSchema> {
                         mediaTypes(ContentType.Application.Json)
-                        example("two targets") { value = EXAMPLE_HEALTH }
+                        example("two targets") { value = EXAMPLE_STATUS }
                     }
                 }
             }
         }) {
-            call.respondText(healthByTarget(ctx, controller.knownTargets()), ContentType.Application.Json)
+            call.respondText(statusByTarget(ctx, controller.knownTargets()), ContentType.Application.Json)
         }
     }
 }
@@ -461,7 +461,7 @@ private fun runDetail(
     return sb.toString()
 }
 
-private fun healthByTarget(
+private fun statusByTarget(
     ctx: DSLContext,
     targets: Set<String>,
 ): String {
