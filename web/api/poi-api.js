@@ -1,7 +1,16 @@
 import { HttpError, jsonPostOk } from './http.js';
 
-export async function searchPois(query, { limit = 8, signal } = {}) {
-  const url = `/api/pois/search?q=${encodeURIComponent(query)}&limit=${encodeURIComponent(String(limit))}`;
+export async function searchPois(query, { limit = 8, categories, signal } = {}) {
+  const params = new URLSearchParams({
+    q: query,
+    limit: String(limit),
+  });
+  if (Array.isArray(categories)) {
+    params.set('categories', categories.join(','));
+  } else if (categories) {
+    params.set('categories', categories);
+  }
+  const url = `/api/pois/search?${params.toString()}`;
   const response = await fetch(url, { signal });
   return response.ok ? response.json() : { results: [] };
 }

@@ -400,6 +400,52 @@ class PoiRoutesTest {
         }
 
     @Test
+    fun `poi search categories filter narrows results`() =
+        testApplication {
+            seed(
+                listOf(
+                    row("upper-camp", "Upper Pines Campground", -119.56, 37.74, "campground"),
+                    row("upper-pf", "Upper Planet Fitness", -119.40, 37.70, "planet-fitness"),
+                    row("upper-sc", "Upper Supercharger", -119.30, 37.80, "supercharger"),
+                ),
+            )
+            application { routing { poiRoutes(ctx, testRegistry) } }
+
+            val resp = client.get("/api/pois/search?q=upper&categories=campground&limit=10")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val results = parsed["results"]!!.jsonArray
+            assertEquals(1, results.size)
+            val hit = results.single().jsonObject
+            assertEquals("Upper Pines Campground", hit["name"]!!.jsonPrimitive.content)
+            assertEquals("campground", hit["category"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `poi search categories filter accepts multiple values`() =
+        testApplication {
+            seed(
+                listOf(
+                    row("upper-camp", "Upper Pines Campground", -119.56, 37.74, "campground"),
+                    row("upper-pf", "Upper Planet Fitness", -119.40, 37.70, "planet-fitness"),
+                    row("upper-sc", "Upper Supercharger", -119.30, 37.80, "supercharger"),
+                ),
+            )
+            application { routing { poiRoutes(ctx, testRegistry) } }
+
+            val resp = client.get("/api/pois/search?q=upper&categories=campground,supercharger&limit=10")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val cats =
+                parsed["results"]!!
+                    .jsonArray
+                    .map {
+                        it.jsonObject["category"]!!.jsonPrimitive.content
+                    }.toSet()
+            assertEquals(setOf("campground", "supercharger"), cats)
+        }
+
+    @Test
     fun `per-category limit gives each category its own slot budget`() =
         testApplication {
             // Seed 50 PF + 50 CG + 50 SP all in tight bbox. With per-cat limit

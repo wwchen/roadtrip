@@ -213,10 +213,12 @@ fun Route.poiRoutes(
         description =
             "Returns up to `limit` matches ranked by prefix-match → name length → alphabetical. " +
             "Empty `q` (or shorter than 2 chars) returns an empty list. " +
+            "`categories` optionally filters to one or more comma-separated POI categories. " +
             "Used by the topbar dropdown so a user can find a POI nationwide without panning to it first."
         request {
             queryParameter<String>("q") { description = "Query string, ≥ 2 chars" }
             queryParameter<Int>("limit") { description = "Max results, 1..25 (default 10)" }
+            queryParameter<String>("categories") { description = "Optional comma-separated category filter, e.g. campground" }
         }
         response {
             code(io.ktor.http.HttpStatusCode.OK) {
@@ -259,6 +261,12 @@ fun Route.poiRoutes(
                 ?.toIntOrNull()
                 ?.coerceIn(1, 25)
                 ?: 10
+        val categories =
+            parseSearchCategories(
+                call.request.queryParameters
+                    .getAll("categories")
+                    .orEmpty(),
+            )
         val terms = splitPoiSearchTerms(q)
         if (terms.isEmpty()) {
             call.respondText(
@@ -270,6 +278,18 @@ fun Route.poiRoutes(
         val termPredicate = terms.joinToString("\n                      AND ") { "name ILIKE ? ESCAPE '\\'" }
         val patterns = terms.map { "%${escapeLikePattern(it)}%" }
         val prefix = "${escapeLikePattern(terms.first())}%"
+        val categoryPredicate =
+            categories
+                .takeIf { it.isNotEmpty() }
+                ?.joinToString(prefix = "AND category IN (", postfix = ")") { "?" }
+                .orEmpty()
+        val args =
+            buildList<Any> {
+                addAll(patterns)
+                addAll(categories)
+                add(prefix)
+                add(limit)
+            }
         val hits =
             ctx
                 .fetch(
@@ -279,12 +299,11 @@ fun Route.poiRoutes(
                     FROM pois
                     WHERE deleted_at IS NULL
                       AND $termPredicate
+                      $categoryPredicate
                     ORDER BY (name ILIKE ? ESCAPE '\') DESC, length(name) ASC, name ASC
                     LIMIT ?
                     """.trimIndent(),
-                    *patterns.toTypedArray(),
-                    prefix,
-                    limit,
+                    *args.toTypedArray(),
                 ).map { r ->
                     PoiSearchHitSchema(
                         id = (r.get("id") as Number).toLong(),
@@ -307,6 +326,13 @@ private fun splitPoiSearchTerms(q: String): List<String> =
         .split(Regex("\\s+"))
         .map { it.trim() }
         .filter { it.isNotEmpty() }
+
+private fun parseSearchCategories(values: List<String>): List<String> =
+    values
+        .flatMap { it.split(",") }
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
 
 private fun escapeLikePattern(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 

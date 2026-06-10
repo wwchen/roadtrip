@@ -861,7 +861,7 @@ async function runQuery(q) {
   // path lets the user find a POI nationwide (e.g. "upper pines" while
   // looking at the East Coast).
   const [backendPoiResults, geocodeResults] = await Promise.all([
-    searchPois(q, { limit: 8, signal })
+    searchPois(q, { limit: 8, categories: ['campground'], signal })
       .then(j => (j.results || []).map(it => ({
         kind: kindForCategory(it.category),
         name: it.name,
