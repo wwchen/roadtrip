@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PoiSearchHitSchema
 import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
 import ca.floo.roadtrip.models.api.PoisRequestSchema
@@ -10,11 +11,14 @@ import ca.floo.roadtrip.repo.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -34,6 +38,12 @@ const val POI_LIMIT: Int = 2000
 // in the categories list. ~12k rows nationwide — not useful at continental
 // zoom and they crowd out the per-category limit budget.
 private const val CG_MIN_ZOOM: Int = 6
+
+@OptIn(ExperimentalSerializationApi::class)
+private val poiRoutesJson =
+    Json {
+        explicitNulls = false
+    }
 
 // POST /api/pois
 //
@@ -100,7 +110,7 @@ fun Route.poiRoutes(
             }
             code(io.ktor.http.HttpStatusCode.BadRequest) {
                 description = "Malformed body or missing bbox."
-                body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
@@ -109,11 +119,7 @@ fun Route.poiRoutes(
             try {
                 parseRequest(bodyText)
             } catch (e: Exception) {
-                call.respondText(
-                    """{"error":"bad_request","detail":"${escapeJsonInline(e.message ?: "parse failed")}"}""",
-                    io.ktor.http.ContentType.Application.Json,
-                    HttpStatusCode.BadRequest,
-                )
+                call.respondPoiError("bad_request", HttpStatusCode.BadRequest, e.message ?: "parse failed")
                 return@post
             }
 
@@ -170,24 +176,16 @@ fun Route.poiRoutes(
             }
             code(io.ktor.http.HttpStatusCode.NotFound) {
                 description = "No row with that id (or it was soft-deleted)."
-                body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
-                ?: return@get call.respondText(
-                    """{"error":"bad_id"}""",
-                    io.ktor.http.ContentType.Application.Json,
-                    HttpStatusCode.BadRequest,
-                )
+                ?: return@get call.respondPoiError("bad_id", HttpStatusCode.BadRequest)
         val row =
             poiRepo.fetchPoiById(id)
-                ?: return@get call.respondText(
-                    """{"error":"not_found"}""",
-                    io.ktor.http.ContentType.Application.Json,
-                    HttpStatusCode.NotFound,
-                )
+                ?: return@get call.respondPoiError("not_found", HttpStatusCode.NotFound)
         call.response.headers.append(
             "Cache-Control",
             "public, max-age=300, stale-while-revalidate=3600",
@@ -409,4 +407,14 @@ private fun jsonString(s: String): String {
     return sb.toString()
 }
 
-private fun escapeJsonInline(s: String): String = s.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
+private suspend fun ApplicationCall.respondPoiError(
+    error: String,
+    status: HttpStatusCode,
+    detail: String? = null,
+) {
+    respondText(
+        poiRoutesJson.encodeToString(ApiErrorSchema(error = error, detail = detail)),
+        ContentType.Application.Json,
+        status,
+    )
+}

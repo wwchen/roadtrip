@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.client.RoutingException
+import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PoisOnRouteRequestSchema
 import ca.floo.roadtrip.models.api.WaypointSchema
 import ca.floo.roadtrip.models.registry.PoiRegistry
@@ -86,11 +87,11 @@ fun Route.poisOnRouteRoutes(
             }
             code(HttpStatusCode.BadRequest) {
                 description = "Malformed body, bad waypoints, or radius out of range."
-                body<String> { mediaTypes(ContentType.Application.Json) }
+                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.ServiceUnavailable) {
                 description = "Route lookup failed (Mapbox unreachable / cache miss)."
-                body<String> { mediaTypes(ContentType.Application.Json) }
+                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
@@ -101,7 +102,7 @@ fun Route.poisOnRouteRoutes(
             } catch (e: Exception) {
                 call.respondText(
                     onRouteJson.encodeToString(
-                        ErrorResponseDto(error = "bad_request", detail = e.message ?: "parse failed"),
+                        ApiErrorSchema(error = "bad_request", detail = e.message ?: "parse failed"),
                     ),
                     ContentType.Application.Json,
                     HttpStatusCode.BadRequest,
@@ -116,7 +117,7 @@ fun Route.poisOnRouteRoutes(
             } catch (e: RoutingException) {
                 onRouteLog.warn("on-route lookup failed: {}", e.message)
                 call.respondText(
-                    onRouteJson.encodeToString(ErrorResponseDto(error = "routing_unavailable")),
+                    onRouteJson.encodeToString(ApiErrorSchema(error = "routing_unavailable")),
                     ContentType.Application.Json,
                     HttpStatusCode.ServiceUnavailable,
                 )
@@ -207,12 +208,6 @@ private data class WaypointDto(
 }
 
 private fun parseOnRouteRequest(bodyText: String): OnRouteRequest = onRouteJson.decodeFromString<OnRouteRequestDto>(bodyText).validated()
-
-@Serializable
-private data class ErrorResponseDto(
-    val error: String,
-    val detail: String? = null,
-)
 
 @Serializable
 private data class OnRouteFeatureCollectionDto(
