@@ -2,16 +2,29 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.client.GeocodeException
 import ca.floo.roadtrip.client.MapboxGeocoder
+import ca.floo.roadtrip.models.api.ApiErrorSchema
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 private val LNGLAT_RE = Regex("""^-?\d{1,3}(\.\d{1,8})?,-?\d{1,3}(\.\d{1,8})?$""")
+
+@OptIn(ExperimentalSerializationApi::class)
+private val geocodeRouteJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 /**
  * GET /api/geocode?q=<text>[&autocomplete=0][&proximity=lng,lat][&limit=N]
@@ -25,10 +38,10 @@ private val LNGLAT_RE = Regex("""^-?\d{1,3}(\.\d{1,8})?,-?\d{1,3}(\.\d{1,8})?$""
 fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
     get("/api/geocode") {
         if (!geocoder.configured) {
-            call.respondText(
-                """{"error":"geocoding_unavailable","detail":"MAPBOX_TOKEN not set"}""",
-                io.ktor.http.ContentType.Application.Json,
+            call.respondGeocodeError(
+                "geocoding_unavailable",
                 HttpStatusCode.ServiceUnavailable,
+                detail = "MAPBOX_TOKEN not set",
             )
             return@get
         }
@@ -38,11 +51,7 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
                 ?.trim()
                 .orEmpty()
         if (q.isBlank() || q.length > 200) {
-            call.respondText(
-                """{"error":"bad_query"}""",
-                io.ktor.http.ContentType.Application.Json,
-                HttpStatusCode.BadRequest,
-            )
+            call.respondGeocodeError("bad_query", HttpStatusCode.BadRequest)
             return@get
         }
 
@@ -57,11 +66,7 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
             try {
                 geocoder.forward(q, autocomplete = autocomplete, proximity = proximity, limit = limit)
             } catch (e: GeocodeException) {
-                call.respondText(
-                    """{"error":"geocoding_unavailable","retry_after_s":30}""",
-                    io.ktor.http.ContentType.Application.Json,
-                    HttpStatusCode.ServiceUnavailable,
-                )
+                call.respondGeocodeError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable, retryAfterS = 30)
                 return@get
             }
 
@@ -86,4 +91,19 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
             }
         call.respondText(json.toString(), io.ktor.http.ContentType.Application.Json)
     }
+}
+
+private suspend fun ApplicationCall.respondGeocodeError(
+    error: String,
+    status: HttpStatusCode,
+    detail: String? = null,
+    retryAfterS: Int? = null,
+) {
+    respondText(
+        geocodeRouteJson.encodeToString(
+            ApiErrorSchema(error = error, detail = detail, retry_after_s = retryAfterS),
+        ),
+        ContentType.Application.Json,
+        status,
+    )
 }
