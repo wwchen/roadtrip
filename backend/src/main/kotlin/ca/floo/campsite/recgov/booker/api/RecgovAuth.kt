@@ -16,10 +16,9 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.time.Instant
 import java.util.Base64
@@ -196,21 +195,22 @@ object RecgovAuth {
         val accountId =
             acct?.get("account_id")?.jsonPrimitiveContent()
                 ?: payload["sub"]?.jsonPrimitiveContent().orEmpty()
-        return buildJsonObject {
-            put("access_token", token)
-            put("expiration", expIso)
-            put(
-                "account",
-                buildJsonObject {
-                    put("account_id", accountId)
-                    put("email", acct?.get("email")?.jsonPrimitiveContent().orEmpty())
-                    put("first_name", acct?.get("first_name")?.jsonPrimitiveContent().orEmpty())
-                    put("last_name", acct?.get("last_name")?.jsonPrimitiveContent().orEmpty())
-                },
-            )
-            put("is_guest", false)
-            put("refresh_id", "")
-        }
+        return Json
+            .encodeToJsonElement(
+                RecaccountDto(
+                    accessToken = token,
+                    expiration = expIso,
+                    account =
+                        RecaccountAccountDto(
+                            accountId = accountId,
+                            email = acct?.get("email")?.jsonPrimitiveContent().orEmpty(),
+                            firstName = acct?.get("first_name")?.jsonPrimitiveContent().orEmpty(),
+                            lastName = acct?.get("last_name")?.jsonPrimitiveContent().orEmpty(),
+                        ),
+                    isGuest = false,
+                    refreshId = "",
+                ),
+            ).jsonObject
     }
 
     private fun padBase64Url(s: String): String {
@@ -222,6 +222,23 @@ object RecgovAuth {
         HttpClient(CIO) { engine { requestTimeout = 10_000 } }
     }
 }
+
+@Serializable
+private data class RecaccountDto(
+    @SerialName("access_token") val accessToken: String,
+    val expiration: String,
+    val account: RecaccountAccountDto,
+    @SerialName("is_guest") val isGuest: Boolean,
+    @SerialName("refresh_id") val refreshId: String,
+)
+
+@Serializable
+private data class RecaccountAccountDto(
+    @SerialName("account_id") val accountId: String,
+    val email: String,
+    @SerialName("first_name") val firstName: String,
+    @SerialName("last_name") val lastName: String,
+)
 
 /**
  * PATCH rec.gov's shopping-cart expiration endpoint to keep the hold alive.
