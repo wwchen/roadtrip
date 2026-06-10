@@ -19,10 +19,13 @@ import ca.floo.roadtrip.models.api.ErrorNotFoundSchema
 import ca.floo.roadtrip.models.api.ErrorTargetBusySchema
 import ca.floo.roadtrip.models.api.ErrorUnknownTargetSchema
 import ca.floo.roadtrip.models.api.FanOutResponseSchema
+import ca.floo.roadtrip.models.api.IngestRunListItemSchema
+import ca.floo.roadtrip.models.api.IngestRunPhaseSchema
 import ca.floo.roadtrip.models.api.RunDetailSchema
 import ca.floo.roadtrip.models.api.RunOutcomeSchema
 import ca.floo.roadtrip.models.api.RunsListSchema
 import ca.floo.roadtrip.models.api.StatusResponseSchema
+import ca.floo.roadtrip.models.api.TargetStatusSchema
 import ca.floo.roadtrip.models.ingest.RunKind
 import ca.floo.roadtrip.models.ingest.RunOutcome
 import ca.floo.roadtrip.service.etl.IngestController
@@ -32,13 +35,24 @@ import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.route
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+
+@OptIn(ExperimentalSerializationApi::class)
+private val adminIngestJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 // Admin surface for the ingestion controller (RFC 0004 / issue #44).
 //
@@ -203,7 +217,7 @@ fun Route.adminIngestRoutes(
             }
         }) {
             val target = call.request.queryParameters["target"]
-            call.respondText(listRecent(ctx, target, limit = 50), ContentType.Application.Json)
+            call.respondAdminJson(listRecent(ctx, target, limit = 50))
         }
 
         get("/runs/{id}", {
@@ -235,18 +249,14 @@ fun Route.adminIngestRoutes(
         }) {
             val id = call.parameters["id"]?.toLongOrNull()
             if (id == null) {
-                call.respondText("""{"error":"bad id"}""", ContentType.Application.Json, HttpStatusCode.BadRequest)
+                call.respondAdminJson(ErrorNotFoundSchema(error = "bad id"), HttpStatusCode.BadRequest)
                 return@get
             }
             val body = runDetail(ctx, id)
             if (body == null) {
-                call.respondText(
-                    """{"error":"not found","id":$id}""",
-                    ContentType.Application.Json,
-                    HttpStatusCode.NotFound,
-                )
+                call.respondAdminJson(ErrorNotFoundSchema(error = "not found", id = id), HttpStatusCode.NotFound)
             } else {
-                call.respondText(body, ContentType.Application.Json)
+                call.respondAdminJson(body)
             }
         }
 
@@ -262,7 +272,7 @@ fun Route.adminIngestRoutes(
                 }
             }
         }) {
-            call.respondText(statusByTarget(ctx, controller.knownTargets()), ContentType.Application.Json)
+            call.respondAdminJson(statusByTarget(ctx, controller.knownTargets()))
         }
     }
 }
@@ -279,18 +289,16 @@ private suspend fun io.ktor.server.routing.RoutingContext.runOne(
                 "completed", "noop" -> HttpStatusCode.OK
                 else -> HttpStatusCode.InternalServerError
             }
-        call.respondText(outcomeJson(outcome), ContentType.Application.Json, status)
+        call.respondAdminJson(outcome.toSchema(), status)
     } catch (_: TargetNotFoundException) {
         val known = controller.knownTargets().sorted()
-        call.respondText(
-            """{"error":"unknown target","target":${jsonString(target)},"known":${jsonStringArray(known)}}""",
-            ContentType.Application.Json,
+        call.respondAdminJson(
+            ErrorUnknownTargetSchema(error = "unknown target", target = target, known = known),
             HttpStatusCode.NotFound,
         )
     } catch (e: TargetBusyException) {
-        call.respondText(
-            """{"error":"target busy","target":${jsonString(e.target)},"running_run_id":${e.runningRunId}}""",
-            ContentType.Application.Json,
+        call.respondAdminJson(
+            ErrorTargetBusySchema(error = "target busy", target = e.target, running_run_id = e.runningRunId),
             HttpStatusCode.Conflict,
         )
     }
@@ -349,32 +357,20 @@ private suspend fun io.ktor.server.routing.RoutingContext.runAll(
         anyFailed,
     )
     val status = if (anyFailed) HttpStatusCode.InternalServerError else HttpStatusCode.OK
-    val sb = StringBuilder("""{"kind":""").append(jsonString(kind.rowValue)).append(""","outcomes":[""")
-    outcomes.forEachIndexed { i, o ->
-        if (i > 0) sb.append(',')
-        sb.append(outcomeJson(o))
-    }
-    sb.append("]}")
-    call.respondText(sb.toString(), ContentType.Application.Json, status)
-}
-
-private fun outcomeJson(o: RunOutcome): String {
-    val sb = StringBuilder()
-    sb.append('{')
-    sb.append(""""run_id":""").append(o.parentRunId)
-    sb.append(""","target":""").append(jsonString(o.target))
-    sb.append(""","kind":""").append(jsonString(o.kind.rowValue))
-    sb.append(""","status":""").append(jsonString(o.status))
-    o.failedPhase?.let { sb.append(""","failed_phase":""").append(jsonString(it)) }
-    sb.append('}')
-    return sb.toString()
+    call.respondAdminJson(
+        FanOutResponseSchema(
+            kind = kind.rowValue,
+            outcomes = outcomes.map { it.toSchema() },
+        ),
+        status,
+    )
 }
 
 private fun listRecent(
     ctx: DSLContext,
     target: String?,
     limit: Int,
-): String {
+): RunsListSchema {
     val q =
         ctx
             .select(
@@ -396,28 +392,27 @@ private fun listRecent(
             .limit(limit)
             .fetch()
 
-    val sb = StringBuilder("""{"runs":[""")
-    q.forEachIndexed { i, r ->
-        if (i > 0) sb.append(',')
-        sb.append("""{"id":""").append(r.get(INGEST_RUNS.ID))
-        sb.append(""","target":""").append(jsonString(r.get(INGEST_RUNS.TARGET)!!))
-        // Parent row's `phase` column carries the run kind (fetch | import).
-        sb.append(""","kind":""").append(jsonString(r.get(INGEST_RUNS.PHASE)!!))
-        sb.append(""","status":""").append(jsonString(r.get(INGEST_RUNS.STATUS)!!))
-        sb.append(""","triggered_by":""").append(jsonString(r.get(INGEST_RUNS.TRIGGERED_BY)!!))
-        sb.append(""","started_at":""").append(jsonString(r.get(INGEST_RUNS.STARTED_AT)!!.toString()))
-        val done = r.get(INGEST_RUNS.COMPLETED_AT)
-        if (done != null) sb.append(""","completed_at":""").append(jsonString(done.toString()))
-        sb.append('}')
-    }
-    sb.append("]}")
-    return sb.toString()
+    return RunsListSchema(
+        runs =
+            q.map { r ->
+                IngestRunListItemSchema(
+                    id = r.get(INGEST_RUNS.ID)!!,
+                    target = r.get(INGEST_RUNS.TARGET)!!,
+                    // Parent row's `phase` column carries the run kind (fetch | import).
+                    kind = r.get(INGEST_RUNS.PHASE)!!,
+                    status = r.get(INGEST_RUNS.STATUS)!!,
+                    triggered_by = r.get(INGEST_RUNS.TRIGGERED_BY)!!,
+                    started_at = r.get(INGEST_RUNS.STARTED_AT)!!.toString(),
+                    completed_at = r.get(INGEST_RUNS.COMPLETED_AT)?.toString(),
+                )
+            },
+    )
 }
 
 private fun runDetail(
     ctx: DSLContext,
     id: Long,
-): String? {
+): RunDetailSchema? {
     val parent =
         ctx
             .selectFrom(INGEST_RUNS)
@@ -432,88 +427,80 @@ private fun runDetail(
             .orderBy(INGEST_RUNS.ID.asc())
             .fetch()
 
-    val sb = StringBuilder()
-    sb.append('{')
-    sb.append(""""id":""").append(parent.id)
-    sb.append(""","target":""").append(jsonString(parent.target!!))
-    sb.append(""","kind":""").append(jsonString(parent.phase!!))
-    sb.append(""","status":""").append(jsonString(parent.status!!))
-    sb.append(""","triggered_by":""").append(jsonString(parent.triggeredBy!!))
-    sb.append(""","started_at":""").append(jsonString(parent.startedAt!!.toString()))
-    parent.completedAt?.let { sb.append(""","completed_at":""").append(jsonString(it.toString())) }
-    parent.notes?.let { sb.append(""","notes":""").append(jsonString(it)) }
-    sb.append(""","phases":[""")
-    phases.forEachIndexed { i, p ->
-        if (i > 0) sb.append(',')
-        sb.append('{')
-        sb.append(""""id":""").append(p.id)
-        sb.append(""","phase":""").append(jsonString(p.phase!!))
-        sb.append(""","phase_kind":""").append(jsonString(p.phaseKind!!))
-        sb.append(""","status":""").append(jsonString(p.status!!))
-        p.exitCode?.let { sb.append(""","exit_code":""").append(it) }
-        sb.append(""","started_at":""").append(jsonString(p.startedAt!!.toString()))
-        p.completedAt?.let { sb.append(""","completed_at":""").append(jsonString(it.toString())) }
-        p.counts?.let { sb.append(""","counts":""").append(it.data()) }
-        p.notes?.let { sb.append(""","notes":""").append(jsonString(it)) }
-        sb.append('}')
-    }
-    sb.append("]}")
-    return sb.toString()
+    return RunDetailSchema(
+        id = parent.id!!,
+        target = parent.target!!,
+        kind = parent.phase!!,
+        status = parent.status!!,
+        triggered_by = parent.triggeredBy!!,
+        started_at = parent.startedAt!!.toString(),
+        completed_at = parent.completedAt?.toString(),
+        notes = parent.notes,
+        phases =
+            phases.map { p ->
+                IngestRunPhaseSchema(
+                    id = p.id!!,
+                    phase = p.phase!!,
+                    phase_kind = p.phaseKind!!,
+                    status = p.status!!,
+                    exit_code = p.exitCode,
+                    started_at = p.startedAt!!.toString(),
+                    completed_at = p.completedAt?.toString(),
+                    counts = p.counts?.let { adminIngestJson.parseToJsonElement(it.data()) },
+                    notes = p.notes,
+                )
+            },
+    )
 }
 
 private fun statusByTarget(
     ctx: DSLContext,
     targets: Set<String>,
-): String {
+): StatusResponseSchema {
     val now = OffsetDateTime.now(ZoneOffset.UTC)
-    val sb = StringBuilder("""{"targets":[""")
-    var first = true
-    for (t in targets.sorted()) {
-        if (!first) sb.append(',')
-        first = false
-        val latest =
-            ctx
-                .selectFrom(INGEST_RUNS)
-                .where(INGEST_RUNS.TARGET.eq(t))
-                .and(INGEST_RUNS.PHASE_KIND.eq("target"))
-                .and(INGEST_RUNS.STATUS.`in`("completed", "failed"))
-                .orderBy(INGEST_RUNS.STARTED_AT.desc())
-                .limit(1)
-                .fetchOne()
-        sb.append('{')
-        sb.append(""""target":""").append(jsonString(t))
-        if (latest == null) {
-            sb.append(""","last_run":null,"kind":null,"status":null,"age_sec":null}""")
-        } else {
-            sb.append(""","last_run":""").append(latest.id)
-            sb.append(""","kind":""").append(jsonString(latest.phase!!))
-            sb.append(""","status":""").append(jsonString(latest.status!!))
-            val ageSec =
-                java.time.Duration
-                    .between(latest.completedAt ?: latest.startedAt, now)
-                    .seconds
-            sb.append(""","age_sec":""").append(ageSec).append('}')
-        }
-    }
-    sb.append("]}")
-    return sb.toString()
+    return StatusResponseSchema(
+        targets =
+            targets.sorted().map { target ->
+                val latest =
+                    ctx
+                        .selectFrom(INGEST_RUNS)
+                        .where(INGEST_RUNS.TARGET.eq(target))
+                        .and(INGEST_RUNS.PHASE_KIND.eq("target"))
+                        .and(INGEST_RUNS.STATUS.`in`("completed", "failed"))
+                        .orderBy(INGEST_RUNS.STARTED_AT.desc())
+                        .limit(1)
+                        .fetchOne()
+                if (latest == null) {
+                    TargetStatusSchema(target = target)
+                } else {
+                    val ageSec =
+                        java.time.Duration
+                            .between(latest.completedAt ?: latest.startedAt, now)
+                            .seconds
+                    TargetStatusSchema(
+                        target = target,
+                        last_run = latest.id,
+                        kind = latest.phase!!,
+                        status = latest.status!!,
+                        age_sec = ageSec,
+                    )
+                }
+            },
+    )
 }
 
-private fun jsonString(s: String): String {
-    val sb = StringBuilder(s.length + 2)
-    sb.append('"')
-    for (c in s) {
-        when (c) {
-            '"' -> sb.append("\\\"")
-            '\\' -> sb.append("\\\\")
-            '\n' -> sb.append("\\n")
-            '\r' -> sb.append("\\r")
-            '\t' -> sb.append("\\t")
-            else -> if (c.code < 0x20) sb.append("\\u%04x".format(c.code)) else sb.append(c)
-        }
-    }
-    sb.append('"')
-    return sb.toString()
+private suspend inline fun <reified T> ApplicationCall.respondAdminJson(
+    value: T,
+    status: HttpStatusCode = HttpStatusCode.OK,
+) {
+    respondText(adminIngestJson.encodeToString(value), ContentType.Application.Json, status)
 }
 
-private fun jsonStringArray(items: List<String>): String = items.joinToString(",", prefix = "[", postfix = "]") { jsonString(it) }
+private fun RunOutcome.toSchema(): RunOutcomeSchema =
+    RunOutcomeSchema(
+        run_id = parentRunId,
+        target = target,
+        kind = kind.rowValue,
+        status = status,
+        failed_phase = failedPhase,
+    )
