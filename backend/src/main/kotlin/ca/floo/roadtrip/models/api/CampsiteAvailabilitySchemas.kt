@@ -26,3 +26,17 @@ data class BulkAvailResponseSchema(
     val nights: Int,
     val results: List<BulkAvailEntrySchema>,
 )
+
+@Serializable
+data class AvailabilityErrorSchema(
+    val state: String = "error",
+    val error: String,
+    val retry_after_s: Int? = null,
+)
+
+@Serializable
+data class AvailabilityEmptySchema(
+    val provider: String = "none",
+    val state: String = "empty",
+    val summary: String = "No availability provider",
+)

@@ -10,6 +10,9 @@ import ca.floo.campsite.recgov.booker.api.monthsCovering
 import ca.floo.campsite.recgov.booker.api.todayUtc
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.roadtrip.client.AspiraException
+import ca.floo.roadtrip.models.api.ApiErrorSchema
+import ca.floo.roadtrip.models.api.AvailabilityEmptySchema
+import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.models.api.BulkAvailEntrySchema
 import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
 import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
@@ -24,6 +27,7 @@ import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.plugins.origin
 import io.ktor.server.request.receiveText
@@ -32,6 +36,7 @@ import io.ktor.server.routing.Route
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
@@ -42,6 +47,13 @@ import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
 private val log = LoggerFactory.getLogger("CampsiteAvailabilityRoutes")
+
+@OptIn(ExperimentalSerializationApi::class)
+private val campsiteAvailabilityRouteJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 // Bulk endpoint guardrails. The single-id endpoint already serves the drawer;
 // bulk is for the route-planner card list which scores N campgrounds against
@@ -79,44 +91,42 @@ fun Route.campsiteAvailabilityRoutes(
             "to rec.gov or Aspira NextGen. Response shape is provider-stable; the only " +
             "differences are `provider`, `season` (rec.gov-only), and provider-specific " +
             "extras (`campground_id` for rec.gov; `host`/`map_id` for Aspira)."
+        response {
+            code(HttpStatusCode.BadRequest) {
+                description = "Bad POI id or invalid days."
+                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.NotFound) {
+                description = "No campground/provider row exists for that POI id."
+                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.ServiceUnavailable) {
+                description = "Rate limited or upstream availability service unavailable."
+                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+        }
     }) {
         val poiId =
             call.parameters["poi_id"]?.toLongOrNull()
-                ?: return@get call.respondText(
-                    """{"state":"error","error":"bad_poi_id"}""",
-                    ContentType.Application.Json,
-                    HttpStatusCode.BadRequest,
-                )
+                ?: return@get call.respondAvailabilityError("bad_poi_id", HttpStatusCode.BadRequest)
 
         val days =
             call.request.queryParameters["days"]?.toIntOrNull()
                 ?: DEFAULT_AVAILABILITY_DAYS
         if (days !in 1..MAX_AVAILABILITY_DAYS) {
-            call.respondText(
-                """{"state":"error","error":"bad_days"}""",
-                ContentType.Application.Json,
-                HttpStatusCode.BadRequest,
-            )
+            call.respondAvailabilityError("bad_days", HttpStatusCode.BadRequest)
             return@get
         }
 
         val ip = call.request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
-            call.respondText(
-                """{"state":"error","error":"ip_throttled","retry_after_s":30}""",
-                ContentType.Application.Json,
-                HttpStatusCode.ServiceUnavailable,
-            )
+            call.respondAvailabilityError("ip_throttled", HttpStatusCode.ServiceUnavailable, retryAfterS = 30)
             return@get
         }
 
         val row = providerRefs.findProviderRef(poiId)
         if (row == null) {
-            call.respondText(
-                """{"state":"error","error":"unknown_campground"}""",
-                ContentType.Application.Json,
-                HttpStatusCode.NotFound,
-            )
+            call.respondAvailabilityError("unknown_campground", HttpStatusCode.NotFound)
             return@get
         }
         val variant = parseProviderRef(row.providerRefJson)
@@ -125,7 +135,7 @@ fun Route.campsiteAvailabilityRoutes(
             // should prevent this from being called for non-bookable rows;
             // returning empty keeps the FE happy even if it slips through.
             call.respondText(
-                """{"provider":"none","state":"empty","summary":"No availability provider"}""",
+                campsiteAvailabilityRouteJson.encodeToString(AvailabilityEmptySchema()),
                 ContentType.Application.Json,
             )
             return@get
@@ -145,11 +155,7 @@ fun Route.campsiteAvailabilityRoutes(
                         val host = aspiraHostBySource[row.source]
                         if (host == null) {
                             log.warn("aspira poi {} has source={} with no host mapping", poiId, row.source)
-                            call.respondText(
-                                """{"state":"error","error":"unknown_aspira_host"}""",
-                                ContentType.Application.Json,
-                                HttpStatusCode.InternalServerError,
-                            )
+                            call.respondAvailabilityError("unknown_aspira_host", HttpStatusCode.InternalServerError)
                             return@get
                         }
                         fetchAndClassifyAspira(aspiraCache, host, variant.mapId, today, days, force)
@@ -221,6 +227,11 @@ fun Route.campsiteAvailabilityRoutes(
             }
             code(HttpStatusCode.BadRequest) {
                 description = "Malformed body, missing fields, or limits exceeded."
+                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.ServiceUnavailable) {
+                description = "Rate limited."
+                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
@@ -228,27 +239,23 @@ fun Route.campsiteAvailabilityRoutes(
             try {
                 Json.decodeFromString(BulkAvailRequestSchema.serializer(), call.receiveText())
             } catch (e: Exception) {
-                call.respondText(
-                    """{"error":"bad_request","detail":"${escapeJsonInline(e.message ?: "parse failed")}"}""",
-                    ContentType.Application.Json,
-                    HttpStatusCode.BadRequest,
-                )
+                call.respondApiError("bad_request", HttpStatusCode.BadRequest, detail = e.message ?: "parse failed")
                 return@post
             }
 
         if (req.ids.isEmpty() || req.ids.size > MAX_BULK_IDS) {
-            call.respondText(
-                """{"error":"bad_ids","detail":"need 1..$MAX_BULK_IDS ids, got ${req.ids.size}"}""",
-                ContentType.Application.Json,
+            call.respondApiError(
+                "bad_ids",
                 HttpStatusCode.BadRequest,
+                detail = "need 1..$MAX_BULK_IDS ids, got ${req.ids.size}",
             )
             return@post
         }
         if (req.nights !in 1..MAX_NIGHTS) {
-            call.respondText(
-                """{"error":"bad_nights","detail":"nights must be in 1..$MAX_NIGHTS"}""",
-                ContentType.Application.Json,
+            call.respondApiError(
+                "bad_nights",
                 HttpStatusCode.BadRequest,
+                detail = "nights must be in 1..$MAX_NIGHTS",
             )
             return@post
         }
@@ -256,21 +263,13 @@ fun Route.campsiteAvailabilityRoutes(
             try {
                 LocalDate.parse(req.start)
             } catch (e: Exception) {
-                call.respondText(
-                    """{"error":"bad_start","detail":"start must be YYYY-MM-DD"}""",
-                    ContentType.Application.Json,
-                    HttpStatusCode.BadRequest,
-                )
+                call.respondApiError("bad_start", HttpStatusCode.BadRequest, detail = "start must be YYYY-MM-DD")
                 return@post
             }
 
         val ip = call.request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
-            call.respondText(
-                """{"error":"ip_throttled","retry_after_s":30}""",
-                ContentType.Application.Json,
-                HttpStatusCode.ServiceUnavailable,
-            )
+            call.respondApiError("ip_throttled", HttpStatusCode.ServiceUnavailable, retryAfterS = 30)
             return@post
         }
 
@@ -386,8 +385,31 @@ private fun parseProviderRef(json: String): ProviderVariant? {
     return null
 }
 
-private fun escapeJsonInline(s: String): String =
-    s
-        .replace("\\", "\\\\")
-        .replace("\"", "\\\"")
-        .replace("\n", "\\n")
+private suspend fun ApplicationCall.respondAvailabilityError(
+    error: String,
+    status: HttpStatusCode,
+    retryAfterS: Int? = null,
+) {
+    respondText(
+        campsiteAvailabilityRouteJson.encodeToString(
+            AvailabilityErrorSchema(error = error, retry_after_s = retryAfterS),
+        ),
+        ContentType.Application.Json,
+        status,
+    )
+}
+
+private suspend fun ApplicationCall.respondApiError(
+    error: String,
+    status: HttpStatusCode,
+    detail: String? = null,
+    retryAfterS: Int? = null,
+) {
+    respondText(
+        campsiteAvailabilityRouteJson.encodeToString(
+            ApiErrorSchema(error = error, detail = detail, retry_after_s = retryAfterS),
+        ),
+        ContentType.Application.Json,
+        status,
+    )
+}
