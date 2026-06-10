@@ -206,7 +206,7 @@ class SettingsRoutesTest {
             val resp =
                 client.post("/api/campsite/booking/session/import") {
                     contentType(ContentType.Application.Json)
-                    setBody(buildJson("raw", curl))
+                    setBody(buildJson("raw", curl, extra = ",\"ignored_by_dto\":\"compat\""))
                 }
             assertEquals(HttpStatusCode.OK, resp.status)
             assertEquals(token, settings.get("recgov_token"))
@@ -224,7 +224,7 @@ class SettingsRoutesTest {
             val resp =
                 client.post("/api/campsite/booking/session/import") {
                     contentType(ContentType.Application.Json)
-                    setBody(buildJson("raw", curl))
+                    setBody(buildJson("raw", curl, extra = ",\"ignored_by_dto\":\"compat\""))
                 }
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(true, body["loggedIn"]?.jsonPrimitive?.boolean)
@@ -354,12 +354,13 @@ class SettingsRoutesTest {
     private fun buildJson(
         key: String,
         value: String,
+        extra: String = "",
     ): String {
         val escaped =
             value
                 .replace("\\", "\\\\")
                 .replace("\"", "\\\"")
                 .replace("\n", "\\n")
-        return """{"$key":"$escaped"}"""
+        return """{"$key":"$escaped"$extra}"""
     }
 }

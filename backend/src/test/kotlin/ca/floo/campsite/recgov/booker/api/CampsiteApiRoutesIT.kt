@@ -454,7 +454,7 @@ class CampsiteApiRoutesIT {
             val open =
                 client.post("/api/campsite/booking/matches/$matchId/cart") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"action":"open"}""")
+                    setBody("""{"action":"open","ignored_by_dto":"compat"}""")
                 }
             assertEquals(HttpStatusCode.OK, open.status)
             assertTrue(json(open.bodyAsText())["url"]!!.jsonPrimitive.content.contains("/campgrounds/232447"))
