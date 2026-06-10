@@ -1,9 +1,11 @@
 package ca.floo.campsite.recgov.booker.events
 
-import kotlinx.serialization.json.JsonNull
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.time.Instant
+
+private val campsiteEventJson = Json
 
 /**
  * Typed event hierarchy for the campsite subsystem. Subscribers (TokenManager,
@@ -39,10 +41,7 @@ sealed interface CampsiteEvent {
     data object LivenessTick : CampsiteEvent {
         override fun sseType() = "tick"
 
-        override fun sseData() =
-            buildJsonObject {
-                put("at", Instant.now().toString())
-            }.toString()
+        override fun sseData() = campsiteEventJson.encodeToString(LivenessTickEventDto(at = Instant.now().toString()))
     }
 
     // ----- User-initiated -----
@@ -90,11 +89,13 @@ sealed interface CampsiteEvent {
         override fun sseType() = "poll_done"
 
         override fun sseData() =
-            buildJsonObject {
-                if (alertId != null) put("alertId", alertId) else put("alertId", JsonNull)
-                put("success", success)
-                put("endedAt", endedAt)
-            }.toString()
+            campsiteEventJson.encodeToString(
+                PollDoneEventDto(
+                    alertId = alertId,
+                    success = success,
+                    endedAt = endedAt,
+                ),
+            )
     }
 
     data class Claimed(
@@ -105,11 +106,13 @@ sealed interface CampsiteEvent {
         override fun sseType() = "claimed"
 
         override fun sseData() =
-            buildJsonObject {
-                put("id", matchId)
-                put("companionId", companionId)
-                put("leaseExpires", leaseExpires)
-            }.toString()
+            campsiteEventJson.encodeToString(
+                ClaimedEventDto(
+                    id = matchId,
+                    companionId = companionId,
+                    leaseExpires = leaseExpires,
+                ),
+            )
     }
 
     data class Result(
@@ -120,11 +123,13 @@ sealed interface CampsiteEvent {
         override fun sseType() = "result"
 
         override fun sseData() =
-            buildJsonObject {
-                put("id", matchId)
-                put("cartAdded", cartAdded)
-                put("companionId", companionId)
-            }.toString()
+            campsiteEventJson.encodeToString(
+                ResultEventDto(
+                    id = matchId,
+                    cartAdded = cartAdded,
+                    companionId = companionId,
+                ),
+            )
     }
 
     data class LeaseExpired(
@@ -132,11 +137,7 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "lease_expired"
 
-        override fun sseData() =
-            buildJsonObject {
-                put("id", matchId)
-                put("reason", "lease_expired")
-            }.toString()
+        override fun sseData() = campsiteEventJson.encodeToString(LeaseExpiredEventDto(id = matchId, reason = "lease_expired"))
     }
 
     data class CompanionOffline(
@@ -146,10 +147,12 @@ sealed interface CampsiteEvent {
         override fun sseType() = "companion_offline"
 
         override fun sseData() =
-            buildJsonObject {
-                put("companionId", companionId)
-                put("lastSeen", lastSeen)
-            }.toString()
+            campsiteEventJson.encodeToString(
+                CompanionOfflineEventDto(
+                    companionId = companionId,
+                    lastSeen = lastSeen,
+                ),
+            )
     }
 
     data class CompanionOnline(
@@ -157,10 +160,7 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "companion_online"
 
-        override fun sseData() =
-            buildJsonObject {
-                put("companionId", companionId)
-            }.toString()
+        override fun sseData() = campsiteEventJson.encodeToString(CompanionOnlineEventDto(companionId = companionId))
     }
 
     data class TokenRefreshed(
@@ -168,10 +168,7 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "token_refreshed"
 
-        override fun sseData() =
-            buildJsonObject {
-                put("expires", expires)
-            }.toString()
+        override fun sseData() = campsiteEventJson.encodeToString(TokenRefreshedEventDto(expires = expires))
     }
 
     data class TokenRefreshFailed(
@@ -179,10 +176,7 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "token_refresh_failed"
 
-        override fun sseData() =
-            buildJsonObject {
-                put("reason", reason)
-            }.toString()
+        override fun sseData() = campsiteEventJson.encodeToString(TokenRefreshFailedEventDto(reason = reason))
     }
 
     data class RecgovDegraded(
@@ -190,10 +184,7 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "recgov_degraded"
 
-        override fun sseData() =
-            buildJsonObject {
-                put("reason", reason)
-            }.toString()
+        override fun sseData() = campsiteEventJson.encodeToString(RecgovDegradedEventDto(reason = reason))
     }
 
     data class RecgovRecovered(
@@ -201,9 +192,69 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "recgov_recovered"
 
-        override fun sseData() =
-            buildJsonObject {
-                put("checkedAt", checkedAt)
-            }.toString()
+        override fun sseData() = campsiteEventJson.encodeToString(RecgovRecoveredEventDto(checkedAt = checkedAt))
     }
 }
+
+@Serializable
+private data class LivenessTickEventDto(
+    val at: String,
+)
+
+@Serializable
+private data class PollDoneEventDto(
+    val alertId: Long?,
+    val success: Boolean,
+    val endedAt: String,
+)
+
+@Serializable
+private data class ClaimedEventDto(
+    val id: Long,
+    val companionId: String,
+    val leaseExpires: String,
+)
+
+@Serializable
+private data class ResultEventDto(
+    val id: Long,
+    val cartAdded: Boolean,
+    val companionId: String,
+)
+
+@Serializable
+private data class LeaseExpiredEventDto(
+    val id: Long,
+    val reason: String,
+)
+
+@Serializable
+private data class CompanionOfflineEventDto(
+    val companionId: String,
+    val lastSeen: String,
+)
+
+@Serializable
+private data class CompanionOnlineEventDto(
+    val companionId: String,
+)
+
+@Serializable
+private data class TokenRefreshedEventDto(
+    val expires: String,
+)
+
+@Serializable
+private data class TokenRefreshFailedEventDto(
+    val reason: String,
+)
+
+@Serializable
+private data class RecgovDegradedEventDto(
+    val reason: String,
+)
+
+@Serializable
+private data class RecgovRecoveredEventDto(
+    val checkedAt: String,
+)
