@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.etl
 
-import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.models.ingest.Phase
 import ca.floo.roadtrip.models.ingest.RunKind
 import ca.floo.roadtrip.models.ingest.RunOutcome
 import ca.floo.roadtrip.models.ingest.Target
+import ca.floo.roadtrip.repo.IngestRunRepo
 import kotlinx.coroutines.CoroutineDispatcher
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -24,8 +24,6 @@ import java.io.BufferedReader
 import java.io.File
 import java.io.InputStreamReader
 import java.time.Duration
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 
 @OptIn(ExperimentalSerializationApi::class)
 private val ingestControllerJson =
@@ -68,6 +66,7 @@ class IngestController(
     private val processFactory: ProcessFactory = DefaultProcessFactory,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val ingestRunRepo = IngestRunRepo(ctx)
 
     // Per-target mutex. Fetch and import keyspaces are disjoint (slug vs.
     // poi_data name); use a combined map keyed by "<kind>:<name>" so
@@ -112,7 +111,7 @@ class IngestController(
                 RunKind.IMPORT -> target.importPhases
             }
 
-        val parentId = createParentRow(target.name, kind, triggeredBy)
+        val parentId = ingestRunRepo.createParentRow(target.name, kind, triggeredBy)
         synchronized(active) { active[lockKey] = parentId }
         log.info(
             "ingest_runs id={} target={} kind={} started ({} phases)",
@@ -140,29 +139,29 @@ class IngestController(
         // has no fetch step). Mark the parent completed and return; this
         // shows up cleanly on the dashboard rather than as a phantom row.
         if (phases.isEmpty()) {
-            completeParent(parentId)
+            ingestRunRepo.completeParent(parentId)
             return RunOutcome(parentId, target.name, kind, "noop", null)
         }
 
         for (phase in phases) {
-            val phaseId = createPhaseRow(parentId, target.name, phase)
+            val phaseId = ingestRunRepo.createPhaseRow(parentId, target.name, phase)
             try {
                 val counts =
                     when (phase) {
                         is Phase.Fetch -> runFetch(phase)
                         is Phase.Import -> runImport(phase)
                     }
-                completePhase(phaseId, counts)
+                ingestRunRepo.completePhase(phaseId, counts)
                 log.info("ingest_runs id={} phase={} completed", phaseId, phase.label)
             } catch (e: Throwable) {
                 val (notes, exit) = phaseFailureNotes(e)
-                failPhase(phaseId, notes, exit)
-                failParent(parentId, "phase=${phase.label}: ${notes.take(300)}")
+                ingestRunRepo.failPhase(phaseId, notes, exit)
+                ingestRunRepo.failParent(parentId, "phase=${phase.label}: ${notes.take(300)}")
                 log.warn("ingest_runs id={} phase={} failed: {}", phaseId, phase.label, notes.take(300))
                 return RunOutcome(parentId, target.name, kind, "failed", phase.label)
             }
         }
-        completeParent(parentId)
+        ingestRunRepo.completeParent(parentId)
         return RunOutcome(parentId, target.name, kind, "completed", null)
     }
 
@@ -244,98 +243,6 @@ class IngestController(
                 ),
             )
         }
-
-    // -- ingest_runs row CRUD -------------------------------------------------
-    private fun createParentRow(
-        target: String,
-        kind: RunKind,
-        triggeredBy: String,
-    ): Long =
-        ctx
-            .insertInto(INGEST_RUNS)
-            .set(INGEST_RUNS.TARGET, target)
-            .set(INGEST_RUNS.PHASE, kind.rowValue) // 'fetch' or 'import'
-            .set(INGEST_RUNS.PHASE_KIND, "target")
-            .set(INGEST_RUNS.STATUS, "started")
-            .set(INGEST_RUNS.TRIGGERED_BY, triggeredBy)
-            .set(INGEST_RUNS.STARTED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .returningResult(INGEST_RUNS.ID)
-            .fetchOne()!!
-            .value1()!!
-
-    private fun createPhaseRow(
-        parentId: Long,
-        target: String,
-        phase: Phase,
-    ): Long {
-        val kind =
-            when (phase) {
-                is Phase.Fetch -> "fetch"
-                is Phase.Import -> "import"
-            }
-        return ctx
-            .insertInto(INGEST_RUNS)
-            .set(INGEST_RUNS.TARGET, target)
-            .set(INGEST_RUNS.PHASE, phase.label)
-            .set(INGEST_RUNS.PHASE_KIND, kind)
-            .set(INGEST_RUNS.PARENT_RUN_ID, parentId)
-            .set(INGEST_RUNS.STATUS, "started")
-            .set(INGEST_RUNS.TRIGGERED_BY, "phase")
-            .set(INGEST_RUNS.STARTED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .returningResult(INGEST_RUNS.ID)
-            .fetchOne()!!
-            .value1()!!
-    }
-
-    private fun completePhase(
-        phaseId: Long,
-        counts: JSONB,
-    ) {
-        ctx
-            .update(INGEST_RUNS)
-            .set(INGEST_RUNS.STATUS, "completed")
-            .set(INGEST_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .set(INGEST_RUNS.COUNTS, counts)
-            .where(INGEST_RUNS.ID.eq(phaseId))
-            .execute()
-    }
-
-    private fun failPhase(
-        phaseId: Long,
-        notes: String,
-        exitCode: Int?,
-    ) {
-        ctx
-            .update(INGEST_RUNS)
-            .set(INGEST_RUNS.STATUS, "failed")
-            .set(INGEST_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .set(INGEST_RUNS.NOTES, notes)
-            .apply { if (exitCode != null) set(INGEST_RUNS.EXIT_CODE, exitCode) }
-            .where(INGEST_RUNS.ID.eq(phaseId))
-            .execute()
-    }
-
-    private fun completeParent(parentId: Long) {
-        ctx
-            .update(INGEST_RUNS)
-            .set(INGEST_RUNS.STATUS, "completed")
-            .set(INGEST_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .where(INGEST_RUNS.ID.eq(parentId))
-            .execute()
-    }
-
-    private fun failParent(
-        parentId: Long,
-        notes: String,
-    ) {
-        ctx
-            .update(INGEST_RUNS)
-            .set(INGEST_RUNS.STATUS, "failed")
-            .set(INGEST_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .set(INGEST_RUNS.NOTES, notes)
-            .where(INGEST_RUNS.ID.eq(parentId))
-            .execute()
-    }
 
     private fun phaseFailureNotes(e: Throwable): Pair<String, Int?> =
         when (e) {
