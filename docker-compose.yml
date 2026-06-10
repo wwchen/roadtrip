@@ -48,7 +48,7 @@ services:
   #   - GET /web/*, /data/*         → static files (data/pricing-cache/ excluded)
   #   - GET /api/pois               → bbox query against postgres
   #   - GET /api/pricing/{slug}     → cache-only read of data/pricing-cache/{slug}.json
-  #   - GET /api/health             → status snapshot (cache count + db ping)
+  #   - GET /api/health             → liveness/readiness probe
   # Static files come from the repo bind-mount so deploys are git-pull +
   # docker compose up — no Dockerfile rebuild needed for HTML/JS/data changes.
   backend:

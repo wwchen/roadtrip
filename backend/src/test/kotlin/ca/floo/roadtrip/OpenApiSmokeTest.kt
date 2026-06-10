@@ -1,6 +1,8 @@
 package ca.floo.roadtrip
 
+import ca.floo.campsite.recgov.booker.api.eventsRoutes
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
+import ca.floo.campsite.recgov.booker.events.EventBus
 import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import ca.floo.roadtrip.client.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.MapboxDirections
@@ -22,8 +24,10 @@ import io.ktor.server.application.install
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import io.ktor.server.sse.SSE
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.SQLDialect
@@ -72,11 +76,12 @@ class OpenApiSmokeTest {
         testApplication {
             application {
                 install(SwaggerUI)
+                install(SSE)
                 val ctx = DSL.using(SQLDialect.POSTGRES)
                 val registry = PoiRegistry.load(File("../config/poi-registry.yaml"))
                 routing {
                     route("/api/docs/openapi.json") { openApiSpec() }
-                    healthRoutes(File("../data/raw"))
+                    healthRoutes()
                     poiRoutes(ctx, registry)
                     poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), registry)
                     campsiteAvailabilityRoutes(
@@ -85,6 +90,7 @@ class OpenApiSmokeTest {
                         CachedAspiraAvailability(AspiraAvailabilityClient()),
                         registry,
                     )
+                    eventsRoutes(EventBus())
                 }
             }
 
@@ -97,7 +103,7 @@ class OpenApiSmokeTest {
 
             val healthGet =
                 paths["/api/health"]!!.jsonObject["get"]!!.jsonObject
-            assertEquals("Liveness probe + supercharger detail cache size", healthGet["summary"]!!.jsonPrimitive.content)
+            assertEquals("Application liveness/readiness probe", healthGet["summary"]!!.jsonPrimitive.content)
             assertEquals(
                 "health",
                 healthGet["tags"]!!
@@ -126,6 +132,21 @@ class OpenApiSmokeTest {
             assertEquals(
                 "Bulk per-day availability for many campgrounds in a date window (poi-id keyed)",
                 bulkPost["summary"]!!.jsonPrimitive.content,
+            )
+
+            val campsiteEventsGet =
+                paths["/api/campsite/events"]!!.jsonObject["get"]!!.jsonObject
+            assertEquals(
+                "Live campsite event stream (SSE)",
+                campsiteEventsGet["summary"]!!.jsonPrimitive.content,
+            )
+            assertEquals(
+                "campsite",
+                campsiteEventsGet["tags"]!!
+                    .jsonArray
+                    .single()
+                    .jsonPrimitive
+                    .content,
             )
         }
 

@@ -74,7 +74,6 @@ fun Application.module() {
     // (gradle run) or at /app/static inside the container (bind-mounted from
     // the host's repo root). Raw upstream captures live under data/raw/.
     val staticDir = File(System.getenv("ROADTRIP_STATIC_DIR") ?: ".")
-    val rawDataDir = File(staticDir, "data/raw")
 
     // Mapbox Directions for /api/route + Mapbox Geocoding for /api/geocode.
     // Both share MAPBOX_TOKEN. Token stays server-side — never sent to the
@@ -221,7 +220,7 @@ fun Application.module() {
         poisOnRouteRoutes(ctx, routeCache, poiRegistry)
         routeRoutes(routeCache, ctx)
         geocodeRoutes(mapboxGeocoder)
-        healthRoutes(rawDataDir)
+        healthRoutes()
         campsiteAvailabilityRoutes(ctx, campsite.cachedAvailability, aspiraCache, poiRegistry)
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)

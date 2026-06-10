@@ -246,7 +246,7 @@ class AdminIngestRoutesTest {
         }
 
     @Test
-    fun `GET health includes every known target`() =
+    fun `GET status includes every known target`() =
         testApplication {
             val controller =
                 controllerWith(
@@ -257,7 +257,7 @@ class AdminIngestRoutesTest {
                 )
             application { routing { adminIngestRoutes(controller, ctx) } }
 
-            val resp = client.get("/api/admin/data/health")
+            val resp = client.get("/api/admin/data/status")
             assertEquals(HttpStatusCode.OK, resp.status)
             val targets =
                 Json

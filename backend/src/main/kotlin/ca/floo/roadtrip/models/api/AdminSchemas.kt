@@ -53,7 +53,7 @@ data class RunDetailSchema(
 )
 
 @Serializable
-data class TargetHealthSchema(
+data class TargetStatusSchema(
     val target: String,
     val last_run: Long? = null,
     val kind: String? = null,
@@ -62,8 +62,8 @@ data class TargetHealthSchema(
 )
 
 @Serializable
-data class HealthResponseSchema(
-    val targets: List<TargetHealthSchema>,
+data class StatusResponseSchema(
+    val targets: List<TargetStatusSchema>,
 )
 
 @Serializable
@@ -217,18 +217,18 @@ val EXAMPLE_RUN_DETAIL =
             ),
     )
 
-val EXAMPLE_HEALTH =
-    HealthResponseSchema(
+val EXAMPLE_STATUS =
+    StatusResponseSchema(
         targets =
             listOf(
-                TargetHealthSchema(
+                TargetStatusSchema(
                     target = "campgrounds",
                     last_run = 42,
                     kind = "fetch",
                     status = "completed",
                     age_sec = 3742,
                 ),
-                TargetHealthSchema(target = "planet-fitness"),
+                TargetStatusSchema(target = "planet-fitness"),
             ),
     )
 
