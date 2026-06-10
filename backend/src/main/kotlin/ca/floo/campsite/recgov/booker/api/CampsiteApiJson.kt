@@ -50,7 +50,7 @@ internal suspend fun ApplicationCall.respondJsonElement(
     value: JsonElement,
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
-    respondText(value.toString(), ContentType.Application.Json, status)
+    respondText(campsiteApiJson.encodeToString(value), ContentType.Application.Json, status)
 }
 
 @Serializable
