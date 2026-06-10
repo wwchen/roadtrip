@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.etl
 
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
+import ca.floo.roadtrip.models.Address
 import ca.floo.roadtrip.models.Poi
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.registry.PoiRegistry
@@ -137,7 +138,7 @@ class EtlOrchestratorTest {
     }
 
     @Test
-    fun `campground provider refs are serialized with json dto escaping`() {
+    fun `campground jsonb fields are serialized with dto escaping`() {
         Upsert(ctx).run(
             sources = setOf("provider-ref-test"),
             pois =
@@ -150,7 +151,13 @@ class EtlOrchestratorTest {
                         region = "BC",
                         country = "CA",
                         phone = null,
-                        address = null,
+                        address =
+                            Address(
+                                street = """12 "Quoted" Road""",
+                                city = "Vancouver",
+                                state = "BC",
+                                country = "CA",
+                            ),
                         infoUrl = null,
                         fetchedAt = Instant.parse("2026-01-01T00:00:00Z"),
                         lastVerified = null,
@@ -169,16 +176,23 @@ class EtlOrchestratorTest {
                 ),
         )
 
-        val providerRef =
+        val row =
             ctx
-                .select(POIS.PROVIDER_REF)
+                .select(POIS.PROVIDER_REF, POIS.ADDRESS)
                 .from(POIS)
                 .where(POIS.SOURCE.eq("provider-ref-test"))
                 .and(POIS.SOURCE_ID.eq("quoted-recgov"))
-                .fetchOne(POIS.PROVIDER_REF)
-        assertNotNull(providerRef)
+                .fetchOne()
+        assertNotNull(row)
 
-        val providerRefJson = Json.parseToJsonElement(providerRef.data()).jsonObject
+        val providerRefJson = Json.parseToJsonElement(row.value1()!!.data()).jsonObject
         assertEquals("""12"345""", providerRefJson["recgov_id"]!!.jsonPrimitive.content)
+
+        val addressJson = Json.parseToJsonElement(row.value2()!!.data()).jsonObject
+        assertEquals("""12 "Quoted" Road""", addressJson["street"]!!.jsonPrimitive.content)
+        assertEquals("Vancouver", addressJson["city"]!!.jsonPrimitive.content)
+        assertEquals("BC", addressJson["state"]!!.jsonPrimitive.content)
+        assertEquals("CA", addressJson["country"]!!.jsonPrimitive.content)
+        assertEquals(null, addressJson["postcode"])
     }
 }
