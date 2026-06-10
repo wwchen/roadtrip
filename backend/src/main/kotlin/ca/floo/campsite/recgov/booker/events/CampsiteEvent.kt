@@ -1,8 +1,9 @@
 package ca.floo.campsite.recgov.booker.events
 
-import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import java.time.Instant
 
 /**
  * Typed event hierarchy for the campsite subsystem. Subscribers (TokenManager,
@@ -38,7 +39,10 @@ sealed interface CampsiteEvent {
     data object LivenessTick : CampsiteEvent {
         override fun sseType() = "tick"
 
-        override fun sseData() = """{"at":"${java.time.Instant.now()}"}"""
+        override fun sseData() =
+            buildJsonObject {
+                put("at", Instant.now().toString())
+            }.toString()
     }
 
     // ----- User-initiated -----
@@ -87,7 +91,7 @@ sealed interface CampsiteEvent {
 
         override fun sseData() =
             buildJsonObject {
-                if (alertId != null) put("alertId", alertId) else put("alertId", JsonPrimitive(null as String?))
+                if (alertId != null) put("alertId", alertId) else put("alertId", JsonNull)
                 put("success", success)
                 put("endedAt", endedAt)
             }.toString()
@@ -128,7 +132,11 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "lease_expired"
 
-        override fun sseData() = """{"id":$matchId,"reason":"lease_expired"}"""
+        override fun sseData() =
+            buildJsonObject {
+                put("id", matchId)
+                put("reason", "lease_expired")
+            }.toString()
     }
 
     data class CompanionOffline(
@@ -137,7 +145,11 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "companion_offline"
 
-        override fun sseData() = """{"companionId":"$companionId","lastSeen":"$lastSeen"}"""
+        override fun sseData() =
+            buildJsonObject {
+                put("companionId", companionId)
+                put("lastSeen", lastSeen)
+            }.toString()
     }
 
     data class CompanionOnline(
@@ -145,7 +157,10 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "companion_online"
 
-        override fun sseData() = """{"companionId":"$companionId"}"""
+        override fun sseData() =
+            buildJsonObject {
+                put("companionId", companionId)
+            }.toString()
     }
 
     data class TokenRefreshed(
@@ -153,7 +168,10 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "token_refreshed"
 
-        override fun sseData() = """{"expires":"$expires"}"""
+        override fun sseData() =
+            buildJsonObject {
+                put("expires", expires)
+            }.toString()
     }
 
     data class TokenRefreshFailed(
@@ -183,6 +201,9 @@ sealed interface CampsiteEvent {
     ) : CampsiteEvent {
         override fun sseType() = "recgov_recovered"
 
-        override fun sseData() = """{"checkedAt":"$checkedAt"}"""
+        override fun sseData() =
+            buildJsonObject {
+                put("checkedAt", checkedAt)
+            }.toString()
     }
 }
