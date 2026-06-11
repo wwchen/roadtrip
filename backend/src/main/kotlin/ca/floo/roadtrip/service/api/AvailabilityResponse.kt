@@ -23,13 +23,14 @@ import java.time.LocalDate
 // per-sub-area per-day status codes). Everything below is provider-agnostic.
 
 @OptIn(ExperimentalSerializationApi::class)
-private val availabilityResponseJson =
+@PublishedApi
+internal val availabilityResponseJson: Json =
     Json {
         encodeDefaults = true
         explicitNulls = false
     }
 
-internal inline fun <reified T> encodeAvailabilityJson(value: T): String = availabilityResponseJson.encodeToString(value)
+inline fun <reified T> encodeAvailabilityJson(value: T): String = availabilityResponseJson.encodeToString(value)
 
 data class DayClassification(
     val date: String,
@@ -80,7 +81,7 @@ fun summarizeWindow(
  *   - Provider-specific fields (recgov: campground_id; aspira: host, map_id)
  *     are additive — the FE ignores unknown fields.
  */
-internal fun availabilityResponseDto(
+fun availabilityResponseDto(
     provider: String,
     today: LocalDate,
     days: Int,
@@ -116,7 +117,7 @@ internal fun availabilityResponseDto(
     )
 
 @Serializable
-internal data class AvailabilityResponseDto(
+data class AvailabilityResponseDto(
     val provider: String,
     @SerialName("campground_id") val campgroundId: String? = null,
     val host: String? = null,
@@ -131,13 +132,13 @@ internal data class AvailabilityResponseDto(
 )
 
 @Serializable
-internal data class AvailabilityWindowDto(
+data class AvailabilityWindowDto(
     val start: String,
     val days: Int,
 )
 
 @Serializable
-internal data class AvailabilityDayDto(
+data class AvailabilityDayDto(
     val date: String,
     val status: String,
     @SerialName("available_count") val availableCount: Int,
@@ -145,12 +146,12 @@ internal data class AvailabilityDayDto(
 )
 
 @Serializable
-internal data class AvailabilitySeasonBlock(
+data class AvailabilitySeasonBlock(
     @SerialName("reopens_on") val reopensOn: String,
 )
 
 @Serializable
-internal data class AvailabilityCacheBlock(
+data class AvailabilityCacheBlock(
     val hit: Boolean,
     @SerialName("age_seconds") val ageSeconds: Long,
     @SerialName("ttl_seconds") val ttlSeconds: Long,
