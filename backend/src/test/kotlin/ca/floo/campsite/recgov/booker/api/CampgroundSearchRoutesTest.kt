@@ -5,18 +5,24 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.put
 import kotlin.test.Test
 import kotlin.test.assertEquals
+
+@OptIn(ExperimentalSerializationApi::class)
+private val campgroundSearchEncodingTestJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = true
+    }
 
 class CampgroundSearchRoutesTest {
     @Test
@@ -136,6 +142,73 @@ class CampgroundSearchRoutesTest {
             assertEquals("Lower", campgrounds[1].jsonObject["name"]!!.jsonPrimitive.content)
         }
 
+    @Test
+    fun `upstream dto decodes flexible rating and review primitives`() {
+        val body =
+            """
+            {
+              "results": [
+                {
+                  "entity_id": "232447",
+                  "name": "Upper Pines",
+                  "average_rating": "4.6",
+                  "number_of_ratings": "42"
+                },
+                {
+                  "entity_id": "232448",
+                  "name": "Lower Pines",
+                  "average_rating": null,
+                  "number_of_ratings": 7
+                }
+              ]
+            }
+            """.trimIndent()
+
+        val results =
+            parseCampgroundSearchResults(body)
+
+        assertEquals(4.6, results[0].averageRating)
+        assertEquals(42, results[0].numberOfRatings)
+        assertEquals(null, results[1].averageRating)
+        assertEquals(7, results[1].numberOfRatings)
+    }
+
+    @Test
+    fun `upstream dto encodes flexible rating and review primitives`() {
+        val body =
+            campgroundSearchEncodingTestJson.encodeToString(
+                CampgroundSearchUpstreamResponseDto(
+                    results =
+                        listOf(
+                            CampgroundSearchUpstreamResultDto(
+                                entityId = "232447",
+                                name = "Upper Pines",
+                                addresses = listOf(CampgroundSearchUpstreamAddressDto(city = "Yosemite", state = "CA")),
+                                averageRating = 4.6,
+                                numberOfRatings = 42,
+                            ),
+                            CampgroundSearchUpstreamResultDto(
+                                entityId = "232448",
+                                name = "Lower Pines",
+                                averageRating = null,
+                                numberOfRatings = 0,
+                            ),
+                        ),
+                ),
+            )
+
+        val root = Json.parseToJsonElement(body).jsonObject
+        val results = root["results"]!!.jsonArray
+        val first = results[0].jsonObject
+        val second = results[1].jsonObject
+        val address = first["addresses"]!!.jsonArray.single().jsonObject
+
+        assertEquals(4.6, first["average_rating"]!!.jsonPrimitive.double)
+        assertEquals("42", first["number_of_ratings"]!!.jsonPrimitive.content)
+        assertEquals("Yosemite", address["city"]!!.jsonPrimitive.content)
+        assertEquals(JsonNull, second["average_rating"])
+    }
+
     private fun json(body: String): JsonObject = Json.parseToJsonElement(body).jsonObject
 
     private fun searchResult(
@@ -147,24 +220,14 @@ class CampgroundSearchRoutesTest {
         state: String = "",
         rating: Double? = null,
         reviews: Int = 0,
-    ): JsonObject =
-        buildJsonObject {
-            put("entity_id", id)
-            put("name", name)
-            put("parent_name", parentName)
-            put("parent_entity_id", parentId)
-            put(
-                "addresses",
-                JsonArray(
-                    listOf(
-                        buildJsonObject {
-                            put("city", city)
-                            put("state", state)
-                        },
-                    ),
-                ),
-            )
-            if (rating != null) put("average_rating", rating)
-            put("number_of_ratings", reviews)
-        }
+    ): CampgroundSearchUpstreamResultDto =
+        CampgroundSearchUpstreamResultDto(
+            entityId = id,
+            name = name,
+            parentName = parentName,
+            parentEntityId = parentId,
+            addresses = listOf(CampgroundSearchUpstreamAddressDto(city = city, state = state)),
+            averageRating = rating,
+            numberOfRatings = reviews,
+        )
 }
