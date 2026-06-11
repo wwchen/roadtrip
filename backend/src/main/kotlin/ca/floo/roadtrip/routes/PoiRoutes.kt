@@ -19,8 +19,11 @@ import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
@@ -42,6 +45,13 @@ private const val CG_MIN_ZOOM: Int = 6
 @OptIn(ExperimentalSerializationApi::class)
 private val poiRoutesJson =
     Json {
+        explicitNulls = false
+    }
+
+@OptIn(ExperimentalSerializationApi::class)
+private val poiFeatureJson =
+    Json {
+        encodeDefaults = true
         explicitNulls = false
     }
 
@@ -324,88 +334,103 @@ private fun parseRequest(bodyText: String): PoiRequest {
     return PoiRequest(bbox, zoom, categories)
 }
 
-/**
- * Slim FeatureCollection for the bbox endpoint. Hand-built JSON; the goal
- * is to ship the smallest possible payload that still drives the map's pin
- * placement + color logic.
- *
- * Per-feature shape:
- *
- *     {"type":"Feature","id":42,
- *      "geometry":{"type":"Point","coordinates":[lng,lat]},
- *      "properties":{"category":"campground","subcategory":"federal"}}
- *
- * No name, no address, no provider_ref, no raw blob — the FE fetches that
- * lazily via GET /api/pois/{id} when a pin is clicked.
- */
 internal fun buildFeatureCollection(
     rows: List<PoiRow>,
     truncated: Boolean,
-): String {
-    val sb = StringBuilder()
-    sb
-        .append("""{"type":"FeatureCollection","truncated":""")
-        .append(truncated)
-    sb.append(""","features":[""")
-    for ((i, r) in rows.withIndex()) {
-        if (i > 0) sb.append(',')
-        sb.append("""{"type":"Feature","id":""").append(r.id)
-        sb
-            .append(""","geometry":{"type":"Point","coordinates":[""")
-            .append(r.lng)
-            .append(',')
-            .append(r.lat)
-            .append("]}")
-        sb.append(""","properties":{"category":""").append(jsonString(r.category))
-        if (r.subcategory != null) sb.append(""","subcategory":""").append(jsonString(r.subcategory))
-        sb.append("}}")
-    }
-    sb.append("]}")
-    return sb.toString()
-}
+): String =
+    poiFeatureJson.encodeToString(
+        PoiFeatureCollectionDto(
+            truncated = truncated,
+            features =
+                rows.map { row ->
+                    SlimPoiFeatureDto(
+                        id = row.id,
+                        geometry = PoiPointGeometryDto(coordinates = listOf(row.lng, row.lat)),
+                        properties =
+                            SlimPoiPropertiesDto(
+                                category = row.category,
+                                subcategory = row.subcategory,
+                            ),
+                    )
+                },
+        ),
+    )
 
-/**
- * Per-id detail JSON: the wide shape the bbox endpoint used to ship every
- * row. Same hand-built renderer + the same property merging logic; this
- * lives behind GET /api/pois/{id} so the FE only pays the cost on click.
- */
-internal fun buildSingleFeatureJson(r: PoiDetailRow): String {
-    val sb = StringBuilder()
-    sb.append("""{"type":"Feature","id":""").append(r.id)
-    sb.append(""","geometry":""").append(r.geomJson)
-    sb.append(""","properties":{"source":""").append(jsonString(r.source))
-    sb.append(""","source_id":""").append(jsonString(r.sourceId))
-    sb.append(""","category":""").append(jsonString(r.category))
-    if (r.subcategory != null) sb.append(""","subcategory":""").append(jsonString(r.subcategory))
-    sb.append(""","name":""").append(jsonString(r.name))
-    if (r.region != null) sb.append(""","region":""").append(jsonString(r.region))
-    if (r.unitName != null) sb.append(""","unit_name":""").append(jsonString(r.unitName))
-    if (r.reserveUrl != null) sb.append(""","reserve_url":""").append(jsonString(r.reserveUrl))
-    if (r.phone != null) sb.append(""","phone":""").append(jsonString(r.phone))
-    if (r.infoUrl != null) sb.append(""","info_url":""").append(jsonString(r.infoUrl))
-    if (r.addressJson != null) sb.append(""","address":""").append(r.addressJson)
-    if (r.providerRefJson != null) sb.append(""","provider_ref":""").append(r.providerRefJson)
-    sb.append(""","raw":""").append(r.propertiesJson)
-    sb.append("}}")
-    return sb.toString()
-}
+internal fun buildSingleFeatureJson(r: PoiDetailRow): String =
+    poiFeatureJson.encodeToString(
+        PoiDetailFeatureDto(
+            id = r.id,
+            geometry = Json.parseToJsonElement(r.geomJson),
+            properties =
+                PoiDetailPropertiesDto(
+                    source = r.source,
+                    sourceId = r.sourceId,
+                    category = r.category,
+                    subcategory = r.subcategory,
+                    name = r.name,
+                    region = r.region,
+                    unitName = r.unitName,
+                    reserveUrl = r.reserveUrl,
+                    phone = r.phone,
+                    infoUrl = r.infoUrl,
+                    address = r.addressJson?.let { Json.parseToJsonElement(it) },
+                    providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
+                    raw = Json.parseToJsonElement(r.propertiesJson),
+                ),
+        ),
+    )
 
-private fun jsonString(s: String): String {
-    val sb = StringBuilder(s.length + 2)
-    sb.append('"')
-    for (c in s) {
-        when (c) {
-            '"' -> sb.append("\\\"")
-            '\\' -> sb.append("\\\\")
-            '\n' -> sb.append("\\n")
-            '\r' -> sb.append("\\r")
-            '\t' -> sb.append("\\t")
-            else -> if (c.code < 0x20) sb.append("\\u%04x".format(c.code)) else sb.append(c)
-        }
-    }
-    sb.append('"')
-    return sb.toString()
-}
+@Serializable
+private data class PoiFeatureCollectionDto(
+    val type: String = "FeatureCollection",
+    val truncated: Boolean,
+    val features: List<SlimPoiFeatureDto>,
+)
+
+@Serializable
+private data class SlimPoiFeatureDto(
+    val type: String = "Feature",
+    val id: Long,
+    val geometry: PoiPointGeometryDto,
+    val properties: SlimPoiPropertiesDto,
+)
+
+@Serializable
+private data class PoiPointGeometryDto(
+    val type: String = "Point",
+    val coordinates: List<Double>,
+)
+
+@Serializable
+private data class SlimPoiPropertiesDto(
+    val category: String,
+    val subcategory: String? = null,
+)
+
+@Serializable
+private data class PoiDetailFeatureDto(
+    val type: String = "Feature",
+    val id: Long,
+    val geometry: JsonElement,
+    val properties: PoiDetailPropertiesDto,
+)
+
+@Serializable
+private data class PoiDetailPropertiesDto(
+    val source: String,
+    @SerialName("source_id") val sourceId: String,
+    val category: String,
+    val subcategory: String? = null,
+    val name: String,
+    val region: String? = null,
+    @SerialName("unit_name") val unitName: String? = null,
+    @SerialName("reserve_url") val reserveUrl: String? = null,
+    val phone: String? = null,
+    @SerialName("info_url") val infoUrl: String? = null,
+    val address: JsonElement? = null,
+    @SerialName("provider_ref") val providerRef: JsonElement? = null,
+    val raw: JsonElement,
+)
 
 private suspend fun ApplicationCall.respondPoiError(
     error: String,
