@@ -6,10 +6,11 @@ import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.Route
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonPrimitive
 
 private const val MASK = "••••••••"
+private val SENSITIVE_SETTING_KEYS = setOf("slack_token", "recgov_cookies", "recgov_token", "recgov_refresh_creds")
 
 fun Route.settingsRoutes(
     settings: SettingsRepo,
@@ -19,24 +20,7 @@ fun Route.settingsRoutes(
         tags = listOf("campsite-settings")
         summary = "All campsite settings (masked); includes recgov_token expiry info"
     }) {
-        val all = settings.all()
-        val token = all["recgov_token"].orEmpty()
-        val info = RecgovAuth.tokenInfo(token)
-        val masked =
-            buildJsonObject {
-                for ((k, v) in all) {
-                    when (k) {
-                        "slack_token", "recgov_cookies", "recgov_token", "recgov_refresh_creds" ->
-                            if (v.isNotEmpty()) put(k, MASK) else put(k, "")
-                        else -> put(k, v)
-                    }
-                }
-                if (token.isNotEmpty()) {
-                    info.expires?.let { put("recgov_token_expires", it.toString()) }
-                    put("recgov_token_expired", info.expired)
-                }
-            }
-        call.respondJsonElement(masked)
+        call.respondJson(maskedSettingsResponse(settings.all()))
     }
 
     post("/api/campsite/settings", {
@@ -71,6 +55,25 @@ fun Route.settingsRoutes(
             call.respondJson(ErrorDto(e.message ?: "Slack test failed"), status = HttpStatusCode.InternalServerError)
         }
     }
+}
+
+private fun maskedSettingsResponse(all: Map<String, String>): Map<String, JsonElement> {
+    val token = all["recgov_token"].orEmpty()
+    val info = RecgovAuth.tokenInfo(token)
+    val response = linkedMapOf<String, JsonElement>()
+    for ((key, value) in all) {
+        response[key] =
+            if (key in SENSITIVE_SETTING_KEYS) {
+                JsonPrimitive(if (value.isNotEmpty()) MASK else "")
+            } else {
+                JsonPrimitive(value)
+            }
+    }
+    if (token.isNotEmpty()) {
+        info.expires?.let { response["recgov_token_expires"] = JsonPrimitive(it.toString()) }
+        response["recgov_token_expired"] = JsonPrimitive(info.expired)
+    }
+    return response
 }
 
 private fun MutableMap<String, String>.putIfUnmasked(
