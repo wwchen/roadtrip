@@ -69,33 +69,33 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
                 return@get
             }
 
-        call.respondText(geocodeResponseJson(results), ContentType.Application.Json)
+        call.respondGeocodeJson(geocodeResponseDto(results))
     }
 }
 
-internal fun geocodeResponseJson(results: List<GeocodeResult>): String =
-    geocodeRouteJson.encodeToString(
-        GeocodeResponseDto(
-            results =
-                results.map { result ->
-                    GeocodeResultDto(
-                        id = result.id,
-                        placeName = result.placeName,
-                        placeType = result.placeType,
-                        lng = result.lng,
-                        lat = result.lat,
-                    )
-                },
-        ),
+internal fun geocodeResponseDto(results: List<GeocodeResult>): GeocodeResponseDto =
+    GeocodeResponseDto(
+        results =
+            results.map { result ->
+                GeocodeResultDto(
+                    id = result.id,
+                    placeName = result.placeName,
+                    placeType = result.placeType,
+                    lng = result.lng,
+                    lat = result.lat,
+                )
+            },
     )
 
+internal inline fun <reified T> encodeGeocodeJson(value: T): String = geocodeRouteJson.encodeToString(value)
+
 @Serializable
-private data class GeocodeResponseDto(
+internal data class GeocodeResponseDto(
     val results: List<GeocodeResultDto>,
 )
 
 @Serializable
-private data class GeocodeResultDto(
+internal data class GeocodeResultDto(
     val id: String,
     @SerialName("place_name") val placeName: String,
     @SerialName("place_type") val placeType: String,
@@ -109,11 +109,12 @@ private suspend fun ApplicationCall.respondGeocodeError(
     detail: String? = null,
     retryAfterS: Int? = null,
 ) {
-    respondText(
-        geocodeRouteJson.encodeToString(
-            ApiErrorSchema(error = error, detail = detail, retry_after_s = retryAfterS),
-        ),
-        ContentType.Application.Json,
-        status,
-    )
+    respondGeocodeJson(ApiErrorSchema(error = error, detail = detail, retry_after_s = retryAfterS), status)
+}
+
+private suspend inline fun <reified T> ApplicationCall.respondGeocodeJson(
+    value: T,
+    status: HttpStatusCode = HttpStatusCode.OK,
+) {
+    respondText(encodeGeocodeJson(value), ContentType.Application.Json, status)
 }

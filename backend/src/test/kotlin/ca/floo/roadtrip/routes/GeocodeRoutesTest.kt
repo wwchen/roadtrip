@@ -13,14 +13,16 @@ class GeocodeRoutesTest {
     @Test
     fun `geocode response serializes results with dto`() {
         val payload =
-            geocodeResponseJson(
-                listOf(
-                    GeocodeResult(
-                        id = "place.1",
-                        placeName = "Vancouver, British Columbia, Canada",
-                        placeType = "place",
-                        lng = -123.1207,
-                        lat = 49.2827,
+            encodeGeocodeJson(
+                geocodeResponseDto(
+                    listOf(
+                        GeocodeResult(
+                            id = "place.1",
+                            placeName = "Vancouver, British Columbia, Canada",
+                            placeType = "place",
+                            lng = -123.1207,
+                            lat = 49.2827,
+                        ),
                     ),
                 ),
             )
