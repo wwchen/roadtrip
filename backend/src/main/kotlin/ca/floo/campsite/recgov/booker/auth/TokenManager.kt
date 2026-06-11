@@ -1,5 +1,6 @@
 package ca.floo.campsite.recgov.booker.auth
 
+import ca.floo.campsite.recgov.booker.api.RecaccountDto
 import ca.floo.campsite.recgov.booker.api.RecgovAuth
 import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.events.CampsiteEvent
@@ -9,8 +10,6 @@ import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
@@ -57,7 +56,7 @@ class TokenManager(
 
     /** Cached recaccount-shaped JSON (the rec.gov refresh endpoint's response shape). */
     @Volatile
-    private var cachedRecaccount: JsonObject? = null
+    private var cachedRecaccount: RecaccountDto? = null
 
     fun start() {
         // Hydrate cache from persisted settings at startup so peek() works
@@ -81,20 +80,20 @@ class TokenManager(
     }
 
     /** Cached access_token without I/O. Null/empty if nothing's been saved yet. */
-    fun peek(): String? = cachedRecaccount?.get("access_token")?.stringContent()?.takeIf { it.isNotEmpty() }
+    fun peek(): String? = cachedRecaccount?.accessToken?.takeIf { it.isNotEmpty() }
 
-    /** Cached recaccount-shaped JSON for the companion's Playwright injection. Null when no token exists. */
-    fun peekRecaccount(): JsonObject? = cachedRecaccount
+    /** Cached recaccount-shaped DTO for the companion's Playwright injection. Null when no token exists. */
+    fun peekRecaccount(): RecaccountDto? = cachedRecaccount
 
     /**
      * Returns a non-expired access_token, refreshing if the current one is
      * within [refreshAheadOfExpiry] of expiry (or already expired). Null if
      * we have no token at all or refresh fails.
      */
-    suspend fun getFreshToken(): String? = withFresh()?.get("access_token")?.stringContent()?.takeIf { it.isNotEmpty() }
+    suspend fun getFreshToken(): String? = withFresh()?.accessToken?.takeIf { it.isNotEmpty() }
 
-    /** Like [getFreshToken] but returns the recaccount-shaped JSON. */
-    suspend fun getFreshRecaccount(): JsonObject? = withFresh()
+    /** Like [getFreshToken] but returns the recaccount-shaped DTO. */
+    suspend fun getFreshRecaccount(): RecaccountDto? = withFresh()
 
     /** Drop the in-memory cache after the booking-session clear endpoint wipes the persisted token. */
     fun clearCache() {
@@ -120,10 +119,10 @@ class TokenManager(
             doRefresh(token, creds)
         }
 
-    private suspend fun withFresh(): JsonObject? =
+    private suspend fun withFresh(): RecaccountDto? =
         mutex.withLock {
             val current = cachedRecaccount
-            val token = current?.get("access_token")?.stringContent()?.takeIf { it.isNotEmpty() }
+            val token = current?.accessToken?.takeIf { it.isNotEmpty() }
             if (token != null) {
                 val info = RecgovAuth.tokenInfo(token)
                 val safeUntil = info.expires?.minus(refreshAheadOfExpiry)
@@ -152,7 +151,7 @@ class TokenManager(
             return
         }
         when (val r = refreshNow()) {
-            is RefreshResult.Ok -> log.info("TokenManager: refreshed (expires {})", r.recaccount["expiration"]?.stringContent())
+            is RefreshResult.Ok -> log.info("TokenManager: refreshed (expires {})", r.recaccount.expiration)
             is RefreshResult.Failed -> log.info("TokenManager: refresh failed — {}", r.reason)
             is RefreshResult.NoToken -> log.debug("TokenManager: no token to refresh")
             is RefreshResult.NoCreds -> log.info("TokenManager: token expired but no refresh creds saved")
@@ -168,20 +167,20 @@ class TokenManager(
             bus.publish(CampsiteEvent.TokenRefreshFailed(reason = "rec.gov refresh endpoint failed"))
             return RefreshResult.Failed("rec.gov refresh endpoint failed")
         }
-        val newToken = recaccount["access_token"]?.stringContent().orEmpty()
+        val newToken = recaccount.accessToken
         if (newToken.isEmpty()) {
             bus.publish(CampsiteEvent.TokenRefreshFailed(reason = "refresh response missing access_token"))
             return RefreshResult.Failed("refresh response missing access_token")
         }
         cachedRecaccount = recaccount
         setSetting("recgov_token", newToken)
-        val expires = recaccount["expiration"]?.stringContent().orEmpty()
+        val expires = recaccount.expiration
         bus.publish(CampsiteEvent.TokenRefreshed(expires = expires))
         return RefreshResult.Ok(recaccount)
     }
 
     private fun currentToken(): String? =
-        cachedRecaccount?.get("access_token")?.stringContent()?.takeIf { it.isNotEmpty() }
+        cachedRecaccount?.accessToken?.takeIf { it.isNotEmpty() }
             ?: getSetting("recgov_token")?.takeIf { it.isNotEmpty() }
 
     private fun currentCreds(): ca.floo.campsite.recgov.booker.api.RefreshCreds? {
@@ -192,7 +191,7 @@ class TokenManager(
 
     sealed interface RefreshResult {
         data class Ok(
-            val recaccount: JsonObject,
+            val recaccount: RecaccountDto,
         ) : RefreshResult
 
         data class Failed(
@@ -204,5 +203,3 @@ class TokenManager(
         data object NoCreds : RefreshResult
     }
 }
-
-private fun kotlinx.serialization.json.JsonElement.stringContent(): String? = (this as? JsonPrimitive)?.content

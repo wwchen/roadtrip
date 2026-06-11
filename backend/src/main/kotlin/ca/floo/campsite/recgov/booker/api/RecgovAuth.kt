@@ -12,12 +12,12 @@ import io.ktor.http.contentType
 import io.ktor.http.isSuccess
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import org.slf4j.LoggerFactory
 import java.time.Instant
@@ -147,7 +147,7 @@ object RecgovAuth {
         token: String,
         creds: RefreshCreds,
         client: HttpClient = sharedClient,
-    ): String? = refreshRecaccount(token, creds, client)?.get("access_token")?.jsonPrimitiveContent()
+    ): String? = refreshRecaccount(token, creds, client)?.accessToken?.takeIf { it.isNotEmpty() }
 
     /**
      * Variant of [refreshAccessToken] that returns the full recaccount-shaped
@@ -159,7 +159,7 @@ object RecgovAuth {
         token: String,
         creds: RefreshCreds,
         client: HttpClient = sharedClient,
-    ): JsonObject? {
+    ): RecaccountDto? {
         val fingerprint = tokenInfo(token).fingerprint
         return runCatching {
             val resp =
@@ -173,7 +173,7 @@ object RecgovAuth {
                 log.info("RecgovAuth: refresh HTTP ${resp.status} — ${resp.bodyAsText().take(200)}")
                 return@runCatching null
             }
-            Json.parseToJsonElement(resp.bodyAsText()) as? JsonObject
+            recgovAuthJson.decodeFromString<RecaccountDto>(resp.bodyAsText())
         }.onFailure { log.info("RecgovAuth: refresh threw — ${it.message}") }.getOrNull()
     }
 
@@ -184,7 +184,7 @@ object RecgovAuth {
      * `/booking/session/fresh-token` endpoint always returns a usable shape if there's
      * any non-expired token at all.
      */
-    fun buildRecaccountFromToken(token: String): JsonObject? {
+    fun buildRecaccountFromToken(token: String): RecaccountDto? {
         val payload = decodeJwt(token) ?: return null
         val expSec = (payload["exp"] as? JsonPrimitive)?.content?.toLongOrNull()
         val expIso =
@@ -195,22 +195,19 @@ object RecgovAuth {
         val accountId =
             acct?.get("account_id")?.jsonPrimitiveContent()
                 ?: payload["sub"]?.jsonPrimitiveContent().orEmpty()
-        return Json
-            .encodeToJsonElement(
-                RecaccountDto(
-                    accessToken = token,
-                    expiration = expIso,
-                    account =
-                        RecaccountAccountDto(
-                            accountId = accountId,
-                            email = acct?.get("email")?.jsonPrimitiveContent().orEmpty(),
-                            firstName = acct?.get("first_name")?.jsonPrimitiveContent().orEmpty(),
-                            lastName = acct?.get("last_name")?.jsonPrimitiveContent().orEmpty(),
-                        ),
-                    isGuest = false,
-                    refreshId = "",
+        return RecaccountDto(
+            accessToken = token,
+            expiration = expIso,
+            account =
+                RecaccountAccountDto(
+                    accountId = accountId,
+                    email = acct?.get("email")?.jsonPrimitiveContent().orEmpty(),
+                    firstName = acct?.get("first_name")?.jsonPrimitiveContent().orEmpty(),
+                    lastName = acct?.get("last_name")?.jsonPrimitiveContent().orEmpty(),
                 ),
-            ).jsonObject
+            isGuest = false,
+            refreshId = "",
+        )
     }
 
     private fun padBase64Url(s: String): String {
@@ -223,21 +220,27 @@ object RecgovAuth {
     }
 }
 
+private val recgovAuthJson: Json =
+    Json {
+        ignoreUnknownKeys = true
+        encodeDefaults = true
+    }
+
 @Serializable
-private data class RecaccountDto(
-    @SerialName("access_token") val accessToken: String,
-    val expiration: String,
-    val account: RecaccountAccountDto,
-    @SerialName("is_guest") val isGuest: Boolean,
-    @SerialName("refresh_id") val refreshId: String,
+data class RecaccountDto(
+    @SerialName("access_token") val accessToken: String = "",
+    val expiration: String = "",
+    val account: RecaccountAccountDto = RecaccountAccountDto(),
+    @SerialName("is_guest") val isGuest: Boolean = false,
+    @SerialName("refresh_id") val refreshId: String = "",
 )
 
 @Serializable
-private data class RecaccountAccountDto(
-    @SerialName("account_id") val accountId: String,
-    val email: String,
-    @SerialName("first_name") val firstName: String,
-    @SerialName("last_name") val lastName: String,
+data class RecaccountAccountDto(
+    @SerialName("account_id") val accountId: String = "",
+    val email: String = "",
+    @SerialName("first_name") val firstName: String = "",
+    @SerialName("last_name") val lastName: String = "",
 )
 
 /**

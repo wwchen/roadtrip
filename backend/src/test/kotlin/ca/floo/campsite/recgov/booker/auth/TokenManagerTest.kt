@@ -6,7 +6,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.Test
 import java.time.Duration
 import java.time.Instant
@@ -58,8 +57,8 @@ class TokenManagerTest {
         assertNull(mgr.peek())
         mgr.start()
         assertEquals(token, mgr.peek())
-        val rec: JsonObject = mgr.peekRecaccount()!!
-        assertNotNull(rec["account"])
+        val rec = mgr.peekRecaccount()!!
+        assertEquals("acct-1", rec.account.accountId)
         scope.cancel()
     }
 
