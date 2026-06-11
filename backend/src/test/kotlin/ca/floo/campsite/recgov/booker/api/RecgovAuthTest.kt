@@ -1,6 +1,7 @@
 package ca.floo.campsite.recgov.booker.api
 
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -88,6 +89,35 @@ class RecgovAuthTest {
 
         assertEquals("""A"3""", parsed["account_id"]!!.jsonPrimitive.content)
         assertEquals("""R\3""", parsed["refresh_id"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `buildRecaccountFromToken serializes fallback recaccount with dto`() {
+        val future = (System.currentTimeMillis() / 1000) + 3600
+        val token =
+            fakeJwt(
+                """
+                {
+                  "exp":$future,
+                  "acct":{
+                    "account_id":"acct-1",
+                    "email":"a@b.c",
+                    "first_name":"Ada",
+                    "last_name":"Lovelace"
+                  }
+                }
+                """.trimIndent(),
+            )
+
+        val recaccount = RecgovAuth.buildRecaccountFromToken(token)
+
+        assertNotNull(recaccount)
+        assertEquals(token, recaccount["access_token"]!!.jsonPrimitive.content)
+        assertEquals(false, recaccount["is_guest"]!!.jsonPrimitive.boolean)
+        assertEquals("", recaccount["refresh_id"]!!.jsonPrimitive.content)
+        val account = recaccount["account"]!!.jsonObject
+        assertEquals("acct-1", account["account_id"]!!.jsonPrimitive.content)
+        assertEquals("Ada", account["first_name"]!!.jsonPrimitive.content)
     }
 
     @Test
