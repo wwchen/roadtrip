@@ -2,7 +2,11 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.client.RoutingException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
+import ca.floo.roadtrip.models.api.PointGeometrySchema
+import ca.floo.roadtrip.models.api.PoisOnRouteFeaturePropertiesSchema
+import ca.floo.roadtrip.models.api.PoisOnRouteFeatureSchema
 import ca.floo.roadtrip.models.api.PoisOnRouteRequestSchema
+import ca.floo.roadtrip.models.api.PoisOnRouteResponseSchema
 import ca.floo.roadtrip.models.api.WaypointSchema
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.OnRoutePoiRepo
@@ -12,6 +16,7 @@ import ca.floo.roadtrip.repo.RouteCorridorRepo
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
@@ -83,7 +88,7 @@ fun Route.poisOnRouteRoutes(
         response {
             code(HttpStatusCode.OK) {
                 description = "FeatureCollection of slim features (+ route_km), sorted by route_km."
-                body<String> { mediaTypes(ContentType.Application.Json) }
+                body<PoisOnRouteResponseSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.BadRequest) {
                 description = "Malformed body, bad waypoints, or radius out of range."
@@ -100,11 +105,8 @@ fun Route.poisOnRouteRoutes(
             try {
                 parseOnRouteRequest(bodyText)
             } catch (e: Exception) {
-                call.respondText(
-                    onRouteJson.encodeToString(
-                        ApiErrorSchema(error = "bad_request", detail = e.message ?: "parse failed"),
-                    ),
-                    ContentType.Application.Json,
+                call.respondOnRouteJson(
+                    ApiErrorSchema(error = "bad_request", detail = e.message ?: "parse failed"),
                     HttpStatusCode.BadRequest,
                 )
                 return@post
@@ -116,9 +118,8 @@ fun Route.poisOnRouteRoutes(
                 routeCache.directions(pairs).coordinates
             } catch (e: RoutingException) {
                 onRouteLog.warn("on-route lookup failed: {}", e.message)
-                call.respondText(
-                    onRouteJson.encodeToString(ApiErrorSchema(error = "routing_unavailable")),
-                    ContentType.Application.Json,
+                call.respondOnRouteJson(
+                    ApiErrorSchema(error = "routing_unavailable"),
                     HttpStatusCode.ServiceUnavailable,
                 )
                 return@post
@@ -148,10 +149,7 @@ fun Route.poisOnRouteRoutes(
                 }
             }
 
-        call.respondText(
-            buildOnRouteFeatureCollection(rows),
-            ContentType.Application.Json,
-        )
+        call.respondOnRouteJson(onRouteFeatureCollection(rows))
     }
 }
 
@@ -209,56 +207,31 @@ private data class WaypointDto(
 
 private fun parseOnRouteRequest(bodyText: String): OnRouteRequest = onRouteJson.decodeFromString<OnRouteRequestDto>(bodyText).validated()
 
-@Serializable
-private data class OnRouteFeatureCollectionDto(
-    val type: String = "FeatureCollection",
-    val features: List<OnRouteFeatureDto>,
-) {
-    companion object {
-        fun fromRows(rows: List<OnRouteRow>): OnRouteFeatureCollectionDto =
-            OnRouteFeatureCollectionDto(features = rows.map { OnRouteFeatureDto.fromRow(it) })
-    }
-}
-
-@Serializable
-private data class OnRouteFeatureDto(
-    val type: String = "Feature",
-    val id: Long,
-    val geometry: PointGeometryDto,
-    val properties: OnRouteFeaturePropertiesDto,
-) {
-    companion object {
-        fun fromRow(row: OnRouteRow): OnRouteFeatureDto =
-            OnRouteFeatureDto(
-                id = row.id,
-                geometry = PointGeometryDto(coordinates = listOf(row.lng, row.lat)),
-                properties =
-                    OnRouteFeaturePropertiesDto(
-                        category = row.category,
-                        subcategory = row.subcategory,
-                        routeKm = row.routeKm,
-                    ),
-            )
-    }
-}
-
-@Serializable
-private data class PointGeometryDto(
-    val type: String = "Point",
-    val coordinates: List<Double>,
-)
-
-@Serializable
-private data class OnRouteFeaturePropertiesDto(
-    val category: String,
-    val subcategory: String? = null,
-    @SerialName("route_km") val routeKm: Double,
-)
-
 /**
  * On-route FeatureCollection. Same per-feature shape as the bbox endpoint
  * (id + Point + category[+subcategory]) plus a `route_km` property so the
  * FE can sort or label without re-projecting on the client.
  */
-internal fun buildOnRouteFeatureCollection(rows: List<OnRouteRow>): String =
-    onRouteJson.encodeToString(OnRouteFeatureCollectionDto.fromRows(rows))
+internal fun onRouteFeatureCollection(rows: List<OnRouteRow>): PoisOnRouteResponseSchema =
+    PoisOnRouteResponseSchema(features = rows.map(::onRouteFeature))
+
+private fun onRouteFeature(row: OnRouteRow): PoisOnRouteFeatureSchema =
+    PoisOnRouteFeatureSchema(
+        id = row.id,
+        geometry = PointGeometrySchema(coordinates = listOf(row.lng, row.lat)),
+        properties =
+            PoisOnRouteFeaturePropertiesSchema(
+                category = row.category,
+                subcategory = row.subcategory,
+                routeKm = row.routeKm,
+            ),
+    )
+
+internal fun encodeOnRouteJson(value: PoisOnRouteResponseSchema): String = onRouteJson.encodeToString(value)
+
+private suspend inline fun <reified T> ApplicationCall.respondOnRouteJson(
+    value: T,
+    status: HttpStatusCode = HttpStatusCode.OK,
+) {
+    respondText(onRouteJson.encodeToString(value), ContentType.Application.Json, status)
+}

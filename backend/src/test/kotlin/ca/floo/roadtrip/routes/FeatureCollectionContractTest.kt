@@ -6,7 +6,7 @@ import ca.floo.roadtrip.repo.PoiRow
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-// Byte-identical contract test for the hand-rolled FeatureCollection +
+// Byte-identical contract test for the serialized FeatureCollection +
 // per-row detail JSON. The webapp depends on the exact wire shapes:
 //
 //   - buildFeatureCollection (slim): drives map rendering. Only id +
@@ -82,12 +82,12 @@ class FeatureCollectionContractTest {
                 """"properties":{"category":"campground","subcategory":"federal","route_km":95.5}}""" +
                 """]}"""
         )
-        assertEquals(expected, buildOnRouteFeatureCollection(rows))
+        assertEquals(expected, encodeOnRouteJson(onRouteFeatureCollection(rows)))
     }
 
     @Test
     fun `on-route empty input produces empty feature list with no truncated flag`() {
-        val out = buildOnRouteFeatureCollection(emptyList())
+        val out = encodeOnRouteJson(onRouteFeatureCollection(emptyList()))
         assertEquals("""{"type":"FeatureCollection","features":[]}""", out)
     }
 
