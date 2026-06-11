@@ -3,12 +3,14 @@ package ca.floo.campsite.recgov.booker.api
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.campsite.recgov.booker.availability.CachedResult
 import ca.floo.campsite.recgov.booker.poller.Campsite
+import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
+import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.AvailabilitySeasonBlock
 import ca.floo.roadtrip.service.api.DayClassification
+import ca.floo.roadtrip.service.api.availabilityErrorDto
+import ca.floo.roadtrip.service.api.availabilityResponseDto
 import ca.floo.roadtrip.service.api.classifyWindowState
-import ca.floo.roadtrip.service.api.renderAvailabilityErrorJson
-import ca.floo.roadtrip.service.api.renderAvailabilityJson
 import ca.floo.roadtrip.service.api.summarizeWindow
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
@@ -55,14 +57,14 @@ internal fun monthsCovering(
  * render the unified response. Throws on upstream failure — caller maps
  * to a 503.
  */
-suspend fun fetchAndClassifyRecgov(
+internal suspend fun fetchAndClassifyRecgov(
     cache: CachedAvailability,
     recgovId: String,
     today: LocalDate,
     days: Int,
     months: List<String>,
     force: Boolean,
-): String =
+): AvailabilityResponseDto =
     coroutineScope {
         val results: List<CachedResult> =
             months
@@ -80,7 +82,7 @@ suspend fun fetchAndClassifyRecgov(
         val cacheBlock = aggregateCacheBlock(results)
         val seasonBlock = if (state == "closed_for_season") inferReopenDate(merged, today) else null
 
-        renderAvailabilityJson(
+        availabilityResponseDto(
             provider = "recgov",
             today = today,
             days = days,
@@ -184,15 +186,15 @@ private fun aggregateCacheBlock(results: List<CachedResult>): AvailabilityCacheB
         ttlSeconds = results.firstOrNull()?.ttlSeconds ?: 7200L,
     )
 
-fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, String> {
+internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, AvailabilityErrorSchema> {
     val msg = e.message.orEmpty()
     return when {
         msg.contains("429") ->
             HttpStatusCode.ServiceUnavailable to
-                renderAvailabilityErrorJson("rate_limited", retryAfterS = 60)
+                availabilityErrorDto("rate_limited", retryAfterS = 60)
         else ->
             HttpStatusCode.ServiceUnavailable to
-                renderAvailabilityErrorJson("upstream_5xx", retryAfterS = 30)
+                availabilityErrorDto("upstream_5xx", retryAfterS = 30)
     }
 }
 

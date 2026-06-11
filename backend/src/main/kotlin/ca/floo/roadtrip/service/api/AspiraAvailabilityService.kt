@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.client.AspiraAvailability
 import ca.floo.roadtrip.client.AspiraException
+import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.models.aspira.AspiraStatus
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import io.ktor.http.HttpStatusCode
@@ -26,14 +27,14 @@ val ASPIRA_ALLOWED_HOSTS: Set<String> =
  * Fetch + classify + render the unified response for an Aspira-backed
  * campground. Throws on upstream failure — caller maps to a 503.
  */
-suspend fun fetchAndClassifyAspira(
+internal suspend fun fetchAndClassifyAspira(
     cache: CachedAspiraAvailability,
     host: String,
     mapId: Int,
     today: LocalDate,
     days: Int,
     force: Boolean,
-): String {
+): AvailabilityResponseDto {
     val end = today.plusDays((days - 1).toLong())
     val cached = cache.get(host, mapId, today, end, force)
     val perDay = classifyDays(cached.data, today, days)
@@ -45,7 +46,7 @@ suspend fun fetchAndClassifyAspira(
             ageSeconds = cached.ageSeconds,
             ttlSeconds = cached.ttlSeconds,
         )
-    return renderAvailabilityJson(
+    return availabilityResponseDto(
         provider = "aspira",
         today = today,
         days = days,
@@ -134,17 +135,17 @@ private fun classifyDays(
     }
 }
 
-fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, String> {
+internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorSchema> {
     val status = e.httpStatus
     return when {
         status == 429 ->
             HttpStatusCode.ServiceUnavailable to
-                renderAvailabilityErrorJson("rate_limited", retryAfterS = 60)
+                availabilityErrorDto("rate_limited", retryAfterS = 60)
         status == 503 || (e.message?.contains("WAF") == true) ->
             HttpStatusCode.ServiceUnavailable to
-                renderAvailabilityErrorJson("upstream_blocked", retryAfterS = 300)
+                availabilityErrorDto("upstream_blocked", retryAfterS = 300)
         else ->
             HttpStatusCode.ServiceUnavailable to
-                renderAvailabilityErrorJson("upstream_5xx", retryAfterS = 30)
+                availabilityErrorDto("upstream_5xx", retryAfterS = 30)
     }
 }

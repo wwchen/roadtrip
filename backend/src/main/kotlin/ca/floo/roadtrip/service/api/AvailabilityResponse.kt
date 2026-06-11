@@ -29,6 +29,8 @@ private val availabilityResponseJson =
         explicitNulls = false
     }
 
+internal inline fun <reified T> encodeAvailabilityJson(value: T): String = availabilityResponseJson.encodeToString(value)
+
 data class DayClassification(
     val date: String,
     val status: String, // "available" | "partial" | "booked" | "closed"
@@ -78,7 +80,7 @@ fun summarizeWindow(
  *   - Provider-specific fields (recgov: campground_id; aspira: host, map_id)
  *     are additive — the FE ignores unknown fields.
  */
-internal fun renderAvailabilityJson(
+internal fun availabilityResponseDto(
     provider: String,
     today: LocalDate,
     days: Int,
@@ -90,33 +92,31 @@ internal fun renderAvailabilityJson(
     campgroundId: String? = null,
     host: String? = null,
     mapId: String? = null,
-): String =
-    availabilityResponseJson.encodeToString(
-        AvailabilityResponseDto(
-            provider = provider,
-            campgroundId = campgroundId,
-            host = host,
-            mapId = mapId,
-            checkedAt = Instant.now().toString(),
-            window = AvailabilityWindowDto(start = today.toString(), days = days),
-            summary = summary,
-            state = state,
-            season = seasonBlock?.let { availabilityResponseJson.encodeToJsonElement(it) } ?: JsonNull,
-            availability =
-                perDay.map { day ->
-                    AvailabilityDayDto(
-                        date = day.date,
-                        status = day.status,
-                        availableCount = day.availableCount,
-                        total = day.total,
-                    )
-                },
-            cache = cacheBlock,
-        ),
+): AvailabilityResponseDto =
+    AvailabilityResponseDto(
+        provider = provider,
+        campgroundId = campgroundId,
+        host = host,
+        mapId = mapId,
+        checkedAt = Instant.now().toString(),
+        window = AvailabilityWindowDto(start = today.toString(), days = days),
+        summary = summary,
+        state = state,
+        season = seasonBlock?.let { availabilityResponseJson.encodeToJsonElement(it) } ?: JsonNull,
+        availability =
+            perDay.map { day ->
+                AvailabilityDayDto(
+                    date = day.date,
+                    status = day.status,
+                    availableCount = day.availableCount,
+                    total = day.total,
+                )
+            },
+        cache = cacheBlock,
     )
 
 @Serializable
-private data class AvailabilityResponseDto(
+internal data class AvailabilityResponseDto(
     val provider: String,
     @SerialName("campground_id") val campgroundId: String? = null,
     val host: String? = null,
@@ -131,13 +131,13 @@ private data class AvailabilityResponseDto(
 )
 
 @Serializable
-private data class AvailabilityWindowDto(
+internal data class AvailabilityWindowDto(
     val start: String,
     val days: Int,
 )
 
 @Serializable
-private data class AvailabilityDayDto(
+internal data class AvailabilityDayDto(
     val date: String,
     val status: String,
     @SerialName("available_count") val availableCount: Int,
@@ -156,10 +156,7 @@ internal data class AvailabilityCacheBlock(
     @SerialName("ttl_seconds") val ttlSeconds: Long,
 )
 
-fun renderAvailabilityErrorJson(
+fun availabilityErrorDto(
     error: String,
-    retryAfterS: Int,
-): String =
-    availabilityResponseJson.encodeToString(
-        AvailabilityErrorSchema(error = error, retry_after_s = retryAfterS),
-    )
+    retryAfterS: Int? = null,
+): AvailabilityErrorSchema = AvailabilityErrorSchema(error = error, retry_after_s = retryAfterS)
