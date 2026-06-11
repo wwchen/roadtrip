@@ -7,8 +7,10 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -63,6 +65,7 @@ class CampgroundSearchRoutesTest {
                                         name = "Upper Pines",
                                         parentName = "Yosemite National Park",
                                         parentId = "2991",
+                                        rating = 4.6,
                                         reviews = 42,
                                     ),
                                 )
@@ -81,6 +84,7 @@ class CampgroundSearchRoutesTest {
             val campground = body["campgrounds"]!!.jsonArray.single().jsonObject
             assertEquals("232447", campground["id"]!!.jsonPrimitive.content)
             assertEquals("Yosemite National Park", campground["parent_name"]!!.jsonPrimitive.content)
+            assertEquals(4.6, campground["rating"]!!.jsonPrimitive.double)
             assertEquals("42", campground["reviews"]!!.jsonPrimitive.content)
         }
 
@@ -102,6 +106,7 @@ class CampgroundSearchRoutesTest {
                     .jsonObject
             assertEquals("232849", campground["id"]!!.jsonPrimitive.content)
             assertEquals("Campground 232849", campground["name"]!!.jsonPrimitive.content)
+            assertEquals(JsonNull, campground["rating"])
         }
 
     @Test

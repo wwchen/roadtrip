@@ -6,13 +6,16 @@ import io.ktor.client.engine.cio.CIO
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
+import io.ktor.server.application.ApplicationCall
+import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
@@ -20,6 +23,14 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 private val log = LoggerFactory.getLogger("CampgroundSearchRoutes")
+
+@OptIn(ExperimentalSerializationApi::class)
+private val campgroundSearchJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = true
+        ignoreUnknownKeys = true
+    }
 
 private val httpClient =
     HttpClient(CIO) {
@@ -63,16 +74,16 @@ fun Route.campgroundSearchRoutes(fetcher: CampgroundSearchFetcher = defaultCampg
     }) {
         val q = call.request.queryParameters["q"]
         if (q.isNullOrBlank()) {
-            return@get call.respondJson(campgroundSearchResponse())
+            return@get call.respondCampgroundSearchJson(campgroundSearchResponse())
         }
         try {
             log.info("Search: rec.gov search \"{}\"", q)
             val parks = fetcher.fetch(q, "recarea", 5).mapPark()
             val campgrounds = fetcher.fetch(q, "campground", 15).mapCampground()
-            call.respondJson(campgroundSearchResponse(parks, campgrounds))
+            call.respondCampgroundSearchJson(campgroundSearchResponse(parks, campgrounds))
         } catch (e: Exception) {
             // Fallback: if the input looks like an ID, return that as a single result.
-            call.respondJson(fallbackCampgroundSearchResponse(q))
+            call.respondCampgroundSearchJson(fallbackCampgroundSearchResponse(q))
         }
     }
 
@@ -100,11 +111,15 @@ fun Route.campgroundSearchRoutes(fetcher: CampgroundSearchFetcher = defaultCampg
                 }
             }
             // sort by reviews desc
-            call.respondJson(campgrounds.sortedByDescending { it.reviews })
+            call.respondCampgroundSearchJson(campgrounds.sortedByDescending { it.reviews })
         } catch (e: Exception) {
-            call.respondJson(emptyList<CampgroundSearchCampgroundDto>())
+            call.respondCampgroundSearchJson(emptyList<CampgroundSearchCampgroundDto>())
         }
     }
+}
+
+private suspend inline fun <reified T> ApplicationCall.respondCampgroundSearchJson(value: T) {
+    respondText(campgroundSearchJson.encodeToString(value), ContentType.Application.Json)
 }
 
 private fun campgroundSearchResponse(
@@ -168,9 +183,8 @@ private fun List<JsonObject>.mapCampground(): List<CampgroundSearchCampgroundDto
             city = (addr?.get("city") as? JsonPrimitive)?.content ?: "",
             state = (addr?.get("state") as? JsonPrimitive)?.content ?: "",
             // rec.gov returns average_rating as either a number or a numeric
-            // string. Coerce to a JSON number (or null) so the frontend can
-            // call .toFixed() on it.
-            rating = if (rating != null) JsonPrimitive(rating) else JsonNull,
+            // string. Coerce to a JSON number or explicit null.
+            rating = rating,
             reviews = (r["number_of_ratings"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0,
         )
     }
@@ -197,6 +211,6 @@ private data class CampgroundSearchCampgroundDto(
     @SerialName("parent_id") val parentId: String = "",
     val city: String = "",
     val state: String = "",
-    val rating: JsonElement = JsonNull,
+    val rating: Double? = null,
     val reviews: Int = 0,
 )
