@@ -7,12 +7,14 @@ import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
 import ca.floo.roadtrip.service.etl.pointGeoJson
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
+import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -199,14 +201,16 @@ class AspiraJoinByNameEtl(
         host: String,
         matchKind: String,
     ): JsonElement =
-        buildJsonObject {
-            put("host", JsonElement_(host))
-            put("transaction_location_id", JsonElement_(leaf.transactionLocationId))
-            put("map_id", JsonElement_(leaf.mapId))
-            put("resource_location_id", leaf.resourceLocationId?.let { JsonElement_(it) } ?: JsonNull)
-            put("parent_name", leaf.parentName?.let { JsonElement_(it) } ?: JsonNull)
-            put("match_kind", JsonElement_(matchKind))
-        }
+        aspiraExtrasJson.encodeToJsonElement(
+            AspiraLeafExtrasDto(
+                host = host,
+                transactionLocationId = leaf.transactionLocationId,
+                mapId = leaf.mapId,
+                resourceLocationId = leaf.resourceLocationId,
+                parentName = leaf.parentName,
+                matchKind = matchKind,
+            ),
+        )
 
     private fun detectGeometrySource(
         slug: String,
@@ -232,6 +236,23 @@ class AspiraJoinByNameEtl(
         private const val FUZZY_THRESHOLD = 0.5
     }
 }
+
+@OptIn(ExperimentalSerializationApi::class)
+private val aspiraExtrasJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = true
+    }
+
+@Serializable
+private data class AspiraLeafExtrasDto(
+    val host: String,
+    @SerialName("transaction_location_id") val transactionLocationId: Long,
+    @SerialName("map_id") val mapId: Long,
+    @SerialName("resource_location_id") val resourceLocationId: Long?,
+    @SerialName("parent_name") val parentName: String?,
+    @SerialName("match_kind") val matchKind: String,
+)
 
 /**
  * Display-name for Poi.Campground.agency, derived from the booking host.
@@ -436,9 +457,3 @@ private fun csvSplit(line: String): List<String> {
     out += sb.toString()
     return out
 }
-
-@Suppress("FunctionName")
-private fun JsonElement_(v: String): JsonElement = kotlinx.serialization.json.JsonPrimitive(v)
-
-@Suppress("FunctionName")
-private fun JsonElement_(v: Long): JsonElement = kotlinx.serialization.json.JsonPrimitive(v)
