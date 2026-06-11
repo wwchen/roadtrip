@@ -25,14 +25,9 @@ import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.doubleOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 
 // Hard cap. The Mapbox/MapLibre frontend chokes on >5k features per source,
@@ -48,6 +43,7 @@ private const val CG_MIN_ZOOM: Int = 6
 @OptIn(ExperimentalSerializationApi::class)
 private val poiRoutesJson =
     Json {
+        ignoreUnknownKeys = true
         explicitNulls = false
     }
 
@@ -300,29 +296,21 @@ private data class PoiRequest(
 )
 
 private fun parseRequest(bodyText: String): PoiRequest {
-    val root = Json.parseToJsonElement(bodyText).jsonObject
-
-    val bboxArr = root["bbox"]?.jsonArray ?: error("missing bbox")
-    require(bboxArr.size == 4) { "bbox must be [west,south,east,north]" }
-    val nums = bboxArr.map { it.jsonPrimitive.doubleOrNull ?: error("bbox values must be numbers") }
+    val dto = poiRoutesJson.decodeFromString<PoisRequestSchema>(bodyText)
+    val nums = dto.bbox
+    require(nums.size == 4) { "bbox must be [west,south,east,north]" }
     val (w, s, e, n) = nums
     require(w in -180.0..180.0 && e in -180.0..180.0) { "bbox lng out of range" }
     require(s in -90.0..90.0 && n in -90.0..90.0) { "bbox lat out of range" }
     require(w < e && s < n) { "bbox: west must be < east, south < north" }
     val bbox = Bbox(w, s, e, n)
 
-    val zoom = root["zoom"]?.jsonPrimitive?.intOrNull
-
     val categories =
-        root["categories"]
-            ?.jsonArray
-            ?.mapNotNull {
-                it.jsonPrimitive.contentOrNull
-                    ?.trim()
-                    ?.takeIf { c -> c.isNotEmpty() }
-            }?.takeIf { it.isNotEmpty() }
+        dto.categories
+            ?.mapNotNull { it.trim().takeIf { category -> category.isNotEmpty() } }
+            ?.takeIf { it.isNotEmpty() }
 
-    return PoiRequest(bbox, zoom, categories)
+    return PoiRequest(bbox, dto.zoom, categories)
 }
 
 internal fun poiFeatureCollection(
