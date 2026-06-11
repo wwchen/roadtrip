@@ -31,10 +31,19 @@ jobs:
        github.event.comment.body == '/rebase')
     runs-on: ubuntu-latest
     steps:
+      # Use a GitHub App token (same one self-approve.yml uses) so force-pushes
+      # to PR branches re-trigger ci.yml. Pushes from the default GITHUB_TOKEN
+      # are intentionally suppressed by GitHub and do not fire workflows.
+      - uses: actions/create-github-app-token@v1
+        id: app-token
+        with:
+          app-id: ${{ secrets.SELF_APPROVE_APPID }}
+          private-key: ${{ secrets.SELF_APPROVE_PRIVATEKEY }}
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
 
       - name: Configure git
         run: |
@@ -44,7 +53,7 @@ jobs:
       - name: Pick target PRs
         id: pick
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           COMMENT_PR: ${{ github.event.issue.number }}
@@ -81,7 +90,7 @@ jobs:
 
       - name: Rebase
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
