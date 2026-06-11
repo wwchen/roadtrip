@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.models.api
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 // /api/pois request body — bbox is required (4 numbers, [w,s,e,n]),
@@ -20,6 +21,35 @@ data class PoisOnRouteRequestSchema(
     val waypoints: List<WaypointSchema>,
     val radius_miles: Double,
     val categories: List<String>? = null,
+)
+
+// /api/pois/on-route response. A slim GeoJSON FeatureCollection, ordered by
+// route_km and intentionally missing bbox-only metadata such as truncated.
+@Serializable
+data class PoisOnRouteResponseSchema(
+    val type: String = "FeatureCollection",
+    val features: List<PoisOnRouteFeatureSchema>,
+)
+
+@Serializable
+data class PoisOnRouteFeatureSchema(
+    val type: String = "Feature",
+    val id: Long,
+    val geometry: PointGeometrySchema,
+    val properties: PoisOnRouteFeaturePropertiesSchema,
+)
+
+@Serializable
+data class PointGeometrySchema(
+    val type: String = "Point",
+    val coordinates: List<Double>,
+)
+
+@Serializable
+data class PoisOnRouteFeaturePropertiesSchema(
+    val category: String,
+    val subcategory: String? = null,
+    @SerialName("route_km") val routeKm: Double,
 )
 
 @Serializable
