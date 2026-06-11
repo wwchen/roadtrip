@@ -11,13 +11,23 @@ import io.ktor.server.application.ApplicationCall
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.descriptors.PrimitiveKind
+import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
+import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encodeToString
+import kotlinx.serialization.encoding.Decoder
+import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonDecoder
+import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.doubleOrNull
+import kotlinx.serialization.json.intOrNull
 import org.slf4j.LoggerFactory
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
@@ -59,7 +69,7 @@ fun interface CampgroundSearchFetcher {
         q: String,
         entityType: String,
         size: Int,
-    ): List<JsonObject>
+    ): List<CampgroundSearchUpstreamResultDto>
 }
 
 private val defaultCampgroundSearchFetcher =
@@ -145,7 +155,7 @@ private suspend fun fetchSearch(
     q: String,
     entityType: String,
     size: Int,
-): List<JsonObject> {
+): List<CampgroundSearchUpstreamResultDto> {
     val url = "https://www.recreation.gov/api/search?q=${URLEncoder.encode(
         q,
         StandardCharsets.UTF_8,
@@ -155,39 +165,110 @@ private suspend fun fetchSearch(
             header("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36")
             header("Accept", "application/json")
         }
-    val root = Json.parseToJsonElement(resp.bodyAsText()) as? JsonObject ?: return emptyList()
-    val results = root["results"] as? JsonArray ?: return emptyList()
-    return results.filterIsInstance<JsonObject>()
+    return parseCampgroundSearchResults(resp.bodyAsText())
 }
 
-private fun List<JsonObject>.mapPark(): List<CampgroundSearchParkDto> =
+internal fun parseCampgroundSearchResults(body: String): List<CampgroundSearchUpstreamResultDto> =
+    campgroundSearchJson
+        .decodeFromString<CampgroundSearchUpstreamResponseDto>(body)
+        .results
+
+private fun List<CampgroundSearchUpstreamResultDto>.mapPark(): List<CampgroundSearchParkDto> =
     map { r ->
-        val addr = (r["addresses"] as? JsonArray)?.firstOrNull() as? JsonObject
+        val addr = r.addresses.firstOrNull()
         CampgroundSearchParkDto(
-            id = (r["entity_id"] as? JsonPrimitive)?.content ?: "",
-            name = (r["name"] as? JsonPrimitive)?.content ?: "",
-            city = (addr?.get("city") as? JsonPrimitive)?.content ?: "",
-            state = (addr?.get("state") as? JsonPrimitive)?.content ?: "",
+            id = r.entityId,
+            name = r.name,
+            city = addr?.city.orEmpty(),
+            state = addr?.state.orEmpty(),
         )
     }
 
-private fun List<JsonObject>.mapCampground(): List<CampgroundSearchCampgroundDto> =
+private fun List<CampgroundSearchUpstreamResultDto>.mapCampground(): List<CampgroundSearchCampgroundDto> =
     map { r ->
-        val addr = (r["addresses"] as? JsonArray)?.firstOrNull() as? JsonObject
-        val rating = (r["average_rating"] as? JsonPrimitive)?.content?.toDoubleOrNull()
+        val addr = r.addresses.firstOrNull()
         CampgroundSearchCampgroundDto(
-            id = (r["entity_id"] as? JsonPrimitive)?.content ?: "",
-            name = (r["name"] as? JsonPrimitive)?.content ?: "",
-            parentName = (r["parent_name"] as? JsonPrimitive)?.content ?: "",
-            parentId = (r["parent_entity_id"] as? JsonPrimitive)?.content ?: "",
-            city = (addr?.get("city") as? JsonPrimitive)?.content ?: "",
-            state = (addr?.get("state") as? JsonPrimitive)?.content ?: "",
-            // rec.gov returns average_rating as either a number or a numeric
-            // string. Coerce to a JSON number or explicit null.
-            rating = rating,
-            reviews = (r["number_of_ratings"] as? JsonPrimitive)?.content?.toIntOrNull() ?: 0,
+            id = r.entityId,
+            name = r.name,
+            parentName = r.parentName,
+            parentId = r.parentEntityId,
+            city = addr?.city.orEmpty(),
+            state = addr?.state.orEmpty(),
+            rating = r.averageRating,
+            reviews = r.numberOfRatings,
         )
     }
+
+@Serializable
+internal data class CampgroundSearchUpstreamResponseDto(
+    val results: List<CampgroundSearchUpstreamResultDto> = emptyList(),
+)
+
+@Serializable
+data class CampgroundSearchUpstreamResultDto(
+    @SerialName("entity_id") val entityId: String = "",
+    val name: String = "",
+    val addresses: List<CampgroundSearchUpstreamAddressDto> = emptyList(),
+    @SerialName("parent_name") val parentName: String = "",
+    @SerialName("parent_entity_id") val parentEntityId: String = "",
+    @Serializable(with = NullableFlexibleDoubleSerializer::class)
+    @SerialName("average_rating")
+    val averageRating: Double? = null,
+    @Serializable(with = FlexibleIntSerializer::class)
+    @SerialName("number_of_ratings")
+    val numberOfRatings: Int = 0,
+)
+
+@Serializable
+data class CampgroundSearchUpstreamAddressDto(
+    val city: String = "",
+    val state: String = "",
+)
+
+private object NullableFlexibleDoubleSerializer : KSerializer<Double?> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("NullableFlexibleDouble", PrimitiveKind.DOUBLE)
+
+    @OptIn(ExperimentalSerializationApi::class)
+    override fun serialize(
+        encoder: Encoder,
+        value: Double?,
+    ) {
+        if (value == null) {
+            encoder.encodeNull()
+        } else {
+            encoder.encodeDouble(value)
+        }
+    }
+
+    override fun deserialize(decoder: Decoder): Double? {
+        val jsonDecoder = decoder as? JsonDecoder ?: return decoder.decodeDouble()
+        val element = jsonDecoder.decodeJsonElement()
+        if (element is JsonNull) return null
+        val primitive = element as? JsonPrimitive ?: return null
+        return primitive.doubleOrNull ?: primitive.contentOrNull?.toDoubleOrNull()
+    }
+}
+
+private object FlexibleIntSerializer : KSerializer<Int> {
+    override val descriptor: SerialDescriptor =
+        PrimitiveSerialDescriptor("FlexibleInt", PrimitiveKind.INT)
+
+    override fun serialize(
+        encoder: Encoder,
+        value: Int,
+    ) {
+        encoder.encodeInt(value)
+    }
+
+    override fun deserialize(decoder: Decoder): Int {
+        val jsonDecoder = decoder as? JsonDecoder ?: return decoder.decodeInt()
+        val element = jsonDecoder.decodeJsonElement()
+        if (element is JsonNull) return 0
+        val primitive = element as? JsonPrimitive ?: return 0
+        return primitive.intOrNull ?: primitive.contentOrNull?.toIntOrNull() ?: 0
+    }
+}
 
 @Serializable
 private data class CampgroundSearchResponseDto(
