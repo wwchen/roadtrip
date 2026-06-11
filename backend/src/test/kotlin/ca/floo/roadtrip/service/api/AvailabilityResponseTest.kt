@@ -16,24 +16,26 @@ class AvailabilityResponseTest {
     @Test
     fun `availability renderer serializes stable dto shape`() {
         val body =
-            renderAvailabilityJson(
-                provider = "recgov",
-                today = LocalDate.parse("2026-06-10"),
-                days = 1,
-                perDay =
-                    listOf(
-                        DayClassification(
-                            date = "2026-06-10",
-                            status = "available",
-                            availableCount = 3,
-                            total = 5,
+            encodeAvailabilityJson(
+                availabilityResponseDto(
+                    provider = "recgov",
+                    today = LocalDate.parse("2026-06-10"),
+                    days = 1,
+                    perDay =
+                        listOf(
+                            DayClassification(
+                                date = "2026-06-10",
+                                status = "available",
+                                availableCount = 3,
+                                total = 5,
+                            ),
                         ),
-                    ),
-                state = "success",
-                summary = "1 night available",
-                seasonBlock = null,
-                cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
-                campgroundId = "232447",
+                    state = "success",
+                    summary = "1 night available",
+                    seasonBlock = null,
+                    cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
+                    campgroundId = "232447",
+                ),
             )
         val json = Json.parseToJsonElement(body).jsonObject
         val availabilityDay = json["availability"]!!.jsonArray[0].jsonObject
@@ -48,7 +50,7 @@ class AvailabilityResponseTest {
 
     @Test
     fun `availability error renderer returns state error dto shape`() {
-        val body = renderAvailabilityErrorJson("rate_limited", retryAfterS = 60)
+        val body = encodeAvailabilityJson(availabilityErrorDto("rate_limited", retryAfterS = 60))
         val json = Json.parseToJsonElement(body).jsonObject
 
         assertEquals("error", json["state"]!!.jsonPrimitive.content)
@@ -58,8 +60,8 @@ class AvailabilityResponseTest {
 
     @Test
     fun `aspira upstream mapper uses availability error dto renderer`() {
-        val (status, body) = mapAspiraUpstreamError(AspiraException("WAF challenge", httpStatus = 503))
-        val json = Json.parseToJsonElement(body).jsonObject
+        val (status, error) = mapAspiraUpstreamError(AspiraException("WAF challenge", httpStatus = 503))
+        val json = Json.parseToJsonElement(encodeAvailabilityJson(error)).jsonObject
 
         assertEquals(503, status.value)
         assertEquals("error", json["state"]!!.jsonPrimitive.content)

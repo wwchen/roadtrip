@@ -20,7 +20,9 @@ import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.availableDatesAspira
+import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspira
 import ca.floo.roadtrip.service.api.mapAspiraUpstreamError
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
@@ -36,8 +38,6 @@ import io.ktor.server.routing.Route
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
@@ -47,13 +47,6 @@ import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
 private val log = LoggerFactory.getLogger("CampsiteAvailabilityRoutes")
-
-@OptIn(ExperimentalSerializationApi::class)
-private val campsiteAvailabilityRouteJson =
-    Json {
-        encodeDefaults = true
-        explicitNulls = false
-    }
 
 // Bulk endpoint guardrails. The single-id endpoint already serves the drawer;
 // bulk is for the route-planner card list which scores N campgrounds against
@@ -68,7 +61,7 @@ private const val MAX_NIGHTS = 14
  * (rec.gov or Aspira NextGen). The FE doesn't need to know which provider
  * a campground is backed by — every POI feature already carries `f.id`.
  *
- * Response shape is provider-stable (see [renderAvailabilityJson]); the FE
+ * Response shape is provider-stable (see `availabilityResponseDto`); the FE
  * drawer renders both alike.
  *
  * Replaces the legacy `/api/campsite/availability/{recgov_id}` and
@@ -134,10 +127,7 @@ fun Route.campsiteAvailabilityRoutes(
             // Camis or no provider_ref. The drawer's hasAvailability gate
             // should prevent this from being called for non-bookable rows;
             // returning empty keeps the FE happy even if it slips through.
-            call.respondText(
-                campsiteAvailabilityRouteJson.encodeToString(AvailabilityEmptySchema()),
-                ContentType.Application.Json,
-            )
+            call.respondAvailabilityJson(AvailabilityEmptySchema())
             return@get
         }
 
@@ -147,7 +137,7 @@ fun Route.campsiteAvailabilityRoutes(
         val months = monthsCovering(today, end)
 
         try {
-            val body =
+            val response =
                 when (variant) {
                     is ProviderVariant.RecGov ->
                         fetchAndClassifyRecgov(recgovCache, variant.recgovId, today, days, months, force)
@@ -161,15 +151,15 @@ fun Route.campsiteAvailabilityRoutes(
                         fetchAndClassifyAspira(aspiraCache, host, variant.mapId, today, days, force)
                     }
                 }
-            call.respondText(body, ContentType.Application.Json)
+            call.respondAvailabilityJson(response)
         } catch (e: AspiraException) {
-            val (status, errBody) = mapAspiraUpstreamError(e)
+            val (status, error) = mapAspiraUpstreamError(e)
             log.info("aspira availability poi={} failed: {}", poiId, e.message)
-            call.respondText(errBody, ContentType.Application.Json, status)
+            call.respondAvailabilityJson(error, status)
         } catch (e: Exception) {
-            val (status, errBody) = mapRecgovUpstreamError(e)
+            val (status, error) = mapRecgovUpstreamError(e)
             log.info("recgov availability poi={} failed: {}", poiId, e.message)
-            call.respondText(errBody, ContentType.Application.Json, status)
+            call.respondAvailabilityJson(error, status)
         }
     }
 
@@ -295,15 +285,12 @@ fun Route.campsiteAvailabilityRoutes(
                     }.awaitAll()
             }
 
-        call.respondText(
-            Json.encodeToString(
-                BulkAvailResponseSchema(
-                    start = req.start,
-                    nights = req.nights,
-                    results = results,
-                ),
+        call.respondAvailabilityJson(
+            BulkAvailResponseSchema(
+                start = req.start,
+                nights = req.nights,
+                results = results,
             ),
-            ContentType.Application.Json,
         )
     }
 }
@@ -390,13 +377,7 @@ private suspend fun ApplicationCall.respondAvailabilityError(
     status: HttpStatusCode,
     retryAfterS: Int? = null,
 ) {
-    respondText(
-        campsiteAvailabilityRouteJson.encodeToString(
-            AvailabilityErrorSchema(error = error, retry_after_s = retryAfterS),
-        ),
-        ContentType.Application.Json,
-        status,
-    )
+    respondAvailabilityJson(availabilityErrorDto(error, retryAfterS), status)
 }
 
 private suspend fun ApplicationCall.respondApiError(
@@ -405,11 +386,12 @@ private suspend fun ApplicationCall.respondApiError(
     detail: String? = null,
     retryAfterS: Int? = null,
 ) {
-    respondText(
-        campsiteAvailabilityRouteJson.encodeToString(
-            ApiErrorSchema(error = error, detail = detail, retry_after_s = retryAfterS),
-        ),
-        ContentType.Application.Json,
-        status,
-    )
+    respondAvailabilityJson(ApiErrorSchema(error = error, detail = detail, retry_after_s = retryAfterS), status)
+}
+
+private suspend inline fun <reified T> ApplicationCall.respondAvailabilityJson(
+    value: T,
+    status: HttpStatusCode = HttpStatusCode.OK,
+) {
+    respondText(encodeAvailabilityJson(value), ContentType.Application.Json, status)
 }

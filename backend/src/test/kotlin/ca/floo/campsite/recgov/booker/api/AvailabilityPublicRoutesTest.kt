@@ -2,6 +2,7 @@ package ca.floo.campsite.recgov.booker.api
 
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.campsite.recgov.booker.poller.Campsite
+import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -68,7 +69,7 @@ class AvailabilityPublicRoutesTest {
     ): JsonObject {
         val end = today.plusDays((days - 1).toLong())
         val months = monthsCovering(today, end)
-        val body = runBlocking { fetchAndClassifyRecgov(cache, recgovId, today, days, months, force) }
+        val body = encodeAvailabilityJson(runBlocking { fetchAndClassifyRecgov(cache, recgovId, today, days, months, force) })
         return parseJson(body)
     }
 
@@ -136,16 +137,16 @@ class AvailabilityPublicRoutesTest {
                 classify(cache, days = 1)
             }.exceptionOrNull()
         require(ex != null) { "expected an upstream error to surface" }
-        val (status, errBody) = mapRecgovUpstreamError(ex)
+        val (status, error) = mapRecgovUpstreamError(ex)
         assertEquals(503, status.value)
-        assertTrue(errBody.contains("rate_limited"))
+        assertEquals("rate_limited", error.error)
     }
 
     @Test
     fun `5xx maps to upstream_5xx`() {
         val ex = IllegalStateException("connection reset")
-        val (_, errBody) = mapRecgovUpstreamError(ex)
-        assertTrue(errBody.contains("upstream_5xx"))
+        val (_, error) = mapRecgovUpstreamError(ex)
+        assertEquals("upstream_5xx", error.error)
     }
 
     @Test
