@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.client.RouteResponse
 import ca.floo.roadtrip.client.RoutingException
 import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.RouteCorridorRepo
@@ -10,13 +11,12 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.add
-import kotlinx.serialization.json.buildJsonArray
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.encodeToJsonElement
 import org.jooq.DSLContext
 import org.jooq.exception.DataAccessException
 
@@ -166,87 +166,105 @@ fun Route.routeRoutes(
                 }
             }
 
-        val json =
-            buildJsonObject {
-                put("type", "FeatureCollection")
-                put(
-                    "features",
-                    buildJsonArray {
-                        add(
-                            buildJsonObject {
-                                put("type", "Feature")
-                                put(
-                                    "geometry",
-                                    buildJsonObject {
-                                        put("type", "LineString")
-                                        put(
-                                            "coordinates",
-                                            buildJsonArray {
-                                                for (c in response.coordinates) {
-                                                    add(buildJsonArray { c.forEach { add(it) } })
-                                                }
-                                            },
-                                        )
-                                    },
-                                )
-                                put(
-                                    "properties",
-                                    buildJsonObject {
-                                        put("distance_m", response.distanceMeters)
-                                        put("duration_s", response.durationSeconds)
-                                        put(
-                                            "legs",
-                                            buildJsonArray {
-                                                for (leg in response.legs) {
-                                                    add(
-                                                        buildJsonObject {
-                                                            put("distance_m", leg.distanceMeters)
-                                                            put("duration_s", leg.durationSeconds)
-                                                        },
-                                                    )
-                                                }
-                                            },
-                                        )
-                                        // Echo back the input waypoints so the caller knows
-                                        // exactly what was routed. Useful for debugging.
-                                        put(
-                                            "waypoints",
-                                            buildJsonArray {
-                                                for ((lng, lat) in coords) {
-                                                    add(
-                                                        buildJsonArray {
-                                                            add(lng)
-                                                            add(lat)
-                                                        },
-                                                    )
-                                                }
-                                            },
-                                        )
-                                    },
-                                )
-                            },
-                        )
-                        if (corridorRadiusMiles != null && corridorPolygonGeoJson != null) {
-                            add(
-                                buildJsonObject {
-                                    put("type", "Feature")
-                                    put("geometry", Json.parseToJsonElement(corridorPolygonGeoJson))
-                                    put(
-                                        "properties",
-                                        buildJsonObject {
-                                            put("role", "corridor")
-                                            put("radius_miles", corridorRadiusMiles)
-                                        },
-                                    )
-                                },
-                            )
-                        }
-                    },
-                )
-            }
-        call.respondText(json.toString(), ContentType.Application.Json)
+        call.respondText(
+            routeResponseFeatureCollectionJson(
+                response = response,
+                waypoints = coords,
+                corridorRadiusMiles = corridorRadiusMiles,
+                corridorPolygonGeoJson = corridorPolygonGeoJson,
+            ),
+            ContentType.Application.Json,
+        )
     }
 }
+
+internal fun routeResponseFeatureCollectionJson(
+    response: RouteResponse,
+    waypoints: List<Pair<Double, Double>>,
+    corridorRadiusMiles: Double? = null,
+    corridorPolygonGeoJson: String? = null,
+): String {
+    val features =
+        mutableListOf(
+            routeJson.encodeToJsonElement(
+                RouteFeatureDto(
+                    geometry = RouteLineGeometryDto(coordinates = response.coordinates),
+                    properties =
+                        RoutePropertiesDto(
+                            distanceMeters = response.distanceMeters,
+                            durationSeconds = response.durationSeconds,
+                            legs =
+                                response.legs.map { leg ->
+                                    RouteLegDto(
+                                        distanceMeters = leg.distanceMeters,
+                                        durationSeconds = leg.durationSeconds,
+                                    )
+                                },
+                            waypoints = waypoints.map { (lng, lat) -> listOf(lng, lat) },
+                        ),
+                ),
+            ),
+        )
+    if (corridorRadiusMiles != null && corridorPolygonGeoJson != null) {
+        features +=
+            routeJson.encodeToJsonElement(
+                CorridorFeatureDto(
+                    geometry = Json.parseToJsonElement(corridorPolygonGeoJson),
+                    properties =
+                        CorridorPropertiesDto(
+                            radiusMiles = corridorRadiusMiles,
+                        ),
+                ),
+            )
+    }
+    return routeJson.encodeToString(RouteFeatureCollectionDto(features = features))
+}
+
+@Serializable
+private data class RouteFeatureCollectionDto(
+    val type: String = "FeatureCollection",
+    val features: List<JsonElement>,
+)
+
+@Serializable
+private data class RouteFeatureDto(
+    val type: String = "Feature",
+    val geometry: RouteLineGeometryDto,
+    val properties: RoutePropertiesDto,
+)
+
+@Serializable
+private data class CorridorFeatureDto(
+    val type: String = "Feature",
+    val geometry: JsonElement,
+    val properties: CorridorPropertiesDto,
+)
+
+@Serializable
+private data class RouteLineGeometryDto(
+    val type: String = "LineString",
+    val coordinates: List<List<Double>>,
+)
+
+@Serializable
+private data class RoutePropertiesDto(
+    @SerialName("distance_m") val distanceMeters: Double,
+    @SerialName("duration_s") val durationSeconds: Double,
+    val legs: List<RouteLegDto>,
+    val waypoints: List<List<Double>>,
+)
+
+@Serializable
+private data class RouteLegDto(
+    @SerialName("distance_m") val distanceMeters: Double,
+    @SerialName("duration_s") val durationSeconds: Double,
+)
+
+@Serializable
+private data class CorridorPropertiesDto(
+    val role: String = "corridor",
+    @SerialName("radius_miles") val radiusMiles: Double,
+)
 
 @Serializable
 private data class RouteErrorDto(
