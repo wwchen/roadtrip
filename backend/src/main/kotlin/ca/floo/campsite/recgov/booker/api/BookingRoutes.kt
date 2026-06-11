@@ -6,6 +6,7 @@ import ca.floo.campsite.recgov.booker.db.SettingsRepo
 import ca.floo.campsite.recgov.booker.domain.Match
 import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.EventBus
+import ca.floo.campsite.recgov.booker.events.matchFoundEventData
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
@@ -184,7 +185,7 @@ fun Route.bookingCartRoutes(
             matches.clearClaim(id)
         }
         val refreshed = matches.get(id) ?: m
-        bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(refreshed)))
+        bus.publish(CampsiteEvent.MatchFound(matchJson = matchFoundEventData(refreshed)))
         call.respondJson(CartQueuedDto())
     }
 

@@ -7,6 +7,7 @@ import ca.floo.campsite.recgov.booker.domain.Alert
 import ca.floo.campsite.recgov.booker.domain.Match
 import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.EventBus
+import ca.floo.campsite.recgov.booker.events.matchFoundEventData
 import ca.floo.campsite.recgov.booker.matching.Matcher
 import ca.floo.campsite.recgov.booker.notifier.SlackNotifier
 import kotlinx.coroutines.CoroutineScope
@@ -15,10 +16,6 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.time.OffsetDateTime
 import kotlin.time.Duration.Companion.seconds
@@ -93,7 +90,7 @@ class Poller(
                         // ignores the payload and re-queries /api/campsite/companion/work/next
                         // — the DB is the source of truth for what to ATC.
                         for (m in newMatches) {
-                            bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(m)))
+                            bus.publish(CampsiteEvent.MatchFound(matchJson = matchFoundEventData(m)))
                         }
                         slack?.notifyBatch(alert, newMatches)
                         newMatches.forEach { matches.markNotified(it.id) }
@@ -173,20 +170,4 @@ class Poller(
         alerts.markChecked(alert.id)
         return newMatches
     }
-
-    private fun matchEnvelope(m: Match): String =
-        buildJsonObject {
-            put("id", m.id)
-            put("alertId", m.alertId)
-            put("campgroundId", m.campgroundId)
-            put("campsiteId", m.campsiteId)
-            put("site", m.campsiteSite ?: "")
-            put("loop", m.campsiteLoop ?: "")
-            put("campsiteType", m.campsiteType ?: "")
-            put("firstDate", m.firstDate)
-            put("nights", m.nights)
-            put("availableDates", JsonArray(m.availableDates.map { JsonPrimitive(it) }))
-            put("foundAt", m.foundAt)
-            put("campgroundName", m.campgroundName ?: "")
-        }.toString()
 }

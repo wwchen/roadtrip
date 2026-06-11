@@ -4,6 +4,7 @@ import ca.floo.campsite.recgov.booker.db.AlertRepo
 import ca.floo.campsite.recgov.booker.db.MatchRepo
 import ca.floo.campsite.recgov.booker.events.CampsiteEvent
 import ca.floo.campsite.recgov.booker.events.EventBus
+import ca.floo.campsite.recgov.booker.events.matchFoundEventData
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.Route
@@ -63,7 +64,7 @@ fun Route.campsiteDebugRoutes(
                 status = HttpStatusCode.Conflict,
             )
         val m = matches.get(matchId)!!
-        bus.publish(CampsiteEvent.MatchFound(matchJson = matchEnvelope(m)))
+        bus.publish(CampsiteEvent.MatchFound(matchJson = matchFoundEventData(m)))
         call.respondJson(DebugSynthMatchDto(id = matchId))
     }
 }
