@@ -14,7 +14,6 @@ import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -45,13 +44,6 @@ internal suspend inline fun <reified T> ApplicationCall.receiveCampsiteJson(): T
     campsiteApiJson.decodeFromString(
         receiveText().ifBlank { "{}" },
     )
-
-internal suspend fun ApplicationCall.respondJsonElement(
-    value: JsonElement,
-    status: HttpStatusCode = HttpStatusCode.OK,
-) {
-    respondText(campsiteApiJson.encodeToString(value), ContentType.Application.Json, status)
-}
 
 @Serializable
 internal data class OkDto(

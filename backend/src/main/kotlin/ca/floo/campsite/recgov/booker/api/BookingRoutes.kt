@@ -152,7 +152,7 @@ fun Route.bookingSessionRoutes(
             call.respondJson(ErrorDto("no recgov token saved"), status = HttpStatusCode.NotFound)
             return@get
         }
-        call.respondJsonElement(recaccount)
+        call.respondJson(recaccount)
     }
 }
 
