@@ -2,6 +2,7 @@ package ca.floo.roadtrip.models.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.json.JsonElement
 
 // /api/pois request body — bbox is required (4 numbers, [w,s,e,n]),
 // zoom + categories optional. Corridor filtering lives behind
@@ -11,6 +12,54 @@ data class PoisRequestSchema(
     val bbox: List<Double>,
     val zoom: Int? = null,
     val categories: List<String>? = null,
+)
+
+// /api/pois response. Slim GeoJSON used for viewport map rendering.
+@Serializable
+data class PoiFeatureCollectionSchema(
+    val type: String = "FeatureCollection",
+    val truncated: Boolean,
+    val features: List<SlimPoiFeatureSchema>,
+)
+
+@Serializable
+data class SlimPoiFeatureSchema(
+    val type: String = "Feature",
+    val id: Long,
+    val geometry: PointGeometrySchema,
+    val properties: SlimPoiPropertiesSchema,
+)
+
+@Serializable
+data class SlimPoiPropertiesSchema(
+    val category: String,
+    val subcategory: String? = null,
+)
+
+// /api/pois/{id} response. Wide GeoJSON used for pin popups/drawers.
+@Serializable
+data class PoiDetailFeatureSchema(
+    val type: String = "Feature",
+    val id: Long,
+    val geometry: JsonElement,
+    val properties: PoiDetailPropertiesSchema,
+)
+
+@Serializable
+data class PoiDetailPropertiesSchema(
+    val source: String,
+    @SerialName("source_id") val sourceId: String,
+    val category: String,
+    val subcategory: String? = null,
+    val name: String,
+    val region: String? = null,
+    @SerialName("unit_name") val unitName: String? = null,
+    @SerialName("reserve_url") val reserveUrl: String? = null,
+    val phone: String? = null,
+    @SerialName("info_url") val infoUrl: String? = null,
+    val address: JsonElement? = null,
+    @SerialName("provider_ref") val providerRef: JsonElement? = null,
+    val raw: JsonElement,
 )
 
 // /api/pois/on-route request body. Same {waypoints, radius_miles}

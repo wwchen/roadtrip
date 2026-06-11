@@ -9,10 +9,10 @@ import kotlin.test.assertEquals
 // Byte-identical contract test for the serialized FeatureCollection +
 // per-row detail JSON. The webapp depends on the exact wire shapes:
 //
-//   - buildFeatureCollection (slim): drives map rendering. Only id +
+//   - poiFeatureCollection (slim): drives map rendering. Only id +
 //     geometry + {category, subcategory?} per feature. Anything richer
 //     would inflate the bbox payload and undo the perf refactor.
-//   - buildSingleFeatureJson (wide): drives popup/drawer hydration via
+//   - poiDetailFeature (wide): drives popup/drawer hydration via
 //     GET /api/pois/{id}. Same shape /api/pois used to ship inline.
 //
 // Pure unit, no DB.
@@ -36,7 +36,7 @@ class FeatureCollectionContractTest {
                 """"properties":{"category":"campground","subcategory":"federal"}}""" +
                 """]}"""
         )
-        assertEquals(expected, buildFeatureCollection(rows, truncated = false))
+        assertEquals(expected, encodePoiFeatureJson(poiFeatureCollection(rows, truncated = false)))
     }
 
     @Test
@@ -51,14 +51,14 @@ class FeatureCollectionContractTest {
                     lat = 49.0,
                 ),
             )
-        val out = buildFeatureCollection(rows, truncated = false)
+        val out = encodePoiFeatureJson(poiFeatureCollection(rows, truncated = false))
         assert(!out.contains("subcategory"))
         assert(out.contains(""""category":"planet-fitness""""))
     }
 
     @Test
     fun `truncated true is reflected verbatim`() {
-        val out = buildFeatureCollection(emptyList(), truncated = true)
+        val out = encodePoiFeatureJson(poiFeatureCollection(emptyList(), truncated = true))
         assertEquals("""{"type":"FeatureCollection","truncated":true,"features":[]}""", out)
     }
 
@@ -122,7 +122,7 @@ class FeatureCollectionContractTest {
                 """"address":{"city":"Banff","state":"AB"},""" +
                 """"raw":{"category":"federal","amenities":["showers"]}}}"""
         )
-        assertEquals(expected, buildSingleFeatureJson(row))
+        assertEquals(expected, encodePoiFeatureJson(poiDetailFeature(row)))
     }
 
     @Test
@@ -144,7 +144,7 @@ class FeatureCollectionContractTest {
                 geomJson = """{"type":"Point","coordinates":[-123.0,49.0]}""",
                 propertiesJson = """{}""",
             )
-        val out = buildSingleFeatureJson(row)
+        val out = encodePoiFeatureJson(poiDetailFeature(row))
         assert(!out.contains("\"subcategory\""))
         assert(!out.contains("\"region\""))
         assert(!out.contains("\"unit_name\""))
@@ -173,7 +173,7 @@ class FeatureCollectionContractTest {
                 geomJson = """{"type":"Point","coordinates":[0,0]}""",
                 propertiesJson = """{}""",
             )
-        val out = buildSingleFeatureJson(row)
+        val out = encodePoiFeatureJson(poiDetailFeature(row))
         kotlinx.serialization.json.Json
             .parseToJsonElement(out)
         assert(out.contains("""\"the\\backslash\""""))

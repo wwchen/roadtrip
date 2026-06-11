@@ -1,9 +1,15 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.api.ApiErrorSchema
+import ca.floo.roadtrip.models.api.PoiDetailFeatureSchema
+import ca.floo.roadtrip.models.api.PoiDetailPropertiesSchema
+import ca.floo.roadtrip.models.api.PoiFeatureCollectionSchema
 import ca.floo.roadtrip.models.api.PoiSearchHitSchema
 import ca.floo.roadtrip.models.api.PoiSearchResponseSchema
+import ca.floo.roadtrip.models.api.PointGeometrySchema
 import ca.floo.roadtrip.models.api.PoisRequestSchema
+import ca.floo.roadtrip.models.api.SlimPoiFeatureSchema
+import ca.floo.roadtrip.models.api.SlimPoiPropertiesSchema
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.Bbox
 import ca.floo.roadtrip.repo.PoiDetailRow
@@ -19,11 +25,8 @@ import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
@@ -116,7 +119,7 @@ fun Route.poiRoutes(
             code(io.ktor.http.HttpStatusCode.OK) {
                 description =
                     "GeoJSON FeatureCollection. truncated:true when the bbox span exceeded the cap."
-                body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+                body<PoiFeatureCollectionSchema> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
             }
             code(io.ktor.http.HttpStatusCode.BadRequest) {
                 description = "Malformed body or missing bbox."
@@ -154,10 +157,7 @@ fun Route.poiRoutes(
                 limit = POI_LIMIT,
             )
 
-        call.respondText(
-            buildFeatureCollection(result.rows, result.truncated),
-            io.ktor.http.ContentType.Application.Json,
-        )
+        call.respondPoiFeatureJson(poiFeatureCollection(result.rows, result.truncated))
     }
 
     // GET /api/pois/{id}
@@ -182,7 +182,7 @@ fun Route.poiRoutes(
         response {
             code(io.ktor.http.HttpStatusCode.OK) {
                 description = "GeoJSON Feature with full properties."
-                body<String> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
+                body<PoiDetailFeatureSchema> { mediaTypes(io.ktor.http.ContentType.Application.Json) }
             }
             code(io.ktor.http.HttpStatusCode.NotFound) {
                 description = "No row with that id (or it was soft-deleted)."
@@ -200,10 +200,7 @@ fun Route.poiRoutes(
             "Cache-Control",
             "public, max-age=300, stale-while-revalidate=3600",
         )
-        call.respondText(
-            buildSingleFeatureJson(row),
-            io.ktor.http.ContentType.Application.Json,
-        )
+        call.respondPoiFeatureJson(poiDetailFeature(row))
     }
 
     // GET /api/pois/search?q=...&limit=10
@@ -258,10 +255,7 @@ fun Route.poiRoutes(
                 ?.trim()
                 .orEmpty()
         if (q.length < 2) {
-            call.respondText(
-                Json.encodeToString(PoiSearchResponseSchema(results = emptyList())),
-                io.ktor.http.ContentType.Application.Json,
-            )
+            call.respondPoiJson(PoiSearchResponseSchema(results = emptyList()))
             return@get
         }
         val limit =
@@ -288,10 +282,7 @@ fun Route.poiRoutes(
                         lat = it.lat,
                     )
                 }
-        call.respondText(
-            Json.encodeToString(PoiSearchResponseSchema(results = hits)),
-            io.ktor.http.ContentType.Application.Json,
-        )
+        call.respondPoiJson(PoiSearchResponseSchema(results = hits))
     }
 }
 
@@ -334,112 +325,67 @@ private fun parseRequest(bodyText: String): PoiRequest {
     return PoiRequest(bbox, zoom, categories)
 }
 
-internal fun buildFeatureCollection(
+internal fun poiFeatureCollection(
     rows: List<PoiRow>,
     truncated: Boolean,
-): String =
-    poiFeatureJson.encodeToString(
-        PoiFeatureCollectionDto(
-            truncated = truncated,
-            features =
-                rows.map { row ->
-                    SlimPoiFeatureDto(
-                        id = row.id,
-                        geometry = PoiPointGeometryDto(coordinates = listOf(row.lng, row.lat)),
-                        properties =
-                            SlimPoiPropertiesDto(
-                                category = row.category,
-                                subcategory = row.subcategory,
-                            ),
-                    )
-                },
-        ),
+): PoiFeatureCollectionSchema =
+    PoiFeatureCollectionSchema(
+        truncated = truncated,
+        features =
+            rows.map { row ->
+                SlimPoiFeatureSchema(
+                    id = row.id,
+                    geometry = PointGeometrySchema(coordinates = listOf(row.lng, row.lat)),
+                    properties =
+                        SlimPoiPropertiesSchema(
+                            category = row.category,
+                            subcategory = row.subcategory,
+                        ),
+                )
+            },
     )
 
-internal fun buildSingleFeatureJson(r: PoiDetailRow): String =
-    poiFeatureJson.encodeToString(
-        PoiDetailFeatureDto(
-            id = r.id,
-            geometry = Json.parseToJsonElement(r.geomJson),
-            properties =
-                PoiDetailPropertiesDto(
-                    source = r.source,
-                    sourceId = r.sourceId,
-                    category = r.category,
-                    subcategory = r.subcategory,
-                    name = r.name,
-                    region = r.region,
-                    unitName = r.unitName,
-                    reserveUrl = r.reserveUrl,
-                    phone = r.phone,
-                    infoUrl = r.infoUrl,
-                    address = r.addressJson?.let { Json.parseToJsonElement(it) },
-                    providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
-                    raw = Json.parseToJsonElement(r.propertiesJson),
-                ),
-        ),
+internal fun poiDetailFeature(r: PoiDetailRow): PoiDetailFeatureSchema =
+    PoiDetailFeatureSchema(
+        id = r.id,
+        geometry = Json.parseToJsonElement(r.geomJson),
+        properties =
+            PoiDetailPropertiesSchema(
+                source = r.source,
+                sourceId = r.sourceId,
+                category = r.category,
+                subcategory = r.subcategory,
+                name = r.name,
+                region = r.region,
+                unitName = r.unitName,
+                reserveUrl = r.reserveUrl,
+                phone = r.phone,
+                infoUrl = r.infoUrl,
+                address = r.addressJson?.let { Json.parseToJsonElement(it) },
+                providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
+                raw = Json.parseToJsonElement(r.propertiesJson),
+            ),
     )
 
-@Serializable
-private data class PoiFeatureCollectionDto(
-    val type: String = "FeatureCollection",
-    val truncated: Boolean,
-    val features: List<SlimPoiFeatureDto>,
-)
+internal fun encodePoiFeatureJson(value: PoiFeatureCollectionSchema): String = poiFeatureJson.encodeToString(value)
 
-@Serializable
-private data class SlimPoiFeatureDto(
-    val type: String = "Feature",
-    val id: Long,
-    val geometry: PoiPointGeometryDto,
-    val properties: SlimPoiPropertiesDto,
-)
+internal fun encodePoiFeatureJson(value: PoiDetailFeatureSchema): String = poiFeatureJson.encodeToString(value)
 
-@Serializable
-private data class PoiPointGeometryDto(
-    val type: String = "Point",
-    val coordinates: List<Double>,
-)
-
-@Serializable
-private data class SlimPoiPropertiesDto(
-    val category: String,
-    val subcategory: String? = null,
-)
-
-@Serializable
-private data class PoiDetailFeatureDto(
-    val type: String = "Feature",
-    val id: Long,
-    val geometry: JsonElement,
-    val properties: PoiDetailPropertiesDto,
-)
-
-@Serializable
-private data class PoiDetailPropertiesDto(
-    val source: String,
-    @SerialName("source_id") val sourceId: String,
-    val category: String,
-    val subcategory: String? = null,
-    val name: String,
-    val region: String? = null,
-    @SerialName("unit_name") val unitName: String? = null,
-    @SerialName("reserve_url") val reserveUrl: String? = null,
-    val phone: String? = null,
-    @SerialName("info_url") val infoUrl: String? = null,
-    val address: JsonElement? = null,
-    @SerialName("provider_ref") val providerRef: JsonElement? = null,
-    val raw: JsonElement,
-)
+private suspend inline fun <reified T> ApplicationCall.respondPoiFeatureJson(value: T) {
+    respondText(poiFeatureJson.encodeToString(value), ContentType.Application.Json)
+}
 
 private suspend fun ApplicationCall.respondPoiError(
     error: String,
     status: HttpStatusCode,
     detail: String? = null,
 ) {
-    respondText(
-        poiRoutesJson.encodeToString(ApiErrorSchema(error = error, detail = detail)),
-        ContentType.Application.Json,
-        status,
-    )
+    respondPoiJson(ApiErrorSchema(error = error, detail = detail), status)
+}
+
+private suspend inline fun <reified T> ApplicationCall.respondPoiJson(
+    value: T,
+    status: HttpStatusCode = HttpStatusCode.OK,
+) {
+    respondText(poiRoutesJson.encodeToString(value), ContentType.Application.Json, status)
 }
