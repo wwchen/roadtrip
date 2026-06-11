@@ -75,10 +75,12 @@ fun Route.campsiteAvailabilityRoutes(
             "adapter registered for that POI's source (rec.gov, Aspira PC/BC/WA, " +
             "Camis stub). Response shape is provider-stable; provider-specific " +
             "extras (`campground_id` for rec.gov; `host`/`map_id` for Aspira) " +
-            "are additive."
+            "are additive. Optional `?start=YYYY-MM-DD` shifts the window " +
+            "(default: today); capped at `capabilities.bookingHorizonDays` " +
+            "ahead of today, per provider."
         response {
             code(HttpStatusCode.BadRequest) {
-                description = "Bad POI id or invalid days."
+                description = "Bad POI id, invalid days, or start out of range."
                 body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.NotFound) {
@@ -134,11 +136,19 @@ fun Route.campsiteAvailabilityRoutes(
 
         val force = call.request.queryParameters["force"] == "1"
         val today = LocalDate.now(java.time.ZoneOffset.UTC)
+        val start =
+            when (val parsed = parseStartParam(call.request.queryParameters["start"], today, provider.capabilities.bookingHorizonDays)) {
+                is StartParam.Ok -> parsed.value
+                StartParam.Invalid -> {
+                    call.respondAvailabilityError("bad_start", HttpStatusCode.BadRequest)
+                    return@get
+                }
+            }
 
         try {
             val response =
                 provider.availability(
-                    AvailabilityRequest(ref = ref, start = today, days = days, force = force),
+                    AvailabilityRequest(ref = ref, start = start, days = days, force = force),
                 )
             call.respondAvailabilityJson(response)
         } catch (e: BookingProviderError) {
@@ -299,6 +309,37 @@ private suspend fun fetchOneBulk(
         log.info("bulk availability poi={} provider={} failed: {}", poiId, provider.id, e.message)
         BulkAvailEntrySchema(id = poiId, status = httpStatusFor(e), available_dates = emptyList())
     }
+}
+
+/**
+ * Result of parsing the `?start=YYYY-MM-DD` query param against the provider's
+ * booking horizon. Sealed so the route can branch on it without re-checking
+ * any null state.
+ */
+internal sealed class StartParam {
+    data class Ok(
+        val value: LocalDate,
+    ) : StartParam()
+
+    /** Malformed date, in the past, or beyond the provider's booking horizon. */
+    object Invalid : StartParam()
+}
+
+/**
+ * Parse `?start=` into a [StartParam]. Null/missing means "default to today."
+ * Anything outside `[today, today + horizonDays]` is [StartParam.Invalid] —
+ * the upstream wouldn't have data for it either way.
+ */
+internal fun parseStartParam(
+    raw: String?,
+    today: LocalDate,
+    horizonDays: Int,
+): StartParam {
+    if (raw == null) return StartParam.Ok(today)
+    val parsed = runCatching { LocalDate.parse(raw) }.getOrNull() ?: return StartParam.Invalid
+    if (parsed.isBefore(today)) return StartParam.Invalid
+    if (parsed.isAfter(today.plusDays(horizonDays.toLong()))) return StartParam.Invalid
+    return StartParam.Ok(parsed)
 }
 
 /** Map the typed provider error to (HTTP status, AvailabilityErrorSchema). */
