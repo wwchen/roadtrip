@@ -11,7 +11,6 @@ import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.Route
-import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 
 private const val MASK = "••••••••"
@@ -85,7 +84,7 @@ fun Route.bookingSessionRoutes(
                 call.respondJson(
                     SessionProbeDto(
                         loggedIn = true,
-                        tokenExpires = (r.recaccount["expiration"] as? JsonPrimitive)?.content,
+                        tokenExpires = r.recaccount.expiration,
                         tokenExpired = false,
                         refreshed = true,
                     ),
@@ -118,7 +117,7 @@ fun Route.bookingSessionRoutes(
     }) {
         when (val r = tokenManager.refreshNow()) {
             is TokenManager.RefreshResult.Ok -> {
-                call.respondJson(SessionRefreshDto(expires = (r.recaccount["expiration"] as? JsonPrimitive)?.content))
+                call.respondJson(SessionRefreshDto(expires = r.recaccount.expiration))
             }
             is TokenManager.RefreshResult.NoToken,
             is TokenManager.RefreshResult.NoCreds,

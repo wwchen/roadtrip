@@ -2,6 +2,7 @@ package ca.floo.campsite.recgov.booker.api
 
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
@@ -112,10 +113,17 @@ class RecgovAuthTest {
         val recaccount = RecgovAuth.buildRecaccountFromToken(token)
 
         assertNotNull(recaccount)
-        assertEquals(token, recaccount["access_token"]!!.jsonPrimitive.content)
-        assertEquals(false, recaccount["is_guest"]!!.jsonPrimitive.boolean)
-        assertEquals("", recaccount["refresh_id"]!!.jsonPrimitive.content)
-        val account = recaccount["account"]!!.jsonObject
+        assertEquals(token, recaccount.accessToken)
+        assertEquals(false, recaccount.isGuest)
+        assertEquals("", recaccount.refreshId)
+        assertEquals("acct-1", recaccount.account.accountId)
+        assertEquals("Ada", recaccount.account.firstName)
+
+        val encoded = campsiteApiJson.encodeToJsonElement(recaccount).jsonObject
+        assertEquals(token, encoded["access_token"]!!.jsonPrimitive.content)
+        assertEquals(false, encoded["is_guest"]!!.jsonPrimitive.boolean)
+        assertEquals("", encoded["refresh_id"]!!.jsonPrimitive.content)
+        val account = encoded["account"]!!.jsonObject
         assertEquals("acct-1", account["account_id"]!!.jsonPrimitive.content)
         assertEquals("Ada", account["first_name"]!!.jsonPrimitive.content)
     }
