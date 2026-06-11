@@ -11,13 +11,20 @@ import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
+import kotlinx.serialization.ExperimentalSerializationApi
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
-import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
+
+@OptIn(ExperimentalSerializationApi::class)
+private val slackJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 class SlackNotifier(
     private val getSetting: (String) -> String?,
@@ -56,56 +63,41 @@ class SlackNotifier(
             }
 
         val blocks =
-            JsonArray(
-                listOf(
-                    buildJsonObject {
-                        put("type", "header")
-                        put(
-                            "text",
-                            slackText(type = "plain_text", text = "⛺ Campsites Available!", emoji = true),
-                        )
-                    },
-                    buildJsonObject {
-                        put("type", "section")
-                        put(
-                            "fields",
-                            JsonArray(
-                                listOf(
-                                    mrkdwn("*Campground*\n${alert.campgroundName}"),
-                                    mrkdwn("*Sites found*\n$count${if (count > 10) " (showing 10)" else ""}"),
-                                    mrkdwn("*Your window*\n${alert.startDate} → ${alert.endDate}"),
-                                    mrkdwn("*Min nights*\n${alert.minNights}"),
-                                ),
+            listOf(
+                SlackBlockDto(
+                    type = "header",
+                    text = slackText(type = "plain_text", text = "⛺ Campsites Available!", emoji = true),
+                ),
+                SlackBlockDto(
+                    type = "section",
+                    fields =
+                        listOf(
+                            mrkdwn("*Campground*\n${alert.campgroundName}"),
+                            mrkdwn("*Sites found*\n$count${if (count > 10) " (showing 10)" else ""}"),
+                            mrkdwn("*Your window*\n${alert.startDate} → ${alert.endDate}"),
+                            mrkdwn("*Min nights*\n${alert.minNights}"),
+                        ),
+                ),
+                SlackBlockDto(
+                    type = "section",
+                    text = mrkdwn(siteLines),
+                ),
+                SlackBlockDto(
+                    type = "actions",
+                    elements =
+                        listOf(
+                            SlackButtonDto(
+                                type = "button",
+                                text =
+                                    slackText(
+                                        type = "plain_text",
+                                        text = "Reserve Site $firstSite →",
+                                        emoji = true,
+                                    ),
+                                url = firstUrl,
+                                style = "primary",
                             ),
-                        )
-                    },
-                    buildJsonObject {
-                        put("type", "section")
-                        put("text", mrkdwn(siteLines))
-                    },
-                    buildJsonObject {
-                        put("type", "actions")
-                        put(
-                            "elements",
-                            JsonArray(
-                                listOf(
-                                    buildJsonObject {
-                                        put("type", "button")
-                                        put(
-                                            "text",
-                                            slackText(
-                                                type = "plain_text",
-                                                text = "Reserve Site $firstSite →",
-                                                emoji = true,
-                                            ),
-                                        )
-                                        put("url", firstUrl)
-                                        put("style", "primary")
-                                    },
-                                ),
-                            ),
-                        )
-                    },
+                        ),
                 ),
             )
 
@@ -129,21 +121,16 @@ class SlackNotifier(
     private suspend fun postSlack(
         token: String,
         channel: String,
-        blocks: JsonArray?,
+        blocks: List<SlackBlockDto>?,
         text: String,
     ) {
         log.info("Slack: POST chat.postMessage to {}", channel)
-        val body =
-            buildJsonObject {
-                put("channel", channel)
-                put("text", text)
-                if (blocks != null) put("blocks", blocks)
-            }
+        val body = slackJson.encodeToString(SlackPostMessageDto(channel = channel, text = text, blocks = blocks))
         val resp =
             client.post("https://slack.com/api/chat.postMessage") {
                 header("Authorization", "Bearer $token")
                 contentType(ContentType.Application.Json)
-                setBody(body.toString())
+                setBody(body)
             }
         val raw = resp.bodyAsText()
         val parsed = Json.parseToJsonElement(raw) as? JsonObject
@@ -164,18 +151,43 @@ class SlackNotifier(
     }
 }
 
+@Serializable
+private data class SlackPostMessageDto(
+    val channel: String,
+    val text: String,
+    val blocks: List<SlackBlockDto>? = null,
+)
+
+@Serializable
+private data class SlackBlockDto(
+    val type: String,
+    val text: SlackTextDto? = null,
+    val fields: List<SlackTextDto>? = null,
+    val elements: List<SlackButtonDto>? = null,
+)
+
+@Serializable
+private data class SlackButtonDto(
+    val type: String,
+    val text: SlackTextDto,
+    val url: String,
+    val style: String,
+)
+
+@Serializable
+private data class SlackTextDto(
+    val type: String,
+    val text: String,
+    val emoji: Boolean? = null,
+)
+
 private fun slackText(
     type: String,
     text: String,
     emoji: Boolean? = null,
-): JsonObject =
-    buildJsonObject {
-        put("type", type)
-        put("text", text)
-        if (emoji != null) put("emoji", emoji)
-    }
+): SlackTextDto = SlackTextDto(type = type, text = text, emoji = emoji)
 
-private fun mrkdwn(text: String): JsonObject = slackText(type = "mrkdwn", text = text)
+private fun mrkdwn(text: String): SlackTextDto = slackText(type = "mrkdwn", text = text)
 
 internal fun toCheckoutDate(lastNight: String): String =
     java.time.LocalDate
