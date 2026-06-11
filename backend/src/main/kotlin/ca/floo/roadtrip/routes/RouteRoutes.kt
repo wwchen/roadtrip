@@ -166,24 +166,23 @@ fun Route.routeRoutes(
                 }
             }
 
-        call.respondText(
-            routeResponseFeatureCollectionJson(
+        call.respondRouteJson(
+            routeResponseFeatureCollection(
                 response = response,
                 waypoints = coords,
                 corridorRadiusMiles = corridorRadiusMiles,
                 corridorPolygonGeoJson = corridorPolygonGeoJson,
             ),
-            ContentType.Application.Json,
         )
     }
 }
 
-internal fun routeResponseFeatureCollectionJson(
+internal fun routeResponseFeatureCollection(
     response: RouteResponse,
     waypoints: List<Pair<Double, Double>>,
     corridorRadiusMiles: Double? = null,
     corridorPolygonGeoJson: String? = null,
-): String {
+): RouteFeatureCollectionDto {
     val features =
         mutableListOf(
             routeJson.encodeToJsonElement(
@@ -217,11 +216,11 @@ internal fun routeResponseFeatureCollectionJson(
                 ),
             )
     }
-    return routeJson.encodeToString(RouteFeatureCollectionDto(features = features))
+    return RouteFeatureCollectionDto(features = features)
 }
 
 @Serializable
-private data class RouteFeatureCollectionDto(
+internal data class RouteFeatureCollectionDto(
     val type: String = "FeatureCollection",
     val features: List<JsonElement>,
 )
@@ -277,9 +276,14 @@ private suspend fun ApplicationCall.respondRouteError(
     detail: String,
     status: HttpStatusCode,
 ) {
-    respondText(
-        routeJson.encodeToString(RouteErrorDto(error = error, detail = detail)),
-        ContentType.Application.Json,
-        status,
-    )
+    respondRouteJson(RouteErrorDto(error = error, detail = detail), status)
+}
+
+internal fun encodeRouteJson(value: RouteFeatureCollectionDto): String = routeJson.encodeToString(value)
+
+private suspend inline fun <reified T> ApplicationCall.respondRouteJson(
+    value: T,
+    status: HttpStatusCode = HttpStatusCode.OK,
+) {
+    respondText(routeJson.encodeToString(value), ContentType.Application.Json, status)
 }

@@ -14,15 +14,17 @@ class RouteRoutesTest {
     @Test
     fun `route response serializes feature collection with dto`() {
         val payload =
-            routeResponseFeatureCollectionJson(
-                response =
-                    RouteResponse(
-                        coordinates = listOf(listOf(-123.1, 49.28), listOf(-122.33, 47.61)),
-                        distanceMeters = 1000.0,
-                        durationSeconds = 90.0,
-                        legs = listOf(RouteLeg(distanceMeters = 1000.0, durationSeconds = 90.0)),
-                    ),
-                waypoints = listOf(-123.1 to 49.28, -122.33 to 47.61),
+            encodeRouteJson(
+                routeResponseFeatureCollection(
+                    response =
+                        RouteResponse(
+                            coordinates = listOf(listOf(-123.1, 49.28), listOf(-122.33, 47.61)),
+                            distanceMeters = 1000.0,
+                            durationSeconds = 90.0,
+                            legs = listOf(RouteLeg(distanceMeters = 1000.0, durationSeconds = 90.0)),
+                        ),
+                    waypoints = listOf(-123.1 to 49.28, -122.33 to 47.61),
+                ),
             )
         val json = Json.parseToJsonElement(payload).jsonObject
         val routeFeature = json["features"]!!.jsonArray.single().jsonObject
@@ -40,17 +42,19 @@ class RouteRoutesTest {
     @Test
     fun `route response includes corridor feature when provided`() {
         val payload =
-            routeResponseFeatureCollectionJson(
-                response =
-                    RouteResponse(
-                        coordinates = listOf(listOf(-123.1, 49.28), listOf(-122.33, 47.61)),
-                        distanceMeters = 1000.0,
-                        durationSeconds = 90.0,
-                        legs = emptyList(),
-                    ),
-                waypoints = listOf(-123.1 to 49.28, -122.33 to 47.61),
-                corridorRadiusMiles = 5.0,
-                corridorPolygonGeoJson = """{"type":"Polygon","coordinates":[]}""",
+            encodeRouteJson(
+                routeResponseFeatureCollection(
+                    response =
+                        RouteResponse(
+                            coordinates = listOf(listOf(-123.1, 49.28), listOf(-122.33, 47.61)),
+                            distanceMeters = 1000.0,
+                            durationSeconds = 90.0,
+                            legs = emptyList(),
+                        ),
+                    waypoints = listOf(-123.1 to 49.28, -122.33 to 47.61),
+                    corridorRadiusMiles = 5.0,
+                    corridorPolygonGeoJson = """{"type":"Polygon","coordinates":[]}""",
+                ),
             )
         val features = Json.parseToJsonElement(payload).jsonObject["features"]!!.jsonArray
         val corridor = features[1].jsonObject
