@@ -312,3 +312,19 @@ reservable_data:
       - slug: aspira-pc-resources
         adapter: AspiraResourcesEtl
         inputs: [aspira-resources-pc, aspira-maps-pc]
+
+# ============================================================================
+# poi_reservable_joiner — link rows in the reservable_pois table. Each row
+# names one adapter class from the joiner registry. Adapters read both
+# tables, emit (reservable_id, poi_id) pairs, and the orchestrator inserts
+# them via ReservableRepo.linkToPoi (idempotent ON CONFLICT DO NOTHING).
+#
+# Joiners are independent of ETL runs — re-running picks up new pairs as
+# rows appear in pois/reservables.
+# ============================================================================
+poi_reservable_joiner:
+  - name: Federal Campsites → Federal Campgrounds
+    adapter: RecgovPoiReservableJoiner
+
+  - name: Aspira Resources → Aspira Pins
+    adapter: AspiraPoiReservableJoiner
