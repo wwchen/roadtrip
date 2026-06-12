@@ -10,6 +10,7 @@
 // Render is split into pure modules:
 //   - week-grid.js          — 7 day cells.
 //   - day-detail.js         — selected-day panel + alert / reserve CTAs.
+//   - site-list.js          — all-site catalog or selected-day availability.
 //   - calendar-popover.js   — month picker shown when the user clicks the
 //                             week label (jump to any date).
 //
@@ -97,9 +98,9 @@ function makeContext(host, feature, signal) {
     skeletonTimer: null,
     calendar: null,
     // Catalog (RFC 0008): the per-POI reservable list the BE serves at
-    // /api/poi/{id}/reservables. Independent of week-grid availability —
-    // catalog tells you "which sites exist here", availability tells you
-    // "which days a site is bookable". The two fetches run in parallel.
+    // /api/poi/{id}/reservables. When a day is selected, the week response's
+    // available_reservable_ids filters this list to the sites available for
+    // that date. The two fetches run in parallel.
     sitesState: 'loading',
     sites: [],
     sitesTotal: null,
@@ -115,6 +116,7 @@ function rerender(ctx) {
 }
 
 function renderShell(ctx) {
+  const selectedDay = selectedAvailabilityDay(ctx);
   return `
     <section class="cg-availability">
       ${renderNightsRow(ctx)}
@@ -128,6 +130,7 @@ function renderShell(ctx) {
         totalAtPoi: ctx.sitesTotal,
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
+        selectedDay,
       })}
     </section>
   `;
@@ -205,8 +208,7 @@ function renderFreshness(ctx) {
 }
 
 function renderDetail(ctx) {
-  if (!ctx.selectedDate || !ctx.days || ctx.days.length === 0) return '';
-  const day = ctx.days.find((d) => d.date === ctx.selectedDate);
+  const day = selectedAvailabilityDay(ctx);
   if (!day) return '';
   return renderDayDetail({
     day,
@@ -214,6 +216,11 @@ function renderDetail(ctx) {
     watching: ctx.alertsByDate.has(day.date),
     recgovId: ctx.recgovId,
   });
+}
+
+function selectedAvailabilityDay(ctx) {
+  if (!ctx.selectedDate || !ctx.days || ctx.days.length === 0) return null;
+  return ctx.days.find((d) => d.date === ctx.selectedDate) || null;
 }
 
 // ---- event wiring ---------------------------------------------------------

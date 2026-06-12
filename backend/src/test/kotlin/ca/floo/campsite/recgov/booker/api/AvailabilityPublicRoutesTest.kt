@@ -272,6 +272,35 @@ class AvailabilityPublicRoutesTest {
         assertEquals(2, day["total"]!!.jsonPrimitive.content.toInt())
     }
 
+    @Test
+    fun `available reservable ids include only sites that qualify for min nights`() {
+        val map =
+            mapOf(
+                "100" to
+                    campsiteWith(
+                        mapOf(
+                            futureKey(0) to "Available",
+                            futureKey(1) to "Available",
+                        ),
+                    ),
+                "200" to
+                    campsiteWith(
+                        mapOf(
+                            futureKey(0) to "Available",
+                            futureKey(1) to "Reserved",
+                        ),
+                    ),
+            )
+        val body = classify(cacheReturning(map), days = 1, minNights = 2)
+        val day = body["availability"]!!.jsonArray[0].jsonObject
+        val ids =
+            day["available_reservable_ids"]!!
+                .jsonArray
+                .map { it.jsonPrimitive.content }
+
+        assertEquals(listOf("site:recgov:100"), ids)
+    }
+
     /**
      * 7-night window: a site needs to be open for an entire week. Common case
      * given that weekends fill up first — the site is open Mon-Fri but

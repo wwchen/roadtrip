@@ -709,11 +709,10 @@
     line-height: 1.4;
   }
 
-  /* ---- Reservable catalog list (RFC 0008) ----
+  /* ---- Reservable site list (RFC 0008) ----
      Collapsed by default so it doesn't compete with the week grid + day
-     detail above. Expands to a row list of every reservable at this POI
-     (recgov campsites, Aspira resources). Catalog only — does NOT colorize
-     by per-day availability. */
+     detail above. Shows every linked site until a day is selected, then
+     filters to that day's available reservables. */
   .cg-sites {
     margin-top: 16px;
     border-top: 1px solid var(--cg-border);

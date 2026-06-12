@@ -51,6 +51,7 @@ class AspiraBookingProvider(
                 days = req.days,
                 force = req.force,
                 minNights = req.minNights,
+                reservableVendor = reservableVendor(),
             )
         }
     }

@@ -37,6 +37,7 @@ data class DayClassification(
     val status: String, // "available" | "partial" | "booked" | "closed"
     val availableCount: Int,
     val total: Int,
+    val availableReservableIds: List<String>? = null,
 )
 
 /** Roll up per-day classifications into a single window-level state. */
@@ -113,6 +114,7 @@ fun availabilityResponseDto(
                     status = day.status,
                     availableCount = day.availableCount,
                     total = day.total,
+                    availableReservableIds = day.availableReservableIds,
                 )
             },
         cache = cacheBlock,
@@ -146,6 +148,7 @@ data class AvailabilityDayDto(
     val status: String,
     @SerialName("available_count") val availableCount: Int,
     val total: Int,
+    @SerialName("available_reservable_ids") val availableReservableIds: List<String>? = null,
 )
 
 @Serializable

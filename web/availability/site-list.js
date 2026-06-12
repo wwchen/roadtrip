@@ -1,12 +1,7 @@
-// Per-POI reservable catalog list. Renders the rows from
-// /api/poi/{id}/reservables under the week grid. Pure: takes context,
-// returns HTML; the controller in availability-week.js owns state and
-// click handling.
-//
-// Catalog ≠ availability. Each row tells you the site exists at this
-// campground; whether it's open on a given date is the week grid's
-// concern. We deliberately do NOT colorize rows by availability — that
-// would imply a per-row roundtrip we aren't making.
+// Per-POI reservable list. With no selected day this renders the catalog from
+// /api/poi/{id}/reservables. With a selected day it filters the catalog by
+// the week availability response's available_reservable_ids so the visible
+// rows match the selected day's availability count.
 
 import { escapeHtml } from '../core.js';
 
@@ -26,26 +21,32 @@ import { escapeHtml } from '../core.js';
  * @param {number|null}          args.totalAtPoi   total_at_poi from BE.
  * @param {string|null}          args.error
  * @param {boolean}               args.expanded
+ * @param {object|null}           args.selectedDay  Per-day availability row.
  */
-export function renderSiteList({ state, reservables, totalAtPoi, error, expanded }) {
+export function renderSiteList({ state, reservables, totalAtPoi, error, expanded, selectedDay = null }) {
   if (state === 'loading') {
     return renderSection({
-      header: renderHeader({ count: null, expanded: false, disabled: true }),
+      header: renderHeader({ count: null, expanded: false, disabled: true, mode: listMode(selectedDay) }),
       body: '<div class="cg-sites-skeleton" aria-busy="true">Loading sites…</div>',
     });
   }
   if (state === 'error') {
     return renderSection({
-      header: renderHeader({ count: null, expanded: false, disabled: true }),
+      header: renderHeader({ count: null, expanded: false, disabled: true, mode: listMode(selectedDay) }),
       body: `<div class="cg-sites-error">${escapeHtml(error || "Couldn't load sites")} · <a href="#" class="cg-sites-retry">Retry</a></div>`,
     });
   }
   // success
-  const count = totalAtPoi ?? reservables.length;
-  if (!count) return ''; // silently hide; nothing to browse
-  const body = expanded ? renderRows(reservables) : '';
+  const availableIds = availableReservableIds(selectedDay);
+  const mode = availableIds ? 'available' : 'all';
+  const rows = mode === 'available'
+    ? reservablesForIds(reservables, availableIds)
+    : reservables;
+  const count = mode === 'available' ? rows.length : totalAtPoi ?? reservables.length;
+  if (!count && mode === 'all') return ''; // silently hide; nothing to browse
+  const body = expanded ? renderRows(rows, mode) : '';
   return renderSection({
-    header: renderHeader({ count, expanded, disabled: false }),
+    header: renderHeader({ count, expanded, disabled: false, mode }),
     body,
   });
 }
@@ -59,11 +60,11 @@ function renderSection({ header, body }) {
   `;
 }
 
-function renderHeader({ count, expanded, disabled }) {
+function renderHeader({ count, expanded, disabled, mode }) {
   const label =
     count == null
-      ? 'All sites'
-      : `All sites (${count})`;
+      ? (mode === 'available' ? 'Available sites' : 'All sites')
+      : `${mode === 'available' ? 'Available sites' : 'All sites'} (${count})`;
   const aria = expanded ? 'true' : 'false';
   const disabledAttr = disabled ? 'disabled' : '';
   return `
@@ -74,15 +75,37 @@ function renderHeader({ count, expanded, disabled }) {
   `;
 }
 
-function renderRows(reservables) {
+function renderRows(reservables, mode) {
   if (!Array.isArray(reservables) || reservables.length === 0) {
-    return '<div class="cg-sites-empty">No sites in catalog yet.</div>';
+    const label = mode === 'available' ? 'No available sites for this date.' : 'No sites in catalog yet.';
+    return `<div class="cg-sites-empty">${escapeHtml(label)}</div>`;
   }
   // Stable sort: loop alphabetical, then site name. Loop-less rows fall
   // to the bottom — that's what Aspira's resource-id-only rows look like.
   const sorted = [...reservables].sort(compareReservable);
   const rows = sorted.map(renderRow).join('');
   return `<ol class="cg-sites-rows">${rows}</ol>`;
+}
+
+function listMode(selectedDay) {
+  return availableReservableIds(selectedDay) ? 'available' : 'all';
+}
+
+function availableReservableIds(day) {
+  if (!day) return null;
+  const ids = day.available_reservable_ids ?? day.availableReservableIds;
+  return Array.isArray(ids) ? ids : null;
+}
+
+function reservablesForIds(reservables, ids) {
+  const byRid = new Map((Array.isArray(reservables) ? reservables : []).map((r) => [r.rid, r]));
+  return ids.map((rid) => byRid.get(rid) || fallbackReservable(rid));
+}
+
+function fallbackReservable(rid) {
+  const parts = String(rid).split(':');
+  const vendorId = parts.slice(2).join(':') || String(rid);
+  return { rid, vendor_id: vendorId };
 }
 
 function renderRow(r) {
