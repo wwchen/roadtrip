@@ -428,14 +428,37 @@
      detail panel below with the alert CTA. Replaces the legacy 30-day
      heat strip — same color tokens, denser per-cell info. */
   .cg-week-nav {
+    position: relative;
     display: flex; align-items: center; justify-content: space-between;
     margin: 12px 0 8px;
+    gap: 8px;
   }
+  .cg-week-nav-left {
+    display: flex; align-items: center; gap: 6px;
+    flex: 0 0 auto;
+  }
+  /* Center label is a button (clickable to open the calendar popover).
+     It expands to fill the available middle space and centers its text. */
   .cg-week-nav .cg-week-label {
-    font-size: 13px; font-weight: 600; color: var(--cg-text);
+    flex: 1 1 auto;
+    height: 32px; padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid transparent;
+    background: transparent; color: var(--cg-text);
+    font: inherit;
+    font-size: 13px; font-weight: 600;
     font-variant-numeric: tabular-nums; letter-spacing: -0.005em;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
   }
-  .cg-week-nav button {
+  .cg-week-nav .cg-week-label:hover {
+    background: var(--cg-bg-subtle);
+    border-color: var(--cg-border);
+  }
+  /* Arrow buttons + Today shortcut — uniform 32px square, except Today
+     which is a pill since it's text-bearing. */
+  .cg-week-nav .cg-week-prev,
+  .cg-week-nav .cg-week-next {
     width: 32px; height: 32px;
     border-radius: 8px;
     border: 1px solid var(--cg-border-strong);
@@ -443,9 +466,96 @@
     font-size: 16px; cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
     line-height: 1;
+    flex: 0 0 auto;
   }
-  .cg-week-nav button:hover { background: var(--cg-bg-hover); }
-  .cg-week-nav button:disabled { opacity: 0.35; cursor: not-allowed; }
+  .cg-week-nav .cg-week-prev:hover,
+  .cg-week-nav .cg-week-next:hover { background: var(--cg-bg-hover); }
+  .cg-week-nav .cg-week-prev:disabled,
+  .cg-week-nav .cg-week-next:disabled { opacity: 0.35; cursor: not-allowed; }
+  .cg-week-nav .cg-week-today {
+    height: 32px; padding: 0 10px;
+    border-radius: 999px;
+    border: 1px solid var(--cg-accent);
+    background: rgba(76,185,106,0.10);
+    color: var(--cg-accent);
+    font: inherit;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    display: inline-flex; align-items: center;
+  }
+  .cg-week-nav .cg-week-today:hover { background: rgba(76,185,106,0.18); }
+
+  /* Month-calendar popover. Anchored to the week label, centered under it.
+     The popover sits on top of any below-the-grid content via z-index. */
+  .cg-cal-host {
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translate(-50%, 6px);
+    z-index: 10;
+    /* The host has no visual; the popover inside owns the chrome. */
+  }
+  .cg-cal-popover {
+    width: 280px;
+    background: var(--cg-surface);
+    border: 1px solid var(--cg-border-strong);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.40);
+    padding: 12px;
+  }
+  .cg-cal-head-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .cg-cal-head-row button {
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    border: 1px solid var(--cg-border-strong);
+    background: var(--cg-bg-subtle); color: var(--cg-text);
+    font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .cg-cal-head-row button:hover { background: var(--cg-bg-hover); }
+  .cg-cal-title {
+    font-size: 13px; font-weight: 600; color: var(--cg-text);
+    letter-spacing: -0.005em;
+  }
+  .cg-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .cg-cal-head {
+    text-align: center;
+    font-size: 10px; font-weight: 600; color: var(--cg-faint);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 4px 0;
+  }
+  .cg-cal-cell {
+    aspect-ratio: 1;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--cg-text);
+    border-radius: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cg-cal-empty { visibility: hidden; }
+  .cg-cal-day {
+    border: 0;
+    background: transparent;
+    color: var(--cg-text);
+    cursor: pointer;
+  }
+  .cg-cal-day:hover:not(:disabled) { background: var(--cg-bg-hover); }
+  .cg-cal-day:disabled { color: var(--cg-faint); cursor: not-allowed; }
+  .cg-cal-day.cg-cal-faint { color: var(--cg-faint); }
+  .cg-cal-day.cg-cal-today {
+    box-shadow: inset 0 0 0 1px var(--cg-accent);
+    color: var(--cg-accent); font-weight: 600;
+  }
+  .cg-cal-day.cg-cal-selected {
+    background: var(--cg-accent);
+    color: #fff;
+  }
+  .cg-cal-day.cg-cal-selected:hover { background: var(--cg-accent); }
 
   .cg-week {
     display: grid;

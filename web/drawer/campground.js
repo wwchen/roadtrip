@@ -43,7 +43,7 @@ import {
   upstreamHTML,
 } from './shared.js';
 import { requestPoiDetail } from '../api/poi-api.js';
-import { mountAvailabilityWeek } from './availability-week.js';
+import { mountAvailabilityWeek } from '../availability/availability-week.js';
 
 // Tracks the currently mounted week component so we can dispose it on
 // re-render (pin-reselect, hydration completing, retry). Disposal kills
@@ -260,8 +260,8 @@ function renderShell(f, signal) {
       ${verdict ? `<div class="cg-verdict-row">${verdict}</div>` : ''}
     </header>
 
-    ${availabilityMount}
     ${actions}
+    ${availabilityMount}
     ${decor.about}
     ${decor.fees}
     ${decor.meta}
