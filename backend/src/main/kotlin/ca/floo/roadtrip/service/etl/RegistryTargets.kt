@@ -43,17 +43,83 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
     val log = LoggerFactory.getLogger("RegistryTargets")
     val out = mutableMapOf<String, Target>()
     val implemented = EtlOrchestrator.registry.keys
+    val implementedJoiners = EtlOrchestrator.joinerRegistry.keys
 
+    // poi_data — produces Poi rows.
     for (row in registry.poiData) {
         val unwiredSlugs = row.etls.map { it.slug }.filterNot { it in implemented }
         val importPhases =
             if (unwiredSlugs.isEmpty()) {
-                listOf(Phase.Import("import:${row.name}", poiDataName = row.name))
+                listOf(
+                    Phase.Import(
+                        label = "import:${row.name}",
+                        name = row.name,
+                        section = Phase.Import.Section.POI_DATA,
+                    ),
+                )
             } else {
                 log.warn(
                     "poi_data '{}' has unwired etl slugs {} — import will be a no-op until adapters land",
                     row.name,
                     unwiredSlugs,
+                )
+                emptyList()
+            }
+        out[row.name] =
+            Target(
+                name = row.name,
+                fetchPhases = emptyList(),
+                importPhases = importPhases,
+            )
+    }
+
+    // reservable_data — produces Reservable rows. RFC 0008.
+    for (row in registry.reservableData) {
+        val unwiredSlugs = row.etls.map { it.slug }.filterNot { it in implemented }
+        val importPhases =
+            if (unwiredSlugs.isEmpty()) {
+                listOf(
+                    Phase.Import(
+                        label = "import:${row.name}",
+                        name = row.name,
+                        section = Phase.Import.Section.RESERVABLE_DATA,
+                    ),
+                )
+            } else {
+                log.warn(
+                    "reservable_data '{}' has unwired etl slugs {} — import will be a no-op until adapters land",
+                    row.name,
+                    unwiredSlugs,
+                )
+                emptyList()
+            }
+        out[row.name] =
+            Target(
+                name = row.name,
+                fetchPhases = emptyList(),
+                importPhases = importPhases,
+            )
+    }
+
+    // poi_reservable_joiner — discovers (reservable, poi) link pairs.
+    // Only `enabled` rows turn into runnable phases; the rest are
+    // declared-but-not-implemented and produce empty phase lists so the
+    // YAML can describe future work.
+    for (row in registry.poiReservableJoiners) {
+        val importPhases =
+            if (row.adapter in implementedJoiners) {
+                listOf(
+                    Phase.Import(
+                        label = "import:${row.name}",
+                        name = row.name,
+                        section = Phase.Import.Section.POI_RESERVABLE_JOINER,
+                    ),
+                )
+            } else {
+                log.warn(
+                    "poi_reservable_joiner '{}' adapter '{}' is not registered — run will be a no-op",
+                    row.name,
+                    row.adapter,
                 )
                 emptyList()
             }

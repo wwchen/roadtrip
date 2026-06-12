@@ -17,14 +17,30 @@ sealed interface Phase {
     ) : Phase
 
     /**
-     * Run a poi_data row's full etls chain. [poiDataName] is the row's
-     * display name from YAML; the orchestrator looks it up and walks the
-     * chain end-to-end.
+     * Run one row from the registry. The [section] field tells the
+     * orchestrator which dispatch path to take:
+     *   - POI_DATA          → runPoiData(name)
+     *   - RESERVABLE_DATA   → runReservableData(name)
+     *   - POI_RESERVABLE_JOINER → runJoiner(name)
+     *
+     * [name] is the row's display name from the YAML (unique per
+     * section, but slugs share a namespace across sections so the
+     * controller can route by name + section together).
      */
     data class Import(
         override val label: String,
-        val poiDataName: String,
-    ) : Phase
+        val name: String,
+        val section: Section = Section.POI_DATA,
+    ) : Phase {
+        /** Which YAML section this import belongs to. */
+        enum class Section(
+            val rowValue: String,
+        ) {
+            POI_DATA("poi_data"),
+            RESERVABLE_DATA("reservable_data"),
+            POI_RESERVABLE_JOINER("poi_reservable_joiner"),
+        }
+    }
 }
 
 // A unit of refresh.

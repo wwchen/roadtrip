@@ -226,22 +226,59 @@ class IngestController(
 
     // -- Import phases (data/raw/ + data/etl-out/ → Postgres) -----------------
     //
-    // The phase carries a poi_data row's display name. The orchestrator
-    // walks that row's full etls: chain — materializing intermediates to
-    // data/etl-out/<slug>/ and upserting the terminal etl's Poi.* output.
+    // The phase carries a row's display name + which YAML section it
+    // came from. The orchestrator walks the section's ETL chain (poi_data
+    // / reservable_data) or runs the matching joiner adapter
+    // (poi_reservable_joiner).
+    //
+    // Each branch writes a section-specific counts DTO so dashboards can
+    // render whichever fields are populated; the legacy `seen`/`swept`/
+    // `import_run_id` fields stay non-null only on the POI_DATA branch.
     private suspend fun runImport(phase: Phase.Import): JSONB =
         withContext(ioDispatcher) {
-            val stats = etl.runPoiData(phase.poiDataName)
-            JSONB.valueOf(
-                ingestControllerJson.encodeToString(
-                    ImportPhaseCountsDto(
-                        importRunId = stats.upsertResult.runId,
-                        seen = stats.upsertResult.seenCount,
-                        swept = stats.upsertResult.sweptCount,
-                        terminalEtl = stats.terminalEtlSlug,
-                    ),
-                ),
-            )
+            when (phase.section) {
+                Phase.Import.Section.POI_DATA -> {
+                    val stats = etl.runPoiData(phase.name)
+                    JSONB.valueOf(
+                        ingestControllerJson.encodeToString(
+                            ImportPhaseCountsDto(
+                                importRunId = stats.upsertResult.runId,
+                                seen = stats.upsertResult.seenCount,
+                                swept = stats.upsertResult.sweptCount,
+                                terminalEtl = stats.terminalEtlSlug,
+                            ),
+                        ),
+                    )
+                }
+                Phase.Import.Section.RESERVABLE_DATA -> {
+                    val stats = etl.runReservableData(phase.name)
+                    JSONB.valueOf(
+                        ingestControllerJson.encodeToString(
+                            ImportPhaseCountsDto(
+                                importRunId = -1L,
+                                seen = stats.parsed,
+                                swept = 0,
+                                terminalEtl = stats.terminalEtlSlug,
+                                upsertedReservables = stats.upserted,
+                            ),
+                        ),
+                    )
+                }
+                Phase.Import.Section.POI_RESERVABLE_JOINER -> {
+                    val stats = etl.runJoiner(phase.name)
+                    JSONB.valueOf(
+                        ingestControllerJson.encodeToString(
+                            ImportPhaseCountsDto(
+                                importRunId = -1L,
+                                seen = stats.linksDiscovered,
+                                swept = 0,
+                                terminalEtl = stats.adapter,
+                                createdLinks = stats.linksInserted,
+                            ),
+                        ),
+                    )
+                }
+            }
         }
 
     private fun phaseFailureNotes(e: Throwable): Pair<String, Int?> =
@@ -262,12 +299,22 @@ private data class FetchPhaseCountsDto(
     @SerialName("exit_code") val exitCode: Int,
 )
 
+/**
+ * Counts written into `ingest_runs.counts` (JSONB) for one import phase.
+ * Section-specific fields are nullable; readers ignore the ones they
+ * don't care about. Existing dashboards keyed off `seen`/`swept`/
+ * `import_run_id` keep working — those stay populated for poi_data
+ * phases. Reservable + joiner phases set the new optional fields and
+ * leave Pois fields zero/-1 (consistent with "no Pois Upsert ran").
+ */
 @Serializable
 private data class ImportPhaseCountsDto(
     @SerialName("import_run_id") val importRunId: Long,
     val seen: Int,
     val swept: Int,
     @SerialName("terminal_etl") val terminalEtl: String,
+    @SerialName("upserted_reservables") val upsertedReservables: Int? = null,
+    @SerialName("created_links") val createdLinks: Int? = null,
 )
 
 class FetchFailedException(

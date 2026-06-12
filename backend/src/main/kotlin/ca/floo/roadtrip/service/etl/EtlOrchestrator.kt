@@ -5,8 +5,10 @@ import ca.floo.roadtrip.models.Poi
 import ca.floo.roadtrip.models.ValidationResult
 import ca.floo.roadtrip.models.registry.PoiDataEntry
 import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.models.registry.ReservableDataEntry
 import ca.floo.roadtrip.repo.NoCaptureException
 import ca.floo.roadtrip.repo.RawCapture
+import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.Upsert
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -35,16 +37,58 @@ class EtlOrchestrator(
     private val ctx: DSLContext,
     private val rawDir: File,
     private val poiRegistry: PoiRegistry,
+    /**
+     * ETL adapter map keyed by YAML slug. Defaults to the production
+     * registry under [Companion.registry]; overridable for tests.
+     */
+    private val etlRegistry: Map<String, SourceEtl<*, *>> = registry,
+    /**
+     * Joiner adapter map keyed by YAML `adapter:` string. Defaults to
+     * the production map under [Companion.joinerRegistry]; overridable
+     * for tests.
+     */
+    private val joinerRegistry: Map<String, PoiReservableJoiner> = Companion.joinerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val upsert = Upsert(ctx)
+    private val reservables = ReservableRepo(ctx)
 
+    /**
+     * Per-row run summary for `poi_data` rows. Mirrors the shape that
+     * existed before RFC 0008's section split — the Pois Upsert path is
+     * unchanged.
+     */
     data class Stats(
         val poiDataName: String,
         val terminalEtlSlug: String,
         val parsed: Int,
         val transformed: Int,
         val upsertResult: Upsert.Result,
+    )
+
+    /**
+     * Per-row run summary for `reservable_data` rows. Counts catalog
+     * upserts and the slug of the terminal etl (== reservable_data
+     * adapter slug).
+     */
+    data class ReservableStats(
+        val reservableDataName: String,
+        val terminalEtlSlug: String,
+        val parsed: Int,
+        val upserted: Int,
+    )
+
+    /**
+     * Per-row run summary for `poi_reservable_joiner` rows. Tracks how
+     * many links the joiner discovered + how many actually inserted
+     * (the rest were already present — `linkToPoi` is idempotent via
+     * ON CONFLICT DO NOTHING).
+     */
+    data class JoinerStats(
+        val joinerName: String,
+        val adapter: String,
+        val linksDiscovered: Int,
+        val linksInserted: Int,
     )
 
     /**
@@ -94,6 +138,97 @@ class EtlOrchestrator(
         return terminalStats!!
     }
 
+    /**
+     * Run a reservable_data row by display name. Same chain shape as
+     * [runPoiData] — list-ordered etl stages, intermediate outputs
+     * threaded in memory — but the terminal stage emits
+     * [ReservableEtlOutput] which the orchestrator unpacks into
+     * `reservables` rows via [ReservableRepo.upsert].
+     *
+     * No POI linking happens here. That's the joiner's job (see
+     * [runJoiner]). A reservable_data run that lands rows but has no
+     * matching joiner run yet is consistent — the catalog exists,
+     * `reservable_pois` just has no entries for it. Run the joiner
+     * later to fill them in.
+     */
+    fun runReservableData(name: String): ReservableStats {
+        val row =
+            poiRegistry.reservableDataByName(name)
+                ?: error("no reservable_data row with name='$name'")
+        require(row.etls.isNotEmpty()) { "reservable_data '$name' has empty etls list" }
+
+        log.info("etl reservable_data='{}' starting ({} stages)", name, row.etls.size)
+        val transformCtx = TransformCtx.load(rawDir, poiRegistry)
+        val intermediateOutputs = mutableMapOf<String, JsonElement>()
+        var terminalStats: ReservableStats? = null
+
+        for ((index, entry) in row.etls.withIndex()) {
+            val isTerminal = index == row.etls.lastIndex
+            val etl =
+                etlRegistry[entry.slug]
+                    ?: error("no adapter registered for etl slug='${entry.slug}'")
+            log.info(
+                "  stage {}/{} slug={} adapter={} terminal={}",
+                index + 1,
+                row.etls.size,
+                entry.slug,
+                etl::class.simpleName,
+                isTerminal,
+            )
+
+            val bundle = buildBundle(entry.inputs, intermediateOutputs)
+            if (isTerminal) {
+                terminalStats = runReservableTerminal(row, etl, bundle, transformCtx)
+            } else {
+                intermediateOutputs[entry.slug] = runIntermediate(etl, bundle, transformCtx)
+            }
+        }
+
+        return terminalStats!!
+    }
+
+    /**
+     * Run a poi_reservable_joiner row by display name. The adapter
+     * reads the current state of `pois` + `reservables`, emits
+     * (reservable_id, poi_id) pairs, and the orchestrator inserts each
+     * via [ReservableRepo.linkToPoi] (idempotent).
+     *
+     * Joiners are independent of ETL runs. Re-running creates no
+     * duplicate links; it just picks up new pairs whose underlying
+     * rows have appeared since the last run.
+     */
+    fun runJoiner(name: String): JoinerStats {
+        val row =
+            poiRegistry.poiReservableJoinerByName(name)
+                ?: error("no poi_reservable_joiner row with name='$name'")
+        val joiner =
+            joinerRegistry[row.adapter]
+                ?: error("no joiner adapter registered for '${row.adapter}' (poi_reservable_joiner '$name')")
+        log.info("joiner '{}' adapter={} starting", name, row.adapter)
+
+        val joinerCtx = JoinerCtx(ctx = ctx, reservables = reservables, args = row.args)
+        val links = joiner.discoverLinks(joinerCtx)
+
+        // linkToPoi is idempotent (ON CONFLICT DO NOTHING). We don't
+        // know a priori how many were already-linked vs newly-linked
+        // without a SELECT round-trip. The simplest honest count is
+        // "discovered" — total pairs we tried; "inserted" matches it
+        // unless we want to introspect the row counts. For v1 we just
+        // mirror discovered → inserted; future work can add per-call
+        // INSERT-result inspection if it matters.
+        for (link in links) {
+            reservables.linkToPoi(reservableId = link.reservableId, poiId = link.poiId)
+        }
+        log.info("joiner '{}' adapter={} links={}", name, row.adapter, links.size)
+
+        return JoinerStats(
+            joinerName = name,
+            adapter = row.adapter,
+            linksDiscovered = links.size,
+            linksInserted = links.size,
+        )
+    }
+
     @Suppress("UNCHECKED_CAST")
     private fun runTerminal(
         row: PoiDataEntry,
@@ -133,6 +268,57 @@ class EtlOrchestrator(
             parsed = pois.size,
             transformed = pois.size,
             upsertResult = ups,
+        )
+    }
+
+    /**
+     * Terminal stage of a reservable_data row. The etl returns a
+     * [ReservableEtlOutput] (a list of catalog rows); the orchestrator
+     * upserts each through [ReservableRepo].
+     *
+     * Validation failure logs + zeroes out — same behavior as the Pois
+     * terminal — so a bad upstream day doesn't fail the whole import.
+     */
+    @Suppress("UNCHECKED_CAST")
+    private fun runReservableTerminal(
+        row: ReservableDataEntry,
+        etl: SourceEtl<*, *>,
+        bundle: InputBundle,
+        transformCtx: TransformCtx,
+    ): ReservableStats {
+        val concrete = etl as SourceEtl<Any, ReservableEtlOutput>
+        val dto = concrete.parse(bundle)
+        val validated =
+            when (val v = concrete.validate(dto)) {
+                is ValidationResult.Ok -> v.dto
+                is ValidationResult.Bad -> {
+                    log.warn("reservable_data '{}' terminal validation failed: {}", row.name, v.errors)
+                    return ReservableStats(
+                        reservableDataName = row.name,
+                        terminalEtlSlug = concrete.etlSlug,
+                        parsed = 0,
+                        upserted = 0,
+                    )
+                }
+            }
+        val output = concrete.transform(validated, transformCtx)
+        var upserted = 0
+        for (input in output.reservables) {
+            reservables.upsert(input)
+            upserted++
+        }
+        log.info(
+            "reservable_data '{}' terminal slug={} parsed={} upserted={}",
+            row.name,
+            concrete.etlSlug,
+            output.reservables.size,
+            upserted,
+        )
+        return ReservableStats(
+            reservableDataName = row.name,
+            terminalEtlSlug = concrete.etlSlug,
+            parsed = output.reservables.size,
+            upserted = upserted,
         )
     }
 
@@ -251,6 +437,14 @@ class EtlOrchestrator(
                     ca.floo.roadtrip.service.etl.aspira
                         .AspiraJoinByNameEtl("aspira-pc-pins"),
             )
+
+        /**
+         * Map of joiner adapter name → adapter instance. Keys MUST match
+         * the YAML `poi_reservable_joiner.adapter` value exactly. Empty
+         * for v2-PR-2 (this PR ships only the section infrastructure);
+         * PR 4 of RFC 0008's rollout adds the recgov + aspira joiners.
+         */
+        val joinerRegistry: Map<String, PoiReservableJoiner> = emptyMap()
     }
 }
 
