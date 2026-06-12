@@ -698,6 +698,64 @@
     line-height: 1.4;
   }
 
+  /* ---- Reservable catalog list (RFC 0008) ----
+     Collapsed by default so it doesn't compete with the week grid + day
+     detail above. Expands to a row list of every reservable at this POI
+     (recgov campsites, Aspira resources). Catalog only — does NOT colorize
+     by per-day availability. */
+  .cg-sites {
+    margin-top: 16px;
+    border-top: 1px solid var(--cg-border);
+    padding-top: 10px;
+  }
+  .cg-sites-toggle {
+    display: flex; align-items: center; justify-content: space-between;
+    width: 100%;
+    background: transparent; border: 0;
+    padding: 6px 0;
+    color: var(--cg-text);
+    font-size: 13px; font-weight: 600;
+    cursor: pointer;
+  }
+  .cg-sites-toggle:hover:not(:disabled) { color: var(--cg-accent); }
+  .cg-sites-toggle:disabled { color: var(--cg-faint); cursor: default; }
+  .cg-sites-chevron { color: var(--cg-faint); font-size: 11px; }
+  .cg-sites-rows {
+    list-style: none;
+    margin: 6px 0 0; padding: 0;
+    max-height: 240px; overflow-y: auto;
+    border-radius: 8px;
+    background: var(--cg-bg-subtle);
+    border: 1px solid var(--cg-border);
+  }
+  .cg-sites-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+    border-bottom: 1px solid var(--cg-border);
+    font-size: 13px;
+  }
+  .cg-sites-row:last-child { border-bottom: 0; }
+  .cg-sites-row-main { min-width: 0; flex: 1 1 auto; }
+  .cg-sites-row-name {
+    color: var(--cg-text);
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cg-sites-row-loop {
+    color: var(--cg-muted); font-size: 11px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .cg-sites-row-type {
+    color: var(--cg-muted); font-size: 11px;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    flex: 0 0 auto;
+  }
+  .cg-sites-skeleton, .cg-sites-error, .cg-sites-empty {
+    color: var(--cg-muted); font-size: 12px;
+    padding: 8px 0;
+  }
+  .cg-sites-error .cg-sites-retry { color: var(--cg-error); text-decoration: underline; }
+
   /* Buttons (Linear three-tier hierarchy):
      Primary  — solid green, white text, no border. One per section.
      Secondary — translucent white fill, subtle border. Companion actions.

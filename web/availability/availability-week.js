@@ -23,9 +23,11 @@ import {
   listCampsiteAlerts,
 } from '../api/campsite-alert-api.js';
 import { requestCampsiteAvailability } from '../api/availability-api.js';
+import { fetchPoiReservables } from '../api/reservable-api.js';
 import { isActiveFeature } from '../drawer/chrome.js';
 import { mountCalendarPopover } from './calendar-popover.js';
 import { renderDayDetail } from './day-detail.js';
+import { renderSiteList } from './site-list.js';
 import { renderWeekGrid, renderWeekSkeleton } from './week-grid.js';
 
 const STORAGE_KEY_MIN_NIGHTS = 'cg.minNights';
@@ -60,6 +62,7 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
   wireRoot(ctx);
   fetchWeek(ctx);
   fetchAlerts(ctx);
+  fetchSites(ctx);
 
   return {
     dispose() {
@@ -93,6 +96,15 @@ function makeContext(host, feature, signal) {
     alertsByDate: new Map(),
     skeletonTimer: null,
     calendar: null,
+    // Catalog (RFC 0008): the per-POI reservable list the BE serves at
+    // /api/poi/{id}/reservables. Independent of week-grid availability —
+    // catalog tells you "which sites exist here", availability tells you
+    // "which days a site is bookable". The two fetches run in parallel.
+    sitesState: 'loading',
+    sites: [],
+    sitesTotal: null,
+    sitesError: null,
+    sitesExpanded: false,
   };
 }
 
@@ -110,6 +122,13 @@ function renderShell(ctx) {
       ${renderBody(ctx)}
       <div class="cg-freshness">${renderFreshness(ctx)}</div>
       ${renderDetail(ctx)}
+      ${renderSiteList({
+        state: ctx.sitesState,
+        reservables: ctx.sites,
+        totalAtPoi: ctx.sitesTotal,
+        error: ctx.sitesError,
+        expanded: ctx.sitesExpanded,
+      })}
     </section>
   `;
 }
@@ -271,6 +290,17 @@ function onRootClick(ctx, e) {
   if (alertBtn) {
     e.preventDefault();
     toggleAlert(ctx, alertBtn);
+    return;
+  }
+  const sitesToggle = tgt.closest('.cg-sites-toggle');
+  if (sitesToggle && !sitesToggle.disabled) {
+    ctx.sitesExpanded = !ctx.sitesExpanded;
+    rerender(ctx);
+    return;
+  }
+  if (tgt.closest('.cg-sites-retry')) {
+    e.preventDefault();
+    fetchSites(ctx);
   }
 }
 
@@ -353,6 +383,28 @@ async function fetchWeek(ctx, { force = false } = {}) {
     if (!isActiveFeature(ctx.feature)) return;
     ctx.state = 'error';
     ctx.error = e.message || 'network';
+    rerender(ctx);
+  }
+}
+
+async function fetchSites(ctx) {
+  if (ctx.poiId == null) return;
+  ctx.sitesState = 'loading';
+  ctx.sitesError = null;
+  rerender(ctx);
+  try {
+    const json = await fetchPoiReservables(ctx.poiId, { signal: ctx.signal });
+    if (ctx.signal?.aborted) return;
+    if (!isActiveFeature(ctx.feature)) return;
+    ctx.sitesState = 'success';
+    ctx.sites = Array.isArray(json?.reservables) ? json.reservables : [];
+    ctx.sitesTotal = typeof json?.total_at_poi === 'number' ? json.total_at_poi : ctx.sites.length;
+    rerender(ctx);
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (!isActiveFeature(ctx.feature)) return;
+    ctx.sitesState = 'error';
+    ctx.sitesError = e.message || 'network';
     rerender(ctx);
   }
 }
