@@ -17,6 +17,7 @@ import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
+import ca.floo.roadtrip.service.booking.BookingProviderRegistryFactory
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
@@ -89,12 +90,13 @@ class OpenApiSmokeTest {
                     healthRoutes()
                     poiRoutes(ctx, registry)
                     poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), registry)
-                    campsiteAvailabilityRoutes(
-                        CampsiteProviderRepo(ctx),
-                        CachedAvailability(AvailabilityClient()),
-                        CachedAspiraAvailability(AspiraAvailabilityClient()),
-                        registry,
-                    )
+                    val bookingProviders =
+                        BookingProviderRegistryFactory.build(
+                            registry = registry,
+                            recgovCache = CachedAvailability(AvailabilityClient()),
+                            aspiraCache = CachedAspiraAvailability(AspiraAvailabilityClient()),
+                        )
+                    campsiteAvailabilityRoutes(CampsiteProviderRepo(ctx), bookingProviders)
                     eventsRoutes(bus)
                     campsiteDebugRoutes(AlertRepo(ctx), MatchRepo(ctx), bus)
                 }

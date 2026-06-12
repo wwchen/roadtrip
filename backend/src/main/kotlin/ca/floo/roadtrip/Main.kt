@@ -24,6 +24,7 @@ import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.routeRoutes
+import ca.floo.roadtrip.service.booking.BookingProviderRegistryFactory
 import ca.floo.roadtrip.service.etl.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.IngestController
 import ca.floo.roadtrip.service.etl.fetchTargetsFromRegistry
@@ -164,6 +165,16 @@ fun Application.module() {
             persistentCache = persistentCache,
         )
 
+    // Booking-provider port registry: one adapter per upstream reservation
+    // system, dispatched by `pois.source`. Routes consume the registry; they
+    // never see vendor types. See docs/booking-providers.md.
+    val bookingProviderRegistry =
+        BookingProviderRegistryFactory.build(
+            registry = poiRegistry,
+            recgovCache = campsite.cachedAvailability,
+            aspiraCache = aspiraCache,
+        )
+
     routing {
         // /api/docs — Swagger UI; /api/docs/openapi.json — the spec it loads.
         // Both must be mounted before the static file fallthrough at "/" so
@@ -180,7 +191,7 @@ fun Application.module() {
         routeRoutes(routeCache, ctx)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
-        campsiteAvailabilityRoutes(CampsiteProviderRepo(ctx), campsite.cachedAvailability, aspiraCache, poiRegistry)
+        campsiteAvailabilityRoutes(CampsiteProviderRepo(ctx), bookingProviderRegistry)
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
         // Static site. /web/* and /data/* serve directly from the repo

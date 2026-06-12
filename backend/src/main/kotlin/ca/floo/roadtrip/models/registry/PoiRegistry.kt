@@ -188,9 +188,11 @@ data class PoiRegistry(
     /**
      * Aspira upstream host keyed by terminal etl slug (== pois.source).
      * Returns the `host` arg from the terminal AspiraJoinByNameEtl row.
-     * Used by the unified availability endpoint to dispatch aspira-backed
-     * pois to the right reservation host (Parks Canada / BC / WA) without
-     * the FE having to know the mapping.
+     *
+     * Used by [ca.floo.roadtrip.service.booking.BookingProviderRegistry]
+     * to construct one [ca.floo.roadtrip.service.booking.adapters.aspira.AspiraBookingProvider]
+     * instance per host (Parks Canada / BC / WA). Routes never see this map
+     * directly — they go through the booking-provider registry.
      */
     fun aspiraHostBySource(): Map<String, String> {
         val out = mutableMapOf<String, String>()
@@ -202,6 +204,29 @@ data class PoiRegistry(
         }
         return out
     }
+
+    /**
+     * Sources whose terminal ETL produces rec.gov-keyed campgrounds. Used
+     * by the booking-provider registry to map `pois.source` → `RECGOV`.
+     */
+    fun recgovSources(): Set<String> =
+        poiData
+            .mapNotNull { row -> row.etls.lastOrNull() }
+            .filter { it.adapter == "RecGovCampgroundsEtl" }
+            .map { it.slug }
+            .toSet()
+
+    /**
+     * Sources whose terminal ETL produces Camis-keyed campgrounds (Alberta
+     * Provincial via ReserveAmericaEtl today; future Camis-direct ETLs
+     * would join here too).
+     */
+    fun camisSources(): Set<String> =
+        poiData
+            .mapNotNull { row -> row.etls.lastOrNull() }
+            .filter { it.adapter == "ReserveAmericaEtl" }
+            .map { it.slug }
+            .toSet()
 }
 
 private fun detectCycles(edges: Map<String, Set<String>>): List<List<String>> {

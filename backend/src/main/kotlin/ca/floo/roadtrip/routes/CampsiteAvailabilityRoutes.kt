@@ -3,28 +3,21 @@ package ca.floo.roadtrip.routes
 import ca.floo.campsite.recgov.booker.api.DEFAULT_AVAILABILITY_DAYS
 import ca.floo.campsite.recgov.booker.api.IpRateLimiter
 import ca.floo.campsite.recgov.booker.api.MAX_AVAILABILITY_DAYS
-import ca.floo.campsite.recgov.booker.api.availableDatesRecgov
-import ca.floo.campsite.recgov.booker.api.fetchAndClassifyRecgov
-import ca.floo.campsite.recgov.booker.api.mapRecgovUpstreamError
-import ca.floo.campsite.recgov.booker.api.monthsCovering
-import ca.floo.campsite.recgov.booker.api.todayUtc
-import ca.floo.campsite.recgov.booker.availability.CachedAvailability
-import ca.floo.roadtrip.client.AspiraException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityEmptySchema
 import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.models.api.BulkAvailEntrySchema
 import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
 import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
-import ca.floo.roadtrip.models.registry.PoiRegistry
-import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.service.api.availabilityErrorDto
-import ca.floo.roadtrip.service.api.availableDatesAspira
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.api.fetchAndClassifyAspira
-import ca.floo.roadtrip.service.api.mapAspiraUpstreamError
+import ca.floo.roadtrip.service.booking.AvailabilityRequest
+import ca.floo.roadtrip.service.booking.AvailableDatesRequest
+import ca.floo.roadtrip.service.booking.BookingProviderError
+import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.ProviderRefParser
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -39,10 +32,6 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -55,38 +44,43 @@ private val log = LoggerFactory.getLogger("CampsiteAvailabilityRoutes")
 private const val MAX_BULK_IDS = 50
 private const val MAX_NIGHTS = 14
 
+// Per-IP rate-limit budget. Cross-provider — one bucket regardless of which
+// adapter ends up answering. See [IpRateLimiter] for the token-bucket math.
+private const val IP_RATE_LIMIT_PER_MINUTE = 30
+private const val IP_THROTTLE_RETRY_AFTER_S = 30
+private const val UPSTREAM_RATE_LIMITED_RETRY_AFTER_S = 60
+private const val UPSTREAM_BLOCKED_RETRY_AFTER_S = 300
+private const val UPSTREAM_5XX_RETRY_AFTER_S = 30
+
 /**
- * Unified campsite availability endpoint, keyed by pois.id. The backend reads
- * `provider_ref` from the row to decide which provider cache to hit
- * (rec.gov or Aspira NextGen). The FE doesn't need to know which provider
- * a campground is backed by — every POI feature already carries `f.id`.
+ * Unified campsite availability endpoint, keyed by `pois.id`. Dispatch to the
+ * upstream is the registry's job — this route just parses inputs, looks up
+ * the right [BookingProvider], and serializes the result.
  *
- * Response shape is provider-stable (see `availabilityResponseDto`); the FE
- * drawer renders both alike.
- *
- * Replaces the legacy `/api/campsite/availability/{recgov_id}` and
- * `/api/campsite/availability-aspira/{tx}/{mapId}` routes — those are gone.
+ * See [BookingProviderRegistry] / `docs/booking-providers.md` for the
+ * provider-port architecture. Adding a new upstream is one new adapter file
+ * + one registry wiring line; this file does not change.
  */
 fun Route.campsiteAvailabilityRoutes(
     providerRefs: CampsiteProviderRepo,
-    recgovCache: CachedAvailability,
-    aspiraCache: CachedAspiraAvailability,
-    registry: PoiRegistry,
+    bookingProviders: BookingProviderRegistry,
 ) {
-    val rateLimit = IpRateLimiter(perMinute = 30)
-    val aspiraHostBySource = registry.aspiraHostBySource()
+    val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
 
     get("/api/campsite/availability/{poi_id}", {
         tags = listOf("campsite-availability")
         summary = "Per-day availability for one campground (cached, provider-dispatched)"
         description =
-            "Path key is `pois.id`. Backend reads `provider_ref` from the row to dispatch " +
-            "to rec.gov or Aspira NextGen. Response shape is provider-stable; the only " +
-            "differences are `provider`, `season` (rec.gov-only), and provider-specific " +
-            "extras (`campground_id` for rec.gov; `host`/`map_id` for Aspira)."
+            "Path key is `pois.id`. Backend dispatches to the booking-provider " +
+            "adapter registered for that POI's source (rec.gov, Aspira PC/BC/WA, " +
+            "Camis stub). Response shape is provider-stable; provider-specific " +
+            "extras (`campground_id` for rec.gov; `host`/`map_id` for Aspira) " +
+            "are additive. Optional `?start=YYYY-MM-DD` shifts the window " +
+            "(default: today); capped at `capabilities.bookingHorizonDays` " +
+            "ahead of today, per provider."
         response {
             code(HttpStatusCode.BadRequest) {
-                description = "Bad POI id or invalid days."
+                description = "Bad POI id, invalid days, or start out of range."
                 body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.NotFound) {
@@ -113,7 +107,11 @@ fun Route.campsiteAvailabilityRoutes(
 
         val ip = call.request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
-            call.respondAvailabilityError("ip_throttled", HttpStatusCode.ServiceUnavailable, retryAfterS = 30)
+            call.respondAvailabilityError(
+                "ip_throttled",
+                HttpStatusCode.ServiceUnavailable,
+                retryAfterS = IP_THROTTLE_RETRY_AFTER_S,
+            )
             return@get
         }
 
@@ -122,43 +120,45 @@ fun Route.campsiteAvailabilityRoutes(
             call.respondAvailabilityError("unknown_campground", HttpStatusCode.NotFound)
             return@get
         }
-        val variant = parseProviderRef(row.providerRefJson)
-        if (variant == null) {
-            // Camis or no provider_ref. The drawer's hasAvailability gate
-            // should prevent this from being called for non-bookable rows;
-            // returning empty keeps the FE happy even if it slips through.
+        val provider = bookingProviders.forPoi(row)
+        if (provider == null) {
+            // Source has no adapter wired (e.g. legacy rows pre-registry). The
+            // drawer's hasAvailability gate should prevent this from being
+            // called for non-bookable rows; respond empty rather than 5xx.
+            call.respondAvailabilityJson(AvailabilityEmptySchema())
+            return@get
+        }
+        val ref = ProviderRefParser.parse(row.providerRefJson)
+        if (ref == null) {
             call.respondAvailabilityJson(AvailabilityEmptySchema())
             return@get
         }
 
         val force = call.request.queryParameters["force"] == "1"
-        val today = todayUtc()
-        val end = today.plusDays((days - 1).toLong())
-        val months = monthsCovering(today, end)
+        val today = LocalDate.now(java.time.ZoneOffset.UTC)
+        val start =
+            when (val parsed = parseStartParam(call.request.queryParameters["start"], today, provider.capabilities.bookingHorizonDays)) {
+                is StartParam.Ok -> parsed.value
+                StartParam.Invalid -> {
+                    call.respondAvailabilityError("bad_start", HttpStatusCode.BadRequest)
+                    return@get
+                }
+            }
 
         try {
             val response =
-                when (variant) {
-                    is ProviderVariant.RecGov ->
-                        fetchAndClassifyRecgov(recgovCache, variant.recgovId, today, days, months, force)
-                    is ProviderVariant.Aspira -> {
-                        val host = aspiraHostBySource[row.source]
-                        if (host == null) {
-                            log.warn("aspira poi {} has source={} with no host mapping", poiId, row.source)
-                            call.respondAvailabilityError("unknown_aspira_host", HttpStatusCode.InternalServerError)
-                            return@get
-                        }
-                        fetchAndClassifyAspira(aspiraCache, host, variant.mapId, today, days, force)
-                    }
-                }
+                provider.availability(
+                    AvailabilityRequest(ref = ref, start = start, days = days, force = force),
+                )
             call.respondAvailabilityJson(response)
-        } catch (e: AspiraException) {
-            val (status, error) = mapAspiraUpstreamError(e)
-            log.info("aspira availability poi={} failed: {}", poiId, e.message)
-            call.respondAvailabilityJson(error, status)
-        } catch (e: Exception) {
-            val (status, error) = mapRecgovUpstreamError(e)
-            log.info("recgov availability poi={} failed: {}", poiId, e.message)
+        } catch (e: BookingProviderError) {
+            val (status, error) = mapProviderError(e)
+            log.info(
+                "availability poi={} provider={} failed: {}",
+                poiId,
+                provider.id,
+                e.message,
+            )
             call.respondAvailabilityJson(error, status)
         }
     }
@@ -168,13 +168,8 @@ fun Route.campsiteAvailabilityRoutes(
     // Trip-planner endpoint. The FE has a list of campgrounds along the
     // active corridor and wants to know "for these N campgrounds, which
     // dates between [start, start+nights-1] have at least one bookable
-    // site?" — so the user can compare and pick. Reuses the same per-month
-    // cache the single-id endpoint hits, so a window inside today..today+30
-    // costs zero upstream calls.
-    //
-    // Per-id errors land as a non-200 `status` on that id's entry; the rest
-    // of the call still succeeds. Mixed providers in one call are fine —
-    // each id is dispatched by its own provider_ref.
+    // site?" Mixed providers in one call are fine — each id is dispatched
+    // by the registry independently.
     post("/api/campsite/availability/bulk", {
         tags = listOf("campsite-availability")
         summary = "Bulk per-day availability for many campgrounds in a date window (poi-id keyed)"
@@ -259,29 +254,21 @@ fun Route.campsiteAvailabilityRoutes(
 
         val ip = call.request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
-            call.respondApiError("ip_throttled", HttpStatusCode.ServiceUnavailable, retryAfterS = 30)
+            call.respondApiError(
+                "ip_throttled",
+                HttpStatusCode.ServiceUnavailable,
+                retryAfterS = IP_THROTTLE_RETRY_AFTER_S,
+            )
             return@post
         }
 
-        // One DB hit for the whole batch — pull (id, source, provider_ref) for
-        // every requested id at once. Missing ids surface as status:404.
         val rowsById = providerRefs.findProviderRefs(req.ids)
 
         val results =
             coroutineScope {
                 req.ids
                     .map { id ->
-                        async {
-                            fetchOneBulk(
-                                id,
-                                rowsById[id],
-                                aspiraHostBySource,
-                                recgovCache,
-                                aspiraCache,
-                                start,
-                                req.nights,
-                            )
-                        }
+                        async { fetchOneBulk(id, rowsById[id], bookingProviders, start, req.nights) }
                     }.awaitAll()
             }
 
@@ -298,79 +285,90 @@ fun Route.campsiteAvailabilityRoutes(
 private suspend fun fetchOneBulk(
     poiId: Long,
     row: CampsiteProviderRefRow?,
-    aspiraHostBySource: Map<String, String>,
-    recgovCache: CachedAvailability,
-    aspiraCache: CachedAspiraAvailability,
+    bookingProviders: BookingProviderRegistry,
     start: LocalDate,
     nights: Int,
 ): BulkAvailEntrySchema {
     if (row == null) {
         return BulkAvailEntrySchema(id = poiId, status = 404, available_dates = emptyList())
     }
-    val variant =
-        parseProviderRef(row.providerRefJson)
+    val provider =
+        bookingProviders.forPoi(row)
+            ?: return BulkAvailEntrySchema(id = poiId, status = 422, available_dates = emptyList())
+    val ref =
+        ProviderRefParser.parse(row.providerRefJson)
             ?: return BulkAvailEntrySchema(id = poiId, status = 422, available_dates = emptyList())
 
     return try {
         val dates =
-            when (variant) {
-                is ProviderVariant.RecGov ->
-                    availableDatesRecgov(recgovCache, variant.recgovId, start, nights)
-                is ProviderVariant.Aspira -> {
-                    val host = aspiraHostBySource[row.source]
-                    if (host == null) {
-                        log.warn("aspira poi {} has source={} with no host mapping", poiId, row.source)
-                        return BulkAvailEntrySchema(id = poiId, status = 500, available_dates = emptyList())
-                    }
-                    availableDatesAspira(aspiraCache, host, variant.mapId, start, nights)
-                }
-            }
+            provider.availableDates(
+                AvailableDatesRequest(ref = ref, start = start, nights = nights),
+            )
         BulkAvailEntrySchema(id = poiId, status = 200, available_dates = dates)
-    } catch (e: AspiraException) {
-        log.info("bulk availability poi={} aspira upstream: {}", poiId, e.message)
-        BulkAvailEntrySchema(id = poiId, status = if (e.httpStatus == 429) 429 else 503, available_dates = emptyList())
-    } catch (e: Exception) {
-        log.info("bulk availability poi={} failed: {}", poiId, e.message)
-        val status = if (e.message?.contains("429") == true) 429 else 503
-        BulkAvailEntrySchema(id = poiId, status = status, available_dates = emptyList())
+    } catch (e: BookingProviderError) {
+        log.info("bulk availability poi={} provider={} failed: {}", poiId, provider.id, e.message)
+        BulkAvailEntrySchema(id = poiId, status = httpStatusFor(e), available_dates = emptyList())
     }
 }
 
 /**
- * Sealed variant the dispatch fans out on. Mirrors [ca.floo.roadtrip.models.ProviderRef]
- * but defined here to keep the api package free of the etl import chain.
+ * Result of parsing the `?start=YYYY-MM-DD` query param against the provider's
+ * booking horizon. Sealed so the route can branch on it without re-checking
+ * any null state.
  */
-private sealed class ProviderVariant {
-    data class RecGov(
-        val recgovId: String,
-    ) : ProviderVariant()
+internal sealed class StartParam {
+    data class Ok(
+        val value: LocalDate,
+    ) : StartParam()
 
-    data class Aspira(
-        val mapId: Int,
-    ) : ProviderVariant()
+    /** Malformed date, in the past, or beyond the provider's booking horizon. */
+    object Invalid : StartParam()
 }
 
 /**
- * Parse a `provider_ref` JSONB payload into the matching [ProviderVariant].
- * The wire format is decided by [Upsert.providerRefToJson]; presence of a
- * field is the discriminator — there's no explicit type tag.
- *
- * Returns null for unknown shapes (Camis, malformed JSON) so the caller
- * can render `state:"empty"` instead of 5xx-ing.
+ * Parse `?start=` into a [StartParam]. Null/missing means "default to today."
+ * Anything outside `[today, today + horizonDays]` is [StartParam.Invalid] —
+ * the upstream wouldn't have data for it either way.
  */
-private fun parseProviderRef(json: String): ProviderVariant? {
-    val obj =
-        try {
-            Json.parseToJsonElement(json).jsonObject
-        } catch (e: Exception) {
-            return null
-        }
-    val recgov = obj["recgov_id"]?.jsonPrimitive?.contentOrNull
-    if (recgov != null) return ProviderVariant.RecGov(recgov)
-    val mapId = obj["mapId"]?.jsonPrimitive?.intOrNull
-    if (mapId != null) return ProviderVariant.Aspira(mapId)
-    return null
+internal fun parseStartParam(
+    raw: String?,
+    today: LocalDate,
+    horizonDays: Int,
+): StartParam {
+    if (raw == null) return StartParam.Ok(today)
+    val parsed = runCatching { LocalDate.parse(raw) }.getOrNull() ?: return StartParam.Invalid
+    if (parsed.isBefore(today)) return StartParam.Invalid
+    if (parsed.isAfter(today.plusDays(horizonDays.toLong()))) return StartParam.Invalid
+    return StartParam.Ok(parsed)
 }
+
+/** Map the typed provider error to (HTTP status, AvailabilityErrorSchema). */
+private fun mapProviderError(e: BookingProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> =
+    when (e) {
+        is BookingProviderError.RateLimited ->
+            HttpStatusCode.ServiceUnavailable to
+                availabilityErrorDto("rate_limited", retryAfterS = UPSTREAM_RATE_LIMITED_RETRY_AFTER_S)
+        is BookingProviderError.UpstreamBlocked ->
+            HttpStatusCode.ServiceUnavailable to
+                availabilityErrorDto("upstream_blocked", retryAfterS = UPSTREAM_BLOCKED_RETRY_AFTER_S)
+        is BookingProviderError.UpstreamUnavailable ->
+            HttpStatusCode.ServiceUnavailable to
+                availabilityErrorDto("upstream_5xx", retryAfterS = UPSTREAM_5XX_RETRY_AFTER_S)
+        is BookingProviderError.Unsupported ->
+            HttpStatusCode.NotImplemented to availabilityErrorDto("unsupported")
+        is BookingProviderError.WrongRefType ->
+            // Programmer error, not a user error. Surface as 500 so it shows up in metrics.
+            HttpStatusCode.InternalServerError to availabilityErrorDto("provider_misconfigured")
+    }
+
+/** Numeric status for the bulk endpoint's per-id `status` field. */
+private fun httpStatusFor(e: BookingProviderError): Int =
+    when (e) {
+        is BookingProviderError.RateLimited -> 429
+        is BookingProviderError.Unsupported -> 422
+        is BookingProviderError.WrongRefType -> 500
+        else -> 503
+    }
 
 private suspend fun ApplicationCall.respondAvailabilityError(
     error: String,
