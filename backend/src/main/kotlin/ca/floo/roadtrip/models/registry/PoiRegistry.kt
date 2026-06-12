@@ -6,32 +6,57 @@ import java.io.File
 
 // In-memory representation of config/poi-registry.yaml.
 //
-// Two sections:
+// Four sections:
 //   - data_sources: fetchers (executor + filename + args + output_dir_prefix).
 //     One entry per upstream feed.
-//   - poi_data: user-facing datasets. Each row carries name, optional enabled
-//     (default true), category, optional subcategory, and an ordered etls:
-//     list. The LAST etls entry is the POI emitter (must produce Poi.*);
-//     earlier entries are intermediates. List order is dependency order:
-//     entry N may only reference data_source slugs OR earlier siblings via
-//     inputs. The framework topo-sorts the global DAG; cycles + forward
-//     references are rejected at boot.
+//   - poi_data: POI datasets. Terminal etl emits Poi.* rows into `pois`.
+//     Each row carries name, optional enabled (default true), category,
+//     optional subcategory, and an ordered etls: list. (Existing flow.)
+//   - reservable_data: reservable catalogs (RFC 0008). Terminal etl emits
+//     reservable rows into `reservables`. Same chain shape as poi_data,
+//     minus category/subcategory (reservables aren't map pins).
+//   - poi_reservable_joiner: N:M-link discovery (RFC 0008). Each entry
+//     names an adapter that reads the current state of `pois` +
+//     `reservables` and writes the (reservable_id, poi_id) link rows
+//     into `reservable_pois`. No etl chain — joiners don't transform raw
+//     data, they query DB tables.
+//
+// Etl chain semantics (poi_data + reservable_data):
+//   - Terminal stage = last etls entry. Earlier entries are intermediates.
+//   - List order = dependency order. Entry N may only reference
+//     data_source slugs OR earlier siblings via inputs.
+//   - Cross-row etl refs and forward refs are rejected at boot.
+//   - Cycles in the global DAG are rejected at boot.
+//
+// All sections share the slug namespace because `inputs:` resolves to
+// either a data_source or an earlier sibling etl. Etl slugs across
+// poi_data + reservable_data must not collide; data_source slugs must
+// not collide with any etl slug.
 //
 // Loaded once at boot. Used by:
-//   1. EtlOrchestrator — runs each poi_data row's etls chain in order,
-//      materializing intermediates to data/etl-out/<etl-slug>/ and upserting
-//      the terminal's Poi.* output to the pois table with source=<terminal-slug>.
-//   2. IngestController / RegistryTargets — fetch is per data_source,
-//      import is per poi_data row.
+//   1. EtlOrchestrator — runs etl chains in declared order, dispatching
+//      poi_data terminals to Pois Upsert and reservable_data terminals
+//      to ReservableRepo. Also runs joiner adapters.
+//   2. IngestController / RegistryTargets — fetch is per data_source;
+//      import targets cover all three of {poi_data, reservable_data,
+//      poi_reservable_joiner}.
 //
-// Adding a new source = one data_sources row + one poi_data row + one
-// EtlOrchestrator.registry line per ETL slug. No Flyway migration.
+// Adding a new POI source: one data_sources row + one poi_data row +
+// one EtlOrchestrator.registry line per ETL slug. No Flyway migration.
+//
+// Adding a new reservable source: same shape but reservable_data row.
+// Then add a poi_reservable_joiner row pointing at the matching joiner
+// adapter so the catalog rows get linked to their parent POIs.
 @Serializable
 data class PoiRegistry(
     @kotlinx.serialization.SerialName("data_sources")
     val dataSources: List<DataSourceEntry>,
     @kotlinx.serialization.SerialName("poi_data")
     val poiData: List<PoiDataEntry>,
+    @kotlinx.serialization.SerialName("reservable_data")
+    val reservableData: List<ReservableDataEntry> = emptyList(),
+    @kotlinx.serialization.SerialName("poi_reservable_joiner")
+    val poiReservableJoiners: List<PoiReservableJoinerEntry> = emptyList(),
 ) {
     companion object {
         private val yaml =
@@ -77,58 +102,44 @@ data class PoiRegistry(
             }
         }
 
-        // ETL slugs share a namespace with data_source slugs because
-        // inputs: resolves to either. Detect collisions.
+        // Etl slugs share a namespace with data_source slugs because
+        // inputs: resolves to either. Detect collisions across both
+        // poi_data and reservable_data — an etl in either section can be
+        // an input to an etl in the same section's row, but not across
+        // sections (the orchestrator hands intermediates over in memory
+        // within one runPoiData / runReservableData invocation, not
+        // between them).
         val etlSlugs = mutableSetOf<String>()
-        for (row in poiData) {
-            if (row.etls.isEmpty()) {
-                errs += "poi_data '${row.name}' has empty etls list"
-                continue
+        validateEtlSection(
+            label = "poi_data",
+            rows = poiData.map { EtlRowRef(it.name, it.etls, it) },
+            dsSlugs = dsSlugs,
+            allEtlSlugs = etlSlugs,
+            errs = errs,
+        )
+        validateEtlSection(
+            label = "reservable_data",
+            rows = reservableData.map { EtlRowRef(it.name, it.etls, it) },
+            dsSlugs = dsSlugs,
+            allEtlSlugs = etlSlugs,
+            errs = errs,
+        )
+
+        // Joiner-row sanity: name uniqueness + non-empty adapter. Joiners
+        // don't have etl chains so there's no input/forward-ref check.
+        val joinerNames = mutableSetOf<String>()
+        for ((i, j) in poiReservableJoiners.withIndex()) {
+            if (!joinerNames.add(j.name)) {
+                errs += "poi_reservable_joiner[$i] name='${j.name}' is not unique"
             }
-            for ((i, e) in row.etls.withIndex()) {
-                if (e.slug in dsSlugs) {
-                    errs += "poi_data '${row.name}' etl[$i] slug='${e.slug}' collides with a data_source slug"
-                }
-                if (!etlSlugs.add(e.slug)) {
-                    errs += "duplicate etl slug='${e.slug}' (in poi_data '${row.name}')"
-                }
-            }
-            // Per-row forward-reference check. Cross-row etl refs fall in
-            // the same bucket: orchestrator hands intermediates over in
-            // memory, so an input has to be either a data_source or a
-            // prior sibling in this row's chain.
-            val priorSiblings = mutableSetOf<String>()
-            for ((i, e) in row.etls.withIndex()) {
-                for (input in e.inputs) {
-                    val resolvesToDataSource = input in dsSlugs
-                    val resolvesToPriorSibling = input in priorSiblings
-                    if (!resolvesToDataSource && !resolvesToPriorSibling) {
-                        val laterSibling =
-                            row.etls.drop(i + 1).any { it.slug == input }
-                        val crossRow =
-                            !laterSibling &&
-                                poiData.any { other ->
-                                    other !== row && other.etls.any { it.slug == input }
-                                }
-                        errs +=
-                            when {
-                                laterSibling ->
-                                    "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is a later sibling (forward reference)"
-                                crossRow ->
-                                    "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is an etl in a different poi_data row (cross-row refs not supported)"
-                                else ->
-                                    "poi_data '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is neither a data_source nor a prior sibling"
-                            }
-                    }
-                }
-                priorSiblings += e.slug
+            if (j.adapter.isBlank()) {
+                errs += "poi_reservable_joiner '${j.name}' has empty adapter"
             }
         }
 
         // Global cycle detection over data_sources.depends_on + every
-        // etl.inputs. Edges run input → consumer. The (data_sources +
-        // etls) namespace is one set; a cycle means one of the .inputs
-        // slugs eventually depends on the consumer.
+        // etl.inputs across both etl-bearing sections. Edges run
+        // input → consumer.
         if (errs.isEmpty()) {
             val edges = mutableMapOf<String, MutableSet<String>>()
 
@@ -142,6 +153,11 @@ data class PoiRegistry(
                 for (dep in ds.dependsOn) edge(dep, ds.slug)
             }
             for (row in poiData) {
+                for (e in row.etls) {
+                    for (input in e.inputs) edge(input, e.slug)
+                }
+            }
+            for (row in reservableData) {
                 for (e in row.etls) {
                     for (input in e.inputs) edge(input, e.slug)
                 }
@@ -160,6 +176,92 @@ data class PoiRegistry(
         }
     }
 
+    /**
+     * Per-section etl validation. Walks one section's rows and applies
+     * the universal constraints: non-empty etl chain, slug uniqueness
+     * across all etl-bearing sections, no collision with data_source
+     * slugs, no forward references, no cross-row references within the
+     * section.
+     *
+     * Cross-section refs are caught here too: if an input slug points
+     * at an etl in a different section (or a different row in this
+     * section), it gets the "neither a data_source nor a prior sibling"
+     * error. The orchestrator hands intermediates in-memory within one
+     * runPoiData/runReservableData call, so cross-row state never exists.
+     */
+    private fun validateEtlSection(
+        label: String,
+        rows: List<EtlRowRef>,
+        dsSlugs: Set<String>,
+        allEtlSlugs: MutableSet<String>,
+        errs: MutableList<String>,
+    ) {
+        for (row in rows) {
+            if (row.etls.isEmpty()) {
+                errs += "$label '${row.name}' has empty etls list"
+                continue
+            }
+            for ((i, e) in row.etls.withIndex()) {
+                if (e.slug in dsSlugs) {
+                    errs += "$label '${row.name}' etl[$i] slug='${e.slug}' collides with a data_source slug"
+                }
+                if (!allEtlSlugs.add(e.slug)) {
+                    errs += "duplicate etl slug='${e.slug}' (in $label '${row.name}')"
+                }
+            }
+            val priorSiblings = mutableSetOf<String>()
+            for ((i, e) in row.etls.withIndex()) {
+                for (input in e.inputs) {
+                    val resolvesToDataSource = input in dsSlugs
+                    val resolvesToPriorSibling = input in priorSiblings
+                    if (!resolvesToDataSource && !resolvesToPriorSibling) {
+                        val laterSibling =
+                            row.etls.drop(i + 1).any { it.slug == input }
+                        val crossRowSameSection =
+                            !laterSibling &&
+                                rows.any { other ->
+                                    other.source !== row.source && other.etls.any { it.slug == input }
+                                }
+                        val crossSection =
+                            !laterSibling &&
+                                !crossRowSameSection &&
+                                otherSectionsHaveEtlSlug(label, input)
+                        errs +=
+                            when {
+                                laterSibling ->
+                                    "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is a later sibling (forward reference)"
+                                crossRowSameSection ->
+                                    "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is an etl in a different $label row (cross-row refs not supported)"
+                                crossSection ->
+                                    "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is an etl in a different section (cross-section refs not supported)"
+                                else ->
+                                    "$label '${row.name}' etl[$i] '${e.slug}' inputs '$input' which is neither a data_source nor a prior sibling"
+                            }
+                    }
+                }
+                priorSiblings += e.slug
+            }
+        }
+    }
+
+    /** True iff some section *other than* [exclude] declares an etl with [slug]. */
+    private fun otherSectionsHaveEtlSlug(
+        exclude: String,
+        slug: String,
+    ): Boolean {
+        if (exclude != "poi_data" && poiData.any { row -> row.etls.any { it.slug == slug } }) return true
+        if (exclude != "reservable_data" && reservableData.any { row -> row.etls.any { it.slug == slug } }) return true
+        return false
+    }
+
+    /** Section-agnostic row pointer used by [validateEtlSection]. */
+    private data class EtlRowRef(
+        val name: String,
+        val etls: List<EtlEntry>,
+        /** Original entry; used as identity for the cross-row check. */
+        val source: Any,
+    )
+
     /** poi_data rows that should run during fan-out import. */
     fun enabledPoiData(): List<PoiDataEntry> = poiData.filter { it.enabled }
 
@@ -171,6 +273,18 @@ data class PoiRegistry(
 
     /** Look up a poi_data row by its display name. Names are unique by convention. */
     fun poiDataByName(name: String): PoiDataEntry? = poiData.firstOrNull { it.name == name }
+
+    /** reservable_data rows that should run during fan-out import. */
+    fun enabledReservableData(): List<ReservableDataEntry> = reservableData.filter { it.enabled }
+
+    /** Look up a reservable_data row by its display name. */
+    fun reservableDataByName(name: String): ReservableDataEntry? = reservableData.firstOrNull { it.name == name }
+
+    /** poi_reservable_joiner rows that should run during fan-out import. */
+    fun enabledPoiReservableJoiners(): List<PoiReservableJoinerEntry> = poiReservableJoiners.filter { it.enabled }
+
+    /** Look up a poi_reservable_joiner row by its display name. */
+    fun poiReservableJoinerByName(name: String): PoiReservableJoinerEntry? = poiReservableJoiners.firstOrNull { it.name == name }
 
     /**
      * Static subcategory lookup keyed by terminal etl slug (== pois.source).
@@ -294,5 +408,37 @@ data class EtlEntry(
     val slug: String,
     val adapter: String,
     val inputs: List<String> = emptyList(),
+    val args: Map<String, String> = emptyMap(),
+)
+
+/**
+ * Row in the `reservable_data` section. Same shape as [PoiDataEntry] minus
+ * `category` / `subcategory` — reservables aren't map pins, so the FE
+ * legend metadata doesn't apply. The terminal etl emits reservable rows
+ * via [ca.floo.roadtrip.repo.ReservableRepo]; the orchestrator dispatches
+ * by section, not by etl marker interface.
+ */
+@Serializable
+data class ReservableDataEntry(
+    val name: String,
+    val enabled: Boolean = true,
+    val etls: List<EtlEntry>,
+)
+
+/**
+ * Row in the `poi_reservable_joiner` section. Names a single adapter
+ * (registered in EtlOrchestrator's joiner registry) that reads the
+ * current state of `pois` + `reservables` and writes (reservable_id,
+ * poi_id) link rows into `reservable_pois`. No etl chain; joiners
+ * don't transform raw data, they query DB tables.
+ *
+ * `args` follows the same shape as [EtlEntry.args]: free-form
+ * adapter-specific config (e.g. which provider source to scope to).
+ */
+@Serializable
+data class PoiReservableJoinerEntry(
+    val name: String,
+    val enabled: Boolean = true,
+    val adapter: String,
     val args: Map<String, String> = emptyMap(),
 )
