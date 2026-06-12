@@ -13,7 +13,7 @@ goes through CachedAvailability. We only persist the catalog half.
 Multi-part output: one envelope per facility under
   data/raw/recgov-campsites/<UTC-ts>/facility-<FacilityID>.json
 
-Rate limits: rec.gov's 429s are aggressive. We hold a conservative gap
+Rate limits: rec.gov's 429s are aggressive. We hold a configurable gap
 between calls and use long backoffs on 429, honoring Retry-After when the
 server provides it.
 
@@ -48,8 +48,9 @@ FETCHER_VERSION = "1"
 
 # Rec.gov allows short interactive availability checks, but the full catalog
 # backfill is thousands of requests. Keep the batch fetcher deliberately slower
-# than the app's mutex-protected availability client.
-MIN_GAP_S = 5.0
+# than the app's mutex-protected availability client, while still allowing
+# operators to tune the gap for one-off backfills.
+DEFAULT_MIN_GAP_S = 3.0
 RETRY_DELAYS_S = (15.0, 60.0, 180.0, 300.0)
 TIMEOUT_S = 30
 
@@ -192,6 +193,12 @@ def main() -> int:
         action="store_true",
         help="also query RIDB facilities not marked Reservable=true",
     )
+    parser.add_argument(
+        "--min-gap",
+        type=float,
+        default=DEFAULT_MIN_GAP_S,
+        help=f"minimum seconds between requests (default: {DEFAULT_MIN_GAP_S})",
+    )
     args = parser.parse_args()
 
     src = load_source(args.slug)
@@ -229,8 +236,8 @@ def main() -> int:
         # Honor the global gap. Sleeps if we're under the minimum since
         # the last fetch; no-op otherwise.
         gap = time.monotonic() - last_call_at
-        if gap < MIN_GAP_S:
-            time.sleep(MIN_GAP_S - gap)
+        if gap < args.min_gap:
+            time.sleep(args.min_gap - gap)
 
         url = f"{API_BASE}/{fid}/month?start_date={encoded_month}"
         err(f"  [{i}/{len(facility_ids)}] facility={fid}")
