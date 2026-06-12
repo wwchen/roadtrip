@@ -54,7 +54,7 @@ RETRY_DELAYS_S = (15.0, 60.0, 180.0, 300.0)
 TIMEOUT_S = 30
 
 
-def _facility_ids_from_recgov_campgrounds() -> list[str]:
+def _facility_ids_from_recgov_campgrounds(*, reservable_only: bool) -> list[str]:
     """Walk the newest recgov-campgrounds capture, collect every FacilityID.
 
     The capture is the multi-part RIDB /facilities pages this slug's sibling
@@ -77,6 +77,7 @@ def _facility_ids_from_recgov_campgrounds() -> list[str]:
 
     ids: list[str] = []
     seen: set[str] = set()
+    ignored_non_reservable = 0
     for page_path in sorted(newest.glob("page-*.json")):
         try:
             envelope = json.loads(page_path.read_text())
@@ -85,6 +86,9 @@ def _facility_ids_from_recgov_campgrounds() -> list[str]:
             continue
         records = (envelope.get("payload") or {}).get("RECDATA") or []
         for rec in records:
+            if reservable_only and rec.get("Reservable") is not True:
+                ignored_non_reservable += 1
+                continue
             fid = rec.get("FacilityID")
             if fid is None:
                 continue
@@ -93,7 +97,10 @@ def _facility_ids_from_recgov_campgrounds() -> list[str]:
                 continue
             seen.add(sid)
             ids.append(sid)
-    err(f"  walked {newest.name}: {len(ids)} unique FacilityIDs")
+    suffix = ""
+    if reservable_only:
+        suffix = f", ignored {ignored_non_reservable} non-reservable facilities"
+    err(f"  walked {newest.name}: {len(ids)} unique FacilityIDs{suffix}")
     return ids
 
 
@@ -180,10 +187,17 @@ def main() -> int:
         action="store_true",
         help="skip facility files already present in the timestamp directory",
     )
+    parser.add_argument(
+        "--include-non-reservable",
+        action="store_true",
+        help="also query RIDB facilities not marked Reservable=true",
+    )
     args = parser.parse_args()
 
     src = load_source(args.slug)
-    facility_ids = _facility_ids_from_recgov_campgrounds()
+    facility_ids = _facility_ids_from_recgov_campgrounds(
+        reservable_only=not args.include_non_reservable
+    )
     if args.limit:
         facility_ids = facility_ids[: args.limit]
 
