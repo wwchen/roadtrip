@@ -471,11 +471,19 @@ class EtlOrchestrator(
 
         /**
          * Map of joiner adapter name → adapter instance. Keys MUST match
-         * the YAML `poi_reservable_joiner.adapter` value exactly. Empty
-         * for v2-PR-2 (this PR ships only the section infrastructure);
-         * PR 4 of RFC 0008's rollout adds the recgov + aspira joiners.
+         * the YAML `poi_reservable_joiner.adapter` value exactly. One
+         * entry per adapter class — multiple YAML rows can share the
+         * same adapter (Aspira's three tenants do).
          */
-        val joinerRegistry: Map<String, PoiReservableJoiner> = emptyMap()
+        val joinerRegistry: Map<String, PoiReservableJoiner> =
+            mapOf(
+                "RecgovPoiReservableJoiner" to
+                    ca.floo.roadtrip.service.etl.recgov
+                        .RecgovPoiReservableJoiner(),
+                "AspiraPoiReservableJoiner" to
+                    ca.floo.roadtrip.service.etl.aspira
+                        .AspiraPoiReservableJoiner(),
+            )
     }
 }
 
