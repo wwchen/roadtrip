@@ -443,6 +443,30 @@ class EtlOrchestrator(
                 "aspira-pc-pins" to
                     ca.floo.roadtrip.service.etl.aspira
                         .AspiraJoinByNameEtl("aspira-pc-pins"),
+                // Reservable catalog terminals (RFC 0008). One row per
+                // tenant; vendor strings use underscore (`aspira_wa`)
+                // because ReservableId disallows ':' in the vendor field.
+                "aspira-wa-resources" to
+                    ca.floo.roadtrip.service.etl.aspira
+                        .AspiraResourcesEtl(
+                            etlSlug = "aspira-wa-resources",
+                            mapsInputSlug = "aspira-maps-wa",
+                            vendor = "aspira_wa",
+                        ),
+                "aspira-bc-resources" to
+                    ca.floo.roadtrip.service.etl.aspira
+                        .AspiraResourcesEtl(
+                            etlSlug = "aspira-bc-resources",
+                            mapsInputSlug = "aspira-maps-bc",
+                            vendor = "aspira_bc",
+                        ),
+                "aspira-pc-resources" to
+                    ca.floo.roadtrip.service.etl.aspira
+                        .AspiraResourcesEtl(
+                            etlSlug = "aspira-pc-resources",
+                            mapsInputSlug = "aspira-maps-pc",
+                            vendor = "aspira_pc",
+                        ),
             )
 
         /**

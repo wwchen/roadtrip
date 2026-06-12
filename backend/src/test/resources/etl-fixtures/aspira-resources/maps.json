@@ -1,0 +1,43 @@
+{
+  "fetcher": "fetch_aspira_maps",
+  "fetcher_version": "3",
+  "fetched_at": "2026-09-12T17:00:00Z",
+  "request": {
+    "url": "https://reservation.pc.gc.ca/api/maps",
+    "method": "GET"
+  },
+  "response": { "status": 200 },
+  "payload": [
+    {
+      "mapId": -2147483648,
+      "transactionLocationId": null,
+      "localizedValues": [
+        { "cultureName": "en-CA", "title": "Parks Canada" }
+      ],
+      "mapLinks": [
+        { "childMapId": -2147483640 },
+        { "childMapId": -2147483641 }
+      ]
+    },
+    {
+      "mapId": -2147483640,
+      "parentMap": { "mapId": -2147483648 },
+      "transactionLocationId": "1001",
+      "resourceLocationId": "9001",
+      "localizedValues": [
+        { "cultureName": "en-CA", "title": "Tunnel Mountain Village I" }
+      ],
+      "mapLinks": []
+    },
+    {
+      "mapId": -2147483641,
+      "parentMap": { "mapId": -2147483648 },
+      "transactionLocationId": "1002",
+      "resourceLocationId": "9002",
+      "localizedValues": [
+        { "cultureName": "en-CA", "title": "Two Jack Lakeside" }
+      ],
+      "mapLinks": []
+    }
+  ]
+}
