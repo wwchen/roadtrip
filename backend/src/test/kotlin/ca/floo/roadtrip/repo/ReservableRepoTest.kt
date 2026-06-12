@@ -25,6 +25,7 @@ import kotlin.test.assertNull
  *   - findByRid round-trips a row inserted via upsert
  *   - findByPoi joins through the N:M link table and filters by type
  *   - countByPoi mirrors findByPoi but returns just the count
+ *   - poiIdsForReservable returns active parent POIs for detail responses
  *   - linkToPoi/unlinkFromPoi are idempotent
  *   - one reservable can belong to multiple POIs (the N:M shape)
  */
@@ -182,6 +183,7 @@ class ReservableRepoTest {
 
         assertEquals(1, repo.countByPoi(campgroundPoi, ReservableType.SITE))
         assertEquals(1, repo.countByPoi(parkPoi, ReservableType.SITE))
+        assertEquals(listOf(campgroundPoi, parkPoi).sorted(), repo.poiIdsForReservable(id))
     }
 
     /**
