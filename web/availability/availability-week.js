@@ -93,6 +93,7 @@ function makeContext(host, feature, signal) {
     cacheBlock: null,
     summary: '',
     season: null,
+    availabilityHost: null,
     error: null,
     alertsByDate: new Map(),
     skeletonTimer: null,
@@ -131,6 +132,8 @@ function renderShell(ctx) {
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
         selectedDay,
+        minNights: ctx.minNights,
+        providerHost: ctx.availabilityHost,
       })}
     </section>
   `;
@@ -219,6 +222,7 @@ function renderDetail(ctx) {
 }
 
 function selectedAvailabilityDay(ctx) {
+  if (ctx.state !== 'success') return null;
   if (!ctx.selectedDate || !ctx.days || ctx.days.length === 0) return null;
   return ctx.days.find((d) => d.date === ctx.selectedDate) || null;
 }
@@ -253,12 +257,14 @@ function onRootClick(ctx, e) {
     if (tgt.closest('.cg-week-prev').disabled) return;
     ctx.weekStart = addDays(ctx.weekStart, -WEEK_DAYS);
     ctx.selectedDate = null;
+    ctx.sitesExpanded = false;
     fetchWeek(ctx);
     return;
   }
   if (tgt.closest('.cg-week-next')) {
     ctx.weekStart = addDays(ctx.weekStart, WEEK_DAYS);
     ctx.selectedDate = null;
+    ctx.sitesExpanded = false;
     fetchWeek(ctx);
     return;
   }
@@ -267,6 +273,7 @@ function onRootClick(ctx, e) {
     if (sameDay(ctx.weekStart, today)) return;
     ctx.weekStart = today;
     ctx.selectedDate = null;
+    ctx.sitesExpanded = false;
     fetchWeek(ctx);
     return;
   }
@@ -279,7 +286,9 @@ function onRootClick(ctx, e) {
   const dayBtn = tgt.closest('.cg-day:not(.cg-day-skeleton)');
   if (dayBtn) {
     const date = dayBtn.getAttribute('data-date');
-    ctx.selectedDate = ctx.selectedDate === date ? null : date;
+    const selected = ctx.selectedDate !== date;
+    ctx.selectedDate = selected ? date : null;
+    ctx.sitesExpanded = selected;
     rerender(ctx);
     return;
   }
@@ -331,6 +340,7 @@ function openCalendar(ctx, anchorBtn) {
     onPick: (date) => {
       ctx.weekStart = date;
       ctx.selectedDate = null;
+      ctx.sitesExpanded = false;
       ctx.calendar?.dispose();
       ctx.calendar = null;
       fetchWeek(ctx);
@@ -371,6 +381,7 @@ async function fetchWeek(ctx, { force = false } = {}) {
     }
     const json = await resp.json();
     ctx.cacheBlock = json.cache || null;
+    ctx.availabilityHost = json.host || null;
     if (json.state === 'empty') {
       ctx.state = 'empty';
       ctx.days = [];

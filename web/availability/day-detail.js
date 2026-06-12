@@ -8,6 +8,8 @@
 
 import { escapeHtml } from '../core.js';
 
+const GREEN_AVAILABLE_THRESHOLD = 5;
+
 /**
  * @param {object} args
  * @param {object} args.day           Per-day classification.
@@ -39,8 +41,8 @@ export function renderDayDetail({ day, minNights, watching, recgovId }) {
 
 function renderStatusLine(day, stayLabel) {
   const total = day.total ?? 0;
-  const count = day.available_count ?? day.availableCount ?? 0;
-  switch (day.status) {
+  const count = availableCount(day) ?? 0;
+  switch (renderStatus(day)) {
     case 'available':
       return `<span class="cg-status-ok">Available</span> · ${count} of ${total} sites · ${stayLabel}`;
     case 'partial':
@@ -52,6 +54,19 @@ function renderStatusLine(day, stayLabel) {
     default:
       return stayLabel;
   }
+}
+
+function renderStatus(day) {
+  const status = day.status || 'closed';
+  const count = availableCount(day);
+  if (status === 'partial' && count != null && count >= GREEN_AVAILABLE_THRESHOLD) {
+    return 'available';
+  }
+  return status;
+}
+
+function availableCount(day) {
+  return day.available_count ?? day.availableCount;
 }
 
 function renderActions({ day, watching, recgovId }) {
