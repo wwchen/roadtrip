@@ -165,11 +165,19 @@ def http_get_text(
     case-insensitive but most fetchers default to title-case).
     """
     req = urllib.request.Request(url, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read()
+            return (
+                resp.status,
+                {k.lower(): v for k, v in resp.getheaders()},
+                body.decode("utf-8", errors="replace"),
+            )
+    except urllib.error.HTTPError as e:
+        body = e.read()
         return (
-            resp.status,
-            {k.lower(): v for k, v in resp.getheaders()},
+            e.code,
+            {k.lower(): v for k, v in e.headers.items()},
             body.decode("utf-8", errors="replace"),
         )
 
@@ -184,11 +192,19 @@ def http_post_text(
     """POST variant — Overpass's only entry point. Same lower-casing
     behavior as http_get_text."""
     req = urllib.request.Request(url, data=data, headers=headers or {})
-    with urllib.request.urlopen(req, timeout=timeout) as resp:
-        body = resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            body = resp.read()
+            return (
+                resp.status,
+                {k.lower(): v for k, v in resp.getheaders()},
+                body.decode("utf-8", errors="replace"),
+            )
+    except urllib.error.HTTPError as e:
+        body = e.read()
         return (
-            resp.status,
-            {k.lower(): v for k, v in resp.getheaders()},
+            e.code,
+            {k.lower(): v for k, v in e.headers.items()},
             body.decode("utf-8", errors="replace"),
         )
 
