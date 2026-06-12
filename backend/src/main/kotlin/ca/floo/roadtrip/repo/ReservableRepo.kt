@@ -105,12 +105,7 @@ class ReservableRepo(
 
         try {
             val existingActive = activeCount(source)
-            var seen = 0
-            for (input in inputs) {
-                upsert(input, source, runId)
-                seen++
-                if (seen % 1000 == 0) log.info("  upserted {} reservables", seen)
-            }
+            val seen = upsertSnapshot(source, inputs, runId)
             log.info("staged {} reservables from source={} (existing active={})", seen, source, existingActive)
 
             if (existingActive > 0 && seen < existingActive / 2) {
@@ -291,6 +286,50 @@ class ReservableRepo(
             )!!
             .get(0, Int::class.java)!!
 
+    private fun upsertSnapshot(
+        source: String,
+        inputs: List<Input>,
+        runId: Long,
+    ): Int {
+        var seen = 0
+        for (chunk in inputs.chunked(RESERVABLE_UPSERT_CHUNK_SIZE)) {
+            val values = chunk.joinToString(", ") { "(?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?)" }
+            val args = mutableListOf<Any?>()
+            for (input in chunk) {
+                args += input.rid.type.encode()
+                args += input.rid.vendor
+                args += input.rid.vendorId
+                args += source
+                args += input.name
+                args += input.loop
+                args += input.siteType
+                args += input.raw?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
+                args += runId
+            }
+            ctx.execute(
+                """
+                INSERT INTO reservables (
+                  type, vendor, vendor_id, source, name, loop, site_type, raw, last_seen_run_id
+                ) VALUES $values
+                ON CONFLICT (type, vendor, vendor_id)
+                DO UPDATE SET
+                  source = EXCLUDED.source,
+                  name = EXCLUDED.name,
+                  loop = EXCLUDED.loop,
+                  site_type = EXCLUDED.site_type,
+                  raw = EXCLUDED.raw,
+                  last_seen_run_id = EXCLUDED.last_seen_run_id,
+                  deleted_at = NULL,
+                  updated_at = now()
+                """.trimIndent(),
+                *args.toTypedArray(),
+            )
+            seen += chunk.size
+            if (seen % 1000 == 0) log.info("  upserted {} reservables", seen)
+        }
+        return seen
+    }
+
     private fun sweep(
         source: String,
         runId: Long,
@@ -327,6 +366,7 @@ class ReservableRepo(
         private val jsonEncoder = Json
 
         private val RESERVABLE_ACTIVE_CONDITION = DSL.condition("reservables.deleted_at IS NULL")
+        private const val RESERVABLE_UPSERT_CHUNK_SIZE = 1000
         private const val LINK_INSERT_CHUNK_SIZE = 1000
     }
 }
