@@ -55,6 +55,7 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
             .join(POIS)
             .on(POIS.SOURCE.`in`(POI_SOURCES).and(POIS.SOURCE_ID.eq(expectedSourceId)))
             .where(RESERVABLES.VENDOR.`in`(RESERVABLE_VENDORS))
+            .and(DSL.condition("reservables.deleted_at IS NULL"))
             .and(POIS.DELETED_AT.isNull)
             .fetch { record ->
                 PoiReservableJoiner.Link(
@@ -63,6 +64,31 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
                 )
             }
     }
+
+    override fun sweepStaleLinks(ctx: JoinerCtx): Int =
+        ctx.ctx.execute(
+            """
+            DELETE FROM reservable_pois rp
+            USING reservables r, pois p
+            WHERE rp.reservable_id = r.id
+              AND rp.poi_id = p.id
+              AND r.vendor IN ('aspira_wa', 'aspira_bc', 'aspira_pc')
+              AND p.source IN ('aspira-wa-pins', 'aspira-bc-pins', 'aspira-pc-pins')
+              AND (
+                r.deleted_at IS NOT NULL
+                OR p.deleted_at IS NOT NULL
+                OR p.source_id IS DISTINCT FROM concat(
+                  ?,
+                  jsonb_extract_path_text(r.raw::jsonb, ?),
+                  '-',
+                  jsonb_extract_path_text(r.raw::jsonb, ?)
+                )
+              )
+            """.trimIndent(),
+            POI_SOURCE_ID_PREFIX,
+            PARENT_TXN_LOC_KEY,
+            PARENT_MAP_ID_KEY,
+        )
 
     private companion object {
         const val ADAPTER_NAME = "AspiraPoiReservableJoiner"

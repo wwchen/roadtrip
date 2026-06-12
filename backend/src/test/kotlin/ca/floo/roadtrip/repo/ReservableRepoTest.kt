@@ -25,6 +25,7 @@ import kotlin.test.assertNull
  *   - findByRid round-trips a row inserted via upsert
  *   - findByPoi joins through the N:M link table and filters by type
  *   - countByPoi mirrors findByPoi but returns just the count
+ *   - runImport sweeps missing reservables and resurrects rows that reappear
  *   - poiIdsForReservable returns active parent POIs for detail responses
  *   - linkToPoi/unlinkFromPoi are idempotent
  *   - one reservable can belong to multiple POIs (the N:M shape)
@@ -107,6 +108,39 @@ class ReservableRepoTest {
     }
 
     @Test
+    fun `runImport soft deletes missing reservables and resurrects rows that reappear`() {
+        val ridA = ReservableId(ReservableType.SITE, "recgov", "1001")
+        val ridB = ReservableId(ReservableType.SITE, "recgov", "1002")
+        val inputA = ReservableRepo.Input(ridA, "A1", null, "STANDARD", null)
+        val inputB = ReservableRepo.Input(ridB, "B1", null, "STANDARD", null)
+
+        val first = repo.runImport("federal-campsites", listOf(inputA, inputB))
+        assertEquals(2, first.seenCount)
+        assertEquals(0, first.sweptCount)
+        assertNotNull(repo.findByRid(ridB))
+
+        val second = repo.runImport("federal-campsites", listOf(inputA.copy(name = "A1-renamed")))
+        assertEquals(1, second.seenCount)
+        assertEquals(1, second.sweptCount)
+        assertEquals("A1-renamed", repo.findByRid(ridA)!!.name)
+        assertNull(repo.findByRid(ridB))
+
+        val deletedCount =
+            ctx
+                .fetchOne(
+                    "SELECT count(*) FROM reservables WHERE source = ? AND deleted_at IS NOT NULL",
+                    "federal-campsites",
+                )!!
+                .get(0, Int::class.java)!!
+        assertEquals(1, deletedCount)
+
+        val third = repo.runImport("federal-campsites", listOf(inputA, inputB.copy(name = "B1-back")))
+        assertEquals(2, third.seenCount)
+        assertEquals(0, third.sweptCount)
+        assertEquals("B1-back", repo.findByRid(ridB)!!.name)
+    }
+
+    @Test
     fun `findByRid returns null for unknown composite`() {
         val rid = ReservableId(ReservableType.SITE, "recgov", "999999")
         assertNull(repo.findByRid(rid))
@@ -124,6 +158,22 @@ class ReservableRepoTest {
 
         val found = repo.findByPoi(poiId, ReservableType.SITE)
         assertEquals(setOf("A1", "B1"), found.map { it.name }.toSet())
+    }
+
+    @Test
+    fun `findByPoi and countByPoi hide soft-deleted reservables`() {
+        val poiId = insertCampgroundPoi("Upper Pines")
+        val ridA = ReservableId(ReservableType.SITE, "recgov", "3001")
+        val ridB = ReservableId(ReservableType.SITE, "recgov", "3002")
+        val a = repo.upsert(ReservableRepo.Input(rid = ridA, name = "A1", loop = null, siteType = null, raw = null))
+        val b = repo.upsert(ReservableRepo.Input(rid = ridB, name = "B1", loop = null, siteType = null, raw = null))
+        repo.linkToPoi(a, poiId)
+        repo.linkToPoi(b, poiId)
+
+        ctx.execute("UPDATE reservables SET deleted_at = now() WHERE id = ?", b)
+
+        assertEquals(listOf("A1"), repo.findByPoi(poiId, ReservableType.SITE).map { it.name })
+        assertEquals(1, repo.countByPoi(poiId, ReservableType.SITE))
     }
 
     @Test
@@ -148,10 +198,31 @@ class ReservableRepoTest {
         val poiId = insertCampgroundPoi("Test CG")
         val rid = ReservableId(ReservableType.SITE, "recgov", "5000")
         val id = repo.upsert(ReservableRepo.Input(rid, "S1", null, null, null))
-        repo.linkToPoi(id, poiId)
-        repo.linkToPoi(id, poiId) // second link is a no-op via ON CONFLICT DO NOTHING
+        assertEquals(1, repo.linkToPoi(id, poiId))
+        assertEquals(0, repo.linkToPoi(id, poiId)) // second link is a no-op via ON CONFLICT DO NOTHING
 
         assertEquals(1, repo.countByPoi(poiId, ReservableType.SITE))
+    }
+
+    @Test
+    fun `linkToPois batches inserts and returns only new links`() {
+        val campground = insertCampgroundPoi("Test CG")
+        val park = insertCampgroundPoi("Test Park")
+        val rid = ReservableId(ReservableType.SITE, "recgov", "5002")
+        val id = repo.upsert(ReservableRepo.Input(rid, "S1", null, null, null))
+
+        val inserted =
+            repo.linkToPois(
+                listOf(
+                    ReservableRepo.LinkInput(id, campground),
+                    ReservableRepo.LinkInput(id, park),
+                    ReservableRepo.LinkInput(id, campground),
+                ),
+            )
+
+        assertEquals(2, inserted)
+        assertEquals(0, repo.linkToPois(listOf(ReservableRepo.LinkInput(id, campground))))
+        assertEquals(listOf(campground, park).sorted(), repo.poiIdsForReservable(id))
     }
 
     @Test

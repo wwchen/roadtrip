@@ -74,14 +74,16 @@ class EtlOrchestrator(
     data class ReservableStats(
         val reservableDataName: String,
         val terminalEtlSlug: String,
+        val runId: Long,
         val parsed: Int,
         val upserted: Int,
+        val swept: Int,
     )
 
     /**
      * Per-row run summary for `poi_reservable_joiner` rows. Tracks how
      * many links the joiner discovered + how many actually inserted
-     * (the rest were already present — `linkToPoi` is idempotent via
+     * (the rest were already present — `linkToPois` is idempotent via
      * ON CONFLICT DO NOTHING).
      */
     data class JoinerStats(
@@ -89,6 +91,7 @@ class EtlOrchestrator(
         val adapter: String,
         val linksDiscovered: Int,
         val linksInserted: Int,
+        val staleLinksDeleted: Int,
     )
 
     /**
@@ -143,7 +146,7 @@ class EtlOrchestrator(
      * [runPoiData] — list-ordered etl stages, intermediate outputs
      * threaded in memory — but the terminal stage emits
      * [ReservableEtlOutput] which the orchestrator unpacks into
-     * `reservables` rows via [ReservableRepo.upsert].
+     * `reservables` rows via [ReservableRepo.runImport].
      *
      * No POI linking happens here. That's the joiner's job (see
      * [runJoiner]). A reservable_data run that lands rows but has no
@@ -191,11 +194,12 @@ class EtlOrchestrator(
      * Run a poi_reservable_joiner row by display name. The adapter
      * reads the current state of `pois` + `reservables`, emits
      * (reservable_id, poi_id) pairs, and the orchestrator inserts each
-     * via [ReservableRepo.linkToPoi] (idempotent).
+     * via [ReservableRepo.linkToPois] (idempotent), then lets the
+     * adapter remove stale links in its provider scope.
      *
      * Joiners are independent of ETL runs. Re-running creates no
-     * duplicate links; it just picks up new pairs whose underlying
-     * rows have appeared since the last run.
+     * duplicate links; it picks up new pairs whose underlying rows
+     * appeared since the last run and deletes stale provider-scoped links.
      */
     fun runJoiner(name: String): JoinerStats {
         val row =
@@ -209,23 +213,26 @@ class EtlOrchestrator(
         val joinerCtx = JoinerCtx(ctx = ctx, reservables = reservables, args = row.args)
         val links = joiner.discoverLinks(joinerCtx)
 
-        // linkToPoi is idempotent (ON CONFLICT DO NOTHING). We don't
-        // know a priori how many were already-linked vs newly-linked
-        // without a SELECT round-trip. The simplest honest count is
-        // "discovered" — total pairs we tried; "inserted" matches it
-        // unless we want to introspect the row counts. For v1 we just
-        // mirror discovered → inserted; future work can add per-call
-        // INSERT-result inspection if it matters.
-        for (link in links) {
-            reservables.linkToPoi(reservableId = link.reservableId, poiId = link.poiId)
-        }
-        log.info("joiner '{}' adapter={} links={}", name, row.adapter, links.size)
+        val inserted =
+            reservables.linkToPois(
+                links.map { ReservableRepo.LinkInput(reservableId = it.reservableId, poiId = it.poiId) },
+            )
+        val staleDeleted = joiner.sweepStaleLinks(joinerCtx)
+        log.info(
+            "joiner '{}' adapter={} links_discovered={} links_inserted={} stale_links_deleted={}",
+            name,
+            row.adapter,
+            links.size,
+            inserted,
+            staleDeleted,
+        )
 
         return JoinerStats(
             joinerName = name,
             adapter = row.adapter,
             linksDiscovered = links.size,
-            linksInserted = links.size,
+            linksInserted = inserted,
+            staleLinksDeleted = staleDeleted,
         )
     }
 
@@ -296,29 +303,30 @@ class EtlOrchestrator(
                     return ReservableStats(
                         reservableDataName = row.name,
                         terminalEtlSlug = concrete.etlSlug,
+                        runId = -1L,
                         parsed = 0,
                         upserted = 0,
+                        swept = 0,
                     )
                 }
             }
         val output = concrete.transform(validated, transformCtx)
-        var upserted = 0
-        for (input in output.reservables) {
-            reservables.upsert(input)
-            upserted++
-        }
+        val importResult = reservables.runImport(concrete.etlSlug, output.reservables)
         log.info(
-            "reservable_data '{}' terminal slug={} parsed={} upserted={}",
+            "reservable_data '{}' terminal slug={} parsed={} upserted={} swept={}",
             row.name,
             concrete.etlSlug,
             output.reservables.size,
-            upserted,
+            importResult.seenCount,
+            importResult.sweptCount,
         )
         return ReservableStats(
             reservableDataName = row.name,
             terminalEtlSlug = concrete.etlSlug,
+            runId = importResult.runId,
             parsed = output.reservables.size,
-            upserted = upserted,
+            upserted = importResult.seenCount,
+            swept = importResult.sweptCount,
         )
     }
 

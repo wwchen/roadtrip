@@ -255,9 +255,9 @@ class IngestController(
                     JSONB.valueOf(
                         ingestControllerJson.encodeToString(
                             ImportPhaseCountsDto(
-                                importRunId = -1L,
+                                importRunId = stats.runId,
                                 seen = stats.parsed,
-                                swept = 0,
+                                swept = stats.swept,
                                 terminalEtl = stats.terminalEtlSlug,
                                 upsertedReservables = stats.upserted,
                             ),
@@ -271,9 +271,10 @@ class IngestController(
                             ImportPhaseCountsDto(
                                 importRunId = -1L,
                                 seen = stats.linksDiscovered,
-                                swept = 0,
+                                swept = stats.staleLinksDeleted,
                                 terminalEtl = stats.adapter,
                                 createdLinks = stats.linksInserted,
+                                staleLinksDeleted = stats.staleLinksDeleted,
                             ),
                         ),
                     )
@@ -303,9 +304,9 @@ private data class FetchPhaseCountsDto(
  * Counts written into `ingest_runs.counts` (JSONB) for one import phase.
  * Section-specific fields are nullable; readers ignore the ones they
  * don't care about. Existing dashboards keyed off `seen`/`swept`/
- * `import_run_id` keep working — those stay populated for poi_data
- * phases. Reservable + joiner phases set the new optional fields and
- * leave Pois fields zero/-1 (consistent with "no Pois Upsert ran").
+ * `import_run_id` keep working. Reservable phases now carry their
+ * reservable import run id; joiner phases report stale-link deletes in
+ * both `swept` and `stale_links_deleted`.
  */
 @Serializable
 private data class ImportPhaseCountsDto(
@@ -315,6 +316,7 @@ private data class ImportPhaseCountsDto(
     @SerialName("terminal_etl") val terminalEtl: String,
     @SerialName("upserted_reservables") val upsertedReservables: Int? = null,
     @SerialName("created_links") val createdLinks: Int? = null,
+    @SerialName("stale_links_deleted") val staleLinksDeleted: Int? = null,
 )
 
 class FetchFailedException(

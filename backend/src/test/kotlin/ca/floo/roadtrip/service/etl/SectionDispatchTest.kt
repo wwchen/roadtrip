@@ -22,11 +22,12 @@ import java.io.File
 import java.nio.file.Files
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 /**
  * Validates that the orchestrator dispatches by YAML section:
  *   - reservable_data rows go through runReservableData → ReservableRepo
- *   - poi_reservable_joiner rows go through runJoiner → linkToPoi
+ *   - poi_reservable_joiner rows go through runJoiner → linkToPois
  *
  * Uses synthesized YAML + fake adapters so the test exercises only the
  * dispatch shape, not vendor-specific fetchers. PR 3 adds end-to-end
@@ -108,7 +109,55 @@ class SectionDispatchTest {
         assertEquals("fake-reservable-terminal", stats.terminalEtlSlug)
         assertEquals(1, stats.parsed)
         assertEquals(1, stats.upserted)
+        assertEquals(0, stats.swept)
         assertNotNull(reservables.findByRid(rid))
+    }
+
+    @Test
+    fun `runReservableData sweeps stale reservables on rerun`() {
+        val ridA = ReservableId(ReservableType.SITE, "recgov", "1001")
+        val ridB = ReservableId(ReservableType.SITE, "recgov", "1002")
+        val first =
+            FakeReservableEtl(
+                slug = "fake-reservable-terminal",
+                output =
+                    ReservableEtlOutput(
+                        reservables =
+                            listOf(
+                                ReservableRepo.Input(ridA, "A1", null, null, null),
+                                ReservableRepo.Input(ridB, "B1", null, null, null),
+                            ),
+                    ),
+            )
+        val second =
+            FakeReservableEtl(
+                slug = "fake-reservable-terminal",
+                output =
+                    ReservableEtlOutput(
+                        reservables = listOf(ReservableRepo.Input(ridA, "A1", null, null, null)),
+                    ),
+            )
+
+        EtlOrchestrator(
+            ctx = ctx,
+            rawDir = rawDir,
+            poiRegistry = registry,
+            etlRegistry = mapOf(first.etlSlug to first),
+            joinerRegistry = emptyMap(),
+        ).runReservableData("Fake Reservable Source")
+        val stats =
+            EtlOrchestrator(
+                ctx = ctx,
+                rawDir = rawDir,
+                poiRegistry = registry,
+                etlRegistry = mapOf(second.etlSlug to second),
+                joinerRegistry = emptyMap(),
+            ).runReservableData("Fake Reservable Source")
+
+        assertEquals(1, stats.upserted)
+        assertEquals(1, stats.swept)
+        assertNotNull(reservables.findByRid(ridA))
+        assertNull(reservables.findByRid(ridB))
     }
 
     @Test
@@ -136,6 +185,7 @@ class SectionDispatchTest {
         val stats = orch.runJoiner("Fake Joiner")
         assertEquals(1, stats.linksDiscovered)
         assertEquals(1, stats.linksInserted)
+        assertEquals(0, stats.staleLinksDeleted)
         assertEquals(1, reservables.countByPoi(poiId, ReservableType.SITE))
     }
 
@@ -159,9 +209,33 @@ class SectionDispatchTest {
                 etlRegistry = emptyMap(),
                 joinerRegistry = mapOf(fakeJoiner.adapter to fakeJoiner),
             )
-        orch.runJoiner("Fake Joiner")
-        orch.runJoiner("Fake Joiner")
+        val first = orch.runJoiner("Fake Joiner")
+        val second = orch.runJoiner("Fake Joiner")
+        assertEquals(1, first.linksInserted)
+        assertEquals(0, second.linksInserted)
         assertEquals(1, reservables.countByPoi(poiId, ReservableType.SITE))
+    }
+
+    @Test
+    fun `runJoiner reports stale link sweep count from adapter`() {
+        val fakeJoiner =
+            FakeJoiner(
+                adapter = "FakeJoinerAdapter",
+                links = emptyList(),
+                staleLinksDeleted = 4,
+            )
+        val orch =
+            EtlOrchestrator(
+                ctx = ctx,
+                rawDir = rawDir,
+                poiRegistry = registry,
+                etlRegistry = emptyMap(),
+                joinerRegistry = mapOf(fakeJoiner.adapter to fakeJoiner),
+            )
+        val stats = orch.runJoiner("Fake Joiner")
+        assertEquals(0, stats.linksDiscovered)
+        assertEquals(0, stats.linksInserted)
+        assertEquals(4, stats.staleLinksDeleted)
     }
 
     private fun insertCampgroundPoi(
@@ -252,6 +326,9 @@ private class FakeReservableEtl(
 private class FakeJoiner(
     override val adapter: String,
     private val links: List<PoiReservableJoiner.Link>,
+    private val staleLinksDeleted: Int = 0,
 ) : PoiReservableJoiner {
     override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> = links
+
+    override fun sweepStaleLinks(ctx: JoinerCtx): Int = staleLinksDeleted
 }

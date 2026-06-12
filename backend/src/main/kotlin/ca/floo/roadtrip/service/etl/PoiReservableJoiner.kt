@@ -8,8 +8,8 @@ import org.jooq.DSLContext
  *
  * Joiners read the current state of both tables (`reservables` + `pois`)
  * and emit link records that the orchestrator upserts via
- * [ReservableRepo.linkToPoi] (idempotent — re-running on existing links
- * is a no-op).
+ * [ReservableRepo.linkToPois] (idempotent — re-running on existing links
+ * is a no-op). Adapters can also sweep stale links in their provider scope.
  *
  * Each adapter knows ONE provider's keying scheme. RecGov knows that
  * `pois.source = federal-campgrounds` and `reservables.raw->>'campsite_id'`
@@ -20,7 +20,8 @@ import org.jooq.DSLContext
  *
  * Joiner runs are independent of ETL runs. After both `pois` and
  * `reservables` are populated for a vendor, run the matching joiner.
- * Re-running creates no duplicate links; it just picks up new pairs.
+ * Re-running creates no duplicate links; it picks up new pairs and removes
+ * links whose source-side rows no longer match.
  *
  * The interface is intentionally minimal: no parse/validate/transform
  * stages, no inputs map. The adapter's `discoverLinks` is one DB query
@@ -33,9 +34,12 @@ interface PoiReservableJoiner {
     /**
      * Find pairs of (reservable_id, poi_id) that should be linked.
      * Reads from [ctx]; idempotency is the orchestrator's concern via
-     * [ReservableRepo.linkToPoi]'s ON CONFLICT DO NOTHING.
+     * [ReservableRepo.linkToPois]'s ON CONFLICT DO NOTHING.
      */
     fun discoverLinks(ctx: JoinerCtx): List<Link>
+
+    /** Delete stale links in this adapter's provider scope. */
+    fun sweepStaleLinks(ctx: JoinerCtx): Int = 0
 
     /** A discovered link. Surrogate ids on both sides. */
     data class Link(

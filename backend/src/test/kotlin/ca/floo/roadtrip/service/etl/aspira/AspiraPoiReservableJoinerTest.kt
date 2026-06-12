@@ -154,6 +154,47 @@ class AspiraPoiReservableJoinerTest {
         assertEquals(0, links.size)
     }
 
+    @Test
+    fun `soft-deleted reservables are not matched`() {
+        insertAspiraPoi("aspira-pc-pins", txnLoc = "1001", mapId = "-2147483640")
+        val resId = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
+        ctx.execute("UPDATE reservables SET deleted_at = now() WHERE id = ?", resId)
+
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+
+        assertEquals(0, links.size)
+    }
+
+    @Test
+    fun `sweepStaleLinks deletes links whose reservable is no longer active`() {
+        val poiId = insertAspiraPoi("aspira-pc-pins", txnLoc = "1001", mapId = "-2147483640")
+        val resId = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
+        reservables.linkToPoi(resId, poiId)
+        ctx.execute("UPDATE reservables SET deleted_at = now() WHERE id = ?", resId)
+
+        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+
+        assertEquals(1, deleted)
+        assertEquals(0, linkCount())
+    }
+
+    @Test
+    fun `sweepStaleLinks deletes links whose parent key changed`() {
+        val poiId = insertAspiraPoi("aspira-pc-pins", txnLoc = "1001", mapId = "-2147483640")
+        val resId = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
+        reservables.linkToPoi(resId, poiId)
+        ctx.execute(
+            "UPDATE reservables SET raw = ?::jsonb WHERE id = ?",
+            """{"_parent_aspira_txn_loc":"9999","_parent_aspira_map_id":"-2147483640"}""",
+            resId,
+        )
+
+        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+
+        assertEquals(1, deleted)
+        assertEquals(0, linkCount())
+    }
+
     private fun upsertResource(
         vendorId: String,
         txnLoc: String,
@@ -201,4 +242,9 @@ class AspiraPoiReservableJoinerTest {
                 "aspira-$txnLoc-$mapId",
             ).fetchOne()!!
             .get(0, Long::class.java)!!
+
+    private fun linkCount(): Int =
+        ctx
+            .fetchOne("SELECT count(*) FROM reservable_pois")!!
+            .get(0, Int::class.java)!!
 }

@@ -305,9 +305,9 @@ class ReservableRoutesTest {
             .fetchOne(
                 """
                 INSERT INTO reservables (
-                    type, vendor, vendor_id, name, loop, site_type, raw
+                    type, vendor, vendor_id, source, name, loop, site_type, raw
                 ) VALUES (
-                    'site', 'recgov', ?, ?, ?, ?, ?::jsonb
+                    'site', 'recgov', ?, 'federal-campsites', ?, ?, ?, ?::jsonb
                 )
                 RETURNING id
                 """.trimIndent(),

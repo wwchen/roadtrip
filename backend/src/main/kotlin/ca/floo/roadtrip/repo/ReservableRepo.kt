@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.db.generated.tables.ReservablePois.Companion.RESERVABLE_POIS
 import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
@@ -9,8 +10,11 @@ import ca.floo.roadtrip.models.ReservableType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
-import org.jooq.JSONB
 import org.jooq.Record
+import org.jooq.impl.DSL
+import org.slf4j.LoggerFactory
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 /**
  * Persistence for the reservables catalog and its N:M link to POIs.
@@ -26,6 +30,14 @@ import org.jooq.Record
 class ReservableRepo(
     private val ctx: DSLContext,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
+    data class ImportResult(
+        val runId: Long,
+        val seenCount: Int,
+        val sweptCount: Int,
+    )
+
     /**
      * Insert or update one reservable, keyed on its composite (type, vendor,
      * vendor_id). Returns the row's surrogate `id` for use in N:M linking.
@@ -33,26 +45,98 @@ class ReservableRepo(
      * Idempotent: re-running with the same [Input] reuses the existing row
      * and refreshes name/loop/site_type/raw to whatever the caller passed.
      */
-    fun upsert(input: Input): Long =
-        ctx
-            .insertInto(RESERVABLES)
-            .set(RESERVABLES.TYPE, input.rid.type.encode())
-            .set(RESERVABLES.VENDOR, input.rid.vendor)
-            .set(RESERVABLES.VENDOR_ID, input.rid.vendorId)
-            .set(RESERVABLES.NAME, input.name)
-            .set(RESERVABLES.LOOP, input.loop)
-            .set(RESERVABLES.SITE_TYPE, input.siteType)
-            .set(RESERVABLES.RAW, input.raw?.let { JSONB.valueOf(jsonEncoder.encodeToString(JsonElement.serializer(), it)) })
-            .onConflict(RESERVABLES.TYPE, RESERVABLES.VENDOR, RESERVABLES.VENDOR_ID)
-            .doUpdate()
-            .set(RESERVABLES.NAME, input.name)
-            .set(RESERVABLES.LOOP, input.loop)
-            .set(RESERVABLES.SITE_TYPE, input.siteType)
-            .set(RESERVABLES.RAW, input.raw?.let { JSONB.valueOf(jsonEncoder.encodeToString(JsonElement.serializer(), it)) })
-            .set(RESERVABLES.UPDATED_AT, ctx.currentOffsetDateTime())
-            .returningResult(RESERVABLES.ID)
-            .fetchOne()!!
-            .value1()!!
+    fun upsert(
+        input: Input,
+        source: String = input.rid.vendor,
+        runId: Long? = null,
+    ): Long {
+        val rawJson = input.raw?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
+        return ctx
+            .resultQuery(
+                """
+                INSERT INTO reservables (
+                  type, vendor, vendor_id, source, name, loop, site_type, raw, last_seen_run_id
+                ) VALUES (
+                  ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?
+                )
+                ON CONFLICT (type, vendor, vendor_id)
+                DO UPDATE SET
+                  source = EXCLUDED.source,
+                  name = EXCLUDED.name,
+                  loop = EXCLUDED.loop,
+                  site_type = EXCLUDED.site_type,
+                  raw = EXCLUDED.raw,
+                  last_seen_run_id = COALESCE(EXCLUDED.last_seen_run_id, reservables.last_seen_run_id),
+                  deleted_at = NULL,
+                  updated_at = now()
+                RETURNING id
+                """.trimIndent(),
+                input.rid.type.encode(),
+                input.rid.vendor,
+                input.rid.vendorId,
+                source,
+                input.name,
+                input.loop,
+                input.siteType,
+                rawJson,
+                runId,
+            ).fetchOne()!!
+            .get(0, Long::class.java)!!
+    }
+
+    /**
+     * Upsert a complete source snapshot and soft-delete active rows from the
+     * same source that did not appear in this run.
+     */
+    fun runImport(
+        source: String,
+        inputs: List<Input>,
+    ): ImportResult {
+        val runId =
+            ctx
+                .insertInto(IMPORT_RUNS)
+                .set(IMPORT_RUNS.SOURCE, source)
+                .set(IMPORT_RUNS.STATUS, "started")
+                .set(IMPORT_RUNS.STARTED_AT, OffsetDateTime.now(ZoneOffset.UTC))
+                .returningResult(IMPORT_RUNS.ID)
+                .fetchOne()!!
+                .value1()!!
+        log.info("import_runs id={} reservables source={} started", runId, source)
+
+        try {
+            val existingActive = activeCount(source)
+            var seen = 0
+            for (input in inputs) {
+                upsert(input, source, runId)
+                seen++
+                if (seen % 1000 == 0) log.info("  upserted {} reservables", seen)
+            }
+            log.info("staged {} reservables from source={} (existing active={})", seen, source, existingActive)
+
+            if (existingActive > 0 && seen < existingActive / 2) {
+                fail(runId, "tripwire: seen=$seen < existing/2=${existingActive / 2}")
+                throw UpsertException(
+                    "Aborted: seen=$seen < existing/2=${existingActive / 2} for reservable source=$source",
+                )
+            }
+
+            val swept = sweep(source, runId)
+            log.info("swept {} reservables (soft-deleted) from source={}", swept, source)
+
+            ctx
+                .update(IMPORT_RUNS)
+                .set(IMPORT_RUNS.STATUS, "completed")
+                .set(IMPORT_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
+                .set(IMPORT_RUNS.SEEN_COUNT, seen)
+                .where(IMPORT_RUNS.ID.eq(runId))
+                .execute()
+
+            return ImportResult(runId = runId, seenCount = seen, sweptCount = swept)
+        } catch (e: Exception) {
+            if (e !is UpsertException) fail(runId, "unhandled: ${e.javaClass.simpleName}: ${e.message}")
+            throw e
+        }
+    }
 
     /** Find one reservable by its composite identity. */
     fun findByRid(rid: ReservableId): Reservable? =
@@ -61,6 +145,7 @@ class ReservableRepo(
             .where(RESERVABLES.TYPE.eq(rid.type.encode()))
             .and(RESERVABLES.VENDOR.eq(rid.vendor))
             .and(RESERVABLES.VENDOR_ID.eq(rid.vendorId))
+            .and(RESERVABLE_ACTIVE_CONDITION)
             .fetchOne()
             ?.let(::fromRecord)
 
@@ -82,6 +167,7 @@ class ReservableRepo(
             .join(RESERVABLE_POIS)
             .on(RESERVABLE_POIS.RESERVABLE_ID.eq(RESERVABLES.ID))
             .where(RESERVABLE_POIS.POI_ID.eq(poiId))
+            .and(RESERVABLE_ACTIVE_CONDITION)
             .let { step -> if (typed != null) step.and(typed) else step }
             .fetch { fromRecord(it) }
     }
@@ -98,6 +184,7 @@ class ReservableRepo(
             .on(RESERVABLE_POIS.RESERVABLE_ID.eq(RESERVABLES.ID))
             .where(RESERVABLE_POIS.POI_ID.eq(poiId))
             .and(RESERVABLES.TYPE.eq(type.encode()))
+            .and(RESERVABLE_ACTIVE_CONDITION)
             .fetchOne(0, Int::class.java)!!
 
     /** Active POI ids linked to one reservable, ordered for stable API output. */
@@ -120,13 +207,28 @@ class ReservableRepo(
     fun linkToPoi(
         reservableId: Long,
         poiId: Long,
-    ) {
+    ): Int =
         ctx
             .insertInto(RESERVABLE_POIS)
             .set(RESERVABLE_POIS.RESERVABLE_ID, reservableId)
             .set(RESERVABLE_POIS.POI_ID, poiId)
             .onConflictDoNothing()
             .execute()
+
+    /** Link many reservables to POIs in chunks. Returns newly inserted rows. */
+    fun linkToPois(links: List<LinkInput>): Int {
+        if (links.isEmpty()) return 0
+        return links
+            .distinct()
+            .chunked(LINK_INSERT_CHUNK_SIZE)
+            .sumOf { chunk ->
+                val values = chunk.joinToString(", ") { "(?, ?)" }
+                val args = chunk.flatMap { listOf<Any?>(it.reservableId, it.poiId) }.toTypedArray()
+                ctx.execute(
+                    "INSERT INTO reservable_pois (reservable_id, poi_id) VALUES $values ON CONFLICT DO NOTHING",
+                    *args,
+                )
+            }
     }
 
     /** Remove a reservable→POI link. Idempotent. */
@@ -148,6 +250,11 @@ class ReservableRepo(
         val loop: String?,
         val siteType: String?,
         val raw: JsonElement?,
+    )
+
+    data class LinkInput(
+        val reservableId: Long,
+        val poiId: Long,
     )
 
     /**
@@ -176,15 +283,50 @@ class ReservableRepo(
         )
     }
 
+    private fun activeCount(source: String): Int =
+        ctx
+            .fetchOne(
+                "SELECT count(*) FROM reservables WHERE source = ? AND deleted_at IS NULL",
+                source,
+            )!!
+            .get(0, Int::class.java)!!
+
+    private fun sweep(
+        source: String,
+        runId: Long,
+    ): Int =
+        ctx.execute(
+            """
+            UPDATE reservables
+            SET deleted_at = now()
+            WHERE source = ?
+              AND deleted_at IS NULL
+              AND (last_seen_run_id <> ? OR last_seen_run_id IS NULL)
+            """.trimIndent(),
+            source,
+            runId,
+        )
+
+    private fun fail(
+        runId: Long,
+        notes: String,
+    ) {
+        ctx
+            .update(IMPORT_RUNS)
+            .set(IMPORT_RUNS.STATUS, "failed")
+            .set(IMPORT_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
+            .set(IMPORT_RUNS.NOTES, notes)
+            .where(IMPORT_RUNS.ID.eq(runId))
+            .execute()
+    }
+
     private companion object {
         // Encoding-only, kept here to avoid coupling the repo to a global Json
         // configuration. Decoding uses the default Json.parseToJsonElement
         // since the input is trusted-from-DB.
         private val jsonEncoder = Json
+
+        private val RESERVABLE_ACTIVE_CONDITION = DSL.condition("reservables.deleted_at IS NULL")
+        private const val LINK_INSERT_CHUNK_SIZE = 1000
     }
 }
-
-/** Convenience: jOOQ's `currentOffsetDateTime()` is verbose; mirror it as an extension. */
-private fun DSLContext.currentOffsetDateTime() =
-    org.jooq.impl.DSL
-        .currentOffsetDateTime()
