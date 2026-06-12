@@ -13,9 +13,9 @@ goes through CachedAvailability. We only persist the catalog half.
 Multi-part output: one envelope per facility under
   data/raw/recgov-campsites/<UTC-ts>/facility-<FacilityID>.json
 
-Rate limits: rec.gov's 429s are aggressive. We hold a 1.5s gap between
-calls (mirroring the existing AvailabilityClient mutex) and back off
-3s/6s/12s on 429.
+Rate limits: rec.gov's 429s are aggressive. We hold a conservative gap
+between calls and use long backoffs on 429, honoring Retry-After when the
+server provides it.
 
 Run:
   python3 scripts/fetch_recgov_campsites.py --slug recgov-campsites
@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import email.utils
 import json
 import sys
 import time
@@ -45,10 +46,11 @@ API_BASE = "https://www.recreation.gov/api/camps/availability/campground"
 FETCHER = "fetch_recgov_campsites"
 FETCHER_VERSION = "1"
 
-# Match the existing rec.gov rate-limit shape (see AvailabilityClient.kt).
-# 1.5s minimum gap between calls, exponential backoff on 429.
-MIN_GAP_S = 1.5
-RETRY_DELAYS_S = (3.0, 6.0, 12.0)
+# Rec.gov allows short interactive availability checks, but the full catalog
+# backfill is thousands of requests. Keep the batch fetcher deliberately slower
+# than the app's mutex-protected availability client.
+MIN_GAP_S = 5.0
+RETRY_DELAYS_S = (15.0, 60.0, 180.0, 300.0)
 TIMEOUT_S = 30
 
 
@@ -107,26 +109,55 @@ def _current_month_iso() -> str:
     return first.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
 
+def _retry_after_seconds(headers: dict) -> float | None:
+    raw = headers.get("retry-after")
+    if not raw:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        pass
+
+    try:
+        when = email.utils.parsedate_to_datetime(raw)
+    except (TypeError, ValueError):
+        return None
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=dt.timezone.utc)
+    return max(0.0, (when - dt.datetime.now(dt.timezone.utc)).total_seconds())
+
+
 def _fetch_with_backoff(url: str) -> tuple[int, dict, str] | None:
     """Get url, retrying on 429 with the configured delays. None on terminal failure."""
-    delays = (0.0,) + RETRY_DELAYS_S
-    for attempt, delay in enumerate(delays):
-        if delay:
-            time.sleep(delay)
+    attempts = 1 + len(RETRY_DELAYS_S)
+    for attempt in range(attempts):
         try:
             status, headers, body = http_get_text(url, timeout=TIMEOUT_S)
         except Exception as e:  # noqa: BLE001
-            err(f"    attempt {attempt + 1}/{len(delays)}: transport error: {e}")
+            err(f"    attempt {attempt + 1}/{attempts}: transport error: {e}")
+            if attempt < attempts - 1:
+                time.sleep(RETRY_DELAYS_S[attempt])
             continue
         if status == 200:
             return status, headers, body
         if status == 429:
-            err(f"    attempt {attempt + 1}/{len(delays)}: 429 rate-limited")
+            if attempt >= attempts - 1:
+                err(f"    attempt {attempt + 1}/{attempts}: 429 rate-limited")
+                break
+            retry_after = _retry_after_seconds(headers)
+            delay = RETRY_DELAYS_S[attempt]
+            if retry_after is not None:
+                delay = max(delay, retry_after)
+            err(
+                f"    attempt {attempt + 1}/{attempts}: "
+                f"429 rate-limited; sleeping {delay:.0f}s"
+            )
+            time.sleep(delay)
             continue
         # Non-200, non-429: stop. Body might explain why.
-        err(f"    attempt {attempt + 1}/{len(delays)}: HTTP {status}: {body[:200]}")
+        err(f"    attempt {attempt + 1}/{attempts}: HTTP {status}: {body[:200]}")
         return status, headers, body
-    err(f"    giving up after {len(delays)} attempts")
+    err(f"    giving up after {attempts} attempts")
     return None
 
 
@@ -139,6 +170,16 @@ def main() -> int:
         default=0,
         help="cap on facilities to fetch (default: all). Useful for partial backfills.",
     )
+    parser.add_argument(
+        "--ts",
+        default="",
+        help="capture timestamp directory to write into (default: new UTC timestamp)",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="skip facility files already present in the timestamp directory",
+    )
     args = parser.parse_args()
 
     src = load_source(args.slug)
@@ -150,14 +191,27 @@ def main() -> int:
         err("nothing to fetch; aborting")
         return 1
 
-    ts = utc_ts()
+    ts = args.ts or utc_ts()
     iso_month = _current_month_iso()
     encoded_month = urllib.parse.quote(iso_month, safe="")
+    existing: set[str] = set()
+    if args.resume:
+        out_dir = src.output_dir_prefix / ts
+        existing = {
+            path.stem.removeprefix("facility-")
+            for path in out_dir.glob("facility-*.json")
+        }
+        err(f"  resume enabled for {ts}: {len(existing)} existing facility envelopes")
 
     last_call_at = 0.0
     written = 0
     skipped = 0
+    resumed = 0
     for i, fid in enumerate(facility_ids, start=1):
+        if fid in existing:
+            resumed += 1
+            continue
+
         # Honor the global gap. Sleeps if we're under the minimum since
         # the last fetch; no-op otherwise.
         gap = time.monotonic() - last_call_at
@@ -192,8 +246,11 @@ def main() -> int:
         )
         written += 1
 
-    err(f"  {args.slug}: wrote {written} envelopes, skipped {skipped}, ts={ts}")
-    return 0 if written else 1
+    err(
+        f"  {args.slug}: wrote {written} envelopes, "
+        f"resumed {resumed}, skipped {skipped}, ts={ts}"
+    )
+    return 0 if (written or resumed) else 1
 
 
 if __name__ == "__main__":
