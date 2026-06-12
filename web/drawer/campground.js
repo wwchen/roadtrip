@@ -1,14 +1,15 @@
-// Campsite availability drawer for US federal campground pins (RFC 0003).
-//
-// Renders one of six frontend states from the JSON contract returned by
-// /api/campsite/availability/{recgov_id}: loading (client-side), success,
-// zero_available, closed_for_season, error, empty.
+// Campsite availability drawer for campground pins (RFC 0003 + 0007).
 //
 // Above-the-fold composition (mobile half, ~310px headroom inside ~480px):
-//   campground name → park/state subline → verdict pill → summary sentence
-//   → freshness (checked Nm ago) → 30-day heat-strip → primary CTA
-//   → secondary CTA → "Details" divider → below-fold (photos, amenities,
-//   cell, ratings, last_verified) — pulled in from web/campground-card.js
+//   campground name → park/state subline → verdict pill → 7-day grid +
+//   day-detail panel (mounted from availability-week.js) → action row
+//   (Directions + View on rec.gov) → "More details" accordion.
+//
+// Alert capture lives in the day-detail panel — there's no top-level
+// "Watch" CTA. The reserve link is intentionally neutral ("View on
+// rec.gov") because our availability is more permissive than the actual
+// booking flow; routing user intent through alerts avoids implying a
+// guarantee we can't keep.
 
 import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';
 import {
@@ -30,7 +31,6 @@ import {
   ensureDrawerDOM,
   beginSession,
   isActiveFeature,
-  restartController,
   show,
   closeDrawer,
   attachDragHandlers,
@@ -42,9 +42,14 @@ import {
   normalizeAspira,
   upstreamHTML,
 } from './shared.js';
-import { requestCampsiteAvailability } from '../api/availability-api.js';
 import { requestPoiDetail } from '../api/poi-api.js';
-import { openCampsiteBookingPanel } from './campsite-booking-panel.js';
+import { mountAvailabilityWeek } from '../availability/availability-week.js';
+
+// Tracks the currently mounted week component so we can dispose it on
+// re-render (pin-reselect, hydration completing, retry). Disposal kills
+// pending skeleton timers; in-flight fetches are killed via the drawer's
+// abort signal already.
+let mountedWeek = null;
 
 /**
  * Campground-specific drawer. Renders availability for recgov pins and
@@ -80,8 +85,7 @@ export function openCampgroundDrawer(f) {
     renderLoadingShell();
     hydrateFromApi(f, signal);
   } else {
-    renderShell(f);
-    if (f.id != null) fetchAvailability(f, signal);
+    renderShell(f, signal);
   }
 }
 
@@ -114,18 +118,17 @@ async function hydrateFromApi(f, signal) {
     const r = await requestPoiDetail(f.id, { signal });
     if (!r.ok) {
       // /api/pois/{id} 404 / 5xx — render whatever we already have rather
-      // than blocking the user, and let availability still try (some test
-      // paths use a hand-crafted feature with no DB row).
+      // than blocking the user. The week component still tries to fetch
+      // availability; it'll show its own error state if the row is bad.
       if (!isActiveFeature(f)) return;
-      renderShell(f);
-      fetchAvailability(f, signal);
+      renderShell(f, signal);
       return;
     }
     detail = await r.json();
   } catch (e) {
     if (e.name === 'AbortError') return;
     if (!isActiveFeature(f)) return;
-    renderShell(f);
+    renderShell(f, signal);
     return;
   }
   // The user clicked a different pin in the time the detail fetch took —
@@ -147,17 +150,16 @@ async function hydrateFromApi(f, signal) {
   merged.properties.upstream != null && reviveJsonProp(merged.properties, 'upstream');
   merged.properties.provider_ref != null && reviveJsonProp(merged.properties, 'provider_ref');
   const hydrated = flattenHydratedPoi(merged);
-  // Re-stake the hydrated feature as the active one so the availability
-  // fetch's isActiveFeature() check passes against the new identity. Same
-  // signal — beginSession aborts the prior controller, but that's our own
-  // (already used) one, so no in-flight is lost.
+  // Re-stake the hydrated feature as the active one so the week
+  // component's isActiveFeature() guard passes against the new identity.
+  // Same signal — beginSession aborts the prior controller, but that's our
+  // own (already used) one, so no in-flight is lost.
   const availSignal = beginSession(hydrated);
-  renderShell(hydrated);
-  fetchAvailability(hydrated, availSignal);
+  renderShell(hydrated, availSignal);
 }
 
 /** Render the static parts (name, subline, verdict, CTAs) from the feature. */
-function renderShell(f) {
+function renderShell(f, signal) {
   const p = f.properties;
   const [lng, lat] = f.geometry.coordinates;
 
@@ -198,40 +200,30 @@ function renderShell(f) {
     ? `<div class="cg-hero" role="img" aria-label="${escapeHtml(p.name)}" style="background-image: url('${escapeHtml(heroUrl)}')"></div>`
     : '';
 
-  // Pins that have an availability provider (rec.gov or Aspira NextGen) get
-  // the availability-first treatment: heat-strip, watch CTA, reserve as
-  // secondary. Detected via provider_ref (set on the row when an aspira or
-  // recgov ETL imported it); the legacy recgov_id / aspira flat fields are
-  // still on the feature for FE-only deeplinks below.
+  // Pins with a known availability provider (rec.gov or Aspira NextGen)
+  // get a week-grid mount point. Detected via provider_ref. The week
+  // component owns its own loading + error UI; we just render the host
+  // div and mount into it after innerHTML is set.
   const pr = p.provider_ref;
   const hasAvailability = !!(pr && (pr.recgov_id || pr.mapId != null));
-  const availabilitySection = hasAvailability
-    ? `
-      <section class="cg-availability" aria-live="polite">
-        <div class="cg-summary">Checking availability…</div>
-        <div class="cg-freshness">&nbsp;</div>
-        <div class="cg-strip" aria-hidden="true">
-          ${'<div class="cg-cell skeleton"></div>'.repeat(30)}
-        </div>
-        <div class="cg-day-labels">
-          <span class="today">Today</span>
-          <span class="end"></span>
-        </div>
-        <div class="cg-legend" aria-hidden="true">
-          <span><span class="cg-legend-dot cg-cell-available"></span>Available</span>
-          <span><span class="cg-legend-dot cg-cell-partial"></span>Some sites</span>
-          <span><span class="cg-legend-dot cg-cell-booked"></span>Booked</span>
-        </div>
-      </section>`
+  const availabilityMount = hasAvailability
+    ? `<div class="cg-availability-mount"></div>`
     : '';
 
   const dirBtn = directionsButtonHTML({ name: p.name, lng, lat, kind: 'CG' });
-  const actions = p.recgov_id
+  // recgov_id is the flat key set by flattenHydratedPoi / flattenPoi.
+  // /api/pois/{id} doesn't ship it; provider_ref.recgov_id does. Read both
+  // so the upstream "View" link works whether the feature was flattened or
+  // came straight from the detail endpoint.
+  const recgovId = p.recgov_id || pr?.recgov_id || null;
+  // Top-level reserve link is intentionally neutral — it's a "go look at
+  // the source" affordance, not an availability claim. Alert capture lives
+  // inside the week component's day-detail panel.
+  const actions = recgovId
     ? `
       <div class="cg-actions">
         ${dirBtn}
-        <button type="button" class="cg-btn cg-btn-primary" data-cta="watch">Watch for openings</button>
-        <a class="cg-btn cg-btn-secondary" href="https://www.recreation.gov/camping/campgrounds/${encodeURIComponent(p.recgov_id)}" target="_blank" rel="noreferrer" data-cta="reserve">Reserve on rec.gov</a>
+        <a class="cg-btn cg-btn-secondary" href="https://www.recreation.gov/camping/campgrounds/${encodeURIComponent(recgovId)}" target="_blank" rel="noreferrer" data-cta="view-upstream">View on rec.gov</a>
       </div>`
     : `
       <div class="cg-actions">
@@ -268,151 +260,22 @@ function renderShell(f) {
       ${verdict ? `<div class="cg-verdict-row">${verdict}</div>` : ''}
     </header>
 
-    ${availabilitySection}
     ${actions}
+    ${availabilityMount}
     ${decor.about}
     ${decor.fees}
     ${decor.meta}
     ${detailsSection}
     ${upstreamSection}
   `;
-  wireRecgovWatchAction(content, f);
-}
 
-function wireRecgovWatchAction(content, f) {
-  content.querySelector('[data-cta="watch"]')?.addEventListener('click', (e) => {
-    e.preventDefault();
-    const signal = restartController();
-    openCampsiteBookingPanel(f, {
-      signal,
-      onBack: () => {
-        const restoredSignal = beginSession(f);
-        renderShell(f);
-        if (f.id != null) fetchAvailability(f, restoredSignal);
-      },
-    });
-  });
-}
+  // Dispose the previous mount before swapping innerHTML left it
+  // orphaned. Pin reselect re-enters renderShell on the same drawer DOM.
+  mountedWeek?.dispose();
+  mountedWeek = null;
 
-async function fetchAvailability(f, signal) {
-  // Single dispatch endpoint keyed by pois.id. Backend reads provider_ref
-  // and routes to rec.gov or Aspira NextGen; response shape is the same
-  // either way. See CampsiteAvailabilityRoutes.kt.
-  await runFetch(f, signal);
-}
-
-async function runFetch(f, signal) {
-  try {
-    const resp = await requestCampsiteAvailability(f.id, { days: 30, signal });
-    const json = await resp.json().catch(() => null);
-
-    // Discard stale response if the user has since selected a different pin.
-    if (!isActiveFeature(f)) return;
-
-    if (resp.status === 503 || (json && json.state === 'error')) {
-      renderError(json?.error || 'unknown', json?.retry_after_s || 60, f);
-      return;
-    }
-    if (resp.status === 400 || resp.status === 404) {
-      // Bad ID / not found — fall back to the empty state silently.
-      renderEmpty();
-      return;
-    }
-    if (!resp.ok || !json) {
-      renderError('unknown', 30, f);
-      return;
-    }
-
-    renderState(json, f);
-  } catch (e) {
-    if (e.name === 'AbortError') return;
-    renderError('network', 30, f);
+  if (hasAvailability && f.id != null) {
+    const host = content.querySelector('.cg-availability-mount');
+    if (host) mountedWeek = mountAvailabilityWeek(host, f, { signal });
   }
-}
-
-/** Render success / zero_available / closed_for_season / empty. */
-function renderState(json, f) {
-  const summaryEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-summary`);
-  const freshEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-freshness`);
-  const stripEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-strip`);
-  const labelEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-day-labels span:last-child`);
-  const primaryBtn = document.querySelector(`#${DRAWER_ROOT_ID} .cg-btn-primary`);
-  // Watch / Snipe relabels are rec.gov-only. For Aspira pins the primary
-  // button is the upstream Reserve link; relabeling it to "Watch for
-  // openings" would just lie about where the click goes.
-  const isRecgov = !!f?.properties?.recgov_id;
-
-  summaryEl.textContent = json.summary || '';
-  const ageMin = Math.max(1, Math.round((json.cache?.age_seconds ?? 0) / 60));
-  const stale = ageMin >= 10;
-  freshEl.innerHTML = stale
-    ? `<span class="cg-stale">checked ${ageMin}m ago · <a href="#" class="cg-refresh">refresh</a></span>`
-    : `<span>checked ${ageMin}m ago</span>`;
-
-  if (json.state === 'closed_for_season') {
-    // Replace strip with a banner.
-    stripEl.outerHTML = `<div class="cg-closed-banner">⛰️ ${json.season?.reopens_on ? 'Reopens ' + json.season.reopens_on : 'Closed for season'}</div>`;
-    if (isRecgov) primaryBtn.textContent = 'Watch for opening day';
-    if (labelEl) labelEl.textContent = '';
-    return;
-  }
-
-  if (json.state === 'empty') {
-    summaryEl.textContent = 'No availability data — try the Reserve link';
-    stripEl.style.display = 'none';
-    if (labelEl) labelEl.textContent = '';
-    return;
-  }
-
-  // success / zero_available — render heat-strip cells.
-  const cells = (json.availability || []).map((d) => {
-    const status = d.status || 'closed';
-    const dow = new Date(d.date + 'T00:00:00Z').getUTCDay();
-    const isWeekend = dow === 5 || dow === 6 || dow === 0;
-    return `<div class="cg-cell cg-cell-${status}${isWeekend ? ' weekend' : ''}" title="${d.date}: ${status}"></div>`;
-  }).join('');
-  stripEl.innerHTML = cells;
-
-  if (isRecgov) {
-    if (json.state === 'zero_available') {
-      primaryBtn.textContent = 'Snipe a cancellation';
-    } else {
-      primaryBtn.textContent = 'Watch for openings';
-    }
-  }
-
-  if (labelEl && json.window?.start && json.window?.days) {
-    const last = new Date(json.window.start + 'T00:00:00Z');
-    last.setUTCDate(last.getUTCDate() + json.window.days - 1);
-    labelEl.textContent = last.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
-  }
-}
-
-function renderError(code, retryAfter, f) {
-  const summaryEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-summary`);
-  const stripEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-strip`);
-  if (!summaryEl || !stripEl) return;
-  const msg = code === 'rate_limited'
-    ? "rec.gov is rate-limiting us"
-    : code === 'ip_throttled'
-    ? "Too many requests — give it a minute"
-    : "Couldn't reach rec.gov";
-  summaryEl.innerHTML = `<span class="cg-error">${escapeHtml(msg)} · <a href="#" class="cg-retry">Retry</a></span>`;
-  // Replace skeleton with hashed cells.
-  stripEl.innerHTML = '<div class="cg-cell cg-cell-closed"></div>'.repeat(30);
-
-  document.querySelector(`#${DRAWER_ROOT_ID} .cg-retry`)?.addEventListener('click', (e) => {
-    e.preventDefault();
-    const signal = restartController();
-    renderShell(f);
-    if (f.id != null) fetchAvailability(f, signal);
-  });
-}
-
-function renderEmpty() {
-  const summaryEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-summary`);
-  const stripEl = document.querySelector(`#${DRAWER_ROOT_ID} .cg-strip`);
-  if (!summaryEl || !stripEl) return;
-  summaryEl.textContent = 'No availability data — try Reserve on rec.gov directly';
-  stripEl.style.display = 'none';
 }

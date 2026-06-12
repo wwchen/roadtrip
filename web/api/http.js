@@ -27,3 +27,9 @@ export async function jsonGetOk(url, { signal } = {}) {
   if (!response.ok) throw new HttpError(url, response.status);
   return response.json();
 }
+
+export async function jsonDeleteOk(url, { signal } = {}) {
+  const response = await fetch(url, { method: 'DELETE', signal });
+  if (!response.ok) throw new HttpError(url, response.status);
+  return response.status === 204 ? null : response.json().catch(() => null);
+}

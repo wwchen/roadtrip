@@ -26,6 +26,11 @@ val ASPIRA_ALLOWED_HOSTS: Set<String> =
 /**
  * Fetch + classify + render the unified response for an Aspira-backed
  * campground. Throws on upstream failure — caller maps to a 503.
+ *
+ * `minNights` enforces same-sub-area multi-night classification: a day D is
+ * "available" iff at least one sub-area is reported Available for all N
+ * consecutive nights starting D. Aspira's per-day status array is fetched
+ * for the rolling window so the last visible day's lookup doesn't truncate.
  */
 internal suspend fun fetchAndClassifyAspira(
     cache: CachedAspiraAvailability,
@@ -34,10 +39,15 @@ internal suspend fun fetchAndClassifyAspira(
     today: LocalDate,
     days: Int,
     force: Boolean,
+    minNights: Int = 1,
 ): AvailabilityResponseDto {
-    val end = today.plusDays((days - 1).toLong())
-    val cached = cache.get(host, mapId, today, end, force)
-    val perDay = classifyDays(cached.data, today, days)
+    val nights = minNights.coerceAtLeast(1)
+    // Pull enough trailing data for the rolling window, but only classify
+    // the visible `days`. Aspira returns an indexed array per sub-area so
+    // extra data is cheap.
+    val rollingEnd = today.plusDays((days + nights - 2).toLong())
+    val cached = cache.get(host, mapId, today, rollingEnd, force)
+    val perDay = classifyDays(cached.data, today, days, nights)
     val state = classifyWindowState(perDay)
     val summary = summarizeWindow(days, perDay, state)
     val cacheBlock =
@@ -61,8 +71,8 @@ internal suspend fun fetchAndClassifyAspira(
 }
 
 /**
- * Bulk variant: dates in [start, start+nights-1] where at least one
- * sub-area is bookable.
+ * Bulk variant: arrival dates in [start, start+nights-1] where at least one
+ * sub-area is bookable for an N-consecutive-night same-sub-area stay.
  */
 suspend fun availableDatesAspira(
     cache: CachedAspiraAvailability,
@@ -71,9 +81,11 @@ suspend fun availableDatesAspira(
     start: LocalDate,
     nights: Int,
 ): List<String> {
-    val end = start.plusDays((nights - 1).toLong())
+    val n = nights.coerceAtLeast(1)
+    // Cover the last arrival's trailing nights too.
+    val end = start.plusDays((n - 1).toLong()).plusDays((n - 1).toLong())
     val cached = cache.get(host, mapId, start, end, force = false)
-    val perDay = classifyDays(cached.data, start, nights)
+    val perDay = classifyDays(cached.data, start, n, n)
     return perDay
         .filter { it.status == "available" || it.status == "partial" }
         .map { it.date }
@@ -82,57 +94,84 @@ suspend fun availableDatesAspira(
 /**
  * Convert Aspira's per-day status arrays into the FE's day-status shape.
  *
- * Strategy: for each day, count how many sub-areas (mapLink) report each
- * Aspira status, then derive `availableCount` (sub-areas reporting
- * AVAILABLE/LIMITED) and `total` (all sub-areas with a status). When the
- * park has no sub-areas (rare, but possible for a single-loop park),
- * fall back to the `mapAvailabilities` rollup.
+ * For each visible arrival day D, a sub-area counts as "available for the
+ * stay" iff it reports AVAILABLE for every night from D through D+N-1.
+ * `availableCount` is the number of sub-areas that satisfy that window;
+ * `total` is the number of sub-areas with any status on the arrival day.
+ *
+ * When the park has no sub-areas (rare, but possible for a single-loop
+ * park), fall back to the `mapAvailabilities` rollup with the same window
+ * logic — the rollup just has one virtual sub-area.
  */
 private fun classifyDays(
     avail: AspiraAvailability,
     start: LocalDate,
     days: Int,
+    minNights: Int,
 ): List<DayClassification> {
+    val nights = minNights.coerceAtLeast(1)
     val sub = avail.byMapLink.values.toList()
     val rollup = avail.parkRollup
     return (0 until days).map { d ->
         val date = start.plusDays(d.toLong()).toString()
         if (sub.isNotEmpty()) {
-            var avCount = 0
-            var total = 0
-            var anyClosed = false
-            var anyAvail = false
-            for (subDays in sub) {
-                if (d >= subDays.size) continue
-                val code = subDays[d]
-                val cls = AspiraStatus.classify(code)
-                total++
-                if (cls == "available") {
-                    avCount++
-                    anyAvail = true
-                } else if (cls == "partial") {
-                    anyAvail = true
-                } else if (cls == "closed") {
-                    anyClosed = true
-                }
-            }
-            val status =
-                when {
-                    total == 0 -> "closed"
-                    avCount == total -> "available"
-                    anyAvail && avCount == 0 -> "partial"
-                    anyAvail -> "partial"
-                    anyClosed -> "closed"
-                    else -> "booked"
-                }
-            DayClassification(date, status, avCount, total)
+            classifyArrivalDay(sub, d, nights, date)
         } else {
-            // No sub-areas — single park rollup. `total` is 1 (the park).
-            val code = rollup.getOrNull(d) ?: AspiraStatus.NO_DATA
-            val cls = AspiraStatus.classify(code)
-            DayClassification(date, cls, if (cls == "available") 1 else 0, 1)
+            // Single virtual sub-area: the rollup. Same window check.
+            classifyArrivalDay(listOf(rollup), d, nights, date)
         }
     }
+}
+
+/**
+ * Run the same-sub-area N-night window check across every sub-area for the
+ * arrival-day index `d`. Sub-areas missing a status on the arrival day are
+ * not counted in `total` (no data, not "available 0 of 0").
+ */
+private fun classifyArrivalDay(
+    subAreas: List<List<Int>>,
+    d: Int,
+    nights: Int,
+    date: String,
+): DayClassification {
+    var availForStay = 0
+    var booked = 0
+    var closed = 0
+    for (subDays in subAreas) {
+        if (d >= subDays.size) continue
+        val arrivalCls = AspiraStatus.classify(subDays[d])
+        when (arrivalCls) {
+            "closed" -> closed++
+            "available", "partial" -> {
+                if (windowAllOpen(subDays, d, nights)) availForStay++ else booked++
+            }
+            else -> booked++
+        }
+    }
+    val total = availForStay + booked + closed
+    val status =
+        when {
+            total == 0 -> "closed"
+            closed == total -> "closed"
+            availForStay == 0 -> "booked"
+            availForStay == total -> "available"
+            else -> "partial"
+        }
+    return DayClassification(date, status, availForStay, total)
+}
+
+private fun windowAllOpen(
+    subDays: List<Int>,
+    d: Int,
+    nights: Int,
+): Boolean {
+    for (offset in 0 until nights) {
+        val idx = d + offset
+        if (idx >= subDays.size) return false
+        val cls = AspiraStatus.classify(subDays[idx])
+        if (cls != "available" && cls != "partial") return false
+    }
+    return true
 }
 
 internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorSchema> {
