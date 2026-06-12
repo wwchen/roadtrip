@@ -414,6 +414,13 @@ class EtlOrchestrator(
                 "federal-campgrounds" to
                     ca.floo.roadtrip.service.etl.recgov
                         .RecGovCampgroundsEtl("federal-campgrounds"),
+                // Reservable catalog terminal (RFC 0008). Emits one row
+                // per campsite into `reservables`; the recgov joiner
+                // (PR 4) links them to their parent federal-campgrounds
+                // POIs.
+                "federal-campsites" to
+                    ca.floo.roadtrip.service.etl.recgov
+                        .RecGovCampsitesEtl("federal-campsites"),
                 // Aspira NextGen — one leaf-walker + one join-by-name
                 // emitter per tenant. Both classes take the slug as a
                 // constructor arg so a fourth tenant is two YAML rows +
