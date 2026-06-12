@@ -598,6 +598,123 @@ context. Forcing the user to fill them in before any alert exists is the
 wrong order — most users want a quick "watch this day," and we can prompt
 for filters later when a match arrives or when they manage the alert list.
 
+## Deferred: reservable hierarchy
+
+A redesign that surfaced during PR #199 review and is captured here so
+future-us doesn't re-derive it. **Not in scope for this RFC.** Tracking
+to a follow-up RFC once we have a second reservable type to validate the
+shape against.
+
+### What prompted it
+
+The current model treats "campground" as the addressable unit and
+"site" as a child of campground. Walking that through three providers,
+plus thinking about non-campground reservables, the model strains:
+
+| Concept | Recgov | Aspira | Camis |
+|---|---|---|---|
+| Bookable unit | `campsite_id` | `resourceId` | `siteId` |
+| Group of units (often a loop) | `loop` (string field) | mapLink (sub-area) | loop |
+| Bookable destination | `facility_id` | `mapId` (+ `transactionLocationId`) | `facilityId` |
+| Geographic park | `RECAREA` (optional) | `transactionLocationId` (sometimes distinct) | (none) |
+
+Important data finding: **Aspira's `/api/availability/map` response
+includes `resourceAvailabilities` — per-individual-site availability
+data we currently discard.** Today our cache stores only the rolled-up
+`mapAvailabilities` and `byMapLink` (sub-area). The per-resource
+availability is in the same upstream call we already make.
+
+So per-site granularity is achievable across all three providers; the
+current model just hasn't pulled it through. That makes the case for a
+hierarchy-aware redesign concrete rather than speculative.
+
+### Beyond campsites
+
+The roadmap mentions monitoring + alerting + auto-cart for things that
+aren't campsites:
+
+- frontcountry campground sites
+- backcountry permit zones (Half Dome, Mt Whitney)
+- day-use parking permits
+- timed-entry tickets (Arches, Glacier)
+- group sites, lottery permits
+
+A `/campground/{id}/site/{id}` URL doesn't fit a Half Dome permit
+(permit isn't *in* a campground) or an Arches timed-entry ticket
+(ticket isn't tied to a site). The right abstraction is one level up:
+**reservable** — a thing-you-can-hold-at-a-place. Campsites, permits,
+and tickets are all *types* of reservable.
+
+### Proposed shape (not yet committed)
+
+```
+POI (map pin)                ← what the user clicks. Already exists.
+  └── Reservable (×N)        ← new abstraction. type + vendor + vendor_id. Bookable.
+```
+
+A POI is a place. A reservable is a thing-you-book at that place. A
+campground POI has many `site:*` reservables. A trailhead POI might
+have one `permit:recgov:445859` reservable for Half Dome. An Arches
+entrance POI has a stream of `ticket:nps:...` reservables (one per
+slot per day).
+
+Composite reservable id, on the wire as `{type}:{vendor}:{vendor_id}`:
+
+```
+site:recgov:330257             # one campsite at Lower Pines
+site:aspira:-2147483190        # one resource at a BC park
+permit:recgov:445859           # Half Dome permit slot
+ticket:nps:arches-2026-08-01-09:00   # Arches timed entry, specific slot
+```
+
+Vendor and type are closed enums in the BE (sealed types). Vendor IDs
+stay opaque. URL-safe. The reservable type drives response shape
+(sites have `loop`; permits have `zone`; tickets have `time_slot`),
+upstream deeplink format, alert payload shape, and auto-book flow.
+
+URL pattern after this pivot:
+
+```
+GET /api/reservable/{rid}                       info: name, vendor, type, parent POI, capabilities
+GET /api/reservable/{rid}/availability          per-time-unit status (day, hour, slot)
+
+GET /api/poi/{poi_id}/reservables               list child reservables
+GET /api/poi/{poi_id}/reservables/availability  per-day rollup across children
+```
+
+### Why deferred
+
+- **No second reservable type built yet.** Doing the abstraction now
+  with only campsites means guessing at the shape for permits and
+  tickets. Once we plumb a permit through (likely Half Dome — fits the
+  alert-driven monitoring model cleanly), the abstraction's edges
+  reveal themselves and the design firms up.
+- **The current `BookingProvider` port (PR #198) is the right seam.**
+  Generalizing it to `(vendor, reservable_type) → adapter` is additive,
+  not a rewrite.
+- **Alert + poll tables would migrate.** `availability_polls` would
+  rekey from `(poi_id, target_date)` to `(reservable_id, target_date)`.
+  Existing alerts get rewritten to `site:recgov:{recgov_id}`. Doable,
+  but a real migration; doing it once with the second use case in
+  hand is cheaper than doing it twice.
+
+### What this means for the v1 work in this RFC
+
+PR #198 (BookingProvider port) and PR #199 (week grid + per-day alerts)
+ship as planned. Both decisions made were **forward-compatible** with
+the reservable redesign:
+
+- The `BookingProvider` port is per-vendor, not per-reservable-type —
+  reservable type slots in as a second registry dimension later.
+- The `availability_polls` slot model (`(poi_id, target_date)`) maps
+  cleanly to `(reservable_id, target_date)` once reservable exists.
+- The alert payload's `campground_id` field becomes `reservable_id`
+  later; existing alerts migrate via a one-shot SQL rewrite.
+
+The follow-up RFC will define the reservable schema, composite-id
+parser, type taxonomy, and migration plan. Until then, the v1 model
+(campground + site, both keyed by POI id) is the right first cut.
+
 ## Unresolved questions
 
 - **Alert dedup.** Two clicks on the same day shouldn't create two alerts.
