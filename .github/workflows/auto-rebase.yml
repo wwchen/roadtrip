@@ -3,6 +3,8 @@ name: Auto-rebase open PRs
 on:
   push:
     branches: [master]
+  pull_request_target:
+    types: [edited]
   issue_comment:
     types: [created]
   workflow_dispatch:
@@ -16,14 +18,18 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: auto-rebase-${{ github.event.issue.number || github.event.inputs.pr_number || 'master' }}
+  group: auto-rebase-${{ github.event.issue.number || github.event.pull_request.number || github.event.inputs.pr_number || 'master' }}
   cancel-in-progress: false
 
 jobs:
   rebase:
-    # Run on master push, /rebase PR comment, or manual dispatch.
+    # Run on master push, PR retarget-to-master, /rebase PR comment, or manual dispatch.
     if: >
       github.event_name == 'push' ||
+      (github.event_name == 'pull_request_target' &&
+       github.event.pull_request.base.ref == 'master' &&
+       github.event.changes.base.ref.from != null &&
+       github.event.pull_request.head.repo.full_name == github.repository) ||
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
@@ -58,10 +64,26 @@ jobs:
           EVENT: ${{ github.event_name }}
           COMMENT_PR: ${{ github.event.issue.number }}
           DISPATCH_PR: ${{ github.event.inputs.pr_number }}
+          RETARGET_PR: ${{ github.event.pull_request.number }}
+          RETARGET_HEAD: ${{ github.event.pull_request.head.ref }}
+          RETARGET_BASE: ${{ github.event.pull_request.base.ref }}
+          RETARGET_OLD_BASE: ${{ github.event.changes.base.ref.from }}
+          RETARGET_IS_FORK: ${{ github.event.pull_request.head.repo.full_name != github.repository }}
         run: |
           set -euo pipefail
 
-          if [ "$EVENT" = "issue_comment" ]; then
+          if [ "$EVENT" = "pull_request_target" ]; then
+            # GitHub retargeted a stacked PR from its parent branch to master.
+            # Keep the old base so the rebase step can transplant only the
+            # current PR's commits: rebase --onto origin/master old-base head.
+            if [ "$RETARGET_IS_FORK" = "false" ] && \
+               [ "$RETARGET_BASE" = "master" ] && \
+               [ -n "$RETARGET_OLD_BASE" ]; then
+              printf '%s %s %s\n' "$RETARGET_PR" "$RETARGET_HEAD" "$RETARGET_OLD_BASE" > prs.txt
+            else
+              : > prs.txt
+            fi
+          elif [ "$EVENT" = "issue_comment" ]; then
             # Single PR from /rebase comment.
             gh pr view "$COMMENT_PR" --repo "$REPO" \
               --json number,headRefName,isCrossRepository,baseRefName \
@@ -97,27 +119,35 @@ jobs:
 
           [ -s prs.txt ] || exit 0
 
-          git fetch origin master
+          git fetch origin +refs/heads/master:refs/remotes/origin/master
           master_sha=$(git rev-parse origin/master)
 
-          while read -r pr_number branch; do
+          while read -r pr_number branch old_base; do
             [ -z "$pr_number" ] && continue
             echo "::group::PR #$pr_number ($branch)"
 
-            git fetch origin "$branch"
+            git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
             git checkout -B "$branch" "origin/$branch"
 
-            base=$(git merge-base HEAD "$master_sha")
-            if [ "$base" = "$master_sha" ]; then
-              echo "Already up to date with master."
-              git checkout --detach "$master_sha"
-              echo "::endgroup::"
-              continue
+            if [ -n "${old_base:-}" ]; then
+              git fetch origin "+refs/heads/$old_base:refs/remotes/origin/$old_base"
+              echo "Rebasing $branch onto origin/master from old base $old_base."
+              rebase_args=(--onto origin/master "origin/$old_base" "$branch")
+            else
+              base=$(git merge-base HEAD "$master_sha")
+              if [ "$base" = "$master_sha" ]; then
+                echo "Already up to date with master."
+                git checkout --detach "$master_sha"
+                echo "::endgroup::"
+                continue
+              fi
+
+              # `git rebase master` drops patches already in master by patch-id,
+              # which is what un-sticks stacked PRs after their parent merges.
+              rebase_args=("$master_sha")
             fi
 
-            # `git rebase master` drops patches already in master by patch-id,
-            # which is what un-sticks stacked PRs after their parent merges.
-            if git rebase "$master_sha"; then
+            if git rebase "${rebase_args[@]}"; then
               if git push --force-with-lease origin "$branch"; then
                 echo "Rebased and pushed."
               else
