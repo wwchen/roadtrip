@@ -1,0 +1,24 @@
+{
+  "fetcher": "fetch_recgov_campsites",
+  "fetcher_version": "1",
+  "fetched_at": "2026-09-12T17:00:00Z",
+  "request": {
+    "url": "https://www.recreation.gov/api/camps/availability/campground/232450/month?start_date=2026-09-01T00%3A00%3A00.000Z",
+    "method": "GET"
+  },
+  "response": { "status": 200 },
+  "part": "facility-232450",
+  "payload": {
+    "campsites": {
+      "440001": {
+        "campsite_id": "440001",
+        "site": "A1",
+        "loop": "Loop A",
+        "campsite_type": "STANDARD ELECTRIC",
+        "max_num_people": 6,
+        "equipment_types": ["Tent", "Small RV", "Large RV"],
+        "availabilities": {}
+      }
+    }
+  }
+}

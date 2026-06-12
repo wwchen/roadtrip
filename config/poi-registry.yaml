@@ -98,6 +98,23 @@ data_sources:
       args: { slug: recgov-campgrounds }
       output_dir_prefix: data/raw/recgov-campgrounds
 
+  # --- Federal campsites (rec.gov per-facility catalog, RFC 0008) -----------
+  # Walks the recgov-campgrounds capture for FacilityIDs and calls rec.gov's
+  # /api/camps/availability/campground/{id}/month per facility. The body's
+  # `campsites` field is the catalog (id, site, loop, equipment_types, ...).
+  # Per-day availability data is in the same response but not stored here —
+  # request-time availability stays in CachedAvailability.
+  #
+  # Heavy fetch (~75min for 3000 facilities at 1.5s gap). Run independently
+  # of recgov-campgrounds so the campground-list refresh stays snappy.
+  - slug: recgov-campsites
+    name: Federal campsites via rec.gov per-facility /month
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_recgov_campsites.py
+      args: { slug: recgov-campsites }
+      output_dir_prefix: data/raw/recgov-campsites
+
   # --- Alberta provincial parks ----------------------------------------------
   - slug: reserveamerica-abpp
     name: ReserveAmerica Alberta park HTML
@@ -216,3 +233,16 @@ poi_data:
       - slug: tesla-superchargers
         adapter: TeslaIndexEtl
         inputs: [tesla-index]
+
+# ============================================================================
+# reservable_data — reservable catalogs (RFC 0008). Each row's terminal etl
+# emits ReservableEtlOutput; the orchestrator upserts via ReservableRepo.
+# No POI knowledge in these ETLs — see poi_reservable_joiner below for
+# the linking concern.
+# ============================================================================
+reservable_data:
+  - name: Federal Campsites
+    etls:
+      - slug: federal-campsites
+        adapter: RecGovCampsitesEtl
+        inputs: [recgov-campsites]

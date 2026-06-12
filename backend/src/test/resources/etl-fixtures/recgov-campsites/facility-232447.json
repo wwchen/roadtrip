@@ -1,0 +1,47 @@
+{
+  "fetcher": "fetch_recgov_campsites",
+  "fetcher_version": "1",
+  "fetched_at": "2026-09-12T17:00:00Z",
+  "request": {
+    "url": "https://www.recreation.gov/api/camps/availability/campground/232447/month?start_date=2026-09-01T00%3A00%3A00.000Z",
+    "method": "GET"
+  },
+  "response": { "status": 200 },
+  "part": "facility-232447",
+  "payload": {
+    "campsites": {
+      "330257": {
+        "campsite_id": "330257",
+        "site": "FS1-20",
+        "loop": "AREA WHITE RIVER",
+        "campsite_type": "STANDARD NONELECTRIC",
+        "max_num_people": 8,
+        "equipment_types": ["Tent", "Small RV"],
+        "availabilities": {
+          "2026-09-01T00:00:00Z": "Available",
+          "2026-09-02T00:00:00Z": "Available"
+        },
+        "attributes": [
+          { "attribute_name": "Picnic Table", "attribute_value": "Yes" },
+          { "attribute_name": "Fire Pit", "attribute_value": "Yes" }
+        ]
+      },
+      "330258": {
+        "campsite_id": "330258",
+        "site": "FS2-15",
+        "loop": "AREA WHITE RIVER",
+        "campsite_type": "TENT ONLY NONELECTRIC",
+        "equipment_types": ["Tent"],
+        "availabilities": {}
+      },
+      "330259": {
+        "campsite_id": "330259",
+        "site": null,
+        "loop": null,
+        "campsite_type": "STANDARD NONELECTRIC",
+        "equipment_types": [],
+        "availabilities": {}
+      }
+    }
+  }
+}
