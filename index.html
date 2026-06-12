@@ -592,8 +592,18 @@
     font-variant-numeric: tabular-nums;
   }
   .cg-day.cg-day-today {
-    border-color: var(--cg-accent);
-    box-shadow: 0 0 0 1px var(--cg-accent);
+    border-color: var(--cg-border);
+    box-shadow: none;
+  }
+  .cg-day.cg-day-today::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--cg-accent);
   }
   .cg-day.cg-day-today .cg-day-dow { color: var(--cg-accent); }
   .cg-day.cg-day-available {
@@ -615,6 +625,7 @@
   .cg-day.cg-day-closed .cg-day-num { color: var(--cg-faint); }
   .cg-day.cg-day-closed .cg-day-avail { color: var(--cg-faint); }
   .cg-day.cg-day-selected {
+    border-color: var(--cg-accent);
     box-shadow: 0 0 0 2px var(--cg-accent);
     transform: translateY(-1px);
   }
@@ -698,11 +709,9 @@
     line-height: 1.4;
   }
 
-  /* ---- Reservable catalog list (RFC 0008) ----
-     Collapsed by default so it doesn't compete with the week grid + day
-     detail above. Expands to a row list of every reservable at this POI
-     (recgov campsites, Aspira resources). Catalog only — does NOT colorize
-     by per-day availability. */
+  /* ---- Reservable site list (RFC 0008) ----
+     Hidden until a day is selected, then expands to that day's available
+     reservables with per-site reservation links. */
   .cg-sites {
     margin-top: 16px;
     border-top: 1px solid var(--cg-border);
@@ -729,13 +738,26 @@
     border: 1px solid var(--cg-border);
   }
   .cg-sites-row {
-    display: flex; align-items: center; justify-content: space-between;
-    gap: 10px;
-    padding: 8px 10px;
     border-bottom: 1px solid var(--cg-border);
     font-size: 13px;
   }
   .cg-sites-row:last-child { border-bottom: 0; }
+  .cg-sites-row-link,
+  .cg-sites-row {
+    color: inherit;
+    text-decoration: none;
+  }
+  .cg-sites-row-link {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+  }
+  .cg-sites-row-link:hover { background: rgba(255,255,255,0.04); }
+  .cg-sites-row:not(:has(.cg-sites-row-link)) {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px;
+    padding: 8px 10px;
+  }
   .cg-sites-row-main { min-width: 0; flex: 1 1 auto; }
   .cg-sites-row-name {
     color: var(--cg-text);

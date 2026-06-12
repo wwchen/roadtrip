@@ -11,6 +11,7 @@ import { escapeHtml } from '../core.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WEEK_DAYS = 7;
+const GREEN_AVAILABLE_THRESHOLD = 5;
 
 /**
  * Render the 7-cell grid as a string.
@@ -28,10 +29,11 @@ export function renderWeekGrid({ days, todayIso, selectedDate, watchedDates }) {
     const dowLabel = DOW_LABELS[dow];
     const dayNum = parseInt(date.slice(8, 10), 10);
     const availLabel = renderAvailLabel(d);
+    const visualStatus = renderStatus(d);
     const watching = watchedDates.has(date);
     const classes = [
       'cg-day',
-      `cg-day-${d.status || 'closed'}`,
+      `cg-day-${visualStatus}`,
       date === todayIso ? 'cg-day-today' : '',
       date === selectedDate ? 'cg-day-selected' : '',
       watching ? 'cg-day-watching' : '',
@@ -39,7 +41,7 @@ export function renderWeekGrid({ days, todayIso, selectedDate, watchedDates }) {
       .filter(Boolean)
       .join(' ');
     return `
-      <button type="button" class="${classes}" data-date="${date}" aria-label="${escapeHtml(`${date} — ${d.status}`)}">
+      <button type="button" class="${classes}" data-date="${date}" aria-label="${escapeHtml(`${date} — ${visualStatus}`)}">
         <div class="cg-day-dow">${dowLabel}</div>
         <div class="cg-day-num">${dayNum}</div>
         <div class="cg-day-avail">${escapeHtml(availLabel)}</div>
@@ -71,11 +73,24 @@ function renderAvailLabel(day) {
   const status = day.status || 'closed';
   if (status === 'closed') return 'closed';
   if (status === 'booked') return 'full';
-  const count = day.available_count ?? day.availableCount;
+  const count = availableCount(day);
   if (count == null) {
     // We know status is available/partial but the BE didn't ship a count —
     // tell the user what we do know rather than printing nothing.
     return status === 'partial' ? 'some open' : 'open';
   }
   return `${count} ${count === 1 ? 'site' : 'sites'}`;
+}
+
+function renderStatus(day) {
+  const status = day.status || 'closed';
+  const count = availableCount(day);
+  if (status === 'partial' && count != null && count >= GREEN_AVAILABLE_THRESHOLD) {
+    return 'available';
+  }
+  return status;
+}
+
+function availableCount(day) {
+  return day.available_count ?? day.availableCount;
 }

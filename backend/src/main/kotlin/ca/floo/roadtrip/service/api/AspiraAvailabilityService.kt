@@ -40,6 +40,7 @@ internal suspend fun fetchAndClassifyAspira(
     days: Int,
     force: Boolean,
     minNights: Int = 1,
+    reservableVendor: String? = null,
 ): AvailabilityResponseDto {
     val nights = minNights.coerceAtLeast(1)
     // Pull enough trailing data for the rolling window, but only classify
@@ -47,7 +48,7 @@ internal suspend fun fetchAndClassifyAspira(
     // extra data is cheap.
     val rollingEnd = today.plusDays((days + nights - 2).toLong())
     val cached = cache.get(host, mapId, today, rollingEnd, force)
-    val perDay = classifyDays(cached.data, today, days, nights)
+    val perDay = classifyDays(cached.data, today, days, nights, reservableVendor)
     val state = classifyWindowState(perDay)
     val summary = summarizeWindow(days, perDay, state)
     val cacheBlock =
@@ -89,7 +90,8 @@ internal suspend fun fetchAndClassifyAspiraResource(
     val rollingEnd = today.plusDays((days + nights - 2).toLong())
     val cached = cache.get(host, mapId, today, rollingEnd, force)
     val resourceDays = cached.data.byResource[resourceId].orEmpty()
-    val perDay = classifyResourceDays(resourceDays, today, days, nights)
+    val reservableId = "site:$reservableVendor:$resourceId"
+    val perDay = classifyResourceDays(resourceDays, today, days, nights, reservableId)
     val state = classifyWindowState(perDay)
     val summary = summarizeWindow(days, perDay, state)
     val cacheBlock =
@@ -109,7 +111,7 @@ internal suspend fun fetchAndClassifyAspiraResource(
         cacheBlock = cacheBlock,
         host = host,
         mapId = mapId.toString(),
-        reservableId = "site:$reservableVendor:$resourceId",
+        reservableId = reservableId,
     )
 }
 
@@ -151,8 +153,12 @@ private fun classifyDays(
     start: LocalDate,
     days: Int,
     minNights: Int,
+    reservableVendor: String? = null,
 ): List<DayClassification> {
     val nights = minNights.coerceAtLeast(1)
+    if (reservableVendor != null && avail.byResource.isNotEmpty()) {
+        return classifyResourceCatalogDays(avail.byResource, start, days, nights, reservableVendor)
+    }
     val sub = avail.byMapLink.values.toList()
     val rollup = avail.parkRollup
     return (0 until days).map { d ->
@@ -171,16 +177,74 @@ private fun classifyResourceDays(
     start: LocalDate,
     days: Int,
     minNights: Int,
+    reservableId: String? = null,
 ): List<DayClassification> {
     val nights = minNights.coerceAtLeast(1)
     return (0 until days).map { d ->
         val date = start.plusDays(d.toLong()).toString()
         if (d >= resourceDays.size) {
-            DayClassification(date = date, status = "closed", availableCount = 0, total = 0)
+            DayClassification(
+                date = date,
+                status = "closed",
+                availableCount = 0,
+                total = 0,
+                availableReservableIds = knownEmptyReservableIds(reservableId),
+            )
         } else {
-            classifyResourceArrivalDay(resourceDays, d, nights, date)
+            classifyResourceArrivalDay(resourceDays, d, nights, date, reservableId)
         }
     }
+}
+
+private fun classifyResourceCatalogDays(
+    byResource: Map<String, List<Int>>,
+    start: LocalDate,
+    days: Int,
+    minNights: Int,
+    reservableVendor: String,
+): List<DayClassification> =
+    (0 until days).map { d ->
+        val date = start.plusDays(d.toLong()).toString()
+        classifyResourceCatalogArrivalDay(byResource, d, minNights, date, reservableVendor)
+    }
+
+private fun classifyResourceCatalogArrivalDay(
+    byResource: Map<String, List<Int>>,
+    d: Int,
+    nights: Int,
+    date: String,
+    reservableVendor: String,
+): DayClassification {
+    var availForStay = 0
+    var booked = 0
+    var closed = 0
+    val availableReservableIds = mutableListOf<String>()
+    for ((resourceId, resourceDays) in byResource) {
+        if (d >= resourceDays.size) continue
+        val arrivalCls = AspiraStatus.classify(resourceDays[d])
+        when (arrivalCls) {
+            "closed" -> closed++
+            "available", "partial" -> {
+                if (windowAllOpen(resourceDays, d, nights)) {
+                    availForStay++
+                    availableReservableIds += "site:$reservableVendor:$resourceId"
+                } else {
+                    booked++
+                }
+            }
+            else -> booked++
+        }
+    }
+    val total = availForStay + booked + closed
+    val status =
+        when {
+            total == 0 -> "closed"
+            closed == total -> "closed"
+            availForStay == 0 -> "booked"
+            availForStay == total -> "available"
+            else -> "partial"
+        }
+    return DayClassification(date, status, availForStay, total, availableReservableIds.sorted())
 }
 
 private fun classifyResourceArrivalDay(
@@ -188,20 +252,49 @@ private fun classifyResourceArrivalDay(
     d: Int,
     nights: Int,
     date: String,
+    reservableId: String? = null,
 ): DayClassification {
     val arrivalCls = AspiraStatus.classify(resourceDays[d])
     return when (arrivalCls) {
-        "closed" -> DayClassification(date = date, status = "closed", availableCount = 0, total = 1)
+        "closed" ->
+            DayClassification(
+                date = date,
+                status = "closed",
+                availableCount = 0,
+                total = 1,
+                availableReservableIds = knownEmptyReservableIds(reservableId),
+            )
         "available", "partial" -> {
             if (!windowAllOpen(resourceDays, d, nights)) {
-                DayClassification(date = date, status = "booked", availableCount = 0, total = 1)
+                DayClassification(
+                    date = date,
+                    status = "booked",
+                    availableCount = 0,
+                    total = 1,
+                    availableReservableIds = knownEmptyReservableIds(reservableId),
+                )
             } else {
-                DayClassification(date = date, status = arrivalCls, availableCount = 1, total = 1)
+                DayClassification(
+                    date = date,
+                    status = arrivalCls,
+                    availableCount = 1,
+                    total = 1,
+                    availableReservableIds = reservableId?.let(::listOf).orEmpty(),
+                )
             }
         }
-        else -> DayClassification(date = date, status = "booked", availableCount = 0, total = 1)
+        else ->
+            DayClassification(
+                date = date,
+                status = "booked",
+                availableCount = 0,
+                total = 1,
+                availableReservableIds = knownEmptyReservableIds(reservableId),
+            )
     }
 }
+
+private fun knownEmptyReservableIds(reservableId: String?): List<String>? = if (reservableId == null) null else emptyList()
 
 /**
  * Run the same-sub-area N-night window check across every sub-area for the

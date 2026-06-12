@@ -10,6 +10,7 @@
 // Render is split into pure modules:
 //   - week-grid.js          — 7 day cells.
 //   - day-detail.js         — selected-day panel + alert / reserve CTAs.
+//   - site-list.js          — all-site catalog or selected-day availability.
 //   - calendar-popover.js   — month picker shown when the user clicks the
 //                             week label (jump to any date).
 //
@@ -92,14 +93,15 @@ function makeContext(host, feature, signal) {
     cacheBlock: null,
     summary: '',
     season: null,
+    availabilityHost: null,
     error: null,
     alertsByDate: new Map(),
     skeletonTimer: null,
     calendar: null,
     // Catalog (RFC 0008): the per-POI reservable list the BE serves at
-    // /api/poi/{id}/reservables. Independent of week-grid availability —
-    // catalog tells you "which sites exist here", availability tells you
-    // "which days a site is bookable". The two fetches run in parallel.
+    // /api/poi/{id}/reservables. When a day is selected, the week response's
+    // available_reservable_ids filters this list to the sites available for
+    // that date. The two fetches run in parallel.
     sitesState: 'loading',
     sites: [],
     sitesTotal: null,
@@ -115,6 +117,7 @@ function rerender(ctx) {
 }
 
 function renderShell(ctx) {
+  const selectedDay = selectedAvailabilityDay(ctx);
   return `
     <section class="cg-availability">
       ${renderNightsRow(ctx)}
@@ -128,6 +131,9 @@ function renderShell(ctx) {
         totalAtPoi: ctx.sitesTotal,
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
+        selectedDay,
+        minNights: ctx.minNights,
+        providerHost: ctx.availabilityHost,
       })}
     </section>
   `;
@@ -205,8 +211,7 @@ function renderFreshness(ctx) {
 }
 
 function renderDetail(ctx) {
-  if (!ctx.selectedDate || !ctx.days || ctx.days.length === 0) return '';
-  const day = ctx.days.find((d) => d.date === ctx.selectedDate);
+  const day = selectedAvailabilityDay(ctx);
   if (!day) return '';
   return renderDayDetail({
     day,
@@ -214,6 +219,12 @@ function renderDetail(ctx) {
     watching: ctx.alertsByDate.has(day.date),
     recgovId: ctx.recgovId,
   });
+}
+
+function selectedAvailabilityDay(ctx) {
+  if (ctx.state !== 'success') return null;
+  if (!ctx.selectedDate || !ctx.days || ctx.days.length === 0) return null;
+  return ctx.days.find((d) => d.date === ctx.selectedDate) || null;
 }
 
 // ---- event wiring ---------------------------------------------------------
@@ -246,12 +257,14 @@ function onRootClick(ctx, e) {
     if (tgt.closest('.cg-week-prev').disabled) return;
     ctx.weekStart = addDays(ctx.weekStart, -WEEK_DAYS);
     ctx.selectedDate = null;
+    ctx.sitesExpanded = false;
     fetchWeek(ctx);
     return;
   }
   if (tgt.closest('.cg-week-next')) {
     ctx.weekStart = addDays(ctx.weekStart, WEEK_DAYS);
     ctx.selectedDate = null;
+    ctx.sitesExpanded = false;
     fetchWeek(ctx);
     return;
   }
@@ -260,6 +273,7 @@ function onRootClick(ctx, e) {
     if (sameDay(ctx.weekStart, today)) return;
     ctx.weekStart = today;
     ctx.selectedDate = null;
+    ctx.sitesExpanded = false;
     fetchWeek(ctx);
     return;
   }
@@ -272,7 +286,9 @@ function onRootClick(ctx, e) {
   const dayBtn = tgt.closest('.cg-day:not(.cg-day-skeleton)');
   if (dayBtn) {
     const date = dayBtn.getAttribute('data-date');
-    ctx.selectedDate = ctx.selectedDate === date ? null : date;
+    const selected = ctx.selectedDate !== date;
+    ctx.selectedDate = selected ? date : null;
+    ctx.sitesExpanded = selected;
     rerender(ctx);
     return;
   }
@@ -324,6 +340,7 @@ function openCalendar(ctx, anchorBtn) {
     onPick: (date) => {
       ctx.weekStart = date;
       ctx.selectedDate = null;
+      ctx.sitesExpanded = false;
       ctx.calendar?.dispose();
       ctx.calendar = null;
       fetchWeek(ctx);
@@ -364,6 +381,7 @@ async function fetchWeek(ctx, { force = false } = {}) {
     }
     const json = await resp.json();
     ctx.cacheBlock = json.cache || null;
+    ctx.availabilityHost = json.host || null;
     if (json.state === 'empty') {
       ctx.state = 'empty';
       ctx.days = [];

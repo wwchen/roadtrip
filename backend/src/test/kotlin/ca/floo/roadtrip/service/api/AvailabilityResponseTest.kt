@@ -31,6 +31,7 @@ class AvailabilityResponseTest {
                                 status = "available",
                                 availableCount = 3,
                                 total = 5,
+                                availableReservableIds = listOf("site:recgov:100", "site:recgov:200", "site:recgov:300"),
                             ),
                         ),
                     state = "success",
@@ -48,6 +49,7 @@ class AvailabilityResponseTest {
         assertEquals(JsonNull, json["season"])
         assertEquals(1, json["window"]!!.jsonObject["days"]!!.jsonPrimitive.int)
         assertEquals(3, availabilityDay["available_count"]!!.jsonPrimitive.int)
+        assertEquals(3, availabilityDay["available_reservable_ids"]!!.jsonArray.size)
         assertEquals(false, json["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
     }
 
@@ -103,5 +105,43 @@ class AvailabilityResponseTest {
             assertEquals("site:aspira_bc:-2147478966", dto.reservableId)
             assertEquals("available", dto.availability[0].status)
             assertEquals("booked", dto.availability[1].status)
+        }
+
+    @Test
+    fun `aspira campground availability emits available resource ids when resources are present`() =
+        runBlocking {
+            val cache =
+                CachedAspiraAvailability(
+                    fetcher = { _, mapId, _, _ ->
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink = emptyMap(),
+                            byResource =
+                                mapOf(
+                                    "-2147478966" to listOf(1, 1),
+                                    "-2147478967" to listOf(1, 5),
+                                ),
+                        )
+                    },
+                )
+
+            val dto =
+                fetchAndClassifyAspira(
+                    cache = cache,
+                    host = "camping.bcparks.ca",
+                    mapId = -2147483516,
+                    today = LocalDate.parse("2026-07-01"),
+                    days = 1,
+                    force = false,
+                    minNights = 2,
+                    reservableVendor = "aspira_bc",
+                )
+
+            assertEquals(1, dto.availability.single().availableCount)
+            assertEquals(
+                listOf("site:aspira_bc:-2147478966"),
+                dto.availability.single().availableReservableIds,
+            )
         }
 }

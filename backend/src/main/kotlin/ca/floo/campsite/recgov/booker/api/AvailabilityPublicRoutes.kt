@@ -223,12 +223,18 @@ private fun classifyDay(
     var availForStay = 0 // sites Available for ALL N nights
     var booked = 0
     var closed = 0
-    for ((_, byDate) in merged) {
+    val availableReservableIds = mutableListOf<String>()
+    for ((siteId, byDate) in merged) {
         val arrivalStatus = byDate[date] ?: continue
         when {
             arrivalStatus.equals("Closed", true) -> closed++
             isOpen(arrivalStatus) -> {
-                if (window.all { d -> isOpen(byDate[d]) }) availForStay++ else booked++
+                if (window.all { d -> isOpen(byDate[d]) }) {
+                    availForStay++
+                    availableReservableIds += "site:recgov:$siteId"
+                } else {
+                    booked++
+                }
             }
             else -> booked++
         }
@@ -242,7 +248,7 @@ private fun classifyDay(
             availForStay == total -> "available"
             else -> "partial"
         }
-    return DayClassification(date, status, availForStay, total)
+    return DayClassification(date, status, availForStay, total, availableReservableIds.sorted())
 }
 
 private fun isOpen(s: String?): Boolean = s != null && (s.equals("Available", true) || s.equals("Open", true))
