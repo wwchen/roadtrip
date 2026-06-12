@@ -104,6 +104,51 @@ internal suspend fun fetchAndClassifyRecgov(
     }
 
 /**
+ * Same cached upstream fetch as [fetchAndClassifyRecgov], narrowed to one
+ * rec.gov campsite id. This powers `/api/reservable/{rid}/availability`.
+ */
+internal suspend fun fetchAndClassifyRecgovReservable(
+    cache: CachedAvailability,
+    recgovId: String,
+    campsiteId: String,
+    today: LocalDate,
+    days: Int,
+    months: List<String>,
+    force: Boolean,
+    minNights: Int = 1,
+): AvailabilityResponseDto =
+    coroutineScope {
+        val results: List<CachedResult> =
+            months
+                .map { month -> async { cache.get("recgov", recgovId, month, force) } }
+                .awaitAll()
+
+        val merged = mergeCampsites(results.map { it.data })
+        val oneSite = merged[campsiteId]?.let { mapOf(campsiteId to it) } ?: emptyMap()
+
+        val dates = (0 until days).map { today.plusDays(it.toLong()).toString() }
+        val perDay = dates.map { date -> classifyDay(oneSite, date, minNights.coerceAtLeast(1)) }
+
+        val state = classifyWindowState(perDay)
+        val summary = summarizeWindow(days, perDay, state)
+        val cacheBlock = aggregateCacheBlock(results)
+        val seasonBlock = if (state == "closed_for_season") inferReopenDate(oneSite, today) else null
+
+        availabilityResponseDto(
+            provider = "recgov",
+            today = today,
+            days = days,
+            perDay = perDay,
+            state = state,
+            summary = summary,
+            seasonBlock = seasonBlock,
+            cacheBlock = cacheBlock,
+            campgroundId = recgovId,
+            reservableId = "site:recgov:$campsiteId",
+        )
+    }
+
+/**
  * Bulk variant: returns just the dates inside [start, start+nights-1] where
  * at least one site is bookable. Reuses the same cache as the single-id path.
  *

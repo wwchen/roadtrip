@@ -6,6 +6,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -125,7 +126,7 @@ class AspiraAvailabilityClient(
             parse(body, mapId)
         }
 
-    private fun parse(
+    internal fun parse(
         body: String,
         mapId: Int,
     ): AspiraAvailability {
@@ -138,10 +139,21 @@ class AspiraAvailabilityClient(
             root["mapLinkAvailabilities"]?.jsonObject?.mapValues { (_, v) ->
                 v.jsonArray.map { it.jsonPrimitive.intOrNull ?: AspiraStatus.NO_DATA }
             } ?: emptyMap()
+        val resources =
+            root["resourceAvailabilities"]?.jsonObject?.mapValues { (_, v) ->
+                v.jsonArray.map { day ->
+                    (day as? JsonObject)
+                        ?.get("availability")
+                        ?.jsonPrimitive
+                        ?.intOrNull
+                        ?: AspiraStatus.NO_DATA
+                }
+            } ?: emptyMap()
         return AspiraAvailability(
             mapId = mapId,
             parkRollup = map,
             byMapLink = sub,
+            byResource = resources,
         )
     }
 
@@ -175,4 +187,5 @@ data class AspiraAvailability(
     val mapId: Int,
     val parkRollup: List<Int>,
     val byMapLink: Map<String, List<Int>>,
+    val byResource: Map<String, List<Int>> = emptyMap(),
 )

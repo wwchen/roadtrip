@@ -48,6 +48,7 @@ class RecgovPoiReservableJoiner : PoiReservableJoiner {
             .join(POIS)
             .on(POIS.SOURCE.eq(POI_SOURCE).and(POIS.SOURCE_ID.eq(expectedSourceId)))
             .where(RESERVABLES.VENDOR.eq(VENDOR))
+            .and(DSL.condition("reservables.deleted_at IS NULL"))
             .and(POIS.DELETED_AT.isNull)
             .fetch { record ->
                 PoiReservableJoiner.Link(
@@ -56,6 +57,27 @@ class RecgovPoiReservableJoiner : PoiReservableJoiner {
                 )
             }
     }
+
+    override fun sweepStaleLinks(ctx: JoinerCtx): Int =
+        ctx.ctx.execute(
+            """
+            DELETE FROM reservable_pois rp
+            USING reservables r, pois p
+            WHERE rp.reservable_id = r.id
+              AND rp.poi_id = p.id
+              AND r.vendor = ?
+              AND p.source = ?
+              AND (
+                r.deleted_at IS NOT NULL
+                OR p.deleted_at IS NOT NULL
+                OR p.source_id IS DISTINCT FROM concat(?, jsonb_extract_path_text(r.raw::jsonb, ?))
+              )
+            """.trimIndent(),
+            VENDOR,
+            POI_SOURCE,
+            POI_SOURCE_ID_PREFIX,
+            PARENT_FACILITY_KEY,
+        )
 
     private companion object {
         const val ADAPTER_NAME = "RecgovPoiReservableJoiner"

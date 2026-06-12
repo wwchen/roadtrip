@@ -20,7 +20,7 @@ export function requestCampsiteAvailability(id, { days = 30, start, minNights, f
   if (start) params.set('start', start);
   if (minNights != null) params.set('min_nights', String(minNights));
   if (force) params.set('force', '1');
-  return fetch(`/api/campsite/availability/${encodeURIComponent(id)}?${params}`, { signal });
+  return fetch(`/api/poi/${encodeURIComponent(id)}/availability?${params}`, { signal });
 }
 
 export async function fetchBulkAvailability({ ids, start, nights, signal }) {

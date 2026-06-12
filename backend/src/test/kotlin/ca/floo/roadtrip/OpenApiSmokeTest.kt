@@ -12,6 +12,7 @@ import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
 import ca.floo.roadtrip.routes.healthRoutes
@@ -96,7 +97,7 @@ class OpenApiSmokeTest {
                             recgovCache = CachedAvailability(AvailabilityClient()),
                             aspiraCache = CachedAspiraAvailability(AspiraAvailabilityClient()),
                         )
-                    campsiteAvailabilityRoutes(CampsiteProviderRepo(ctx), bookingProviders)
+                    campsiteAvailabilityRoutes(CampsiteProviderRepo(ctx), bookingProviders, ReservableRepo(ctx))
                     eventsRoutes(bus)
                     campsiteDebugRoutes(AlertRepo(ctx), MatchRepo(ctx), bus)
                 }

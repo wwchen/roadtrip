@@ -37,6 +37,20 @@ interface BookingProvider {
     suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto
 
     /**
+     * Per-day availability for one reservable under a campground. Providers
+     * should share the same upstream cache as [availability]; this endpoint is
+     * a narrower projection of the same inventory window, not a second
+     * independent polling path.
+     *
+     * Default is unsupported so adapters can opt in as their upstream exposes
+     * stable per-resource status.
+     *
+     * @throws BookingProviderError on upstream failure or unsupported provider.
+     */
+    suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto =
+        throw BookingProviderError.Unsupported("reservableAvailability", id)
+
+    /**
      * Just the dates inside the requested window where at least one site is
      * bookable. Cheaper variant for the bulk "score N campgrounds" endpoint;
      * adapters typically share the cache with [availability].
@@ -57,6 +71,20 @@ interface BookingProvider {
  */
 data class AvailabilityRequest(
     val ref: ProviderRef,
+    val start: LocalDate,
+    val days: Int,
+    val minNights: Int = 1,
+    val force: Boolean = false,
+)
+
+/**
+ * Single-reservable availability request. [vendorId] is the opaque
+ * reservables.vendor_id for the adapter's upstream (rec.gov campsite id,
+ * Aspira resource id, etc.).
+ */
+data class ReservableAvailabilityRequest(
+    val ref: ProviderRef,
+    val vendorId: String,
     val start: LocalDate,
     val days: Int,
     val minNights: Int = 1,

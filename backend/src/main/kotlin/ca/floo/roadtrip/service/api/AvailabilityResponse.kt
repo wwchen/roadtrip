@@ -93,12 +93,14 @@ fun availabilityResponseDto(
     campgroundId: String? = null,
     host: String? = null,
     mapId: String? = null,
+    reservableId: String? = null,
 ): AvailabilityResponseDto =
     AvailabilityResponseDto(
         provider = provider,
         campgroundId = campgroundId,
         host = host,
         mapId = mapId,
+        reservableId = reservableId,
         checkedAt = Instant.now().toString(),
         window = AvailabilityWindowDto(start = today.toString(), days = days),
         summary = summary,
@@ -122,6 +124,7 @@ data class AvailabilityResponseDto(
     @SerialName("campground_id") val campgroundId: String? = null,
     val host: String? = null,
     @SerialName("map_id") val mapId: String? = null,
+    @SerialName("reservable_id") val reservableId: String? = null,
     @SerialName("checked_at") val checkedAt: String,
     val window: AvailabilityWindowDto,
     val summary: String,

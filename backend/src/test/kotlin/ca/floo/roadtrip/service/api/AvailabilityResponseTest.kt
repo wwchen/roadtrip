@@ -1,6 +1,9 @@
 package ca.floo.roadtrip.service.api
 
+import ca.floo.roadtrip.client.AspiraAvailability
 import ca.floo.roadtrip.client.AspiraException
+import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean
@@ -68,4 +71,37 @@ class AvailabilityResponseTest {
         assertEquals("upstream_blocked", json["error"]!!.jsonPrimitive.content)
         assertEquals(300, json["retry_after_s"]!!.jsonPrimitive.int)
     }
+
+    @Test
+    fun `aspira resource availability narrows cached map response to one resource`() =
+        runBlocking {
+            val cache =
+                CachedAspiraAvailability(
+                    fetcher = { _, mapId, _, _ ->
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink = emptyMap(),
+                            byResource = mapOf("-2147478966" to listOf(1, 1, 5)),
+                        )
+                    },
+                )
+
+            val dto =
+                fetchAndClassifyAspiraResource(
+                    cache = cache,
+                    host = "camping.bcparks.ca",
+                    mapId = -2147483516,
+                    resourceId = "-2147478966",
+                    reservableVendor = "aspira_bc",
+                    today = LocalDate.parse("2026-07-01"),
+                    days = 2,
+                    force = false,
+                    minNights = 2,
+                )
+
+            assertEquals("site:aspira_bc:-2147478966", dto.reservableId)
+            assertEquals("available", dto.availability[0].status)
+            assertEquals("booked", dto.availability[1].status)
+        }
 }

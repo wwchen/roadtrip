@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.booking.adapters.recgov
 
 import ca.floo.campsite.recgov.booker.api.availableDatesRecgov
 import ca.floo.campsite.recgov.booker.api.fetchAndClassifyRecgov
+import ca.floo.campsite.recgov.booker.api.fetchAndClassifyRecgovReservable
 import ca.floo.campsite.recgov.booker.api.monthsCovering
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.roadtrip.models.ProviderRef
@@ -12,6 +13,7 @@ import ca.floo.roadtrip.service.booking.BookingCapabilities
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderError
 import ca.floo.roadtrip.service.booking.BookingProviderId
+import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 
 /**
  * rec.gov adapter. Wraps the existing per-month cache + classify pipeline in
@@ -60,6 +62,24 @@ class RecGovBookingProvider(
         val recgovId = recgovIdOrThrow(req.ref)
         return runWithErrorMapping {
             availableDatesRecgov(cache, recgovId, req.start, req.nights)
+        }
+    }
+
+    override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
+        val recgovId = recgovIdOrThrow(req.ref)
+        val rollingEnd = req.start.plusDays((req.days + req.minNights - 2).toLong())
+        val months = monthsCovering(req.start, rollingEnd)
+        return runWithErrorMapping {
+            fetchAndClassifyRecgovReservable(
+                cache = cache,
+                recgovId = recgovId,
+                campsiteId = req.vendorId,
+                today = req.start,
+                days = req.days,
+                months = months,
+                force = req.force,
+                minNights = req.minNights,
+            )
         }
     }
 
