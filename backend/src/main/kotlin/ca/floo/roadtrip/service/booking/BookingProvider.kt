@@ -46,11 +46,20 @@ interface BookingProvider {
     suspend fun availableDates(req: AvailableDatesRequest): List<String>
 }
 
-/** Single-id availability request. `force=true` busts the adapter's cache. */
+/**
+ * Single-id availability request.
+ *
+ * `minNights` controls same-site multi-night classification: a day D in the
+ * response is "available" iff at least one site is open for all N nights
+ * starting D. Default 1 collapses to single-night classification.
+ *
+ * `force=true` busts the adapter's cache.
+ */
 data class AvailabilityRequest(
     val ref: ProviderRef,
     val start: LocalDate,
     val days: Int,
+    val minNights: Int = 1,
     val force: Boolean = false,
 )
 

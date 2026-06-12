@@ -56,6 +56,13 @@ internal fun monthsCovering(
  * Fetch every relevant month from cache, classify into per-day buckets, and
  * render the unified response. Throws on upstream failure — caller maps
  * to a 503.
+ *
+ * `minNights` controls same-site multi-night classification: a day D is
+ * "available" iff at least one site is Available for all N consecutive
+ * nights starting D. Passing 1 collapses to single-night classification
+ * (the legacy behavior). The caller is responsible for ensuring `months`
+ * covers `[start, start + days + minNights - 2]` so the rolling window
+ * doesn't truncate at the visible-window edge.
  */
 internal suspend fun fetchAndClassifyRecgov(
     cache: CachedAvailability,
@@ -64,6 +71,7 @@ internal suspend fun fetchAndClassifyRecgov(
     days: Int,
     months: List<String>,
     force: Boolean,
+    minNights: Int = 1,
 ): AvailabilityResponseDto =
     coroutineScope {
         val results: List<CachedResult> =
@@ -75,7 +83,7 @@ internal suspend fun fetchAndClassifyRecgov(
         val merged: Map<String, Map<String, String>> = mergeCampsites(results.map { it.data })
 
         val dates = (0 until days).map { today.plusDays(it.toLong()).toString() }
-        val perDay = dates.map { date -> classifyDay(merged, date) }
+        val perDay = dates.map { date -> classifyDay(merged, date, minNights.coerceAtLeast(1)) }
 
         val state = classifyWindowState(perDay)
         val summary = summarizeWindow(days, perDay, state)
@@ -98,6 +106,11 @@ internal suspend fun fetchAndClassifyRecgov(
 /**
  * Bulk variant: returns just the dates inside [start, start+nights-1] where
  * at least one site is bookable. Reuses the same cache as the single-id path.
+ *
+ * "Bookable" here means available *for nights consecutive nights starting
+ * that date*. This matches the bulk endpoint's contract — the caller is
+ * asking "which arrival dates work for an N-night stay?", not "which dates
+ * have any open site."
  */
 suspend fun availableDatesRecgov(
     cache: CachedAvailability,
@@ -106,7 +119,10 @@ suspend fun availableDatesRecgov(
     nights: Int,
 ): List<String> =
     coroutineScope {
-        val end = start.plusDays((nights - 1).toLong())
+        // Cover the full range each candidate window touches: start through
+        // start + (nights-1) for the last arrival + (nights-1) trailing nights.
+        val lastArrival = start.plusDays((nights - 1).toLong())
+        val end = lastArrival.plusDays((nights - 1).toLong())
         val months = monthsCovering(start, end)
         val results: List<CachedResult> =
             months
@@ -116,7 +132,7 @@ suspend fun availableDatesRecgov(
         (0 until nights)
             .map { start.plusDays(it.toLong()).toString() }
             .filter { date ->
-                val cls = classifyDay(merged, date)
+                val cls = classifyDay(merged, date, nights.coerceAtLeast(1))
                 cls.status == "available" || cls.status == "partial"
             }
     }
@@ -136,32 +152,55 @@ private fun mergeCampsites(maps: List<Map<String, Campsite>>): Map<String, Map<S
     return out
 }
 
+/**
+ * Classify a single arrival day's availability for an N-night same-site stay.
+ *
+ * For each campsite, the site qualifies as "available" only if it's reported
+ * Available for every night from `date` through `date + minNights - 1`. A
+ * single Closed or booked night anywhere in that window disqualifies the
+ * site for that arrival day.
+ *
+ * Site totals (`total`) count sites that have *any* status for the arrival
+ * date — that's how we tell the visible-window classifier between "no data"
+ * and "fully booked." A site missing from the upstream feed for the arrival
+ * date doesn't contribute to either tally; one with a non-Closed status on
+ * the arrival but missing data on a trailing night counts as booked (the
+ * upstream simply doesn't sell beyond the season's end on that site).
+ */
 private fun classifyDay(
     merged: Map<String, Map<String, String>>,
     date: String,
+    minNights: Int,
 ): DayClassification {
-    var avail = 0
+    val arrivalDate = LocalDate.parse(date)
+    val window = (0 until minNights).map { arrivalDate.plusDays(it.toLong()).toString() }
+
+    var availForStay = 0 // sites Available for ALL N nights
     var booked = 0
     var closed = 0
     for ((_, byDate) in merged) {
-        val s = byDate[date] ?: continue
+        val arrivalStatus = byDate[date] ?: continue
         when {
-            s.equals("Available", true) || s.equals("Open", true) -> avail++
-            s.equals("Closed", true) -> closed++
+            arrivalStatus.equals("Closed", true) -> closed++
+            isOpen(arrivalStatus) -> {
+                if (window.all { d -> isOpen(byDate[d]) }) availForStay++ else booked++
+            }
             else -> booked++
         }
     }
-    val total = avail + booked + closed
+    val total = availForStay + booked + closed
     val status =
         when {
             total == 0 -> "closed"
             closed == total -> "closed"
-            avail == 0 -> "booked"
-            avail == total -> "available"
+            availForStay == 0 -> "booked"
+            availForStay == total -> "available"
             else -> "partial"
         }
-    return DayClassification(date, status, avail, total)
+    return DayClassification(date, status, availForStay, total)
 }
+
+private fun isOpen(s: String?): Boolean = s != null && (s.equals("Available", true) || s.equals("Open", true))
 
 private fun inferReopenDate(
     merged: Map<String, Map<String, String>>,

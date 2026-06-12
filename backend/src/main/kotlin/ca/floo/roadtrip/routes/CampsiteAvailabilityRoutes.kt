@@ -44,6 +44,10 @@ private val log = LoggerFactory.getLogger("CampsiteAvailabilityRoutes")
 private const val MAX_BULK_IDS = 50
 private const val MAX_NIGHTS = 14
 
+// Multi-night classifier upper bound. 31 covers any realistic stay; longer
+// windows would need a sliding-window optimization in the per-day classifier.
+private const val MAX_MIN_NIGHTS = 31
+
 // Per-IP rate-limit budget. Cross-provider — one bucket regardless of which
 // adapter ends up answering. See [IpRateLimiter] for the token-bucket math.
 private const val IP_RATE_LIMIT_PER_MINUTE = 30
@@ -77,7 +81,10 @@ fun Route.campsiteAvailabilityRoutes(
             "extras (`campground_id` for rec.gov; `host`/`map_id` for Aspira) " +
             "are additive. Optional `?start=YYYY-MM-DD` shifts the window " +
             "(default: today); capped at `capabilities.bookingHorizonDays` " +
-            "ahead of today, per provider."
+            "ahead of today, per provider. Optional `?min_nights=N` (1..31, " +
+            "default 1) classifies each day under same-site multi-night " +
+            "semantics: 'available' means at least one site is open for all " +
+            "N consecutive nights starting that day."
         response {
             code(HttpStatusCode.BadRequest) {
                 description = "Bad POI id, invalid days, or start out of range."
@@ -144,11 +151,22 @@ fun Route.campsiteAvailabilityRoutes(
                     return@get
                 }
             }
+        val minNights =
+            call.request.queryParameters["min_nights"]
+                ?.toIntOrNull()
+                ?.coerceIn(1, MAX_MIN_NIGHTS)
+                ?: 1
 
         try {
             val response =
                 provider.availability(
-                    AvailabilityRequest(ref = ref, start = start, days = days, force = force),
+                    AvailabilityRequest(
+                        ref = ref,
+                        start = start,
+                        days = days,
+                        minNights = minNights,
+                        force = force,
+                    ),
                 )
             call.respondAvailabilityJson(response)
         } catch (e: BookingProviderError) {

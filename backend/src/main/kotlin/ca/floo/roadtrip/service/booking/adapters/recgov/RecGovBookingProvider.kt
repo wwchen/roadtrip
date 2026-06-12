@@ -37,10 +37,22 @@ class RecGovBookingProvider(
 
     override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
         val recgovId = recgovIdOrThrow(req.ref)
-        val end = req.start.plusDays((req.days - 1).toLong())
-        val months = monthsCovering(req.start, end)
+        // The classifier looks up to (minNights - 1) days past the visible
+        // window's last day to determine whether the last day is bookable for
+        // a stay. Pull months that cover the rolling window so the lookup
+        // doesn't truncate at the edge.
+        val rollingEnd = req.start.plusDays((req.days + req.minNights - 2).toLong())
+        val months = monthsCovering(req.start, rollingEnd)
         return runWithErrorMapping {
-            fetchAndClassifyRecgov(cache, recgovId, req.start, req.days, months, req.force)
+            fetchAndClassifyRecgov(
+                cache = cache,
+                recgovId = recgovId,
+                today = req.start,
+                days = req.days,
+                months = months,
+                force = req.force,
+                minNights = req.minNights,
+            )
         }
     }
 

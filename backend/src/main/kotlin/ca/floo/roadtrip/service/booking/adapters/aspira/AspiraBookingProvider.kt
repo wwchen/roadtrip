@@ -41,7 +41,15 @@ class AspiraBookingProvider(
     override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
         val mapId = mapIdOrThrow(req.ref)
         return runWithErrorMapping {
-            fetchAndClassifyAspira(cache, host, mapId, req.start, req.days, req.force)
+            fetchAndClassifyAspira(
+                cache = cache,
+                host = host,
+                mapId = mapId,
+                today = req.start,
+                days = req.days,
+                force = req.force,
+                minNights = req.minNights,
+            )
         }
     }
 

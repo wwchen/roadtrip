@@ -63,9 +63,9 @@ export function renderWeekSkeleton() {
  * The label inside each cell. Status-driven rather than count-driven, since
  * the count alone is ambiguous (0 could be 'fully booked' or 'closed').
  *
- * Reads both snake_case (BE wire) and camelCase (defensive). If the count is
- * missing for any reason, fall back to a status-only label rather than
- * showing 'undefined'.
+ * Reads both snake_case (BE wire) and camelCase (defensive). Pluralizes the
+ * unit so "1 site" / "5 sites" reads naturally. Falls back to a status-only
+ * label when the count is missing rather than printing 'undefined'.
  */
 function renderAvailLabel(day) {
   const status = day.status || 'closed';
@@ -75,7 +75,7 @@ function renderAvailLabel(day) {
   if (count == null) {
     // We know status is available/partial but the BE didn't ship a count —
     // tell the user what we do know rather than printing nothing.
-    return status === 'partial' ? 'some' : 'open';
+    return status === 'partial' ? 'some open' : 'open';
   }
-  return String(count);
+  return `${count} ${count === 1 ? 'site' : 'sites'}`;
 }
