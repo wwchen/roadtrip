@@ -71,6 +71,49 @@ internal suspend fun fetchAndClassifyAspira(
 }
 
 /**
+ * Same cached Aspira `/api/availability/map` response as the campground
+ * rollup, narrowed to one `resourceAvailabilities` key.
+ */
+internal suspend fun fetchAndClassifyAspiraResource(
+    cache: CachedAspiraAvailability,
+    host: String,
+    mapId: Int,
+    resourceId: String,
+    reservableVendor: String,
+    today: LocalDate,
+    days: Int,
+    force: Boolean,
+    minNights: Int = 1,
+): AvailabilityResponseDto {
+    val nights = minNights.coerceAtLeast(1)
+    val rollingEnd = today.plusDays((days + nights - 2).toLong())
+    val cached = cache.get(host, mapId, today, rollingEnd, force)
+    val resourceDays = cached.data.byResource[resourceId].orEmpty()
+    val perDay = classifyResourceDays(resourceDays, today, days, nights)
+    val state = classifyWindowState(perDay)
+    val summary = summarizeWindow(days, perDay, state)
+    val cacheBlock =
+        AvailabilityCacheBlock(
+            hit = cached.hit,
+            ageSeconds = cached.ageSeconds,
+            ttlSeconds = cached.ttlSeconds,
+        )
+    return availabilityResponseDto(
+        provider = "aspira",
+        today = today,
+        days = days,
+        perDay = perDay,
+        state = state,
+        summary = summary,
+        seasonBlock = null,
+        cacheBlock = cacheBlock,
+        host = host,
+        mapId = mapId.toString(),
+        reservableId = "site:$reservableVendor:$resourceId",
+    )
+}
+
+/**
  * Bulk variant: arrival dates in [start, start+nights-1] where at least one
  * sub-area is bookable for an N-consecutive-night same-sub-area stay.
  */
@@ -120,6 +163,43 @@ private fun classifyDays(
             // Single virtual sub-area: the rollup. Same window check.
             classifyArrivalDay(listOf(rollup), d, nights, date)
         }
+    }
+}
+
+private fun classifyResourceDays(
+    resourceDays: List<Int>,
+    start: LocalDate,
+    days: Int,
+    minNights: Int,
+): List<DayClassification> {
+    val nights = minNights.coerceAtLeast(1)
+    return (0 until days).map { d ->
+        val date = start.plusDays(d.toLong()).toString()
+        if (d >= resourceDays.size) {
+            DayClassification(date = date, status = "closed", availableCount = 0, total = 0)
+        } else {
+            classifyResourceArrivalDay(resourceDays, d, nights, date)
+        }
+    }
+}
+
+private fun classifyResourceArrivalDay(
+    resourceDays: List<Int>,
+    d: Int,
+    nights: Int,
+    date: String,
+): DayClassification {
+    val arrivalCls = AspiraStatus.classify(resourceDays[d])
+    return when (arrivalCls) {
+        "closed" -> DayClassification(date = date, status = "closed", availableCount = 0, total = 1)
+        "available", "partial" -> {
+            if (!windowAllOpen(resourceDays, d, nights)) {
+                DayClassification(date = date, status = "booked", availableCount = 0, total = 1)
+            } else {
+                DayClassification(date = date, status = arrivalCls, availableCount = 1, total = 1)
+            }
+        }
+        else -> DayClassification(date = date, status = "booked", availableCount = 0, total = 1)
     }
 }
 

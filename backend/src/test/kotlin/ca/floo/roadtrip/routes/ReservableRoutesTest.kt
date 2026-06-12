@@ -1,6 +1,20 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
+import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.DayClassification
+import ca.floo.roadtrip.service.api.availabilityResponseDto
+import ca.floo.roadtrip.service.booking.AvailabilityRequest
+import ca.floo.roadtrip.service.booking.AvailableDatesRequest
+import ca.floo.roadtrip.service.booking.BookingCapabilities
+import ca.floo.roadtrip.service.booking.BookingProvider
+import ca.floo.roadtrip.service.booking.BookingProviderId
+import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
@@ -193,25 +207,90 @@ class ReservableRoutesTest {
             assertEquals(HttpStatusCode.NotFound, resp.status)
         }
 
+    @Test
+    fun `poi availability alias dispatches through booking provider`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/poi/$poiId/availability?start=2026-07-01&days=1")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
+            assertEquals("232447", body["campground_id"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `reservable availability dispatches by linked campground provider`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            val reservableId = seedReservable(vendorId = "330257", name = "A12")
+            link(reservableId, poiId)
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01&days=1")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
+            assertEquals("site:recgov:330257", body["reservable_id"]!!.jsonPrimitive.content)
+            val firstDate =
+                body["availability"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject["date"]!!
+                    .jsonPrimitive
+                    .content
+            assertEquals("2026-07-01", firstDate)
+        }
+
     private fun seedPoi(
         sourceId: String,
         name: String,
+        providerRefJson: String? = null,
     ): Long =
         ctx
             .fetchOne(
                 """
                 INSERT INTO pois (
                     source, source_id, category, name, geom,
-                    region, properties, fetched_at
+                    region, properties, provider_ref, fetched_at
                 ) VALUES (
                     'test', ?, 'campground', ?,
                     ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, '2026-06-01 00:00:00+00'::timestamptz
+                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
                 )
                 RETURNING id
                 """.trimIndent(),
                 sourceId,
                 name,
+                providerRefJson,
             )!!
             .get("id", Long::class.java)
 
@@ -252,5 +331,71 @@ class ReservableRoutesTest {
             reservableId,
             poiId,
         )
+    }
+
+    private fun fakeBookingProviders(): BookingProviderRegistry =
+        BookingProviderRegistry(
+            adapters = mapOf(BookingProviderId.RECGOV to FakeBookingProvider),
+            sourceToProviderId = mapOf("test" to BookingProviderId.RECGOV),
+        )
+
+    private object FakeBookingProvider : BookingProvider {
+        override val id: BookingProviderId = BookingProviderId.RECGOV
+        override val capabilities: BookingCapabilities =
+            BookingCapabilities(
+                supportsAvailability = true,
+                supportsAlerts = false,
+                supportsAutoBook = false,
+                bookingHorizonDays = 365,
+            )
+
+        override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
+            val ref = req.ref as ProviderRef.RecGov
+            return fakeResponse(
+                start = req.start,
+                days = req.days,
+                campgroundId = ref.recgovId,
+                reservableId = null,
+            )
+        }
+
+        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto =
+            fakeResponse(
+                start = req.start,
+                days = req.days,
+                campgroundId = null,
+                reservableId = "site:recgov:${req.vendorId}",
+            )
+
+        override suspend fun availableDates(req: AvailableDatesRequest): List<String> = listOf(req.start.toString())
+
+        private fun fakeResponse(
+            start: java.time.LocalDate,
+            days: Int,
+            campgroundId: String?,
+            reservableId: String?,
+        ): AvailabilityResponseDto {
+            val perDay =
+                (0 until days).map { offset ->
+                    DayClassification(
+                        date = start.plusDays(offset.toLong()).toString(),
+                        status = "available",
+                        availableCount = 1,
+                        total = 1,
+                    )
+                }
+            return availabilityResponseDto(
+                provider = "fake",
+                today = start,
+                days = days,
+                perDay = perDay,
+                state = "success",
+                summary = "$days nights available",
+                seasonBlock = null,
+                cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 0, ttlSeconds = 60),
+                campgroundId = campgroundId,
+                reservableId = reservableId,
+            )
+        }
     }
 }

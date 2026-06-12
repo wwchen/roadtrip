@@ -13,6 +13,7 @@ import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
+import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.dataSourceFor
 import ca.floo.roadtrip.repo.dsl
@@ -193,7 +194,7 @@ fun Application.module() {
         routeRoutes(routeCache, ctx)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
-        campsiteAvailabilityRoutes(CampsiteProviderRepo(ctx), bookingProviderRegistry)
+        campsiteAvailabilityRoutes(CampsiteProviderRepo(ctx), bookingProviderRegistry, ReservableRepo(ctx))
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
         // Static site. /web/* and /data/* serve directly from the repo

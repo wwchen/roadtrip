@@ -6,12 +6,14 @@ import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.availableDatesAspira
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspira
+import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraResource
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
 import ca.floo.roadtrip.service.booking.BookingCapabilities
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderError
 import ca.floo.roadtrip.service.booking.BookingProviderId
+import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 
 /**
  * Aspira NextGen adapter. One instance per host (Parks Canada, BC Provincial,
@@ -60,6 +62,23 @@ class AspiraBookingProvider(
         }
     }
 
+    override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
+        val mapId = mapIdOrThrow(req.ref)
+        return runWithErrorMapping {
+            fetchAndClassifyAspiraResource(
+                cache = cache,
+                host = host,
+                mapId = mapId,
+                resourceId = req.vendorId,
+                reservableVendor = reservableVendor(),
+                today = req.start,
+                days = req.days,
+                force = req.force,
+                minNights = req.minNights,
+            )
+        }
+    }
+
     /**
      * Pull the map id and narrow Long → Int. Real Aspira ids fit comfortably
      * in 32 bits; rejecting an out-of-range value loudly is better than
@@ -76,6 +95,14 @@ class AspiraBookingProvider(
         }
         return ar.mapId.toInt()
     }
+
+    private fun reservableVendor(): String =
+        when (id) {
+            BookingProviderId.ASPIRA_PC -> "aspira_pc"
+            BookingProviderId.ASPIRA_BC -> "aspira_bc"
+            BookingProviderId.ASPIRA_WA -> "aspira_wa"
+            else -> "aspira"
+        }
 
     private inline fun <T> runWithErrorMapping(block: () -> T): T =
         try {
