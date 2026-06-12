@@ -122,6 +122,32 @@ jobs:
           git fetch origin +refs/heads/master:refs/remotes/origin/master
           master_sha=$(git rev-parse origin/master)
 
+          resolve_old_base_ref() {
+            local old_base="$1"
+            local old_base_sha
+
+            if git fetch origin "+refs/heads/$old_base:refs/remotes/origin/$old_base"; then
+              printf 'origin/%s\n' "$old_base"
+              return 0
+            fi
+
+            echo "Old base branch $old_base no longer exists on origin; looking up merged PR head." >&2
+            old_base_sha=$(
+              gh pr list --repo "$REPO" --state merged --head "$old_base" \
+                --json headRefOid,mergedAt \
+                --jq 'sort_by(.mergedAt) | last | .headRefOid // empty' \
+                || true
+            )
+
+            if [ -n "$old_base_sha" ] && git cat-file -e "$old_base_sha^{commit}" 2>/dev/null; then
+              printf '%s\n' "$old_base_sha"
+              return 0
+            fi
+
+            echo "Could not resolve old base $old_base; falling back to patch-id rebase onto master." >&2
+            return 1
+          }
+
           while read -r pr_number branch old_base; do
             [ -z "$pr_number" ] && continue
             echo "::group::PR #$pr_number ($branch)"
@@ -130,9 +156,12 @@ jobs:
             git checkout -B "$branch" "origin/$branch"
 
             if [ -n "${old_base:-}" ]; then
-              git fetch origin "+refs/heads/$old_base:refs/remotes/origin/$old_base"
-              echo "Rebasing $branch onto origin/master from old base $old_base."
-              rebase_args=(--onto origin/master "origin/$old_base" "$branch")
+              if old_base_ref=$(resolve_old_base_ref "$old_base"); then
+                echo "Rebasing $branch onto origin/master from old base $old_base ($old_base_ref)."
+                rebase_args=(--onto origin/master "$old_base_ref" "$branch")
+              else
+                rebase_args=("$master_sha")
+              fi
             else
               base=$(git merge-base HEAD "$master_sha")
               if [ "$base" = "$master_sha" ]; then
