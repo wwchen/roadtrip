@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.db.generated.tables.ReservablePois.Companion.RESERVABLE_POIS
 import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
 import ca.floo.roadtrip.models.Reservable
@@ -98,6 +99,18 @@ class ReservableRepo(
             .where(RESERVABLE_POIS.POI_ID.eq(poiId))
             .and(RESERVABLES.TYPE.eq(type.encode()))
             .fetchOne(0, Int::class.java)!!
+
+    /** Active POI ids linked to one reservable, ordered for stable API output. */
+    fun poiIdsForReservable(reservableId: Long): List<Long> =
+        ctx
+            .select(RESERVABLE_POIS.POI_ID)
+            .from(RESERVABLE_POIS)
+            .join(POIS)
+            .on(POIS.ID.eq(RESERVABLE_POIS.POI_ID))
+            .where(RESERVABLE_POIS.RESERVABLE_ID.eq(reservableId))
+            .and(POIS.DELETED_AT.isNull)
+            .orderBy(RESERVABLE_POIS.POI_ID.asc())
+            .fetch { it.value1()!! }
 
     /**
      * Link a reservable to a POI. Idempotent — re-running with the same
