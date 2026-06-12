@@ -98,6 +98,48 @@ data_sources:
       args: { slug: recgov-campgrounds }
       output_dir_prefix: data/raw/recgov-campgrounds
 
+  # --- Aspira per-resource availability captures (RFC 0008) -----------------
+  # One fetcher, three tenants. The fetcher walks the paired aspira-maps-{tenant}
+  # capture for leaves and calls /api/availability/map per leaf so the response's
+  # `resourceAvailabilities` block names every individual reservable. We persist
+  # only the catalog signal — request-time availability stays in the existing
+  # CachedAvailability path.
+  - slug: aspira-resources-wa
+    name: Aspira resource catalog (Washington State Parks)
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_aspira_resources.py
+      args:
+        slug: aspira-resources-wa
+        maps-slug: aspira-maps-wa
+        host: washington.goingtocamp.com
+      output_dir_prefix: data/raw/aspira-resources-wa
+    depends_on: [aspira-maps-wa]
+
+  - slug: aspira-resources-bc
+    name: Aspira resource catalog (BC Parks)
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_aspira_resources.py
+      args:
+        slug: aspira-resources-bc
+        maps-slug: aspira-maps-bc
+        host: camping.bcparks.ca
+      output_dir_prefix: data/raw/aspira-resources-bc
+    depends_on: [aspira-maps-bc]
+
+  - slug: aspira-resources-pc
+    name: Aspira resource catalog (Parks Canada)
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_aspira_resources.py
+      args:
+        slug: aspira-resources-pc
+        maps-slug: aspira-maps-pc
+        host: reservation.pc.gc.ca
+      output_dir_prefix: data/raw/aspira-resources-pc
+    depends_on: [aspira-maps-pc]
+
   # --- Federal campsites (rec.gov per-facility catalog, RFC 0008) -----------
   # Walks the recgov-campgrounds capture for FacilityIDs and calls rec.gov's
   # /api/camps/availability/campground/{id}/month per facility. The body's
@@ -246,3 +288,27 @@ reservable_data:
       - slug: federal-campsites
         adapter: RecGovCampsitesEtl
         inputs: [recgov-campsites]
+
+  # Aspira per-tenant reservable catalogs. Each row's terminal reads two
+  # data_sources: the per-leaf availability capture (multi-part) for the
+  # resource list, and the /api/maps capture for leaf metadata
+  # (transactionLocationId, name, parent name) used to label resources.
+  # Cross-row etl refs aren't supported, so the maps tree gets walked
+  # again here via AspiraLeavesWalk — same code path AspiraLeavesEtl uses.
+  - name: Washington Aspira Resources
+    etls:
+      - slug: aspira-wa-resources
+        adapter: AspiraResourcesEtl
+        inputs: [aspira-resources-wa, aspira-maps-wa]
+
+  - name: BC Aspira Resources
+    etls:
+      - slug: aspira-bc-resources
+        adapter: AspiraResourcesEtl
+        inputs: [aspira-resources-bc, aspira-maps-bc]
+
+  - name: Parks Canada Aspira Resources
+    etls:
+      - slug: aspira-pc-resources
+        adapter: AspiraResourcesEtl
+        inputs: [aspira-resources-pc, aspira-maps-pc]

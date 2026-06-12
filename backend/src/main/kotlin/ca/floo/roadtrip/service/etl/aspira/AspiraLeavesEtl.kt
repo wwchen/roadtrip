@@ -5,14 +5,8 @@ import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.long
 
 // Aspira /api/maps tree → flat list of bookable leaves.
 //
@@ -52,137 +46,11 @@ class AspiraLeavesEtl(
     override fun transform(
         dto: AspiraMapsDto,
         ctx: TransformCtx,
-    ): AspiraLeavesPayload {
-        val byId =
-            dto.maps.associate { node ->
-                val obj = node.jsonObject
-                val id =
-                    obj["mapId"]?.jsonPrimitive?.long
-                        ?: error("$etlSlug: map node without mapId: $obj")
-                id to obj
-            }
-
-        val seen = mutableSetOf<Long>()
-        val leaves = mutableListOf<AspiraLeaf>()
-
-        for (node in dto.maps) {
-            val obj = node.jsonObject
-            val txnLoc = obj["transactionLocationId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
-            if (txnLoc == null) continue
-
-            val mapId = obj["mapId"]!!.jsonPrimitive.long
-            if (mapId in seen) continue
-
-            val title = titleFor(obj, byId) ?: continue
-            val resLoc = obj["resourceLocationId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
-            val parentName = parentNameFor(obj, byId)
-
-            leaves +=
-                AspiraLeaf(
-                    name = title,
-                    transactionLocationId = txnLoc,
-                    mapId = mapId,
-                    resourceLocationId = resLoc,
-                    parentName = parentName,
-                )
-            seen += mapId
-        }
-
-        // Some maps only declare a leaf indirectly via a parent's mapLinks
-        // entry (childMapId points at a node not in the array, but the link
-        // itself carries the txnLoc). Catch those too.
-        for (node in dto.maps) {
-            for (link in node.jsonObject["mapLinks"]?.jsonArray.orEmpty()) {
-                val l = link.jsonObject
-                val txnLoc = l["transactionLocationId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: continue
-                val childMapId = l["childMapId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: continue
-                if (childMapId in seen) continue
-                val title = localizedTitle(l["localizations"]?.jsonArray) ?: continue
-                val resLoc = l["resourceLocationId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
-                val parentName = localizedTitle(node.jsonObject["localizedValues"]?.jsonArray)
-
-                leaves +=
-                    AspiraLeaf(
-                        name = title,
-                        transactionLocationId = txnLoc,
-                        mapId = childMapId,
-                        resourceLocationId = resLoc,
-                        parentName = parentName,
-                    )
-                seen += childMapId
-            }
-        }
-
-        return AspiraLeavesPayload(slug = etlSlug, leaves = leaves)
-    }
-
-    /**
-     * Prefer the node's own en-* localizedValues title. Fall back to the
-     * parent map's mapLinks localizations (PC tenant routinely leaves the
-     * node title blank).
-     */
-    private fun titleFor(
-        node: JsonObject,
-        byId: Map<Long, JsonObject>,
-    ): String? {
-        val direct = localizedTitle(node["localizedValues"]?.jsonArray)
-        if (direct != null) return direct
-        val parentId =
-            node["parentMap"]
-                ?.jsonObject
-                ?.get("mapId")
-                ?.jsonPrimitive
-                ?.long ?: return null
-        val parent = byId[parentId] ?: return null
-        val ourId = node["mapId"]!!.jsonPrimitive.long
-        for (link in parent["mapLinks"]?.jsonArray.orEmpty()) {
-            val l = link.jsonObject
-            if (l["childMapId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() == ourId) {
-                return localizedTitle(l["localizations"]?.jsonArray)
-            }
-        }
-        return null
-    }
-
-    /** Walk one parent up and return its title (used by the join-by-name fallback). */
-    private fun parentNameFor(
-        node: JsonObject,
-        byId: Map<Long, JsonObject>,
-    ): String? {
-        val parentId =
-            node["parentMap"]
-                ?.jsonObject
-                ?.get("mapId")
-                ?.jsonPrimitive
-                ?.long ?: return null
-        val parent = byId[parentId] ?: return null
-        return localizedTitle(parent["localizedValues"]?.jsonArray)
-    }
-
-    /**
-     * Pull the first en-* title out of a localizations / localizedValues
-     * array. Each entry shape: { cultureName: "en-US", title: "..." }.
-     * Tenant cultures vary (en-US for WA, en-CA for PC); prefix-match.
-     */
-    private fun localizedTitle(arr: JsonArray?): String? {
-        if (arr == null) return null
-        for (entry in arr) {
-            val o = entry.jsonObject
-            val culture = o["cultureName"]?.jsonPrimitive?.contentOrNull ?: continue
-            if (!culture.startsWith("en", ignoreCase = true)) continue
-            val title = o["title"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }
-            if (title != null) return title
-        }
-        return null
-    }
-
-    companion object {
-        private val json =
-            Json {
-                ignoreUnknownKeys = true
-                coerceInputValues = true
-            }
-    }
+    ): AspiraLeavesPayload =
+        AspiraLeavesPayload(
+            slug = etlSlug,
+            leaves = AspiraLeavesWalk.walk(dto.maps),
+        )
 }
 
 /** Just-parsed envelope, before we walk the tree. */

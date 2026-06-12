@@ -1,0 +1,19 @@
+{
+  "fetcher": "fetch_aspira_resources",
+  "fetcher_version": "1",
+  "fetched_at": "2026-09-12T17:00:00Z",
+  "request": {
+    "url": "https://reservation.pc.gc.ca/api/availability/map?mapId=-2147483641&bookingCategoryId=0&startDate=2026-09-12&endDate=2026-09-13&isReserving=true&getDailyAvailability=true&partySize=1&equipmentCategoryId=-32768&subEquipmentCategoryId=-32768",
+    "method": "GET"
+  },
+  "response": { "status": 200 },
+  "part": "leaf--2147483641",
+  "payload": {
+    "mapId": -2147483641,
+    "mapAvailabilities": [0],
+    "resourceAvailabilities": {
+      "601": [0]
+    },
+    "mapLinkAvailabilities": {}
+  }
+}
