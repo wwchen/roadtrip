@@ -592,8 +592,18 @@
     font-variant-numeric: tabular-nums;
   }
   .cg-day.cg-day-today {
-    border-color: var(--cg-accent);
-    box-shadow: 0 0 0 1px var(--cg-accent);
+    border-color: var(--cg-border);
+    box-shadow: none;
+  }
+  .cg-day.cg-day-today::before {
+    content: '';
+    position: absolute;
+    top: 6px;
+    left: 6px;
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: var(--cg-accent);
   }
   .cg-day.cg-day-today .cg-day-dow { color: var(--cg-accent); }
   .cg-day.cg-day-available {
@@ -615,6 +625,7 @@
   .cg-day.cg-day-closed .cg-day-num { color: var(--cg-faint); }
   .cg-day.cg-day-closed .cg-day-avail { color: var(--cg-faint); }
   .cg-day.cg-day-selected {
+    border-color: var(--cg-accent);
     box-shadow: 0 0 0 2px var(--cg-accent);
     transform: translateY(-1px);
   }
