@@ -100,6 +100,21 @@ class AspiraPoiReservableJoinerTest {
     }
 
     @Test
+    fun `tenant source must match reservable vendor when parent keys collide`() {
+        val pcPoi = insertAspiraPoi("aspira-pc-pins", txnLoc = "1001", mapId = "-2147483640")
+        val bcPoi = insertAspiraPoi("aspira-bc-pins", txnLoc = "1001", mapId = "-2147483640")
+        val pcRes = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
+        val bcRes = upsertResource("601", "1001", "-2147483640", vendor = "aspira_bc")
+
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val byReservable = links.associate { it.reservableId to it.poiId }
+
+        assertEquals(2, links.size)
+        assertEquals(pcPoi, byReservable[pcRes])
+        assertEquals(bcPoi, byReservable[bcRes])
+    }
+
+    @Test
     fun `mismatched txnLoc or mapId yields no link`() {
         // The composite source_id "aspira-{txnLoc}-{mapId}" must match
         // exactly. Stale captures where one half has rotated produce
@@ -188,6 +203,18 @@ class AspiraPoiReservableJoinerTest {
             """{"_parent_aspira_txn_loc":"9999","_parent_aspira_map_id":"-2147483640"}""",
             resId,
         )
+
+        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+
+        assertEquals(1, deleted)
+        assertEquals(0, linkCount())
+    }
+
+    @Test
+    fun `sweepStaleLinks deletes cross-tenant links even when parent key matches`() {
+        val bcPoi = insertAspiraPoi("aspira-bc-pins", txnLoc = "1001", mapId = "-2147483640")
+        val pcRes = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
+        reservables.linkToPoi(pcRes, bcPoi)
 
         val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservables = reservables))
 

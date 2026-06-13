@@ -13,14 +13,11 @@ import org.jooq.impl.DSL
  *   reservables.raw->>'_parent_aspira_txn_loc' = T
  *   reservables.raw->>'_parent_aspira_map_id'  = M
  *      ⇄ pois.source_id = "aspira-{T}-{M}"
- *   AND pois.source IN (aspira-wa-pins, aspira-bc-pins, aspira-pc-pins)
+ *   AND reservables.vendor maps to pois.source for the same tenant
  *
- * One adapter spans every Aspira tenant. The vendor side filter
- * (`aspira_wa` / `aspira_bc` / `aspira_pc`) is implicit because POIs and
- * reservables share the same `(txnLoc, mapId)` namespace per tenant
- * already — the upstream IDs Aspira mints are unique across the tree.
- * If a fourth tenant lands, only the YAML row + a new reservable_data
- * row need to change; the joiner stays as is.
+ * One adapter spans every Aspira tenant. The vendor/source mapping is
+ * explicit because `(txnLoc, mapId)` can collide across tenant trees.
+ * If a fourth tenant lands, add it to [TENANT_PAIRS].
  *
  * One SQL round-trip: JOIN on the constructed `aspira-{T}-{M}` source_id
  * pulled from the reservable's raw JSONB.
@@ -53,8 +50,7 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
             .select(RESERVABLES.ID, POIS.ID)
             .from(RESERVABLES)
             .join(POIS)
-            .on(POIS.SOURCE.`in`(POI_SOURCES).and(POIS.SOURCE_ID.eq(expectedSourceId)))
-            .where(RESERVABLES.VENDOR.`in`(RESERVABLE_VENDORS))
+            .on(tenantCondition().and(POIS.SOURCE_ID.eq(expectedSourceId)))
             .and(DSL.condition("reservables.deleted_at IS NULL"))
             .and(POIS.DELETED_AT.isNull)
             .fetch { record ->
@@ -77,6 +73,11 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
               AND (
                 r.deleted_at IS NOT NULL
                 OR p.deleted_at IS NOT NULL
+                OR NOT (
+                  (r.vendor = 'aspira_wa' AND p.source = 'aspira-wa-pins')
+                  OR (r.vendor = 'aspira_bc' AND p.source = 'aspira-bc-pins')
+                  OR (r.vendor = 'aspira_pc' AND p.source = 'aspira-pc-pins')
+                )
                 OR p.source_id IS DISTINCT FROM concat(
                   ?,
                   jsonb_extract_path_text(r.raw::jsonb, ?),
@@ -90,6 +91,11 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
             PARENT_MAP_ID_KEY,
         )
 
+    private fun tenantCondition() =
+        TENANT_PAIRS
+            .map { (vendor, source) -> RESERVABLES.VENDOR.eq(vendor).and(POIS.SOURCE.eq(source)) }
+            .reduce { acc, condition -> acc.or(condition) }
+
     private companion object {
         const val ADAPTER_NAME = "AspiraPoiReservableJoiner"
 
@@ -101,10 +107,11 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
         // POI keying for Aspira pins. AspiraJoinByNameEtl writes
         // pois.source_id = "aspira-{txnLoc}-{mapId}".
         const val POI_SOURCE_ID_PREFIX = "aspira-"
-        val POI_SOURCES = listOf("aspira-wa-pins", "aspira-bc-pins", "aspira-pc-pins")
-
-        // Reservable side filter — bound by AspiraResourcesEtl's per-tenant
-        // ReservableId(vendor=...).
-        val RESERVABLE_VENDORS = listOf("aspira_wa", "aspira_bc", "aspira_pc")
+        val TENANT_PAIRS =
+            listOf(
+                "aspira_wa" to "aspira-wa-pins",
+                "aspira_bc" to "aspira-bc-pins",
+                "aspira_pc" to "aspira-pc-pins",
+            )
     }
 }
