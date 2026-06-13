@@ -44,11 +44,12 @@ data class DayClassification(
 fun classifyWindowState(days: List<DayClassification>): String {
     val total = days.sumOf { it.total }
     if (total == 0) return "empty"
-    val anyAvail = days.any { it.status == "available" || it.status == "partial" }
+    val anyBookable = days.any { it.availableCount > 0 }
+    val anyStayMismatch = days.any { it.status == "partial" }
     val allClosed = days.all { it.status == "closed" || it.total == 0 }
     return when {
         allClosed -> "closed_for_season"
-        anyAvail -> "success"
+        anyBookable || anyStayMismatch -> "success"
         else -> "zero_available"
     }
 }
@@ -61,7 +62,8 @@ fun summarizeWindow(
 ): String {
     if (state == "empty") return "No availability data"
     if (state == "closed_for_season") return "Closed for season"
-    val nightsAvailable = perDay.count { it.status == "available" || it.status == "partial" }
+    val nightsAvailable = perDay.count { it.availableCount > 0 }
+    if (nightsAvailable == 0 && perDay.any { it.status == "partial" }) return "Openings need a shorter stay"
     if (state == "zero_available") return "Fully booked next $days days"
     val weekendsBooked =
         perDay.any { d ->

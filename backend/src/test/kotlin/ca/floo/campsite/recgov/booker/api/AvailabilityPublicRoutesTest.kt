@@ -214,11 +214,11 @@ class AvailabilityPublicRoutesTest {
 
     /**
      * Same data, minNights=2: the same site is open Fri but booked Sat, so it
-     * does NOT qualify for a 2-night stay. Day 0 should classify as 'booked'
-     * (no site qualifies), not 'available'.
+     * does NOT qualify for a 2-night stay. Day 0 should classify as 'partial'
+     * (open arrival, no matching stay), not 'available'.
      */
     @Test
-    fun `minNights of 2 marks day booked when trailing night is reserved`() {
+    fun `minNights of 2 marks day partial when trailing night is reserved`() {
         val map =
             mapOf(
                 "100" to
@@ -231,7 +231,7 @@ class AvailabilityPublicRoutesTest {
             )
         val body = classify(cacheReturning(map), days = 1, minNights = 2)
         val avail = body["availability"]!!.jsonArray
-        assertEquals("booked", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
+        assertEquals("partial", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
         assertEquals(
             0,
             avail[0]
@@ -243,11 +243,11 @@ class AvailabilityPublicRoutesTest {
 
     /**
      * Multi-site park: site A is open Fri+Sat, site B is open Fri but booked
-     * Sat. For a 2-night stay starting Fri, only A qualifies, so the day
-     * shows as 'partial' with available_count=1, total=2.
+     * Sat. For a 2-night stay starting Fri, A qualifies, so the day is
+     * bookable/green even though not every site qualifies.
      */
     @Test
-    fun `minNights of 2 partials when only some sites qualify`() {
+    fun `minNights of 2 is available when at least one site qualifies`() {
         val map =
             mapOf(
                 "100" to
@@ -267,7 +267,7 @@ class AvailabilityPublicRoutesTest {
             )
         val body = classify(cacheReturning(map), days = 1, minNights = 2)
         val day = body["availability"]!!.jsonArray[0].jsonObject
-        assertEquals("partial", day["status"]!!.jsonPrimitive.content)
+        assertEquals("available", day["status"]!!.jsonPrimitive.content)
         assertEquals(1, day["available_count"]!!.jsonPrimitive.content.toInt())
         assertEquals(2, day["total"]!!.jsonPrimitive.content.toInt())
     }
@@ -317,6 +317,6 @@ class AvailabilityPublicRoutesTest {
         val map = mapOf("100" to campsiteWith(byDay))
         val body = classify(cacheReturning(map), days = 1, minNights = 7)
         val day = body["availability"]!!.jsonArray[0].jsonObject
-        assertEquals("booked", day["status"]!!.jsonPrimitive.content)
+        assertEquals("partial", day["status"]!!.jsonPrimitive.content)
     }
 }
