@@ -132,7 +132,7 @@ suspend fun availableDatesAspira(
     val cached = cache.get(host, mapId, start, end, force = false)
     val perDay = classifyDays(cached.data, start, n, n)
     return perDay
-        .filter { it.status == "available" || it.status == "partial" }
+        .filter { it.availableCount > 0 }
         .map { it.date }
 }
 
@@ -143,6 +143,8 @@ suspend fun availableDatesAspira(
  * stay" iff it reports AVAILABLE for every night from D through D+N-1.
  * `availableCount` is the number of sub-areas that satisfy that window;
  * `total` is the number of sub-areas with any status on the arrival day.
+ * A `partial` day means there are open arrival-day sites, but none can
+ * satisfy the requested stay length.
  *
  * When the park has no sub-areas (rare, but possible for a single-loop
  * park), fall back to the `mapAvailabilities` rollup with the same window
@@ -218,6 +220,7 @@ private fun classifyResourceCatalogArrivalDay(
     var availForStay = 0
     var booked = 0
     var closed = 0
+    var openButTooShort = 0
     val availableReservableIds = mutableListOf<String>()
     for ((resourceId, resourceDays) in byResource) {
         if (d >= resourceDays.size) continue
@@ -230,6 +233,7 @@ private fun classifyResourceCatalogArrivalDay(
                     availableReservableIds += "site:$reservableVendor:$resourceId"
                 } else {
                     booked++
+                    openButTooShort++
                 }
             }
             else -> booked++
@@ -240,9 +244,9 @@ private fun classifyResourceCatalogArrivalDay(
         when {
             total == 0 -> "closed"
             closed == total -> "closed"
-            availForStay == 0 -> "booked"
-            availForStay == total -> "available"
-            else -> "partial"
+            availForStay > 0 -> "available"
+            openButTooShort > 0 -> "partial"
+            else -> "booked"
         }
     return DayClassification(date, status, availForStay, total, availableReservableIds.sorted())
 }
@@ -268,7 +272,7 @@ private fun classifyResourceArrivalDay(
             if (!windowAllOpen(resourceDays, d, nights)) {
                 DayClassification(
                     date = date,
-                    status = "booked",
+                    status = "partial",
                     availableCount = 0,
                     total = 1,
                     availableReservableIds = knownEmptyReservableIds(reservableId),
@@ -276,7 +280,7 @@ private fun classifyResourceArrivalDay(
             } else {
                 DayClassification(
                     date = date,
-                    status = arrivalCls,
+                    status = "available",
                     availableCount = 1,
                     total = 1,
                     availableReservableIds = reservableId?.let(::listOf).orEmpty(),
@@ -310,13 +314,19 @@ private fun classifyArrivalDay(
     var availForStay = 0
     var booked = 0
     var closed = 0
+    var openButTooShort = 0
     for (subDays in subAreas) {
         if (d >= subDays.size) continue
         val arrivalCls = AspiraStatus.classify(subDays[d])
         when (arrivalCls) {
             "closed" -> closed++
             "available", "partial" -> {
-                if (windowAllOpen(subDays, d, nights)) availForStay++ else booked++
+                if (windowAllOpen(subDays, d, nights)) {
+                    availForStay++
+                } else {
+                    booked++
+                    openButTooShort++
+                }
             }
             else -> booked++
         }
@@ -326,9 +336,9 @@ private fun classifyArrivalDay(
         when {
             total == 0 -> "closed"
             closed == total -> "closed"
-            availForStay == 0 -> "booked"
-            availForStay == total -> "available"
-            else -> "partial"
+            availForStay > 0 -> "available"
+            openButTooShort > 0 -> "partial"
+            else -> "booked"
         }
     return DayClassification(date, status, availForStay, total)
 }

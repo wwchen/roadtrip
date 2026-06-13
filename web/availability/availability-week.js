@@ -118,6 +118,7 @@ function rerender(ctx) {
 
 function renderShell(ctx) {
   const selectedDay = selectedAvailabilityDay(ctx);
+  const sitesDay = selectedDay && availableCount(selectedDay) > 0 ? selectedDay : null;
   return `
     <section class="cg-availability">
       ${renderNightsRow(ctx)}
@@ -131,7 +132,7 @@ function renderShell(ctx) {
         totalAtPoi: ctx.sitesTotal,
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
-        selectedDay,
+        selectedDay: sitesDay,
         minNights: ctx.minNights,
         providerHost: ctx.availabilityHost,
       })}
@@ -212,7 +213,7 @@ function renderFreshness(ctx) {
 
 function renderDetail(ctx) {
   const day = selectedAvailabilityDay(ctx);
-  if (!day) return '';
+  if (!day || availableCount(day) > 0) return '';
   return renderDayDetail({
     day,
     minNights: ctx.minNights,
@@ -222,9 +223,15 @@ function renderDetail(ctx) {
 }
 
 function selectedAvailabilityDay(ctx) {
-  if (ctx.state !== 'success') return null;
+  if (ctx.state === 'loading' || ctx.state === 'error' || ctx.state === 'empty' || ctx.state === 'closed_for_season') {
+    return null;
+  }
   if (!ctx.selectedDate || !ctx.days || ctx.days.length === 0) return null;
   return ctx.days.find((d) => d.date === ctx.selectedDate) || null;
+}
+
+function availableCount(day) {
+  return day?.available_count ?? day?.availableCount ?? 0;
 }
 
 // ---- event wiring ---------------------------------------------------------

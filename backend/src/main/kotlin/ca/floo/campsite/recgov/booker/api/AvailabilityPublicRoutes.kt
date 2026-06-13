@@ -178,7 +178,7 @@ suspend fun availableDatesRecgov(
             .map { start.plusDays(it.toLong()).toString() }
             .filter { date ->
                 val cls = classifyDay(merged, date, nights.coerceAtLeast(1))
-                cls.status == "available" || cls.status == "partial"
+                cls.availableCount > 0
             }
     }
 
@@ -209,8 +209,8 @@ private fun mergeCampsites(maps: List<Map<String, Campsite>>): Map<String, Map<S
  * date — that's how we tell the visible-window classifier between "no data"
  * and "fully booked." A site missing from the upstream feed for the arrival
  * date doesn't contribute to either tally; one with a non-Closed status on
- * the arrival but missing data on a trailing night counts as booked (the
- * upstream simply doesn't sell beyond the season's end on that site).
+ * the arrival but missing data on a trailing night is surfaced as `partial`
+ * when no site can satisfy the requested stay length.
  */
 private fun classifyDay(
     merged: Map<String, Map<String, String>>,
@@ -223,6 +223,7 @@ private fun classifyDay(
     var availForStay = 0 // sites Available for ALL N nights
     var booked = 0
     var closed = 0
+    var openButTooShort = 0
     val availableReservableIds = mutableListOf<String>()
     for ((siteId, byDate) in merged) {
         val arrivalStatus = byDate[date] ?: continue
@@ -234,6 +235,7 @@ private fun classifyDay(
                     availableReservableIds += "site:recgov:$siteId"
                 } else {
                     booked++
+                    openButTooShort++
                 }
             }
             else -> booked++
@@ -244,9 +246,9 @@ private fun classifyDay(
         when {
             total == 0 -> "closed"
             closed == total -> "closed"
-            availForStay == 0 -> "booked"
-            availForStay == total -> "available"
-            else -> "partial"
+            availForStay > 0 -> "available"
+            openButTooShort > 0 -> "partial"
+            else -> "booked"
         }
     return DayClassification(date, status, availForStay, total, availableReservableIds.sorted())
 }

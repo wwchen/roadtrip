@@ -10,13 +10,12 @@ import { escapeHtml } from '../core.js';
  *
  * Loading: shows a single skeleton row.
  * Error:   shows the error text + a retry link (controller wires it).
- * Empty:   shows a zero-state when the selected date has no open sites.
- * Loaded:  expanded by default when the user selects a date.
+ * Empty:   hidden; the day-detail fallback owns no-site selected days.
+ * Loaded:  expanded by default when the user selects a bookable date.
  *
  * @param {object} args
  * @param {'loading'|'success'|'error'} args.state
  * @param {Array<object>}        args.reservables  Rows from BE (rid/name/loop/site_type).
- * @param {number|null}          args.totalAtPoi   total_at_poi from BE.
  * @param {string|null}          args.error
  * @param {boolean}               args.expanded
  * @param {object|null}           args.selectedDay  Per-day availability row.
@@ -33,17 +32,19 @@ export function renderSiteList({
   providerHost = null,
 }) {
   const availableIds = availableReservableIds(selectedDay);
-  if (availableIds == null) return '';
+  if (availableIds == null || availableIds.length === 0) return '';
+  const count = availableCount(selectedDay) ?? availableIds.length;
+  const total = selectedDay.total ?? selectedDay.totalAtPoi ?? null;
 
   if (state === 'loading') {
     return renderSection({
-      header: renderHeader({ count: null, expanded: false, disabled: true }),
+      header: renderHeader({ count, total, expanded: false, disabled: true }),
       body: '<div class="cg-sites-skeleton" aria-busy="true">Loading sites…</div>',
     });
   }
   if (state === 'error') {
     return renderSection({
-      header: renderHeader({ count: null, expanded: false, disabled: true }),
+      header: renderHeader({ count, total, expanded: false, disabled: true }),
       body: `<div class="cg-sites-error">${escapeHtml(error || "Couldn't load sites")} · <a href="#" class="cg-sites-retry">Retry</a></div>`,
     });
   }
@@ -51,7 +52,7 @@ export function renderSiteList({
   const rows = reservablesForIds(reservables, availableIds);
   const body = expanded ? renderRows(rows, selectedDay, minNights, providerHost) : '';
   return renderSection({
-    header: renderHeader({ count: rows.length, expanded, disabled: false }),
+    header: renderHeader({ count, total, expanded, disabled: false }),
     body,
   });
 }
@@ -65,11 +66,8 @@ function renderSection({ header, body }) {
   `;
 }
 
-function renderHeader({ count, expanded, disabled }) {
-  const label =
-    count == null
-      ? 'Available sites'
-      : `Available sites (${count})`;
+function renderHeader({ count, total, expanded, disabled }) {
+  const label = renderHeaderLabel(count, total);
   const aria = expanded ? 'true' : 'false';
   const disabledAttr = disabled ? 'disabled' : '';
   return `
@@ -78,6 +76,12 @@ function renderHeader({ count, expanded, disabled }) {
       <span class="cg-sites-chevron" aria-hidden="true">${expanded ? '▾' : '▸'}</span>
     </button>
   `;
+}
+
+function renderHeaderLabel(count, total) {
+  if (count == null) return 'Available sites';
+  if (total != null) return `Available sites (${count} of ${total} sites)`;
+  return `Available sites (${count})`;
 }
 
 function renderRows(reservables, selectedDay, minNights, providerHost) {
@@ -95,6 +99,11 @@ function availableReservableIds(day) {
   if (!day) return null;
   const ids = day.available_reservable_ids ?? day.availableReservableIds;
   return Array.isArray(ids) ? ids : null;
+}
+
+function availableCount(day) {
+  const count = day?.available_count ?? day?.availableCount;
+  return typeof count === 'number' ? count : null;
 }
 
 function reservablesForIds(reservables, ids) {

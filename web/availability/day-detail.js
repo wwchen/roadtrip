@@ -8,8 +8,6 @@
 
 import { escapeHtml } from '../core.js';
 
-const GREEN_AVAILABLE_THRESHOLD = 5;
-
 /**
  * @param {object} args
  * @param {object} args.day           Per-day classification.
@@ -46,6 +44,9 @@ function renderStatusLine(day, stayLabel) {
     case 'available':
       return `<span class="cg-status-ok">Available</span> · ${count} of ${total} sites · ${stayLabel}`;
     case 'partial':
+      if (count === 0) {
+        return `<span class="cg-status-partial">Open, not for ${escapeHtml(stayLabel)}</span> · ${total} ${total === 1 ? 'site' : 'sites'}`;
+      }
       return `<span class="cg-status-partial">Partial</span> · ${count} of ${total} sites · ${stayLabel}`;
     case 'booked':
       return `<span class="cg-status-full">Full</span> · ${stayLabel}`;
@@ -59,8 +60,9 @@ function renderStatusLine(day, stayLabel) {
 function renderStatus(day) {
   const status = day.status || 'closed';
   const count = availableCount(day);
-  if (status === 'partial' && count != null && count >= GREEN_AVAILABLE_THRESHOLD) {
-    return 'available';
+  if (count != null) {
+    if (count > 0) return 'available';
+    if (status === 'available') return 'booked';
   }
   return status;
 }

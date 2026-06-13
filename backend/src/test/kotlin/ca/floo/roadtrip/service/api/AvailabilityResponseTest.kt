@@ -104,7 +104,7 @@ class AvailabilityResponseTest {
 
             assertEquals("site:aspira_bc:-2147478966", dto.reservableId)
             assertEquals("available", dto.availability[0].status)
-            assertEquals("booked", dto.availability[1].status)
+            assertEquals("partial", dto.availability[1].status)
         }
 
     @Test
@@ -139,6 +139,7 @@ class AvailabilityResponseTest {
                 )
 
             assertEquals(1, dto.availability.single().availableCount)
+            assertEquals("available", dto.availability.single().status)
             assertEquals(
                 listOf("site:aspira_bc:-2147478966"),
                 dto.availability.single().availableReservableIds,
