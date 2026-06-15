@@ -1,15 +1,29 @@
-export function renderTable({ columns, rows, className = 'nested-table', rowClassName = '' }) {
+export function renderTable({
+  columns,
+  rows,
+  className = 'nested-table',
+  rowClassName = '',
+  wrapClassName = `${className}-wrap`,
+  rowRenderer = null,
+}) {
   const colgroup = columns.some((column) => column.colClass)
     ? `<colgroup>${columns.map((column) => `<col${column.colClass ? ` class="${escapeHtml(column.colClass)}"` : ''}>`).join('')}</colgroup>`
     : '';
+  const body = rows
+    .map((row) => (
+      typeof rowRenderer === 'function'
+        ? rowRenderer(row)
+        : renderRow(columns, row, { className: rowClassName })
+    ))
+    .join('');
   return `
-    <div class="${escapeHtml(className)}-wrap">
+    <div class="${escapeHtml(wrapClassName)}">
       <table class="${escapeHtml(className)}">
         ${colgroup}
         <thead>
           <tr>${columns.map((column) => `<th>${escapeHtml(column.label)}</th>`).join('')}</tr>
         </thead>
-        <tbody>${rows.map((row) => renderRow(columns, row, { className: rowClassName })).join('')}</tbody>
+        <tbody>${body}</tbody>
       </table>
     </div>
   `;

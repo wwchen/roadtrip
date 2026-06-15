@@ -511,55 +511,15 @@
     </nav>
   </header>
 
-  <form id="poi-form" class="panel" autocomplete="off">
-    <div class="filters">
-      <label>
-        ID
-        <input name="id" inputmode="numeric" placeholder="64397">
-      </label>
-      <label>
-        Name
-        <input name="q" placeholder="Glacier, Upper Pines, Planet Fitness">
-      </label>
-      <label>
-        Categories
-        <input name="categories" placeholder="campground, supercharger">
-      </label>
-      <label>
-        Limit
-        <select name="limit">
-          <option value="10">10</option>
-          <option value="25" selected>25</option>
-        </select>
-      </label>
-      <div class="actions">
-        <button class="primary" type="submit">Search</button>
-        <button id="reset-btn" type="button">Reset</button>
-      </div>
-    </div>
-  </form>
+  <div id="poi-query"></div>
 
   <section class="panel" aria-live="polite">
     <div id="status" class="status">
       <span>Enter at least 2 characters.</span>
       <span class="mono muted" id="query-url"></span>
     </div>
-    <div class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Name</th>
-            <th>Category</th>
-            <th>Region</th>
-            <th>Coordinates</th>
-            <th>Links</th>
-          </tr>
-        </thead>
-        <tbody id="results"></tbody>
-      </table>
-      <div id="empty" class="empty">Enter at least 2 characters to search.</div>
-    </div>
+    <div id="results"></div>
+    <div id="empty" class="empty">Enter at least 2 characters to search.</div>
   </section>
 </main>
 <script type="module" src="/web/pois.js"></script>

@@ -41,12 +41,22 @@ export function reservableRowHtml(row, { linksHtml = defaultReservableLinks(row)
   );
 }
 
-export function reservableTableHtml(rows, { linksForRow = defaultReservableLinks } = {}) {
+export function reservableTableHtml(
+  rows,
+  {
+    linksForRow = defaultReservableLinks,
+    rowRenderer = null,
+    rowClassName = 'result-row',
+  } = {},
+) {
+  const columns = columnsWithLinks(linksForRow);
   return renderTable({
-    columns: columnsWithLinks(linksForRow),
+    columns,
     rows,
     className: 'reservables-table',
-    rowClassName: 'result-row',
+    wrapClassName: 'reservables-table-wrap table-wrap',
+    rowClassName,
+    rowRenderer,
   });
 }
 
