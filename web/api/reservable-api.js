@@ -9,8 +9,8 @@
 //   GET /api/reservables
 //     → { total, limit, offset, reservables: [{rid, poi_ids, name, loop, …}, …] }
 //
-//   GET /api/reservables/availability/monitors
-//     → { monitors: [{ id, reservable, cadence, trigger_action, … }, …] }
+//   GET /api/reservables/availability/pollers
+//     → { pollers: [{ id, scope, cadence, target_dates, trigger_actions, … }, …] }
 //
 //   GET /api/reservable/{rid}/availability
 //     → provider availability response for one reservable
@@ -18,7 +18,7 @@
 // Catalog routes are cheap (no upstream roundtrip). Reservable availability is
 // fetched per reservable and remains throttled/rate-limited.
 
-import { jsonGetOk } from './http.js';
+import { jsonGetOk, jsonPostOk } from './http.js';
 
 /**
  * Search active reservables across supported catalog fields.
@@ -43,13 +43,46 @@ export function searchReservables(params = {}) {
 }
 
 /**
- * List persisted reservable availability monitor registrations.
+ * Execute an intent-based reservable availability query and append log rows.
+ *
+ * @param {object}      body
+ * @param {AbortSignal} [opts.signal]
+ */
+export function queryReservableAvailability(body, { signal } = {}) {
+  return jsonPostOk('/api/reservables/availability/query', body, { signal });
+}
+
+/**
+ * List persisted reservable availability poller registrations.
  *
  * @param {object}      [opts]
  * @param {AbortSignal} [opts.signal]
  */
-export function fetchReservableAvailabilityMonitors({ signal } = {}) {
-  return jsonGetOk('/api/reservables/availability/monitors', { signal });
+export function fetchReservableAvailabilityPollers({ signal } = {}) {
+  return jsonGetOk('/api/reservables/availability/pollers', { signal });
+}
+
+export function fetchReservableAvailabilityRuns({ signal } = {}) {
+  return jsonGetOk('/api/reservables/availability/runs', { signal });
+}
+
+export function fetchReservableAvailabilityLogs(params = {}) {
+  const { signal, ...filters } = params;
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value == null || value === '') continue;
+    qs.set(key, String(value));
+  }
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return jsonGetOk(`/api/reservables/availability/logs${suffix}`, { signal });
+}
+
+export function createReservableAvailabilityPoller(body, { signal } = {}) {
+  return jsonPostOk('/api/reservables/availability/pollers', body, { signal });
+}
+
+export function createReservableAvailabilityPollerForRid(rid, body, { signal } = {}) {
+  return jsonPostOk(`/api/reservable/${encodeURIComponent(rid)}/availability/poller`, body, { signal });
 }
 
 /**

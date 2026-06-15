@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#26272d">
-<title>Reservable Monitors</title>
+<title>Availability Pollers</title>
 <style>
   :root {
     --surface: #26272d;
@@ -227,6 +227,11 @@
   .chip-kind.json {
     color: #f1c27d;
   }
+  .date-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+  }
   .empty {
     padding: 34px 14px;
     color: var(--muted);
@@ -256,14 +261,14 @@
 <main class="shell">
   <header class="top">
     <div>
-      <h1>Reservable Monitors</h1>
-      <div class="sub">Availability monitor registrations.</div>
+      <h1>Availability Pollers</h1>
+      <div class="sub">Intent-based reservable availability polling jobs.</div>
     </div>
     <nav class="nav" aria-label="Page links">
       <div class="nav-group" aria-label="Catalog pages">
         <a href="/pois">POIs</a>
         <a href="/reservables">Reservables</a>
-        <a href="/monitors" aria-current="page">Monitors</a>
+        <a href="/pollers" aria-current="page">Pollers</a>
       </div>
       <div class="nav-group" aria-label="Outside links">
         <a class="outside-link" href="/">Map</a>
@@ -282,23 +287,24 @@
         <thead>
           <tr>
             <th>ID</th>
-            <th>Reservable</th>
+            <th>Scope</th>
+            <th>Filters</th>
+            <th>Dates</th>
+            <th>Nights</th>
             <th>Cadence</th>
-            <th>Action</th>
-            <th>Stop</th>
+            <th>Actions</th>
             <th>Status</th>
             <th>Last Checked</th>
-            <th>Last Triggered</th>
-            <th>Created</th>
+            <th>Next Poll</th>
             <th>Links</th>
           </tr>
         </thead>
-        <tbody id="monitors"></tbody>
+        <tbody id="pollers"></tbody>
       </table>
-      <div id="empty" class="empty" hidden>No monitors.</div>
+      <div id="empty" class="empty" hidden>No pollers.</div>
     </div>
   </section>
 </main>
-<script type="module" src="/web/monitors.js"></script>
+<script type="module" src="/web/pollers.js"></script>
 </body>
 </html>

@@ -1,13 +1,19 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityPollerRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityRunRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.DayClassification
+import ca.floo.roadtrip.service.api.ReservableAvailabilityIntentService
+import ca.floo.roadtrip.service.api.ReservableAvailabilityPollerService
 import ca.floo.roadtrip.service.api.availabilityResponseDto
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
@@ -27,8 +33,16 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.boolean
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -42,7 +56,9 @@ import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ReservableRoutesTest {
@@ -82,7 +98,8 @@ class ReservableRoutesTest {
     @BeforeEach
     fun reset() {
         ctx.execute("DELETE FROM reservable_availability_log")
-        ctx.execute("DELETE FROM reservable_availability_monitors")
+        ctx.execute("DELETE FROM reservable_availability_runs")
+        ctx.execute("DELETE FROM reservable_availability_pollers")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
         ctx.execute("DELETE FROM pois")
@@ -214,36 +231,67 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `reservable availability monitor create and list`() =
+    fun `reservable availability poller create and list`() =
         testApplication {
-            seedReservable(vendorId = "330257", name = "A12", loop = "Loop A")
-            application { routing { reservableRoutes(ctx) } }
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            val reservableId = seedReservable(vendorId = "330257", name = "A12", loop = "Loop A")
+            link(reservableId, poiId)
+            application {
+                routing {
+                    reservableRoutes(
+                        ctx,
+                        fakeBookingProviders(),
+                        CampsiteProviderRepo(ctx),
+                        ReservableAvailabilityLogRepo(ctx),
+                    )
+                }
+            }
 
             val created =
-                client.post("/api/reservable/site:recgov:330257/availability/monitor") {
+                client.post("/api/reservable/site:recgov:330257/availability/poller") {
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
-                        {"cadence":60,"trigger_actions":["notify_slack"],"stop_when_triggered":false}
+                        {
+                          "target_dates":["2026-07-01"],
+                          "min_nights":1,
+                          "cadence":60,
+                          "trigger_actions":["notify_slack"],
+                          "stop_when_triggered":false
+                        }
                         """.trimIndent(),
                     )
                 }
             assertEquals(HttpStatusCode.Created, created.status)
             val createdBody = Json.parseToJsonElement(created.bodyAsText()).jsonObject
-            val monitor = createdBody["monitor"]!!.jsonObject
-            assertEquals("60", monitor["cadence"]!!.jsonPrimitive.content)
-            assertEquals(listOf("notify_slack"), monitor["trigger_actions"]!!.jsonArray.map { it.jsonPrimitive.content })
-            assertEquals(false, monitor["stop_when_triggered"]!!.jsonPrimitive.boolean)
-            assertEquals("active", monitor["status"]!!.jsonPrimitive.content)
-            assertEquals("site:recgov:330257", monitor["reservable"]!!.jsonObject["rid"]!!.jsonPrimitive.content)
+            val poller = createdBody["poller"]!!.jsonObject
+            val pollerId = poller["id"]!!.jsonPrimitive.content
+            assertEquals("60", poller["cadence"]!!.jsonPrimitive.content)
+            assertEquals(listOf("notify_slack"), poller["trigger_actions"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(false, poller["stop_when_triggered"]!!.jsonPrimitive.boolean)
+            assertEquals("active", poller["status"]!!.jsonPrimitive.content)
+            assertEquals("site:recgov:330257", poller["scope"]!!.jsonObject["rid"]!!.jsonPrimitive.content)
+            assertEquals(listOf("2026-07-01"), poller["target_dates"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals("completed", createdBody["initial_run"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+            assertEquals("1", createdBody["initial_run"]!!.jsonObject["log_count"]!!.jsonPrimitive.content)
 
-            val list = client.get("/api/reservables/availability/monitors")
+            val runs = client.get("/api/reservables/availability/runs?poller_id=$pollerId")
+            assertEquals(HttpStatusCode.OK, runs.status)
+            val runsBody = Json.parseToJsonElement(runs.bodyAsText()).jsonObject
+            assertEquals(1, runsBody["runs"]!!.jsonArray.size)
+
+            val list = client.get("/api/reservables/availability/pollers")
             assertEquals(HttpStatusCode.OK, list.status)
             val listBody = Json.parseToJsonElement(list.bodyAsText()).jsonObject
-            assertEquals(1, listBody["monitors"]!!.jsonArray.size)
+            assertEquals(1, listBody["pollers"]!!.jsonArray.size)
             assertEquals(
                 listOf("notify_slack"),
-                listBody["monitors"]!!
+                listBody["pollers"]!!
                     .jsonArray
                     .single()
                     .jsonObject["trigger_actions"]!!
@@ -253,31 +301,178 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `reservable availability monitor rejects invalid input`() =
+    fun `reservable availability poller rejects invalid input`() =
         testApplication {
             seedReservable(vendorId = "330257", name = "A12")
-            application { routing { reservableRoutes(ctx) } }
+            application {
+                routing {
+                    reservableRoutes(
+                        ctx,
+                        fakeBookingProviders(),
+                        CampsiteProviderRepo(ctx),
+                        ReservableAvailabilityLogRepo(ctx),
+                    )
+                }
+            }
 
             val badCadence =
-                client.post("/api/reservable/site:recgov:330257/availability/monitor") {
+                client.post("/api/reservable/site:recgov:330257/availability/poller") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"cadence":1,"trigger_actions":["notify_slack"]}""")
+                    setBody("""{"target_dates":["2026-07-01"],"cadence":1,"trigger_actions":["notify_slack"]}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, badCadence.status)
 
             val emptyAction =
-                client.post("/api/reservable/site:recgov:330257/availability/monitor") {
+                client.post("/api/reservable/site:recgov:330257/availability/poller") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"cadence":60,"trigger_actions":[]}""")
+                    setBody("""{"target_dates":["2026-07-01"],"cadence":60,"trigger_actions":[]}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, emptyAction.status)
 
             val unknown =
-                client.post("/api/reservable/site:recgov:missing/availability/monitor") {
+                client.post("/api/reservable/site:recgov:missing/availability/poller") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"cadence":60,"trigger_actions":["notify_slack"]}""")
+                    setBody("""{"target_dates":["2026-07-01"],"cadence":60,"trigger_actions":["notify_slack"]}""")
                 }
             assertEquals(HttpStatusCode.NotFound, unknown.status)
+        }
+
+    @Test
+    fun `reservable availability intent query writes runs and log rows`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            val standard = seedReservable(vendorId = "330257", name = "A12", siteType = "STANDARD")
+            val tent = seedReservable(vendorId = "330258", name = "B03", siteType = "TENT")
+            link(standard, poiId)
+            link(tent, poiId)
+            application {
+                routing {
+                    reservableRoutes(
+                        ctx,
+                        fakeBookingProviders(),
+                        CampsiteProviderRepo(ctx),
+                        ReservableAvailabilityLogRepo(ctx),
+                    )
+                }
+            }
+
+            val resp =
+                client.post("/api/reservables/availability/query") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {
+                          "scope":{"poi_id":$poiId},
+                          "reservable_filters":{"site_type":["STANDARD"]},
+                          "start_date":"2026-07-01",
+                          "days":2,
+                          "min_nights":1
+                        }
+                        """.trimIndent(),
+                    )
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("1", body["candidate_count"]!!.jsonPrimitive.content)
+            assertEquals("2", body["log_count"]!!.jsonPrimitive.content)
+            assertEquals(1, body["results"]!!.jsonArray.size)
+            assertEquals(
+                listOf("2026-07-01", "2026-07-02"),
+                body["results"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject["matching_starts"]!!
+                    .jsonArray
+                    .map { it.jsonPrimitive.content },
+            )
+
+            val runId = body["run_id"]!!.jsonPrimitive.content
+            val logs = client.get("/api/reservables/availability/logs?run_id=$runId")
+            assertEquals(HttpStatusCode.OK, logs.status)
+            val logsBody = Json.parseToJsonElement(logs.bodyAsText()).jsonObject
+            assertEquals(2, logsBody["logs"]!!.jsonArray.size)
+            assertEquals(
+                setOf("2026-07-01", "2026-07-02"),
+                logsBody["logs"]!!
+                    .jsonArray
+                    .map { it.jsonObject["target_date"]!!.jsonPrimitive.content }
+                    .toSet(),
+            )
+        }
+
+    @Test
+    fun `availability poller service claims due pollers and appends log rows`() =
+        runBlocking {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            val reservableId = seedReservable(vendorId = "330257", name = "A12", siteType = "STANDARD")
+            link(reservableId, poiId)
+
+            val pollers = ReservableAvailabilityPollerRepo(ctx)
+            val logs = ReservableAvailabilityLogRepo(ctx)
+            val runs = ReservableAvailabilityRunRepo(ctx)
+            val poller =
+                pollers.create(
+                    ReservableAvailabilityPollerRepo.CreateInput(
+                        scope =
+                            ReservableAvailabilityPollerRepo.Scope(
+                                reservableId = reservableId,
+                                reservableRid = ReservableId.parse("site:recgov:330257"),
+                            ),
+                        reservableFilters = buildJsonObject {},
+                        targetDates = listOf(LocalDate.parse("2026-07-01")),
+                        minNights = 1,
+                        cadenceSec = 60,
+                        triggerActions = JsonArray(listOf(JsonPrimitive("notify_slack"))),
+                        stopWhenTriggered = true,
+                    ),
+                )
+            val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+            try {
+                val service =
+                    ReservableAvailabilityPollerService(
+                        pollers = pollers,
+                        intents =
+                            ReservableAvailabilityIntentService(
+                                providerRefs = CampsiteProviderRepo(ctx),
+                                bookingProviders = fakeBookingProviders(),
+                                reservables = ReservableRepo(ctx),
+                                pois = PoiServingRepo(ctx),
+                                availabilityLogs = logs,
+                                runs = runs,
+                            ),
+                        scope = scope,
+                    )
+
+                assertEquals(1, service.pollDueOnce(limit = 1))
+
+                val updated = pollers.get(poller.id)!!
+                assertEquals("done", updated.status)
+                assertNotNull(updated.lastCheckedAt)
+                assertNotNull(updated.lastTriggeredAt)
+
+                val rows =
+                    logs.list(
+                        ReservableAvailabilityLogRepo.LogFilters(
+                            pollerId = poller.id,
+                            targetDate = LocalDate.parse("2026-07-01"),
+                        ),
+                    )
+                assertEquals(1, rows.size)
+                assertEquals("site:recgov:330257", rows.single().reservableRid)
+                assertEquals(true, rows.single().available)
+            } finally {
+                scope.cancel()
+            }
         }
 
     @Test

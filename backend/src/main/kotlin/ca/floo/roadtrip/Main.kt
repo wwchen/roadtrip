@@ -13,7 +13,10 @@ import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityPollerRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityRunRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.dataSourceFor
@@ -27,6 +30,8 @@ import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
+import ca.floo.roadtrip.service.api.ReservableAvailabilityIntentService
+import ca.floo.roadtrip.service.api.ReservableAvailabilityPollerService
 import ca.floo.roadtrip.service.booking.BookingProviderRegistryFactory
 import ca.floo.roadtrip.service.etl.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.IngestController
@@ -54,6 +59,9 @@ import io.ktor.server.response.respondFile
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import java.io.File
 
 fun main() {
@@ -179,6 +187,25 @@ fun Application.module() {
             recgovCache = campsite.cachedAvailability,
             aspiraCache = aspiraCache,
         )
+    val campsiteProviderRefs = CampsiteProviderRepo(ctx)
+    val reservableRepo = ReservableRepo(ctx)
+    val reservableAvailabilityLogs = ReservableAvailabilityLogRepo(ctx)
+    val reservableAvailabilityRuns = ReservableAvailabilityRunRepo(ctx)
+    val reservableAvailabilityPollers = ReservableAvailabilityPollerRepo(ctx)
+    val reservableAvailabilityIntents =
+        ReservableAvailabilityIntentService(
+            providerRefs = campsiteProviderRefs,
+            bookingProviders = bookingProviderRegistry,
+            reservables = reservableRepo,
+            pois = PoiServingRepo(ctx),
+            availabilityLogs = reservableAvailabilityLogs,
+            runs = reservableAvailabilityRuns,
+        )
+    ReservableAvailabilityPollerService(
+        pollers = reservableAvailabilityPollers,
+        intents = reservableAvailabilityIntents,
+        scope = CoroutineScope(SupervisorJob() + Dispatchers.Default),
+    ).start()
 
     routing {
         // /api/docs — Swagger UI; /api/docs/openapi.json — the spec it loads.
@@ -192,16 +219,16 @@ fun Application.module() {
         }
 
         poiRoutes(ctx, poiRegistry)
-        reservableRoutes(ctx)
+        reservableRoutes(ctx, bookingProviderRegistry, campsiteProviderRefs, reservableAvailabilityLogs)
         poisOnRouteRoutes(ctx, routeCache, poiRegistry)
         routeRoutes(routeCache, ctx)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
         campsiteAvailabilityRoutes(
-            CampsiteProviderRepo(ctx),
+            campsiteProviderRefs,
             bookingProviderRegistry,
-            ReservableRepo(ctx),
-            ReservableAvailabilityLogRepo(ctx),
+            reservableRepo,
+            reservableAvailabilityLogs,
         )
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)
@@ -227,11 +254,11 @@ fun Application.module() {
         get("/reservables/") {
             call.respondFile(File(staticDir, "reservables.html"))
         }
-        get("/monitors") {
-            call.respondFile(File(staticDir, "monitors.html"))
+        get("/pollers") {
+            call.respondFile(File(staticDir, "pollers.html"))
         }
-        get("/monitors/") {
-            call.respondFile(File(staticDir, "monitors.html"))
+        get("/pollers/") {
+            call.respondFile(File(staticDir, "pollers.html"))
         }
         // Campsite UI served from the JAR's classpath
         // (backend/src/main/resources/static/campsite/), separate from

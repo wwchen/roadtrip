@@ -208,6 +208,14 @@ function formatNumber(value) {
 }
 
 resultsEl.addEventListener('click', (event) => {
+  const createPoller = event.target.closest('[data-action="create-availability-poller"]');
+  if (createPoller) {
+    const form = createPoller.closest('[data-action="availability-query"]');
+    if (!form) return;
+    availabilityPanels.createPoller(form?.dataset.rid || '', form);
+    return;
+  }
+
   const reservables = event.target.closest('[data-action="toggle-reservables"]');
   if (reservables) {
     toggleReservables(reservables.dataset.poiId || '');

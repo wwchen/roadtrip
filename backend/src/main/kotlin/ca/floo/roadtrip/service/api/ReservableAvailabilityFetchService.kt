@@ -21,9 +21,17 @@ class ReservableAvailabilityFetchService(
         val days: Int,
         val minNights: Int,
         val force: Boolean,
+        val runId: Long? = null,
     )
 
-    suspend fun fetch(request: Request): AvailabilityResponseDto {
+    data class FetchResult(
+        val response: AvailabilityResponseDto,
+        val logCount: Int,
+    )
+
+    suspend fun fetch(request: Request): AvailabilityResponseDto = fetchAndLog(request).response
+
+    suspend fun fetchAndLog(request: Request): FetchResult {
         val response =
             request.provider.reservableAvailability(
                 ReservableAvailabilityRequest(
@@ -35,15 +43,17 @@ class ReservableAvailabilityFetchService(
                     force = request.force,
                 ),
             )
-        appendBaseAvailabilityLog(request, response)
-        return response
+        return FetchResult(
+            response = response,
+            logCount = appendBaseAvailabilityLog(request, response),
+        )
     }
 
     private suspend fun appendBaseAvailabilityLog(
         request: Request,
         response: AvailabilityResponseDto,
-    ) {
-        val logs = availabilityLogs ?: return
+    ): Int {
+        val logs = availabilityLogs ?: return 0
         try {
             val logResponse =
                 if (request.minNights == 1) {
@@ -60,14 +70,16 @@ class ReservableAvailabilityFetchService(
                         ),
                     )
                 }
-            logs.appendAvailabilityPoll(
+            return logs.appendAvailabilityPoll(
                 ReservableAvailabilityLogRepo.AvailabilityPoll(
                     reservableRid = request.reservableRid,
                     response = logResponse,
+                    runId = request.runId,
                 ),
             )
         } catch (e: Exception) {
             log.warn("reservable availability log append failed rid={}: {}", request.reservableRid, e.message)
+            return 0
         }
     }
 }

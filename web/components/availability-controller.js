@@ -1,5 +1,9 @@
-import { fetchReservableAvailability } from '../api/reservable-api.js';
 import {
+  createReservableAvailabilityPollerForRid,
+  fetchReservableAvailability,
+} from '../api/reservable-api.js';
+import {
+  availabilityPollerFromForm,
   availabilityQueryFromForm,
   defaultAvailabilityQuery,
 } from './availability-panel.js';
@@ -15,7 +19,11 @@ export function createAvailabilityPanels({ render }) {
         loading: false,
         error: '',
         data: null,
+        poller: null,
+        pollerError: '',
+        pollerLoading: false,
         abort: null,
+        pollerAbort: null,
       });
     }
     return panels.get(rid);
@@ -55,10 +63,35 @@ export function createAvailabilityPanels({ render }) {
     }
   }
 
+  async function createPoller(rid, formEl) {
+    const state = stateForRid(rid);
+    state.pollerAbort?.abort();
+    state.pollerAbort = new AbortController();
+    state.pollerLoading = true;
+    state.pollerError = '';
+    state.poller = null;
+    render();
+
+    try {
+      state.poller = await createReservableAvailabilityPollerForRid(
+        rid,
+        availabilityPollerFromForm(formEl),
+        { signal: state.pollerAbort.signal },
+      );
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      state.pollerError = errorMessage(err);
+    } finally {
+      state.pollerLoading = false;
+      render();
+    }
+  }
+
   return {
     stateForRow,
     toggleAvailability,
     queryAvailability,
+    createPoller,
   };
 }
 

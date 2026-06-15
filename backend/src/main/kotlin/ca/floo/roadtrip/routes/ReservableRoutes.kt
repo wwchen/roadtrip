@@ -5,17 +5,32 @@ import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.models.ReservableType
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PoiReservablesResponseSchema
-import ca.floo.roadtrip.models.api.ReservableAvailabilityMonitorCreateRequestSchema
-import ca.floo.roadtrip.models.api.ReservableAvailabilityMonitorListResponseSchema
-import ca.floo.roadtrip.models.api.ReservableAvailabilityMonitorResponseSchema
-import ca.floo.roadtrip.models.api.ReservableAvailabilityMonitorSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityLogListResponseSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityLogSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityPollerCreateRequestSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityPollerListResponseSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityPollerPatchRequestSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityPollerResponseSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityPollerSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityQueryRequestSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityRunListResponseSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityRunSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityScopeSchema
 import ca.floo.roadtrip.models.api.ReservableDetailResponseSchema
 import ca.floo.roadtrip.models.api.ReservableSchema
 import ca.floo.roadtrip.models.api.ReservablesResponseSchema
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.repo.ReservableAvailabilityMonitorRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityPollerRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityRunRepo
 import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.api.BadAvailabilityIntent
+import ca.floo.roadtrip.service.api.ReservableAvailabilityIntentService
+import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import io.github.smiley4.ktorswaggerui.dsl.routing.delete
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
+import io.github.smiley4.ktorswaggerui.dsl.routing.patch
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -28,8 +43,12 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.jooq.DSLContext
+import java.time.LocalDate
 
 @OptIn(ExperimentalSerializationApi::class)
 private val reservableRoutesJson =
@@ -39,10 +58,30 @@ private val reservableRoutesJson =
         ignoreUnknownKeys = true
     }
 
-fun Route.reservableRoutes(ctx: DSLContext) {
+fun Route.reservableRoutes(
+    ctx: DSLContext,
+    bookingProviders: BookingProviderRegistry? = null,
+    providerRefs: CampsiteProviderRepo? = null,
+    availabilityLogs: ReservableAvailabilityLogRepo? = null,
+) {
     val reservables = ReservableRepo(ctx)
     val pois = PoiServingRepo(ctx)
-    val monitors = ReservableAvailabilityMonitorRepo(ctx)
+    val pollers = ReservableAvailabilityPollerRepo(ctx)
+    val runs = ReservableAvailabilityRunRepo(ctx)
+    val logs = availabilityLogs ?: ReservableAvailabilityLogRepo(ctx)
+    val intentService =
+        if (bookingProviders != null && providerRefs != null) {
+            ReservableAvailabilityIntentService(
+                providerRefs = providerRefs,
+                bookingProviders = bookingProviders,
+                reservables = reservables,
+                pois = pois,
+                availabilityLogs = logs,
+                runs = runs,
+            )
+        } else {
+            null
+        }
 
     get("/api/reservables", {
         tags = listOf("reservable")
@@ -107,22 +146,229 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         )
     }
 
-    get("/api/reservables/availability/monitors", {
+    post("/api/reservables/availability/query", {
         tags = listOf("reservable")
-        summary = "List reservable availability monitors"
-        description = "Lists all persisted reservable availability monitor registrations."
+        summary = "Execute an intent-based reservable availability query"
+        description =
+            "Translates a POI or reservable intent into concrete reservable availability fetches. " +
+            "Each fetch appends reservable_availability_log rows."
         response {
             code(HttpStatusCode.OK) {
-                description = "Monitor registrations."
-                body<ReservableAvailabilityMonitorListResponseSchema> { mediaTypes(ContentType.Application.Json) }
+                description = "Derived availability results plus run/log counts."
+            }
+            code(HttpStatusCode.BadRequest) {
+                description = "Malformed scope, dates, filters, days, or min_nights."
+                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
+        val service =
+            intentService
+                ?: return@post call.respondReservableError("availability_query_unavailable", HttpStatusCode.NotImplemented)
+        val input =
+            try {
+                reservableRoutesJson.decodeFromString<ReservableAvailabilityQueryRequestSchema>(
+                    call.receiveText().ifBlank { "{}" },
+                )
+            } catch (e: Exception) {
+                return@post call.respondReservableError("bad_json", HttpStatusCode.BadRequest, e.message)
+            }
+        try {
+            call.respondReservableJson(service.execute(input).response)
+        } catch (e: BadAvailabilityIntent) {
+            call.respondReservableError(
+                e.error,
+                if (e.error == "not_found") HttpStatusCode.NotFound else HttpStatusCode.BadRequest,
+                e.message,
+            )
+        }
+    }
+
+    get("/api/reservables/availability/pollers", {
+        tags = listOf("reservable")
+        summary = "List reservable availability pollers"
+        description = "Lists persisted intent-based availability poller jobs."
+    }) {
+        val limit =
+            try {
+                call.intQuery("limit", default = 100, min = 1, max = 500)
+            } catch (e: BadReservableQuery) {
+                return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
+            }
+        val offset =
+            try {
+                call.intQuery("offset", default = 0, min = 0, max = Int.MAX_VALUE)
+            } catch (e: BadReservableQuery) {
+                return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
+            }
         call.respondReservableJson(
-            ReservableAvailabilityMonitorListResponseSchema(
-                monitors = monitors.list().map { it.toSchema() },
+            ReservableAvailabilityPollerListResponseSchema(
+                pollers = pollers.list(limit, offset).map { it.toSchema() },
             ),
         )
+    }
+
+    get("/api/reservables/availability/pollers/{id}", {
+        tags = listOf("reservable")
+        summary = "Fetch one reservable availability poller"
+    }) {
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@get call.respondReservableError("bad_id", HttpStatusCode.BadRequest)
+        val poller = pollers.get(id) ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
+        call.respondReservableJson(ReservableAvailabilityPollerResponseSchema(poller = poller.toSchema()))
+    }
+
+    post("/api/reservables/availability/pollers", {
+        tags = listOf("reservable")
+        summary = "Create an intent-based reservable availability poller"
+        description =
+            "Stores one poller intent and runs the first poll immediately so " +
+            "reservable_availability_log has rows for the created job."
+    }) {
+        val input =
+            try {
+                reservableRoutesJson.decodeFromString<ReservableAvailabilityPollerCreateRequestSchema>(
+                    call.receiveText().ifBlank { "{}" },
+                )
+            } catch (e: Exception) {
+                return@post call.respondReservableError("bad_json", HttpStatusCode.BadRequest, e.message)
+            }
+        createAvailabilityPoller(
+            call = call,
+            input = input,
+            reservables = reservables,
+            pollers = pollers,
+            runs = runs,
+            intentService = intentService,
+        )
+    }
+
+    patch("/api/reservables/availability/pollers/{id}", {
+        tags = listOf("reservable")
+        summary = "Patch one reservable availability poller"
+    }) {
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@patch call.respondReservableError("bad_id", HttpStatusCode.BadRequest)
+        val input =
+            try {
+                reservableRoutesJson.decodeFromString<ReservableAvailabilityPollerPatchRequestSchema>(
+                    call.receiveText().ifBlank { "{}" },
+                )
+            } catch (e: Exception) {
+                return@patch call.respondReservableError("bad_json", HttpStatusCode.BadRequest, e.message)
+            }
+        val targetDates =
+            try {
+                input.targetDates?.map(LocalDate::parse)
+            } catch (e: Exception) {
+                return@patch call.respondReservableError("bad_target_dates", HttpStatusCode.BadRequest, "target_dates must be YYYY-MM-DD")
+            }
+        if (input.status != null && input.status !in setOf("active", "paused", "done")) {
+            return@patch call.respondReservableError("bad_status", HttpStatusCode.BadRequest)
+        }
+        val validation =
+            validatePollerInput(
+                cadence = input.cadence ?: 5,
+                minNights = 1,
+                targetDates = targetDates ?: listOf(LocalDate.now()),
+                triggerActions = input.triggerActions,
+                requireActions = false,
+            )
+        if (validation != null) return@patch call.respondReservableError(validation.first, HttpStatusCode.BadRequest, validation.second)
+        val updated =
+            pollers.patch(
+                id,
+                ReservableAvailabilityPollerRepo.PatchInput(
+                    status = input.status,
+                    cadenceSec = input.cadence,
+                    targetDates = targetDates,
+                    triggerActions = input.triggerActions,
+                    stopWhenTriggered = input.stopWhenTriggered,
+                ),
+            ) ?: return@patch call.respondReservableError("not_found", HttpStatusCode.NotFound)
+        call.respondReservableJson(ReservableAvailabilityPollerResponseSchema(poller = updated.toSchema()))
+    }
+
+    delete("/api/reservables/availability/pollers/{id}", {
+        tags = listOf("reservable")
+        summary = "Delete one reservable availability poller"
+    }) {
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@delete call.respondReservableError("bad_id", HttpStatusCode.BadRequest)
+        if (!pollers.delete(id)) return@delete call.respondReservableError("not_found", HttpStatusCode.NotFound)
+        call.respondReservableJson(mapOf("ok" to true))
+    }
+
+    get("/api/reservables/availability/logs", {
+        tags = listOf("reservable")
+        summary = "List reservable availability log rows"
+    }) {
+        val limit =
+            try {
+                call.intQuery("limit", default = 100, min = 1, max = 500)
+            } catch (e: BadReservableQuery) {
+                return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
+            }
+        val filters =
+            try {
+                ReservableAvailabilityLogRepo.LogFilters(
+                    runId = call.longQuery("run_id"),
+                    pollerId = call.longQuery("poller_id"),
+                    rid = call.request.queryParameters["rid"],
+                    targetDate = call.dateQuery("target_date"),
+                    limit = limit,
+                )
+            } catch (e: BadReservableQuery) {
+                return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
+            }
+        call.respondReservableJson(
+            ReservableAvailabilityLogListResponseSchema(
+                logs = logs.list(filters).map { it.toSchema() },
+            ),
+        )
+    }
+
+    get("/api/reservables/availability/runs", {
+        tags = listOf("reservable")
+        summary = "List reservable availability query and poller runs"
+    }) {
+        val limit =
+            try {
+                call.intQuery("limit", default = 100, min = 1, max = 500)
+            } catch (e: BadReservableQuery) {
+                return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
+            }
+        val offset =
+            try {
+                call.intQuery("offset", default = 0, min = 0, max = Int.MAX_VALUE)
+            } catch (e: BadReservableQuery) {
+                return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
+            }
+        val pollerId =
+            try {
+                call.longQuery("poller_id")
+            } catch (e: BadReservableQuery) {
+                return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
+            }
+        call.respondReservableJson(
+            ReservableAvailabilityRunListResponseSchema(
+                runs = runs.list(limit, offset, pollerId).map { it.toSchema() },
+            ),
+        )
+    }
+
+    get("/api/reservables/availability/runs/{id}", {
+        tags = listOf("reservable")
+        summary = "Fetch one reservable availability run"
+    }) {
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@get call.respondReservableError("bad_id", HttpStatusCode.BadRequest)
+        val run = runs.get(id) ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
+        call.respondReservableJson(run.toSchema())
     }
 
     get("/api/reservable/{rid}", {
@@ -167,85 +413,34 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         )
     }
 
-    post("/api/reservable/{rid}/availability/monitor", {
+    post("/api/reservable/{rid}/availability/poller", {
         tags = listOf("reservable")
-        summary = "Create a reservable availability monitor"
+        summary = "Create a concrete-reservable availability poller"
         description =
-            "Persists a monitor registration for one reservable. `cadence` is " +
-            "seconds and must be at least 5. `trigger_actions` is a non-empty " +
-            "JSON array describing the actions the future monitor worker " +
-            "should perform when availability matches; `stop_when_triggered` " +
-            "defaults to true."
-        request {
-            pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
-            body<ReservableAvailabilityMonitorCreateRequestSchema> {
-                mediaTypes(ContentType.Application.Json)
-            }
-        }
-        response {
-            code(HttpStatusCode.Created) {
-                description = "Created monitor registration."
-                body<ReservableAvailabilityMonitorResponseSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.BadRequest) {
-                description = "Malformed reservable id, JSON body, cadence, or trigger_actions."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.NotFound) {
-                description = "No reservable with that composite id."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
+            "Concrete-RID shortcut for POST /api/reservables/availability/pollers."
     }) {
         val rid =
             call.parameters["rid"]
                 ?.let(ReservableId::parse)
                 ?: return@post call.respondReservableError("bad_rid", HttpStatusCode.BadRequest)
-        val row =
-            reservables.findByRid(rid)
-                ?: return@post call.respondReservableError("not_found", HttpStatusCode.NotFound)
-        val input =
+        val body = call.receiveText().ifBlank { "{}" }
+        val base =
             try {
-                reservableRoutesJson.decodeFromString<ReservableAvailabilityMonitorCreateRequestSchema>(
-                    call.receiveText().ifBlank { "{}" },
-                )
+                reservableRoutesJson.decodeFromString<ReservableAvailabilityPollerCreateRequestSchema>(body)
             } catch (e: Exception) {
-                return@post call.respondReservableError(
-                    "bad_json",
-                    HttpStatusCode.BadRequest,
-                    e.message,
-                )
+                return@post call.respondReservableError("bad_json", HttpStatusCode.BadRequest, e.message)
             }
-        if (input.cadence < 5) {
-            return@post call.respondReservableError(
-                "bad_cadence",
-                HttpStatusCode.BadRequest,
-                "cadence must be at least 5 seconds",
+        val rewritten =
+            base.copy(
+                scope = ReservableAvailabilityScopeSchema(rid = rid.encode()),
             )
-        }
-        val triggerActions = input.triggerActions
-        if (triggerActions.isEmpty()) {
-            return@post call.respondReservableError(
-                "bad_trigger_actions",
-                HttpStatusCode.BadRequest,
-                "trigger_actions must be a non-empty array",
-            )
-        }
-
-        call.respondReservableJson(
-            ReservableAvailabilityMonitorResponseSchema(
-                monitor =
-                    monitors
-                        .create(
-                            row.id,
-                            ReservableAvailabilityMonitorRepo.CreateInput(
-                                cadenceSec = input.cadence,
-                                triggerActions = triggerActions,
-                                stopWhenTriggered = input.stopWhenTriggered,
-                            ),
-                        ).toSchema(),
-            ),
-            HttpStatusCode.Created,
+        createAvailabilityPoller(
+            call = call,
+            input = rewritten,
+            reservables = reservables,
+            pollers = pollers,
+            runs = runs,
+            intentService = intentService,
         )
     }
 
@@ -347,6 +542,17 @@ private fun ApplicationCall.intQuery(
     return value
 }
 
+private fun ApplicationCall.longQuery(name: String): Long? {
+    val raw = request.queryParameters[name] ?: return null
+    return raw.toLongOrNull() ?: throw BadReservableQuery("bad_$name", "$name must be an integer")
+}
+
+private fun ApplicationCall.dateQuery(name: String): LocalDate? {
+    val raw = request.queryParameters[name] ?: return null
+    return runCatching { LocalDate.parse(raw) }
+        .getOrElse { throw BadReservableQuery("bad_$name", "$name must be YYYY-MM-DD") }
+}
+
 private fun ApplicationCall.queryValues(vararg names: String): List<String> =
     names
         .flatMap { name -> request.queryParameters.getAll(name).orEmpty() }
@@ -368,18 +574,163 @@ private fun Reservable.toSchema(poiIds: List<Long> = emptyList()): ReservableSch
         raw = raw,
     )
 
-private fun ReservableAvailabilityMonitorRepo.Monitor.toSchema(): ReservableAvailabilityMonitorSchema =
-    ReservableAvailabilityMonitorSchema(
+private suspend fun createAvailabilityPoller(
+    call: ApplicationCall,
+    input: ReservableAvailabilityPollerCreateRequestSchema,
+    reservables: ReservableRepo,
+    pollers: ReservableAvailabilityPollerRepo,
+    runs: ReservableAvailabilityRunRepo,
+    intentService: ReservableAvailabilityIntentService?,
+) {
+    val service =
+        intentService
+            ?: return call.respondReservableError("availability_query_unavailable", HttpStatusCode.NotImplemented)
+    val targetDates =
+        try {
+            input.targetDates.map(LocalDate::parse)
+        } catch (e: Exception) {
+            return call.respondReservableError(
+                "bad_target_dates",
+                HttpStatusCode.BadRequest,
+                "target_dates must be YYYY-MM-DD",
+            )
+        }
+    val scope =
+        try {
+            input.scope.toPollerScope(reservables)
+        } catch (e: BadReservableQuery) {
+            return call.respondReservableError(
+                e.error,
+                if (e.error == "not_found") HttpStatusCode.NotFound else HttpStatusCode.BadRequest,
+                e.detail,
+            )
+        }
+    val validation = validatePollerInput(input.cadence, input.minNights, targetDates, input.triggerActions)
+    if (validation != null) return call.respondReservableError(validation.first, HttpStatusCode.BadRequest, validation.second)
+
+    val poller =
+        pollers.create(
+            ReservableAvailabilityPollerRepo.CreateInput(
+                scope = scope,
+                reservableFilters = service.filtersToJson(input.reservableFilters),
+                targetDates = targetDates,
+                minNights = input.minNights,
+                cadenceSec = input.cadence,
+                triggerActions = input.triggerActions,
+                stopWhenTriggered = input.stopWhenTriggered,
+            ),
+        )
+    val initial =
+        try {
+            val query =
+                service.pollerIntent(
+                    scope = poller.scope.toApiScope(),
+                    filters = service.filtersFromJson(poller.reservableFilters),
+                    targetDates = poller.targetDates,
+                    minNights = poller.minNights,
+                    force = input.force,
+                )
+            service.execute(query, sourceKind = "poller", pollerId = poller.id).run
+        } catch (e: BadAvailabilityIntent) {
+            val failedRun =
+                runs.start(
+                    sourceKind = "poller",
+                    pollerId = poller.id,
+                    intentPayload = buildJsonObject { put("error", e.error) },
+                )
+            runs.fail(
+                failedRun.id,
+                e.message ?: e.error,
+            )
+        }
+
+    call.respondReservableJson(
+        ReservableAvailabilityPollerResponseSchema(
+            poller = pollers.get(poller.id)!!.toSchema(),
+            initialRun = initial.toSchema(),
+        ),
+        HttpStatusCode.Created,
+    )
+}
+
+private fun validatePollerInput(
+    cadence: Int,
+    minNights: Int,
+    targetDates: List<LocalDate>,
+    triggerActions: JsonArray?,
+    requireActions: Boolean = true,
+): Pair<String, String?>? =
+    when {
+        cadence < 5 -> "bad_cadence" to "cadence must be at least 5 seconds"
+        minNights !in 1..31 -> "bad_min_nights" to "min_nights must be between 1 and 31"
+        targetDates.isEmpty() -> "bad_target_dates" to "target_dates must not be empty"
+        requireActions && (triggerActions == null || triggerActions.isEmpty()) ->
+            "bad_trigger_actions" to "trigger_actions must not be empty"
+        triggerActions != null && triggerActions.isEmpty() ->
+            "bad_trigger_actions" to "trigger_actions must not be empty"
+        else -> null
+    }
+
+private fun ReservableAvailabilityScopeSchema.toPollerScope(reservables: ReservableRepo): ReservableAvailabilityPollerRepo.Scope {
+    val hasPoi = poiId != null
+    val hasRid = !rid.isNullOrBlank()
+    if (hasPoi == hasRid) throw BadReservableQuery("bad_scope", "exactly one of scope.poi_id or scope.rid is required")
+    poiId?.let {
+        if (it <= 0) throw BadReservableQuery("bad_poi_id", "scope.poi_id must be positive")
+        return ReservableAvailabilityPollerRepo.Scope(poiId = it)
+    }
+
+    val parsed = ReservableId.parse(rid!!) ?: throw BadReservableQuery("bad_rid", rid)
+    val row = reservables.findByRid(parsed) ?: throw BadReservableQuery("not_found", rid)
+    return ReservableAvailabilityPollerRepo.Scope(reservableId = row.id, reservableRid = parsed)
+}
+
+private fun ReservableAvailabilityPollerRepo.Scope.toApiScope(): ReservableAvailabilityScopeSchema =
+    poiId
+        ?.let { ReservableAvailabilityScopeSchema(poiId = it) }
+        ?: ReservableAvailabilityScopeSchema(rid = requireNotNull(reservableRid).encode())
+
+private fun ReservableAvailabilityPollerRepo.Poller.toSchema(): ReservableAvailabilityPollerSchema =
+    ReservableAvailabilityPollerSchema(
         id = id,
-        reservable = reservable.toSchema(),
+        scope = scope.toApiScope(),
+        reservableFilters = reservableFilters,
+        targetDates = targetDates.map { it.toString() },
+        minNights = minNights,
         cadence = cadenceSec,
         triggerActions = triggerActions,
         stopWhenTriggered = stopWhenTriggered,
         status = status,
         lastCheckedAt = lastCheckedAt?.toString(),
         lastTriggeredAt = lastTriggeredAt?.toString(),
+        nextPollAfter = nextPollAfter.toString(),
         createdAt = createdAt.toString(),
         updatedAt = updatedAt.toString(),
+    )
+
+private fun ReservableAvailabilityRunRepo.Run.toSchema(): ReservableAvailabilityRunSchema =
+    ReservableAvailabilityRunSchema(
+        id = id,
+        sourceKind = sourceKind,
+        pollerId = pollerId,
+        status = status,
+        candidateCount = candidateCount,
+        logCount = logCount,
+        error = error,
+        startedAt = startedAt.toString(),
+        completedAt = completedAt?.toString(),
+    )
+
+private fun ReservableAvailabilityLogRepo.LogRow.toSchema(): ReservableAvailabilityLogSchema =
+    ReservableAvailabilityLogSchema(
+        id = id,
+        runId = runId,
+        reservableRid = reservableRid,
+        observedAt = observedAt.toString(),
+        targetDate = targetDate.toString(),
+        status = status,
+        available = available,
+        dayPayload = dayPayload,
     )
 
 private suspend fun ApplicationCall.respondReservableError(

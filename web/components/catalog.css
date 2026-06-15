@@ -299,7 +299,7 @@ details[open] .action-icon.inline::before {
 
 .availability-controls {
   display: grid;
-  grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+  grid-template-columns: repeat(auto-fit, minmax(128px, 1fr));
   gap: 10px;
   align-items: end;
 }

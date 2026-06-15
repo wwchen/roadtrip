@@ -139,6 +139,14 @@ nextBtn.addEventListener('click', () => {
 });
 
 resultsEl.addEventListener('click', (event) => {
+  const createPoller = event.target.closest('[data-action="create-availability-poller"]');
+  if (createPoller) {
+    const form = createPoller.closest('[data-action="availability-query"]');
+    if (!form) return;
+    availabilityPanels.createPoller(form?.dataset.rid || '', form);
+    return;
+  }
+
   const toggle = event.target.closest('[data-action="toggle-availability"]');
   if (toggle) {
     availabilityPanels.toggleAvailability(toggle.dataset.rid || '');
