@@ -108,19 +108,19 @@ function renderRow(w) {
   const triggers = w.trigger_kinds.join(', ');
   return `
     <tr>
-      <td>${w.id}</td>
+      <td>${escapeHtml(w.id)}</td>
       <td>${escapeHtml(scope)}</td>
-      <td>${dates}</td>
-      <td>${w.cadence_sec}s</td>
+      <td>${escapeHtml(dates)}</td>
+      <td>${escapeHtml(w.cadence_sec)}s</td>
       <td>${escapeHtml(triggers)}</td>
-      <td>${w.status}</td>
+      <td>${escapeHtml(w.status)}</td>
       <td>
         ${w.status === 'active'
-          ? `<button data-action="pause" data-id="${w.id}">⏸</button>`
+          ? `<button data-action="pause" data-id="${escapeHtml(w.id)}">⏸</button>`
           : w.status === 'paused'
-            ? `<button data-action="resume" data-id="${w.id}">▶</button>`
+            ? `<button data-action="resume" data-id="${escapeHtml(w.id)}">▶</button>`
             : ''}
-        <button data-action="delete" data-id="${w.id}">✕</button>
+        <button data-action="delete" data-id="${escapeHtml(w.id)}">✕</button>
       </td>
     </tr>`;
 }
