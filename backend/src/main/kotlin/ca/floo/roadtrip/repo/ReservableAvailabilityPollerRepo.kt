@@ -99,6 +99,45 @@ class ReservableAvailabilityPollerRepo(
         return get(id)!!
     }
 
+    fun findEquivalent(input: CreateInput): Poller? {
+        require(input.targetDates.isNotEmpty()) { "targetDates must not be empty" }
+        val (scopeSql, scopeArgs) =
+            if (input.scope.poiId != null) {
+                "p.poi_id = ? AND p.reservable_id IS NULL" to listOf(input.scope.poiId)
+            } else {
+                "p.reservable_id = ? AND p.poi_id IS NULL" to listOf(input.scope.reservableId)
+            }
+        return ctx
+            .fetchOne(
+                """
+                SELECT p.*, r.type, r.vendor, r.vendor_id
+                FROM reservable_availability_pollers p
+                LEFT JOIN reservables r ON r.id = p.reservable_id
+                WHERE $scopeSql
+                  AND p.reservable_filters = ?::jsonb
+                  AND p.target_dates = ?::date[]
+                  AND p.min_nights = ?
+                  AND p.cadence_sec = ?
+                  AND p.trigger_actions = ?::jsonb
+                  AND p.stop_when_triggered = ?
+                  AND p.status IN ('active', 'paused')
+                ORDER BY CASE WHEN p.status = 'active' THEN 0 ELSE 1 END, p.created_at DESC, p.id DESC
+                LIMIT 1
+                """.trimIndent(),
+                *(
+                    scopeArgs +
+                        listOf(
+                            json.encodeToString(input.reservableFilters),
+                            input.targetDates.toTypedArray(),
+                            input.minNights,
+                            input.cadenceSec,
+                            json.encodeToString(input.triggerActions),
+                            input.stopWhenTriggered,
+                        )
+                ).toTypedArray(),
+            )?.let(::fromRecord)
+    }
+
     fun list(
         limit: Int = 100,
         offset: Int = 0,

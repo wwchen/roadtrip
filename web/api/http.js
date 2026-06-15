@@ -28,6 +28,17 @@ export async function jsonGetOk(url, { signal } = {}) {
   return response.json();
 }
 
+export async function jsonPatchOk(url, body, { signal } = {}) {
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!response.ok) throw new HttpError(url, response.status);
+  return response.json();
+}
+
 export async function jsonDeleteOk(url, { signal } = {}) {
   const response = await fetch(url, { method: 'DELETE', signal });
   if (!response.ok) throw new HttpError(url, response.status);

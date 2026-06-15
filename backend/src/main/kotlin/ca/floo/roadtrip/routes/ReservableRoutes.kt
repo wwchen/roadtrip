@@ -48,6 +48,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jooq.DSLContext
+import org.jooq.exception.DataAccessException
 import java.time.LocalDate
 
 @OptIn(ExperimentalSerializationApi::class)
@@ -261,7 +262,10 @@ fun Route.reservableRoutes(
             }
         val targetDates =
             try {
-                input.targetDates?.map(LocalDate::parse)
+                input.targetDates
+                    ?.map(LocalDate::parse)
+                    ?.distinct()
+                    ?.sorted()
             } catch (e: Exception) {
                 return@patch call.respondReservableError("bad_target_dates", HttpStatusCode.BadRequest, "target_dates must be YYYY-MM-DD")
             }
@@ -278,16 +282,24 @@ fun Route.reservableRoutes(
             )
         if (validation != null) return@patch call.respondReservableError(validation.first, HttpStatusCode.BadRequest, validation.second)
         val updated =
-            pollers.patch(
-                id,
-                ReservableAvailabilityPollerRepo.PatchInput(
-                    status = input.status,
-                    cadenceSec = input.cadence,
-                    targetDates = targetDates,
-                    triggerActions = input.triggerActions,
-                    stopWhenTriggered = input.stopWhenTriggered,
-                ),
-            ) ?: return@patch call.respondReservableError("not_found", HttpStatusCode.NotFound)
+            try {
+                pollers.patch(
+                    id,
+                    ReservableAvailabilityPollerRepo.PatchInput(
+                        status = input.status,
+                        cadenceSec = input.cadence,
+                        targetDates = targetDates,
+                        triggerActions = input.triggerActions,
+                        stopWhenTriggered = input.stopWhenTriggered,
+                    ),
+                )
+            } catch (e: DataAccessException) {
+                return@patch call.respondReservableError(
+                    "duplicate_poller",
+                    HttpStatusCode.Conflict,
+                    "another active or paused poller already has this intent",
+                )
+            } ?: return@patch call.respondReservableError("not_found", HttpStatusCode.NotFound)
         call.respondReservableJson(ReservableAvailabilityPollerResponseSchema(poller = updated.toSchema()))
     }
 
@@ -587,7 +599,10 @@ private suspend fun createAvailabilityPoller(
             ?: return call.respondReservableError("availability_query_unavailable", HttpStatusCode.NotImplemented)
     val targetDates =
         try {
-            input.targetDates.map(LocalDate::parse)
+            input.targetDates
+                .map(LocalDate::parse)
+                .distinct()
+                .sorted()
         } catch (e: Exception) {
             return call.respondReservableError(
                 "bad_target_dates",
@@ -608,18 +623,38 @@ private suspend fun createAvailabilityPoller(
     val validation = validatePollerInput(input.cadence, input.minNights, targetDates, input.triggerActions)
     if (validation != null) return call.respondReservableError(validation.first, HttpStatusCode.BadRequest, validation.second)
 
-    val poller =
-        pollers.create(
-            ReservableAvailabilityPollerRepo.CreateInput(
-                scope = scope,
-                reservableFilters = service.filtersToJson(input.reservableFilters),
-                targetDates = targetDates,
-                minNights = input.minNights,
-                cadenceSec = input.cadence,
-                triggerActions = input.triggerActions,
-                stopWhenTriggered = input.stopWhenTriggered,
-            ),
+    val createInput =
+        ReservableAvailabilityPollerRepo.CreateInput(
+            scope = scope,
+            reservableFilters = service.filtersToJson(input.reservableFilters),
+            targetDates = targetDates,
+            minNights = input.minNights,
+            cadenceSec = input.cadence,
+            triggerActions = input.triggerActions,
+            stopWhenTriggered = input.stopWhenTriggered,
         )
+
+    pollers.findEquivalent(createInput)?.let { existing ->
+        val active =
+            if (existing.status == "paused") {
+                pollers.patch(existing.id, ReservableAvailabilityPollerRepo.PatchInput(status = "active")) ?: existing
+            } else {
+                existing
+            }
+        call.respondReservableJson(ReservableAvailabilityPollerResponseSchema(poller = active.toSchema()))
+        return
+    }
+
+    val poller =
+        try {
+            pollers.create(createInput)
+        } catch (e: DataAccessException) {
+            pollers.findEquivalent(createInput)?.let { existing ->
+                call.respondReservableJson(ReservableAvailabilityPollerResponseSchema(poller = existing.toSchema()))
+                return
+            }
+            throw e
+        }
     val initial =
         try {
             val query =

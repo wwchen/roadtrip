@@ -18,7 +18,7 @@
 // Catalog routes are cheap (no upstream roundtrip). Reservable availability is
 // fetched per reservable and remains throttled/rate-limited.
 
-import { jsonGetOk, jsonPostOk } from './http.js';
+import { jsonDeleteOk, jsonGetOk, jsonPatchOk, jsonPostOk } from './http.js';
 
 /**
  * Search active reservables across supported catalog fields.
@@ -79,6 +79,14 @@ export function fetchReservableAvailabilityLogs(params = {}) {
 
 export function createReservableAvailabilityPoller(body, { signal } = {}) {
   return jsonPostOk('/api/reservables/availability/pollers', body, { signal });
+}
+
+export function patchReservableAvailabilityPoller(id, body, { signal } = {}) {
+  return jsonPatchOk(`/api/reservables/availability/pollers/${encodeURIComponent(id)}`, body, { signal });
+}
+
+export function deleteReservableAvailabilityPoller(id, { signal } = {}) {
+  return jsonDeleteOk(`/api/reservables/availability/pollers/${encodeURIComponent(id)}`, { signal });
 }
 
 export function createReservableAvailabilityPollerForRid(rid, body, { signal } = {}) {

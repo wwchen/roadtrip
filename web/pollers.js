@@ -1,4 +1,8 @@
-import { fetchReservableAvailabilityPollers } from './api/reservable-api.js';
+import {
+  deleteReservableAvailabilityPoller,
+  fetchReservableAvailabilityPollers,
+  patchReservableAvailabilityPoller,
+} from './api/reservable-api.js';
 import { dash, escapeHtml, linkChip, links, renderRow } from './components/result-table.js';
 
 const statusEl = document.getElementById('status');
@@ -43,7 +47,7 @@ const pollerColumns = [
     render: (poller) => escapeHtml(formatCadence(poller.cadence)),
   },
   {
-    label: 'Actions',
+    label: 'Triggers',
     render: (poller) => {
       const actions = poller.trigger_actions || [];
       if (!actions.length) return dash('');
@@ -64,6 +68,10 @@ const pollerColumns = [
   {
     label: 'Next Poll',
     render: (poller) => escapeHtml(formatTime(poller.next_poll_after)),
+  },
+  {
+    label: 'Manage',
+    render: (poller) => renderManage(poller),
   },
   {
     label: 'Links',
@@ -178,6 +186,23 @@ function renderLinks(poller) {
   return links(items);
 }
 
+function renderManage(poller) {
+  const id = String(poller.id || '');
+  const status = String(poller.status || '').toLowerCase();
+  const nextStatus = status === 'active' ? 'paused' : 'active';
+  const label = status === 'active' ? 'Pause' : 'Resume';
+  const statusButton =
+    status === 'done'
+      ? ''
+      : `<button type="button" data-action="set-poller-status" data-id="${escapeHtml(id)}" data-status="${escapeHtml(nextStatus)}">${escapeHtml(label)}</button>`;
+  return `
+    <div class="actions">
+      ${statusButton}
+      <button type="button" data-action="delete-poller" data-id="${escapeHtml(id)}">Delete</button>
+    </div>
+  `;
+}
+
 function formatCadence(seconds) {
   const value = Number(seconds);
   if (!Number.isFinite(value)) return '-';
@@ -214,4 +239,39 @@ function statusClass(status) {
 }
 
 refreshBtn.addEventListener('click', loadPollers);
+
+rowsEl.addEventListener('click', async (event) => {
+  const statusButton = event.target.closest('[data-action="set-poller-status"]');
+  if (statusButton) {
+    const id = statusButton.dataset.id || '';
+    const status = statusButton.dataset.status || '';
+    if (!id || !status) return;
+    setBusy(true);
+    setStatus('Updating...');
+    try {
+      await patchReservableAvailabilityPoller(id, { status });
+      await loadPollers();
+    } catch (err) {
+      setStatus(escapeHtml(errorMessage(err)), 'error');
+      setBusy(false);
+    }
+    return;
+  }
+
+  const deleteButton = event.target.closest('[data-action="delete-poller"]');
+  if (deleteButton) {
+    const id = deleteButton.dataset.id || '';
+    if (!id || !window.confirm(`Delete poller #${id}?`)) return;
+    setBusy(true);
+    setStatus('Deleting...');
+    try {
+      await deleteReservableAvailabilityPoller(id);
+      await loadPollers();
+    } catch (err) {
+      setStatus(escapeHtml(errorMessage(err)), 'error');
+      setBusy(false);
+    }
+  }
+});
+
 loadPollers();

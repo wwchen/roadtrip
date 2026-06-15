@@ -24,7 +24,9 @@ import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import io.ktor.client.request.delete
 import io.ktor.client.request.get
+import io.ktor.client.request.patch
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
@@ -252,20 +254,20 @@ class ReservableRoutesTest {
                 }
             }
 
+            val createBody =
+                """
+                {
+                  "target_dates":["2026-07-01"],
+                  "min_nights":1,
+                  "cadence":60,
+                  "trigger_actions":["notify_slack"],
+                  "stop_when_triggered":false
+                }
+                """.trimIndent()
             val created =
                 client.post("/api/reservable/site:recgov:330257/availability/poller") {
                     contentType(ContentType.Application.Json)
-                    setBody(
-                        """
-                        {
-                          "target_dates":["2026-07-01"],
-                          "min_nights":1,
-                          "cadence":60,
-                          "trigger_actions":["notify_slack"],
-                          "stop_when_triggered":false
-                        }
-                        """.trimIndent(),
-                    )
+                    setBody(createBody)
                 }
             assertEquals(HttpStatusCode.Created, created.status)
             val createdBody = Json.parseToJsonElement(created.bodyAsText()).jsonObject
@@ -279,6 +281,21 @@ class ReservableRoutesTest {
             assertEquals(listOf("2026-07-01"), poller["target_dates"]!!.jsonArray.map { it.jsonPrimitive.content })
             assertEquals("completed", createdBody["initial_run"]!!.jsonObject["status"]!!.jsonPrimitive.content)
             assertEquals("1", createdBody["initial_run"]!!.jsonObject["log_count"]!!.jsonPrimitive.content)
+
+            val duplicate =
+                client.post("/api/reservable/site:recgov:330257/availability/poller") {
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody)
+                }
+            assertEquals(HttpStatusCode.OK, duplicate.status)
+            val duplicateBody = Json.parseToJsonElement(duplicate.bodyAsText()).jsonObject
+            assertEquals(pollerId, duplicateBody["poller"]!!.jsonObject["id"]!!.jsonPrimitive.content)
+            assertEquals(null, duplicateBody["initial_run"])
+
+            val fetched = client.get("/api/reservables/availability/pollers/$pollerId")
+            assertEquals(HttpStatusCode.OK, fetched.status)
+            val fetchedBody = Json.parseToJsonElement(fetched.bodyAsText()).jsonObject
+            assertEquals(pollerId, fetchedBody["poller"]!!.jsonObject["id"]!!.jsonPrimitive.content)
 
             val runs = client.get("/api/reservables/availability/runs?poller_id=$pollerId")
             assertEquals(HttpStatusCode.OK, runs.status)
@@ -298,6 +315,51 @@ class ReservableRoutesTest {
                     .jsonArray
                     .map { it.jsonPrimitive.content },
             )
+
+            val secondCreated =
+                client.post("/api/reservables/availability/pollers") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {
+                          "scope":{"rid":"site:recgov:330257"},
+                          "target_dates":["2026-07-01"],
+                          "min_nights":1,
+                          "cadence":120,
+                          "trigger_actions":["notify_slack"],
+                          "stop_when_triggered":false
+                        }
+                        """.trimIndent(),
+                    )
+                }
+            assertEquals(HttpStatusCode.Created, secondCreated.status)
+            val secondPollerId =
+                Json
+                    .parseToJsonElement(secondCreated.bodyAsText())
+                    .jsonObject["poller"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive
+                    .content
+            val conflict =
+                client.patch("/api/reservables/availability/pollers/$secondPollerId") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"cadence":60}""")
+                }
+            assertEquals(HttpStatusCode.Conflict, conflict.status)
+
+            val patched =
+                client.patch("/api/reservables/availability/pollers/$pollerId") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status":"paused"}""")
+                }
+            assertEquals(HttpStatusCode.OK, patched.status)
+            val patchedBody = Json.parseToJsonElement(patched.bodyAsText()).jsonObject
+            assertEquals("paused", patchedBody["poller"]!!.jsonObject["status"]!!.jsonPrimitive.content)
+
+            assertEquals(HttpStatusCode.OK, client.delete("/api/reservables/availability/pollers/$secondPollerId").status)
+            val deleted = client.delete("/api/reservables/availability/pollers/$pollerId")
+            assertEquals(HttpStatusCode.OK, deleted.status)
+            assertEquals(HttpStatusCode.NotFound, client.get("/api/reservables/availability/pollers/$pollerId").status)
         }
 
     @Test
