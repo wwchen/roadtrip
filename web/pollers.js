@@ -154,6 +154,12 @@ function renderLinks(poller) {
       kind: 'JSON',
     }),
     linkChip({
+      href: `/logs?poller_id=${encodeURIComponent(id)}`,
+      text: 'Logs',
+      kind: 'Page',
+      target: null,
+    }),
+    linkChip({
       href: `/api/reservables/availability/logs?poller_id=${encodeURIComponent(id)}`,
       text: 'Logs',
       kind: 'JSON',

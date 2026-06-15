@@ -187,6 +187,33 @@ button.link-chip:hover .link-text {
 .chip-kind.page { color: #87d99b; }
 .chip-kind.json { color: #f1c27d; }
 
+.pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--border-strong);
+  background: var(--bg-subtle);
+  font-size: 12px;
+  color: var(--text);
+}
+
+.pill.available,
+.pill.active {
+  border-color: rgba(76,185,106,0.45);
+  background: rgba(76,185,106,0.12);
+  color: #87d99b;
+}
+
+.pill.partial,
+.pill.paused { color: #f1c27d; }
+
+.pill.booked,
+.pill.closed,
+.pill.done,
+.pill.unknown { color: var(--muted); }
+
 .action-icon {
   position: relative;
   display: inline-block;
@@ -464,6 +491,23 @@ pre {
 }
 .reservables-table .links { min-width: 0; }
 
+.logs-table {
+  width: 100%;
+  min-width: 1040px;
+  table-layout: fixed;
+}
+
+.logs-table .col-log-id { width: 6%; }
+.logs-table .col-rid { width: 18%; }
+.logs-table .col-date { width: 11%; }
+.logs-table .col-status { width: 10%; }
+.logs-table .col-available { width: 9%; }
+.logs-table .col-observed { width: 13%; }
+.logs-table .col-run { width: 7%; }
+.logs-table .col-payload { width: 13%; }
+.logs-table .col-links { width: 13%; }
+.logs-table .links { min-width: 0; }
+
 .poi-id-list {
   display: flex;
   flex-wrap: wrap;
@@ -481,26 +525,33 @@ pre {
 
   .poi-table,
   .reservables-table,
+  .logs-table,
   .poi-table tbody,
   .reservables-table tbody,
+  .logs-table tbody,
   .poi-table tr,
   .reservables-table tr,
+  .logs-table tr,
   .poi-table td,
-  .reservables-table td {
+  .reservables-table td,
+  .logs-table td {
     display: block;
   }
 
   .poi-table,
-  .reservables-table {
+  .reservables-table,
+  .logs-table {
     min-width: 0;
     table-layout: auto;
   }
 
   .poi-table thead,
-  .reservables-table thead { display: none; }
+  .reservables-table thead,
+  .logs-table thead { display: none; }
 
   .poi-table tbody,
-  .reservables-table tbody {
+  .reservables-table tbody,
+  .logs-table tbody {
     display: grid;
     gap: 10px;
     padding: 10px;
@@ -511,7 +562,8 @@ pre {
   .poi-table tbody tr.availability-row,
   .reservables-table tbody tr.result-row,
   .reservables-table tbody tr.reservables-row,
-  .reservables-table tbody tr.availability-row {
+  .reservables-table tbody tr.availability-row,
+  .logs-table tbody tr.result-row {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: rgba(255,255,255,0.018);
@@ -536,10 +588,12 @@ pre {
   }
 
   .poi-table tbody tr:hover,
-  .reservables-table tbody tr:hover { background: rgba(255,255,255,0.018); }
+  .reservables-table tbody tr:hover,
+  .logs-table tbody tr:hover { background: rgba(255,255,255,0.018); }
 
   .poi-table tbody tr.result-row td,
-  .reservables-table tbody tr.result-row td {
+  .reservables-table tbody tr.result-row td,
+  .logs-table tbody tr.result-row td {
     display: grid;
     grid-template-columns: var(--result-label-width, 86px) minmax(0, 1fr);
     gap: 10px;
@@ -549,10 +603,12 @@ pre {
   }
 
   .poi-table tbody tr.result-row td:last-child,
-  .reservables-table tbody tr.result-row td:last-child { border-bottom: 0; }
+  .reservables-table tbody tr.result-row td:last-child,
+  .logs-table tbody tr.result-row td:last-child { border-bottom: 0; }
 
   .poi-table tbody tr.result-row td::before,
-  .reservables-table tbody tr.result-row td::before {
+  .reservables-table tbody tr.result-row td::before,
+  .logs-table tbody tr.result-row td::before {
     content: attr(data-label);
     grid-column: 1;
     grid-row: 1 / -1;
@@ -564,7 +620,8 @@ pre {
   }
 
   .poi-table tbody tr.result-row td > *,
-  .reservables-table tbody tr.result-row td > * { grid-column: 2; }
+  .reservables-table tbody tr.result-row td > *,
+  .logs-table tbody tr.result-row td > * { grid-column: 2; }
 
   .rid,
   .name {

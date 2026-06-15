@@ -12,8 +12,8 @@
 //   GET /api/reservables/availability/pollers
 //     → { pollers: [{ id, scope, cadence, target_dates, trigger_actions, … }, …] }
 //
-//   GET /api/reservable/{rid}/availability
-//     → provider availability response for one reservable
+//   GET /api/reservables/availability/logs
+//     → { logs: [{ id, run_id, reservable_rid, target_date, day_payload, … }, …] }
 //
 // Catalog routes are cheap (no upstream roundtrip). Reservable availability is
 // fetched per reservable and remains throttled/rate-limited.
