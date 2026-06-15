@@ -15,10 +15,8 @@
 //   GET /api/reservable/{rid}/availability
 //     → provider availability response for one reservable
 //
-// These hit the catalog (per-site rows from the reservable_data ETLs +
-// joiner). They are NOT availability data — per-day status still comes
-// from /api/campsite/availability/{poi_id}. Catalog is cheap (no upstream
-// roundtrip); availability is throttled and rate-limited.
+// Catalog routes are cheap (no upstream roundtrip). Reservable availability is
+// fetched per reservable and remains throttled/rate-limited.
 
 import { jsonGetOk } from './http.js';
 

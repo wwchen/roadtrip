@@ -170,17 +170,18 @@
   }
   table {
     width: 100%;
-    min-width: 920px;
+    min-width: 1020px;
     table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
   }
-  .col-rid { width: 27%; }
-  .col-name { width: 15%; }
+  .col-rid { width: 21%; }
+  .col-name { width: 14%; }
   .col-loop { width: 12%; }
   .col-site-type { width: 16%; }
-  .col-raw { width: 18%; }
-  .col-links { width: 12%; }
+  .col-raw { width: 12%; }
+  .col-page { width: 12%; }
+  .col-api { width: 13%; }
   th,
   td {
     padding: 10px 12px;
@@ -216,6 +217,72 @@
     flex-direction: column;
     gap: 6px;
     align-items: flex-start;
+  }
+  .action-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-height: 24px;
+    color: var(--accent);
+    font-size: 13px;
+    line-height: 1.25;
+  }
+  a.action-item:hover {
+    text-decoration: none;
+  }
+  a.action-item:hover .action-text,
+  button.action-item:hover .action-text {
+    text-decoration: underline;
+  }
+  .action-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .action-icon {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    color: currentColor;
+  }
+  .action-icon.inline::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 6px;
+    height: 6px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+  }
+  .link-button.active .action-icon.inline::before {
+    left: 4px;
+    top: 1px;
+    transform: rotate(45deg);
+  }
+  .action-icon.open::before {
+    content: "";
+    position: absolute;
+    left: 1px;
+    bottom: 1px;
+    width: 9px;
+    height: 9px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    opacity: 0.82;
+  }
+  .action-icon.open::after {
+    content: "";
+    position: absolute;
+    right: 1px;
+    top: 1px;
+    width: 7px;
+    height: 7px;
+    border-top: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
   }
   .link-button {
     height: auto;
@@ -308,8 +375,18 @@
     justify-content: flex-end;
   }
   details summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
     cursor: pointer;
     color: var(--accent);
+  }
+  details summary::-webkit-details-marker { display: none; }
+  details[open] .action-icon.inline::before {
+    left: 4px;
+    top: 1px;
+    transform: rotate(45deg);
   }
   pre {
     margin: 8px 0 0;
@@ -505,7 +582,8 @@
           <col class="col-loop">
           <col class="col-site-type">
           <col class="col-raw">
-          <col class="col-links">
+          <col class="col-page">
+          <col class="col-api">
         </colgroup>
         <thead>
           <tr>
@@ -514,7 +592,8 @@
             <th>Loop</th>
             <th>Site Type</th>
             <th>Raw</th>
-            <th>Links</th>
+            <th>Page</th>
+            <th>API (JSON)</th>
           </tr>
         </thead>
         <tbody id="results"></tbody>

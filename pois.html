@@ -155,7 +155,7 @@
   }
   table {
     width: 100%;
-    min-width: 880px;
+    min-width: 980px;
     border-collapse: collapse;
     font-size: 13px;
   }
@@ -176,6 +176,7 @@
   }
   td { color: var(--text); }
   tbody tr:hover { background: rgba(255,255,255,0.025); }
+  .result-row.is-expanded { background: rgba(255,255,255,0.025); }
   .mono {
     font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
     font-size: 12px;
@@ -189,8 +190,173 @@
   .links {
     display: flex;
     flex-direction: column;
-    gap: 5px;
+    gap: 6px;
     min-width: 110px;
+    align-items: flex-start;
+  }
+  .action-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-height: 24px;
+    color: var(--accent);
+    font-size: 13px;
+    line-height: 1.25;
+  }
+  a.action-item:hover {
+    text-decoration: none;
+  }
+  a.action-item:hover .action-text,
+  button.action-item:hover .action-text {
+    text-decoration: underline;
+  }
+  .action-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .action-icon {
+    position: relative;
+    display: inline-block;
+    flex: 0 0 auto;
+    width: 14px;
+    height: 14px;
+    color: currentColor;
+  }
+  .action-icon.inline::before {
+    content: "";
+    position: absolute;
+    left: 3px;
+    top: 3px;
+    width: 6px;
+    height: 6px;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: rotate(-45deg);
+  }
+  .link-button.active .action-icon.inline::before {
+    left: 4px;
+    top: 1px;
+    transform: rotate(45deg);
+  }
+  .action-icon.open::before {
+    content: "";
+    position: absolute;
+    left: 1px;
+    bottom: 1px;
+    width: 9px;
+    height: 9px;
+    border: 1.5px solid currentColor;
+    border-radius: 2px;
+    opacity: 0.82;
+  }
+  .action-icon.open::after {
+    content: "";
+    position: absolute;
+    right: 1px;
+    top: 1px;
+    width: 7px;
+    height: 7px;
+    border-top: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+  }
+  .name-link {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .link-button {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+    justify-content: flex-start;
+  }
+  .link-button:hover {
+    background: transparent;
+    text-decoration: underline;
+  }
+  .link-button.active { color: #62cc7d; }
+  .reservables-row td {
+    padding: 0;
+    background: rgba(255,255,255,0.018);
+  }
+  .reservables-panel {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .reservables-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .reservables-heading strong { color: var(--text); }
+  .reservable-list {
+    display: grid;
+    gap: 8px;
+  }
+  .reservable-card {
+    display: grid;
+    grid-template-columns: minmax(240px, 1.4fr) minmax(160px, 0.7fr) minmax(120px, 0.45fr) minmax(150px, 0.55fr);
+    gap: 12px;
+    padding: 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    background: rgba(255,255,255,0.018);
+  }
+  .reservable-title {
+    display: grid;
+    gap: 4px;
+  }
+  .reservable-meta {
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .column-label {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 650;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .reservable-links {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    align-items: flex-start;
+  }
+  .json-details summary {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    list-style: none;
+    cursor: pointer;
+    color: var(--accent);
+  }
+  .json-details summary::-webkit-details-marker { display: none; }
+  .json-details[open] .action-icon.inline::before {
+    left: 4px;
+    top: 1px;
+    transform: rotate(45deg);
+  }
+  pre {
+    margin: 8px 0 0;
+    padding: 9px;
+    max-height: 260px;
+    overflow: auto;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
   .empty {
     padding: 34px 14px;
@@ -211,8 +377,79 @@
     .nav { justify-content: flex-start; }
     .filters { grid-template-columns: 1fr; }
     .actions { flex-wrap: wrap; }
-    th,
-    td { padding: 9px; }
+    .table-wrap { overflow-x: visible; }
+    table,
+    tbody,
+    tr,
+    td {
+      display: block;
+    }
+    table { min-width: 0; }
+    thead { display: none; }
+    tbody {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+    }
+    tbody tr.result-row,
+    tbody tr.reservables-row {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.018);
+      overflow: hidden;
+    }
+    tbody tr.result-row.is-expanded {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom-color: transparent;
+    }
+    tbody tr.reservables-row {
+      margin-top: -10px;
+      border-top: 0;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+    tbody tr.result-row td {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 10px;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      overflow-wrap: anywhere;
+    }
+    tbody tr.result-row td:last-child { border-bottom: 0; }
+    tbody tr.result-row td::before {
+      content: attr(data-label);
+      grid-column: 1;
+      grid-row: 1 / -1;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    tbody tr.result-row td > * { grid-column: 2; }
+    .name {
+      max-width: none;
+      min-width: 0;
+    }
+    .links { min-width: 0; align-items: flex-start; }
+    .reservables-row td {
+      display: block;
+      border-bottom: 0;
+    }
+    .reservables-panel {
+      border-bottom: 0;
+      padding: 12px 10px;
+    }
+    .reservables-heading {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .reservable-card {
+      grid-template-columns: 1fr;
+    }
+    pre { max-width: 100%; }
   }
 </style>
 </head>
@@ -269,7 +506,8 @@
             <th>Category</th>
             <th>Region</th>
             <th>Coordinates</th>
-            <th>Links</th>
+            <th>Page</th>
+            <th>API (JSON)</th>
           </tr>
         </thead>
         <tbody id="results"></tbody>

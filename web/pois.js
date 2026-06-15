@@ -1,4 +1,8 @@
 import { poiSearchUrl, searchPoiCatalog } from './api/poi-api.js';
+import {
+  fetchPoiReservables,
+  reservableAvailabilityUrl,
+} from './api/reservable-api.js';
 
 const form = document.getElementById('poi-form');
 const resultsEl = document.getElementById('results');
@@ -8,6 +12,8 @@ const queryUrlEl = document.getElementById('query-url');
 const resetBtn = document.getElementById('reset-btn');
 
 let activeAbort = null;
+let lastRows = [];
+const poiReservables = new Map();
 
 function formParams() {
   const data = new FormData(form);
@@ -91,38 +97,182 @@ async function runSearch() {
 }
 
 function renderResults(rows) {
+  lastRows = rows;
   emptyEl.hidden = rows.length !== 0;
-  resultsEl.innerHTML = rows.map(rowHtml).join('');
+  resultsEl.innerHTML = rows.map(rowGroupHtml).join('');
 }
 
-function rowHtml(row) {
+function rowGroupHtml(row) {
+  const state = poiReservables.get(String(row.id));
+  return rowHtml(row, state) + (state?.expanded ? reservablesPanelHtml(row, state) : '');
+}
+
+function rowHtml(row, state) {
   const id = row.id == null ? '' : String(row.id);
   const detailUrl = `/api/pois/${encodeURIComponent(id)}`;
   const mapUrl = `/?poi=${encodeURIComponent(id)}`;
-  const reservablesUrl = `/api/poi/${encodeURIComponent(id)}/reservables`;
-  const availabilityUrl = `/api/poi/${encodeURIComponent(id)}/availability?days=7`;
+  const reservablesJsonUrl = `/api/poi/${encodeURIComponent(id)}/reservables`;
   const coords = formatCoords(row.lng, row.lat);
+  const expanded = !!state?.expanded;
   return `
-    <tr>
-      <td class="mono">${escapeHtml(id)}</td>
-      <td class="name">
-        <a href="${detailUrl}" target="_blank" rel="noreferrer">${escapeHtml(row.name || 'unknown')}</a>
+    <tr class="result-row${expanded ? ' is-expanded' : ''}">
+      <td class="mono" data-label="ID">${escapeHtml(id)}</td>
+      <td class="name" data-label="Name">
+        <a class="name-link" href="${mapUrl}">
+          <span class="action-text">${escapeHtml(row.name || 'unknown')}</span>
+          <span class="action-icon open" aria-hidden="true"></span>
+        </a>
       </td>
-      <td>
+      <td data-label="Category">
         ${dash(row.category)}
       </td>
-      <td>${dash(row.region)}</td>
-      <td class="mono">${escapeHtml(coords)}</td>
-      <td>
+      <td data-label="Region">${dash(row.region)}</td>
+      <td class="mono" data-label="Coordinates">${escapeHtml(coords)}</td>
+      <td data-label="Page">
         <div class="links">
-          <a href="${mapUrl}">Map</a>
-          <a href="${detailUrl}" target="_blank" rel="noreferrer">Detail</a>
-          <a href="${reservablesUrl}" target="_blank" rel="noreferrer">Reservables</a>
-          <a href="${availabilityUrl}" target="_blank" rel="noreferrer">Availability</a>
+          <button
+            class="link-button action-item${expanded ? ' active' : ''}"
+            type="button"
+            data-action="toggle-reservables"
+            data-poi-id="${escapeHtml(id)}"
+            aria-expanded="${expanded ? 'true' : 'false'}"
+          >
+            <span class="action-icon inline" aria-hidden="true"></span>
+            <span class="action-text">${escapeHtml(reservablesToggleLabel(state))}</span>
+          </button>
+        </div>
+      </td>
+      <td data-label="API (JSON)">
+        <div class="links">
+          <a class="action-item" href="${detailUrl}" target="_blank" rel="noreferrer">
+            <span class="action-text">POI</span>
+            <span class="action-icon open" aria-hidden="true"></span>
+          </a>
+          <a class="action-item" href="${reservablesJsonUrl}" target="_blank" rel="noreferrer">
+            <span class="action-text">Reservables</span>
+            <span class="action-icon open" aria-hidden="true"></span>
+          </a>
         </div>
       </td>
     </tr>
   `;
+}
+
+function reservablesPanelHtml(row, state) {
+  const id = String(row.id);
+  const loaded = Array.isArray(state.rows);
+  const count = loaded ? state.totalAtPoi : null;
+  const title = loaded
+    ? `<strong>${formatNumber(count)} reservables</strong> linked to this POI`
+    : 'Reservables linked to this POI';
+  return `
+    <tr class="reservables-row" data-panel-poi-id="${escapeHtml(id)}">
+      <td colspan="7">
+        <div class="reservables-panel">
+          <div class="reservables-heading">
+            <div>${title}</div>
+            <div class="mono muted">/api/poi/${escapeHtml(id)}/reservables</div>
+          </div>
+          ${reservablesContentHtml(state)}
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function reservablesContentHtml(state) {
+  if (state.loading) return '<div class="muted">Loading reservables...</div>';
+  if (state.error) return `<div class="error">${escapeHtml(state.error)}</div>`;
+  if (!Array.isArray(state.rows)) return '<div class="muted">Open this panel to load linked reservables.</div>';
+  if (state.rows.length === 0) return '<div class="muted">No reservables linked to this POI.</div>';
+  return `<div class="reservable-list">${state.rows.map(reservableCardHtml).join('')}</div>`;
+}
+
+function reservableCardHtml(row) {
+  const rid = row.rid || '';
+  const viewUrl = `/reservables?type=${encodeURIComponent(row.type || 'site')}&rid=${encodeURIComponent(rid)}`;
+  const jsonUrl = `/api/reservable/${encodeURIComponent(rid)}`;
+  const availabilityJsonUrl = reservableAvailabilityUrl(rid, {
+    days: 7,
+    start: utcYmd(new Date()),
+    minNights: 1,
+  });
+  return `
+    <div class="reservable-card">
+      <div class="reservable-title">
+        <div class="mono">${escapeHtml(rid)}</div>
+        <div>${dash(row.name)}</div>
+      </div>
+      <div class="reservable-meta">
+        ${escapeHtml([row.loop, row.site_type].filter(Boolean).join(' / ') || 'site')}
+      </div>
+      <div class="reservable-links">
+        <div class="column-label">Page</div>
+        <a class="action-item" href="${viewUrl}">
+          <span class="action-text">Reservable</span>
+          <span class="action-icon open" aria-hidden="true"></span>
+        </a>
+      </div>
+      <div class="reservable-links">
+        <div class="column-label">API (JSON)</div>
+        <a class="action-item" href="${jsonUrl}" target="_blank" rel="noreferrer">
+          <span class="action-text">Reservable</span>
+          <span class="action-icon open" aria-hidden="true"></span>
+        </a>
+        <a class="action-item" href="${availabilityJsonUrl}" target="_blank" rel="noreferrer">
+          <span class="action-text">Availability</span>
+          <span class="action-icon open" aria-hidden="true"></span>
+        </a>
+      </div>
+    </div>
+  `;
+}
+
+function reservablesToggleLabel(state) {
+  if (state?.loading) return 'Loading reservables';
+  if (Array.isArray(state?.rows)) {
+    return `${formatNumber(state.totalAtPoi ?? state.rows.length)} reservables`;
+  }
+  return 'Reservables';
+}
+
+function panelState(poiId) {
+  if (!poiReservables.has(poiId)) {
+    poiReservables.set(poiId, {
+      expanded: false,
+      loading: false,
+      error: '',
+      rows: null,
+      totalAtPoi: 0,
+      abort: null,
+    });
+  }
+  return poiReservables.get(poiId);
+}
+
+async function toggleReservables(poiId) {
+  const state = panelState(poiId);
+  state.expanded = !state.expanded;
+  renderResults(lastRows);
+  if (!state.expanded || state.rows) return;
+
+  state.abort?.abort();
+  state.abort = new AbortController();
+  state.loading = true;
+  state.error = '';
+  renderResults(lastRows);
+  try {
+    const body = await fetchPoiReservables(poiId, { type: 'site', signal: state.abort.signal });
+    state.rows = body.reservables || [];
+    state.totalAtPoi = body.total_at_poi ?? state.rows.length;
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    state.error = errorMessage(err);
+    state.rows = null;
+  } finally {
+    state.loading = false;
+    renderResults(lastRows);
+  }
 }
 
 function formatCoords(lng, lat) {
@@ -146,6 +296,13 @@ function formatNumber(value) {
   return Number(value || 0).toLocaleString();
 }
 
+function utcYmd(date) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll('&', '&amp;')
@@ -163,6 +320,12 @@ form.addEventListener('submit', (event) => {
 resetBtn.addEventListener('click', () => {
   form.reset();
   runSearch();
+});
+
+resultsEl.addEventListener('click', (event) => {
+  const toggle = event.target.closest('[data-action="toggle-reservables"]');
+  if (!toggle) return;
+  toggleReservables(toggle.dataset.poiId || '');
 });
 
 applyParamsFromUrl();

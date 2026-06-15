@@ -110,29 +110,40 @@ function rowGroupHtml(row) {
 function rowHtml(row, state) {
   const raw = row.raw == null ? '' : JSON.stringify(row.raw, null, 2);
   const rawCell = raw
-    ? `<details><summary>JSON</summary><pre>${escapeHtml(raw)}</pre></details>`
+    ? `<details class="json-details"><summary><span class="action-icon inline" aria-hidden="true"></span><span>JSON</span></summary><pre>${escapeHtml(raw)}</pre></details>`
     : '<span class="muted">none</span>';
   const detailUrl = `/api/reservable/${encodeURIComponent(row.rid)}`;
   const expanded = !!state?.expanded;
   return `
     <tr class="result-row${expanded ? ' is-expanded' : ''}">
       <td class="rid mono" data-label="RID">
-        <a href="${detailUrl}" target="_blank" rel="noreferrer">${escapeHtml(row.rid)}</a>
+        ${escapeHtml(row.rid)}
         <div class="muted">${escapeHtml(row.vendor || '')} · ${escapeHtml(row.type || '')}</div>
       </td>
       <td class="name" data-label="Name">${dash(row.name)}</td>
       <td data-label="Loop">${dash(row.loop)}</td>
       <td data-label="Site Type">${dash(row.site_type)}</td>
       <td data-label="Raw">${rawCell}</td>
-      <td data-label="Links">
+      <td data-label="Page">
         <div class="row-links">
           <button
-            class="link-button${expanded ? ' active' : ''}"
+            class="link-button action-item${expanded ? ' active' : ''}"
             type="button"
             data-action="toggle-availability"
             data-rid="${escapeHtml(row.rid)}"
             aria-expanded="${expanded ? 'true' : 'false'}"
-          >Availability</button>
+          >
+            <span class="action-icon inline" aria-hidden="true"></span>
+            <span class="action-text">${expanded ? 'Hide availability' : 'Availability'}</span>
+          </button>
+        </div>
+      </td>
+      <td data-label="API (JSON)">
+        <div class="row-links">
+          <a class="action-item" href="${detailUrl}" target="_blank" rel="noreferrer">
+            <span class="action-text">Reservable</span>
+            <span class="action-icon open" aria-hidden="true"></span>
+          </a>
         </div>
       </td>
     </tr>
@@ -145,7 +156,7 @@ function availabilityPanelHtml(rid, state) {
   const result = availabilityResultHtml(state);
   return `
     <tr class="availability-row" data-panel-rid="${escapeHtml(rid)}">
-      <td colspan="6">
+      <td colspan="7">
         <div class="availability-panel">
           <form class="availability-controls" data-action="availability-query" data-rid="${escapeHtml(rid)}">
             <label>
@@ -200,8 +211,8 @@ function availabilityResultHtml(state) {
         ${body.provider ? ` · ${escapeHtml(body.provider)}` : ''}
       </div>
       <div class="availability-days">${pills}${remainder}</div>
-      <details>
-        <summary>Response JSON</summary>
+      <details class="json-details">
+        <summary><span class="action-icon inline" aria-hidden="true"></span><span>JSON</span></summary>
         <pre>${escapeHtml(JSON.stringify(body, null, 2))}</pre>
       </details>
     </div>
