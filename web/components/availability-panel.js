@@ -51,9 +51,35 @@ export function availabilityQueryHtml(rid, query, { loading = false } = {}) {
       </label>
       <div class="actions">
         <button class="primary" type="submit"${loading ? ' disabled' : ''}>Query</button>
+        <button type="button" data-action="create-watch" data-rid="${escapeHtml(rid)}">Create watch</button>
       </div>
     </form>
   `;
+}
+
+export function createWatchUrlFromQuery(rid, query) {
+  const start = query.start;
+  const days = Math.max(1, Number(query.days) || 7);
+  const dates = [];
+  if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) {
+    const base = new Date(`${start}T00:00:00Z`);
+    for (let i = 0; i < days; i += 1) {
+      const d = new Date(base);
+      d.setUTCDate(base.getUTCDate() + i);
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(d.getUTCDate()).padStart(2, '0');
+      dates.push(`${y}-${m}-${day}`);
+    }
+  }
+  const params = new URLSearchParams({
+    reservable_rid: rid,
+    target_dates: dates.join(','),
+    min_nights: String(query.minNights || 1),
+    cadence_sec: '60',
+    trigger_kinds: 'atc',
+  });
+  return `/watches?${params}`;
 }
 
 export function availabilityResultHtml(state) {

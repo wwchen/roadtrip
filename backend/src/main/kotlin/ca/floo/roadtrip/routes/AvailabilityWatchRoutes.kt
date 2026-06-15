@@ -112,13 +112,18 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
             } catch (e: Exception) {
                 return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
             }
-        val err = validateCreate(req, reservables)
+        val resolved =
+            when (val r = resolveCreateScope(req, reservables)) {
+                is ResolveResult.Err -> return@post call.respondError(r.error, HttpStatusCode.BadRequest, r.detail)
+                is ResolveResult.Ok -> r
+            }
+        val err = validateCreateBody(req)
         if (err != null) return@post call.respondError(err.first, HttpStatusCode.BadRequest, err.second)
         val watch =
             watches.create(
                 AvailabilityWatchRepo.CreateInput(
-                    poiId = req.poiId,
-                    reservableId = req.reservableId,
+                    poiId = resolved.poiId,
+                    reservableId = resolved.reservableId,
                     reservableFilters = req.reservableFilters,
                     targetDates = req.targetDates.map(LocalDate::parse),
                     minNights = req.minNights,
@@ -196,13 +201,49 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
     }
 }
 
-private fun validateCreate(
+private sealed class ResolveResult {
+    data class Ok(
+        val poiId: Long?,
+        val reservableId: Long?,
+    ) : ResolveResult()
+
+    data class Err(
+        val error: String,
+        val detail: String?,
+    ) : ResolveResult()
+}
+
+private fun resolveCreateScope(
     req: AvailabilityWatchCreateRequest,
     reservables: ReservableRepo,
-): Pair<String, String?>? {
-    if ((req.poiId == null) == (req.reservableId == null)) {
-        return "invalid_scope" to "exactly one of poi_id, reservable_id must be set"
+): ResolveResult {
+    val scopeKeysSet = listOf(req.poiId, req.reservableId, req.reservableRid).count { it != null }
+    if (scopeKeysSet != 1) {
+        return ResolveResult.Err(
+            "invalid_scope",
+            "exactly one of poi_id, reservable_id, or reservable_rid must be set",
+        )
     }
+    if (req.reservableRid != null) {
+        val parsed =
+            ca.floo.roadtrip.models.ReservableId
+                .parse(req.reservableRid)
+                ?: return ResolveResult.Err(
+                    "invalid_reservable_rid",
+                    "could not parse reservable_rid '${req.reservableRid}'",
+                )
+        val resolvedReservable =
+            reservables.findByRid(parsed)
+                ?: return ResolveResult.Err(
+                    "reservable_not_found",
+                    "no reservable with rid ${req.reservableRid}",
+                )
+        return ResolveResult.Ok(poiId = null, reservableId = resolvedReservable.id)
+    }
+    return ResolveResult.Ok(poiId = req.poiId, reservableId = req.reservableId)
+}
+
+private fun validateCreateBody(req: AvailabilityWatchCreateRequest): Pair<String, String?>? {
     if (req.targetDates.isEmpty()) return "invalid_target_dates" to "target_dates must be non-empty"
     runCatching { req.targetDates.forEach(LocalDate::parse) }
         .onFailure { return "invalid_target_dates" to it.message }

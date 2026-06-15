@@ -30,9 +30,9 @@ createForm.addEventListener('submit', async (e) => {
 
 function buildCreatePayload(fd) {
   const poiId = (fd.get('poi_id') || '').trim();
-  const reservableId = (fd.get('reservable_id') || '').trim();
-  if (!poiId === !reservableId) {
-    statusEl.textContent = 'Set exactly one of POI ID or Reservable ID.';
+  const reservableRid = (fd.get('reservable_rid') || '').trim();
+  if (!poiId === !reservableRid) {
+    statusEl.textContent = 'Set exactly one of POI ID or Reservable RID.';
     return null;
   }
   let filters = {};
@@ -50,7 +50,7 @@ function buildCreatePayload(fd) {
     .split(',').map((s) => s.trim()).filter(Boolean);
   return {
     poi_id: poiId ? Number(poiId) : null,
-    reservable_id: reservableId ? Number(reservableId) : null,
+    reservable_rid: reservableRid || null,
     reservable_filters: filters,
     target_dates: targetDates,
     min_nights: Number(fd.get('min_nights') || 1),
@@ -59,6 +59,25 @@ function buildCreatePayload(fd) {
     trigger_config: triggerConfig,
     stop_when_triggered: fd.get('stop_when_triggered') === 'on',
   };
+}
+
+function prefillCreateFormFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  const fields = ['poi_id', 'reservable_rid', 'target_dates', 'min_nights', 'cadence_sec', 'trigger_kinds'];
+  let prefilled = false;
+  for (const name of fields) {
+    const value = params.get(name);
+    if (value == null) continue;
+    const input = createForm.querySelector(`[name="${name}"]`);
+    if (input) {
+      input.value = value;
+      prefilled = true;
+    }
+  }
+  if (prefilled) {
+    document.getElementById('create-panel')?.setAttribute('open', '');
+    createForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
 }
 
 async function refresh() {
@@ -145,4 +164,5 @@ function escapeHtml(s) {
   ));
 }
 
+prefillCreateFormFromUrl();
 refresh();

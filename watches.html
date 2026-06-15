@@ -123,6 +123,7 @@
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 10px;
     align-items: end;
+    max-width: 720px;
   }
   .form-stack > .full { grid-column: 1 / -1; }
   .form-stack label.checkbox {
@@ -240,8 +241,8 @@
       <label>POI ID (or)
         <input name="poi_id" inputmode="numeric" placeholder="2258">
       </label>
-      <label>Reservable ID
-        <input name="reservable_id" inputmode="numeric" placeholder="leave blank if poi_id set">
+      <label>Reservable RID
+        <input name="reservable_rid" placeholder="site:recgov:330257">
       </label>
       <label class="full">Target dates (comma-separated YYYY-MM-DD)
         <input name="target_dates" placeholder="2026-07-04, 2026-07-05" required>

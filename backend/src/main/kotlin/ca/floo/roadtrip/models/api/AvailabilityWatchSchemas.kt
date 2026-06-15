@@ -8,6 +8,7 @@ import kotlinx.serialization.json.JsonObject
 data class AvailabilityWatchCreateRequest(
     @SerialName("poi_id") val poiId: Long? = null,
     @SerialName("reservable_id") val reservableId: Long? = null,
+    @SerialName("reservable_rid") val reservableRid: String? = null,
     @SerialName("reservable_filters") val reservableFilters: JsonObject = JsonObject(emptyMap()),
     @SerialName("target_dates") val targetDates: List<String>,
     @SerialName("min_nights") val minNights: Int = 1,
