@@ -37,8 +37,6 @@ class ReservableAvailabilityLogRepo(
                     .set(RESERVABLE_AVAILABILITY_LOG.TARGET_DATE, LocalDate.parse(day.date))
                     .set(RESERVABLE_AVAILABILITY_LOG.STATUS, day.status)
                     .set(RESERVABLE_AVAILABILITY_LOG.AVAILABLE, day.availableCount > 0)
-                    .set(RESERVABLE_AVAILABILITY_LOG.AVAILABLE_COUNT, day.availableCount)
-                    .set(RESERVABLE_AVAILABILITY_LOG.TOTAL, day.total)
                     .set(RESERVABLE_AVAILABILITY_LOG.DAY_PAYLOAD, JSONB.valueOf(day.toJson()))
             }
         ctx.batch(inserts).execute()

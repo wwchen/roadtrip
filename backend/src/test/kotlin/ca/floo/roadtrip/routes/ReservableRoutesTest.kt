@@ -427,8 +427,7 @@ class ReservableRoutesTest {
             val logRows =
                 ctx.fetch(
                     """
-                    SELECT reservable_rid, target_date, status, available, available_count,
-                           total, day_payload
+                    SELECT reservable_rid, target_date, status, available, day_payload
                     FROM reservable_availability_log
                     ORDER BY target_date
                     """.trimIndent(),
@@ -438,8 +437,6 @@ class ReservableRoutesTest {
             assertEquals(java.time.LocalDate.parse("2026-07-01"), logRows[0].get("target_date", java.time.LocalDate::class.java))
             assertEquals("available", logRows[0].get("status", String::class.java))
             assertEquals(true, logRows[0].get("available", Boolean::class.java))
-            assertEquals(1, logRows[0].get("available_count", Int::class.java))
-            assertEquals(1, logRows[0].get("total", Int::class.java))
             assertEquals(
                 "2026-07-01",
                 Json
