@@ -42,7 +42,10 @@ class ReservableAvailabilityPollerRepo(
     )
 
     data class PatchInput(
+        val scope: Scope? = null,
+        val reservableFilters: JsonObject? = null,
         val status: String? = null,
+        val minNights: Int? = null,
         val cadenceSec: Int? = null,
         val targetDates: List<LocalDate>? = null,
         val triggerActions: JsonArray? = null,
@@ -173,8 +176,22 @@ class ReservableAvailabilityPollerRepo(
     ): Poller? {
         val updates = mutableListOf<String>()
         val args = mutableListOf<Any?>()
+        input.scope?.let {
+            updates += "poi_id = ?"
+            args += it.poiId
+            updates += "reservable_id = ?"
+            args += it.reservableId
+        }
+        input.reservableFilters?.let {
+            updates += "reservable_filters = ?::jsonb"
+            args += json.encodeToString(it)
+        }
         input.status?.let {
             updates += "status = ?"
+            args += it
+        }
+        input.minNights?.let {
+            updates += "min_nights = ?"
             args += it
         }
         input.cadenceSec?.let {

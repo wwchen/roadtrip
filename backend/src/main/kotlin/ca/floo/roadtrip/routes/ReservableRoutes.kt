@@ -5,6 +5,7 @@ import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.models.ReservableType
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PoiReservablesResponseSchema
+import ca.floo.roadtrip.models.api.ReservableAvailabilityFiltersSchema
 import ca.floo.roadtrip.models.api.ReservableAvailabilityLogListResponseSchema
 import ca.floo.roadtrip.models.api.ReservableAvailabilityLogSchema
 import ca.floo.roadtrip.models.api.ReservableAvailabilityPollerCreateRequestSchema
@@ -45,6 +46,8 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.jooq.DSLContext
@@ -272,10 +275,20 @@ fun Route.reservableRoutes(
         if (input.status != null && input.status !in setOf("active", "paused", "done")) {
             return@patch call.respondReservableError("bad_status", HttpStatusCode.BadRequest)
         }
+        val scope =
+            try {
+                input.scope?.toPollerScope(reservables)
+            } catch (e: BadReservableQuery) {
+                return@patch call.respondReservableError(
+                    e.error,
+                    if (e.error == "not_found") HttpStatusCode.NotFound else HttpStatusCode.BadRequest,
+                    e.detail,
+                )
+            }
         val validation =
             validatePollerInput(
                 cadence = input.cadence ?: 5,
-                minNights = 1,
+                minNights = input.minNights ?: 1,
                 targetDates = targetDates ?: listOf(LocalDate.now()),
                 triggerActions = input.triggerActions,
                 requireActions = false,
@@ -286,7 +299,10 @@ fun Route.reservableRoutes(
                 pollers.patch(
                     id,
                     ReservableAvailabilityPollerRepo.PatchInput(
+                        scope = scope,
+                        reservableFilters = input.reservableFilters?.let(::availabilityFiltersToJson),
                         status = input.status,
+                        minNights = input.minNights,
                         cadenceSec = input.cadence,
                         targetDates = targetDates,
                         triggerActions = input.triggerActions,
@@ -586,6 +602,17 @@ private fun Reservable.toSchema(poiIds: List<Long> = emptyList()): ReservableSch
         raw = raw,
     )
 
+private fun availabilityFiltersToJson(filters: ReservableAvailabilityFiltersSchema): JsonObject =
+    buildJsonObject {
+        if (filters.type.isNotEmpty()) put("type", JsonArray(filters.type.map(::JsonPrimitive)))
+        if (filters.vendor.isNotEmpty()) put("vendor", JsonArray(filters.vendor.map(::JsonPrimitive)))
+        if (filters.vendorId.isNotEmpty()) put("vendor_id", JsonArray(filters.vendorId.map(::JsonPrimitive)))
+        if (filters.name.isNotEmpty()) put("name", JsonArray(filters.name.map(::JsonPrimitive)))
+        if (filters.loop.isNotEmpty()) put("loop", JsonArray(filters.loop.map(::JsonPrimitive)))
+        if (filters.siteType.isNotEmpty()) put("site_type", JsonArray(filters.siteType.map(::JsonPrimitive)))
+        filters.raw?.let { put("raw", it) }
+    }
+
 private suspend fun createAvailabilityPoller(
     call: ApplicationCall,
     input: ReservableAvailabilityPollerCreateRequestSchema,
@@ -626,7 +653,7 @@ private suspend fun createAvailabilityPoller(
     val createInput =
         ReservableAvailabilityPollerRepo.CreateInput(
             scope = scope,
-            reservableFilters = service.filtersToJson(input.reservableFilters),
+            reservableFilters = availabilityFiltersToJson(input.reservableFilters),
             targetDates = targetDates,
             minNights = input.minNights,
             cadenceSec = input.cadence,

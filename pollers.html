@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#26272d">
 <title>Availability Pollers</title>
+<link rel="stylesheet" href="/web/components/catalog.css">
 <style>
   :root {
     --surface: #26272d;
@@ -17,9 +18,11 @@
     --muted: #8a8f96;
     --faint: #5a6068;
     --accent: #4cb96a;
+    --accent-hover: #62cc7d;
     --error: #f56565;
   }
   * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
   html, body {
     margin: 0;
     min-height: 100%;
@@ -140,9 +143,22 @@
   }
   table {
     width: 100%;
+    min-width: 1280px;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
   }
+  th:nth-child(1), td:nth-child(1) { width: 56px; }
+  th:nth-child(2), td:nth-child(2) { width: 130px; }
+  th:nth-child(3), td:nth-child(3) { width: 104px; }
+  th:nth-child(4), td:nth-child(4) { width: 104px; }
+  th:nth-child(5), td:nth-child(5) { width: 72px; }
+  th:nth-child(6), td:nth-child(6) { width: 104px; }
+  th:nth-child(7), td:nth-child(7) { width: 104px; }
+  th:nth-child(8), td:nth-child(8) { width: 104px; }
+  th:nth-child(9), td:nth-child(9) { width: 120px; }
+  th:nth-child(10), td:nth-child(10) { width: 120px; }
+  th:nth-child(11), td:nth-child(11) { width: 184px; }
   th,
   td {
     padding: 10px 12px;
@@ -186,6 +202,44 @@
   }
   .pill.paused { color: #f1c27d; }
   .pill.done { color: var(--muted); }
+  .poller-form-header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+  }
+  .poller-form-header > div:first-child {
+    display: flex;
+    align-items: baseline;
+    gap: 8px;
+  }
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+    align-items: end;
+  }
+  .wide { grid-column: span 2; }
+  .poller-check {
+    display: flex;
+    min-height: 34px;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 13px;
+    font-weight: 400;
+  }
+  .poller-check input {
+    width: auto;
+    height: auto;
+  }
+  .actions {
+    flex-wrap: wrap;
+    align-items: flex-start;
+  }
   .links {
     display: flex;
     flex-wrap: wrap;
@@ -255,8 +309,54 @@
       border-left: 0;
       border-top: 1px solid var(--border-strong);
     }
-    th,
-    td { padding: 9px; }
+    .poller-form-header {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .filters { grid-template-columns: 1fr; }
+    .wide { grid-column: span 1; }
+    .table-wrap { overflow-x: visible; }
+    table,
+    tbody,
+    tr,
+    td {
+      display: block;
+    }
+    table {
+      min-width: 0;
+      table-layout: auto;
+    }
+    thead { display: none; }
+    tbody {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+    }
+    tbody tr {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.018);
+      overflow: hidden;
+    }
+    tbody tr:hover { background: rgba(255,255,255,0.018); }
+    tbody td {
+      display: grid;
+      grid-template-columns: 92px minmax(0, 1fr);
+      gap: 8px;
+      width: auto !important;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      overflow-wrap: anywhere;
+    }
+    tbody td:last-child { border-bottom: 0; }
+    tbody td::before {
+      content: attr(data-label);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
   }
 </style>
 </head>
@@ -281,6 +381,8 @@
     </nav>
   </header>
 
+  <div id="poller-form-root"></div>
+
   <section class="panel" aria-live="polite">
     <div class="toolbar">
       <div id="status" class="status">Loading...</div>
@@ -301,7 +403,6 @@
             <th>Last Checked</th>
             <th>Next Poll</th>
             <th>Manage</th>
-            <th>Links</th>
           </tr>
         </thead>
         <tbody id="pollers"></tbody>

@@ -1,16 +1,27 @@
 import {
+  createReservableAvailabilityPoller,
   deleteReservableAvailabilityPoller,
   fetchReservableAvailabilityPollers,
   patchReservableAvailabilityPoller,
 } from './api/reservable-api.js';
-import { dash, escapeHtml, linkChip, links, renderRow } from './components/result-table.js';
+import { mountPollerForm } from './components/poller-form.js';
+import { dash, escapeHtml, renderRow } from './components/result-table.js';
 
 const statusEl = document.getElementById('status');
 const refreshBtn = document.getElementById('refresh-btn');
 const rowsEl = document.getElementById('pollers');
 const emptyEl = document.getElementById('empty');
+const pollerFormEl = document.getElementById('poller-form-root');
 
 let activeAbort = null;
+let pollersById = new Map();
+
+const pollerForm = mountPollerForm(pollerFormEl, {
+  onCreate: createPoller,
+  onUpdate: updatePoller,
+  onCancel: () => setStatus(''),
+  onError: (err) => setStatus(escapeHtml(errorMessage(err)), 'error'),
+});
 
 const pollerColumns = [
   {
@@ -18,7 +29,7 @@ const pollerColumns = [
     className: 'mono',
     render: (poller) => {
       const id = String(poller.id || '');
-      return `<a href="/api/reservables/availability/pollers/${encodeURIComponent(id)}" target="_blank" rel="noreferrer">${escapeHtml(id)}</a>`;
+      return escapeHtml(id);
     },
   },
   {
@@ -73,10 +84,6 @@ const pollerColumns = [
     label: 'Manage',
     render: (poller) => renderManage(poller),
   },
-  {
-    label: 'Links',
-    render: (poller) => renderLinks(poller),
-  },
 ];
 
 async function loadPollers() {
@@ -101,6 +108,7 @@ async function loadPollers() {
 
 function setBusy(busy) {
   refreshBtn.disabled = busy;
+  pollerForm.setBusy(busy);
 }
 
 function setStatus(html, className = '') {
@@ -109,6 +117,7 @@ function setStatus(html, className = '') {
 }
 
 function renderRows(pollers) {
+  pollersById = new Map(pollers.map((poller) => [String(poller.id || ''), poller]));
   emptyEl.hidden = pollers.length !== 0;
   rowsEl.innerHTML = pollers.map(rowHtml).join('');
 }
@@ -147,45 +156,6 @@ function renderFilters(filters) {
     .join('');
 }
 
-function renderLinks(poller) {
-  const id = String(poller.id || '');
-  const scope = poller.scope || {};
-  const items = [
-    linkChip({
-      href: `/api/reservables/availability/pollers/${encodeURIComponent(id)}`,
-      text: 'Poller',
-      kind: 'JSON',
-    }),
-    linkChip({
-      href: `/api/reservables/availability/runs?poller_id=${encodeURIComponent(id)}`,
-      text: 'Runs',
-      kind: 'JSON',
-    }),
-    linkChip({
-      href: `/logs?poller_id=${encodeURIComponent(id)}`,
-      text: 'Logs',
-      kind: 'Page',
-      target: null,
-    }),
-    linkChip({
-      href: `/api/reservables/availability/logs?poller_id=${encodeURIComponent(id)}`,
-      text: 'Logs',
-      kind: 'JSON',
-    }),
-  ];
-
-  if (scope.rid) {
-    items.push(
-      linkChip({
-        href: `/api/reservable/${encodeURIComponent(scope.rid)}/availability?days=7`,
-        text: 'Availability',
-        kind: 'JSON',
-      }),
-    );
-  }
-  return links(items);
-}
-
 function renderManage(poller) {
   const id = String(poller.id || '');
   const status = String(poller.status || '').toLowerCase();
@@ -197,10 +167,40 @@ function renderManage(poller) {
       : `<button type="button" data-action="set-poller-status" data-id="${escapeHtml(id)}" data-status="${escapeHtml(nextStatus)}">${escapeHtml(label)}</button>`;
   return `
     <div class="actions">
+      <button type="button" data-action="edit-poller" data-id="${escapeHtml(id)}">Edit</button>
       ${statusButton}
       <button type="button" data-action="delete-poller" data-id="${escapeHtml(id)}">Delete</button>
     </div>
   `;
+}
+
+async function createPoller(body) {
+  setBusy(true);
+  setStatus('Creating...');
+  try {
+    const result = await createReservableAvailabilityPoller(body);
+    pollerForm.reset();
+    await loadPollers();
+    setStatus(`<strong>Poller #${escapeHtml(result.poller?.id || '')}</strong> saved`);
+  } catch (err) {
+    setStatus(escapeHtml(errorMessage(err)), 'error');
+    setBusy(false);
+  }
+}
+
+async function updatePoller(id, body) {
+  if (!id) return;
+  setBusy(true);
+  setStatus('Updating...');
+  try {
+    const result = await patchReservableAvailabilityPoller(id, body);
+    pollerForm.reset();
+    await loadPollers();
+    setStatus(`<strong>Poller #${escapeHtml(result.poller?.id || id)}</strong> updated`);
+  } catch (err) {
+    setStatus(escapeHtml(errorMessage(err)), 'error');
+    setBusy(false);
+  }
 }
 
 function formatCadence(seconds) {
@@ -241,6 +241,17 @@ function statusClass(status) {
 refreshBtn.addEventListener('click', loadPollers);
 
 rowsEl.addEventListener('click', async (event) => {
+  const editButton = event.target.closest('[data-action="edit-poller"]');
+  if (editButton) {
+    const id = editButton.dataset.id || '';
+    const poller = pollersById.get(id);
+    if (!poller) return;
+    pollerForm.edit(poller);
+    pollerFormEl.scrollIntoView({ block: 'start' });
+    setStatus(`Editing poller #${escapeHtml(id)}`);
+    return;
+  }
+
   const statusButton = event.target.closest('[data-action="set-poller-status"]');
   if (statusButton) {
     const id = statusButton.dataset.id || '';

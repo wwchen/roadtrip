@@ -101,7 +101,10 @@ data class ReservableAvailabilityPollerCreateRequestSchema(
 
 @Serializable
 data class ReservableAvailabilityPollerPatchRequestSchema(
+    val scope: ReservableAvailabilityScopeSchema? = null,
+    @SerialName("reservable_filters") val reservableFilters: ReservableAvailabilityFiltersSchema? = null,
     val status: String? = null,
+    @SerialName("min_nights") val minNights: Int? = null,
     val cadence: Int? = null,
     @SerialName("target_dates") val targetDates: List<String>? = null,
     @SerialName("trigger_actions") val triggerActions: JsonArray? = null,

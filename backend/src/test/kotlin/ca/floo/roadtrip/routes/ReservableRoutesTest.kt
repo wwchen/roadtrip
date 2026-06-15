@@ -347,6 +347,40 @@ class ReservableRoutesTest {
                 }
             assertEquals(HttpStatusCode.Conflict, conflict.status)
 
+            val fullPatch =
+                client.patch("/api/reservables/availability/pollers/$secondPollerId") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {
+                          "scope":{"poi_id":$poiId},
+                          "reservable_filters":{"site_type":["STANDARD"]},
+                          "target_dates":["2026-07-02"],
+                          "min_nights":2,
+                          "cadence":180,
+                          "trigger_actions":["notify_slack"],
+                          "stop_when_triggered":true,
+                          "status":"paused"
+                        }
+                        """.trimIndent(),
+                    )
+                }
+            assertEquals(HttpStatusCode.OK, fullPatch.status)
+            val fullPatchPoller = Json.parseToJsonElement(fullPatch.bodyAsText()).jsonObject["poller"]!!.jsonObject
+            assertEquals(poiId.toString(), fullPatchPoller["scope"]!!.jsonObject["poi_id"]!!.jsonPrimitive.content)
+            assertEquals(
+                listOf("STANDARD"),
+                fullPatchPoller["reservable_filters"]!!
+                    .jsonObject["site_type"]!!
+                    .jsonArray
+                    .map { it.jsonPrimitive.content },
+            )
+            assertEquals(listOf("2026-07-02"), fullPatchPoller["target_dates"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals("2", fullPatchPoller["min_nights"]!!.jsonPrimitive.content)
+            assertEquals("180", fullPatchPoller["cadence"]!!.jsonPrimitive.content)
+            assertEquals(true, fullPatchPoller["stop_when_triggered"]!!.jsonPrimitive.boolean)
+            assertEquals("paused", fullPatchPoller["status"]!!.jsonPrimitive.content)
+
             val patched =
                 client.patch("/api/reservables/availability/pollers/$pollerId") {
                     contentType(ContentType.Application.Json)
