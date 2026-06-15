@@ -127,7 +127,6 @@
   .form-stack > label,
   .form-stack > .actions { flex: 3 1 280px; }
   .form-stack > label.narrow { flex: 0 0 160px; }
-  .form-stack > .full { flex: 1 1 100%; }
   .form-stack label.checkbox {
     display: flex;
     flex-direction: row;
@@ -254,17 +253,17 @@
       <label>Trigger kinds (comma-separated)
         <input name="trigger_kinds" value="atc" required>
       </label>
-      <label class="full">Reservable filters (JSON object)
+      <label>Reservable filters (JSON object)
         <textarea name="reservable_filters" rows="2">{}</textarea>
       </label>
-      <label class="full">Trigger config (JSON)
+      <label>Trigger config (JSON)
         <textarea name="trigger_config" rows="2">{}</textarea>
       </label>
-      <label class="checkbox full">
+      <label class="checkbox">
         <input name="stop_when_triggered" type="checkbox" checked>
         Stop when triggered
       </label>
-      <div class="actions full">
+      <div class="actions">
         <button class="primary" type="submit">Create</button>
       </div>
     </form>
