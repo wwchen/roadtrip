@@ -215,6 +215,12 @@ fun Application.module() {
         get("/reservables/") {
             call.respondFile(File(staticDir, "reservables.html"))
         }
+        get("/monitors") {
+            call.respondFile(File(staticDir, "monitors.html"))
+        }
+        get("/monitors/") {
+            call.respondFile(File(staticDir, "monitors.html"))
+        }
         // Campsite UI served from the JAR's classpath
         // (backend/src/main/resources/static/campsite/), separate from
         // roadtrip's repo-checkout static files. index.html serves at

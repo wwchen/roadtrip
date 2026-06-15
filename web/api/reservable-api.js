@@ -9,6 +9,9 @@
 //   GET /api/reservables
 //     → { total, limit, offset, reservables: [{rid, name, loop, …}, …] }
 //
+//   GET /api/reservables/availability/monitors
+//     → { monitors: [{ id, reservable, cadence, trigger_action, … }, …] }
+//
 // These hit the catalog (per-site rows from the reservable_data ETLs +
 // joiner). They are NOT availability data — per-day status still comes
 // from /api/campsite/availability/{poi_id}. Catalog is cheap (no upstream
@@ -36,6 +39,16 @@ export function searchReservables(params = {}) {
   }
   const suffix = qs.toString() ? `?${qs}` : '';
   return jsonGetOk(`/api/reservables${suffix}`, { signal });
+}
+
+/**
+ * List persisted reservable availability monitor registrations.
+ *
+ * @param {object}      [opts]
+ * @param {AbortSignal} [opts.signal]
+ */
+export function fetchReservableAvailabilityMonitors({ signal } = {}) {
+  return jsonGetOk('/api/reservables/availability/monitors', { signal });
 }
 
 /**
