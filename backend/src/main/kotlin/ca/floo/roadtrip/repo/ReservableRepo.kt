@@ -9,6 +9,7 @@ import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.models.ReservableType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import org.jooq.Condition
 import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
@@ -145,6 +146,30 @@ class ReservableRepo(
             ?.let(::fromRecord)
 
     /**
+     * Search active reservables. Each populated [SearchFilters] field is ORed
+     * internally, and all populated fields are ANDed together.
+     */
+    fun search(
+        filters: SearchFilters,
+        limit: Int,
+        offset: Int,
+    ): List<Reservable> =
+        ctx
+            .selectFrom(RESERVABLES)
+            .where(searchCondition(filters))
+            .orderBy(RESERVABLES.TYPE.asc(), RESERVABLES.VENDOR.asc(), RESERVABLES.VENDOR_ID.asc())
+            .limit(limit)
+            .offset(offset)
+            .fetch { fromRecord(it) }
+
+    fun countSearch(filters: SearchFilters): Int =
+        ctx
+            .selectCount()
+            .from(RESERVABLES)
+            .where(searchCondition(filters))
+            .fetchOne(0, Int::class.java)!!
+
+    /**
      * Find every reservable linked to [poiId], optionally filtered by type.
      * Used by the listing endpoint (`/api/poi/{id}/reservables`).
      *
@@ -252,6 +277,17 @@ class ReservableRepo(
         val poiId: Long,
     )
 
+    data class SearchFilters(
+        val rids: List<ReservableId> = emptyList(),
+        val types: List<ReservableType> = emptyList(),
+        val vendors: List<String> = emptyList(),
+        val vendorIds: List<String> = emptyList(),
+        val names: List<String> = emptyList(),
+        val loops: List<String> = emptyList(),
+        val siteTypes: List<String> = emptyList(),
+        val rawContainsJson: List<String> = emptyList(),
+    )
+
     /**
      * Map a jOOQ record to the model. The DB columns are nullable for the
      * generic-text shape jOOQ generates, but type/vendor/vendor_id are
@@ -259,7 +295,7 @@ class ReservableRepo(
      * migration ran wrong; treat them as invariants and let the !! crash
      * loudly if they do.
      */
-    private fun fromRecord(r: Record): Reservable {
+    internal fun fromRecord(r: Record): Reservable {
         val typeStr = r.get(RESERVABLES.TYPE)!!
         val vendor = r.get(RESERVABLES.VENDOR)!!
         val vendorId = r.get(RESERVABLES.VENDOR_ID)!!
@@ -277,6 +313,33 @@ class ReservableRepo(
             raw = rawJson,
         )
     }
+
+    private fun searchCondition(filters: SearchFilters): Condition =
+        listOfNotNull(
+            orCondition(
+                filters.rids.map { rid ->
+                    DSL.and(
+                        RESERVABLES.TYPE.eq(rid.type.encode()),
+                        RESERVABLES.VENDOR.eq(rid.vendor),
+                        RESERVABLES.VENDOR_ID.eq(rid.vendorId),
+                    )
+                },
+            ),
+            filters.types
+                .map { it.encode() }
+                .takeIf { it.isNotEmpty() }
+                ?.let { RESERVABLES.TYPE.`in`(it) },
+            filters.vendors.takeIf { it.isNotEmpty() }?.let { RESERVABLES.VENDOR.`in`(it) },
+            filters.vendorIds.takeIf { it.isNotEmpty() }?.let { RESERVABLES.VENDOR_ID.`in`(it) },
+            filters.names.takeIf { it.isNotEmpty() }?.let { RESERVABLES.NAME.`in`(it) },
+            filters.loops.takeIf { it.isNotEmpty() }?.let { RESERVABLES.LOOP.`in`(it) },
+            filters.siteTypes.takeIf { it.isNotEmpty() }?.let { RESERVABLES.SITE_TYPE.`in`(it) },
+            orCondition(
+                filters.rawContainsJson.map { rawJson ->
+                    DSL.condition("{0} @> {1}::jsonb", RESERVABLES.RAW, DSL.inline(rawJson))
+                },
+            ),
+        ).fold(RESERVABLE_ACTIVE_CONDITION) { acc, condition -> acc.and(condition) }
 
     private fun activeCount(source: String): Int =
         ctx
@@ -370,3 +433,10 @@ class ReservableRepo(
         private const val LINK_INSERT_CHUNK_SIZE = 1000
     }
 }
+
+private fun orCondition(conditions: List<Condition>): Condition? =
+    if (conditions.isEmpty()) {
+        null
+    } else {
+        conditions.reduce { acc, condition -> acc.or(condition) }
+    }
