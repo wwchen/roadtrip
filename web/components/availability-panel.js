@@ -134,6 +134,7 @@ function dayRowHtml(rid, day, state) {
       </div>
       <div class="availability-day-action">
         ${pollerActionHtml(rid, date, pollerState)}
+        ${logsActionHtml(rid, date)}
       </div>
     </div>
   `;
@@ -167,6 +168,20 @@ function pollerActionHtml(rid, date, pollerState) {
       data-target-date="${escapeHtml(date)}"
       ${date ? '' : 'disabled'}
     >Create poller</button>
+  `;
+}
+
+function logsActionHtml(rid, date) {
+  const params = new URLSearchParams({
+    rid,
+    target_date: date,
+    limit: '100',
+  });
+  return `
+    <a class="link-chip" href="/logs?${params}">
+      <span class="chip-kind page">Page</span>
+      <span class="link-text">View logs</span>
+    </a>
   `;
 }
 

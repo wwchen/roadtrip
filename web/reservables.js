@@ -1,7 +1,7 @@
 import { fetchReservable, searchReservables } from './api/reservable-api.js';
 import { createAvailabilityPanels } from './components/availability-controller.js';
 import { mountReservableQuery } from './components/reservable-query.js';
-import { reservableDetailLink, reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
+import { reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
 import { escapeHtml } from './components/result-table.js';
 
 const resultsEl = document.getElementById('results');
@@ -42,9 +42,10 @@ function syncUrl(params) {
   const suffix = qs.toString();
   const next = suffix ? `/reservables?${suffix}` : '/reservables';
   window.history.replaceState(null, '', next);
-  queryUrlEl.textContent = params.id
+  const apiUrl = params.id
     ? `/api/reservable/${encodeURIComponent(params.id)}`
     : `/api/reservables${suffix ? `?${suffix}` : ''}`;
+  queryUrlEl.innerHTML = apiLink(apiUrl);
 }
 
 function setBusy(busy) {
@@ -110,10 +111,8 @@ function renderResults(rows) {
   lastRows = rows;
   emptyEl.hidden = rows.length !== 0;
   resultsEl.innerHTML = reservableTableHtml(rows, {
-    linksForRow: reservableDetailLink,
     rowRenderer: reservableRowGroupRenderer({
       stateForRow: availabilityPanels.stateForRow,
-      linksForRow: reservableDetailLink,
     }),
   });
 }
@@ -125,6 +124,10 @@ function errorMessage(err) {
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString();
+}
+
+function apiLink(href) {
+  return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${escapeHtml(href)}</a>`;
 }
 
 prevBtn.addEventListener('click', () => {

@@ -1,5 +1,5 @@
 import { fetchReservableAvailabilityLogs } from './api/reservable-api.js';
-import { dash, escapeHtml, linkChip, links, renderTable } from './components/result-table.js';
+import { dash, escapeHtml, renderTable } from './components/result-table.js';
 
 const formEl = document.getElementById('logs-query');
 const resultsEl = document.getElementById('results');
@@ -54,11 +54,6 @@ const logColumns = [
     colClass: 'col-payload',
     render: (log) => payloadDetails(log.day_payload),
   },
-  {
-    label: 'Links',
-    colClass: 'col-links',
-    render: (log) => rowLinks(log),
-  },
 ];
 
 function applyParamsFromUrl() {
@@ -83,7 +78,8 @@ function paramsFromForm() {
 function syncUrl(params) {
   const qs = queryString(params);
   window.history.replaceState(null, '', qs ? `/logs?${qs}` : '/logs');
-  queryUrlEl.textContent = `/api/reservables/availability/logs${qs ? `?${qs}` : ''}`;
+  const apiUrl = `/api/reservables/availability/logs${qs ? `?${qs}` : ''}`;
+  queryUrlEl.innerHTML = apiLink(apiUrl);
 }
 
 async function loadLogs() {
@@ -162,35 +158,6 @@ function payloadDetails(payload) {
   `;
 }
 
-function rowLinks(log) {
-  const items = [];
-  if (log.reservable_rid) {
-    items.push(
-      linkChip({
-        href: `/reservables?id=${encodeURIComponent(log.reservable_rid)}`,
-        text: 'Reservable',
-        kind: 'Page',
-        target: null,
-      }),
-    );
-  }
-  if (log.run_id != null && Number(log.run_id) > 0) {
-    items.push(
-      linkChip({
-        href: logsApiUrl({ run_id: log.run_id, rid: log.reservable_rid, target_date: log.target_date, limit: 100 }),
-        text: 'Log',
-        kind: 'JSON',
-      }),
-    );
-  }
-  return links(items);
-}
-
-function logsApiUrl(params) {
-  const qs = queryString(params);
-  return `/api/reservables/availability/logs${qs ? `?${qs}` : ''}`;
-}
-
 function queryString(params) {
   const qs = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -228,6 +195,10 @@ function statusClass(status) {
 
 function clean(value) {
   return String(value || '').trim();
+}
+
+function apiLink(href) {
+  return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${escapeHtml(href)}</a>`;
 }
 
 formEl.addEventListener('submit', (event) => {

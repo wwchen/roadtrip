@@ -1,4 +1,4 @@
-import { dash, escapeHtml, expanderButton, linkChip, links, renderRow, renderTable } from './result-table.js';
+import { dash, escapeHtml, expanderButton, renderRow, renderTable } from './result-table.js';
 
 export const poiColumns = [
   {
@@ -30,11 +30,6 @@ export const poiColumns = [
     colClass: 'col-coordinates',
     className: 'mono',
     render: (row) => escapeHtml(formatCoords(row.lng, row.lat)),
-  },
-  {
-    label: 'Links',
-    colClass: 'col-links',
-    render: (row) => poiLinks(row),
   },
 ];
 
@@ -71,28 +66,13 @@ export function poiReservablesRowHtml(row, state, { contentHtml = '' } = {}) {
                 expanded,
               })}
             </div>
-            <div class="mono muted">/api/poi/${escapeHtml(id)}/reservables</div>
+            <a class="mono muted" href="${escapeHtml(poiReservablesJsonUrl(id))}" target="_blank" rel="noreferrer">${escapeHtml(poiReservablesJsonUrl(id))}</a>
           </div>
           ${expanded ? contentHtml : ''}
         </div>
       </td>
     </tr>
   `;
-}
-
-export function poiLinks(row) {
-  return links([
-    linkChip({
-      href: poiJsonUrl(row.id),
-      text: 'POI',
-      kind: 'JSON',
-    }),
-    linkChip({
-      href: poiReservablesJsonUrl(row.id),
-      text: 'Reservables',
-      kind: 'JSON',
-    }),
-  ]);
 }
 
 export function poiPageUrl(row) {

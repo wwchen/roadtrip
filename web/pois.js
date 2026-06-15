@@ -3,7 +3,7 @@ import { fetchPoiReservables } from './api/reservable-api.js';
 import { createAvailabilityPanels } from './components/availability-controller.js';
 import { mountPoiQuery } from './components/poi-query.js';
 import { poiReservablesRowHtml, poiRowHtml, poiTableHtml } from './components/poi-table.js';
-import { reservableDetailLink, reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
+import { reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
 import { escapeHtml } from './components/result-table.js';
 
 const query = mountPoiQuery(document.getElementById('poi-query'), {
@@ -31,7 +31,7 @@ function syncUrl(params) {
   }
   const suffix = qs.toString();
   window.history.replaceState(null, '', suffix ? `/pois?${suffix}` : '/pois');
-  queryUrlEl.textContent = apiUrl(params);
+  queryUrlEl.innerHTML = apiLink(apiUrl(params));
 }
 
 function apiUrl(params) {
@@ -147,10 +147,8 @@ function reservablesContentHtml(state) {
   if (!Array.isArray(state.rows)) return '<div class="muted">Open this panel to load linked reservables.</div>';
   if (state.rows.length === 0) return '<div class="muted">No reservables linked to this POI.</div>';
   return reservableTableHtml(state.rows, {
-    linksForRow: reservableDetailLink,
     rowRenderer: reservableRowGroupRenderer({
       stateForRow: availabilityPanels.stateForRow,
-      linksForRow: reservableDetailLink,
     }),
   });
 }
@@ -205,6 +203,10 @@ function errorMessage(err) {
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString();
+}
+
+function apiLink(href) {
+  return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${escapeHtml(href)}</a>`;
 }
 
 resultsEl.addEventListener('click', (event) => {
