@@ -1,6 +1,7 @@
 import {
   createReservableAvailabilityPoller,
   deleteReservableAvailabilityPoller,
+  fetchReservableAvailabilityPoller,
   fetchReservableAvailabilityPollers,
   patchReservableAvailabilityPoller,
 } from './api/reservable-api.js';
@@ -15,6 +16,7 @@ import {
   pill,
   plainLink,
   replaceChildren,
+  rowApiLink,
 } from './components/result-table.js';
 
 const statusEl = document.getElementById('status');
@@ -44,7 +46,7 @@ const pollerColumns = [
   { label: 'Status', colClass: 'col-poller-status', render: renderPollerStatus },
   { label: 'Last Checked', colClass: 'col-poller-last', render: renderLastChecked },
   { label: 'Next Poll', colClass: 'col-poller-next', render: renderNextPoll },
-  { label: 'Logs', colClass: 'col-poller-logs', render: renderLogLinks },
+  { label: 'Links', colClass: 'col-poller-links', render: renderPollerLinks },
   { label: 'Manage', colClass: 'col-poller-manage', render: renderManage },
 ];
 
@@ -55,8 +57,11 @@ async function loadPollers() {
   setStatusText('Loading...');
 
   try {
-    const body = await fetchReservableAvailabilityPollers({ signal: activeAbort.signal });
-    const pollers = body.pollers || [];
+    const id = currentPollerId();
+    const body = id
+      ? await fetchReservableAvailabilityPoller(id, { signal: activeAbort.signal })
+      : await fetchReservableAvailabilityPollers({ signal: activeAbort.signal });
+    const pollers = id ? [body.poller].filter(Boolean) : body.pollers || [];
     renderRows(pollers);
     setStatusCount(pollers.length);
   } catch (err) {
@@ -106,7 +111,12 @@ function renderRows(pollers) {
 }
 
 function renderPollerId(poller) {
-  return String(poller.id || '');
+  const id = String(poller.id || '');
+  if (!id) return dash();
+  return plainLink({
+    href: `/pollers?id=${encodeURIComponent(id)}`,
+    text: id,
+  });
 }
 
 function renderScope(poller) {
@@ -186,13 +196,16 @@ function renderNextPoll(poller) {
   return formatTime(poller.next_poll_after);
 }
 
-function renderLogLinks(poller) {
+function renderPollerLinks(poller) {
   const id = String(poller.id || '');
   const dates = poller.target_dates || [];
   const links = [
+    rowApiLink({
+      href: `/api/reservables/availability/pollers/${encodeURIComponent(id)}`,
+    }),
     plainLink({
       href: `/logs?poller_id=${encodeURIComponent(id)}&limit=100`,
-      text: 'All logs',
+      text: 'Logs',
     }),
   ];
   dates.slice(0, 3).forEach((date) => {
@@ -283,6 +296,10 @@ function formatNumber(value) {
 function statusClass(status) {
   const value = String(status || '').toLowerCase();
   return ['active', 'paused', 'done'].includes(value) ? value : '';
+}
+
+function currentPollerId() {
+  return new URLSearchParams(window.location.search).get('id')?.trim() || '';
 }
 
 refreshBtn.addEventListener('click', loadPollers);

@@ -7,6 +7,7 @@ import {
   pill,
   plainLink,
   replaceChildren,
+  rowApiLink,
 } from './components/result-table.js';
 
 const formEl = document.getElementById('logs-query');
@@ -22,7 +23,7 @@ const logColumns = [
     label: 'ID',
     colClass: 'col-log-id',
     className: 'mono',
-    render: (log) => log.id || '',
+    render: (log) => logIdLink(log),
   },
   {
     label: 'RID',
@@ -58,6 +59,11 @@ const logColumns = [
     render: (log) => runLink(log.run_id),
   },
   {
+    label: 'Links',
+    colClass: 'col-links',
+    render: (log) => logLinks(log),
+  },
+  {
     label: 'Payload',
     colClass: 'col-payload',
     render: (log) => payloadDetails(log.day_payload),
@@ -66,7 +72,7 @@ const logColumns = [
 
 function applyParamsFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  for (const name of ['run_id', 'poller_id', 'rid', 'target_date', 'limit']) {
+  for (const name of ['id', 'run_id', 'poller_id', 'rid', 'target_date', 'limit']) {
     const input = formEl.elements.namedItem(name);
     if (input && params.has(name)) input.value = params.get(name) || '';
   }
@@ -75,6 +81,7 @@ function applyParamsFromUrl() {
 function paramsFromForm() {
   const data = new FormData(formEl);
   return {
+    id: clean(data.get('id')),
     run_id: clean(data.get('run_id')),
     poller_id: clean(data.get('poller_id')),
     rid: clean(data.get('rid')),
@@ -135,6 +142,15 @@ function renderRows(logs) {
   }));
 }
 
+function logIdLink(log) {
+  const id = String(log.id || '').trim();
+  if (!id) return dash();
+  return plainLink({
+    href: `/logs?id=${encodeURIComponent(id)}&limit=100`,
+    text: id,
+  });
+}
+
 function ridLink(rid) {
   if (!rid) return dash();
   return plainLink({
@@ -150,6 +166,14 @@ function runLink(runId) {
     href: `/api/reservables/availability/runs/${encodeURIComponent(id)}`,
     text: id,
     target: '_blank',
+  });
+}
+
+function logLinks(log) {
+  const id = String(log.id || '').trim();
+  if (!id) return dash();
+  return rowApiLink({
+    href: `/api/reservables/availability/logs?id=${encodeURIComponent(id)}&limit=100`,
   });
 }
 

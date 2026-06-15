@@ -1,5 +1,5 @@
 import { createAvailabilityPanel } from './availability-panel.js';
-import { createRow, createTable, dash, linkList, plainLink } from './result-table.js';
+import { createRow, createTable, dash, linkList, plainLink, rowApiLink } from './result-table.js';
 
 export const reservableColumns = [
   {
@@ -32,6 +32,11 @@ export const reservableColumns = [
     colClass: 'col-pois',
     className: 'poi-ids mono',
     render: (row) => poiIdLinks(row),
+  },
+  {
+    label: 'Links',
+    colClass: 'col-links',
+    render: (row) => reservableLinks(row),
   },
 ];
 
@@ -98,4 +103,14 @@ function poiIdLinks(row) {
       text: id,
     }));
   return links.length ? linkList(links, 'poi-id-list') : dash();
+}
+
+function reservableLinks(row) {
+  const rid = String(row.rid || '').trim();
+  if (!rid) return dash();
+  return linkList([
+    rowApiLink({
+      href: `/api/reservable/${encodeURIComponent(rid)}`,
+    }),
+  ]);
 }

@@ -27,6 +27,7 @@ class ReservableAvailabilityLogRepo(
     )
 
     data class LogFilters(
+        val id: Long? = null,
         val runId: Long? = null,
         val pollerId: Long? = null,
         val rid: String? = null,
@@ -70,6 +71,10 @@ class ReservableAvailabilityLogRepo(
     fun list(filters: LogFilters): List<LogRow> {
         val where = mutableListOf<String>()
         val args = mutableListOf<Any?>()
+        filters.id?.let {
+            where += "l.id = ?"
+            args += it
+        }
         filters.runId?.let {
             where += "l.run_id = ?"
             args += it

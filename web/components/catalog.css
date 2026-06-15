@@ -472,6 +472,16 @@ tbody tr:hover { background: rgba(255,255,255,0.025); }
   align-items: flex-start;
 }
 
+.links a {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+}
+
+.row-api-link {
+  color: var(--accent);
+}
+
 .api-call {
   display: inline-flex;
   align-items: baseline;
@@ -799,11 +809,12 @@ pre {
   table-layout: fixed;
 }
 
-.reservables-table .col-rid { width: 24%; }
+.reservables-table .col-rid { width: 22%; }
 .reservables-table .col-pois { width: 12%; }
-.reservables-table .col-name { width: 24%; }
-.reservables-table .col-loop { width: 18%; }
-.reservables-table .col-site-type { width: 22%; }
+.reservables-table .col-name { width: 23%; }
+.reservables-table .col-loop { width: 16%; }
+.reservables-table .col-site-type { width: 17%; }
+.reservables-table .col-links { width: 10%; }
 .reservables-table .name {
   max-width: 260px;
   min-width: 0;
@@ -815,14 +826,15 @@ pre {
   table-layout: fixed;
 }
 
-.logs-table .col-log-id { width: 6%; }
-.logs-table .col-rid { width: 22%; }
-.logs-table .col-date { width: 12%; }
-.logs-table .col-status { width: 11%; }
-.logs-table .col-available { width: 10%; }
-.logs-table .col-observed { width: 15%; }
+.logs-table .col-log-id { width: 7%; }
+.logs-table .col-rid { width: 20%; }
+.logs-table .col-date { width: 11%; }
+.logs-table .col-status { width: 10%; }
+.logs-table .col-available { width: 9%; }
+.logs-table .col-observed { width: 14%; }
 .logs-table .col-run { width: 8%; }
-.logs-table .col-payload { width: 16%; }
+.logs-table .col-links { width: 7%; }
+.logs-table .col-payload { width: 14%; }
 
 .pollers-table {
   width: 100%;
@@ -840,7 +852,7 @@ pre {
 .pollers-table .col-poller-status { width: 6%; }
 .pollers-table .col-poller-last { width: 9%; }
 .pollers-table .col-poller-next { width: 9%; }
-.pollers-table .col-poller-logs { width: 11%; }
+.pollers-table .col-poller-links { width: 11%; }
 .pollers-table .col-poller-manage { width: 12%; }
 
 .date-list {

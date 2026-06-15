@@ -145,6 +145,21 @@ export function apiCallLink({ method = 'GET', href, target = '_blank' }) {
   );
 }
 
+export function rowApiLink({ method = 'GET', href, text = 'API', target = '_blank' }) {
+  return element(
+    'a',
+    {
+      className: 'row-api-link',
+      href,
+      target,
+      rel: target ? 'noreferrer' : undefined,
+      attrs: { 'aria-label': `${method} ${text}` },
+    },
+    element('span', { className: 'api-method', text: method }),
+    element('span', { text }),
+  );
+}
+
 export function apiCallLabel({ method, path }) {
   return element(
     'span',

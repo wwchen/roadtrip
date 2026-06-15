@@ -344,6 +344,7 @@ fun Route.reservableRoutes(
         val filters =
             try {
                 ReservableAvailabilityLogRepo.LogFilters(
+                    id = call.longQuery("id"),
                     runId = call.longQuery("run_id"),
                     pollerId = call.longQuery("poller_id"),
                     rid = call.request.queryParameters["rid"],

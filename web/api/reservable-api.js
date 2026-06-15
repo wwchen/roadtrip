@@ -62,6 +62,10 @@ export function fetchReservableAvailabilityPollers({ signal } = {}) {
   return jsonGetOk('/api/reservables/availability/pollers', { signal });
 }
 
+export function fetchReservableAvailabilityPoller(id, { signal } = {}) {
+  return jsonGetOk(`/api/reservables/availability/pollers/${encodeURIComponent(id)}`, { signal });
+}
+
 export function fetchReservableAvailabilityRuns({ signal } = {}) {
   return jsonGetOk('/api/reservables/availability/runs', { signal });
 }
