@@ -5,10 +5,21 @@ import {
   patchReservableAvailabilityPoller,
 } from './api/reservable-api.js';
 import { mountPollerForm } from './components/poller-form.js';
+import {
+  actionButton,
+  createTable,
+  dash,
+  element,
+  fragment,
+  linkList,
+  pill,
+  plainLink,
+  replaceChildren,
+} from './components/result-table.js';
 
 const statusEl = document.getElementById('status');
 const refreshBtn = document.getElementById('refresh-btn');
-const rowsEl = document.getElementById('pollers');
+const resultsEl = document.getElementById('results');
 const emptyEl = document.getElementById('empty');
 const pollerFormEl = document.getElementById('poller-form-root');
 
@@ -23,18 +34,18 @@ const pollerForm = mountPollerForm(pollerFormEl, {
 });
 
 const pollerColumns = [
-  { label: 'ID', className: 'mono', render: renderPollerId },
-  { label: 'Scope', className: 'rid mono', render: renderScope },
-  { label: 'Filters', render: renderFilters },
-  { label: 'Dates', render: renderDates },
-  { label: 'Nights', render: renderNights },
-  { label: 'Cadence', render: renderCadence },
-  { label: 'Triggers', render: renderTriggers },
-  { label: 'Status', render: renderPollerStatus },
-  { label: 'Last Checked', render: renderLastChecked },
-  { label: 'Next Poll', render: renderNextPoll },
-  { label: 'Logs', render: renderLogLinks },
-  { label: 'Manage', render: renderManage },
+  { label: 'ID', colClass: 'col-poller-id', className: 'mono', render: renderPollerId },
+  { label: 'Scope', colClass: 'col-poller-scope', className: 'rid mono', render: renderScope },
+  { label: 'Filters', colClass: 'col-poller-filters', render: renderFilters },
+  { label: 'Dates', colClass: 'col-poller-dates', render: renderDates },
+  { label: 'Nights', colClass: 'col-poller-nights', render: renderNights },
+  { label: 'Cadence', colClass: 'col-poller-cadence', render: renderCadence },
+  { label: 'Triggers', colClass: 'col-poller-triggers', render: renderTriggers },
+  { label: 'Status', colClass: 'col-poller-status', render: renderPollerStatus },
+  { label: 'Last Checked', colClass: 'col-poller-last', render: renderLastChecked },
+  { label: 'Next Poll', colClass: 'col-poller-next', render: renderNextPoll },
+  { label: 'Logs', colClass: 'col-poller-logs', render: renderLogLinks },
+  { label: 'Manage', colClass: 'col-poller-manage', render: renderManage },
 ];
 
 async function loadPollers() {
@@ -85,194 +96,129 @@ function setStatusPoller(id, action) {
 function renderRows(pollers) {
   pollersById = new Map(pollers.map((poller) => [String(poller.id || ''), poller]));
   emptyEl.hidden = pollers.length !== 0;
-  rowsEl.replaceChildren(...pollers.map(rowElement));
+  replaceChildren(resultsEl, createTable({
+    columns: pollerColumns,
+    rows: pollers,
+    className: 'pollers-table',
+    wrapClassName: 'pollers-table-wrap table-wrap',
+    rowClassName: 'result-row',
+  }));
 }
 
-function rowElement(poller) {
-  const row = document.createElement('tr');
-  row.className = 'result-row';
-  pollerColumns.forEach((column) => {
-    const cell = document.createElement('td');
-    cell.dataset.label = column.label;
-    if (column.className) cell.className = column.className;
-    column.render(cell, poller);
-    row.append(cell);
-  });
-  return row;
+function renderPollerId(poller) {
+  return String(poller.id || '');
 }
 
-function renderPollerId(cell, poller) {
-  cell.textContent = String(poller.id || '');
-}
-
-function renderScope(cell, poller) {
+function renderScope(poller) {
   const scope = poller.scope || {};
   if (scope.rid) {
-    appendLink(cell, {
+    return plainLink({
       href: `/reservables?id=${encodeURIComponent(scope.rid)}`,
       text: scope.rid,
     });
-    return;
   }
   if (scope.poi_id != null) {
     const id = String(scope.poi_id);
-    appendLink(cell, {
+    return plainLink({
       href: `/pois?id=${encodeURIComponent(id)}`,
       text: `poi:${id}`,
     });
-    return;
   }
-  appendDash(cell);
+  return dash();
 }
 
-function renderFilters(cell, poller) {
+function renderFilters(poller) {
   const filters = poller.reservable_filters || {};
   const entries = Object.entries(filters).filter(([, value]) => {
     if (Array.isArray(value)) return value.length > 0;
     return value != null && value !== '';
   });
-  if (!entries.length) {
-    appendDash(cell);
-    return;
-  }
-  entries.forEach(([key, value]) => {
+  if (!entries.length) return dash();
+  return fragment(...entries.map(([key, value]) => {
     const renderedValue = Array.isArray(value)
       ? value.join(', ')
       : typeof value === 'object'
         ? JSON.stringify(value)
         : String(value);
-    const row = document.createElement('div');
-    row.append(textSpan('muted', `${key}:`), document.createTextNode(` ${renderedValue}`));
-    cell.append(row);
-  });
+    return element(
+      'div',
+      {},
+      element('span', { className: 'muted', text: `${key}:` }),
+      document.createTextNode(` ${renderedValue}`),
+    );
+  }));
 }
 
-function renderDates(cell, poller) {
+function renderDates(poller) {
   const dates = poller.target_dates || [];
-  if (!dates.length) {
-    appendDash(cell);
-    return;
-  }
-  const list = document.createElement('div');
-  list.className = 'date-list';
+  if (!dates.length) return dash();
+  const list = element('div', { className: 'date-list' });
   dates.forEach((date) => {
-    list.append(textSpan('', date));
+    list.append(element('span', { text: date }));
   });
-  cell.append(list);
+  return list;
 }
 
-function renderNights(cell, poller) {
-  cell.textContent = String(poller.min_nights || 1);
+function renderNights(poller) {
+  return String(poller.min_nights || 1);
 }
 
-function renderCadence(cell, poller) {
-  cell.textContent = formatCadence(poller.cadence);
+function renderCadence(poller) {
+  return formatCadence(poller.cadence);
 }
 
-function renderTriggers(cell, poller) {
+function renderTriggers(poller) {
   const actions = poller.trigger_actions || [];
-  if (!actions.length) {
-    appendDash(cell);
-    return;
-  }
-  actions.forEach((action, index) => {
-    if (index > 0) cell.append(document.createTextNode(' '));
-    cell.append(pill(action));
-  });
+  if (!actions.length) return dash();
+  return element('div', { className: 'pill-list' }, actions.map((action) => pill(action)));
 }
 
-function renderPollerStatus(cell, poller) {
+function renderPollerStatus(poller) {
   const status = poller.status || '';
-  cell.append(pill(status || 'unknown', statusClass(status)));
+  return pill(status || 'unknown', statusClass(status));
 }
 
-function renderLastChecked(cell, poller) {
-  cell.textContent = formatTime(poller.last_checked_at);
+function renderLastChecked(poller) {
+  return formatTime(poller.last_checked_at);
 }
 
-function renderNextPoll(cell, poller) {
-  cell.textContent = formatTime(poller.next_poll_after);
+function renderNextPoll(poller) {
+  return formatTime(poller.next_poll_after);
 }
 
-function renderLogLinks(cell, poller) {
+function renderLogLinks(poller) {
   const id = String(poller.id || '');
   const dates = poller.target_dates || [];
-  const wrapper = document.createElement('div');
-  wrapper.className = 'links';
-  appendLinkChip(wrapper, {
-    href: `/logs?poller_id=${encodeURIComponent(id)}&limit=100`,
-    text: 'All logs',
-    kind: 'Page',
-  });
+  const links = [
+    plainLink({
+      href: `/logs?poller_id=${encodeURIComponent(id)}&limit=100`,
+      text: 'All logs',
+    }),
+  ];
   dates.slice(0, 3).forEach((date) => {
-    appendLinkChip(wrapper, {
+    links.push(plainLink({
       href: `/logs?poller_id=${encodeURIComponent(id)}&target_date=${encodeURIComponent(date)}&limit=100`,
       text: date,
-      kind: 'Page',
-    });
+    }));
   });
   if (dates.length > 3) {
-    wrapper.append(textSpan('muted', `+${dates.length - 3} dates`));
+    links.push(element('span', { className: 'muted', text: `+${dates.length - 3} dates` }));
   }
-  cell.append(wrapper);
+  return linkList(links);
 }
 
-function renderManage(cell, poller) {
+function renderManage(poller) {
   const id = String(poller.id || '');
   const status = String(poller.status || '').toLowerCase();
   const nextStatus = status === 'active' ? 'paused' : 'active';
   const label = status === 'active' ? 'Pause' : 'Resume';
-  const actions = document.createElement('div');
-  actions.className = 'actions';
+  const actions = element('div', { className: 'actions' });
   actions.append(actionButton('Edit', 'edit-poller', { id }));
   if (status !== 'done') {
     actions.append(actionButton(label, 'set-poller-status', { id, status: nextStatus }));
   }
   actions.append(actionButton('Delete', 'delete-poller', { id }));
-  cell.append(actions);
-}
-
-function actionButton(label, action, dataset) {
-  const button = document.createElement('button');
-  button.type = 'button';
-  button.textContent = label;
-  button.dataset.action = action;
-  Object.entries(dataset).forEach(([key, value]) => {
-    button.dataset[key] = value;
-  });
-  return button;
-}
-
-function appendLink(parent, { href, text }) {
-  const anchor = document.createElement('a');
-  anchor.href = href;
-  anchor.textContent = text;
-  parent.append(anchor);
-}
-
-function appendLinkChip(parent, { href, text, kind }) {
-  const anchor = document.createElement('a');
-  anchor.className = 'link-chip';
-  anchor.href = href;
-  anchor.append(textSpan(`chip-kind ${kind.toLowerCase()}`, kind), textSpan('link-text', text));
-  parent.append(anchor);
-}
-
-function appendDash(parent) {
-  parent.append(textSpan('muted', '-'));
-}
-
-function pill(text, className = '') {
-  const span = textSpan('pill', text);
-  if (className) span.classList.add(className);
-  return span;
-}
-
-function textSpan(className, text) {
-  const span = document.createElement('span');
-  if (className) span.className = className;
-  span.textContent = text;
-  return span;
+  return actions;
 }
 
 async function createPoller(body) {
@@ -341,7 +287,7 @@ function statusClass(status) {
 
 refreshBtn.addEventListener('click', loadPollers);
 
-rowsEl.addEventListener('click', async (event) => {
+resultsEl.addEventListener('click', async (event) => {
   const editButton = event.target.closest('[data-action="edit-poller"]');
   if (editButton) {
     const id = editButton.dataset.id || '';

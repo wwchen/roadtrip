@@ -1,6 +1,6 @@
 export function mountPoiQuery(root, { onSubmit, onReset } = {}) {
-  root.innerHTML = poiQueryHtml();
   const form = root.querySelector('form');
+  if (!form) throw new Error('POI query markup is missing');
   const resetBtn = root.querySelector('[data-action="reset-poi-query"]');
 
   form.addEventListener('submit', (event) => {
@@ -37,36 +37,4 @@ export function mountPoiQuery(root, { onSubmit, onReset } = {}) {
       });
     },
   };
-}
-
-function poiQueryHtml() {
-  return `
-    <form id="poi-form" class="panel" autocomplete="off">
-      <div class="filters">
-        <label>
-          ID
-          <input name="id" inputmode="numeric" placeholder="64397">
-        </label>
-        <label>
-          Name
-          <input name="q" placeholder="Glacier, Upper Pines, Planet Fitness">
-        </label>
-        <label>
-          Categories
-          <input name="categories" placeholder="campground, supercharger">
-        </label>
-        <label>
-          Limit
-          <select name="limit">
-            <option value="10">10</option>
-            <option value="25" selected>25</option>
-          </select>
-        </label>
-        <div class="actions">
-          <button class="primary" type="submit">Search</button>
-          <button data-action="reset-poi-query" type="button">Reset</button>
-        </div>
-      </div>
-    </form>
-  `;
 }

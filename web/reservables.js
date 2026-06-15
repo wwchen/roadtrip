@@ -1,8 +1,8 @@
 import { fetchReservable, searchReservables } from './api/reservable-api.js';
 import { createAvailabilityPanels } from './components/availability-controller.js';
 import { mountReservableQuery } from './components/reservable-query.js';
-import { reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
-import { apiCallLink, escapeHtml } from './components/result-table.js';
+import { createReservableTable, reservableRowGroupRenderer } from './components/reservable-table.js';
+import { apiCallLink, element, replaceChildren } from './components/result-table.js';
 
 const resultsEl = document.getElementById('results');
 const emptyEl = document.getElementById('empty');
@@ -45,7 +45,7 @@ function syncUrl(params) {
   const apiUrl = params.id
     ? `/api/reservable/${encodeURIComponent(params.id)}`
     : `/api/reservables${suffix ? `?${suffix}` : ''}`;
-  queryUrlEl.innerHTML = apiCallLink({ href: apiUrl });
+  replaceChildren(queryUrlEl, apiCallLink({ href: apiUrl }));
 }
 
 function setBusy(busy) {
@@ -54,9 +54,10 @@ function setBusy(busy) {
   nextBtn.disabled = pager.nextDisabled;
 }
 
-function setStatus(html, className = '') {
-  statusEl.firstElementChild.className = className;
-  statusEl.firstElementChild.innerHTML = html;
+function setStatus(content, className = '') {
+  const statusText = statusEl.firstElementChild;
+  statusText.className = className;
+  replaceChildren(statusText, content);
 }
 
 async function runSearch() {
@@ -79,12 +80,15 @@ async function runSearch() {
     renderResults(body.reservables || []);
     const first = total === 0 ? 0 : offset + 1;
     const last = Math.min(offset + (body.reservables || []).length, total);
-    setStatus(`<strong>${formatNumber(total)}</strong> matches / ${formatNumber(first)}-${formatNumber(last)}`);
+    setStatus([
+      element('strong', { text: formatNumber(total) }),
+      document.createTextNode(` matches / ${formatNumber(first)}-${formatNumber(last)}`),
+    ]);
   } catch (err) {
     if (err.name === 'AbortError') return;
     total = 0;
     renderResults([]);
-    setStatus(escapeHtml(errorMessage(err)), 'error');
+    setStatus(errorMessage(err), 'error');
   } finally {
     setBusy(false);
   }
@@ -96,12 +100,12 @@ async function runIdLookup(id) {
     total = 1;
     offset = 0;
     renderResults([{ ...(body.reservable || {}), poi_ids: body.reservable?.poi_ids || body.poi_ids || [] }]);
-    setStatus('<strong>1</strong> match');
+    setStatus([element('strong', { text: '1' }), document.createTextNode(' match')]);
   } catch (err) {
     if (err.name === 'AbortError') return;
     total = 0;
     renderResults([]);
-    setStatus(escapeHtml(errorMessage(err)), 'error');
+    setStatus(errorMessage(err), 'error');
   } finally {
     setBusy(false);
   }
@@ -110,11 +114,11 @@ async function runIdLookup(id) {
 function renderResults(rows) {
   lastRows = rows;
   emptyEl.hidden = rows.length !== 0;
-  resultsEl.innerHTML = reservableTableHtml(rows, {
+  replaceChildren(resultsEl, createReservableTable(rows, {
     rowRenderer: reservableRowGroupRenderer({
       stateForRow: availabilityPanels.stateForRow,
     }),
-  });
+  }));
 }
 
 function errorMessage(err) {

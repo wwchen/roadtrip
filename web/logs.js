@@ -1,5 +1,13 @@
 import { fetchReservableAvailabilityLogs } from './api/reservable-api.js';
-import { apiCallLink, dash, escapeHtml, renderTable } from './components/result-table.js';
+import {
+  apiCallLink,
+  createTable,
+  dash,
+  element,
+  pill,
+  plainLink,
+  replaceChildren,
+} from './components/result-table.js';
 
 const formEl = document.getElementById('logs-query');
 const resultsEl = document.getElementById('results');
@@ -14,7 +22,7 @@ const logColumns = [
     label: 'ID',
     colClass: 'col-log-id',
     className: 'mono',
-    render: (log) => escapeHtml(log.id || ''),
+    render: (log) => log.id || '',
   },
   {
     label: 'RID',
@@ -26,7 +34,7 @@ const logColumns = [
     label: 'Target Date',
     colClass: 'col-date',
     className: 'mono',
-    render: (log) => escapeHtml(log.target_date || ''),
+    render: (log) => log.target_date || '',
   },
   {
     label: 'Status',
@@ -41,7 +49,7 @@ const logColumns = [
   {
     label: 'Observed',
     colClass: 'col-observed',
-    render: (log) => escapeHtml(formatTime(log.observed_at)),
+    render: (log) => formatTime(log.observed_at),
   },
   {
     label: 'Run',
@@ -79,7 +87,7 @@ function syncUrl(params) {
   const qs = queryString(params);
   window.history.replaceState(null, '', qs ? `/logs?${qs}` : '/logs');
   const apiUrl = `/api/reservables/availability/logs${qs ? `?${qs}` : ''}`;
-  queryUrlEl.innerHTML = apiCallLink({ href: apiUrl });
+  replaceChildren(queryUrlEl, apiCallLink({ href: apiUrl }));
 }
 
 async function loadLogs() {
@@ -94,11 +102,11 @@ async function loadLogs() {
     const body = await fetchReservableAvailabilityLogs({ ...params, signal: activeAbort.signal });
     const logs = body.logs || [];
     renderRows(logs);
-    setStatus(`<strong>${formatNumber(logs.length)}</strong> logs`);
+    setStatus([element('strong', { text: formatNumber(logs.length) }), document.createTextNode(' logs')]);
   } catch (err) {
     if (err.name === 'AbortError') return;
     renderRows([]);
-    setStatus(escapeHtml(errorMessage(err)), 'error');
+    setStatus(errorMessage(err), 'error');
   } finally {
     setBusy(false);
   }
@@ -110,52 +118,65 @@ function setBusy(busy) {
   });
 }
 
-function setStatus(html, className = '') {
-  statusEl.firstElementChild.className = className;
-  statusEl.firstElementChild.innerHTML = html;
+function setStatus(content, className = '') {
+  const statusText = statusEl.firstElementChild;
+  statusText.className = className;
+  replaceChildren(statusText, content);
 }
 
 function renderRows(logs) {
   emptyEl.hidden = logs.length !== 0;
-  resultsEl.innerHTML = renderTable({
+  replaceChildren(resultsEl, createTable({
     columns: logColumns,
     rows: logs,
     className: 'logs-table',
     wrapClassName: 'logs-table-wrap table-wrap',
     rowClassName: 'result-row',
-  });
+  }));
 }
 
 function ridLink(rid) {
-  if (!rid) return dash('');
-  return `<a href="/reservables?id=${encodeURIComponent(rid)}">${escapeHtml(rid)}</a>`;
+  if (!rid) return dash();
+  return plainLink({
+    href: `/reservables?id=${encodeURIComponent(rid)}`,
+    text: rid,
+  });
 }
 
 function runLink(runId) {
-  if (runId == null || Number(runId) <= 0) return dash('');
+  if (runId == null || Number(runId) <= 0) return dash();
   const id = String(runId);
-  return `<a href="/api/reservables/availability/runs/${encodeURIComponent(id)}" target="_blank" rel="noreferrer">${escapeHtml(id)}</a>`;
+  return plainLink({
+    href: `/api/reservables/availability/runs/${encodeURIComponent(id)}`,
+    text: id,
+    target: '_blank',
+  });
 }
 
 function statusPill(status) {
   const value = String(status || 'unknown');
-  return `<span class="pill ${escapeHtml(statusClass(value))}">${escapeHtml(value)}</span>`;
+  return pill(value, statusClass(value));
 }
 
 function booleanPill(value) {
-  return `<span class="pill ${value ? 'available' : 'booked'}">${value ? 'yes' : 'no'}</span>`;
+  return pill(value ? 'yes' : 'no', value ? 'available' : 'booked');
 }
 
 function payloadDetails(payload) {
-  if (!payload || typeof payload !== 'object') return dash('');
+  if (!payload || typeof payload !== 'object') return dash();
   const count = payload.available_count ?? 0;
   const total = payload.total ?? 0;
-  return `
-    <details class="json-details">
-      <summary><span class="action-icon inline" aria-hidden="true"></span><span>${escapeHtml(count)} of ${escapeHtml(total)}</span></summary>
-      <pre>${escapeHtml(JSON.stringify(payload, null, 2))}</pre>
-    </details>
-  `;
+  return element(
+    'details',
+    { className: 'json-details' },
+    element(
+      'summary',
+      {},
+      element('span', { className: 'action-icon inline', attrs: { 'aria-hidden': 'true' } }),
+      element('span', { text: `${count} of ${total}` }),
+    ),
+    element('pre', { text: JSON.stringify(payload, null, 2) }),
+  );
 }
 
 function queryString(params) {

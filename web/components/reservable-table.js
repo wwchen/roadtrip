@@ -1,14 +1,15 @@
-import { availabilityPanelHtml } from './availability-panel.js';
-import { dash, escapeHtml, renderRow, renderTable } from './result-table.js';
+import { createAvailabilityPanel } from './availability-panel.js';
+import { createRow, createTable, dash, linkList, plainLink } from './result-table.js';
 
 export const reservableColumns = [
   {
     label: 'RID',
     colClass: 'col-rid',
     className: 'rid mono',
-    render: (row) => `
-      <a href="${escapeHtml(reservablePageUrl(row))}">${escapeHtml(row.rid || '')}</a>
-    `,
+    render: (row) => plainLink({
+      href: reservablePageUrl(row),
+      text: row.rid || '',
+    }),
   },
   {
     label: 'Name',
@@ -34,47 +35,46 @@ export const reservableColumns = [
   },
 ];
 
-export function reservableRowHtml(row, { className = 'result-row' } = {}) {
-  return renderRow(
-    reservableColumns,
-    row,
-    { className },
-  );
+export function createReservableRow(row, { className = 'result-row' } = {}) {
+  return createRow(reservableColumns, row, { className });
 }
 
-export function reservableRowGroupHtml(
+export function createReservableRowGroup(
   row,
   {
     state = null,
     includeAvailability = true,
   } = {},
 ) {
-  return [
-    reservableRowHtml(row, {
+  const rows = [
+    createReservableRow(row, {
       className: 'result-row has-subrow',
     }),
-    includeAvailability ? availabilityPanelHtml(row.rid, state, { colspan: reservableColumns.length }) : '',
-  ].join('');
+  ];
+  if (includeAvailability) {
+    rows.push(createAvailabilityPanel(row.rid, state, { colspan: reservableColumns.length }));
+  }
+  return rows;
 }
 
 export function reservableRowGroupRenderer({
   stateForRow = () => null,
   includeAvailability = true,
 } = {}) {
-  return (row) => reservableRowGroupHtml(row, {
+  return (row) => createReservableRowGroup(row, {
     state: stateForRow(row),
     includeAvailability,
   });
 }
 
-export function reservableTableHtml(
+export function createReservableTable(
   rows,
   {
     rowRenderer = null,
     rowClassName = 'result-row',
   } = {},
 ) {
-  return renderTable({
+  return createTable({
     columns: reservableColumns,
     rows,
     className: 'reservables-table',
@@ -90,11 +90,12 @@ export function reservablePageUrl(row) {
 
 function poiIdLinks(row) {
   const ids = Array.isArray(row.poi_ids) ? row.poi_ids : (Array.isArray(row.poiIds) ? row.poiIds : []);
-  const filtered = ids.map((id) => String(id || '').trim()).filter(Boolean);
-  if (filtered.length === 0) return dash(null);
-  return `
-    <div class="poi-id-list">
-      ${filtered.map((id) => `<a href="/pois?id=${encodeURIComponent(id)}">${escapeHtml(id)}</a>`).join('')}
-    </div>
-  `;
+  const links = ids
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)
+    .map((id) => plainLink({
+      href: `/pois?id=${encodeURIComponent(id)}`,
+      text: id,
+    }));
+  return links.length ? linkList(links, 'poi-id-list') : dash();
 }

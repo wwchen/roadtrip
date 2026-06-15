@@ -1,7 +1,7 @@
 import { fetchPoiDetail, poiSearchUrl, searchPoiCatalog } from './api/poi-api.js';
 import { mountPoiQuery } from './components/poi-query.js';
-import { poiTableHtml } from './components/poi-table.js';
-import { apiCallLink, escapeHtml } from './components/result-table.js';
+import { createPoiTable } from './components/poi-table.js';
+import { apiCallLink, element, replaceChildren } from './components/result-table.js';
 
 const query = mountPoiQuery(document.getElementById('poi-query'), {
   onSubmit: runSearch,
@@ -23,7 +23,7 @@ function syncUrl(params) {
   }
   const suffix = qs.toString();
   window.history.replaceState(null, '', suffix ? `/pois?${suffix}` : '/pois');
-  queryUrlEl.innerHTML = apiCallLink({ href: apiUrl(params) });
+  replaceChildren(queryUrlEl, apiCallLink({ href: apiUrl(params) }));
 }
 
 function apiUrl(params) {
@@ -39,9 +39,10 @@ function setBusy(busy) {
   query.setBusy(busy);
 }
 
-function setStatus(html, className = '') {
-  statusEl.firstElementChild.className = className;
-  statusEl.firstElementChild.innerHTML = html;
+function setStatus(content, className = '') {
+  const statusText = statusEl.firstElementChild;
+  statusText.className = className;
+  replaceChildren(statusText, content);
 }
 
 async function runSearch() {
@@ -70,12 +71,12 @@ async function runSearch() {
     const rows = body.results || [];
     renderResults(rows);
     emptyEl.textContent = 'No POIs match this search.';
-    setStatus(`<strong>${formatNumber(rows.length)}</strong> matches`);
+    setStatus([element('strong', { text: formatNumber(rows.length) }), document.createTextNode(' matches')]);
   } catch (err) {
     if (err.name === 'AbortError') return;
     renderResults([]);
     emptyEl.textContent = 'No POIs match this search.';
-    setStatus(escapeHtml(errorMessage(err)), 'error');
+    setStatus(errorMessage(err), 'error');
   } finally {
     setBusy(false);
   }
@@ -90,12 +91,12 @@ async function runIdLookup(id) {
     const row = rowFromPoiDetail(body);
     renderResults([row]);
     emptyEl.textContent = 'No POI matches this ID.';
-    setStatus('<strong>1</strong> match');
+    setStatus([element('strong', { text: '1' }), document.createTextNode(' match')]);
   } catch (err) {
     if (err.name === 'AbortError') return;
     renderResults([]);
     emptyEl.textContent = 'No POI matches this ID.';
-    setStatus(escapeHtml(errorMessage(err)), 'error');
+    setStatus(errorMessage(err), 'error');
   } finally {
     setBusy(false);
   }
@@ -103,8 +104,7 @@ async function runIdLookup(id) {
 
 function renderResults(rows) {
   emptyEl.hidden = rows.length !== 0;
-  resultsEl.innerHTML = poiTableHtml(rows);
-  addReservablesPageLinks();
+  replaceChildren(resultsEl, createPoiTable(rows));
 }
 
 function rowFromPoiDetail(feature) {
@@ -118,49 +118,6 @@ function rowFromPoiDetail(feature) {
     lng: coordinates[0],
     lat: coordinates[1],
   };
-}
-
-function addReservablesPageLinks() {
-  const table = resultsEl.querySelector('.poi-table');
-  if (!table) return;
-
-  const headerRow = table.querySelector(':scope > thead > tr');
-  if (headerRow) {
-    const header = document.createElement('th');
-    header.textContent = 'Reservables';
-    headerRow.append(header);
-  }
-
-  table.querySelectorAll(':scope > tbody > tr.result-row').forEach((row) => {
-    const id = row.querySelector('td[data-label="ID"]')?.textContent.trim() || '';
-    const cell = document.createElement('td');
-    cell.dataset.label = 'Reservables';
-    const links = document.createElement('div');
-    links.className = 'links';
-    appendLinkChip(links, {
-      href: `/reservables?poi_id=${encodeURIComponent(id)}&type=site`,
-      text: 'Reservables',
-      kind: 'Page',
-    });
-    cell.append(links);
-    row.append(cell);
-  });
-
-}
-
-function appendLinkChip(parent, { href, text, kind }) {
-  const anchor = document.createElement('a');
-  anchor.className = 'link-chip';
-  anchor.href = href;
-  anchor.append(textSpan(`chip-kind ${kind.toLowerCase()}`, kind), textSpan('link-text', text));
-  parent.append(anchor);
-}
-
-function textSpan(className, text) {
-  const span = document.createElement('span');
-  if (className) span.className = className;
-  span.textContent = text;
-  return span;
 }
 
 function errorMessage(err) {

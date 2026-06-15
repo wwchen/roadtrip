@@ -1,84 +1,102 @@
-import { apiCallLabel, escapeHtml, expanderButton, renderRow, renderTable } from './result-table.js';
+import {
+  actionButton,
+  apiCallLabel,
+  createRow,
+  createTable,
+  disclosureButton,
+  element,
+  fragment,
+  pill,
+  plainLink,
+  submitButton,
+} from './result-table.js';
 
-export function availabilityPanelHtml(rid, state, { colspan = 5 } = {}) {
+export function createAvailabilityPanel(rid, state, { colspan = 5 } = {}) {
   const expanded = !!state?.expanded;
   const query = state?.query || defaultAvailabilityQuery();
-  const result = expanded ? availabilityResultHtml(rid, state) : '';
-  return `
-    <tr class="availability-row${expanded ? ' is-expanded' : ''}" data-panel-rid="${escapeHtml(rid)}">
-      <td colspan="${colspan}">
-        <div class="availability-panel">
-          <div class="sub-heading">
-            <div class="sub-title">
-              ${expanderButton({
-                action: 'toggle-availability',
-                idName: 'rid',
-                id: rid,
-                label: 'Availability',
-                expanded,
-              })}
-              <span class="muted">Query availability for this reservable</span>
-            </div>
-            ${apiCallLabel({ method: 'POST', path: '/api/reservables/availability/query' })}
-          </div>
-          ${expanded ? availabilityQueryHtml(rid, query, { loading: !!state?.loading }) : ''}
-          ${result}
-        </div>
-      </td>
-    </tr>
-  `;
+  const row = element('tr', {
+    className: `availability-row${expanded ? ' is-expanded' : ''}`,
+    dataset: { panelRid: rid },
+  });
+  const cell = element('td', { attrs: { colspan } });
+  const panel = element('div', { className: 'availability-panel' });
+
+  panel.append(createAvailabilityHeading(rid, expanded));
+  if (expanded) {
+    panel.append(createAvailabilityQuery(rid, query, { loading: !!state?.loading }));
+    panel.append(createAvailabilityResult(rid, state));
+  }
+
+  cell.append(panel);
+  row.append(cell);
+  return row;
 }
 
-export function availabilityQueryHtml(rid, query, { loading = false } = {}) {
-  return `
-    <form class="availability-controls" data-action="availability-query" data-rid="${escapeHtml(rid)}">
-      <label>
-        Start
-        <input name="start" type="date" value="${escapeHtml(query.start)}">
-      </label>
-      <label>
-        Days
-        <input name="days" type="number" min="1" max="60" value="${escapeHtml(query.days)}">
-      </label>
-      <label>
-        Min nights
-        <input name="min_nights" type="number" min="1" max="31" value="${escapeHtml(query.minNights)}">
-      </label>
-      <label class="availability-force">
-        <input name="force" type="checkbox"${query.force ? ' checked' : ''}>
-        Force refresh
-      </label>
-      <div class="actions">
-        <button class="primary" type="submit"${loading ? ' disabled' : ''}>Query</button>
-      </div>
-    </form>
-  `;
+export function createAvailabilityQuery(rid, query, { loading = false } = {}) {
+  const form = element('form', {
+    className: 'availability-controls',
+    dataset: {
+      action: 'availability-query',
+      rid,
+    },
+  });
+
+  const forceInput = element('input', { type: 'checkbox', name: 'force' });
+  forceInput.checked = !!query.force;
+
+  form.append(
+    labeledControl('Start', element('input', {
+      type: 'date',
+      name: 'start',
+      value: query.start,
+    })),
+    labeledControl('Days', element('input', {
+      type: 'number',
+      name: 'days',
+      value: query.days,
+      attrs: { min: '1', max: '60' },
+    })),
+    labeledControl('Min nights', element('input', {
+      type: 'number',
+      name: 'min_nights',
+      value: query.minNights,
+      attrs: { min: '1', max: '31' },
+    })),
+    element('label', { className: 'availability-force' }, forceInput, document.createTextNode('Force refresh')),
+    element('div', { className: 'actions' }, submitButton('Query', { primary: true, disabled: loading })),
+  );
+  return form;
 }
 
-export function availabilityResultHtml(rid, state) {
-  if (state.loading) {
-    return '<div class="availability-summary">Loading availability...</div>';
+export function createAvailabilityResult(rid, state) {
+  if (state?.loading) {
+    return element('div', { className: 'availability-summary', text: 'Loading availability...' });
   }
-  if (state.error) {
-    return `<div class="availability-summary error">${escapeHtml(state.error)}</div>`;
+  if (state?.error) {
+    return element('div', { className: 'availability-summary error', text: state.error });
   }
-  if (!state.data) {
-    return '<div class="availability-summary">Edit query parameters, then run the request.</div>';
+  if (!state?.data) {
+    return element('div', {
+      className: 'availability-summary',
+      text: 'Edit query parameters, then run the request.',
+    });
   }
+
   const body = state.data;
   const days = Array.isArray(body.availability) ? body.availability : [];
-  const table = availabilityDaysTableHtml(rid, days.slice(0, 14), state);
-  const remainder = days.length > 14 ? `<div class="muted">+${days.length - 14} more</div>` : '';
-  return `
-    <div class="availability-result">
-      <div class="availability-summary">
-        <strong>${escapeHtml(body.summary || body.state || 'Availability response')}</strong>
-        ${body.provider ? ` / ${escapeHtml(body.provider)}` : ''}
-      </div>
-      ${table}
-      ${remainder}
-    </div>
-  `;
+  const result = element('div', { className: 'availability-result' });
+  const summary = element(
+    'div',
+    { className: 'availability-summary' },
+    element('strong', { text: body.summary || body.state || 'Availability response' }),
+  );
+  if (body.provider) summary.append(document.createTextNode(` / ${body.provider}`));
+
+  result.append(summary, createAvailabilityDaysTable(rid, days.slice(0, 14), state));
+  if (days.length > 14) {
+    result.append(element('div', { className: 'muted', text: `+${days.length - 14} more` }));
+  }
+  return result;
 }
 
 export function availabilityQueryFromForm(formEl) {
@@ -111,60 +129,120 @@ export function defaultAvailabilityQuery() {
   };
 }
 
-function availabilityDaysTableHtml(rid, days, state) {
+function createAvailabilityHeading(rid, expanded) {
+  return element(
+    'div',
+    { className: 'sub-heading' },
+    element(
+      'div',
+      { className: 'sub-title' },
+      disclosureButton({
+        action: 'toggle-availability',
+        idName: 'rid',
+        id: rid,
+        label: 'Availability',
+        expanded,
+      }),
+      element('span', { className: 'muted', text: 'Query availability for this reservable' }),
+    ),
+    apiCallLabel({ method: 'POST', path: '/api/reservables/availability/query' }),
+  );
+}
+
+function createAvailabilityDaysTable(rid, days, state) {
   const columns = [
     {
       label: 'Date',
       colClass: 'col-date',
       className: 'mono',
-      render: (day) => escapeHtml(day.date || ''),
+      render: (day) => day.date || '',
     },
     {
       label: 'Status',
       colClass: 'col-status',
-      render: (day) => statusPill(day.status),
+      render: (day) => pill(day.status || 'unknown', statusClass(day.status)),
     },
     {
       label: 'Available',
       colClass: 'col-available',
-      render: (day) => countHtml(day),
+      render: (day) => `${Number(day.available_count || 0)} of ${Number(day.total || 0)}`,
     },
     {
       label: 'Actions',
       colClass: 'col-actions',
-      render: (day) => dayActionsHtml(rid, day, state),
+      render: (day) => dayActions(rid, day, state),
     },
   ];
-  return renderTable({
+  return createTable({
     columns,
     rows: days,
     className: 'availability-days-table',
     wrapClassName: 'availability-days-table-wrap table-wrap',
     rowRenderer: (day) =>
-      renderRow(columns, day, {
+      createRow(columns, day, {
         className: `availability-day-result-row ${availabilityDayClass(day)}`.trim(),
       }),
   });
 }
 
-function dayActionsHtml(rid, day, state) {
+function dayActions(rid, day, state) {
   const date = String(day.date || '');
   const pollerState = state?.pollersByDate?.[date] || {};
-  return `
-    <div class="availability-day-action">
-      ${pollerActionHtml(rid, date, pollerState)}
-      ${logsActionHtml(rid, date)}
-    </div>
-  `;
+  return element(
+    'div',
+    { className: 'availability-day-action' },
+    pollerAction(rid, date, pollerState),
+    logsAction(rid, date),
+  );
 }
 
-function countHtml(day) {
-  return escapeHtml(`${Number(day.available_count || 0)} of ${Number(day.total || 0)}`);
+function pollerAction(rid, date, pollerState) {
+  if (pollerState.loading) {
+    const button = element('button', { type: 'button', text: 'Creating...' });
+    button.disabled = true;
+    return button;
+  }
+  if (pollerState.error) {
+    return fragment(
+      actionButton('Retry poller', 'create-availability-poller', {
+        rid,
+        targetDate: date,
+      }),
+      element('span', { className: 'availability-row-error', text: pollerState.error }),
+    );
+  }
+  if (pollerState.poller) {
+    const id = pollerState.poller.poller?.id || pollerState.poller.id;
+    return plainLink({
+      href: '/pollers',
+      text: id ? `Poller #${id}` : 'Poller created',
+    });
+  }
+
+  const button = actionButton('Create poller', 'create-availability-poller', {
+    rid,
+    targetDate: date,
+  });
+  if (!date) button.disabled = true;
+  return button;
 }
 
-function statusPill(status) {
-  const value = String(status || 'unknown');
-  return `<span class="pill ${escapeHtml(statusClass(value))}">${escapeHtml(value)}</span>`;
+function logsAction(rid, date) {
+  const params = new URLSearchParams({
+    rid,
+    target_date: date,
+    limit: '100',
+  });
+  return plainLink({
+    href: `/logs?${params}`,
+    text: 'View logs',
+  });
+}
+
+function labeledControl(text, control) {
+  const label = element('label');
+  label.append(document.createTextNode(text), control);
+  return label;
 }
 
 function availabilityDayClass(day) {
@@ -175,51 +253,6 @@ function availabilityDayClass(day) {
 function statusClass(status) {
   const value = String(status || '').toLowerCase();
   return ['available', 'partial', 'booked', 'closed', 'unknown'].includes(value) ? value : 'unknown';
-}
-
-function pollerActionHtml(rid, date, pollerState) {
-  if (pollerState.loading) {
-    return '<button type="button" disabled>Creating...</button>';
-  }
-  if (pollerState.error) {
-    return `
-      <button
-        type="button"
-        data-action="create-availability-poller"
-        data-rid="${escapeHtml(rid)}"
-        data-target-date="${escapeHtml(date)}"
-      >Retry poller</button>
-      <span class="availability-row-error">${escapeHtml(pollerState.error)}</span>
-    `;
-  }
-  if (pollerState.poller) {
-    const id = pollerState.poller.poller?.id || pollerState.poller.id;
-    const label = id ? `Poller #${id}` : 'Poller created';
-    return `<a class="link-chip" href="/pollers"><span class="chip-kind page">Page</span><span class="link-text">${escapeHtml(label)}</span></a>`;
-  }
-  return `
-    <button
-      type="button"
-      data-action="create-availability-poller"
-      data-rid="${escapeHtml(rid)}"
-      data-target-date="${escapeHtml(date)}"
-      ${date ? '' : 'disabled'}
-    >Create poller</button>
-  `;
-}
-
-function logsActionHtml(rid, date) {
-  const params = new URLSearchParams({
-    rid,
-    target_date: date,
-    limit: '100',
-  });
-  return `
-    <a class="link-chip" href="/logs?${params}">
-      <span class="chip-kind page">Page</span>
-      <span class="link-text">View logs</span>
-    </a>
-  `;
 }
 
 function utcYmd(date) {
