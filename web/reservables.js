@@ -113,24 +113,26 @@ function rowHtml(row, state) {
     ? `<details><summary>JSON</summary><pre>${escapeHtml(raw)}</pre></details>`
     : '<span class="muted">none</span>';
   const detailUrl = `/api/reservable/${encodeURIComponent(row.rid)}`;
+  const expanded = !!state?.expanded;
   return `
-    <tr>
-      <td class="rid mono">
+    <tr class="result-row${expanded ? ' is-expanded' : ''}">
+      <td class="rid mono" data-label="RID">
         <a href="${detailUrl}" target="_blank" rel="noreferrer">${escapeHtml(row.rid)}</a>
         <div class="muted">${escapeHtml(row.vendor || '')} · ${escapeHtml(row.type || '')}</div>
       </td>
-      <td class="name">${dash(row.name)}</td>
-      <td>${dash(row.loop)}</td>
-      <td>${dash(row.site_type)}</td>
-      <td>${rawCell}</td>
-      <td>
+      <td class="name" data-label="Name">${dash(row.name)}</td>
+      <td data-label="Loop">${dash(row.loop)}</td>
+      <td data-label="Site Type">${dash(row.site_type)}</td>
+      <td data-label="Raw">${rawCell}</td>
+      <td data-label="Links">
         <div class="row-links">
           <button
-            class="link-button"
+            class="link-button${expanded ? ' active' : ''}"
             type="button"
             data-action="toggle-availability"
             data-rid="${escapeHtml(row.rid)}"
-          >${state?.expanded ? 'Hide availability' : 'Availability'}</button>
+            aria-expanded="${expanded ? 'true' : 'false'}"
+          >Availability</button>
         </div>
       </td>
     </tr>
@@ -168,6 +170,9 @@ function availabilityPanelHtml(rid, state) {
           </form>
           <div class="mono muted availability-url">${escapeHtml(url)}</div>
           ${result}
+          <div class="availability-footer">
+            <button type="button" data-action="close-availability" data-rid="${escapeHtml(rid)}">Close</button>
+          </div>
         </div>
       </td>
     </tr>
@@ -242,6 +247,12 @@ function panelState(rid) {
 function toggleAvailability(rid) {
   const state = panelState(rid);
   state.expanded = !state.expanded;
+  renderResults(lastRows);
+}
+
+function closeAvailability(rid) {
+  const state = panelState(rid);
+  state.expanded = false;
   renderResults(lastRows);
 }
 
@@ -336,8 +347,13 @@ nextBtn.addEventListener('click', () => {
 
 resultsEl.addEventListener('click', (event) => {
   const toggle = event.target.closest('[data-action="toggle-availability"]');
-  if (!toggle) return;
-  toggleAvailability(toggle.dataset.rid || '');
+  if (toggle) {
+    toggleAvailability(toggle.dataset.rid || '');
+    return;
+  }
+
+  const close = event.target.closest('[data-action="close-availability"]');
+  if (close) closeAvailability(close.dataset.rid || '');
 });
 
 resultsEl.addEventListener('submit', (event) => {

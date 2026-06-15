@@ -171,9 +171,16 @@
   table {
     width: 100%;
     min-width: 920px;
+    table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
   }
+  .col-rid { width: 27%; }
+  .col-name { width: 15%; }
+  .col-loop { width: 12%; }
+  .col-site-type { width: 16%; }
+  .col-raw { width: 18%; }
+  .col-links { width: 12%; }
   th,
   td {
     padding: 10px 12px;
@@ -222,6 +229,9 @@
     background: transparent;
     color: var(--accent-hover);
     text-decoration: underline;
+  }
+  .link-button.active {
+    color: var(--accent-hover);
   }
   .availability-row td {
     padding: 0;
@@ -293,6 +303,10 @@
   .availability-url {
     overflow-wrap: anywhere;
   }
+  .availability-footer {
+    display: flex;
+    justify-content: flex-end;
+  }
   details summary {
     cursor: pointer;
     color: var(--accent);
@@ -332,11 +346,81 @@
     .filters { grid-template-columns: 1fr; }
     .wide { grid-column: span 1; }
     .actions { flex-wrap: wrap; }
+    .table-wrap { overflow-x: visible; }
+    table,
+    tbody,
+    tr,
+    td {
+      display: block;
+    }
+    table {
+      min-width: 0;
+      table-layout: auto;
+    }
+    thead { display: none; }
+    tbody {
+      display: grid;
+      gap: 10px;
+      padding: 10px;
+    }
+    tbody tr.result-row,
+    tbody tr.availability-row {
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: rgba(255,255,255,0.018);
+      overflow: hidden;
+    }
+    tbody tr.result-row.is-expanded {
+      border-bottom-left-radius: 0;
+      border-bottom-right-radius: 0;
+      border-bottom-color: transparent;
+    }
+    tbody tr.availability-row {
+      margin-top: -10px;
+      border-top: 0;
+      border-top-left-radius: 0;
+      border-top-right-radius: 0;
+    }
+    tbody tr:hover { background: rgba(255,255,255,0.018); }
+    tbody tr.result-row td {
+      display: grid;
+      grid-template-columns: 86px minmax(0, 1fr);
+      gap: 10px;
+      padding: 9px 10px;
+      border-bottom: 1px solid var(--border);
+      overflow-wrap: anywhere;
+    }
+    tbody tr.result-row td:last-child { border-bottom: 0; }
+    tbody tr.result-row td::before {
+      content: attr(data-label);
+      grid-column: 1;
+      grid-row: 1 / -1;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 650;
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    tbody tr.result-row td > * {
+      grid-column: 2;
+    }
+    .rid,
+    .name {
+      max-width: none;
+    }
+    .row-links { align-items: flex-start; }
+    .availability-row td {
+      display: block;
+      border-bottom: 0;
+    }
+    .availability-panel {
+      border-bottom: 0;
+      padding: 12px 10px;
+    }
     .availability-controls { grid-template-columns: 1fr; }
     .status,
     .pager { align-items: flex-start; flex-direction: column; }
-    th,
-    td { padding: 9px; }
+    pre { max-width: 100%; }
   }
 </style>
 </head>
@@ -415,6 +499,14 @@
     </div>
     <div class="table-wrap">
       <table>
+        <colgroup>
+          <col class="col-rid">
+          <col class="col-name">
+          <col class="col-loop">
+          <col class="col-site-type">
+          <col class="col-raw">
+          <col class="col-links">
+        </colgroup>
         <thead>
           <tr>
             <th>RID</th>
