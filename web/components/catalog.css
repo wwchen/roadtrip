@@ -365,31 +365,36 @@ details[open] .action-icon.inline::before {
 
 .availability-summary strong { color: var(--text); }
 
-.availability-days {
-  display: grid;
-  gap: 6px;
+.availability-days-table {
+  width: 100%;
+  min-width: 560px;
+  table-layout: fixed;
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  overflow: hidden;
 }
 
-.availability-day-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
-  min-height: 36px;
-  padding: 5px 8px;
-  border: 1px solid var(--border-strong);
-  border-radius: 7px;
+.availability-days-table th,
+.availability-days-table td {
+  padding: 8px 10px;
+}
+
+.availability-days-table .col-date { width: 22%; }
+.availability-days-table .col-status { width: 18%; }
+.availability-days-table .col-available { width: 18%; }
+.availability-days-table .col-actions { width: 42%; }
+
+.availability-day-result-row {
   background: var(--bg-subtle);
   color: var(--muted);
-  font-size: 12px;
 }
 
-.availability-day-main {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  flex-wrap: wrap;
+.availability-day-result-row.available {
+  background: rgba(76,185,106,0.08);
+}
+
+.availability-day-result-row.partial {
+  background: rgba(241,194,125,0.08);
 }
 
 .availability-day-action {
@@ -420,18 +425,6 @@ details[open] .action-icon.inline::before {
   color: var(--error);
   font-size: 12px;
   overflow-wrap: anywhere;
-}
-
-.availability-day-row.available {
-  border-color: rgba(76,185,106,0.45);
-  background: rgba(76,185,106,0.12);
-  color: #87d99b;
-}
-
-.availability-day-row.partial {
-  border-color: rgba(241,194,125,0.42);
-  background: rgba(241,194,125,0.10);
-  color: #f1c27d;
 }
 
 details summary {
@@ -649,14 +642,10 @@ pre {
     padding: 0;
   }
 
-  .availability-day-row {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-
   .availability-day-action {
     justify-content: flex-start;
     width: 100%;
+    flex-wrap: wrap;
   }
 
   .reservables-heading,

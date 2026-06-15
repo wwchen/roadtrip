@@ -1,9 +1,8 @@
-import { escapeHtml, expanderButton } from './result-table.js';
+import { escapeHtml, expanderButton, renderRow, renderTable } from './result-table.js';
 
 export function availabilityPanelHtml(rid, state, { colspan = 5 } = {}) {
   const expanded = !!state?.expanded;
   const query = state?.query || defaultAvailabilityQuery();
-  const url = reservableAvailabilityUrl(rid, query);
   const result = expanded ? availabilityResultHtml(rid, state) : '';
   return `
     <tr class="availability-row${expanded ? ' is-expanded' : ''}" data-panel-rid="${escapeHtml(rid)}">
@@ -20,7 +19,6 @@ export function availabilityPanelHtml(rid, state, { colspan = 5 } = {}) {
               })}
               <span class="muted">Query availability for this reservable</span>
             </div>
-            <span class="mono muted">${escapeHtml(url)}</span>
           </div>
           ${expanded ? availabilityQueryHtml(rid, query, { loading: !!state?.loading }) : ''}
           ${result}
@@ -68,7 +66,7 @@ export function availabilityResultHtml(rid, state) {
   }
   const body = state.data;
   const days = Array.isArray(body.availability) ? body.availability : [];
-  const rows = days.slice(0, 14).map((day) => dayRowHtml(rid, day, state)).join('');
+  const table = availabilityDaysTableHtml(rid, days.slice(0, 14), state);
   const remainder = days.length > 14 ? `<div class="muted">+${days.length - 14} more</div>` : '';
   return `
     <div class="availability-result">
@@ -76,11 +74,8 @@ export function availabilityResultHtml(rid, state) {
         <strong>${escapeHtml(body.summary || body.state || 'Availability response')}</strong>
         ${body.provider ? ` / ${escapeHtml(body.provider)}` : ''}
       </div>
-      <div class="availability-days" role="list">${rows}${remainder}</div>
-      <details class="json-details">
-        <summary><span class="action-icon inline" aria-hidden="true"></span><span>JSON</span></summary>
-        <pre>${escapeHtml(JSON.stringify(body, null, 2))}</pre>
-      </details>
+      ${table}
+      ${remainder}
     </div>
   `;
 }
@@ -115,29 +110,70 @@ export function defaultAvailabilityQuery() {
   };
 }
 
-function reservableAvailabilityUrl(rid, query) {
-  return 'POST /api/reservables/availability/query';
+function availabilityDaysTableHtml(rid, days, state) {
+  const columns = [
+    {
+      label: 'Date',
+      colClass: 'col-date',
+      className: 'mono',
+      render: (day) => escapeHtml(day.date || ''),
+    },
+    {
+      label: 'Status',
+      colClass: 'col-status',
+      render: (day) => statusPill(day.status),
+    },
+    {
+      label: 'Available',
+      colClass: 'col-available',
+      render: (day) => countHtml(day),
+    },
+    {
+      label: 'Actions',
+      colClass: 'col-actions',
+      render: (day) => dayActionsHtml(rid, day, state),
+    },
+  ];
+  return renderTable({
+    columns,
+    rows: days,
+    className: 'availability-days-table',
+    wrapClassName: 'availability-days-table-wrap table-wrap',
+    rowRenderer: (day) =>
+      renderRow(columns, day, {
+        className: `availability-day-result-row ${availabilityDayClass(day)}`.trim(),
+      }),
+  });
 }
 
-function dayRowHtml(rid, day, state) {
-  const status = String(day.status || '').toLowerCase();
-  const cls = ['available', 'partial'].includes(status) ? status : '';
-  const count = `${Number(day.available_count || 0)} of ${Number(day.total || 0)}`;
+function dayActionsHtml(rid, day, state) {
   const date = String(day.date || '');
   const pollerState = state?.pollersByDate?.[date] || {};
   return `
-    <div class="availability-day-row ${cls}" role="listitem">
-      <div class="availability-day-main">
-        <span class="mono">${escapeHtml(date)}</span>
-        <span>${escapeHtml(status || 'unknown')}</span>
-        <span>${escapeHtml(count)}</span>
-      </div>
-      <div class="availability-day-action">
-        ${pollerActionHtml(rid, date, pollerState)}
-        ${logsActionHtml(rid, date)}
-      </div>
+    <div class="availability-day-action">
+      ${pollerActionHtml(rid, date, pollerState)}
+      ${logsActionHtml(rid, date)}
     </div>
   `;
+}
+
+function countHtml(day) {
+  return escapeHtml(`${Number(day.available_count || 0)} of ${Number(day.total || 0)}`);
+}
+
+function statusPill(status) {
+  const value = String(status || 'unknown');
+  return `<span class="pill ${escapeHtml(statusClass(value))}">${escapeHtml(value)}</span>`;
+}
+
+function availabilityDayClass(day) {
+  const status = String(day.status || '').toLowerCase();
+  return ['available', 'partial'].includes(status) ? status : '';
+}
+
+function statusClass(status) {
+  const value = String(status || '').toLowerCase();
+  return ['available', 'partial', 'booked', 'closed', 'unknown'].includes(value) ? value : 'unknown';
 }
 
 function pollerActionHtml(rid, date, pollerState) {
