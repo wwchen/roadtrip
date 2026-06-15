@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.AvailabilityJob.Companion.AVAILABILITY_JOB
+import ca.floo.roadtrip.service.scheduler.Schedulable
+import ca.floo.roadtrip.service.scheduler.SchedulableRepo
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -14,22 +16,22 @@ import java.util.UUID
 
 class AvailabilityJobRepo(
     private val ctx: DSLContext,
-) {
+) : SchedulableRepo<AvailabilityJobRepo.Job> {
     private val json = Json
 
     data class Job(
-        val id: Long,
+        override val id: Long,
         val watchId: Long,
         val intentPayload: JsonObject,
         val cadenceSec: Int,
         val status: String,
         val nextRunAt: OffsetDateTime,
         val claimedUntil: OffsetDateTime?,
-        val claimToken: String?,
+        override val claimToken: String?,
         val lastRunAt: OffsetDateTime?,
         val createdAt: OffsetDateTime,
         val updatedAt: OffsetDateTime,
-    )
+    ) : Schedulable
 
     /**
      * Atomically create or refresh the job backing a watch. Called whenever
@@ -88,7 +90,7 @@ class AvailabilityJobRepo(
      * Postgres `FOR UPDATE SKIP LOCKED` means parallel scheduler ticks (or a
      * future second worker) won't hand the same row to two callers.
      */
-    fun claimDue(
+    override fun claimDue(
         now: OffsetDateTime,
         limit: Int,
         leaseDuration: Duration,
@@ -134,7 +136,7 @@ class AvailabilityJobRepo(
      * claim_token matches; mismatched calls (lease expired, reclaimed)
      * return false without modifying the row.
      */
-    fun release(
+    override fun release(
         id: Long,
         token: String,
         nextRunAt: OffsetDateTime,
@@ -156,7 +158,7 @@ class AvailabilityJobRepo(
      * (worker crashed, app restarted) get their claim wiped so the next
      * tick can re-claim them.
      */
-    fun reclaimExpired(now: OffsetDateTime): Int =
+    override fun reclaimExpired(now: OffsetDateTime): Int =
         ctx
             .update(AVAILABILITY_JOB)
             .set(AVAILABILITY_JOB.CLAIM_TOKEN, null as String?)
