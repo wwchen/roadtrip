@@ -19,6 +19,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.request.receiveText
+import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -181,7 +182,7 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
         val id = call.parameters["id"]?.toLongOrNull()
             ?: return@delete call.respondError("invalid_id", HttpStatusCode.BadRequest)
         if (watches.delete(id)) {
-            call.respondText("", ContentType.Application.Json, HttpStatusCode.NoContent)
+            call.respond(HttpStatusCode.NoContent)
         } else {
             call.respondError("not_found", HttpStatusCode.NotFound)
         }
