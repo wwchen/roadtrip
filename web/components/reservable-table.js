@@ -8,8 +8,18 @@ export const reservableColumns = [
     className: 'rid mono',
     render: (row) => `
       <a href="${escapeHtml(reservablePageUrl(row))}">${escapeHtml(row.rid || '')}</a>
-      <div class="muted">${escapeHtml([row.vendor, row.type].filter(Boolean).join(' / '))}</div>
     `,
+  },
+  {
+    label: 'Vendor',
+    colClass: 'col-vendor',
+    className: 'mono',
+    render: (row) => dash(row.vendor),
+  },
+  {
+    label: 'Type',
+    colClass: 'col-type',
+    render: (row) => dash(row.type),
   },
   {
     label: 'Name',

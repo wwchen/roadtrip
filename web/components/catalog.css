@@ -409,11 +409,13 @@ pre {
   table-layout: fixed;
 }
 
-.reservables-table .col-rid { width: 25%; }
+.reservables-table .col-rid { width: 22%; }
+.reservables-table .col-vendor { width: 10%; }
+.reservables-table .col-type { width: 8%; }
 .reservables-table .col-name { width: 16%; }
-.reservables-table .col-loop { width: 12%; }
-.reservables-table .col-site-type { width: 16%; }
-.reservables-table .col-links { width: 31%; }
+.reservables-table .col-loop { width: 10%; }
+.reservables-table .col-site-type { width: 14%; }
+.reservables-table .col-links { width: 20%; }
 .reservables-table .name {
   max-width: 260px;
   min-width: 0;
