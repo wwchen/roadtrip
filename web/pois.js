@@ -1,4 +1,4 @@
-import { poiSearchUrl, searchPoiCatalog } from './api/poi-api.js';
+import { fetchPoiDetail, poiSearchUrl, searchPoiCatalog } from './api/poi-api.js';
 import {
   fetchPoiReservables,
   reservableAvailabilityUrl,
@@ -36,7 +36,8 @@ function applyParamsFromUrl() {
 
 function syncUrl(params) {
   const qs = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
+  const urlParams = params.id ? { id: params.id } : params;
+  for (const [key, value] of Object.entries(urlParams)) {
     if (value == null || value === '') continue;
     qs.set(key, String(value));
   }
@@ -46,6 +47,7 @@ function syncUrl(params) {
 }
 
 function apiUrl(params) {
+  if (params.id) return `/api/pois/${encodeURIComponent(params.id)}`;
   return poiSearchUrl({
     q: params.q || '',
     limit: params.limit || '25',
@@ -69,6 +71,11 @@ async function runSearch() {
   activeAbort = new AbortController();
   const params = formParams();
   syncUrl(params);
+
+  if ((params.id || '').trim()) {
+    await runIdLookup(params.id);
+    return;
+  }
 
   if ((params.q || '').trim().length < 2) {
     renderResults([]);
@@ -96,6 +103,26 @@ async function runSearch() {
   }
 }
 
+async function runIdLookup(id) {
+  setBusy(true);
+  setStatus('Loading...');
+
+  try {
+    const body = await fetchPoiDetail(id, { signal: activeAbort.signal });
+    const row = rowFromPoiDetail(body);
+    renderResults([row]);
+    emptyEl.textContent = 'No POI matches this ID.';
+    setStatus('<strong>1</strong> match');
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    renderResults([]);
+    emptyEl.textContent = 'No POI matches this ID.';
+    setStatus(escapeHtml(errorMessage(err)), 'error');
+  } finally {
+    setBusy(false);
+  }
+}
+
 function renderResults(rows) {
   lastRows = rows;
   emptyEl.hidden = rows.length !== 0;
@@ -107,6 +134,19 @@ function rowGroupHtml(row) {
   return rowHtml(row, state) + (state?.expanded ? reservablesPanelHtml(row, state) : '');
 }
 
+function rowFromPoiDetail(feature) {
+  const props = feature?.properties || {};
+  const coordinates = feature?.geometry?.coordinates || [];
+  return {
+    id: feature?.id,
+    name: props.name || props.unit_name || `POI ${feature?.id || ''}`.trim(),
+    category: props.category,
+    region: props.region,
+    lng: coordinates[0],
+    lat: coordinates[1],
+  };
+}
+
 function rowHtml(row, state) {
   const id = row.id == null ? '' : String(row.id);
   const detailUrl = `/api/pois/${encodeURIComponent(id)}`;
@@ -116,41 +156,36 @@ function rowHtml(row, state) {
   const expanded = !!state?.expanded;
   return `
     <tr class="result-row${expanded ? ' is-expanded' : ''}">
-      <td class="mono" data-label="ID">${escapeHtml(id)}</td>
+      <td class="mono" data-label="ID">
+        <a class="name-link" href="${mapUrl}">${escapeHtml(id)}</a>
+      </td>
       <td class="name" data-label="Name">
-        <a class="name-link" href="${mapUrl}">
-          <span class="action-text">${escapeHtml(row.name || 'unknown')}</span>
-          <span class="action-icon open" aria-hidden="true"></span>
-        </a>
+        ${escapeHtml(row.name || 'unknown')}
       </td>
       <td data-label="Category">
         ${dash(row.category)}
       </td>
       <td data-label="Region">${dash(row.region)}</td>
       <td class="mono" data-label="Coordinates">${escapeHtml(coords)}</td>
-      <td data-label="Page">
+      <td data-label="Links">
         <div class="links">
           <button
-            class="link-button action-item${expanded ? ' active' : ''}"
+            class="link-chip link-button${expanded ? ' active' : ''}"
             type="button"
             data-action="toggle-reservables"
             data-poi-id="${escapeHtml(id)}"
             aria-expanded="${expanded ? 'true' : 'false'}"
           >
             <span class="action-icon inline" aria-hidden="true"></span>
-            <span class="action-text">${escapeHtml(reservablesToggleLabel(state))}</span>
+            <span class="link-text">${escapeHtml(reservablesToggleLabel(state))}</span>
           </button>
-        </div>
-      </td>
-      <td data-label="API (JSON)">
-        <div class="links">
-          <a class="action-item" href="${detailUrl}" target="_blank" rel="noreferrer">
-            <span class="action-text">POI</span>
-            <span class="action-icon open" aria-hidden="true"></span>
+          <a class="link-chip" href="${detailUrl}" target="_blank" rel="noreferrer">
+            <span class="chip-kind json">JSON</span>
+            <span class="link-text">POI</span>
           </a>
-          <a class="action-item" href="${reservablesJsonUrl}" target="_blank" rel="noreferrer">
-            <span class="action-text">Reservables</span>
-            <span class="action-icon open" aria-hidden="true"></span>
+          <a class="link-chip" href="${reservablesJsonUrl}" target="_blank" rel="noreferrer">
+            <span class="chip-kind json">JSON</span>
+            <span class="link-text">Reservables</span>
           </a>
         </div>
       </td>
@@ -167,7 +202,7 @@ function reservablesPanelHtml(row, state) {
     : 'Reservables linked to this POI';
   return `
     <tr class="reservables-row" data-panel-poi-id="${escapeHtml(id)}">
-      <td colspan="7">
+      <td colspan="6">
         <div class="reservables-panel">
           <div class="reservables-heading">
             <div>${title}</div>
@@ -190,7 +225,7 @@ function reservablesContentHtml(state) {
 
 function reservableCardHtml(row) {
   const rid = row.rid || '';
-  const viewUrl = `/reservables?type=${encodeURIComponent(row.type || 'site')}&rid=${encodeURIComponent(rid)}`;
+  const viewUrl = `/reservables?id=${encodeURIComponent(rid)}`;
   const jsonUrl = `/api/reservable/${encodeURIComponent(rid)}`;
   const availabilityJsonUrl = reservableAvailabilityUrl(rid, {
     days: 7,
@@ -207,21 +242,17 @@ function reservableCardHtml(row) {
         ${escapeHtml([row.loop, row.site_type].filter(Boolean).join(' / ') || 'site')}
       </div>
       <div class="reservable-links">
-        <div class="column-label">Page</div>
-        <a class="action-item" href="${viewUrl}">
-          <span class="action-text">Reservable</span>
-          <span class="action-icon open" aria-hidden="true"></span>
+        <a class="link-chip" href="${viewUrl}">
+          <span class="chip-kind page">Page</span>
+          <span class="link-text">Reservable</span>
         </a>
-      </div>
-      <div class="reservable-links">
-        <div class="column-label">API (JSON)</div>
-        <a class="action-item" href="${jsonUrl}" target="_blank" rel="noreferrer">
-          <span class="action-text">Reservable</span>
-          <span class="action-icon open" aria-hidden="true"></span>
+        <a class="link-chip" href="${jsonUrl}" target="_blank" rel="noreferrer">
+          <span class="chip-kind json">JSON</span>
+          <span class="link-text">Reservable</span>
         </a>
-        <a class="action-item" href="${availabilityJsonUrl}" target="_blank" rel="noreferrer">
-          <span class="action-text">Availability</span>
-          <span class="action-icon open" aria-hidden="true"></span>
+        <a class="link-chip" href="${availabilityJsonUrl}" target="_blank" rel="noreferrer">
+          <span class="chip-kind json">JSON</span>
+          <span class="link-text">Availability</span>
         </a>
       </div>
     </div>

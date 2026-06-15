@@ -78,6 +78,17 @@
     background: var(--bg-hover);
     text-decoration: none;
   }
+  .nav a.outside-link {
+    gap: 7px;
+  }
+  .nav a.outside-link::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-top: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+    opacity: 0.7;
+  }
   button.primary {
     border-color: rgba(76,185,106,0.55);
     background: #2f7a3a;
@@ -96,7 +107,7 @@
   }
   .filters {
     display: grid;
-    grid-template-columns: minmax(260px, 2fr) minmax(170px, 1fr) 120px auto;
+    grid-template-columns: 120px minmax(240px, 2fr) minmax(170px, 1fr) 120px auto;
     gap: 10px;
     align-items: end;
   }
@@ -155,7 +166,7 @@
   }
   table {
     width: 100%;
-    min-width: 980px;
+    min-width: 900px;
     border-collapse: collapse;
     font-size: 13px;
   }
@@ -189,32 +200,46 @@
   }
   .links {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 6px;
-    min-width: 110px;
+    min-width: 220px;
     align-items: flex-start;
   }
-  .action-item {
+  .link-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     max-width: 100%;
-    min-height: 24px;
+    min-height: 26px;
+    padding: 3px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--bg-subtle);
     color: var(--accent);
     font-size: 13px;
     line-height: 1.25;
   }
-  a.action-item:hover {
+  a.link-chip:hover {
+    background: var(--bg-hover);
     text-decoration: none;
   }
-  a.action-item:hover .action-text,
-  button.action-item:hover .action-text {
+  a.link-chip:hover .link-text,
+  button.link-chip:hover .link-text {
     text-decoration: underline;
   }
-  .action-text {
+  .link-text {
     min-width: 0;
     overflow-wrap: anywhere;
   }
+  .chip-kind {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .chip-kind.page { color: #87d99b; }
+  .chip-kind.json { color: #f1c27d; }
   .action-icon {
     position: relative;
     display: inline-block;
@@ -261,22 +286,16 @@
     border-right: 1.5px solid currentColor;
   }
   .name-link {
-    display: inline-flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 6px;
+    color: var(--accent);
   }
   .link-button {
     height: auto;
     min-height: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
     color: var(--accent);
     justify-content: flex-start;
   }
   .link-button:hover {
-    background: transparent;
+    background: var(--bg-hover);
     text-decoration: underline;
   }
   .link-button.active { color: #62cc7d; }
@@ -304,7 +323,7 @@
   }
   .reservable-card {
     display: grid;
-    grid-template-columns: minmax(240px, 1.4fr) minmax(160px, 0.7fr) minmax(120px, 0.45fr) minmax(150px, 0.55fr);
+    grid-template-columns: minmax(240px, 1.2fr) minmax(160px, 0.8fr) minmax(260px, 1fr);
     gap: 12px;
     padding: 10px;
     border: 1px solid var(--border);
@@ -328,8 +347,8 @@
   }
   .reservable-links {
     display: flex;
-    flex-direction: column;
-    gap: 5px;
+    flex-wrap: wrap;
+    gap: 6px;
     align-items: flex-start;
   }
   .json-details summary {
@@ -461,15 +480,19 @@
       <div class="sub">Name search across active map points.</div>
     </div>
     <nav class="nav" aria-label="Page links">
-      <a href="/">Map</a>
+      <a class="outside-link" href="/">Map</a>
       <a href="/reservables">Reservables</a>
       <a href="/monitors">Monitors</a>
-      <a href="/api/docs">API docs</a>
+      <a class="outside-link" href="/api/docs">API docs</a>
     </nav>
   </header>
 
   <form id="poi-form" class="panel" autocomplete="off">
     <div class="filters">
+      <label>
+        ID
+        <input name="id" inputmode="numeric" placeholder="64397">
+      </label>
       <label>
         Name
         <input name="q" placeholder="Glacier, Upper Pines, Planet Fitness">
@@ -506,8 +529,7 @@
             <th>Category</th>
             <th>Region</th>
             <th>Coordinates</th>
-            <th>Page</th>
-            <th>API (JSON)</th>
+            <th>Links</th>
           </tr>
         </thead>
         <tbody id="results"></tbody>

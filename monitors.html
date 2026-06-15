@@ -87,6 +87,17 @@
     background: var(--bg-hover);
     text-decoration: none;
   }
+  .nav a.outside-link {
+    gap: 7px;
+  }
+  .nav a.outside-link::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-top: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+    opacity: 0.7;
+  }
   .panel {
     background: var(--surface);
     border: 1px solid var(--border);
@@ -190,10 +201,10 @@
       <div class="sub">Availability monitor registrations.</div>
     </div>
     <nav class="nav" aria-label="Page links">
-      <a href="/">Map</a>
+      <a class="outside-link" href="/">Map</a>
       <a href="/pois">POIs</a>
       <a href="/reservables">Reservables</a>
-      <a href="/api/docs">API docs</a>
+      <a class="outside-link" href="/api/docs">API docs</a>
     </nav>
   </header>
 

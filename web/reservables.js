@@ -1,5 +1,6 @@
 import {
   fetchReservableAvailability,
+  fetchReservable,
   reservableAvailabilityUrl,
   searchReservables,
 } from './api/reservable-api.js';
@@ -25,7 +26,7 @@ function formParams() {
   for (const [key, value] of data.entries()) {
     const text = String(value).trim();
     if (!text) continue;
-    params[key] = text;
+    params[key === 'id' ? 'id' : key] = text;
   }
   params.offset = String(offset);
   return params;
@@ -34,15 +35,20 @@ function formParams() {
 function applyParamsFromUrl() {
   const qs = new URLSearchParams(window.location.search);
   for (const el of form.elements) {
-    if (!el.name || !qs.has(el.name)) continue;
-    el.value = qs.get(el.name) || '';
+    if (!el.name) continue;
+    if (qs.has(el.name)) {
+      el.value = qs.get(el.name) || '';
+    } else if (el.name === 'id' && qs.has('rid')) {
+      el.value = qs.get('rid') || '';
+    }
   }
   offset = Math.max(0, parseInt(qs.get('offset') || '0', 10) || 0);
 }
 
 function syncUrl(params) {
   const qs = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
+  const urlParams = params.id ? { id: params.id } : params;
+  for (const [key, value] of Object.entries(urlParams)) {
     if (value == null || value === '') continue;
     if (key === 'offset' && String(value) === '0') continue;
     qs.set(key, String(value));
@@ -50,7 +56,9 @@ function syncUrl(params) {
   const suffix = qs.toString();
   const next = suffix ? `/reservables?${suffix}` : '/reservables';
   window.history.replaceState(null, '', next);
-  queryUrlEl.textContent = `/api/reservables${suffix ? `?${suffix}` : ''}`;
+  queryUrlEl.textContent = params.id
+    ? `/api/reservable/${encodeURIComponent(params.id)}`
+    : `/api/reservables${suffix ? `?${suffix}` : ''}`;
 }
 
 function setBusy(busy) {
@@ -78,6 +86,11 @@ async function runSearch() {
   setBusy(true);
   setStatus('Loading...');
 
+  if ((params.id || '').trim()) {
+    await runIdLookup(params.id);
+    return;
+  }
+
   try {
     const body = await searchReservables({ ...params, signal: activeAbort.signal });
     total = body.total || 0;
@@ -96,6 +109,23 @@ async function runSearch() {
   }
 }
 
+async function runIdLookup(id) {
+  try {
+    const body = await fetchReservable(id, { signal: activeAbort.signal });
+    total = 1;
+    offset = 0;
+    renderResults([body.reservable]);
+    setStatus('<strong>1</strong> match');
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    total = 0;
+    renderResults([]);
+    setStatus(escapeHtml(errorMessage(err)), 'error');
+  } finally {
+    setBusy(false);
+  }
+}
+
 function renderResults(rows) {
   lastRows = rows;
   emptyEl.hidden = rows.length !== 0;
@@ -104,46 +134,75 @@ function renderResults(rows) {
 
 function rowGroupHtml(row) {
   const state = availabilityPanels.get(row.rid);
-  return rowHtml(row, state) + (state?.expanded ? availabilityPanelHtml(row.rid, state) : '');
+  return [
+    rowHtml(row, state),
+    state?.rawExpanded ? rawPanelHtml(row) : '',
+    state?.expanded ? availabilityPanelHtml(row.rid, state) : '',
+  ].join('');
 }
 
 function rowHtml(row, state) {
-  const raw = row.raw == null ? '' : JSON.stringify(row.raw, null, 2);
-  const rawCell = raw
-    ? `<details class="json-details"><summary><span class="action-icon inline" aria-hidden="true"></span><span>JSON</span></summary><pre>${escapeHtml(raw)}</pre></details>`
-    : '<span class="muted">none</span>';
   const detailUrl = `/api/reservable/${encodeURIComponent(row.rid)}`;
+  const viewUrl = reservablePageUrl(row);
   const expanded = !!state?.expanded;
+  const rawExpanded = !!state?.rawExpanded;
+  const anyExpanded = expanded || rawExpanded;
   return `
-    <tr class="result-row${expanded ? ' is-expanded' : ''}">
+    <tr class="result-row${anyExpanded ? ' is-expanded' : ''}">
       <td class="rid mono" data-label="RID">
-        ${escapeHtml(row.rid)}
+        <a href="${viewUrl}">${escapeHtml(row.rid)}</a>
         <div class="muted">${escapeHtml(row.vendor || '')} · ${escapeHtml(row.type || '')}</div>
       </td>
-      <td class="name" data-label="Name">${dash(row.name)}</td>
+      <td class="name" data-label="Name">
+        ${dash(row.name)}
+      </td>
       <td data-label="Loop">${dash(row.loop)}</td>
       <td data-label="Site Type">${dash(row.site_type)}</td>
-      <td data-label="Raw">${rawCell}</td>
-      <td data-label="Page">
+      <td data-label="Links">
         <div class="row-links">
           <button
-            class="link-button action-item${expanded ? ' active' : ''}"
+            class="link-chip link-button${expanded ? ' active' : ''}"
             type="button"
             data-action="toggle-availability"
             data-rid="${escapeHtml(row.rid)}"
             aria-expanded="${expanded ? 'true' : 'false'}"
           >
             <span class="action-icon inline" aria-hidden="true"></span>
-            <span class="action-text">${expanded ? 'Hide availability' : 'Availability'}</span>
+            <span class="link-text">${expanded ? 'Hide availability' : 'Availability'}</span>
           </button>
+          ${row.raw == null ? '' : `
+            <button
+              class="link-chip link-button${rawExpanded ? ' active' : ''}"
+              type="button"
+              data-action="toggle-raw"
+              data-rid="${escapeHtml(row.rid)}"
+              aria-expanded="${rawExpanded ? 'true' : 'false'}"
+            >
+              <span class="action-icon inline" aria-hidden="true"></span>
+              <span class="link-text">${rawExpanded ? 'Hide raw JSON' : 'Raw JSON'}</span>
+            </button>
+          `}
+          <a class="link-chip" href="${detailUrl}" target="_blank" rel="noreferrer">
+            <span class="chip-kind json">JSON</span>
+            <span class="link-text">Reservable</span>
+          </a>
         </div>
       </td>
-      <td data-label="API (JSON)">
-        <div class="row-links">
-          <a class="action-item" href="${detailUrl}" target="_blank" rel="noreferrer">
-            <span class="action-text">Reservable</span>
-            <span class="action-icon open" aria-hidden="true"></span>
-          </a>
+    </tr>
+  `;
+}
+
+function rawPanelHtml(row) {
+  const raw = JSON.stringify(row.raw, null, 2);
+  return `
+    <tr class="sub-row raw-row" data-panel-raw-rid="${escapeHtml(row.rid)}">
+      <td colspan="5">
+        <div class="sub-panel">
+          <div class="sub-heading">
+            <strong>Raw JSON</strong>
+            <span class="mono muted">${escapeHtml(row.rid)}</span>
+          </div>
+          <pre>${escapeHtml(raw)}</pre>
         </div>
       </td>
     </tr>
@@ -156,7 +215,7 @@ function availabilityPanelHtml(rid, state) {
   const result = availabilityResultHtml(state);
   return `
     <tr class="availability-row" data-panel-rid="${escapeHtml(rid)}">
-      <td colspan="7">
+      <td colspan="5">
         <div class="availability-panel">
           <form class="availability-controls" data-action="availability-query" data-rid="${escapeHtml(rid)}">
             <label>
@@ -245,6 +304,7 @@ function panelState(rid) {
   if (!availabilityPanels.has(rid)) {
     availabilityPanels.set(rid, {
       expanded: false,
+      rawExpanded: false,
       query: defaultAvailabilityQuery(),
       loading: false,
       error: '',
@@ -258,6 +318,12 @@ function panelState(rid) {
 function toggleAvailability(rid) {
   const state = panelState(rid);
   state.expanded = !state.expanded;
+  renderResults(lastRows);
+}
+
+function toggleRaw(rid) {
+  const state = panelState(rid);
+  state.rawExpanded = !state.rawExpanded;
   renderResults(lastRows);
 }
 
@@ -313,6 +379,10 @@ function dash(value) {
   return `<span${text === '—' ? ' class="muted"' : ''}>${escapeHtml(text)}</span>`;
 }
 
+function reservablePageUrl(row) {
+  return `/reservables?id=${encodeURIComponent(row.rid)}`;
+}
+
 function errorMessage(err) {
   if (err?.status) return `Request failed: HTTP ${err.status}`;
   return err?.message || 'Request failed';
@@ -360,6 +430,12 @@ resultsEl.addEventListener('click', (event) => {
   const toggle = event.target.closest('[data-action="toggle-availability"]');
   if (toggle) {
     toggleAvailability(toggle.dataset.rid || '');
+    return;
+  }
+
+  const raw = event.target.closest('[data-action="toggle-raw"]');
+  if (raw) {
+    toggleRaw(raw.dataset.rid || '');
     return;
   }
 

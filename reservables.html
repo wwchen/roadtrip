@@ -79,6 +79,17 @@
     background: var(--bg-hover);
     text-decoration: none;
   }
+  .nav a.outside-link {
+    gap: 7px;
+  }
+  .nav a.outside-link::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-top: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+    opacity: 0.7;
+  }
   button.primary {
     border-color: rgba(76,185,106,0.55);
     background: #2f7a3a;
@@ -170,18 +181,16 @@
   }
   table {
     width: 100%;
-    min-width: 1020px;
+    min-width: 840px;
     table-layout: fixed;
     border-collapse: collapse;
     font-size: 13px;
   }
-  .col-rid { width: 21%; }
-  .col-name { width: 14%; }
+  .col-rid { width: 25%; }
+  .col-name { width: 16%; }
   .col-loop { width: 12%; }
   .col-site-type { width: 16%; }
-  .col-raw { width: 12%; }
-  .col-page { width: 12%; }
-  .col-api { width: 13%; }
+  .col-links { width: 31%; }
   th,
   td {
     padding: 10px 12px;
@@ -214,31 +223,45 @@
   }
   .row-links {
     display: flex;
-    flex-direction: column;
+    flex-wrap: wrap;
     gap: 6px;
     align-items: flex-start;
   }
-  .action-item {
+  .link-chip {
     display: inline-flex;
     align-items: center;
     gap: 6px;
     max-width: 100%;
-    min-height: 24px;
+    min-height: 26px;
+    padding: 3px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--bg-subtle);
     color: var(--accent);
     font-size: 13px;
     line-height: 1.25;
   }
-  a.action-item:hover {
+  a.link-chip:hover {
+    background: var(--bg-hover);
     text-decoration: none;
   }
-  a.action-item:hover .action-text,
-  button.action-item:hover .action-text {
+  a.link-chip:hover .link-text,
+  button.link-chip:hover .link-text {
     text-decoration: underline;
   }
-  .action-text {
+  .link-text {
     min-width: 0;
     overflow-wrap: anywhere;
   }
+  .chip-kind {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .chip-kind.page { color: #87d99b; }
+  .chip-kind.json { color: #f1c27d; }
   .action-icon {
     position: relative;
     display: inline-block;
@@ -287,23 +310,22 @@
   .link-button {
     height: auto;
     min-height: 0;
-    padding: 0;
-    border: 0;
-    background: transparent;
     color: var(--accent);
   }
   .link-button:hover {
-    background: transparent;
+    background: var(--bg-hover);
     color: var(--accent-hover);
     text-decoration: underline;
   }
   .link-button.active {
     color: var(--accent-hover);
   }
+  .sub-row td,
   .availability-row td {
     padding: 0;
     background: rgba(255,255,255,0.018);
   }
+  .sub-panel,
   .availability-panel {
     display: grid;
     gap: 12px;
@@ -374,6 +396,14 @@
     display: flex;
     justify-content: flex-end;
   }
+  .sub-heading {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .sub-heading strong { color: var(--text); }
   details summary {
     display: inline-flex;
     align-items: center;
@@ -441,6 +471,7 @@
       padding: 10px;
     }
     tbody tr.result-row,
+    tbody tr.sub-row,
     tbody tr.availability-row {
       border: 1px solid var(--border);
       border-radius: 8px;
@@ -452,6 +483,7 @@
       border-bottom-right-radius: 0;
       border-bottom-color: transparent;
     }
+    tbody tr.sub-row,
     tbody tr.availability-row {
       margin-top: -10px;
       border-top: 0;
@@ -486,13 +518,19 @@
       max-width: none;
     }
     .row-links { align-items: flex-start; }
+    .sub-row td,
     .availability-row td {
       display: block;
       border-bottom: 0;
     }
+    .sub-panel,
     .availability-panel {
       border-bottom: 0;
       padding: 12px 10px;
+    }
+    .sub-heading {
+      align-items: flex-start;
+      flex-direction: column;
     }
     .availability-controls { grid-template-columns: 1fr; }
     .status,
@@ -509,10 +547,10 @@
       <div class="sub">Active bookable catalog rows across vendors.</div>
     </div>
     <nav class="nav" aria-label="Page links">
-      <a href="/">Map</a>
+      <a class="outside-link" href="/">Map</a>
       <a href="/pois">POIs</a>
       <a href="/monitors">Monitors</a>
-      <a href="/api/docs">API docs</a>
+      <a class="outside-link" href="/api/docs">API docs</a>
     </nav>
   </header>
 
@@ -546,8 +584,8 @@
         <input name="site_type" placeholder="STANDARD">
       </label>
       <label class="wide">
-        RID
-        <input name="rid" placeholder="site:recgov:330257">
+        ID
+        <input name="id" placeholder="site:recgov:330257">
       </label>
       <label class="wide">
         Raw contains
@@ -581,9 +619,7 @@
           <col class="col-name">
           <col class="col-loop">
           <col class="col-site-type">
-          <col class="col-raw">
-          <col class="col-page">
-          <col class="col-api">
+          <col class="col-links">
         </colgroup>
         <thead>
           <tr>
@@ -591,9 +627,7 @@
             <th>Name</th>
             <th>Loop</th>
             <th>Site Type</th>
-            <th>Raw</th>
-            <th>Page</th>
-            <th>API (JSON)</th>
+            <th>Links</th>
           </tr>
         </thead>
         <tbody id="results"></tbody>
