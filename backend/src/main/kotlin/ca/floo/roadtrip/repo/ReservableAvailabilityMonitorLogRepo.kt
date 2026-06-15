@@ -20,18 +20,12 @@ class ReservableAvailabilityMonitorLogRepo(
     data class AvailabilityPoll(
         val monitorId: Long? = null,
         val reservableRid: String,
-        val provider: String,
         val response: AvailabilityResponseDto,
-        val windowStart: LocalDate,
-        val windowDays: Int,
         val minNights: Int,
-        val force: Boolean,
     )
 
     fun appendAvailabilityPoll(input: AvailabilityPoll): Int {
         require(input.reservableRid.isNotBlank()) { "reservableRid must not be blank" }
-        require(input.provider.isNotBlank()) { "provider must not be blank" }
-        require(input.windowDays > 0) { "windowDays must be positive" }
         require(input.minNights >= 1) { "minNights must be at least 1" }
 
         if (input.response.availability.isEmpty()) return 0
@@ -43,14 +37,9 @@ class ReservableAvailabilityMonitorLogRepo(
                     .insertInto(RESERVABLE_AVAILABILITY_MONITOR_LOG)
                     .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.MONITOR_ID, input.monitorId)
                     .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.RESERVABLE_RID, input.reservableRid)
-                    .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.PROVIDER, input.provider)
                     .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.OBSERVED_AT, observedAt)
                     .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.TARGET_DATE, LocalDate.parse(day.date))
-                    .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.WINDOW_START, input.windowStart)
-                    .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.WINDOW_DAYS, input.windowDays)
                     .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.MIN_NIGHTS, input.minNights)
-                    .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.FORCE, input.force)
-                    .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.CACHE_HIT, input.response.cache.hit)
                     .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.STATUS, day.status)
                     .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.AVAILABLE, day.availableCount > 0)
                     .set(RESERVABLE_AVAILABILITY_MONITOR_LOG.AVAILABLE_COUNT, day.availableCount)
