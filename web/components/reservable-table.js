@@ -11,12 +11,6 @@ export const reservableColumns = [
     `,
   },
   {
-    label: 'POIs',
-    colClass: 'col-pois',
-    className: 'poi-ids mono',
-    render: (row) => poiIdLinks(row),
-  },
-  {
     label: 'Name',
     colClass: 'col-name',
     className: 'name',
@@ -31,6 +25,12 @@ export const reservableColumns = [
     label: 'Site Type',
     colClass: 'col-site-type',
     render: (row) => dash(row.site_type),
+  },
+  {
+    label: 'POIs',
+    colClass: 'col-pois',
+    className: 'poi-ids mono',
+    render: (row) => poiIdLinks(row),
   },
   {
     label: 'Links',
