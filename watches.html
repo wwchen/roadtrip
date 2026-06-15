@@ -118,15 +118,31 @@
     gap: 10px;
     align-items: end;
   }
-  .form-stack { display: grid; gap: 10px; }
+  .form-stack {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    align-items: end;
+  }
+  .form-stack > .full { grid-column: 1 / -1; }
   .form-stack label.checkbox {
+    display: flex;
     flex-direction: row;
     align-items: center;
     gap: 8px;
     text-transform: none;
     font-size: 13px;
+    color: var(--text);
+    font-weight: 500;
   }
-  .form-stack label.checkbox input { width: auto; height: auto; }
+  .form-stack label.checkbox input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+  @media (max-width: 640px) {
+    .form-stack { grid-template-columns: 1fr; }
+  }
   .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
   .data-table th,
   .data-table td {
@@ -227,25 +243,25 @@
       <label>Reservable ID
         <input name="reservable_id" inputmode="numeric" placeholder="leave blank if poi_id set">
       </label>
-      <label>Reservable filters (JSON object)
-        <textarea name="reservable_filters" rows="2">{}</textarea>
-      </label>
-      <label>Target dates (comma-separated YYYY-MM-DD)
+      <label class="full">Target dates (comma-separated YYYY-MM-DD)
         <input name="target_dates" placeholder="2026-07-04, 2026-07-05" required>
       </label>
       <label>Min nights <input name="min_nights" type="number" min="1" value="1"></label>
       <label>Cadence (seconds) <input name="cadence_sec" type="number" min="5" value="60" required></label>
-      <label>Trigger kinds (comma-separated)
+      <label class="full">Trigger kinds (comma-separated)
         <input name="trigger_kinds" value="atc" required>
       </label>
-      <label>Trigger config (JSON)
+      <label class="full">Reservable filters (JSON object)
+        <textarea name="reservable_filters" rows="2">{}</textarea>
+      </label>
+      <label class="full">Trigger config (JSON)
         <textarea name="trigger_config" rows="2">{}</textarea>
       </label>
-      <label class="checkbox">
+      <label class="checkbox full">
         <input name="stop_when_triggered" type="checkbox" checked>
         Stop when triggered
       </label>
-      <div class="actions">
+      <div class="actions full">
         <button class="primary" type="submit">Create</button>
       </div>
     </form>
