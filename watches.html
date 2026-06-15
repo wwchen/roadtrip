@@ -120,12 +120,27 @@
   }
   .form-stack {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 10px;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 10px 20px;
     align-items: end;
-    max-width: 720px;
   }
+  .form-stack > label,
+  .form-stack > .actions { grid-column: span 2; }
   .form-stack > .full { grid-column: 1 / -1; }
+  .form-stack > label.narrow { grid-column: span 1; }
+  .form-stack input,
+  .form-stack select,
+  .form-stack textarea {
+    max-width: 480px;
+  }
+  .form-stack > .full input,
+  .form-stack > .full textarea {
+    max-width: none;
+  }
+  .filters input,
+  .filters select {
+    max-width: 360px;
+  }
   .form-stack label.checkbox {
     display: flex;
     flex-direction: row;
@@ -247,8 +262,8 @@
       <label class="full">Target dates (comma-separated YYYY-MM-DD)
         <input name="target_dates" placeholder="2026-07-04, 2026-07-05" required>
       </label>
-      <label>Min nights <input name="min_nights" type="number" min="1" value="1"></label>
-      <label>Cadence (seconds) <input name="cadence_sec" type="number" min="5" value="60" required></label>
+      <label class="narrow">Min nights <input name="min_nights" type="number" min="1" value="1"></label>
+      <label class="narrow">Cadence (seconds) <input name="cadence_sec" type="number" min="5" value="60" required></label>
       <label class="full">Trigger kinds (comma-separated)
         <input name="trigger_kinds" value="atc" required>
       </label>
