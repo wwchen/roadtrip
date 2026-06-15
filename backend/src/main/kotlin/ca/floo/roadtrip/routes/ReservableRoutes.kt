@@ -94,12 +94,15 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
             }
 
+        val rows = reservables.search(filters, limit, offset)
+        val poiIdsByReservable = reservables.poiIdsForReservables(rows.map { it.id })
+
         call.respondReservableJson(
             ReservablesResponseSchema(
                 total = reservables.countSearch(filters),
                 limit = limit,
                 offset = offset,
-                reservables = reservables.search(filters, limit, offset).map { it.toSchema() },
+                reservables = rows.map { it.toSchema(poiIdsByReservable[it.id].orEmpty()) },
             ),
         )
     }
@@ -154,10 +157,12 @@ fun Route.reservableRoutes(ctx: DSLContext) {
             reservables.findByRid(rid)
                 ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
 
+        val poiIds = reservables.poiIdsForReservable(row.id)
+
         call.respondReservableJson(
             ReservableDetailResponseSchema(
-                reservable = row.toSchema(),
-                poiIds = reservables.poiIdsForReservable(row.id),
+                reservable = row.toSchema(poiIds),
+                poiIds = poiIds,
             ),
         )
     }
@@ -284,7 +289,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 poiId = poiId,
                 type = type.encode(),
                 totalAtPoi = reservables.countByPoi(poiId, type),
-                reservables = rows.map { it.toSchema() },
+                reservables = rows.map { it.toSchema(listOf(poiId)) },
             ),
         )
     }
@@ -349,7 +354,7 @@ private fun ApplicationCall.queryValues(vararg names: String): List<String> =
         .filter { it.isNotEmpty() }
         .distinct()
 
-private fun Reservable.toSchema(): ReservableSchema =
+private fun Reservable.toSchema(poiIds: List<Long> = emptyList()): ReservableSchema =
     ReservableSchema(
         rid = rid.encode(),
         type = rid.type.encode(),
@@ -358,6 +363,7 @@ private fun Reservable.toSchema(): ReservableSchema =
         name = name,
         loop = loop,
         siteType = siteType,
+        poiIds = poiIds,
         raw = raw,
     )
 

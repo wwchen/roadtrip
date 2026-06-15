@@ -13,6 +13,7 @@ data class ReservableSchema(
     val name: String? = null,
     val loop: String? = null,
     @SerialName("site_type") val siteType: String? = null,
+    @SerialName("poi_ids") val poiIds: List<Long> = emptyList(),
     val raw: JsonElement? = null,
 )
 

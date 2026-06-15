@@ -115,6 +115,7 @@ class ReservableRoutesTest {
             assertEquals("STANDARD", reservable["site_type"]!!.jsonPrimitive.content)
             assertEquals("330257", reservable["raw"]!!.jsonObject["campsite_id"]!!.jsonPrimitive.content)
             assertEquals(listOf(poiId.toString()), body["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(listOf(poiId.toString()), reservable["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
         }
 
     @Test
@@ -142,7 +143,8 @@ class ReservableRoutesTest {
     @Test
     fun `reservables search ORs within fields and ANDs across fields`() =
         testApplication {
-            seedReservable(vendorId = "330257", name = "A12", loop = "Loop A")
+            val poiId = seedPoi("upper-pines", "Upper Pines Campground")
+            val linkedReservable = seedReservable(vendorId = "330257", name = "A12", loop = "Loop A")
             seedReservable(vendorId = "330258", name = "B03", loop = "Loop B")
             seedReservable(
                 vendor = "aspira_pc",
@@ -152,6 +154,7 @@ class ReservableRoutesTest {
                 loop = "Loop A",
                 raw = """{"host":"reservation.pc.gc.ca","map_id":101}""",
             )
+            link(linkedReservable, poiId)
             application { routing { reservableRoutes(ctx) } }
 
             val resp = client.get("/api/reservables?type=site&vendor=recgov&vendor_id=330257,330258")
@@ -166,6 +169,12 @@ class ReservableRoutesTest {
                     .map { it.jsonObject["rid"]!!.jsonPrimitive.content }
                     .toSet()
             assertEquals(setOf("site:recgov:330257", "site:recgov:330258"), rids)
+            val linkedRow =
+                body["reservables"]!!
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it["rid"]!!.jsonPrimitive.content == "site:recgov:330257" }
+            assertEquals(listOf(poiId.toString()), linkedRow["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
 
             val paged = client.get("/api/reservables?vendor=recgov,aspira_pc&name=A12&limit=1&offset=1")
             assertEquals(HttpStatusCode.OK, paged.status)
@@ -278,6 +287,12 @@ class ReservableRoutesTest {
                     .map { it.jsonObject["rid"]!!.jsonPrimitive.content }
                     .toSet()
             assertEquals(setOf("site:recgov:330257", "site:recgov:330258"), rids)
+            body["reservables"]!!
+                .jsonArray
+                .map { it.jsonObject }
+                .forEach { row ->
+                    assertEquals(listOf(poiId.toString()), row["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+                }
         }
 
     @Test

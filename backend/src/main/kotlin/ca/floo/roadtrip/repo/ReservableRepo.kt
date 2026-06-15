@@ -219,6 +219,21 @@ class ReservableRepo(
             .orderBy(RESERVABLE_POIS.POI_ID.asc())
             .fetch { it.value1()!! }
 
+    /** Active POI ids linked to many reservables, grouped by reservables.id. */
+    fun poiIdsForReservables(reservableIds: Collection<Long>): Map<Long, List<Long>> {
+        if (reservableIds.isEmpty()) return emptyMap()
+        return ctx
+            .select(RESERVABLE_POIS.RESERVABLE_ID, RESERVABLE_POIS.POI_ID)
+            .from(RESERVABLE_POIS)
+            .join(POIS)
+            .on(POIS.ID.eq(RESERVABLE_POIS.POI_ID))
+            .where(RESERVABLE_POIS.RESERVABLE_ID.`in`(reservableIds))
+            .and(POIS.DELETED_AT.isNull)
+            .orderBy(RESERVABLE_POIS.RESERVABLE_ID.asc(), RESERVABLE_POIS.POI_ID.asc())
+            .fetch()
+            .groupBy({ it.value1()!! }, { it.value2()!! })
+    }
+
     /**
      * Link a reservable to a POI. Idempotent — re-running with the same
      * pair is a no-op. The N:M shape supports park-POI parents in future

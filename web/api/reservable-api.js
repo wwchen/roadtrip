@@ -1,13 +1,13 @@
 // Reservable catalog API client (RFC 0008). Two endpoints:
 //
 //   GET /api/poi/{id}/reservables[?type=site]
-//     → { poi_id, type, total_at_poi, reservables: [{rid, name, loop, …}, …] }
+//     → { poi_id, type, total_at_poi, reservables: [{rid, poi_ids, name, loop, …}, …] }
 //
 //   GET /api/reservable/{rid}
-//     → { reservable: {rid, name, loop, raw, …}, poi_ids: [123, 456] }
+//     → { reservable: {rid, poi_ids, name, loop, raw, …}, poi_ids: [123, 456] }
 //
 //   GET /api/reservables
-//     → { total, limit, offset, reservables: [{rid, name, loop, …}, …] }
+//     → { total, limit, offset, reservables: [{rid, poi_ids, name, loop, …}, …] }
 //
 //   GET /api/reservables/availability/monitors
 //     → { monitors: [{ id, reservable, cadence, trigger_action, … }, …] }
@@ -21,7 +21,7 @@
 import { jsonGetOk } from './http.js';
 
 /**
- * Search active reservables across ReservableSchema fields.
+ * Search active reservables across supported catalog fields.
  *
  * Each populated field is passed through to /api/reservables; the backend
  * ORs repeated/comma-separated values within a field and ANDs across fields.

@@ -94,7 +94,7 @@ async function runIdLookup(id) {
     const body = await fetchReservable(id, { signal: activeAbort.signal });
     total = 1;
     offset = 0;
-    renderResults([body.reservable]);
+    renderResults([{ ...(body.reservable || {}), poi_ids: body.reservable?.poi_ids || body.poi_ids || [] }]);
     setStatus('<strong>1</strong> match');
   } catch (err) {
     if (err.name === 'AbortError') return;

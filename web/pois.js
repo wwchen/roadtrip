@@ -182,7 +182,11 @@ async function toggleReservables(poiId) {
   renderResults(lastRows);
   try {
     const body = await fetchPoiReservables(poiId, { type: 'site', signal: state.abort.signal });
-    state.rows = body.reservables || [];
+    const linkedPoiIds = [body.poi_id ?? poiId].map((id) => String(id || '').trim()).filter(Boolean);
+    state.rows = (body.reservables || []).map((row) => ({
+      ...row,
+      poi_ids: Array.isArray(row.poi_ids) && row.poi_ids.length > 0 ? row.poi_ids : linkedPoiIds,
+    }));
     state.totalAtPoi = body.total_at_poi ?? state.rows.length;
   } catch (err) {
     if (err.name === 'AbortError') return;

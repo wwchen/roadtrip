@@ -11,15 +11,10 @@ export const reservableColumns = [
     `,
   },
   {
-    label: 'Vendor',
-    colClass: 'col-vendor',
-    className: 'mono',
-    render: (row) => dash(row.vendor),
-  },
-  {
-    label: 'Type',
-    colClass: 'col-type',
-    render: (row) => dash(row.type),
+    label: 'POIs',
+    colClass: 'col-pois',
+    className: 'poi-ids mono',
+    render: (row) => poiIdLinks(row),
   },
   {
     label: 'Name',
@@ -140,6 +135,17 @@ export function reservableAvailabilityJsonUrl(rid, { days = 7, start = utcYmd(ne
     min_nights: String(minNights),
   });
   return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
+}
+
+function poiIdLinks(row) {
+  const ids = Array.isArray(row.poi_ids) ? row.poi_ids : (Array.isArray(row.poiIds) ? row.poiIds : []);
+  const filtered = ids.map((id) => String(id || '').trim()).filter(Boolean);
+  if (filtered.length === 0) return dash(null);
+  return `
+    <div class="poi-id-list">
+      ${filtered.map((id) => `<a href="/pois?id=${encodeURIComponent(id)}">${escapeHtml(id)}</a>`).join('')}
+    </div>
+  `;
 }
 
 function columnsWithLinks(linksForRow) {
