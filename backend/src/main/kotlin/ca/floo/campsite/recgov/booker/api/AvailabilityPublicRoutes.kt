@@ -127,7 +127,15 @@ internal suspend fun fetchAndClassifyRecgovReservable(
         val oneSite = merged[campsiteId]?.let { mapOf(campsiteId to it) } ?: emptyMap()
 
         val dates = (0 until days).map { today.plusDays(it.toLong()).toString() }
-        val perDay = dates.map { date -> classifyDay(oneSite, date, minNights.coerceAtLeast(1)) }
+        val perDay =
+            dates.map { date ->
+                classifyDay(
+                    oneSite,
+                    date,
+                    minNights.coerceAtLeast(1),
+                    partialOnOpenTooShort = false,
+                )
+            }
 
         val state = classifyWindowState(perDay)
         val summary = summarizeWindow(days, perDay, state)
@@ -210,12 +218,15 @@ private fun mergeCampsites(maps: List<Map<String, Campsite>>): Map<String, Map<S
  * and "fully booked." A site missing from the upstream feed for the arrival
  * date doesn't contribute to either tally; one with a non-Closed status on
  * the arrival but missing data on a trailing night is surfaced as `partial`
- * when no site can satisfy the requested stay length.
+ * when no site can satisfy the requested stay length. Single-reservable
+ * callers pass [partialOnOpenTooShort] false because their endpoint answers
+ * whether that one reservable is bookable for the requested stay.
  */
 private fun classifyDay(
     merged: Map<String, Map<String, String>>,
     date: String,
     minNights: Int,
+    partialOnOpenTooShort: Boolean = true,
 ): DayClassification {
     val arrivalDate = LocalDate.parse(date)
     val window = (0 until minNights).map { arrivalDate.plusDays(it.toLong()).toString() }
@@ -247,7 +258,7 @@ private fun classifyDay(
             total == 0 -> "closed"
             closed == total -> "closed"
             availForStay > 0 -> "available"
-            openButTooShort > 0 -> "partial"
+            partialOnOpenTooShort && openButTooShort > 0 -> "partial"
             else -> "booked"
         }
     return DayClassification(date, status, availForStay, total, availableReservableIds.sorted())
