@@ -116,13 +116,7 @@ export function defaultAvailabilityQuery() {
 }
 
 function reservableAvailabilityUrl(rid, query) {
-  const params = new URLSearchParams({
-    days: String(query.days || 7),
-    start: query.start || utcYmd(new Date()),
-    min_nights: String(query.minNights || 1),
-  });
-  if (query.force) params.set('force', 'true');
-  return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
+  return 'POST /api/reservables/availability/query';
 }
 
 function dayRowHtml(rid, day, state) {
