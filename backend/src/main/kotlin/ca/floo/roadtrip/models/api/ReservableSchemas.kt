@@ -43,7 +43,7 @@ data class PoiReservablesResponseSchema(
 @Serializable
 data class ReservableAvailabilityMonitorCreateRequestSchema(
     val cadence: Int,
-    @SerialName("trigger_action") val triggerAction: JsonArray,
+    @SerialName("trigger_actions") val triggerActions: JsonArray,
     @SerialName("stop_when_triggered") val stopWhenTriggered: Boolean = true,
 )
 
@@ -52,7 +52,7 @@ data class ReservableAvailabilityMonitorSchema(
     val id: Long,
     val reservable: ReservableSchema,
     val cadence: Int,
-    @SerialName("trigger_action") val triggerAction: JsonArray,
+    @SerialName("trigger_actions") val triggerActions: JsonArray,
     @SerialName("stop_when_triggered") val stopWhenTriggered: Boolean,
     val status: String,
     @SerialName("last_checked_at") val lastCheckedAt: String? = null,

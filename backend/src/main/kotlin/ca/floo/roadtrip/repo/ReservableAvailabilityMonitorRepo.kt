@@ -20,7 +20,7 @@ class ReservableAvailabilityMonitorRepo(
 
     data class CreateInput(
         val cadenceSec: Int,
-        val triggerAction: JsonArray,
+        val triggerActions: JsonArray,
         val stopWhenTriggered: Boolean,
     )
 
@@ -28,7 +28,7 @@ class ReservableAvailabilityMonitorRepo(
         val id: Long,
         val reservable: Reservable,
         val cadenceSec: Int,
-        val triggerAction: JsonArray,
+        val triggerActions: JsonArray,
         val stopWhenTriggered: Boolean,
         val status: String,
         val lastCheckedAt: OffsetDateTime?,
@@ -46,7 +46,7 @@ class ReservableAvailabilityMonitorRepo(
                 .insertInto(RESERVABLE_AVAILABILITY_MONITORS)
                 .set(RESERVABLE_AVAILABILITY_MONITORS.RESERVABLE_ID, reservableId)
                 .set(RESERVABLE_AVAILABILITY_MONITORS.CADENCE_SEC, input.cadenceSec)
-                .set(RESERVABLE_AVAILABILITY_MONITORS.TRIGGER_ACTION, JSONB.valueOf(json.encodeToString(input.triggerAction)))
+                .set(RESERVABLE_AVAILABILITY_MONITORS.TRIGGER_ACTIONS, JSONB.valueOf(json.encodeToString(input.triggerActions)))
                 .set(RESERVABLE_AVAILABILITY_MONITORS.STOP_WHEN_TRIGGERED, input.stopWhenTriggered)
                 .returningResult(RESERVABLE_AVAILABILITY_MONITORS.ID)
                 .fetchOne()!!
@@ -80,7 +80,7 @@ class ReservableAvailabilityMonitorRepo(
             id = r.get(RESERVABLE_AVAILABILITY_MONITORS.ID)!!,
             reservable = reservables.fromRecord(r),
             cadenceSec = r.get(RESERVABLE_AVAILABILITY_MONITORS.CADENCE_SEC)!!,
-            triggerAction = json.parseToJsonElement(r.get(RESERVABLE_AVAILABILITY_MONITORS.TRIGGER_ACTION)!!.data()).jsonArray,
+            triggerActions = json.parseToJsonElement(r.get(RESERVABLE_AVAILABILITY_MONITORS.TRIGGER_ACTIONS)!!.data()).jsonArray,
             stopWhenTriggered = r.get(RESERVABLE_AVAILABILITY_MONITORS.STOP_WHEN_TRIGGERED)!!,
             status = r.get(RESERVABLE_AVAILABILITY_MONITORS.STATUS)!!,
             lastCheckedAt = r.get(RESERVABLE_AVAILABILITY_MONITORS.LAST_CHECKED_AT),
