@@ -66,7 +66,7 @@ export function poiReservablesRowHtml(row, state, { contentHtml = '' } = {}) {
                 expanded,
               })}
             </div>
-            <a class="mono muted" href="${escapeHtml(poiReservablesJsonUrl(id))}" target="_blank" rel="noreferrer">${escapeHtml(poiReservablesJsonUrl(id))}</a>
+            <a class="mono" href="${escapeHtml(poiReservablesJsonUrl(id))}" target="_blank" rel="noreferrer">${escapeHtml(poiReservablesJsonUrl(id))}</a>
           </div>
           ${expanded ? contentHtml : ''}
         </div>
