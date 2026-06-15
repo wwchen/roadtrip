@@ -1,8 +1,9 @@
 import { fetchPoiDetail, poiSearchUrl, searchPoiCatalog } from './api/poi-api.js';
 import { fetchPoiReservables } from './api/reservable-api.js';
+import { createAvailabilityPanels } from './availability-controller.js';
 import { mountPoiQuery } from './poi-query.js';
 import { poiReservablesRowHtml, poiRowHtml, poiTableHtml } from './poi-table.js';
-import { reservableDetailLink, reservableTableHtml } from './reservable-table.js';
+import { reservableDetailLink, reservableRowGroupRenderer, reservableTableHtml } from './reservable-table.js';
 import { escapeHtml } from './table-view.js';
 
 const query = mountPoiQuery(document.getElementById('poi-query'), {
@@ -17,6 +18,9 @@ const queryUrlEl = document.getElementById('query-url');
 let activeAbort = null;
 let lastRows = [];
 const poiReservables = new Map();
+const availabilityPanels = createAvailabilityPanels({
+  render: () => renderResults(lastRows),
+});
 
 function syncUrl(params) {
   const qs = new URLSearchParams();
@@ -142,7 +146,13 @@ function reservablesContentHtml(state) {
   if (state.error) return `<div class="error">${escapeHtml(state.error)}</div>`;
   if (!Array.isArray(state.rows)) return '<div class="muted">Open this panel to load linked reservables.</div>';
   if (state.rows.length === 0) return '<div class="muted">No reservables linked to this POI.</div>';
-  return reservableTableHtml(state.rows, { linksForRow: reservableDetailLink });
+  return reservableTableHtml(state.rows, {
+    linksForRow: reservableDetailLink,
+    rowRenderer: reservableRowGroupRenderer({
+      stateForRow: availabilityPanels.stateForRow,
+      linksForRow: reservableDetailLink,
+    }),
+  });
 }
 
 function panelState(poiId) {
@@ -194,9 +204,23 @@ function formatNumber(value) {
 }
 
 resultsEl.addEventListener('click', (event) => {
-  const toggle = event.target.closest('[data-action="toggle-reservables"]');
-  if (!toggle) return;
-  toggleReservables(toggle.dataset.poiId || '');
+  const reservables = event.target.closest('[data-action="toggle-reservables"]');
+  if (reservables) {
+    toggleReservables(reservables.dataset.poiId || '');
+    return;
+  }
+
+  const availability = event.target.closest('[data-action="toggle-availability"]');
+  if (availability) {
+    availabilityPanels.toggleAvailability(availability.dataset.rid || '');
+  }
+});
+
+resultsEl.addEventListener('submit', (event) => {
+  const queryForm = event.target.closest('[data-action="availability-query"]');
+  if (!queryForm) return;
+  event.preventDefault();
+  availabilityPanels.queryAvailability(queryForm.dataset.rid || '', queryForm);
 });
 
 query.applyParamsFromUrl();

@@ -57,11 +57,6 @@ export function poiRowHtml(row, { expanded = false } = {}) {
 export function poiReservablesRowHtml(row, state, { contentHtml = '' } = {}) {
   const id = String(row.id);
   const expanded = !!state?.expanded;
-  const loaded = Array.isArray(state?.rows);
-  const count = loaded ? state.totalAtPoi : null;
-  const title = loaded
-    ? `<strong>${formatNumber(count)} reservables</strong> linked to this POI`
-    : '<span class="muted">Reservables linked to this POI</span>';
   return `
     <tr class="reservables-row${expanded ? ' is-expanded' : ''}" data-panel-poi-id="${escapeHtml(id)}">
       <td colspan="${poiColumns.length}">
@@ -75,7 +70,6 @@ export function poiReservablesRowHtml(row, state, { contentHtml = '' } = {}) {
                 label: 'Reservables',
                 expanded,
               })}
-              ${title}
             </div>
             <div class="mono muted">/api/poi/${escapeHtml(id)}/reservables</div>
           </div>
@@ -118,8 +112,4 @@ function formatCoords(lng, lat) {
   const y = Number(lat);
   if (!Number.isFinite(x) || !Number.isFinite(y)) return '-';
   return `${y.toFixed(5)}, ${x.toFixed(5)}`;
-}
-
-function formatNumber(value) {
-  return Number(value || 0).toLocaleString();
 }

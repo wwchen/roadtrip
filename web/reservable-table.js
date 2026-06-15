@@ -1,3 +1,4 @@
+import { availabilityPanelHtml } from './availability-components.js';
 import { dash, escapeHtml, linkChip, links, renderRow, renderTable } from './table-view.js';
 
 export const reservableColumns = [
@@ -39,6 +40,35 @@ export function reservableRowHtml(row, { linksHtml = defaultReservableLinks(row)
     row,
     { className },
   );
+}
+
+export function reservableRowGroupHtml(
+  row,
+  {
+    state = null,
+    linksHtml = reservableDetailLink(row),
+    includeAvailability = true,
+  } = {},
+) {
+  return [
+    reservableRowHtml(row, {
+      className: 'result-row has-subrow',
+      linksHtml,
+    }),
+    includeAvailability ? availabilityPanelHtml(row.rid, state, { colspan: reservableColumns.length }) : '',
+  ].join('');
+}
+
+export function reservableRowGroupRenderer({
+  stateForRow = () => null,
+  linksForRow = reservableDetailLink,
+  includeAvailability = true,
+} = {}) {
+  return (row) => reservableRowGroupHtml(row, {
+    state: stateForRow(row),
+    linksHtml: linksForRow(row),
+    includeAvailability,
+  });
 }
 
 export function reservableTableHtml(

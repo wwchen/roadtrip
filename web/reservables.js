@@ -1,16 +1,7 @@
-import {
-  fetchReservableAvailability,
-  fetchReservable,
-  searchReservables,
-} from './api/reservable-api.js';
-import {
-  availabilityPanelHtml,
-  availabilityQueryFromForm,
-  defaultAvailabilityQuery,
-  rawPanelHtml,
-} from './availability-components.js';
+import { fetchReservable, searchReservables } from './api/reservable-api.js';
+import { createAvailabilityPanels } from './availability-controller.js';
 import { mountReservableQuery } from './reservable-query.js';
-import { reservableDetailLink, reservableRowHtml, reservableTableHtml } from './reservable-table.js';
+import { reservableDetailLink, reservableRowGroupRenderer, reservableTableHtml } from './reservable-table.js';
 import { escapeHtml } from './table-view.js';
 
 const resultsEl = document.getElementById('results');
@@ -24,7 +15,9 @@ let offset = 0;
 let total = 0;
 let activeAbort = null;
 let lastRows = [];
-const availabilityPanels = new Map();
+const availabilityPanels = createAvailabilityPanels({
+  render: () => renderResults(lastRows),
+});
 
 const query = mountReservableQuery(document.getElementById('reservable-query'), {
   onSubmit: () => {
@@ -118,71 +111,11 @@ function renderResults(rows) {
   emptyEl.hidden = rows.length !== 0;
   resultsEl.innerHTML = reservableTableHtml(rows, {
     linksForRow: reservableDetailLink,
-    rowRenderer: reservableRowGroupHtml,
-  });
-}
-
-function reservableRowGroupHtml(row) {
-  const state = availabilityPanels.get(row.rid);
-  return [
-    reservableRowHtml(row, {
-      className: 'result-row has-subrow',
-      linksHtml: reservableDetailLink(row),
+    rowRenderer: reservableRowGroupRenderer({
+      stateForRow: availabilityPanels.stateForRow,
+      linksForRow: reservableDetailLink,
     }),
-    row.raw == null ? '' : rawPanelHtml(row, state),
-    availabilityPanelHtml(row.rid, state),
-  ].join('');
-}
-
-function panelState(rid) {
-  if (!availabilityPanels.has(rid)) {
-    availabilityPanels.set(rid, {
-      expanded: false,
-      rawExpanded: false,
-      query: defaultAvailabilityQuery(),
-      loading: false,
-      error: '',
-      data: null,
-      abort: null,
-    });
-  }
-  return availabilityPanels.get(rid);
-}
-
-function toggleAvailability(rid) {
-  const state = panelState(rid);
-  state.expanded = !state.expanded;
-  renderResults(lastRows);
-}
-
-function toggleRaw(rid) {
-  const state = panelState(rid);
-  state.rawExpanded = !state.rawExpanded;
-  renderResults(lastRows);
-}
-
-async function queryAvailability(rid, formEl) {
-  const state = panelState(rid);
-  state.abort?.abort();
-  state.abort = new AbortController();
-  state.query = availabilityQueryFromForm(formEl);
-  state.loading = true;
-  state.error = '';
-  state.data = null;
-  renderResults(lastRows);
-
-  try {
-    state.data = await fetchReservableAvailability(rid, {
-      ...state.query,
-      signal: state.abort.signal,
-    });
-  } catch (err) {
-    if (err.name === 'AbortError') return;
-    state.error = errorMessage(err);
-  } finally {
-    state.loading = false;
-    renderResults(lastRows);
-  }
+  });
 }
 
 function errorMessage(err) {
@@ -208,13 +141,7 @@ nextBtn.addEventListener('click', () => {
 resultsEl.addEventListener('click', (event) => {
   const toggle = event.target.closest('[data-action="toggle-availability"]');
   if (toggle) {
-    toggleAvailability(toggle.dataset.rid || '');
-    return;
-  }
-
-  const raw = event.target.closest('[data-action="toggle-raw"]');
-  if (raw) {
-    toggleRaw(raw.dataset.rid || '');
+    availabilityPanels.toggleAvailability(toggle.dataset.rid || '');
   }
 });
 
@@ -222,7 +149,7 @@ resultsEl.addEventListener('submit', (event) => {
   const queryForm = event.target.closest('[data-action="availability-query"]');
   if (!queryForm) return;
   event.preventDefault();
-  queryAvailability(queryForm.dataset.rid || '', queryForm);
+  availabilityPanels.queryAvailability(queryForm.dataset.rid || '', queryForm);
 });
 
 query.applyParamsFromUrl();

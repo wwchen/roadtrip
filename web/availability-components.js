@@ -1,32 +1,5 @@
 import { escapeHtml, expanderButton } from './table-view.js';
 
-export function rawPanelHtml(row, state, { colspan = 5 } = {}) {
-  const raw = JSON.stringify(row.raw, null, 2);
-  const expanded = !!state?.rawExpanded;
-  return `
-    <tr class="sub-row raw-row${expanded ? ' is-expanded' : ''}" data-panel-raw-rid="${escapeHtml(row.rid)}">
-      <td colspan="${colspan}">
-        <div class="sub-panel">
-          <div class="sub-heading">
-            <div class="sub-title">
-              ${expanderButton({
-                action: 'toggle-raw',
-                idName: 'rid',
-                id: row.rid,
-                label: 'Raw JSON',
-                expanded,
-              })}
-              <span class="muted">Source payload</span>
-            </div>
-            <span class="mono muted">${escapeHtml(row.rid)}</span>
-          </div>
-          ${expanded ? `<pre>${escapeHtml(raw)}</pre>` : ''}
-        </div>
-      </td>
-    </tr>
-  `;
-}
-
 export function availabilityPanelHtml(rid, state, { colspan = 5 } = {}) {
   const expanded = !!state?.expanded;
   const query = state?.query || defaultAvailabilityQuery();
