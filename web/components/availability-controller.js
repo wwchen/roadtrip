@@ -3,7 +3,7 @@ import {
   fetchReservableAvailability,
 } from '../api/reservable-api.js';
 import {
-  availabilityPollerFromForm,
+  availabilityPollerFromQuery,
   availabilityQueryFromForm,
   defaultAvailabilityQuery,
 } from './availability-panel.js';
@@ -19,11 +19,8 @@ export function createAvailabilityPanels({ render }) {
         loading: false,
         error: '',
         data: null,
-        poller: null,
-        pollerError: '',
-        pollerLoading: false,
+        pollersByDate: Object.create(null),
         abort: null,
-        pollerAbort: null,
       });
     }
     return panels.get(rid);
@@ -47,6 +44,7 @@ export function createAvailabilityPanels({ render }) {
     state.loading = true;
     state.error = '';
     state.data = null;
+    state.pollersByDate = Object.create(null);
     render();
 
     try {
@@ -63,26 +61,30 @@ export function createAvailabilityPanels({ render }) {
     }
   }
 
-  async function createPoller(rid, formEl) {
+  async function createPoller(rid, targetDate) {
     const state = stateForRid(rid);
-    state.pollerAbort?.abort();
-    state.pollerAbort = new AbortController();
-    state.pollerLoading = true;
-    state.pollerError = '';
-    state.poller = null;
+    const date = String(targetDate || '').trim();
+    if (!date) return;
+    const dateState = state.pollersByDate[date] || {};
+    dateState.abort?.abort();
+    dateState.abort = new AbortController();
+    dateState.loading = true;
+    dateState.error = '';
+    dateState.poller = null;
+    state.pollersByDate[date] = dateState;
     render();
 
     try {
-      state.poller = await createReservableAvailabilityPollerForRid(
+      dateState.poller = await createReservableAvailabilityPollerForRid(
         rid,
-        availabilityPollerFromForm(formEl),
-        { signal: state.pollerAbort.signal },
+        availabilityPollerFromQuery(state.query, date),
+        { signal: dateState.abort.signal },
       );
     } catch (err) {
       if (err.name === 'AbortError') return;
-      state.pollerError = errorMessage(err);
+      dateState.error = errorMessage(err);
     } finally {
-      state.pollerLoading = false;
+      dateState.loading = false;
       render();
     }
   }
