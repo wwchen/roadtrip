@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#26272d">
+<title>Reservable Monitors</title>
+<style>
+  :root {
+    --surface: #26272d;
+    --bg: #1c1d21;
+    --bg-subtle: rgba(255,255,255,0.04);
+    --bg-hover: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --text: #e6e8eb;
+    --muted: #8a8f96;
+    --faint: #5a6068;
+    --accent: #4cb96a;
+    --error: #f56565;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body { padding: 20px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  button {
+    border: 1px solid var(--border-strong);
+    background: var(--bg-subtle);
+    color: var(--text);
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 12px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  button:hover { background: var(--bg-hover); }
+  button:disabled { opacity: 0.55; cursor: default; }
+  .shell {
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 650;
+  }
+  .sub {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 10px 16px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .nav-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .nav-group + .nav-group {
+    padding-left: 14px;
+    border-left: 1px solid var(--border-strong);
+  }
+  .nav a {
+    border: 1px solid var(--border-strong);
+    background: var(--bg-subtle);
+    color: var(--text);
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 12px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav a:hover {
+    background: var(--bg-hover);
+    text-decoration: none;
+  }
+  .nav a[aria-current="page"] {
+    border-color: rgba(76,185,106,0.45);
+    background: rgba(76,185,106,0.12);
+    color: #87d99b;
+  }
+  .nav a.outside-link {
+    gap: 7px;
+  }
+  .nav a.outside-link::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-top: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+    opacity: 0.7;
+  }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+  }
+  .toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .status {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .status strong { color: var(--text); font-weight: 650; }
+  .error { color: var(--error); font-weight: 600; }
+  .table-wrap {
+    width: 100%;
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th,
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  tbody tr:hover { background: rgba(255,255,255,0.025); }
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+  }
+  .muted { color: var(--muted); }
+  .rid {
+    max-width: 340px;
+    overflow-wrap: anywhere;
+  }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    min-height: 22px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid var(--border-strong);
+    background: var(--bg-subtle);
+    font-size: 12px;
+    color: var(--text);
+  }
+  .pill.active {
+    border-color: rgba(76,185,106,0.45);
+    background: rgba(76,185,106,0.12);
+    color: #87d99b;
+  }
+  .pill.paused { color: #f1c27d; }
+  .pill.done { color: var(--muted); }
+  .links {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .link-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-height: 26px;
+    padding: 3px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--accent);
+    font-size: 13px;
+    line-height: 1.25;
+  }
+  a.link-chip:hover {
+    background: var(--bg-hover);
+    text-decoration: none;
+  }
+  a.link-chip:hover .link-text {
+    text-decoration: underline;
+  }
+  .link-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .chip-kind {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .chip-kind.json {
+    color: #f1c27d;
+  }
+  .empty {
+    padding: 34px 14px;
+    color: var(--muted);
+    text-align: center;
+  }
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .top,
+    .toolbar {
+      align-items: flex-start;
+      flex-direction: column;
+    }
+    .nav { justify-content: flex-start; }
+    .nav-group + .nav-group {
+      width: 100%;
+      padding-left: 0;
+      padding-top: 8px;
+      border-left: 0;
+      border-top: 1px solid var(--border-strong);
+    }
+    th,
+    td { padding: 9px; }
+  }
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div>
+      <h1>Reservable Monitors</h1>
+      <div class="sub">Availability monitor registrations.</div>
+    </div>
+    <nav class="nav" aria-label="Page links">
+      <div class="nav-group" aria-label="Catalog pages">
+        <a href="/pois">POIs</a>
+        <a href="/reservables">Reservables</a>
+        <a href="/monitors" aria-current="page">Monitors</a>
+      </div>
+      <div class="nav-group" aria-label="Outside links">
+        <a class="outside-link" href="/">Map</a>
+        <a class="outside-link" href="/api/docs">API docs</a>
+      </div>
+    </nav>
+  </header>
+
+  <section class="panel" aria-live="polite">
+    <div class="toolbar">
+      <div id="status" class="status">Loading...</div>
+      <button id="refresh-btn" type="button">Refresh</button>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>ID</th>
+            <th>Reservable</th>
+            <th>Cadence</th>
+            <th>Action</th>
+            <th>Stop</th>
+            <th>Status</th>
+            <th>Last Checked</th>
+            <th>Last Triggered</th>
+            <th>Created</th>
+            <th>Links</th>
+          </tr>
+        </thead>
+        <tbody id="monitors"></tbody>
+      </table>
+      <div id="empty" class="empty" hidden>No monitors.</div>
+    </div>
+  </section>
+</main>
+<script type="module" src="/web/monitors.js"></script>
+</body>
+</html>

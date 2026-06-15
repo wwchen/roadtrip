@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#26272d">
+<title>Reservables</title>
+<style>
+  :root {
+    --surface: #26272d;
+    --bg: #1c1d21;
+    --bg-subtle: rgba(255,255,255,0.04);
+    --bg-hover: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --text: #e6e8eb;
+    --muted: #8a8f96;
+    --faint: #5a6068;
+    --accent: #4cb96a;
+    --accent-hover: #62cc7d;
+    --error: #f56565;
+    --catalog-table-min-width: 840px;
+    --catalog-table-layout: fixed;
+    --result-label-width: 86px;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body { padding: 20px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .shell {
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 650;
+  }
+  .sub {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 10px 16px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .nav-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .nav-group + .nav-group {
+    padding-left: 14px;
+    border-left: 1px solid var(--border-strong);
+  }
+  .nav a,
+  button {
+    border: 1px solid var(--border-strong);
+    background: var(--bg-subtle);
+    color: var(--text);
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 12px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav a:hover,
+  button:hover {
+    background: var(--bg-hover);
+    text-decoration: none;
+  }
+  .nav a[aria-current="page"] {
+    border-color: rgba(76,185,106,0.45);
+    background: rgba(76,185,106,0.12);
+    color: #87d99b;
+  }
+  .nav a.outside-link {
+    gap: 7px;
+  }
+  .nav a.outside-link::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-top: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+    opacity: 0.7;
+  }
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+    align-items: end;
+  }
+  .wide { grid-column: span 2; }
+  @media (max-width: 980px) {
+    .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .top { align-items: flex-start; flex-direction: column; }
+    .nav { justify-content: flex-start; }
+    .nav-group + .nav-group {
+      width: 100%;
+      padding-left: 0;
+      padding-top: 8px;
+      border-left: 0;
+      border-top: 1px solid var(--border-strong);
+    }
+    .filters { grid-template-columns: 1fr; }
+    .wide { grid-column: span 1; }
+  }
+</style>
+<link rel="stylesheet" href="/web/components/catalog.css">
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div>
+      <h1>Reservables</h1>
+      <div class="sub">Active bookable catalog rows across vendors.</div>
+    </div>
+    <nav class="nav" aria-label="Page links">
+      <div class="nav-group" aria-label="Catalog pages">
+        <a href="/pois">POIs</a>
+        <a href="/reservables" aria-current="page">Reservables</a>
+        <a href="/monitors">Monitors</a>
+      </div>
+      <div class="nav-group" aria-label="Outside links">
+        <a class="outside-link" href="/">Map</a>
+        <a class="outside-link" href="/api/docs">API docs</a>
+      </div>
+    </nav>
+  </header>
+
+  <div id="reservable-query"></div>
+
+  <section class="panel" aria-live="polite">
+    <div id="status" class="status">
+      <span>Ready.</span>
+      <span class="mono muted" id="query-url"></span>
+    </div>
+    <div id="results"></div>
+    <div id="empty" class="empty" hidden>No reservables match these filters.</div>
+    <div class="pager">
+      <button id="prev-btn" type="button">Previous</button>
+      <button id="next-btn" type="button">Next</button>
+    </div>
+  </section>
+</main>
+<script type="module" src="/web/reservables.js"></script>
+</body>
+</html>
