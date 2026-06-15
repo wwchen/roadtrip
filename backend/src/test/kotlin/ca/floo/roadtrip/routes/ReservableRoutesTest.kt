@@ -18,11 +18,16 @@ import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -75,6 +80,7 @@ class ReservableRoutesTest {
 
     @BeforeEach
     fun reset() {
+        ctx.execute("DELETE FROM reservable_availability_monitors")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
         ctx.execute("DELETE FROM pois")
@@ -109,6 +115,7 @@ class ReservableRoutesTest {
             assertEquals("STANDARD", reservable["site_type"]!!.jsonPrimitive.content)
             assertEquals("330257", reservable["raw"]!!.jsonObject["campsite_id"]!!.jsonPrimitive.content)
             assertEquals(listOf(poiId.toString()), body["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(listOf(poiId.toString()), reservable["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
         }
 
     @Test
@@ -131,6 +138,128 @@ class ReservableRoutesTest {
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("bad_rid", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `reservables search ORs within fields and ANDs across fields`() =
+        testApplication {
+            val poiId = seedPoi("upper-pines", "Upper Pines Campground")
+            val linkedReservable = seedReservable(vendorId = "330257", name = "A12", loop = "Loop A")
+            seedReservable(vendorId = "330258", name = "B03", loop = "Loop B")
+            seedReservable(
+                vendor = "aspira_pc",
+                vendorId = "-2147483641",
+                source = "aspira-resources-pc",
+                name = "A12",
+                loop = "Loop A",
+                raw = """{"host":"reservation.pc.gc.ca","map_id":101}""",
+            )
+            link(linkedReservable, poiId)
+            application { routing { reservableRoutes(ctx) } }
+
+            val resp = client.get("/api/reservables?type=site&vendor=recgov&vendor_id=330257,330258")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("2", body["total"]!!.jsonPrimitive.content)
+            assertEquals("100", body["limit"]!!.jsonPrimitive.content)
+            assertEquals("0", body["offset"]!!.jsonPrimitive.content)
+            val rids =
+                body["reservables"]!!
+                    .jsonArray
+                    .map { it.jsonObject["rid"]!!.jsonPrimitive.content }
+                    .toSet()
+            assertEquals(setOf("site:recgov:330257", "site:recgov:330258"), rids)
+            val linkedRow =
+                body["reservables"]!!
+                    .jsonArray
+                    .map { it.jsonObject }
+                    .single { it["rid"]!!.jsonPrimitive.content == "site:recgov:330257" }
+            assertEquals(listOf(poiId.toString()), linkedRow["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+
+            val paged = client.get("/api/reservables?vendor=recgov,aspira_pc&name=A12&limit=1&offset=1")
+            assertEquals(HttpStatusCode.OK, paged.status)
+            val pagedBody = Json.parseToJsonElement(paged.bodyAsText()).jsonObject
+            assertEquals("2", pagedBody["total"]!!.jsonPrimitive.content)
+            assertEquals("1", pagedBody["limit"]!!.jsonPrimitive.content)
+            assertEquals("1", pagedBody["offset"]!!.jsonPrimitive.content)
+            assertEquals(1, pagedBody["reservables"]!!.jsonArray.size)
+
+            val raw = client.get("/api/reservables?raw=%7B%22host%22%3A%22reservation.pc.gc.ca%22%7D")
+            assertEquals(HttpStatusCode.OK, raw.status)
+            val rawBody = Json.parseToJsonElement(raw.bodyAsText()).jsonObject
+            assertEquals("1", rawBody["total"]!!.jsonPrimitive.content)
+            val rawRid =
+                rawBody["reservables"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject["rid"]!!
+                    .jsonPrimitive
+                    .content
+            assertEquals(
+                "site:aspira_pc:-2147483641",
+                rawRid,
+            )
+        }
+
+    @Test
+    fun `reservables search rejects bad filters`() =
+        testApplication {
+            application { routing { reservableRoutes(ctx) } }
+
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?type=permit").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?limit=0").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?raw=%7Bnot-json%7D").status)
+        }
+
+    @Test
+    fun `reservable availability monitor create and list`() =
+        testApplication {
+            seedReservable(vendorId = "330257", name = "A12", loop = "Loop A")
+            application { routing { reservableRoutes(ctx) } }
+
+            val created =
+                client.post("/api/reservable/site:recgov:330257/availability/monitor") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {"cadence":60,"trigger_action":"notify_slack","stop_when_triggered":false}
+                        """.trimIndent(),
+                    )
+                }
+            assertEquals(HttpStatusCode.Created, created.status)
+            val createdBody = Json.parseToJsonElement(created.bodyAsText()).jsonObject
+            val monitor = createdBody["monitor"]!!.jsonObject
+            assertEquals("60", monitor["cadence"]!!.jsonPrimitive.content)
+            assertEquals("notify_slack", monitor["trigger_action"]!!.jsonPrimitive.content)
+            assertEquals(false, monitor["stop_when_triggered"]!!.jsonPrimitive.boolean)
+            assertEquals("active", monitor["status"]!!.jsonPrimitive.content)
+            assertEquals("site:recgov:330257", monitor["reservable"]!!.jsonObject["rid"]!!.jsonPrimitive.content)
+
+            val list = client.get("/api/reservables/availability/monitors")
+            assertEquals(HttpStatusCode.OK, list.status)
+            val listBody = Json.parseToJsonElement(list.bodyAsText()).jsonObject
+            assertEquals(1, listBody["monitors"]!!.jsonArray.size)
+        }
+
+    @Test
+    fun `reservable availability monitor rejects invalid input`() =
+        testApplication {
+            seedReservable(vendorId = "330257", name = "A12")
+            application { routing { reservableRoutes(ctx) } }
+
+            val badCadence =
+                client.post("/api/reservable/site:recgov:330257/availability/monitor") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"cadence":1,"trigger_action":"notify_slack"}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, badCadence.status)
+
+            val unknown =
+                client.post("/api/reservable/site:recgov:missing/availability/monitor") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"cadence":60,"trigger_action":"notify_slack"}""")
+                }
+            assertEquals(HttpStatusCode.NotFound, unknown.status)
         }
 
     @Test
@@ -158,6 +287,12 @@ class ReservableRoutesTest {
                     .map { it.jsonObject["rid"]!!.jsonPrimitive.content }
                     .toSet()
             assertEquals(setOf("site:recgov:330257", "site:recgov:330258"), rids)
+            body["reservables"]!!
+                .jsonArray
+                .map { it.jsonObject }
+                .forEach { row ->
+                    assertEquals(listOf(poiId.toString()), row["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+                }
         }
 
     @Test
@@ -295,7 +430,10 @@ class ReservableRoutesTest {
             .get("id", Long::class.java)
 
     private fun seedReservable(
+        type: String = "site",
+        vendor: String = "recgov",
         vendorId: String,
+        source: String = "federal-campsites",
         name: String,
         loop: String? = null,
         siteType: String? = null,
@@ -307,11 +445,14 @@ class ReservableRoutesTest {
                 INSERT INTO reservables (
                     type, vendor, vendor_id, source, name, loop, site_type, raw
                 ) VALUES (
-                    'site', 'recgov', ?, 'federal-campsites', ?, ?, ?, ?::jsonb
+                    ?, ?, ?, ?, ?, ?, ?, ?::jsonb
                 )
                 RETURNING id
                 """.trimIndent(),
+                type,
+                vendor,
                 vendorId,
+                source,
                 name,
                 loop,
                 siteType,

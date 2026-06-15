@@ -49,6 +49,8 @@ import io.ktor.server.plugins.compression.matchContentType
 import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
 import io.ktor.server.request.path
+import io.ktor.server.response.respondFile
+import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import java.io.File
@@ -206,6 +208,24 @@ fun Application.module() {
             contentType { f ->
                 if (f.name.endsWith(".geojson")) ContentType("application", "geo+json") else null
             }
+        }
+        get("/pois") {
+            call.respondFile(File(staticDir, "pois.html"))
+        }
+        get("/pois/") {
+            call.respondFile(File(staticDir, "pois.html"))
+        }
+        get("/reservables") {
+            call.respondFile(File(staticDir, "reservables.html"))
+        }
+        get("/reservables/") {
+            call.respondFile(File(staticDir, "reservables.html"))
+        }
+        get("/monitors") {
+            call.respondFile(File(staticDir, "monitors.html"))
+        }
+        get("/monitors/") {
+            call.respondFile(File(staticDir, "monitors.html"))
         }
         // Campsite UI served from the JAR's classpath
         // (backend/src/main/resources/static/campsite/), separate from
