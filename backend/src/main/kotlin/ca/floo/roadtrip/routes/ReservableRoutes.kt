@@ -172,9 +172,10 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         summary = "Create a reservable availability monitor"
         description =
             "Persists a monitor registration for one reservable. `cadence` is " +
-            "seconds and must be at least 5. `trigger_action` is the action " +
-            "label the future monitor worker should perform when availability " +
-            "matches; `stop_when_triggered` defaults to true."
+            "seconds and must be at least 5. `trigger_action` is a non-empty " +
+            "JSON array describing the actions the future monitor worker " +
+            "should perform when availability matches; `stop_when_triggered` " +
+            "defaults to true."
         request {
             pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
             body<ReservableAvailabilityMonitorCreateRequestSchema> {
@@ -222,12 +223,12 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 "cadence must be at least 5 seconds",
             )
         }
-        val triggerAction = input.triggerAction.trim()
+        val triggerAction = input.triggerAction
         if (triggerAction.isEmpty()) {
             return@post call.respondReservableError(
                 "bad_trigger_action",
                 HttpStatusCode.BadRequest,
-                "trigger_action must not be blank",
+                "trigger_action must be a non-empty array",
             )
         }
 
