@@ -45,6 +45,8 @@ services:
 
   # Kotlin/Ktor backend. Serves the entire site:
   #   - GET /                       → index.html
+  #   - GET /pois, /reservables,
+  #         /monitors                 → catalog pages
   #   - GET /web/*, /data/*         → static files (data/pricing-cache/ excluded)
   #   - GET /api/pois               → bbox query against postgres
   #   - GET /api/pricing/{slug}     → cache-only read of data/pricing-cache/{slug}.json
@@ -69,6 +71,9 @@ services:
       - MAPBOX_TOKEN=${MAPBOX_TOKEN}
     volumes:
       - ./index.html:/app/static/index.html:ro
+      - ./pois.html:/app/static/pois.html:ro
+      - ./reservables.html:/app/static/reservables.html:ro
+      - ./monitors.html:/app/static/monitors.html:ro
       - ./web:/app/static/web:ro
       - ./data:/app/static/data:ro
       # PoiRegistry.load reads /app/static/config/poi-registry.yaml at boot;

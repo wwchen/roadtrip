@@ -16,6 +16,9 @@ on:
       - 'data/**'
       - 'docker-compose*.yml'
       - 'index.html'
+      - 'pois.html'
+      - 'reservables.html'
+      - 'monitors.html'
       - 'web/**'
       - 'app.js'
       - 'style.css'
@@ -81,13 +84,18 @@ jobs:
           # Probe via the public tunnel URL so we're verifying what users see,
           # not the LAN-side container. Override DEPLOY_HEALTH_URL via repo
           # variable if the tunnel hostname changes.
-          url="${{ vars.DEPLOY_HEALTH_URL || 'https://roadtrip.floo.ca/api/health' }}"
+          base="${{ vars.DEPLOY_BASE_URL || 'https://roadtrip.floo.ca' }}"
+          health_url="${{ vars.DEPLOY_HEALTH_URL || 'https://roadtrip.floo.ca/api/health' }}"
           for _ in $(seq 1 30); do
-            if curl -fsS "$url" >/dev/null; then
-              echo "health: $url OK"
+            if curl -fsS "$health_url" >/dev/null; then
+              for path in /pois /reservables /monitors; do
+                curl -fsS "$base$path" >/dev/null
+                echo "health: $base$path OK"
+              done
+              echo "health: $health_url OK"
               exit 0
             fi
             sleep 2
           done
-          echo "health check failed: $url"
+          echo "health check failed: $health_url"
           exit 1
