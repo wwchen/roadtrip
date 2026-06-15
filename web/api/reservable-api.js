@@ -6,12 +6,37 @@
 //   GET /api/reservable/{rid}
 //     → { reservable: {rid, name, loop, raw, …}, poi_ids: [123, 456] }
 //
+//   GET /api/reservables
+//     → { total, limit, offset, reservables: [{rid, name, loop, …}, …] }
+//
 // These hit the catalog (per-site rows from the reservable_data ETLs +
 // joiner). They are NOT availability data — per-day status still comes
 // from /api/campsite/availability/{poi_id}. Catalog is cheap (no upstream
 // roundtrip); availability is throttled and rate-limited.
 
 import { jsonGetOk } from './http.js';
+
+/**
+ * Search active reservables across ReservableSchema fields.
+ *
+ * Each populated field is passed through to /api/reservables; the backend
+ * ORs repeated/comma-separated values within a field and ANDs across fields.
+ *
+ * @param {object}      params
+ * @param {AbortSignal} [params.signal]
+ */
+export function searchReservables(params = {}) {
+  const { signal, ...filters } = params;
+  const qs = new URLSearchParams();
+  for (const [key, value] of Object.entries(filters)) {
+    if (value == null) continue;
+    const text = String(value).trim();
+    if (!text) continue;
+    qs.set(key, text);
+  }
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return jsonGetOk(`/api/reservables${suffix}`, { signal });
+}
 
 /**
  * List the reservables linked to a POI. Returns the parsed JSON body.

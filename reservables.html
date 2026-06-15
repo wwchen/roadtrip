@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#26272d">
+<title>Reservables</title>
+<style>
+  :root {
+    --surface: #26272d;
+    --bg: #1c1d21;
+    --bg-subtle: rgba(255,255,255,0.04);
+    --bg-hover: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --text: #e6e8eb;
+    --muted: #8a8f96;
+    --faint: #5a6068;
+    --accent: #4cb96a;
+    --accent-hover: #62cc7d;
+    --error: #f56565;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body { padding: 20px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .shell {
+    max-width: 1280px;
+    margin: 0 auto;
+  }
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  h1 {
+    margin: 0;
+    font-size: 22px;
+    line-height: 1.2;
+    font-weight: 650;
+  }
+  .sub {
+    margin-top: 4px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .nav {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .nav a,
+  button {
+    border: 1px solid var(--border-strong);
+    background: var(--bg-subtle);
+    color: var(--text);
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 12px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav a:hover,
+  button:hover {
+    background: var(--bg-hover);
+    text-decoration: none;
+  }
+  button.primary {
+    border-color: rgba(76,185,106,0.55);
+    background: #2f7a3a;
+  }
+  button.primary:hover { background: #356f3e; }
+  button:disabled { opacity: 0.55; cursor: default; }
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.22);
+  }
+  form.panel {
+    padding: 14px;
+    margin-bottom: 14px;
+  }
+  .filters {
+    display: grid;
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+    gap: 10px;
+    align-items: end;
+  }
+  label {
+    display: grid;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  input,
+  select,
+  textarea {
+    width: 100%;
+    min-width: 0;
+    border: 1px solid var(--border-strong);
+    border-radius: 7px;
+    background: var(--bg-subtle);
+    color: var(--text);
+    font: inherit;
+    font-size: 13px;
+  }
+  input,
+  select {
+    height: 34px;
+    padding: 0 9px;
+  }
+  textarea {
+    min-height: 34px;
+    max-height: 92px;
+    resize: vertical;
+    padding: 8px 9px;
+    line-height: 1.35;
+  }
+  input::placeholder,
+  textarea::placeholder { color: var(--faint); }
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    border-color: var(--accent);
+    background: var(--bg-hover);
+  }
+  .wide { grid-column: span 2; }
+  .actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+  .status {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .status strong { color: var(--text); font-weight: 650; }
+  .error {
+    color: var(--error);
+    font-weight: 600;
+  }
+  .table-wrap {
+    width: 100%;
+    overflow-x: auto;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  th,
+  td {
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border);
+    text-align: left;
+    vertical-align: top;
+  }
+  th {
+    color: var(--muted);
+    font-size: 11px;
+    font-weight: 650;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  td { color: var(--text); }
+  tbody tr:hover { background: rgba(255,255,255,0.025); }
+  .mono {
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+    font-size: 12px;
+  }
+  .muted { color: var(--muted); }
+  .rid {
+    max-width: 340px;
+    overflow-wrap: anywhere;
+  }
+  .name {
+    max-width: 260px;
+    overflow-wrap: anywhere;
+  }
+  details summary {
+    cursor: pointer;
+    color: var(--accent);
+  }
+  pre {
+    margin: 8px 0 0;
+    padding: 9px;
+    max-width: 420px;
+    max-height: 240px;
+    overflow: auto;
+    background: var(--bg-subtle);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    color: var(--text);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .pager {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 12px 14px;
+  }
+  .empty {
+    padding: 34px 14px;
+    color: var(--muted);
+    text-align: center;
+  }
+  @media (max-width: 980px) {
+    .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  }
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .top { align-items: flex-start; flex-direction: column; }
+    .nav { justify-content: flex-start; }
+    .filters { grid-template-columns: 1fr; }
+    .wide { grid-column: span 1; }
+    .actions { flex-wrap: wrap; }
+    .status,
+    .pager { align-items: flex-start; flex-direction: column; }
+    th,
+    td { padding: 9px; }
+  }
+</style>
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div>
+      <h1>Reservables</h1>
+      <div class="sub">Active bookable catalog rows across vendors.</div>
+    </div>
+    <nav class="nav" aria-label="Page links">
+      <a href="/">Map</a>
+      <a href="/api/docs">API docs</a>
+    </nav>
+  </header>
+
+  <form id="reservable-form" class="panel" autocomplete="off">
+    <div class="filters">
+      <label>
+        Type
+        <select name="type">
+          <option value="site">site</option>
+          <option value="">any</option>
+        </select>
+      </label>
+      <label>
+        Vendor
+        <input name="vendor" placeholder="recgov, aspira_pc">
+      </label>
+      <label>
+        Vendor ID
+        <input name="vendor_id" placeholder="330257">
+      </label>
+      <label>
+        Name
+        <input name="name" placeholder="A12">
+      </label>
+      <label>
+        Loop
+        <input name="loop" placeholder="Loop A">
+      </label>
+      <label>
+        Site Type
+        <input name="site_type" placeholder="STANDARD">
+      </label>
+      <label class="wide">
+        RID
+        <input name="rid" placeholder="site:recgov:330257">
+      </label>
+      <label class="wide">
+        Raw contains
+        <textarea name="raw" spellcheck="false" placeholder='{"host":"reservation.pc.gc.ca"}'></textarea>
+      </label>
+      <label>
+        Limit
+        <select name="limit">
+          <option value="50">50</option>
+          <option value="100" selected>100</option>
+          <option value="250">250</option>
+          <option value="500">500</option>
+        </select>
+      </label>
+      <div class="actions">
+        <button class="primary" type="submit">Search</button>
+        <button id="reset-btn" type="button">Reset</button>
+      </div>
+    </div>
+  </form>
+
+  <section class="panel" aria-live="polite">
+    <div id="status" class="status">
+      <span>Ready.</span>
+      <span class="mono muted" id="query-url"></span>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>RID</th>
+            <th>Name</th>
+            <th>Loop</th>
+            <th>Site Type</th>
+            <th>Raw</th>
+            <th>Links</th>
+          </tr>
+        </thead>
+        <tbody id="results"></tbody>
+      </table>
+      <div id="empty" class="empty" hidden>No reservables match these filters.</div>
+    </div>
+    <div class="pager">
+      <button id="prev-btn" type="button">Previous</button>
+      <button id="next-btn" type="button">Next</button>
+    </div>
+  </section>
+</main>
+<script type="module" src="/web/reservables.js"></script>
+</body>
+</html>
