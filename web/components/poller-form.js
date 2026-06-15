@@ -1,24 +1,26 @@
-import { apiCallLabel } from './result-table.js';
-
 export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } = {}) {
-  root.innerHTML = pollerFormHtml();
-
   const form = root.querySelector('form');
+  if (!form) throw new Error('Poller form markup is missing');
+
   const titleEl = root.querySelector('[data-role="poller-form-title"]');
   const idEl = root.querySelector('[data-role="poller-form-id"]');
   const apiEl = root.querySelector('[data-role="poller-form-api"]');
   const submitEl = root.querySelector('[data-role="poller-form-submit"]');
   const cancelEl = root.querySelector('[data-action="cancel-poller-edit"]');
+  const addDateEl = root.querySelector('[data-action="add-target-date"]');
+  const dateInputEl = form.elements.target_date;
+  const datesEl = root.querySelector('[data-role="target-dates"]');
   const statusFieldEl = form.elements.status.closest('label');
   const forceFieldEl = form.elements.force.closest('label');
   let mode = 'create';
   let editId = null;
+  let targetDates = [];
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
     let body;
     try {
-      body = pollerBodyFromForm(form, { includeForce: mode !== 'edit' });
+      body = bodyFromForm({ includeForce: mode !== 'edit' });
     } catch (err) {
       onError?.(err);
       return;
@@ -30,9 +32,26 @@ export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } 
     onCreate?.(body);
   });
 
+  addDateEl.addEventListener('click', () => {
+    addTargetDate(dateInputEl.value);
+  });
+
+  dateInputEl.addEventListener('keydown', (event) => {
+    if (event.key !== 'Enter') return;
+    event.preventDefault();
+    addTargetDate(dateInputEl.value);
+  });
+
+  datesEl.addEventListener('click', (event) => {
+    const button = event.target.closest('[data-action="remove-target-date"]');
+    if (!button) return;
+    removeTargetDate(button.dataset.date || '');
+  });
+
   form.querySelector('[data-action="reset-poller-form"]').addEventListener('click', () => {
     reset();
   });
+
   cancelEl.addEventListener('click', () => {
     reset();
     onCancel?.();
@@ -41,7 +60,7 @@ export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } 
   function reset() {
     mode = 'create';
     editId = null;
-    fillPollerForm(form, defaultPollerValues());
+    fillPollerForm(defaultPollerValues());
     syncMode();
   }
 
@@ -49,14 +68,98 @@ export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } 
     const editing = mode === 'edit';
     titleEl.textContent = editing ? 'Update poller' : 'Create poller';
     idEl.textContent = editing ? `#${editId}` : '';
-    apiEl.innerHTML = editing
-      ? apiCallLabel({ method: 'PATCH', path: `/api/reservables/availability/pollers/${editId}` })
-      : apiCallLabel({ method: 'POST', path: '/api/reservables/availability/pollers' });
+    renderApiLabel(apiEl, {
+      method: editing ? 'PATCH' : 'POST',
+      path: editing
+        ? `/api/reservables/availability/pollers/${editId}`
+        : '/api/reservables/availability/pollers',
+    });
     submitEl.textContent = editing ? 'Update' : 'Create';
     cancelEl.hidden = !editing;
     statusFieldEl.hidden = !editing;
     forceFieldEl.hidden = editing;
     form.elements.force.disabled = editing;
+  }
+
+  function fillPollerForm(values) {
+    form.elements.scope_type.value = values.scopeType;
+    form.elements.scope_value.value = values.scopeValue;
+    form.elements.status.value = values.status;
+    form.elements.min_nights.value = values.minNights;
+    form.elements.cadence.value = values.cadence;
+    form.elements.filter_type.value = values.filters.type;
+    form.elements.filter_vendor.value = values.filters.vendor;
+    form.elements.filter_vendor_id.value = values.filters.vendorId;
+    form.elements.filter_name.value = values.filters.name;
+    form.elements.filter_loop.value = values.filters.loop;
+    form.elements.filter_site_type.value = values.filters.siteType;
+    form.elements.filter_raw.value = values.filters.raw;
+    form.elements.trigger_actions.value = values.triggerActions;
+    form.elements.stop_when_triggered.checked = values.stopWhenTriggered;
+    form.elements.force.checked = false;
+    setTargetDates(values.targetDates);
+  }
+
+  function bodyFromForm({ includeForce }) {
+    if (!targetDates.length) throw new Error('Add at least one target date');
+    const body = {
+      scope: scopeFromForm(form),
+      reservable_filters: filtersFromForm(form),
+      target_dates: targetDates,
+      min_nights: intFromField(form.elements.min_nights, 'min_nights'),
+      cadence: intFromField(form.elements.cadence, 'cadence'),
+      trigger_actions: listFromText(form.elements.trigger_actions.value),
+      stop_when_triggered: form.elements.stop_when_triggered.checked,
+      status: form.elements.status.value,
+    };
+    if (includeForce) {
+      delete body.status;
+      body.force = form.elements.force.checked;
+    }
+    return body;
+  }
+
+  function addTargetDate(date) {
+    const value = String(date || '').trim();
+    if (!value) return;
+    targetDates = [...new Set([...targetDates, value])].sort();
+    dateInputEl.value = value;
+    renderTargetDates();
+  }
+
+  function removeTargetDate(date) {
+    targetDates = targetDates.filter((value) => value !== date);
+    if (dateInputEl.value === date) {
+      dateInputEl.value = targetDates[0] || utcYmd(new Date());
+    }
+    renderTargetDates();
+  }
+
+  function setTargetDates(dates) {
+    targetDates = [...new Set(dates.filter(Boolean))].sort();
+    dateInputEl.value = targetDates[0] || utcYmd(new Date());
+    renderTargetDates();
+  }
+
+  function renderTargetDates() {
+    datesEl.replaceChildren();
+    if (!targetDates.length) {
+      datesEl.append(textSpan('muted', 'No dates selected.'));
+      return;
+    }
+    targetDates.forEach((date) => {
+      const chip = document.createElement('span');
+      chip.className = 'date-chip';
+      chip.append(textSpan('', date));
+
+      const button = document.createElement('button');
+      button.type = 'button';
+      button.dataset.action = 'remove-target-date';
+      button.dataset.date = date;
+      button.setAttribute('aria-label', `Remove ${date}`);
+      chip.append(button);
+      datesEl.append(chip);
+    });
   }
 
   reset();
@@ -67,7 +170,7 @@ export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } 
     edit(poller) {
       mode = 'edit';
       editId = String(poller.id || '');
-      fillPollerForm(form, pollerValues(poller));
+      fillPollerForm(pollerValues(poller));
       syncMode();
       form.elements.scope_value.focus();
     },
@@ -80,115 +183,18 @@ export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } 
   };
 }
 
-function pollerFormHtml() {
-  return `
-    <form id="poller-form" class="panel poller-form" autocomplete="off">
-      <div class="poller-form-header">
-        <div>
-          <strong data-role="poller-form-title"></strong>
-          <span class="mono muted" data-role="poller-form-id"></span>
-        </div>
-        <div data-role="poller-form-api"></div>
-      </div>
-      <div class="filters poller-fields">
-        <label>
-          Scope
-          <select name="scope_type">
-            <option value="rid">Reservable</option>
-            <option value="poi_id">POI</option>
-          </select>
-        </label>
-        <label class="wide">
-          Scope ID
-          <input name="scope_value" placeholder="site:recgov:100">
-        </label>
-        <label>
-          Status
-          <select name="status">
-            <option value="active">active</option>
-            <option value="paused">paused</option>
-            <option value="done">done</option>
-          </select>
-        </label>
-        <label>
-          Min nights
-          <input name="min_nights" type="number" min="1" max="31" value="1">
-        </label>
-        <label>
-          Cadence
-          <input name="cadence" type="number" min="5" value="300">
-        </label>
-        <label class="wide">
-          Target dates
-          <textarea name="target_dates" spellcheck="false"></textarea>
-        </label>
-        <label>
-          Type
-          <input name="filter_type" placeholder="site">
-        </label>
-        <label>
-          Vendor
-          <input name="filter_vendor" placeholder="recgov">
-        </label>
-        <label>
-          Vendor ID
-          <input name="filter_vendor_id" placeholder="330257">
-        </label>
-        <label>
-          Name
-          <input name="filter_name">
-        </label>
-        <label>
-          Loop
-          <input name="filter_loop">
-        </label>
-        <label>
-          Site type
-          <input name="filter_site_type">
-        </label>
-        <label class="wide">
-          Raw contains
-          <textarea name="filter_raw" spellcheck="false"></textarea>
-        </label>
-        <label>
-          Trigger actions
-          <input name="trigger_actions" value="notify_slack">
-        </label>
-        <label class="poller-check">
-          <input name="stop_when_triggered" type="checkbox" checked>
-          Stop when triggered
-        </label>
-        <label class="poller-check">
-          <input name="force" type="checkbox">
-          Force
-        </label>
-        <div class="actions">
-          <button class="primary" type="submit" data-role="poller-form-submit"></button>
-          <button data-action="reset-poller-form" type="button">Reset</button>
-          <button data-action="cancel-poller-edit" type="button" hidden>Cancel</button>
-        </div>
-      </div>
-    </form>
-  `;
+function renderApiLabel(root, { method, path }) {
+  const wrapper = document.createElement('span');
+  wrapper.className = 'api-call api-call-static';
+  wrapper.append(textSpan('api-method', method), textSpan('api-path', path));
+  root.replaceChildren(wrapper);
 }
 
-function fillPollerForm(form, values) {
-  form.elements.scope_type.value = values.scopeType;
-  form.elements.scope_value.value = values.scopeValue;
-  form.elements.status.value = values.status;
-  form.elements.min_nights.value = values.minNights;
-  form.elements.cadence.value = values.cadence;
-  form.elements.target_dates.value = values.targetDates;
-  form.elements.filter_type.value = values.filters.type;
-  form.elements.filter_vendor.value = values.filters.vendor;
-  form.elements.filter_vendor_id.value = values.filters.vendorId;
-  form.elements.filter_name.value = values.filters.name;
-  form.elements.filter_loop.value = values.filters.loop;
-  form.elements.filter_site_type.value = values.filters.siteType;
-  form.elements.filter_raw.value = values.filters.raw;
-  form.elements.trigger_actions.value = values.triggerActions;
-  form.elements.stop_when_triggered.checked = values.stopWhenTriggered;
-  form.elements.force.checked = false;
+function textSpan(className, text) {
+  const span = document.createElement('span');
+  if (className) span.className = className;
+  span.textContent = text;
+  return span;
 }
 
 function pollerValues(poller) {
@@ -200,7 +206,7 @@ function pollerValues(poller) {
     status: String(poller.status || 'active'),
     minNights: String(poller.min_nights || 1),
     cadence: String(poller.cadence || 300),
-    targetDates: (poller.target_dates || []).join('\n'),
+    targetDates: poller.target_dates || [],
     filters: {
       type: listValue(filters.type),
       vendor: listValue(filters.vendor),
@@ -222,7 +228,7 @@ function defaultPollerValues() {
     status: 'active',
     minNights: '1',
     cadence: '300',
-    targetDates: utcYmd(new Date()),
+    targetDates: [utcYmd(new Date())],
     filters: {
       type: '',
       vendor: '',
@@ -235,25 +241,6 @@ function defaultPollerValues() {
     triggerActions: 'notify_slack',
     stopWhenTriggered: true,
   };
-}
-
-function pollerBodyFromForm(form, { includeForce }) {
-  const scope = scopeFromForm(form);
-  const body = {
-    scope,
-    reservable_filters: filtersFromForm(form),
-    target_dates: listFromText(form.elements.target_dates.value),
-    min_nights: intFromField(form.elements.min_nights, 'min_nights'),
-    cadence: intFromField(form.elements.cadence, 'cadence'),
-    trigger_actions: listFromText(form.elements.trigger_actions.value),
-    stop_when_triggered: form.elements.stop_when_triggered.checked,
-    status: form.elements.status.value,
-  };
-  if (includeForce) {
-    delete body.status;
-    body.force = form.elements.force.checked;
-  }
-  return body;
 }
 
 function scopeFromForm(form) {

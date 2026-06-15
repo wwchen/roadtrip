@@ -20,6 +20,9 @@
     --accent: #4cb96a;
     --accent-hover: #62cc7d;
     --error: #f56565;
+    --catalog-table-min-width: 1180px;
+    --catalog-table-layout: fixed;
+    --result-label-width: 96px;
   }
   * { box-sizing: border-box; }
   [hidden] { display: none !important; }
@@ -143,22 +146,11 @@
   }
   table {
     width: 100%;
-    min-width: 1280px;
-    table-layout: fixed;
+    min-width: var(--catalog-table-min-width, 1280px);
+    table-layout: var(--catalog-table-layout, fixed);
     border-collapse: collapse;
     font-size: 13px;
   }
-  th:nth-child(1), td:nth-child(1) { width: 56px; }
-  th:nth-child(2), td:nth-child(2) { width: 130px; }
-  th:nth-child(3), td:nth-child(3) { width: 104px; }
-  th:nth-child(4), td:nth-child(4) { width: 104px; }
-  th:nth-child(5), td:nth-child(5) { width: 72px; }
-  th:nth-child(6), td:nth-child(6) { width: 104px; }
-  th:nth-child(7), td:nth-child(7) { width: 104px; }
-  th:nth-child(8), td:nth-child(8) { width: 104px; }
-  th:nth-child(9), td:nth-child(9) { width: 120px; }
-  th:nth-child(10), td:nth-child(10) { width: 120px; }
-  th:nth-child(11), td:nth-child(11) { width: 184px; }
   th,
   td {
     padding: 10px 12px;
@@ -381,7 +373,124 @@
     </nav>
   </header>
 
-  <div id="poller-form-root"></div>
+  <div id="poller-form-root">
+    <form id="poller-form" class="panel poller-form" autocomplete="off">
+      <div class="form-header">
+        <div>
+          <strong data-role="poller-form-title">Create poller</strong>
+          <span class="mono muted" data-role="poller-form-id"></span>
+        </div>
+        <div data-role="poller-form-api">
+          <span class="api-call api-call-static">
+            <span class="api-method">POST</span>
+            <span class="api-path">/api/reservables/availability/pollers</span>
+          </span>
+        </div>
+      </div>
+
+      <div class="form-stack">
+        <section class="form-section">
+          <div class="form-section-title">Scope and schedule</div>
+          <div class="form-grid">
+            <label>
+              Scope
+              <select name="scope_type">
+                <option value="rid">Reservable</option>
+                <option value="poi_id">POI</option>
+              </select>
+            </label>
+            <label class="field-wide">
+              Scope ID
+              <input name="scope_value" placeholder="site:recgov:100">
+            </label>
+            <label>
+              Status
+              <select name="status">
+                <option value="active">active</option>
+                <option value="paused">paused</option>
+                <option value="done">done</option>
+              </select>
+            </label>
+            <label>
+              Min nights
+              <input name="min_nights" type="number" min="1" max="31" value="1">
+            </label>
+            <label>
+              Cadence
+              <input name="cadence" type="number" min="5" value="300">
+            </label>
+            <div class="date-field field-span-3">
+              <label>
+                Target date
+                <span class="date-entry">
+                  <input name="target_date" type="date">
+                  <button type="button" data-action="add-target-date">Add</button>
+                </span>
+              </label>
+              <div class="date-chip-list" data-role="target-dates"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="form-section-title">Reservable filters</div>
+          <div class="form-grid">
+            <label>
+              Type
+              <input name="filter_type" placeholder="site">
+            </label>
+            <label>
+              Vendor
+              <input name="filter_vendor" placeholder="recgov">
+            </label>
+            <label>
+              Vendor ID
+              <input name="filter_vendor_id" placeholder="330257">
+            </label>
+            <label>
+              Name
+              <input name="filter_name">
+            </label>
+            <label>
+              Loop
+              <input name="filter_loop">
+            </label>
+            <label>
+              Site type
+              <input name="filter_site_type">
+            </label>
+            <label class="field-span-3">
+              Raw contains
+              <textarea name="filter_raw" spellcheck="false"></textarea>
+            </label>
+          </div>
+        </section>
+
+        <section class="form-section">
+          <div class="form-section-title">Behavior</div>
+          <div class="form-grid form-grid-compact">
+            <label class="field-wide">
+              Trigger actions
+              <input name="trigger_actions" value="notify_slack">
+            </label>
+            <label class="check-row">
+              <input name="stop_when_triggered" type="checkbox" checked>
+              Stop when triggered
+            </label>
+            <label class="check-row">
+              <input name="force" type="checkbox">
+              Force first poll
+            </label>
+            <div class="actions form-actions">
+              <button class="primary" type="submit" data-role="poller-form-submit">Create</button>
+              <button data-action="reset-poller-form" type="button">Reset</button>
+              <button data-action="cancel-poller-edit" type="button" hidden>Cancel</button>
+            </div>
+          </div>
+        </section>
+      </div>
+    </form>
+  </div>
 
   <section class="panel" aria-live="polite">
     <div class="toolbar">
@@ -389,7 +498,21 @@
       <button id="refresh-btn" type="button">Refresh</button>
     </div>
     <div class="table-wrap">
-      <table>
+      <table class="pollers-table">
+        <colgroup>
+          <col class="col-poller-id">
+          <col class="col-poller-scope">
+          <col class="col-poller-filters">
+          <col class="col-poller-dates">
+          <col class="col-poller-nights">
+          <col class="col-poller-cadence">
+          <col class="col-poller-triggers">
+          <col class="col-poller-status">
+          <col class="col-poller-last">
+          <col class="col-poller-next">
+          <col class="col-poller-logs">
+          <col class="col-poller-manage">
+        </colgroup>
         <thead>
           <tr>
             <th>ID</th>
@@ -402,6 +525,7 @@
             <th>Status</th>
             <th>Last Checked</th>
             <th>Next Poll</th>
+            <th>Logs</th>
             <th>Manage</th>
           </tr>
         </thead>

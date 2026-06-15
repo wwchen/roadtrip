@@ -72,6 +72,131 @@ button:disabled { opacity: 0.55; cursor: default; }
   align-items: center;
 }
 
+.form-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.form-header > div:first-child {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.form-stack {
+  display: grid;
+  gap: 14px;
+}
+
+.form-section {
+  display: grid;
+  gap: 10px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.form-section:first-of-type {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.form-section-title {
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 10px;
+  align-items: end;
+}
+
+.form-grid-compact { align-items: center; }
+.field-wide { grid-column: span 2; }
+.field-span-3 { grid-column: span 3; }
+
+.date-field {
+  display: grid;
+  gap: 8px;
+}
+
+.date-entry {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 8px;
+}
+
+.date-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 26px;
+}
+
+.date-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 26px;
+  padding: 3px 7px 3px 9px;
+  border: 1px solid rgba(76,185,106,0.35);
+  border-radius: 999px;
+  background: rgba(76,185,106,0.10);
+  color: #b8e8c5;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+}
+
+.date-chip button {
+  position: relative;
+  width: 16px;
+  height: 16px;
+  min-width: 16px;
+  padding: 0;
+  border-radius: 999px;
+}
+
+.date-chip button::before,
+.date-chip button::after {
+  content: "";
+  position: absolute;
+  left: 4px;
+  top: 7px;
+  width: 8px;
+  height: 1.5px;
+  background: currentColor;
+}
+
+.date-chip button::before { transform: rotate(45deg); }
+.date-chip button::after { transform: rotate(-45deg); }
+
+.check-row {
+  display: flex;
+  min-height: 34px;
+  align-items: center;
+  gap: 8px;
+  color: var(--text);
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 13px;
+  font-weight: 400;
+}
+
+.check-row input {
+  width: auto;
+  height: auto;
+}
+
+.form-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+}
+
 .status {
   display: flex;
   align-items: center;
@@ -535,6 +660,31 @@ pre {
 .logs-table .col-run { width: 8%; }
 .logs-table .col-payload { width: 16%; }
 
+.pollers-table {
+  width: 100%;
+  min-width: 1180px;
+  table-layout: fixed;
+}
+
+.pollers-table .col-poller-id { width: 4%; }
+.pollers-table .col-poller-scope { width: 12%; }
+.pollers-table .col-poller-filters { width: 11%; }
+.pollers-table .col-poller-dates { width: 8%; }
+.pollers-table .col-poller-nights { width: 5%; }
+.pollers-table .col-poller-cadence { width: 6%; }
+.pollers-table .col-poller-triggers { width: 7%; }
+.pollers-table .col-poller-status { width: 6%; }
+.pollers-table .col-poller-last { width: 9%; }
+.pollers-table .col-poller-next { width: 9%; }
+.pollers-table .col-poller-logs { width: 11%; }
+.pollers-table .col-poller-manage { width: 12%; }
+
+.date-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
 .poi-id-list {
   display: flex;
   flex-wrap: wrap;
@@ -546,39 +696,57 @@ pre {
   overflow-wrap: anywhere;
 }
 
+@media (max-width: 980px) {
+  .form-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
 @media (max-width: 640px) {
   .actions { flex-wrap: wrap; }
+  .form-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .form-grid { grid-template-columns: 1fr; }
+  .field-wide,
+  .field-span-3 { grid-column: span 1; }
   .table-wrap { overflow-x: visible; }
 
   .poi-table,
   .reservables-table,
   .logs-table,
+  .pollers-table,
   .poi-table tbody,
   .reservables-table tbody,
   .logs-table tbody,
+  .pollers-table tbody,
   .poi-table tr,
   .reservables-table tr,
   .logs-table tr,
+  .pollers-table tr,
   .poi-table td,
   .reservables-table td,
-  .logs-table td {
+  .logs-table td,
+  .pollers-table td {
     display: block;
   }
 
   .poi-table,
   .reservables-table,
-  .logs-table {
+  .logs-table,
+  .pollers-table {
     min-width: 0;
     table-layout: auto;
   }
 
   .poi-table thead,
   .reservables-table thead,
-  .logs-table thead { display: none; }
+  .logs-table thead,
+  .pollers-table thead { display: none; }
 
   .poi-table tbody,
   .reservables-table tbody,
-  .logs-table tbody {
+  .logs-table tbody,
+  .pollers-table tbody {
     display: grid;
     gap: 10px;
     padding: 10px;
@@ -590,7 +758,8 @@ pre {
   .reservables-table tbody tr.result-row,
   .reservables-table tbody tr.reservables-row,
   .reservables-table tbody tr.availability-row,
-  .logs-table tbody tr.result-row {
+  .logs-table tbody tr.result-row,
+  .pollers-table tbody tr.result-row {
     border: 1px solid var(--border);
     border-radius: 8px;
     background: rgba(255,255,255,0.018);
@@ -616,11 +785,13 @@ pre {
 
   .poi-table tbody tr:hover,
   .reservables-table tbody tr:hover,
-  .logs-table tbody tr:hover { background: rgba(255,255,255,0.018); }
+  .logs-table tbody tr:hover,
+  .pollers-table tbody tr:hover { background: rgba(255,255,255,0.018); }
 
   .poi-table tbody tr.result-row td,
   .reservables-table tbody tr.result-row td,
-  .logs-table tbody tr.result-row td {
+  .logs-table tbody tr.result-row td,
+  .pollers-table tbody tr.result-row td {
     display: grid;
     grid-template-columns: var(--result-label-width, 86px) minmax(0, 1fr);
     gap: 10px;
@@ -631,11 +802,13 @@ pre {
 
   .poi-table tbody tr.result-row td:last-child,
   .reservables-table tbody tr.result-row td:last-child,
-  .logs-table tbody tr.result-row td:last-child { border-bottom: 0; }
+  .logs-table tbody tr.result-row td:last-child,
+  .pollers-table tbody tr.result-row td:last-child { border-bottom: 0; }
 
   .poi-table tbody tr.result-row td::before,
   .reservables-table tbody tr.result-row td::before,
-  .logs-table tbody tr.result-row td::before {
+  .logs-table tbody tr.result-row td::before,
+  .pollers-table tbody tr.result-row td::before {
     content: attr(data-label);
     grid-column: 1;
     grid-row: 1 / -1;
@@ -648,7 +821,8 @@ pre {
 
   .poi-table tbody tr.result-row td > *,
   .reservables-table tbody tr.result-row td > *,
-  .logs-table tbody tr.result-row td > * { grid-column: 2; }
+  .logs-table tbody tr.result-row td > *,
+  .pollers-table tbody tr.result-row td > * { grid-column: 2; }
 
   .rid,
   .name {
