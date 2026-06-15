@@ -1,36 +1,83 @@
-export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } = {}) {
-  const form = root.querySelector('form');
-  if (!form) throw new Error('Poller form markup is missing');
+import { apiCallLabel, replaceChildren } from './result-table.js';
 
-  const titleEl = root.querySelector('[data-role="poller-form-title"]');
-  const idEl = root.querySelector('[data-role="poller-form-id"]');
-  const apiEl = root.querySelector('[data-role="poller-form-api"]');
-  const submitEl = root.querySelector('[data-role="poller-form-submit"]');
-  const cancelEl = root.querySelector('[data-action="cancel-poller-edit"]');
+export function mountPollerGetForm(root, { onSubmit, onReset } = {}) {
+  const form = root.querySelector('form');
+  if (!form) throw new Error('Poller GET form markup is missing');
+  const apiEl = root.querySelector('[data-role="poller-get-api"]');
+  const resetBtn = root.querySelector('[data-action="reset-poller-get"]');
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    syncApiLabel();
+    onSubmit?.();
+  });
+
+  form.addEventListener('input', syncApiLabel);
+  form.addEventListener('change', syncApiLabel);
+
+  resetBtn.addEventListener('click', () => {
+    form.reset();
+    form.elements.limit.value = '100';
+    form.elements.offset.value = '0';
+    syncApiLabel();
+    onReset?.();
+  });
+
+  function params() {
+    return {
+      id: clean(form.elements.id.value),
+      limit: clean(form.elements.limit.value) || '100',
+      offset: clean(form.elements.offset.value) || '0',
+    };
+  }
+
+  function applyParamsFromUrl(search = window.location.search) {
+    const qs = new URLSearchParams(search);
+    form.elements.id.value = qs.get('id') || '';
+    form.elements.limit.value = qs.get('limit') || '100';
+    form.elements.offset.value = qs.get('offset') || '0';
+    syncApiLabel();
+  }
+
+  function syncApiLabel() {
+    const values = params();
+    const path = values.id
+      ? `/api/reservables/availability/pollers/${encodeURIComponent(values.id)}`
+      : pollerListApiPath(values);
+    replaceChildren(apiEl, apiCallLabel({ method: 'GET', path }));
+  }
+
+  return {
+    form,
+    params,
+    applyParamsFromUrl,
+    setBusy: (busy) => setFormBusy(form, busy),
+  };
+}
+
+export function mountPollerMutationForm(root, { mode, onSubmit, onReset, onError } = {}) {
+  const form = root.querySelector('form');
+  if (!form) throw new Error(`Poller ${mode} form markup is missing`);
+
+  const apiEl = root.querySelector('[data-role="poller-mutation-api"]');
   const addDateEl = root.querySelector('[data-action="add-target-date"]');
+  const resetBtn = root.querySelector('[data-action="reset-poller-form"]');
   const dateInputEl = form.elements.target_date;
   const datesEl = root.querySelector('[data-role="target-dates"]');
-  const statusFieldEl = form.elements.status.closest('label');
-  const forceFieldEl = form.elements.force.closest('label');
-  let mode = 'create';
-  let editId = null;
+  const detailsEl = root.closest('details');
   let targetDates = [];
 
   form.addEventListener('submit', (event) => {
     event.preventDefault();
-    let body;
     try {
-      body = bodyFromForm({ includeForce: mode !== 'edit' });
+      onSubmit?.(submitPayload());
     } catch (err) {
       onError?.(err);
-      return;
     }
-    if (mode === 'edit') {
-      onUpdate?.(editId, body);
-      return;
-    }
-    onCreate?.(body);
   });
+
+  form.addEventListener('input', syncApiLabel);
+  form.addEventListener('change', syncApiLabel);
 
   addDateEl.addEventListener('click', () => {
     addTargetDate(dateInputEl.value);
@@ -48,79 +95,46 @@ export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } 
     removeTargetDate(button.dataset.date || '');
   });
 
-  form.querySelector('[data-action="reset-poller-form"]').addEventListener('click', () => {
+  resetBtn.addEventListener('click', () => {
     reset();
+    onReset?.();
   });
 
-  cancelEl.addEventListener('click', () => {
-    reset();
-    onCancel?.();
-  });
+  function submitPayload() {
+    if (mode === 'update') {
+      const id = clean(form.elements.poller_id.value);
+      if (!id) throw new Error('Poller ID is required');
+      return { id, body: bodyFromForm(form, { mode, targetDates }) };
+    }
+    return { body: bodyFromForm(form, { mode, targetDates }) };
+  }
 
   function reset() {
-    mode = 'create';
-    editId = null;
-    fillPollerForm(defaultPollerValues());
-    syncMode();
+    fillPollerForm(form, defaultPollerValues(mode));
+    setTargetDates(mode === 'create' ? [utcYmd(new Date())] : []);
+    syncApiLabel();
   }
 
-  function syncMode() {
-    const editing = mode === 'edit';
-    titleEl.textContent = editing ? 'Update poller' : 'Create poller';
-    idEl.textContent = editing ? `#${editId}` : '';
-    renderApiLabel(apiEl, {
-      method: editing ? 'PATCH' : 'POST',
-      path: editing
-        ? `/api/reservables/availability/pollers/${editId}`
-        : '/api/reservables/availability/pollers',
-    });
-    submitEl.textContent = editing ? 'Update' : 'Create';
-    cancelEl.hidden = !editing;
-    statusFieldEl.hidden = !editing;
-    forceFieldEl.hidden = editing;
-    form.elements.force.disabled = editing;
+  function edit(poller) {
+    if (mode !== 'update') return;
+    form.elements.poller_id.value = String(poller.id || '');
+    fillPollerForm(form, pollerValues(poller));
+    setTargetDates(poller.target_dates || []);
+    syncApiLabel();
+    if (detailsEl) detailsEl.open = true;
+    form.elements.poller_id.focus();
   }
 
-  function fillPollerForm(values) {
-    form.elements.scope_type.value = values.scopeType;
-    form.elements.scope_value.value = values.scopeValue;
-    form.elements.status.value = values.status;
-    form.elements.min_nights.value = values.minNights;
-    form.elements.cadence.value = values.cadence;
-    form.elements.filter_type.value = values.filters.type;
-    form.elements.filter_vendor.value = values.filters.vendor;
-    form.elements.filter_vendor_id.value = values.filters.vendorId;
-    form.elements.filter_name.value = values.filters.name;
-    form.elements.filter_loop.value = values.filters.loop;
-    form.elements.filter_site_type.value = values.filters.siteType;
-    form.elements.filter_raw.value = values.filters.raw;
-    form.elements.trigger_actions.value = values.triggerActions;
-    form.elements.stop_when_triggered.checked = values.stopWhenTriggered;
-    form.elements.force.checked = false;
-    setTargetDates(values.targetDates);
-  }
-
-  function bodyFromForm({ includeForce }) {
-    if (!targetDates.length) throw new Error('Add at least one target date');
-    const body = {
-      scope: scopeFromForm(form),
-      reservable_filters: filtersFromForm(form),
-      target_dates: targetDates,
-      min_nights: intFromField(form.elements.min_nights, 'min_nights'),
-      cadence: intFromField(form.elements.cadence, 'cadence'),
-      trigger_actions: listFromText(form.elements.trigger_actions.value),
-      stop_when_triggered: form.elements.stop_when_triggered.checked,
-      status: form.elements.status.value,
-    };
-    if (includeForce) {
-      delete body.status;
-      body.force = form.elements.force.checked;
-    }
-    return body;
+  function syncApiLabel() {
+    const id = mode === 'update' ? clean(form.elements.poller_id.value) : '';
+    const path = mode === 'update'
+      ? `/api/reservables/availability/pollers/${id || ':id'}`
+      : '/api/reservables/availability/pollers';
+    replaceChildren(apiEl, apiCallLabel({ method: mode === 'update' ? 'PATCH' : 'POST', path }));
   }
 
   function addTargetDate(date) {
-    const value = String(date || '').trim();
+    const value = clean(date);
     if (!value) return;
     targetDates = [...new Set([...targetDates, value])].sort();
     dateInputEl.value = value;
@@ -130,14 +144,14 @@ export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } 
   function removeTargetDate(date) {
     targetDates = targetDates.filter((value) => value !== date);
     if (dateInputEl.value === date) {
-      dateInputEl.value = targetDates[0] || utcYmd(new Date());
+      dateInputEl.value = targetDates[0] || '';
     }
     renderTargetDates();
   }
 
   function setTargetDates(dates) {
     targetDates = [...new Set(dates.filter(Boolean))].sort();
-    dateInputEl.value = targetDates[0] || utcYmd(new Date());
+    dateInputEl.value = targetDates[0] || '';
     renderTargetDates();
   }
 
@@ -167,46 +181,79 @@ export function mountPollerForm(root, { onCreate, onUpdate, onCancel, onError } 
   return {
     form,
     reset,
-    edit(poller) {
-      mode = 'edit';
-      editId = String(poller.id || '');
-      fillPollerForm(pollerValues(poller));
-      syncMode();
-      form.elements.scope_value.focus();
-    },
-    setBusy(busy) {
-      form.querySelectorAll('input, select, textarea, button').forEach((el) => {
-        el.disabled = busy;
-      });
-      if (!busy) syncMode();
-    },
+    edit,
+    setBusy: (busy) => setFormBusy(form, busy),
   };
 }
 
-function renderApiLabel(root, { method, path }) {
-  const wrapper = document.createElement('span');
-  wrapper.className = 'api-call api-call-static';
-  wrapper.append(textSpan('api-method', method), textSpan('api-path', path));
-  root.replaceChildren(wrapper);
+function pollerListApiPath({ limit, offset }) {
+  const qs = new URLSearchParams();
+  if (limit && limit !== '100') qs.set('limit', limit);
+  if (offset && offset !== '0') qs.set('offset', offset);
+  const suffix = qs.toString();
+  return `/api/reservables/availability/pollers${suffix ? `?${suffix}` : ''}`;
 }
 
-function textSpan(className, text) {
-  const span = document.createElement('span');
-  if (className) span.className = className;
-  span.textContent = text;
-  return span;
+function bodyFromForm(form, { mode, targetDates }) {
+  if (mode === 'create' && !targetDates.length) throw new Error('Add at least one target date');
+  const body = {};
+  const scope = scopeFromForm(form, { required: mode === 'create' });
+  if (scope) body.scope = scope;
+
+  const filters = filtersFromForm(form);
+  if (mode === 'create' || Object.keys(filters).length) body.reservable_filters = filters;
+  if (targetDates.length) body.target_dates = targetDates;
+
+  setOptionalInt(body, 'min_nights', form.elements.min_nights);
+  setOptionalInt(body, 'cadence', form.elements.cadence);
+
+  const triggerActions = listFromText(form.elements.trigger_actions.value);
+  if (mode === 'create' || triggerActions.length) body.trigger_actions = triggerActions;
+  const includeStopWhenTriggered =
+    mode === 'create' || form.dataset.loaded === 'true' || form.elements.stop_when_triggered.checked;
+  if (includeStopWhenTriggered) {
+    body.stop_when_triggered = form.elements.stop_when_triggered.checked;
+  }
+
+  if (mode === 'create') {
+    body.force = form.elements.force.checked;
+  } else if (form.elements.status.value) {
+    body.status = form.elements.status.value;
+  }
+
+  return body;
+}
+
+function fillPollerForm(form, values) {
+  form.dataset.loaded = values.id ? 'true' : 'false';
+  if (form.elements.poller_id && values.id != null) form.elements.poller_id.value = values.id;
+  form.elements.scope_type.value = values.scopeType;
+  form.elements.scope_value.value = values.scopeValue;
+  if (form.elements.status) form.elements.status.value = values.status;
+  form.elements.min_nights.value = values.minNights;
+  form.elements.cadence.value = values.cadence;
+  form.elements.filter_type.value = values.filters.type;
+  form.elements.filter_vendor.value = values.filters.vendor;
+  form.elements.filter_vendor_id.value = values.filters.vendorId;
+  form.elements.filter_name.value = values.filters.name;
+  form.elements.filter_loop.value = values.filters.loop;
+  form.elements.filter_site_type.value = values.filters.siteType;
+  form.elements.filter_raw.value = values.filters.raw;
+  form.elements.trigger_actions.value = values.triggerActions;
+  form.elements.stop_when_triggered.checked = values.stopWhenTriggered;
+  if (form.elements.force) form.elements.force.checked = false;
 }
 
 function pollerValues(poller) {
   const scope = poller.scope || {};
   const filters = poller.reservable_filters || {};
   return {
+    id: String(poller.id || ''),
     scopeType: scope.poi_id != null ? 'poi_id' : 'rid',
     scopeValue: scope.poi_id != null ? String(scope.poi_id) : String(scope.rid || ''),
     status: String(poller.status || 'active'),
-    minNights: String(poller.min_nights || 1),
-    cadence: String(poller.cadence || 300),
-    targetDates: poller.target_dates || [],
+    minNights: String(poller.min_nights || ''),
+    cadence: String(poller.cadence || ''),
     filters: {
       type: listValue(filters.type),
       vendor: listValue(filters.vendor),
@@ -216,19 +263,19 @@ function pollerValues(poller) {
       siteType: listValue(filters.site_type),
       raw: filters.raw ? JSON.stringify(filters.raw) : '',
     },
-    triggerActions: listValue(poller.trigger_actions || ['notify_slack']),
+    triggerActions: listValue(poller.trigger_actions || []),
     stopWhenTriggered: poller.stop_when_triggered !== false,
   };
 }
 
-function defaultPollerValues() {
+function defaultPollerValues(mode) {
   return {
+    id: '',
     scopeType: 'rid',
     scopeValue: '',
-    status: 'active',
-    minNights: '1',
-    cadence: '300',
-    targetDates: [utcYmd(new Date())],
+    status: mode === 'update' ? '' : 'active',
+    minNights: mode === 'create' ? '1' : '',
+    cadence: mode === 'create' ? '300' : '',
     filters: {
       type: '',
       vendor: '',
@@ -238,14 +285,17 @@ function defaultPollerValues() {
       siteType: '',
       raw: '',
     },
-    triggerActions: 'notify_slack',
-    stopWhenTriggered: true,
+    triggerActions: mode === 'create' ? 'notify_slack' : '',
+    stopWhenTriggered: mode === 'create',
   };
 }
 
-function scopeFromForm(form) {
-  const value = String(form.elements.scope_value.value || '').trim();
-  if (!value) throw new Error('Scope ID is required');
+function scopeFromForm(form, { required }) {
+  const value = clean(form.elements.scope_value.value);
+  if (!value) {
+    if (required) throw new Error('Scope ID is required');
+    return null;
+  }
   if (form.elements.scope_type.value === 'poi_id') {
     const id = Number(value);
     if (!Number.isInteger(id) || id <= 0) throw new Error('POI scope must be a positive integer');
@@ -262,7 +312,7 @@ function filtersFromForm(form) {
   setList(filters, 'name', form.elements.filter_name.value);
   setList(filters, 'loop', form.elements.filter_loop.value);
   setList(filters, 'site_type', form.elements.filter_site_type.value);
-  const raw = String(form.elements.filter_raw.value || '').trim();
+  const raw = clean(form.elements.filter_raw.value);
   if (raw) {
     try {
       filters.raw = JSON.parse(raw);
@@ -278,6 +328,16 @@ function setList(target, key, value) {
   if (list.length) target[key] = list;
 }
 
+function setOptionalInt(target, key, field) {
+  const text = clean(field.value);
+  if (!text) return;
+  const value = Number(text);
+  if (!Number.isInteger(value) || value < Number(field.min || 1)) {
+    throw new Error(`${key} must be at least ${field.min || 1}`);
+  }
+  target[key] = value;
+}
+
 function listFromText(value) {
   return String(value || '')
     .split(/[\n,]+/)
@@ -285,17 +345,26 @@ function listFromText(value) {
     .filter(Boolean);
 }
 
-function intFromField(field, name) {
-  const value = Number(String(field.value || '').trim());
-  if (!Number.isInteger(value) || value < Number(field.min || 1)) {
-    throw new Error(`${name} must be at least ${field.min || 1}`);
-  }
-  return value;
-}
-
 function listValue(value) {
   if (Array.isArray(value)) return value.join(', ');
   return value == null ? '' : String(value);
+}
+
+function setFormBusy(form, busy) {
+  form.querySelectorAll('input, select, textarea, button').forEach((el) => {
+    el.disabled = busy;
+  });
+}
+
+function textSpan(className, text) {
+  const span = document.createElement('span');
+  if (className) span.className = className;
+  span.textContent = text;
+  return span;
+}
+
+function clean(value) {
+  return String(value || '').trim();
 }
 
 function utcYmd(date) {

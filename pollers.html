@@ -28,123 +28,264 @@
     </nav>
   </header>
 
-  <div id="poller-form-root">
-    <form id="poller-form" class="panel poller-form" autocomplete="off">
-      <div class="form-header">
-        <div>
-          <strong data-role="poller-form-title">Create poller</strong>
-          <span class="mono muted" data-role="poller-form-id"></span>
+  <div id="poller-forms" class="form-accordion">
+    <details id="poller-get-panel" class="accordion-item panel" open>
+      <summary>
+        <span class="accordion-title"><span class="api-method">GET</span> Get pollers</span>
+        <span data-role="poller-get-api">
+          <span class="api-call api-call-static">
+            <span class="api-method">GET</span>
+            <span class="api-path">/api/reservables/availability/pollers</span>
+          </span>
+        </span>
+      </summary>
+      <form id="poller-get-form" class="accordion-body" autocomplete="off">
+        <div class="form-grid form-grid-compact">
+          <label>
+            Poller ID
+            <input name="id" inputmode="numeric" placeholder="4">
+          </label>
+          <label>
+            Limit
+            <select name="limit">
+              <option value="50">50</option>
+              <option value="100" selected>100</option>
+              <option value="250">250</option>
+              <option value="500">500</option>
+            </select>
+          </label>
+          <label>
+            Offset
+            <input name="offset" type="number" min="0" value="0">
+          </label>
+          <div class="actions form-actions">
+            <button class="primary" type="submit">Get</button>
+            <button data-action="reset-poller-get" type="button">Reset</button>
+          </div>
         </div>
-        <div data-role="poller-form-api">
+      </form>
+    </details>
+
+    <details id="poller-create-panel" class="accordion-item panel">
+      <summary>
+        <span class="accordion-title"><span class="api-method">POST</span> Create poller</span>
+        <span data-role="poller-mutation-api">
           <span class="api-call api-call-static">
             <span class="api-method">POST</span>
             <span class="api-path">/api/reservables/availability/pollers</span>
           </span>
-        </div>
-      </div>
-
-      <div class="form-stack">
-        <section class="form-section">
-          <div class="form-section-title">Scope and schedule</div>
-          <div class="form-grid">
-            <label>
-              Scope
-              <select name="scope_type">
-                <option value="rid">Reservable</option>
-                <option value="poi_id">POI</option>
-              </select>
-            </label>
-            <label class="field-wide">
-              Scope ID
-              <input name="scope_value" placeholder="site:recgov:100">
-            </label>
-            <label>
-              Status
-              <select name="status">
-                <option value="active">active</option>
-                <option value="paused">paused</option>
-                <option value="done">done</option>
-              </select>
-            </label>
-            <label>
-              Min nights
-              <input name="min_nights" type="number" min="1" max="31" value="1">
-            </label>
-            <label>
-              Cadence
-              <input name="cadence" type="number" min="5" value="300">
-            </label>
-            <div class="date-field field-span-3">
+        </span>
+      </summary>
+      <form id="poller-create-form" class="accordion-body" autocomplete="off">
+        <div class="form-stack">
+          <section class="form-section">
+            <div class="form-section-title">Scope and schedule</div>
+            <div class="form-grid">
               <label>
-                Target date
-                <span class="date-entry">
-                  <input name="target_date" type="date">
-                  <button type="button" data-action="add-target-date">Add</button>
-                </span>
+                Scope
+                <select name="scope_type">
+                  <option value="rid">Reservable</option>
+                  <option value="poi_id">POI</option>
+                </select>
               </label>
-              <div class="date-chip-list" data-role="target-dates"></div>
+              <label class="field-wide">
+                Scope ID
+                <input name="scope_value" placeholder="site:recgov:100">
+              </label>
+              <label>
+                Min nights
+                <input name="min_nights" type="number" min="1" max="31" value="1">
+              </label>
+              <label>
+                Cadence
+                <input name="cadence" type="number" min="5" value="300">
+              </label>
+              <div class="date-field field-span-3">
+                <label>
+                  Target date
+                  <span class="date-entry">
+                    <input name="target_date" type="date">
+                    <button type="button" data-action="add-target-date">Add</button>
+                  </span>
+                </label>
+                <div class="date-chip-list" data-role="target-dates"></div>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
 
-        <section class="form-section">
-          <div class="form-section-title">Reservable filters</div>
-          <div class="form-grid">
-            <label>
-              Type
-              <input name="filter_type" placeholder="site">
-            </label>
-            <label>
-              Vendor
-              <input name="filter_vendor" placeholder="recgov">
-            </label>
-            <label>
-              Vendor ID
-              <input name="filter_vendor_id" placeholder="330257">
-            </label>
-            <label>
-              Name
-              <input name="filter_name">
-            </label>
-            <label>
-              Loop
-              <input name="filter_loop">
-            </label>
-            <label>
-              Site type
-              <input name="filter_site_type">
-            </label>
-            <label class="field-span-3">
-              Raw contains
-              <textarea name="filter_raw" spellcheck="false"></textarea>
-            </label>
-          </div>
-        </section>
-
-        <section class="form-section">
-          <div class="form-section-title">Behavior</div>
-          <div class="form-grid form-grid-compact">
-            <label class="field-wide">
-              Trigger actions
-              <input name="trigger_actions" value="notify_slack">
-            </label>
-            <label class="check-row">
-              <input name="stop_when_triggered" type="checkbox" checked>
-              Stop when triggered
-            </label>
-            <label class="check-row">
-              <input name="force" type="checkbox">
-              Force first poll
-            </label>
-            <div class="actions form-actions">
-              <button class="primary" type="submit" data-role="poller-form-submit">Create</button>
-              <button data-action="reset-poller-form" type="button">Reset</button>
-              <button data-action="cancel-poller-edit" type="button" hidden>Cancel</button>
+          <section class="form-section">
+            <div class="form-section-title">Reservable filters</div>
+            <div class="form-grid">
+              <label>
+                Type
+                <input name="filter_type" placeholder="site">
+              </label>
+              <label>
+                Vendor
+                <input name="filter_vendor" placeholder="recgov">
+              </label>
+              <label>
+                Vendor ID
+                <input name="filter_vendor_id" placeholder="330257">
+              </label>
+              <label>
+                Name
+                <input name="filter_name">
+              </label>
+              <label>
+                Loop
+                <input name="filter_loop">
+              </label>
+              <label>
+                Site type
+                <input name="filter_site_type">
+              </label>
+              <label class="field-span-3">
+                Raw contains
+                <textarea name="filter_raw" spellcheck="false"></textarea>
+              </label>
             </div>
-          </div>
-        </section>
-      </div>
-    </form>
+          </section>
+
+          <section class="form-section">
+            <div class="form-section-title">Behavior</div>
+            <div class="form-grid form-grid-compact">
+              <label class="field-wide">
+                Trigger actions
+                <input name="trigger_actions" value="notify_slack">
+              </label>
+              <label class="check-row">
+                <input name="stop_when_triggered" type="checkbox" checked>
+                Stop when triggered
+              </label>
+              <label class="check-row">
+                <input name="force" type="checkbox">
+                Force first poll
+              </label>
+              <div class="actions form-actions">
+                <button class="primary" type="submit">Create</button>
+                <button data-action="reset-poller-form" type="button">Reset</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </form>
+    </details>
+
+    <details id="poller-update-panel" class="accordion-item panel">
+      <summary>
+        <span class="accordion-title"><span class="api-method">PATCH</span> Update poller</span>
+        <span data-role="poller-mutation-api">
+          <span class="api-call api-call-static">
+            <span class="api-method">PATCH</span>
+            <span class="api-path">/api/reservables/availability/pollers/:id</span>
+          </span>
+        </span>
+      </summary>
+      <form id="poller-update-form" class="accordion-body" autocomplete="off">
+        <div class="form-stack">
+          <section class="form-section">
+            <div class="form-section-title">Identity and schedule</div>
+            <div class="form-grid">
+              <label>
+                Poller ID
+                <input name="poller_id" inputmode="numeric" placeholder="4">
+              </label>
+              <label>
+                Scope
+                <select name="scope_type">
+                  <option value="rid">Reservable</option>
+                  <option value="poi_id">POI</option>
+                </select>
+              </label>
+              <label class="field-wide">
+                Scope ID
+                <input name="scope_value" placeholder="site:recgov:100">
+              </label>
+              <label>
+                Status
+                <select name="status">
+                  <option value="">no change</option>
+                  <option value="active">active</option>
+                  <option value="paused">paused</option>
+                  <option value="done">done</option>
+                </select>
+              </label>
+              <label>
+                Min nights
+                <input name="min_nights" type="number" min="1" max="31">
+              </label>
+              <label>
+                Cadence
+                <input name="cadence" type="number" min="5">
+              </label>
+              <div class="date-field field-span-3">
+                <label>
+                  Target date
+                  <span class="date-entry">
+                    <input name="target_date" type="date">
+                    <button type="button" data-action="add-target-date">Add</button>
+                  </span>
+                </label>
+                <div class="date-chip-list" data-role="target-dates"></div>
+              </div>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="form-section-title">Reservable filters</div>
+            <div class="form-grid">
+              <label>
+                Type
+                <input name="filter_type" placeholder="site">
+              </label>
+              <label>
+                Vendor
+                <input name="filter_vendor" placeholder="recgov">
+              </label>
+              <label>
+                Vendor ID
+                <input name="filter_vendor_id" placeholder="330257">
+              </label>
+              <label>
+                Name
+                <input name="filter_name">
+              </label>
+              <label>
+                Loop
+                <input name="filter_loop">
+              </label>
+              <label>
+                Site type
+                <input name="filter_site_type">
+              </label>
+              <label class="field-span-3">
+                Raw contains
+                <textarea name="filter_raw" spellcheck="false"></textarea>
+              </label>
+            </div>
+          </section>
+
+          <section class="form-section">
+            <div class="form-section-title">Behavior</div>
+            <div class="form-grid form-grid-compact">
+              <label class="field-wide">
+                Trigger actions
+                <input name="trigger_actions" placeholder="notify_slack">
+              </label>
+              <label class="check-row">
+                <input name="stop_when_triggered" type="checkbox">
+                Stop when triggered
+              </label>
+              <div class="actions form-actions">
+                <button class="primary" type="submit">Update</button>
+                <button data-action="reset-poller-form" type="button">Reset</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </form>
+    </details>
   </div>
 
   <section class="panel" aria-live="polite">

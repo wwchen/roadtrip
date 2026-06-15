@@ -5,7 +5,7 @@ import {
   fetchReservableAvailabilityPollers,
   patchReservableAvailabilityPoller,
 } from './api/reservable-api.js';
-import { mountPollerForm } from './components/poller-form.js';
+import { mountPollerGetForm, mountPollerMutationForm } from './components/poller-form.js';
 import {
   actionButton,
   createTable,
@@ -23,15 +23,34 @@ const statusEl = document.getElementById('status');
 const refreshBtn = document.getElementById('refresh-btn');
 const resultsEl = document.getElementById('results');
 const emptyEl = document.getElementById('empty');
-const pollerFormEl = document.getElementById('poller-form-root');
+const pollerFormsEl = document.getElementById('poller-forms');
+const pollerGetEl = document.getElementById('poller-get-panel');
+const pollerCreateEl = document.getElementById('poller-create-panel');
+const pollerUpdateEl = document.getElementById('poller-update-panel');
 
 let activeAbort = null;
 let pollersById = new Map();
 
-const pollerForm = mountPollerForm(pollerFormEl, {
-  onCreate: createPoller,
-  onUpdate: updatePoller,
-  onCancel: () => setStatusText(''),
+const getForm = mountPollerGetForm(pollerGetEl, {
+  onSubmit: () => {
+    syncUrlFromGetForm();
+    loadPollers();
+  },
+  onReset: () => {
+    syncUrlFromGetForm();
+    loadPollers();
+  },
+});
+
+const createForm = mountPollerMutationForm(pollerCreateEl, {
+  mode: 'create',
+  onSubmit: ({ body }) => createPoller(body),
+  onError: (err) => setStatusText(errorMessage(err), 'error'),
+});
+
+const updateForm = mountPollerMutationForm(pollerUpdateEl, {
+  mode: 'update',
+  onSubmit: ({ id, body }) => updatePoller(id, body),
   onError: (err) => setStatusText(errorMessage(err), 'error'),
 });
 
@@ -57,10 +76,10 @@ async function loadPollers() {
   setStatusText('Loading...');
 
   try {
-    const id = currentPollerId();
+    const { id, limit, offset } = getForm.params();
     const body = id
       ? await fetchReservableAvailabilityPoller(id, { signal: activeAbort.signal })
-      : await fetchReservableAvailabilityPollers({ signal: activeAbort.signal });
+      : await fetchReservableAvailabilityPollers({ limit, offset, signal: activeAbort.signal });
     const pollers = id ? [body.poller].filter(Boolean) : body.pollers || [];
     renderRows(pollers);
     setStatusCount(pollers.length);
@@ -75,7 +94,9 @@ async function loadPollers() {
 
 function setBusy(busy) {
   refreshBtn.disabled = busy;
-  pollerForm.setBusy(busy);
+  getForm.setBusy(busy);
+  createForm.setBusy(busy);
+  updateForm.setBusy(busy);
 }
 
 function setStatusText(text, className = '') {
@@ -96,6 +117,19 @@ function setStatusPoller(id, action) {
   const strong = document.createElement('strong');
   strong.textContent = `Poller #${id}`;
   statusEl.replaceChildren(strong, document.createTextNode(action));
+}
+
+function syncUrlFromGetForm() {
+  const { id, limit, offset } = getForm.params();
+  const qs = new URLSearchParams();
+  if (id) {
+    qs.set('id', id);
+  } else {
+    if (limit && limit !== '100') qs.set('limit', limit);
+    if (offset && offset !== '0') qs.set('offset', offset);
+  }
+  const suffix = qs.toString();
+  window.history.replaceState(null, '', suffix ? `/pollers?${suffix}` : '/pollers');
 }
 
 function renderRows(pollers) {
@@ -239,7 +273,7 @@ async function createPoller(body) {
   setStatusText('Creating...');
   try {
     const result = await createReservableAvailabilityPoller(body);
-    pollerForm.reset();
+    createForm.reset();
     await loadPollers();
     setStatusPoller(result.poller?.id || '', ' saved');
   } catch (err) {
@@ -254,7 +288,7 @@ async function updatePoller(id, body) {
   setStatusText('Updating...');
   try {
     const result = await patchReservableAvailabilityPoller(id, body);
-    pollerForm.reset();
+    updateForm.reset();
     await loadPollers();
     setStatusPoller(result.poller?.id || id, ' updated');
   } catch (err) {
@@ -298,10 +332,6 @@ function statusClass(status) {
   return ['active', 'paused', 'done'].includes(value) ? value : '';
 }
 
-function currentPollerId() {
-  return new URLSearchParams(window.location.search).get('id')?.trim() || '';
-}
-
 refreshBtn.addEventListener('click', loadPollers);
 
 resultsEl.addEventListener('click', async (event) => {
@@ -310,8 +340,8 @@ resultsEl.addEventListener('click', async (event) => {
     const id = editButton.dataset.id || '';
     const poller = pollersById.get(id);
     if (!poller) return;
-    pollerForm.edit(poller);
-    pollerFormEl.scrollIntoView({ block: 'start' });
+    updateForm.edit(poller);
+    pollerFormsEl.scrollIntoView({ block: 'start' });
     setStatusText(`Editing poller #${id}`);
     return;
   }
@@ -349,4 +379,5 @@ resultsEl.addEventListener('click', async (event) => {
   }
 });
 
+getForm.applyParamsFromUrl();
 loadPollers();

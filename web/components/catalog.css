@@ -197,6 +197,44 @@ form.panel {
   margin-bottom: 14px;
 }
 
+.form-accordion {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.accordion-item {
+  overflow: hidden;
+}
+
+.accordion-item summary {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  color: var(--text);
+}
+
+.accordion-item:not([open]) summary {
+  border-bottom: 0;
+}
+
+.accordion-title {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  font-weight: 650;
+}
+
+.accordion-body {
+  display: grid;
+  gap: 14px;
+  padding: 14px;
+}
+
 label {
   display: grid;
   gap: 5px;
@@ -889,6 +927,7 @@ pre {
   .actions { flex-wrap: wrap; }
   .top,
   .toolbar,
+  .accordion-item summary,
   .form-header {
     align-items: flex-start;
     flex-direction: column;

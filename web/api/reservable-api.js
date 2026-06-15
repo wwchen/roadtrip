@@ -58,8 +58,12 @@ export function queryReservableAvailability(body, { signal } = {}) {
  * @param {object}      [opts]
  * @param {AbortSignal} [opts.signal]
  */
-export function fetchReservableAvailabilityPollers({ signal } = {}) {
-  return jsonGetOk('/api/reservables/availability/pollers', { signal });
+export function fetchReservableAvailabilityPollers({ limit, offset, signal } = {}) {
+  const params = new URLSearchParams();
+  if (limit) params.set('limit', String(limit));
+  if (offset) params.set('offset', String(offset));
+  const suffix = params.toString() ? `?${params}` : '';
+  return jsonGetOk(`/api/reservables/availability/pollers${suffix}`, { signal });
 }
 
 export function fetchReservableAvailabilityPoller(id, { signal } = {}) {
