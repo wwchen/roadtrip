@@ -8,7 +8,10 @@ CREATE TABLE reservable_availability_monitors (
   id                   BIGSERIAL    PRIMARY KEY,
   reservable_id        BIGINT       NOT NULL REFERENCES reservables(id) ON DELETE CASCADE,
   cadence_sec          INT          NOT NULL CHECK (cadence_sec >= 5),
-  trigger_action       TEXT         NOT NULL CHECK (length(trim(trigger_action)) > 0),
+  trigger_action       JSONB        NOT NULL CHECK (
+                                      jsonb_typeof(trigger_action) = 'array'
+                                      AND jsonb_array_length(trigger_action) > 0
+                                    ),
   stop_when_triggered  BOOLEAN      NOT NULL DEFAULT TRUE,
   status               TEXT         NOT NULL DEFAULT 'active'
                                       CHECK (status IN ('active', 'paused', 'done')),

@@ -3,7 +3,12 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.db.generated.tables.ReservableAvailabilityMonitors.Companion.RESERVABLE_AVAILABILITY_MONITORS
 import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
 import ca.floo.roadtrip.models.Reservable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.jsonArray
 import org.jooq.DSLContext
+import org.jooq.JSONB
 import org.jooq.Record
 import java.time.OffsetDateTime
 
@@ -11,10 +16,11 @@ class ReservableAvailabilityMonitorRepo(
     private val ctx: DSLContext,
 ) {
     private val reservables = ReservableRepo(ctx)
+    private val json = Json
 
     data class CreateInput(
         val cadenceSec: Int,
-        val triggerAction: String,
+        val triggerAction: JsonArray,
         val stopWhenTriggered: Boolean,
     )
 
@@ -22,7 +28,7 @@ class ReservableAvailabilityMonitorRepo(
         val id: Long,
         val reservable: Reservable,
         val cadenceSec: Int,
-        val triggerAction: String,
+        val triggerAction: JsonArray,
         val stopWhenTriggered: Boolean,
         val status: String,
         val lastCheckedAt: OffsetDateTime?,
@@ -40,7 +46,7 @@ class ReservableAvailabilityMonitorRepo(
                 .insertInto(RESERVABLE_AVAILABILITY_MONITORS)
                 .set(RESERVABLE_AVAILABILITY_MONITORS.RESERVABLE_ID, reservableId)
                 .set(RESERVABLE_AVAILABILITY_MONITORS.CADENCE_SEC, input.cadenceSec)
-                .set(RESERVABLE_AVAILABILITY_MONITORS.TRIGGER_ACTION, input.triggerAction)
+                .set(RESERVABLE_AVAILABILITY_MONITORS.TRIGGER_ACTION, JSONB.valueOf(json.encodeToString(input.triggerAction)))
                 .set(RESERVABLE_AVAILABILITY_MONITORS.STOP_WHEN_TRIGGERED, input.stopWhenTriggered)
                 .returningResult(RESERVABLE_AVAILABILITY_MONITORS.ID)
                 .fetchOne()!!
@@ -74,7 +80,7 @@ class ReservableAvailabilityMonitorRepo(
             id = r.get(RESERVABLE_AVAILABILITY_MONITORS.ID)!!,
             reservable = reservables.fromRecord(r),
             cadenceSec = r.get(RESERVABLE_AVAILABILITY_MONITORS.CADENCE_SEC)!!,
-            triggerAction = r.get(RESERVABLE_AVAILABILITY_MONITORS.TRIGGER_ACTION)!!,
+            triggerAction = json.parseToJsonElement(r.get(RESERVABLE_AVAILABILITY_MONITORS.TRIGGER_ACTION)!!.data()).jsonArray,
             stopWhenTriggered = r.get(RESERVABLE_AVAILABILITY_MONITORS.STOP_WHEN_TRIGGERED)!!,
             status = r.get(RESERVABLE_AVAILABILITY_MONITORS.STATUS)!!,
             lastCheckedAt = r.get(RESERVABLE_AVAILABILITY_MONITORS.LAST_CHECKED_AT),

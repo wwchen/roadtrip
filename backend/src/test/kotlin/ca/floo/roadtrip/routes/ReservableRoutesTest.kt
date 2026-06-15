@@ -222,7 +222,7 @@ class ReservableRoutesTest {
                     contentType(ContentType.Application.Json)
                     setBody(
                         """
-                        {"cadence":60,"trigger_action":"notify_slack","stop_when_triggered":false}
+                        {"cadence":60,"trigger_action":["notify_slack"],"stop_when_triggered":false}
                         """.trimIndent(),
                     )
                 }
@@ -230,7 +230,7 @@ class ReservableRoutesTest {
             val createdBody = Json.parseToJsonElement(created.bodyAsText()).jsonObject
             val monitor = createdBody["monitor"]!!.jsonObject
             assertEquals("60", monitor["cadence"]!!.jsonPrimitive.content)
-            assertEquals("notify_slack", monitor["trigger_action"]!!.jsonPrimitive.content)
+            assertEquals(listOf("notify_slack"), monitor["trigger_action"]!!.jsonArray.map { it.jsonPrimitive.content })
             assertEquals(false, monitor["stop_when_triggered"]!!.jsonPrimitive.boolean)
             assertEquals("active", monitor["status"]!!.jsonPrimitive.content)
             assertEquals("site:recgov:330257", monitor["reservable"]!!.jsonObject["rid"]!!.jsonPrimitive.content)
@@ -239,6 +239,15 @@ class ReservableRoutesTest {
             assertEquals(HttpStatusCode.OK, list.status)
             val listBody = Json.parseToJsonElement(list.bodyAsText()).jsonObject
             assertEquals(1, listBody["monitors"]!!.jsonArray.size)
+            assertEquals(
+                listOf("notify_slack"),
+                listBody["monitors"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject["trigger_action"]!!
+                    .jsonArray
+                    .map { it.jsonPrimitive.content },
+            )
         }
 
     @Test
@@ -250,14 +259,21 @@ class ReservableRoutesTest {
             val badCadence =
                 client.post("/api/reservable/site:recgov:330257/availability/monitor") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"cadence":1,"trigger_action":"notify_slack"}""")
+                    setBody("""{"cadence":1,"trigger_action":["notify_slack"]}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, badCadence.status)
+
+            val emptyAction =
+                client.post("/api/reservable/site:recgov:330257/availability/monitor") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"cadence":60,"trigger_action":[]}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, emptyAction.status)
 
             val unknown =
                 client.post("/api/reservable/site:recgov:missing/availability/monitor") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"cadence":60,"trigger_action":"notify_slack"}""")
+                    setBody("""{"cadence":60,"trigger_action":["notify_slack"]}""")
                 }
             assertEquals(HttpStatusCode.NotFound, unknown.status)
         }
