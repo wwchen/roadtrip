@@ -27,3 +27,36 @@ CREATE INDEX reservable_availability_monitors_active_idx
 
 CREATE INDEX reservable_availability_monitors_reservable_idx
   ON reservable_availability_monitors (reservable_id);
+
+-- Append-only per-day availability snapshots captured from reservable
+-- availability polls. A single poll window writes one row per returned
+-- target_date so history queries can compare "what did rid X look like
+-- yesterday vs today for date Y" without parsing whole response blobs.
+CREATE TABLE reservable_availability_monitor_log (
+  id               BIGSERIAL    PRIMARY KEY,
+  monitor_id       BIGINT       REFERENCES reservable_availability_monitors(id) ON DELETE SET NULL,
+  reservable_rid   TEXT         NOT NULL CHECK (length(trim(reservable_rid)) > 0),
+  provider         TEXT         NOT NULL CHECK (length(trim(provider)) > 0),
+  observed_at      TIMESTAMPTZ  NOT NULL DEFAULT now(),
+  target_date      DATE         NOT NULL,
+  window_start     DATE         NOT NULL,
+  window_days      INT          NOT NULL CHECK (window_days > 0),
+  min_nights       INT          NOT NULL CHECK (min_nights >= 1),
+  force            BOOLEAN      NOT NULL DEFAULT FALSE,
+  cache_hit        BOOLEAN      NOT NULL DEFAULT FALSE,
+  status           TEXT         NOT NULL CHECK (status IN ('available', 'partial', 'booked', 'closed')),
+  available        BOOLEAN      NOT NULL,
+  available_count  INT          NOT NULL CHECK (available_count >= 0),
+  total            INT          NOT NULL CHECK (total >= 0),
+  day_payload      JSONB        NOT NULL CHECK (jsonb_typeof(day_payload) = 'object')
+);
+
+CREATE INDEX reservable_availability_monitor_log_rid_target_observed_idx
+  ON reservable_availability_monitor_log (reservable_rid, target_date, observed_at DESC);
+
+CREATE INDEX reservable_availability_monitor_log_rid_observed_idx
+  ON reservable_availability_monitor_log (reservable_rid, observed_at DESC);
+
+CREATE INDEX reservable_availability_monitor_log_monitor_observed_idx
+  ON reservable_availability_monitor_log (monitor_id, observed_at DESC)
+  WHERE monitor_id IS NOT NULL;

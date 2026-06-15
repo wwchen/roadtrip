@@ -2,6 +2,7 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityMonitorLogRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
@@ -80,6 +81,7 @@ class ReservableRoutesTest {
 
     @BeforeEach
     fun reset() {
+        ctx.execute("DELETE FROM reservable_availability_monitor_log")
         ctx.execute("DELETE FROM reservable_availability_monitors")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
@@ -402,23 +404,57 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
+                        ReservableAvailabilityMonitorLogRepo(ctx),
                     )
                 }
             }
 
-            val resp = client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01&days=1")
+            val resp = client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01&days=2")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
             assertEquals("site:recgov:330257", body["reservable_id"]!!.jsonPrimitive.content)
+            assertEquals(2, body["availability"]!!.jsonArray.size)
             val firstDate =
                 body["availability"]!!
                     .jsonArray
-                    .single()
+                    .first()
                     .jsonObject["date"]!!
                     .jsonPrimitive
                     .content
             assertEquals("2026-07-01", firstDate)
+
+            val logRows =
+                ctx.fetch(
+                    """
+                    SELECT reservable_rid, provider, target_date, window_start, window_days,
+                           min_nights, force, cache_hit, status, available, available_count, total,
+                           day_payload
+                    FROM reservable_availability_monitor_log
+                    ORDER BY target_date
+                    """.trimIndent(),
+                )
+            assertEquals(2, logRows.size)
+            assertEquals("site:recgov:330257", logRows[0].get("reservable_rid", String::class.java))
+            assertEquals("fake", logRows[0].get("provider", String::class.java))
+            assertEquals(java.time.LocalDate.parse("2026-07-01"), logRows[0].get("target_date", java.time.LocalDate::class.java))
+            assertEquals(java.time.LocalDate.parse("2026-07-01"), logRows[0].get("window_start", java.time.LocalDate::class.java))
+            assertEquals(2, logRows[0].get("window_days", Int::class.java))
+            assertEquals(1, logRows[0].get("min_nights", Int::class.java))
+            assertEquals(false, logRows[0].get("force", Boolean::class.java))
+            assertEquals(true, logRows[0].get("cache_hit", Boolean::class.java))
+            assertEquals("available", logRows[0].get("status", String::class.java))
+            assertEquals(true, logRows[0].get("available", Boolean::class.java))
+            assertEquals(1, logRows[0].get("available_count", Int::class.java))
+            assertEquals(1, logRows[0].get("total", Int::class.java))
+            assertEquals(
+                "2026-07-01",
+                Json
+                    .parseToJsonElement(logRows[0].get("day_payload").toString())
+                    .jsonObject["date"]!!
+                    .jsonPrimitive
+                    .content,
+            )
         }
 
     private fun seedPoi(

@@ -12,7 +12,9 @@ import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
 import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityMonitorLogRepo
 import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
@@ -72,6 +74,7 @@ fun Route.campsiteAvailabilityRoutes(
     providerRefs: CampsiteProviderRepo,
     bookingProviders: BookingProviderRegistry,
     reservables: ReservableRepo,
+    monitorLogs: ReservableAvailabilityMonitorLogRepo? = null,
 ) {
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
 
@@ -298,6 +301,11 @@ fun Route.campsiteAvailabilityRoutes(
                         force = query.force,
                     ),
                 )
+            monitorLogs?.appendReservableAvailability(
+                reservableRid = rid.encode(),
+                response = response,
+                query = query,
+            )
             call.respondAvailabilityJson(response)
         } catch (e: BookingProviderError) {
             val (status, error) = mapProviderError(e)
@@ -457,6 +465,28 @@ private suspend fun fetchOneBulk(
     } catch (e: BookingProviderError) {
         log.info("bulk availability poi={} provider={} failed: {}", poiId, provider.id, e.message)
         BulkAvailEntrySchema(id = poiId, status = httpStatusFor(e), available_dates = emptyList())
+    }
+}
+
+private fun ReservableAvailabilityMonitorLogRepo.appendReservableAvailability(
+    reservableRid: String,
+    response: AvailabilityResponseDto,
+    query: AvailabilityQuery,
+) {
+    try {
+        appendAvailabilityPoll(
+            ReservableAvailabilityMonitorLogRepo.AvailabilityPoll(
+                reservableRid = reservableRid,
+                provider = response.provider,
+                response = response,
+                windowStart = query.start,
+                windowDays = response.window.days,
+                minNights = query.minNights,
+                force = query.force,
+            ),
+        )
+    } catch (e: Exception) {
+        log.warn("reservable availability log append failed rid={}: {}", reservableRid, e.message)
     }
 }
 
