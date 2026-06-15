@@ -172,7 +172,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         summary = "Create a reservable availability monitor"
         description =
             "Persists a monitor registration for one reservable. `cadence` is " +
-            "seconds and must be at least 5. `trigger_action` is a non-empty " +
+            "seconds and must be at least 5. `trigger_actions` is a non-empty " +
             "JSON array describing the actions the future monitor worker " +
             "should perform when availability matches; `stop_when_triggered` " +
             "defaults to true."
@@ -188,7 +188,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 body<ReservableAvailabilityMonitorResponseSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.BadRequest) {
-                description = "Malformed reservable id, JSON body, cadence, or trigger_action."
+                description = "Malformed reservable id, JSON body, cadence, or trigger_actions."
                 body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.NotFound) {
@@ -223,12 +223,12 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 "cadence must be at least 5 seconds",
             )
         }
-        val triggerAction = input.triggerAction
-        if (triggerAction.isEmpty()) {
+        val triggerActions = input.triggerActions
+        if (triggerActions.isEmpty()) {
             return@post call.respondReservableError(
-                "bad_trigger_action",
+                "bad_trigger_actions",
                 HttpStatusCode.BadRequest,
-                "trigger_action must be a non-empty array",
+                "trigger_actions must be a non-empty array",
             )
         }
 
@@ -240,7 +240,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                             row.id,
                             ReservableAvailabilityMonitorRepo.CreateInput(
                                 cadenceSec = input.cadence,
-                                triggerAction = triggerAction,
+                                triggerActions = triggerActions,
                                 stopWhenTriggered = input.stopWhenTriggered,
                             ),
                         ).toSchema(),
@@ -373,7 +373,7 @@ private fun ReservableAvailabilityMonitorRepo.Monitor.toSchema(): ReservableAvai
         id = id,
         reservable = reservable.toSchema(),
         cadence = cadenceSec,
-        triggerAction = triggerAction,
+        triggerActions = triggerActions,
         stopWhenTriggered = stopWhenTriggered,
         status = status,
         lastCheckedAt = lastCheckedAt?.toString(),
