@@ -41,8 +41,6 @@ CREATE TABLE reservable_availability_log (
   target_date      DATE         NOT NULL,
   status           TEXT         NOT NULL CHECK (status IN ('available', 'partial', 'booked', 'closed')),
   available        BOOLEAN      NOT NULL,
-  available_count  INT          NOT NULL CHECK (available_count >= 0),
-  total            INT          NOT NULL CHECK (total >= 0),
   day_payload      JSONB        NOT NULL CHECK (jsonb_typeof(day_payload) = 'object')
 );
 
