@@ -170,6 +170,7 @@
   }
   table {
     width: 100%;
+    min-width: 920px;
     border-collapse: collapse;
     font-size: 13px;
   }
@@ -201,6 +202,95 @@
   }
   .name {
     max-width: 260px;
+    overflow-wrap: anywhere;
+  }
+  .row-links {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .link-button {
+    height: auto;
+    min-height: 0;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--accent);
+  }
+  .link-button:hover {
+    background: transparent;
+    color: var(--accent-hover);
+    text-decoration: underline;
+  }
+  .availability-row td {
+    padding: 0;
+    background: rgba(255,255,255,0.018);
+  }
+  .availability-panel {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    border-bottom: 1px solid var(--border);
+  }
+  .availability-controls {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(120px, 1fr)) auto;
+    gap: 10px;
+    align-items: end;
+  }
+  .availability-force {
+    display: flex;
+    min-height: 34px;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 13px;
+    font-weight: 400;
+  }
+  .availability-force input {
+    width: auto;
+    height: auto;
+  }
+  .availability-result {
+    display: grid;
+    gap: 8px;
+  }
+  .availability-summary {
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .availability-summary strong { color: var(--text); }
+  .availability-days {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .day-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    min-height: 26px;
+    padding: 3px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .day-pill.available {
+    border-color: rgba(76,185,106,0.45);
+    background: rgba(76,185,106,0.12);
+    color: #87d99b;
+  }
+  .day-pill.partial {
+    border-color: rgba(241,194,125,0.42);
+    background: rgba(241,194,125,0.10);
+    color: #f1c27d;
+  }
+  .availability-url {
     overflow-wrap: anywhere;
   }
   details summary {
@@ -242,6 +332,7 @@
     .filters { grid-template-columns: 1fr; }
     .wide { grid-column: span 1; }
     .actions { flex-wrap: wrap; }
+    .availability-controls { grid-template-columns: 1fr; }
     .status,
     .pager { align-items: flex-start; flex-direction: column; }
     th,

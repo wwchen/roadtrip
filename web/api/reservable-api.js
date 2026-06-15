@@ -12,6 +12,9 @@
 //   GET /api/reservables/availability/monitors
 //     → { monitors: [{ id, reservable, cadence, trigger_action, … }, …] }
 //
+//   GET /api/reservable/{rid}/availability
+//     → provider availability response for one reservable
+//
 // These hit the catalog (per-site rows from the reservable_data ETLs +
 // joiner). They are NOT availability data — per-day status still comes
 // from /api/campsite/availability/{poi_id}. Catalog is cheap (no upstream
@@ -76,4 +79,30 @@ export function fetchPoiReservables(poiId, { type, signal } = {}) {
  */
 export function fetchReservable(rid, { signal } = {}) {
   return jsonGetOk(`/api/reservable/${encodeURIComponent(rid)}`, { signal });
+}
+
+/**
+ * Fetch per-day availability for one reservable.
+ *
+ * @param {string}      rid
+ * @param {object}      [opts]
+ * @param {number}      [opts.days=7]
+ * @param {string}      [opts.start]
+ * @param {number}      [opts.minNights=1]
+ * @param {boolean}     [opts.force]
+ * @param {AbortSignal} [opts.signal]
+ */
+export function fetchReservableAvailability(
+  rid,
+  { days = 7, start, minNights = 1, force, signal } = {},
+) {
+  return jsonGetOk(reservableAvailabilityUrl(rid, { days, start, minNights, force }), { signal });
+}
+
+export function reservableAvailabilityUrl(rid, { days = 7, start, minNights = 1, force } = {}) {
+  const params = new URLSearchParams({ days: String(days) });
+  if (start) params.set('start', start);
+  if (minNights != null) params.set('min_nights', String(minNights));
+  if (force) params.set('force', '1');
+  return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
 }

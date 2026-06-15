@@ -1,4 +1,8 @@
-import { searchReservables } from './api/reservable-api.js';
+import {
+  fetchReservableAvailability,
+  reservableAvailabilityUrl,
+  searchReservables,
+} from './api/reservable-api.js';
 
 const form = document.getElementById('reservable-form');
 const resultsEl = document.getElementById('results');
@@ -12,6 +16,8 @@ const resetBtn = document.getElementById('reset-btn');
 let offset = 0;
 let total = 0;
 let activeAbort = null;
+let lastRows = [];
+const availabilityPanels = new Map();
 
 function formParams() {
   const data = new FormData(form);
@@ -91,17 +97,22 @@ async function runSearch() {
 }
 
 function renderResults(rows) {
+  lastRows = rows;
   emptyEl.hidden = rows.length !== 0;
-  resultsEl.innerHTML = rows.map(rowHtml).join('');
+  resultsEl.innerHTML = rows.map(rowGroupHtml).join('');
 }
 
-function rowHtml(row) {
+function rowGroupHtml(row) {
+  const state = availabilityPanels.get(row.rid);
+  return rowHtml(row, state) + (state?.expanded ? availabilityPanelHtml(row.rid, state) : '');
+}
+
+function rowHtml(row, state) {
   const raw = row.raw == null ? '' : JSON.stringify(row.raw, null, 2);
   const rawCell = raw
     ? `<details><summary>JSON</summary><pre>${escapeHtml(raw)}</pre></details>`
     : '<span class="muted">none</span>';
   const detailUrl = `/api/reservable/${encodeURIComponent(row.rid)}`;
-  const availabilityUrl = `/api/reservable/${encodeURIComponent(row.rid)}/availability?days=7`;
   return `
     <tr>
       <td class="rid mono">
@@ -113,10 +124,166 @@ function rowHtml(row) {
       <td>${dash(row.site_type)}</td>
       <td>${rawCell}</td>
       <td>
-        <a href="${availabilityUrl}" target="_blank" rel="noreferrer">Availability</a>
+        <div class="row-links">
+          <button
+            class="link-button"
+            type="button"
+            data-action="toggle-availability"
+            data-rid="${escapeHtml(row.rid)}"
+          >${state?.expanded ? 'Hide availability' : 'Availability'}</button>
+        </div>
       </td>
     </tr>
   `;
+}
+
+function availabilityPanelHtml(rid, state) {
+  const query = state.query || defaultAvailabilityQuery();
+  const url = reservableAvailabilityUrl(rid, query);
+  const result = availabilityResultHtml(state);
+  return `
+    <tr class="availability-row" data-panel-rid="${escapeHtml(rid)}">
+      <td colspan="6">
+        <div class="availability-panel">
+          <form class="availability-controls" data-action="availability-query" data-rid="${escapeHtml(rid)}">
+            <label>
+              Start
+              <input name="start" type="date" value="${escapeHtml(query.start)}">
+            </label>
+            <label>
+              Days
+              <input name="days" type="number" min="1" max="60" value="${escapeHtml(query.days)}">
+            </label>
+            <label>
+              Min nights
+              <input name="min_nights" type="number" min="1" max="31" value="${escapeHtml(query.minNights)}">
+            </label>
+            <label class="availability-force">
+              <input name="force" type="checkbox"${query.force ? ' checked' : ''}>
+              Force refresh
+            </label>
+            <div class="actions">
+              <button class="primary" type="submit"${state.loading ? ' disabled' : ''}>Query</button>
+            </div>
+          </form>
+          <div class="mono muted availability-url">${escapeHtml(url)}</div>
+          ${result}
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function availabilityResultHtml(state) {
+  if (state.loading) {
+    return '<div class="availability-summary">Loading availability...</div>';
+  }
+  if (state.error) {
+    return `<div class="availability-summary error">${escapeHtml(state.error)}</div>`;
+  }
+  if (!state.data) {
+    return '<div class="availability-summary">Edit query parameters, then run the request.</div>';
+  }
+  const body = state.data;
+  const days = Array.isArray(body.availability) ? body.availability : [];
+  const pills = days.slice(0, 14).map(dayPillHtml).join('');
+  const remainder = days.length > 14 ? `<span class="muted">+${days.length - 14} more</span>` : '';
+  return `
+    <div class="availability-result">
+      <div class="availability-summary">
+        <strong>${escapeHtml(body.summary || body.state || 'Availability response')}</strong>
+        ${body.provider ? ` · ${escapeHtml(body.provider)}` : ''}
+      </div>
+      <div class="availability-days">${pills}${remainder}</div>
+      <details>
+        <summary>Response JSON</summary>
+        <pre>${escapeHtml(JSON.stringify(body, null, 2))}</pre>
+      </details>
+    </div>
+  `;
+}
+
+function dayPillHtml(day) {
+  const status = String(day.status || '').toLowerCase();
+  const cls = ['available', 'partial'].includes(status) ? status : '';
+  const count = `${Number(day.available_count || 0)} of ${Number(day.total || 0)}`;
+  return `
+    <span class="day-pill ${cls}">
+      <span>${escapeHtml(day.date || '')}</span>
+      <span>${escapeHtml(status || 'unknown')}</span>
+      <span>${escapeHtml(count)}</span>
+    </span>
+  `;
+}
+
+function defaultAvailabilityQuery() {
+  return {
+    start: utcYmd(new Date()),
+    days: '7',
+    minNights: '1',
+    force: false,
+  };
+}
+
+function panelState(rid) {
+  if (!availabilityPanels.has(rid)) {
+    availabilityPanels.set(rid, {
+      expanded: false,
+      query: defaultAvailabilityQuery(),
+      loading: false,
+      error: '',
+      data: null,
+      abort: null,
+    });
+  }
+  return availabilityPanels.get(rid);
+}
+
+function toggleAvailability(rid) {
+  const state = panelState(rid);
+  state.expanded = !state.expanded;
+  renderResults(lastRows);
+}
+
+async function queryAvailability(rid, formEl) {
+  const state = panelState(rid);
+  state.abort?.abort();
+  state.abort = new AbortController();
+  state.query = availabilityQueryFromForm(formEl);
+  state.loading = true;
+  state.error = '';
+  state.data = null;
+  renderResults(lastRows);
+
+  try {
+    state.data = await fetchReservableAvailability(rid, {
+      ...state.query,
+      signal: state.abort.signal,
+    });
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    state.error = errorMessage(err);
+  } finally {
+    state.loading = false;
+    renderResults(lastRows);
+  }
+}
+
+function availabilityQueryFromForm(formEl) {
+  const data = new FormData(formEl);
+  return {
+    start: String(data.get('start') || '').trim(),
+    days: String(data.get('days') || '7').trim() || '7',
+    minNights: String(data.get('min_nights') || '1').trim() || '1',
+    force: data.get('force') === 'on',
+  };
+}
+
+function utcYmd(date) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
 }
 
 function dash(value) {
@@ -165,6 +332,19 @@ nextBtn.addEventListener('click', () => {
   if (offset + limitValue() >= total) return;
   offset += limitValue();
   runSearch();
+});
+
+resultsEl.addEventListener('click', (event) => {
+  const toggle = event.target.closest('[data-action="toggle-availability"]');
+  if (!toggle) return;
+  toggleAvailability(toggle.dataset.rid || '');
+});
+
+resultsEl.addEventListener('submit', (event) => {
+  const queryForm = event.target.closest('[data-action="availability-query"]');
+  if (!queryForm) return;
+  event.preventDefault();
+  queryAvailability(queryForm.dataset.rid || '', queryForm);
 });
 
 applyParamsFromUrl();
