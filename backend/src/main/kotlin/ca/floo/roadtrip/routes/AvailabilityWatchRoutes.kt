@@ -82,6 +82,9 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
     get("/api/availability/watches/{id}", {
         tags = listOf("availability")
         summary = "Get one watch"
+        request {
+            pathParameter<Long>("id") { description = "Watch id." }
+        }
         response {
             code(HttpStatusCode.OK) { body<AvailabilityWatchResponse> { mediaTypes(ContentType.Application.Json) } }
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
@@ -139,8 +142,13 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
     patch("/api/availability/watches/{id}", {
         tags = listOf("availability")
         summary = "Update a watch"
+        request {
+            pathParameter<Long>("id") { description = "Watch id." }
+            body<AvailabilityWatchUpdateRequest> { mediaTypes(ContentType.Application.Json) }
+        }
         response {
             code(HttpStatusCode.OK) { body<AvailabilityWatchResponse> { mediaTypes(ContentType.Application.Json) } }
+            code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
@@ -185,6 +193,9 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
     delete("/api/availability/watches/{id}", {
         tags = listOf("availability")
         summary = "Delete a watch"
+        request {
+            pathParameter<Long>("id") { description = "Watch id." }
+        }
         response {
             code(HttpStatusCode.NoContent) { description = "Deleted." }
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
