@@ -119,28 +119,15 @@
     align-items: end;
   }
   .form-stack {
-    display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    display: flex;
+    flex-wrap: wrap;
     gap: 10px 20px;
-    align-items: end;
+    align-items: flex-end;
   }
   .form-stack > label,
-  .form-stack > .actions { grid-column: span 2; }
-  .form-stack > .full { grid-column: 1 / -1; }
-  .form-stack > label.narrow { grid-column: span 1; }
-  .form-stack input,
-  .form-stack select,
-  .form-stack textarea {
-    max-width: 480px;
-  }
-  .form-stack > .full input,
-  .form-stack > .full textarea {
-    max-width: none;
-  }
-  .filters input,
-  .filters select {
-    max-width: 360px;
-  }
+  .form-stack > .actions { flex: 3 1 280px; }
+  .form-stack > label.narrow { flex: 1 1 160px; }
+  .form-stack > .full { flex: 1 1 100%; }
   .form-stack label.checkbox {
     display: flex;
     flex-direction: row;
