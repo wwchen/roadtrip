@@ -1,4 +1,4 @@
-import { dash, escapeHtml, expanderButton, linkChip, links, renderRow, renderTable } from './table-view.js';
+import { dash, escapeHtml, expanderButton, linkChip, links, renderRow, renderTable } from './result-table.js';
 
 export const poiColumns = [
   {

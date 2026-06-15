@@ -1,4 +1,4 @@
-import { escapeHtml, expanderButton } from './table-view.js';
+import { escapeHtml, expanderButton } from './result-table.js';
 
 export function availabilityPanelHtml(rid, state, { colspan = 5 } = {}) {
   const expanded = !!state?.expanded;

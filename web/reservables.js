@@ -1,8 +1,8 @@
 import { fetchReservable, searchReservables } from './api/reservable-api.js';
-import { createAvailabilityPanels } from './availability-controller.js';
-import { mountReservableQuery } from './reservable-query.js';
-import { reservableDetailLink, reservableRowGroupRenderer, reservableTableHtml } from './reservable-table.js';
-import { escapeHtml } from './table-view.js';
+import { createAvailabilityPanels } from './components/availability-controller.js';
+import { mountReservableQuery } from './components/reservable-query.js';
+import { reservableDetailLink, reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
+import { escapeHtml } from './components/result-table.js';
 
 const resultsEl = document.getElementById('results');
 const emptyEl = document.getElementById('empty');

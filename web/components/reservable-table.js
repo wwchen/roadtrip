@@ -1,5 +1,5 @@
-import { availabilityPanelHtml } from './availability-components.js';
-import { dash, escapeHtml, linkChip, links, renderRow, renderTable } from './table-view.js';
+import { availabilityPanelHtml } from './availability-panel.js';
+import { dash, escapeHtml, linkChip, links, renderRow, renderTable } from './result-table.js';
 
 export const reservableColumns = [
   {

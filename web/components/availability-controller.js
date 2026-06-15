@@ -1,8 +1,8 @@
-import { fetchReservableAvailability } from './api/reservable-api.js';
+import { fetchReservableAvailability } from '../api/reservable-api.js';
 import {
   availabilityQueryFromForm,
   defaultAvailabilityQuery,
-} from './availability-components.js';
+} from './availability-panel.js';
 
 export function createAvailabilityPanels({ render }) {
   const panels = new Map();

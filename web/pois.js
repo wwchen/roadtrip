@@ -1,10 +1,10 @@
 import { fetchPoiDetail, poiSearchUrl, searchPoiCatalog } from './api/poi-api.js';
 import { fetchPoiReservables } from './api/reservable-api.js';
-import { createAvailabilityPanels } from './availability-controller.js';
-import { mountPoiQuery } from './poi-query.js';
-import { poiReservablesRowHtml, poiRowHtml, poiTableHtml } from './poi-table.js';
-import { reservableDetailLink, reservableRowGroupRenderer, reservableTableHtml } from './reservable-table.js';
-import { escapeHtml } from './table-view.js';
+import { createAvailabilityPanels } from './components/availability-controller.js';
+import { mountPoiQuery } from './components/poi-query.js';
+import { poiReservablesRowHtml, poiRowHtml, poiTableHtml } from './components/poi-table.js';
+import { reservableDetailLink, reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
+import { escapeHtml } from './components/result-table.js';
 
 const query = mountPoiQuery(document.getElementById('poi-query'), {
   onSubmit: runSearch,

@@ -1,5 +1,5 @@
 import { fetchReservableAvailabilityMonitors } from './api/reservable-api.js';
-import { escapeHtml, linkChip, links, renderRow } from './table-view.js';
+import { escapeHtml, linkChip, links, renderRow } from './components/result-table.js';
 
 const statusEl = document.getElementById('status');
 const refreshBtn = document.getElementById('refresh-btn');
