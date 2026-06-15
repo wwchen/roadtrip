@@ -1,0 +1,148 @@
+import { createWatch, deleteWatch, listWatches, updateWatch } from '/web/api/watches-api.js';
+
+const filterForm = document.getElementById('filter-form');
+const createForm = document.getElementById('create-form');
+const statusEl = document.getElementById('status');
+const resultsEl = document.getElementById('results');
+const emptyEl = document.getElementById('empty');
+
+filterForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  refresh();
+});
+filterForm.addEventListener('reset', () => {
+  setTimeout(refresh, 0);
+});
+
+createForm.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const fd = new FormData(createForm);
+  const body = buildCreatePayload(fd);
+  if (!body) return;
+  try {
+    await createWatch(body);
+    createForm.reset();
+    await refresh();
+  } catch (err) {
+    statusEl.textContent = `Create failed: ${err.message}${err.body ? ` — ${err.body}` : ''}`;
+  }
+});
+
+function buildCreatePayload(fd) {
+  const poiId = (fd.get('poi_id') || '').trim();
+  const reservableId = (fd.get('reservable_id') || '').trim();
+  if (!poiId === !reservableId) {
+    statusEl.textContent = 'Set exactly one of POI ID or Reservable ID.';
+    return null;
+  }
+  let filters = {};
+  let triggerConfig = {};
+  try {
+    filters = JSON.parse(fd.get('reservable_filters') || '{}');
+    triggerConfig = JSON.parse(fd.get('trigger_config') || '{}');
+  } catch (err) {
+    statusEl.textContent = `Invalid JSON: ${err.message}`;
+    return null;
+  }
+  const targetDates = (fd.get('target_dates') || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  const triggerKinds = (fd.get('trigger_kinds') || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return {
+    poi_id: poiId ? Number(poiId) : null,
+    reservable_id: reservableId ? Number(reservableId) : null,
+    reservable_filters: filters,
+    target_dates: targetDates,
+    min_nights: Number(fd.get('min_nights') || 1),
+    cadence_sec: Number(fd.get('cadence_sec') || 60),
+    trigger_kinds: triggerKinds,
+    trigger_config: triggerConfig,
+    stop_when_triggered: fd.get('stop_when_triggered') === 'on',
+  };
+}
+
+async function refresh() {
+  const fd = new FormData(filterForm);
+  const params = {
+    status: fd.get('status') || undefined,
+    poiId: fd.get('poi_id') || undefined,
+    reservableId: fd.get('reservable_id') || undefined,
+  };
+  statusEl.textContent = 'Loading…';
+  try {
+    const data = await listWatches(params);
+    statusEl.textContent = `${data.total} watch${data.total === 1 ? '' : 'es'}.`;
+    render(data.watches);
+  } catch (err) {
+    statusEl.textContent = `Error: ${err.message}`;
+    resultsEl.innerHTML = '';
+  }
+}
+
+function render(watches) {
+  if (watches.length === 0) {
+    emptyEl.hidden = false;
+    resultsEl.innerHTML = '';
+    return;
+  }
+  emptyEl.hidden = true;
+  const rows = watches.map(renderRow).join('');
+  resultsEl.innerHTML = `
+    <table class="data-table">
+      <thead><tr>
+        <th>id</th><th>scope</th><th>dates</th>
+        <th>cadence</th><th>triggers</th><th>status</th><th>actions</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+  resultsEl.querySelectorAll('[data-action]').forEach((btn) => {
+    btn.addEventListener('click', onAction);
+  });
+}
+
+function renderRow(w) {
+  const scope = w.poi_id != null
+    ? `poi:${w.poi_id}${Object.keys(w.reservable_filters).length ? ' (filtered)' : ''}`
+    : `resv:${w.reservable?.rid ?? w.reservable_id}`;
+  const dates = `${w.target_dates.length} dt${w.target_dates.length === 1 ? '' : 's'}`;
+  const triggers = w.trigger_kinds.join(', ');
+  return `
+    <tr>
+      <td>${w.id}</td>
+      <td>${escapeHtml(scope)}</td>
+      <td>${dates}</td>
+      <td>${w.cadence_sec}s</td>
+      <td>${escapeHtml(triggers)}</td>
+      <td>${w.status}</td>
+      <td>
+        ${w.status === 'active'
+          ? `<button data-action="pause" data-id="${w.id}">⏸</button>`
+          : w.status === 'paused'
+            ? `<button data-action="resume" data-id="${w.id}">▶</button>`
+            : ''}
+        <button data-action="delete" data-id="${w.id}">✕</button>
+      </td>
+    </tr>`;
+}
+
+async function onAction(e) {
+  const btn = e.currentTarget;
+  const id = btn.dataset.id;
+  const action = btn.dataset.action;
+  try {
+    if (action === 'pause') await updateWatch(id, { status: 'paused' });
+    else if (action === 'resume') await updateWatch(id, { status: 'active' });
+    else if (action === 'delete') await deleteWatch(id);
+    await refresh();
+  } catch (err) {
+    statusEl.textContent = `Action failed: ${err.message}`;
+  }
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+  ));
+}
+
+refresh();

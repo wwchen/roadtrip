@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#26272d">
+<title>Availability Watches</title>
+<link rel="stylesheet" href="/web/components/catalog.css">
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div>
+      <h1>Availability Watches</h1>
+      <div class="sub">Reservable availability intents and their status.</div>
+    </div>
+    <nav class="nav" aria-label="Page links">
+      <div class="nav-group" aria-label="Catalog pages">
+        <a href="/pois">POIs</a>
+        <a href="/reservables">Reservables</a>
+        <a href="/watches" aria-current="page">Watches</a>
+      </div>
+      <div class="nav-group" aria-label="Outside links">
+        <a class="outside-link" href="/">Map</a>
+        <a class="outside-link" href="/api/docs">API docs</a>
+      </div>
+    </nav>
+  </header>
+
+  <section class="panel">
+    <h2>Filter</h2>
+    <form id="filter-form" class="filters">
+      <label>Status
+        <select name="status">
+          <option value="">any</option>
+          <option value="active" selected>active</option>
+          <option value="paused">paused</option>
+          <option value="done">done</option>
+        </select>
+      </label>
+      <label>POI ID <input name="poi_id" inputmode="numeric"></label>
+      <label>Reservable ID <input name="reservable_id" inputmode="numeric"></label>
+      <div class="actions">
+        <button class="primary" type="submit">Apply</button>
+        <button type="reset">Reset</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Create watch</h2>
+    <form id="create-form" class="form-stack">
+      <label>POI ID (or)
+        <input name="poi_id" inputmode="numeric" placeholder="2258">
+      </label>
+      <label>Reservable ID
+        <input name="reservable_id" inputmode="numeric" placeholder="leave blank if poi_id set">
+      </label>
+      <label>Reservable filters (JSON object)
+        <textarea name="reservable_filters" rows="2">{}</textarea>
+      </label>
+      <label>Target dates (comma-separated YYYY-MM-DD)
+        <input name="target_dates" placeholder="2026-07-04, 2026-07-05" required>
+      </label>
+      <label>Min nights <input name="min_nights" type="number" min="1" value="1"></label>
+      <label>Cadence (seconds) <input name="cadence_sec" type="number" min="5" value="60" required></label>
+      <label>Trigger kinds (comma-separated)
+        <input name="trigger_kinds" value="atc" required>
+      </label>
+      <label>Trigger config (JSON)
+        <textarea name="trigger_config" rows="2">{}</textarea>
+      </label>
+      <label class="checkbox">
+        <input name="stop_when_triggered" type="checkbox" checked>
+        Stop when triggered
+      </label>
+      <div class="actions">
+        <button class="primary" type="submit">Create</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel" aria-live="polite">
+    <div id="status" class="status">Loading…</div>
+    <div id="results"></div>
+    <div id="empty" class="empty" hidden>No watches.</div>
+  </section>
+</main>
+<script type="module" src="/web/watches.js"></script>
+</body>
+</html>

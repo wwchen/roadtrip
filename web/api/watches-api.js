@@ -1,0 +1,72 @@
+// web/api/watches-api.js
+//
+// Client for /api/availability/watches CRUD. Watches are user intent for
+// availability polling; the backend persists them and (in later PRs) a
+// scheduler will turn them into actual polling jobs.
+
+import { HttpError, jsonGetOk } from './http.js';
+
+const BASE = '/api/availability/watches';
+
+/**
+ * @param {object}        [params]
+ * @param {string}        [params.status]        active | paused | done
+ * @param {number|string} [params.poiId]
+ * @param {number|string} [params.reservableId]
+ * @param {number}        [params.limit]
+ * @param {number}        [params.offset]
+ * @param {AbortSignal}   [params.signal]
+ */
+export function listWatches({ status, poiId, reservableId, limit, offset, signal } = {}) {
+  const qs = new URLSearchParams();
+  if (status) qs.set('status', status);
+  if (poiId != null && poiId !== '') qs.set('poi_id', poiId);
+  if (reservableId != null && reservableId !== '') qs.set('reservable_id', reservableId);
+  if (limit != null) qs.set('limit', limit);
+  if (offset != null) qs.set('offset', offset);
+  const suffix = qs.toString() ? `?${qs}` : '';
+  return jsonGetOk(`${BASE}${suffix}`, { signal });
+}
+
+export function getWatch(id, { signal } = {}) {
+  return jsonGetOk(`${BASE}/${id}`, { signal });
+}
+
+export async function createWatch(body, { signal } = {}) {
+  const r = await fetch(BASE, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!r.ok) {
+    const text = await r.text().catch(() => '');
+    const err = new HttpError(BASE, r.status);
+    err.body = text;
+    throw err;
+  }
+  return r.json();
+}
+
+export async function updateWatch(id, body, { signal } = {}) {
+  const r = await fetch(`${BASE}/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (!r.ok) {
+    const text = await r.text().catch(() => '');
+    const err = new HttpError(`${BASE}/${id}`, r.status);
+    err.body = text;
+    throw err;
+  }
+  return r.json();
+}
+
+export async function deleteWatch(id, { signal } = {}) {
+  const r = await fetch(`${BASE}/${id}`, { method: 'DELETE', signal });
+  if (!r.ok && r.status !== 404) {
+    throw new HttpError(`${BASE}/${id}`, r.status);
+  }
+}
