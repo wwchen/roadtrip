@@ -380,4 +380,8 @@ resultsEl.addEventListener('click', async (event) => {
 });
 
 getForm.applyParamsFromUrl();
+if (createForm.applyParamsFromUrl()) {
+  pollerGetEl.open = false;
+  pollerUpdateEl.open = false;
+}
 loadPollers();

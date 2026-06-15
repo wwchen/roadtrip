@@ -1,11 +1,9 @@
 import {
-  actionButton,
   apiCallLabel,
   createRow,
   createTable,
   disclosureButton,
   element,
-  fragment,
   pill,
   plainLink,
   submitButton,
@@ -109,17 +107,6 @@ export function availabilityQueryFromForm(formEl) {
   };
 }
 
-export function availabilityPollerFromQuery(query, targetDate) {
-  return {
-    target_dates: [targetDate || query.start],
-    min_nights: numberString(query.minNights, '1'),
-    cadence: 300,
-    trigger_actions: ['notify_slack'],
-    stop_when_triggered: true,
-    force: !!query.force,
-  };
-}
-
 export function defaultAvailabilityQuery() {
   return {
     start: utcYmd(new Date()),
@@ -187,44 +174,24 @@ function createAvailabilityDaysTable(rid, days, state) {
 
 function dayActions(rid, day, state) {
   const date = String(day.date || '');
-  const pollerState = state?.pollersByDate?.[date] || {};
   return element(
     'div',
     { className: 'availability-day-action' },
-    pollerAction(rid, date, pollerState),
+    pollerAction(rid, date, state?.query),
     logsAction(rid, date),
   );
 }
 
-function pollerAction(rid, date, pollerState) {
-  if (pollerState.loading) {
-    const button = element('button', { type: 'button', text: 'Creating...' });
+function pollerAction(rid, date, query) {
+  if (!date) {
+    const button = element('button', { type: 'button', text: 'Create poller' });
     button.disabled = true;
     return button;
   }
-  if (pollerState.error) {
-    return fragment(
-      actionButton('Retry poller', 'create-availability-poller', {
-        rid,
-        targetDate: date,
-      }),
-      element('span', { className: 'availability-row-error', text: pollerState.error }),
-    );
-  }
-  if (pollerState.poller) {
-    const id = pollerState.poller.poller?.id || pollerState.poller.id;
-    return plainLink({
-      href: '/pollers',
-      text: id ? `Poller #${id}` : 'Poller created',
-    });
-  }
-
-  const button = actionButton('Create poller', 'create-availability-poller', {
-    rid,
-    targetDate: date,
+  return plainLink({
+    href: createPollerUrl(rid, date, query || defaultAvailabilityQuery()),
+    text: 'Create poller',
   });
-  if (!date) button.disabled = true;
-  return button;
 }
 
 function logsAction(rid, date) {
@@ -237,6 +204,21 @@ function logsAction(rid, date) {
     href: `/logs?${params}`,
     text: 'View logs',
   });
+}
+
+function createPollerUrl(rid, date, query) {
+  const params = new URLSearchParams({
+    action: 'create',
+    scope_type: 'rid',
+    scope_value: rid,
+    target_date: date,
+    min_nights: String(numberString(query.minNights, '1')),
+    cadence: '300',
+    trigger_actions: 'notify_slack',
+    stop_when_triggered: '1',
+  });
+  if (query.force) params.set('force', '1');
+  return `/pollers?${params}`;
 }
 
 function labeledControl(text, control) {

@@ -1,10 +1,8 @@
 import {
-  createReservableAvailabilityPollerForRid,
   fetchReservableAvailabilityLogs,
   queryReservableAvailability,
 } from '../api/reservable-api.js';
 import {
-  availabilityPollerFromQuery,
   availabilityQueryFromForm,
   defaultAvailabilityQuery,
 } from './availability-panel.js';
@@ -20,7 +18,6 @@ export function createAvailabilityPanels({ render }) {
         loading: false,
         error: '',
         data: null,
-        pollersByDate: Object.create(null),
         abort: null,
       });
     }
@@ -45,7 +42,6 @@ export function createAvailabilityPanels({ render }) {
     state.loading = true;
     state.error = '';
     state.data = null;
-    state.pollersByDate = Object.create(null);
     render();
 
     try {
@@ -67,39 +63,10 @@ export function createAvailabilityPanels({ render }) {
     }
   }
 
-  async function createPoller(rid, targetDate) {
-    const state = stateForRid(rid);
-    const date = String(targetDate || '').trim();
-    if (!date) return;
-    const dateState = state.pollersByDate[date] || {};
-    dateState.abort?.abort();
-    dateState.abort = new AbortController();
-    dateState.loading = true;
-    dateState.error = '';
-    dateState.poller = null;
-    state.pollersByDate[date] = dateState;
-    render();
-
-    try {
-      dateState.poller = await createReservableAvailabilityPollerForRid(
-        rid,
-        availabilityPollerFromQuery(state.query, date),
-        { signal: dateState.abort.signal },
-      );
-    } catch (err) {
-      if (err.name === 'AbortError') return;
-      dateState.error = errorMessage(err);
-    } finally {
-      dateState.loading = false;
-      render();
-    }
-  }
-
   return {
     stateForRow,
     toggleAvailability,
     queryAvailability,
-    createPoller,
   };
 }
 

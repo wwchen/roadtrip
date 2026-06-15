@@ -125,6 +125,27 @@ export function mountPollerMutationForm(root, { mode, onSubmit, onReset, onError
     form.elements.poller_id.focus();
   }
 
+  function applyParamsFromUrl(search = window.location.search) {
+    if (mode !== 'create') return false;
+    const qs = new URLSearchParams(search);
+    if (qs.get('action') !== 'create') return false;
+    const values = defaultPollerValues(mode);
+    values.scopeType = qs.get('scope_type') || values.scopeType;
+    values.scopeValue = qs.get('scope_value') || values.scopeValue;
+    values.minNights = qs.get('min_nights') || values.minNights;
+    values.cadence = qs.get('cadence') || values.cadence;
+    values.triggerActions = qs.get('trigger_actions') || values.triggerActions;
+    values.stopWhenTriggered = booleanParam(qs.get('stop_when_triggered'), values.stopWhenTriggered);
+    fillPollerForm(form, values);
+    setTargetDates(targetDatesFromParams(qs));
+    if (form.elements.force) {
+      form.elements.force.checked = booleanParam(qs.get('force'), false);
+    }
+    if (detailsEl) detailsEl.open = true;
+    syncApiLabel();
+    return true;
+  }
+
   function syncApiLabel() {
     const id = mode === 'update' ? clean(form.elements.poller_id.value) : '';
     const path = mode === 'update'
@@ -182,6 +203,7 @@ export function mountPollerMutationForm(root, { mode, onSubmit, onReset, onError
     form,
     reset,
     edit,
+    applyParamsFromUrl,
     setBusy: (busy) => setFormBusy(form, busy),
   };
 }
@@ -348,6 +370,19 @@ function listFromText(value) {
 function listValue(value) {
   if (Array.isArray(value)) return value.join(', ');
   return value == null ? '' : String(value);
+}
+
+function targetDatesFromParams(qs) {
+  const dates = [
+    ...qs.getAll('target_date'),
+    ...String(qs.get('target_dates') || '').split(','),
+  ].map(clean).filter(Boolean);
+  return dates.length ? dates : [utcYmd(new Date())];
+}
+
+function booleanParam(value, fallback) {
+  if (value == null || value === '') return fallback;
+  return ['1', 'true', 'yes', 'on'].includes(String(value).toLowerCase());
 }
 
 function setFormBusy(form, busy) {
