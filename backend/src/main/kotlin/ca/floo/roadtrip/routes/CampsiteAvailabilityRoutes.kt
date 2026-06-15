@@ -477,12 +477,8 @@ private fun ReservableAvailabilityMonitorLogRepo.appendReservableAvailability(
         appendAvailabilityPoll(
             ReservableAvailabilityMonitorLogRepo.AvailabilityPoll(
                 reservableRid = reservableRid,
-                provider = response.provider,
                 response = response,
-                windowStart = query.start,
-                windowDays = response.window.days,
                 minNights = query.minNights,
-                force = query.force,
             ),
         )
     } catch (e: Exception) {

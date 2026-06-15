@@ -427,22 +427,16 @@ class ReservableRoutesTest {
             val logRows =
                 ctx.fetch(
                     """
-                    SELECT reservable_rid, provider, target_date, window_start, window_days,
-                           min_nights, force, cache_hit, status, available, available_count, total,
-                           day_payload
+                    SELECT reservable_rid, target_date, min_nights, status, available,
+                           available_count, total, day_payload
                     FROM reservable_availability_monitor_log
                     ORDER BY target_date
                     """.trimIndent(),
                 )
             assertEquals(2, logRows.size)
             assertEquals("site:recgov:330257", logRows[0].get("reservable_rid", String::class.java))
-            assertEquals("fake", logRows[0].get("provider", String::class.java))
             assertEquals(java.time.LocalDate.parse("2026-07-01"), logRows[0].get("target_date", java.time.LocalDate::class.java))
-            assertEquals(java.time.LocalDate.parse("2026-07-01"), logRows[0].get("window_start", java.time.LocalDate::class.java))
-            assertEquals(2, logRows[0].get("window_days", Int::class.java))
             assertEquals(1, logRows[0].get("min_nights", Int::class.java))
-            assertEquals(false, logRows[0].get("force", Boolean::class.java))
-            assertEquals(true, logRows[0].get("cache_hit", Boolean::class.java))
             assertEquals("available", logRows[0].get("status", String::class.java))
             assertEquals(true, logRows[0].get("available", Boolean::class.java))
             assertEquals(1, logRows[0].get("available_count", Int::class.java))
