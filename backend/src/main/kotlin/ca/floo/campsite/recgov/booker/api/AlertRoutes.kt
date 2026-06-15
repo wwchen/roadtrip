@@ -21,14 +21,16 @@ fun Route.alertRoutes(
 ) {
     get("/api/campsite/alerts", {
         tags = listOf("campsite-alerts")
-        summary = "List every recreation.gov alert (any status)"
+        summary = "Deprecated: list every recreation.gov alert (any status)"
+        description = "Deprecated rec.gov-only alert path; prefer reservable availability monitor endpoints."
     }) {
         call.respondJson(alertDtos(alerts.list()))
     }
 
     post("/api/campsite/alerts", {
         tags = listOf("campsite-alerts")
-        summary = "Create a new alert; triggers an immediate poll"
+        summary = "Deprecated: create a recreation.gov alert"
+        description = "Deprecated rec.gov-only alert path; prefer POST /api/reservable/{rid}/availability/monitor."
     }) {
         val body = call.receiveCampsiteJson<AlertCreateRequestDto>()
         val campgroundId = body.campgroundId
@@ -72,7 +74,8 @@ fun Route.alertRoutes(
 
     patch("/api/campsite/alerts/{id}", {
         tags = listOf("campsite-alerts")
-        summary = "Patch one or more alert fields (status, dates, party size, …)"
+        summary = "Deprecated: patch a recreation.gov alert"
+        description = "Deprecated rec.gov-only alert path; prefer reservable availability monitor endpoints."
     }) {
         val id =
             call.parameters["id"]?.toLongOrNull()
@@ -107,7 +110,8 @@ fun Route.alertRoutes(
 
     delete("/api/campsite/alerts/{id}", {
         tags = listOf("campsite-alerts")
-        summary = "Hard-delete an alert and stop its poll job"
+        summary = "Deprecated: delete a recreation.gov alert"
+        description = "Deprecated rec.gov-only alert path; prefer reservable availability monitor endpoints."
     }) {
         val id =
             call.parameters["id"]?.toLongOrNull()

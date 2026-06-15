@@ -149,9 +149,12 @@ fun Route.campsiteAvailabilityRoutes(
 
     get("/api/campsite/availability/{poi_id}", {
         tags = listOf("campsite-availability")
-        summary = "Per-day availability for one campground (cached, provider-dispatched)"
+        summary = "Deprecated: per-day availability for one campground"
         description =
-            "Path key is `pois.id`. Backend dispatches to the booking-provider " +
+            "Deprecated legacy path; prefer `/api/poi/{poi_id}/availability` " +
+            "for POI-scoped availability or `/api/reservable/{rid}/availability` " +
+            "for reservable-scoped availability. Path key is `pois.id`. " +
+            "Backend dispatches to the booking-provider " +
             "adapter registered for that POI's source (rec.gov, Aspira PC/BC/WA, " +
             "Camis stub). Response shape is provider-stable; provider-specific " +
             "extras (`campground_id` for rec.gov; `host`/`map_id` for Aspira) " +
