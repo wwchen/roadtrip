@@ -55,6 +55,25 @@ export function linkChip({ href, text, kind = 'JSON', target = '_blank' }) {
   `;
 }
 
+export function apiCallLink({ method = 'GET', href, target = '_blank' }) {
+  const targetAttrs = target ? ` target="${escapeHtml(target)}" rel="noreferrer"` : '';
+  return `
+    <a class="api-call" href="${escapeHtml(href)}"${targetAttrs}>
+      <span class="api-method">${escapeHtml(method)}</span>
+      <span class="api-path">${escapeHtml(href)}</span>
+    </a>
+  `;
+}
+
+export function apiCallLabel({ method, path }) {
+  return `
+    <span class="api-call api-call-static">
+      <span class="api-method">${escapeHtml(method)}</span>
+      <span class="api-path">${escapeHtml(path)}</span>
+    </span>
+  `;
+}
+
 export function expanderButton({ action, idName, id, label, expanded }) {
   return `
     <button

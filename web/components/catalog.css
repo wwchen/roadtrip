@@ -176,6 +176,44 @@ button.link-chip:hover .link-text {
   overflow-wrap: anywhere;
 }
 
+.api-call {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 7px;
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+a.api-call {
+  color: var(--accent);
+}
+
+a.api-call:hover .api-path {
+  text-decoration: underline;
+}
+
+.api-call-static .api-path {
+  color: var(--muted);
+}
+
+.api-method {
+  flex: 0 0 auto;
+  color: #f1c27d;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.api-path {
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
 .chip-kind {
   color: var(--muted);
   font-size: 10px;

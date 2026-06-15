@@ -1,4 +1,4 @@
-import { dash, escapeHtml, expanderButton, renderRow, renderTable } from './result-table.js';
+import { apiCallLink, dash, escapeHtml, expanderButton, renderRow, renderTable } from './result-table.js';
 
 export const poiColumns = [
   {
@@ -66,7 +66,7 @@ export function poiReservablesRowHtml(row, state, { contentHtml = '' } = {}) {
                 expanded,
               })}
             </div>
-            <a class="mono" href="${escapeHtml(poiReservablesJsonUrl(id))}" target="_blank" rel="noreferrer">${escapeHtml(poiReservablesJsonUrl(id))}</a>
+            ${apiCallLink({ href: poiReservablesJsonUrl(id) })}
           </div>
           ${expanded ? contentHtml : ''}
         </div>

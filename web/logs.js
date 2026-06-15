@@ -1,5 +1,5 @@
 import { fetchReservableAvailabilityLogs } from './api/reservable-api.js';
-import { dash, escapeHtml, renderTable } from './components/result-table.js';
+import { apiCallLink, dash, escapeHtml, renderTable } from './components/result-table.js';
 
 const formEl = document.getElementById('logs-query');
 const resultsEl = document.getElementById('results');
@@ -79,7 +79,7 @@ function syncUrl(params) {
   const qs = queryString(params);
   window.history.replaceState(null, '', qs ? `/logs?${qs}` : '/logs');
   const apiUrl = `/api/reservables/availability/logs${qs ? `?${qs}` : ''}`;
-  queryUrlEl.innerHTML = apiLink(apiUrl);
+  queryUrlEl.innerHTML = apiCallLink({ href: apiUrl });
 }
 
 async function loadLogs() {
@@ -195,10 +195,6 @@ function statusClass(status) {
 
 function clean(value) {
   return String(value || '').trim();
-}
-
-function apiLink(href) {
-  return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${escapeHtml(href)}</a>`;
 }
 
 formEl.addEventListener('submit', (event) => {

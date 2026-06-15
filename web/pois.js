@@ -4,7 +4,7 @@ import { createAvailabilityPanels } from './components/availability-controller.j
 import { mountPoiQuery } from './components/poi-query.js';
 import { poiReservablesRowHtml, poiRowHtml, poiTableHtml } from './components/poi-table.js';
 import { reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
-import { escapeHtml } from './components/result-table.js';
+import { apiCallLink, escapeHtml } from './components/result-table.js';
 
 const query = mountPoiQuery(document.getElementById('poi-query'), {
   onSubmit: runSearch,
@@ -31,7 +31,7 @@ function syncUrl(params) {
   }
   const suffix = qs.toString();
   window.history.replaceState(null, '', suffix ? `/pois?${suffix}` : '/pois');
-  queryUrlEl.innerHTML = apiLink(apiUrl(params));
+  queryUrlEl.innerHTML = apiCallLink({ href: apiUrl(params) });
 }
 
 function apiUrl(params) {
@@ -203,10 +203,6 @@ function errorMessage(err) {
 
 function formatNumber(value) {
   return Number(value || 0).toLocaleString();
-}
-
-function apiLink(href) {
-  return `<a href="${escapeHtml(href)}" target="_blank" rel="noreferrer">${escapeHtml(href)}</a>`;
 }
 
 resultsEl.addEventListener('click', (event) => {

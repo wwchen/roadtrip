@@ -1,4 +1,4 @@
-import { escapeHtml, expanderButton, renderRow, renderTable } from './result-table.js';
+import { apiCallLabel, escapeHtml, expanderButton, renderRow, renderTable } from './result-table.js';
 
 export function availabilityPanelHtml(rid, state, { colspan = 5 } = {}) {
   const expanded = !!state?.expanded;
@@ -19,6 +19,7 @@ export function availabilityPanelHtml(rid, state, { colspan = 5 } = {}) {
               })}
               <span class="muted">Query availability for this reservable</span>
             </div>
+            ${apiCallLabel({ method: 'POST', path: '/api/reservables/availability/query' })}
           </div>
           ${expanded ? availabilityQueryHtml(rid, query, { loading: !!state?.loading }) : ''}
           ${result}
