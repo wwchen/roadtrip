@@ -24,6 +24,8 @@ concurrency:
 jobs:
   rebase:
     # Run on master push, PR retarget-to-master, /rebase PR comment, or manual dispatch.
+    # Explicit /rebase comments also create an empty commit when the branch is
+    # already current, so the PR's push-triggered CI runs again.
     if: >
       github.event_name == 'push' ||
       (github.event_name == 'pull_request_target' &&
@@ -114,6 +116,7 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
 
@@ -154,6 +157,7 @@ jobs:
 
             git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
             git checkout -B "$branch" "origin/$branch"
+            before_sha=$(git rev-parse HEAD)
 
             if [ -n "${old_base:-}" ]; then
               if old_base_ref=$(resolve_old_base_ref "$old_base"); then
@@ -165,10 +169,7 @@ jobs:
             else
               base=$(git merge-base HEAD "$master_sha")
               if [ "$base" = "$master_sha" ]; then
-                echo "Already up to date with master."
-                git checkout --detach "$master_sha"
-                echo "::endgroup::"
-                continue
+                echo "Already contains master; running rebase anyway."
               fi
 
               # `git rebase master` drops patches already in master by patch-id,
@@ -177,6 +178,11 @@ jobs:
             fi
 
             if git rebase "${rebase_args[@]}"; then
+              after_sha=$(git rev-parse HEAD)
+              if [ "$EVENT" = "issue_comment" ] && [ "$before_sha" = "$after_sha" ]; then
+                git commit --allow-empty -m "Trigger CI after /rebase on PR #$pr_number"
+              fi
+
               if git push --force-with-lease origin "$branch"; then
                 echo "Rebased and pushed."
               else
