@@ -1,18 +1,27 @@
-import { HttpError, jsonPostOk } from './http.js';
+import { HttpError, jsonGetOk, jsonPostOk } from './http.js';
 
 export async function searchPois(query, { limit = 8, categories, signal } = {}) {
+  const url = poiSearchUrl({ q: query, limit, categories });
+  const response = await fetch(url, { signal });
+  return response.ok ? response.json() : { results: [] };
+}
+
+export function searchPoiCatalog({ q, limit = 25, categories, signal } = {}) {
+  return jsonGetOk(poiSearchUrl({ q, limit, categories }), { signal });
+}
+
+export function poiSearchUrl({ q = '', limit = 25, categories } = {}) {
   const params = new URLSearchParams({
-    q: query,
+    q,
     limit: String(limit),
   });
   if (Array.isArray(categories)) {
-    params.set('categories', categories.join(','));
+    const value = categories.filter(Boolean).join(',');
+    if (value) params.set('categories', value);
   } else if (categories) {
     params.set('categories', categories);
   }
-  const url = `/api/pois/search?${params.toString()}`;
-  const response = await fetch(url, { signal });
-  return response.ok ? response.json() : { results: [] };
+  return `/api/pois/search?${params.toString()}`;
 }
 
 export function requestPoiDetail(id, { signal } = {}) {

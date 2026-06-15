@@ -209,6 +209,12 @@ fun Application.module() {
                 if (f.name.endsWith(".geojson")) ContentType("application", "geo+json") else null
             }
         }
+        get("/pois") {
+            call.respondFile(File(staticDir, "pois.html"))
+        }
+        get("/pois/") {
+            call.respondFile(File(staticDir, "pois.html"))
+        }
         get("/reservables") {
             call.respondFile(File(staticDir, "reservables.html"))
         }

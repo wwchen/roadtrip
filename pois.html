@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#26272d">
-<title>Reservables</title>
+<title>POIs</title>
 <style>
   :root {
     --surface: #26272d;
@@ -17,7 +17,6 @@
     --muted: #8a8f96;
     --faint: #5a6068;
     --accent: #4cb96a;
-    --accent-hover: #62cc7d;
     --error: #f56565;
   }
   * { box-sizing: border-box; }
@@ -97,7 +96,7 @@
   }
   .filters {
     display: grid;
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: minmax(260px, 2fr) minmax(170px, 1fr) 120px auto;
     gap: 10px;
     align-items: end;
   }
@@ -111,39 +110,25 @@
     letter-spacing: 0.04em;
   }
   input,
-  select,
-  textarea {
+  select {
     width: 100%;
     min-width: 0;
+    height: 34px;
     border: 1px solid var(--border-strong);
     border-radius: 7px;
     background: var(--bg-subtle);
     color: var(--text);
     font: inherit;
     font-size: 13px;
-  }
-  input,
-  select {
-    height: 34px;
     padding: 0 9px;
   }
-  textarea {
-    min-height: 34px;
-    max-height: 92px;
-    resize: vertical;
-    padding: 8px 9px;
-    line-height: 1.35;
-  }
-  input::placeholder,
-  textarea::placeholder { color: var(--faint); }
+  input::placeholder { color: var(--faint); }
   input:focus,
-  select:focus,
-  textarea:focus {
+  select:focus {
     outline: none;
     border-color: var(--accent);
     background: var(--bg-hover);
   }
-  .wide { grid-column: span 2; }
   .actions {
     display: flex;
     gap: 8px;
@@ -170,6 +155,7 @@
   }
   table {
     width: 100%;
+    min-width: 880px;
     border-collapse: collapse;
     font-size: 13px;
   }
@@ -195,55 +181,36 @@
     font-size: 12px;
   }
   .muted { color: var(--muted); }
-  .rid {
-    max-width: 340px;
-    overflow-wrap: anywhere;
-  }
   .name {
-    max-width: 260px;
+    max-width: 360px;
+    min-width: 220px;
     overflow-wrap: anywhere;
   }
-  details summary {
-    cursor: pointer;
-    color: var(--accent);
-  }
-  pre {
-    margin: 8px 0 0;
-    padding: 9px;
-    max-width: 420px;
-    max-height: 240px;
-    overflow: auto;
-    background: var(--bg-subtle);
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    color: var(--text);
-    white-space: pre-wrap;
-    overflow-wrap: anywhere;
-  }
-  .pager {
+  .links {
     display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 8px;
-    padding: 12px 14px;
+    flex-direction: column;
+    gap: 5px;
+    min-width: 110px;
   }
   .empty {
     padding: 34px 14px;
     color: var(--muted);
     text-align: center;
   }
-  @media (max-width: 980px) {
-    .filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  @media (max-width: 900px) {
+    .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .actions { align-self: end; }
   }
   @media (max-width: 640px) {
     body { padding: 12px; }
-    .top { align-items: flex-start; flex-direction: column; }
+    .top,
+    .status {
+      align-items: flex-start;
+      flex-direction: column;
+    }
     .nav { justify-content: flex-start; }
     .filters { grid-template-columns: 1fr; }
-    .wide { grid-column: span 1; }
     .actions { flex-wrap: wrap; }
-    .status,
-    .pager { align-items: flex-start; flex-direction: column; }
     th,
     td { padding: 9px; }
   }
@@ -253,61 +220,32 @@
 <main class="shell">
   <header class="top">
     <div>
-      <h1>Reservables</h1>
-      <div class="sub">Active bookable catalog rows across vendors.</div>
+      <h1>POIs</h1>
+      <div class="sub">Name search across active map points.</div>
     </div>
     <nav class="nav" aria-label="Page links">
       <a href="/">Map</a>
-      <a href="/pois">POIs</a>
+      <a href="/reservables">Reservables</a>
       <a href="/monitors">Monitors</a>
       <a href="/api/docs">API docs</a>
     </nav>
   </header>
 
-  <form id="reservable-form" class="panel" autocomplete="off">
+  <form id="poi-form" class="panel" autocomplete="off">
     <div class="filters">
       <label>
-        Type
-        <select name="type">
-          <option value="site">site</option>
-          <option value="">any</option>
-        </select>
-      </label>
-      <label>
-        Vendor
-        <input name="vendor" placeholder="recgov, aspira_pc">
-      </label>
-      <label>
-        Vendor ID
-        <input name="vendor_id" placeholder="330257">
-      </label>
-      <label>
         Name
-        <input name="name" placeholder="A12">
+        <input name="q" placeholder="Glacier, Upper Pines, Planet Fitness">
       </label>
       <label>
-        Loop
-        <input name="loop" placeholder="Loop A">
-      </label>
-      <label>
-        Site Type
-        <input name="site_type" placeholder="STANDARD">
-      </label>
-      <label class="wide">
-        RID
-        <input name="rid" placeholder="site:recgov:330257">
-      </label>
-      <label class="wide">
-        Raw contains
-        <textarea name="raw" spellcheck="false" placeholder='{"host":"reservation.pc.gc.ca"}'></textarea>
+        Categories
+        <input name="categories" placeholder="campground, supercharger">
       </label>
       <label>
         Limit
         <select name="limit">
-          <option value="50">50</option>
-          <option value="100" selected>100</option>
-          <option value="250">250</option>
-          <option value="500">500</option>
+          <option value="10">10</option>
+          <option value="25" selected>25</option>
         </select>
       </label>
       <div class="actions">
@@ -319,31 +257,27 @@
 
   <section class="panel" aria-live="polite">
     <div id="status" class="status">
-      <span>Ready.</span>
+      <span>Enter at least 2 characters.</span>
       <span class="mono muted" id="query-url"></span>
     </div>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>RID</th>
+            <th>ID</th>
             <th>Name</th>
-            <th>Loop</th>
-            <th>Site Type</th>
-            <th>Raw</th>
+            <th>Category</th>
+            <th>Region</th>
+            <th>Coordinates</th>
             <th>Links</th>
           </tr>
         </thead>
         <tbody id="results"></tbody>
       </table>
-      <div id="empty" class="empty" hidden>No reservables match these filters.</div>
-    </div>
-    <div class="pager">
-      <button id="prev-btn" type="button">Previous</button>
-      <button id="next-btn" type="button">Next</button>
+      <div id="empty" class="empty">Enter at least 2 characters to search.</div>
     </div>
   </section>
 </main>
-<script type="module" src="/web/reservables.js"></script>
+<script type="module" src="/web/pois.js"></script>
 </body>
 </html>
