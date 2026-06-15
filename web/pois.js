@@ -1,9 +1,6 @@
 import { fetchPoiDetail, poiSearchUrl, searchPoiCatalog } from './api/poi-api.js';
-import { fetchPoiReservables } from './api/reservable-api.js';
-import { createAvailabilityPanels } from './components/availability-controller.js';
 import { mountPoiQuery } from './components/poi-query.js';
-import { poiReservablesRowHtml, poiRowHtml, poiTableHtml } from './components/poi-table.js';
-import { reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
+import { poiTableHtml } from './components/poi-table.js';
 import { apiCallLink, escapeHtml } from './components/result-table.js';
 
 const query = mountPoiQuery(document.getElementById('poi-query'), {
@@ -16,11 +13,6 @@ const statusEl = document.getElementById('status');
 const queryUrlEl = document.getElementById('query-url');
 
 let activeAbort = null;
-let lastRows = [];
-const poiReservables = new Map();
-const availabilityPanels = createAvailabilityPanels({
-  render: () => renderResults(lastRows),
-});
 
 function syncUrl(params) {
   const qs = new URLSearchParams();
@@ -110,18 +102,9 @@ async function runIdLookup(id) {
 }
 
 function renderResults(rows) {
-  lastRows = rows;
   emptyEl.hidden = rows.length !== 0;
-  resultsEl.innerHTML = poiTableHtml(rows, { rowRenderer: rowGroupHtml });
+  resultsEl.innerHTML = poiTableHtml(rows);
   addReservablesPageLinks();
-}
-
-function rowGroupHtml(row) {
-  const state = poiReservables.get(String(row.id));
-  return rowHtml(row, state) +
-    poiReservablesRowHtml(row, state, {
-      contentHtml: reservablesContentHtml(state),
-    });
 }
 
 function rowFromPoiDetail(feature) {
@@ -135,23 +118,6 @@ function rowFromPoiDetail(feature) {
     lng: coordinates[0],
     lat: coordinates[1],
   };
-}
-
-function rowHtml(row, state) {
-  return poiRowHtml(row, { expanded: !!state?.expanded });
-}
-
-function reservablesContentHtml(state) {
-  if (!state?.expanded) return '';
-  if (state.loading) return '<div class="muted">Loading reservables...</div>';
-  if (state.error) return `<div class="error">${escapeHtml(state.error)}</div>`;
-  if (!Array.isArray(state.rows)) return '<div class="muted">Open this panel to load linked reservables.</div>';
-  if (state.rows.length === 0) return '<div class="muted">No reservables linked to this POI.</div>';
-  return reservableTableHtml(state.rows, {
-    rowRenderer: reservableRowGroupRenderer({
-      stateForRow: availabilityPanels.stateForRow,
-    }),
-  });
 }
 
 function addReservablesPageLinks() {
@@ -180,10 +146,6 @@ function addReservablesPageLinks() {
     row.append(cell);
   });
 
-  const columnCount = table.querySelectorAll(':scope > thead > tr > th').length;
-  table.querySelectorAll(':scope > tbody > tr.reservables-row > td').forEach((cell) => {
-    cell.colSpan = columnCount;
-  });
 }
 
 function appendLinkChip(parent, { href, text, kind }) {
@@ -201,49 +163,6 @@ function textSpan(className, text) {
   return span;
 }
 
-function panelState(poiId) {
-  if (!poiReservables.has(poiId)) {
-    poiReservables.set(poiId, {
-      expanded: false,
-      loading: false,
-      error: '',
-      rows: null,
-      totalAtPoi: 0,
-      abort: null,
-    });
-  }
-  return poiReservables.get(poiId);
-}
-
-async function toggleReservables(poiId) {
-  const state = panelState(poiId);
-  state.expanded = !state.expanded;
-  renderResults(lastRows);
-  if (!state.expanded || state.rows) return;
-
-  state.abort?.abort();
-  state.abort = new AbortController();
-  state.loading = true;
-  state.error = '';
-  renderResults(lastRows);
-  try {
-    const body = await fetchPoiReservables(poiId, { type: 'site', signal: state.abort.signal });
-    const linkedPoiIds = [body.poi_id ?? poiId].map((id) => String(id || '').trim()).filter(Boolean);
-    state.rows = (body.reservables || []).map((row) => ({
-      ...row,
-      poi_ids: Array.isArray(row.poi_ids) && row.poi_ids.length > 0 ? row.poi_ids : linkedPoiIds,
-    }));
-    state.totalAtPoi = body.total_at_poi ?? state.rows.length;
-  } catch (err) {
-    if (err.name === 'AbortError') return;
-    state.error = errorMessage(err);
-    state.rows = null;
-  } finally {
-    state.loading = false;
-    renderResults(lastRows);
-  }
-}
-
 function errorMessage(err) {
   if (err?.status) return `Request failed: HTTP ${err.status}`;
   return err?.message || 'Request failed';
@@ -252,32 +171,6 @@ function errorMessage(err) {
 function formatNumber(value) {
   return Number(value || 0).toLocaleString();
 }
-
-resultsEl.addEventListener('click', (event) => {
-  const createPoller = event.target.closest('[data-action="create-availability-poller"]');
-  if (createPoller) {
-    availabilityPanels.createPoller(createPoller.dataset.rid || '', createPoller.dataset.targetDate || '');
-    return;
-  }
-
-  const reservables = event.target.closest('[data-action="toggle-reservables"]');
-  if (reservables) {
-    toggleReservables(reservables.dataset.poiId || '');
-    return;
-  }
-
-  const availability = event.target.closest('[data-action="toggle-availability"]');
-  if (availability) {
-    availabilityPanels.toggleAvailability(availability.dataset.rid || '');
-  }
-});
-
-resultsEl.addEventListener('submit', (event) => {
-  const queryForm = event.target.closest('[data-action="availability-query"]');
-  if (!queryForm) return;
-  event.preventDefault();
-  availabilityPanels.queryAvailability(queryForm.dataset.rid || '', queryForm);
-});
 
 query.applyParamsFromUrl();
 runSearch();
