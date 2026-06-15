@@ -75,102 +75,127 @@ class AvailabilityWatchRoutesTest {
     }
 
     @Test
-    fun `POST creates a poi-scoped watch with filters`() = testApplication {
-        application { routing { availabilityWatchRoutes(ctx) } }
-        val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
-        val body = """
-            {
-              "poi_id": $poiId,
-              "reservable_filters": {"loop": ["A"]},
-              "target_dates": ["2026-07-04", "2026-07-05"],
-              "min_nights": 2,
-              "cadence_sec": 60,
-              "trigger_kinds": ["atc"]
+    fun `POST creates a poi-scoped watch with filters`() =
+        testApplication {
+            application { routing { availabilityWatchRoutes(ctx) } }
+            val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
+            val body =
+                """
+                {
+                  "poi_id": $poiId,
+                  "reservable_filters": {"loop": ["A"]},
+                  "target_dates": ["2026-07-04", "2026-07-05"],
+                  "min_nights": 2,
+                  "cadence_sec": 60,
+                  "trigger_kinds": ["atc"]
+                }
+                """.trimIndent()
+            val resp =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            assertEquals(HttpStatusCode.Created, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals(poiId, obj["poi_id"]!!.jsonPrimitive.long)
+            assertEquals(2, obj["target_dates"]!!.jsonArray.size)
+            assertEquals("active", obj["status"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `POST rejects missing scope`() =
+        testApplication {
+            application { routing { availabilityWatchRoutes(ctx) } }
+            val body =
+                """
+                {"target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val resp =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("invalid_scope", obj["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `GET list filters by status`() =
+        testApplication {
+            application { routing { availabilityWatchRoutes(ctx) } }
+            val poiId = seedPoi(sourceId = "p2", name = "Glacier")
+            val body =
+                """
+                {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            repeat(3) {
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
             }
-        """.trimIndent()
-        val resp = client.post("/api/availability/watches") {
-            contentType(ContentType.Application.Json)
-            setBody(body)
+            val resp = client.get("/api/availability/watches?status=active")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(3, obj["total"]!!.jsonPrimitive.int)
         }
-        assertEquals(HttpStatusCode.Created, resp.status)
-        val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
-        assertEquals(poiId, obj["poi_id"]!!.jsonPrimitive.long)
-        assertEquals(2, obj["target_dates"]!!.jsonArray.size)
-        assertEquals("active", obj["status"]!!.jsonPrimitive.content)
-    }
 
     @Test
-    fun `POST rejects missing scope`() = testApplication {
-        application { routing { availabilityWatchRoutes(ctx) } }
-        val body = """
-            {"target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
-        """.trimIndent()
-        val resp = client.post("/api/availability/watches") {
-            contentType(ContentType.Application.Json)
-            setBody(body)
+    fun `PATCH pauses a watch`() =
+        testApplication {
+            application { routing { availabilityWatchRoutes(ctx) } }
+            val poiId = seedPoi(sourceId = "p3", name = "Yosemite")
+            val body =
+                """
+                {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+            val resp =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status": "paused"}""")
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals("paused", obj["status"]!!.jsonPrimitive.content)
         }
-        assertEquals(HttpStatusCode.BadRequest, resp.status)
-        val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-        assertEquals("invalid_scope", obj["error"]!!.jsonPrimitive.content)
-    }
 
     @Test
-    fun `GET list filters by status`() = testApplication {
-        application { routing { availabilityWatchRoutes(ctx) } }
-        val poiId = seedPoi(sourceId = "p2", name = "Glacier")
-        val body = """
-            {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
-        """.trimIndent()
-        repeat(3) {
-            client.post("/api/availability/watches") {
-                contentType(ContentType.Application.Json)
-                setBody(body)
-            }
+    fun `DELETE removes a watch`() =
+        testApplication {
+            application { routing { availabilityWatchRoutes(ctx) } }
+            val poiId = seedPoi(sourceId = "p4", name = "Tunnel")
+            val body =
+                """
+                {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+            val del = client.delete("/api/availability/watches/$id")
+            assertEquals(HttpStatusCode.NoContent, del.status)
+            val getAfter = client.get("/api/availability/watches/$id")
+            assertEquals(HttpStatusCode.NotFound, getAfter.status)
         }
-        val resp = client.get("/api/availability/watches?status=active")
-        assertEquals(HttpStatusCode.OK, resp.status)
-        val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-        assertEquals(3, obj["total"]!!.jsonPrimitive.int)
-    }
-
-    @Test
-    fun `PATCH pauses a watch`() = testApplication {
-        application { routing { availabilityWatchRoutes(ctx) } }
-        val poiId = seedPoi(sourceId = "p3", name = "Yosemite")
-        val body = """
-            {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
-        """.trimIndent()
-        val created = client.post("/api/availability/watches") {
-            contentType(ContentType.Application.Json)
-            setBody(body)
-        }
-        val id = Json.parseToJsonElement(created.bodyAsText()).jsonObject["watch"]!!.jsonObject["id"]!!.jsonPrimitive.long
-        val resp = client.patch("/api/availability/watches/$id") {
-            contentType(ContentType.Application.Json)
-            setBody("""{"status": "paused"}""")
-        }
-        assertEquals(HttpStatusCode.OK, resp.status)
-        val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
-        assertEquals("paused", obj["status"]!!.jsonPrimitive.content)
-    }
-
-    @Test
-    fun `DELETE removes a watch`() = testApplication {
-        application { routing { availabilityWatchRoutes(ctx) } }
-        val poiId = seedPoi(sourceId = "p4", name = "Tunnel")
-        val body = """
-            {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
-        """.trimIndent()
-        val created = client.post("/api/availability/watches") {
-            contentType(ContentType.Application.Json)
-            setBody(body)
-        }
-        val id = Json.parseToJsonElement(created.bodyAsText()).jsonObject["watch"]!!.jsonObject["id"]!!.jsonPrimitive.long
-        val del = client.delete("/api/availability/watches/$id")
-        assertEquals(HttpStatusCode.NoContent, del.status)
-        val getAfter = client.get("/api/availability/watches/$id")
-        assertEquals(HttpStatusCode.NotFound, getAfter.status)
-    }
 
     private fun seedPoi(
         sourceId: String,

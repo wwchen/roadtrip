@@ -63,7 +63,10 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
         val poiId = call.request.queryParameters["poi_id"]?.toLongOrNull()
         val reservableId = call.request.queryParameters["reservable_id"]?.toLongOrNull()
         val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT).coerceIn(1, MAX_LIST_LIMIT)
-        val offset = call.request.queryParameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val offset =
+            call.request.queryParameters["offset"]
+                ?.toIntOrNull()
+                ?.coerceAtLeast(0) ?: 0
         val rows = watches.list(status, poiId, reservableId, limit, offset)
         val total = watches.count(status, poiId, reservableId)
         call.respondJson(
@@ -84,10 +87,12 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
-        val id = call.parameters["id"]?.toLongOrNull()
-            ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
-        val watch = watches.findById(id)
-            ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
+        val watch =
+            watches.findById(id)
+                ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
         call.respondJson(AvailabilityWatchResponse(watch.toSchema()))
     }
 
@@ -134,8 +139,9 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
-        val id = call.parameters["id"]?.toLongOrNull()
-            ?: return@patch call.respondError("invalid_id", HttpStatusCode.BadRequest)
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@patch call.respondError("invalid_id", HttpStatusCode.BadRequest)
         val raw = call.receiveText()
         val req =
             try {
@@ -179,8 +185,9 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
-        val id = call.parameters["id"]?.toLongOrNull()
-            ?: return@delete call.respondError("invalid_id", HttpStatusCode.BadRequest)
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@delete call.respondError("invalid_id", HttpStatusCode.BadRequest)
         if (watches.delete(id)) {
             call.respond(HttpStatusCode.NoContent)
         } else {
@@ -210,19 +217,20 @@ private fun Watch.toSchema(): AvailabilityWatchSchema =
         id = id,
         poiId = poiId,
         reservableId = reservableId,
-        reservable = reservable?.let { r ->
-            ReservableSchema(
-                rid = r.rid.encode(),
-                type = r.rid.type.encode(),
-                vendor = r.rid.vendor,
-                vendorId = r.rid.vendorId,
-                name = r.name,
-                loop = r.loop,
-                siteType = r.siteType,
-                poiIds = emptyList(),
-                raw = r.raw,
-            )
-        },
+        reservable =
+            reservable?.let { r ->
+                ReservableSchema(
+                    rid = r.rid.encode(),
+                    type = r.rid.type.encode(),
+                    vendor = r.rid.vendor,
+                    vendorId = r.rid.vendorId,
+                    name = r.name,
+                    loop = r.loop,
+                    siteType = r.siteType,
+                    poiIds = emptyList(),
+                    raw = r.raw,
+                )
+            },
         reservableFilters = reservableFilters,
         targetDates = targetDates.map { it.toString() },
         minNights = minNights,

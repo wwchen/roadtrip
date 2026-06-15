@@ -71,8 +71,10 @@ class AvailabilityWatchRepo(
                 .insertInto(AVAILABILITY_WATCH)
                 .set(AVAILABILITY_WATCH.POI_ID, input.poiId)
                 .set(AVAILABILITY_WATCH.RESERVABLE_ID, input.reservableId)
-                .set(AVAILABILITY_WATCH.RESERVABLE_FILTERS, JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)))
-                .set(AVAILABILITY_WATCH.TARGET_DATES, input.targetDates.toTypedArray())
+                .set(
+                    AVAILABILITY_WATCH.RESERVABLE_FILTERS,
+                    JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)),
+                ).set(AVAILABILITY_WATCH.TARGET_DATES, input.targetDates.toTypedArray())
                 .set(AVAILABILITY_WATCH.MIN_NIGHTS, input.minNights)
                 .set(AVAILABILITY_WATCH.CADENCE_SEC, input.cadenceSec)
                 .set(AVAILABILITY_WATCH.TRIGGER_KINDS, input.triggerKinds.toTypedArray())
@@ -128,14 +130,22 @@ class AvailabilityWatchRepo(
     ): Watch? {
         var query = ctx.update(AVAILABILITY_WATCH).set(AVAILABILITY_WATCH.UPDATED_AT, OffsetDateTime.now())
         if (input.reservableFilters != null) {
-            query = query.set(AVAILABILITY_WATCH.RESERVABLE_FILTERS, JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)))
+            query =
+                query.set(
+                    AVAILABILITY_WATCH.RESERVABLE_FILTERS,
+                    JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)),
+                )
         }
         if (input.targetDates != null) query = query.set(AVAILABILITY_WATCH.TARGET_DATES, input.targetDates.toTypedArray())
         if (input.minNights != null) query = query.set(AVAILABILITY_WATCH.MIN_NIGHTS, input.minNights)
         if (input.cadenceSec != null) query = query.set(AVAILABILITY_WATCH.CADENCE_SEC, input.cadenceSec)
         if (input.triggerKinds != null) query = query.set(AVAILABILITY_WATCH.TRIGGER_KINDS, input.triggerKinds.toTypedArray())
         if (input.triggerConfig != null) {
-            query = query.set(AVAILABILITY_WATCH.TRIGGER_CONFIG, JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.triggerConfig)))
+            query =
+                query.set(
+                    AVAILABILITY_WATCH.TRIGGER_CONFIG,
+                    JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.triggerConfig)),
+                )
         }
         if (input.stopWhenTriggered != null) query = query.set(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED, input.stopWhenTriggered)
         if (input.status != null) {
