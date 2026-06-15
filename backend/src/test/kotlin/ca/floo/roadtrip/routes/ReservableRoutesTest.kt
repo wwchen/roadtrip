@@ -197,6 +197,19 @@ class ReservableRoutesTest {
                     .single { it["rid"]!!.jsonPrimitive.content == "site:recgov:330257" }
             assertEquals(listOf(poiId.toString()), linkedRow["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
 
+            val poiScoped = client.get("/api/reservables?poi_id=$poiId&type=site")
+            assertEquals(HttpStatusCode.OK, poiScoped.status)
+            val poiScopedBody = Json.parseToJsonElement(poiScoped.bodyAsText()).jsonObject
+            assertEquals("1", poiScopedBody["total"]!!.jsonPrimitive.content)
+            val poiScopedRow = poiScopedBody["reservables"]!!.jsonArray.single().jsonObject
+            assertEquals("site:recgov:330257", poiScopedRow["rid"]!!.jsonPrimitive.content)
+            assertEquals(listOf(poiId.toString()), poiScopedRow["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+
+            val poiAndVendorScoped = client.get("/api/reservables?poiId=$poiId&vendor=aspira_pc")
+            assertEquals(HttpStatusCode.OK, poiAndVendorScoped.status)
+            val poiAndVendorBody = Json.parseToJsonElement(poiAndVendorScoped.bodyAsText()).jsonObject
+            assertEquals("0", poiAndVendorBody["total"]!!.jsonPrimitive.content)
+
             val paged = client.get("/api/reservables?vendor=recgov,aspira_pc&name=A12&limit=1&offset=1")
             assertEquals(HttpStatusCode.OK, paged.status)
             val pagedBody = Json.parseToJsonElement(paged.bodyAsText()).jsonObject
@@ -229,6 +242,7 @@ class ReservableRoutesTest {
 
             assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?type=permit").status)
             assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?limit=0").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?poi_id=nope").status)
             assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?raw=%7Bnot-json%7D").status)
         }
 

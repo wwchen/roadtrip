@@ -6,7 +6,7 @@
 //   GET /api/reservable/{rid}
 //     → { reservable: {rid, poi_ids, name, loop, raw, …}, poi_ids: [123, 456] }
 //
-//   GET /api/reservables
+//   GET /api/reservables[?poi_id=123]
 //     → { total, limit, offset, reservables: [{rid, poi_ids, name, loop, …}, …] }
 //
 //   GET /api/reservables/availability/pollers

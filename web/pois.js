@@ -113,6 +113,7 @@ function renderResults(rows) {
   lastRows = rows;
   emptyEl.hidden = rows.length !== 0;
   resultsEl.innerHTML = poiTableHtml(rows, { rowRenderer: rowGroupHtml });
+  addReservablesPageLinks();
 }
 
 function rowGroupHtml(row) {
@@ -151,6 +152,53 @@ function reservablesContentHtml(state) {
       stateForRow: availabilityPanels.stateForRow,
     }),
   });
+}
+
+function addReservablesPageLinks() {
+  const table = resultsEl.querySelector('.poi-table');
+  if (!table) return;
+
+  const headerRow = table.querySelector(':scope > thead > tr');
+  if (headerRow) {
+    const header = document.createElement('th');
+    header.textContent = 'Reservables';
+    headerRow.append(header);
+  }
+
+  table.querySelectorAll(':scope > tbody > tr.result-row').forEach((row) => {
+    const id = row.querySelector('td[data-label="ID"]')?.textContent.trim() || '';
+    const cell = document.createElement('td');
+    cell.dataset.label = 'Reservables';
+    const links = document.createElement('div');
+    links.className = 'links';
+    appendLinkChip(links, {
+      href: `/reservables?poi_id=${encodeURIComponent(id)}&type=site`,
+      text: 'Reservables',
+      kind: 'Page',
+    });
+    cell.append(links);
+    row.append(cell);
+  });
+
+  const columnCount = table.querySelectorAll(':scope > thead > tr > th').length;
+  table.querySelectorAll(':scope > tbody > tr.reservables-row > td').forEach((cell) => {
+    cell.colSpan = columnCount;
+  });
+}
+
+function appendLinkChip(parent, { href, text, kind }) {
+  const anchor = document.createElement('a');
+  anchor.className = 'link-chip';
+  anchor.href = href;
+  anchor.append(textSpan(`chip-kind ${kind.toLowerCase()}`, kind), textSpan('link-text', text));
+  parent.append(anchor);
+}
+
+function textSpan(className, text) {
+  const span = document.createElement('span');
+  if (className) span.className = className;
+  span.textContent = text;
+  return span;
 }
 
 function panelState(poiId) {

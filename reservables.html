@@ -157,7 +157,64 @@
     </nav>
   </header>
 
-  <div id="reservable-query"></div>
+  <div id="reservable-query">
+    <form id="reservable-form" class="panel" autocomplete="off">
+      <div class="filters">
+        <label>
+          Type
+          <select name="type">
+            <option value="site">site</option>
+            <option value="">any</option>
+          </select>
+        </label>
+        <label>
+          Vendor
+          <input name="vendor" placeholder="recgov, aspira_pc">
+        </label>
+        <label>
+          Vendor ID
+          <input name="vendor_id" placeholder="330257">
+        </label>
+        <label>
+          Name
+          <input name="name" placeholder="A12">
+        </label>
+        <label>
+          Loop
+          <input name="loop" placeholder="Loop A">
+        </label>
+        <label>
+          Site Type
+          <input name="site_type" placeholder="STANDARD">
+        </label>
+        <label>
+          POI ID
+          <input name="poi_id" inputmode="numeric" placeholder="2258">
+        </label>
+        <label class="wide">
+          ID
+          <input name="id" placeholder="site:recgov:330257">
+        </label>
+        <label class="wide">
+          Raw contains
+          <textarea name="raw" spellcheck="false" placeholder='{"host":"reservation.pc.gc.ca"}'></textarea>
+        </label>
+        <label>
+          Limit
+          <select name="limit">
+            <option value="50">50</option>
+            <option value="100" selected>100</option>
+            <option value="250">250</option>
+            <option value="500">500</option>
+          </select>
+        </label>
+        <div class="actions">
+          <button class="primary" type="submit">Search</button>
+          <button data-action="reset-reservable-query" type="button">Reset</button>
+        </div>
+      </div>
+    </form>
+  </div>
 
   <section class="panel" aria-live="polite">
     <div id="status" class="status">

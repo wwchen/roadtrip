@@ -103,6 +103,7 @@ fun Route.reservableRoutes(
             queryParameter<String>("name") { description = "Exact reservable display name." }
             queryParameter<String>("loop") { description = "Exact loop value." }
             queryParameter<String>("site_type") { description = "Exact site type value." }
+            queryParameter<Long>("poi_id") { description = "Linked pois.id value." }
             queryParameter<String>("raw") { description = "JSON object contained by the raw JSONB payload." }
             queryParameter<Int>("limit") { description = "Page size, default 100, max 500." }
             queryParameter<Int>("offset") { description = "Page offset, default 0." }
@@ -544,6 +545,14 @@ private fun ApplicationCall.reservableSearchFilters(): ReservableRepo.SearchFilt
         names = queryValues("name"),
         loops = queryValues("loop"),
         siteTypes = queryValues("site_type", "siteType"),
+        poiIds =
+            queryValues("poi_id", "poiId")
+                .map { raw ->
+                    raw
+                        .toLongOrNull()
+                        ?.takeIf { it > 0 }
+                        ?: throw BadReservableQuery("bad_poi_id", "poi_id must be a positive integer")
+                },
         rawContainsJson =
             queryValues("raw")
                 .map { raw ->

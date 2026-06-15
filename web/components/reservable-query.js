@@ -1,6 +1,6 @@
 export function mountReservableQuery(root, { onSubmit, onReset } = {}) {
-  root.innerHTML = reservableQueryHtml();
   const form = root.querySelector('form');
+  if (!form) throw new Error('Reservable query markup is missing');
   const resetBtn = root.querySelector('[data-action="reset-reservable-query"]');
 
   form.addEventListener('submit', (event) => {
@@ -34,6 +34,8 @@ export function mountReservableQuery(root, { onSubmit, onReset } = {}) {
           el.value = qs.get(el.name) || '';
         } else if (el.name === 'id' && qs.has('rid')) {
           el.value = qs.get('rid') || '';
+        } else if (el.name === 'poi_id' && qs.has('poiId')) {
+          el.value = qs.get('poiId') || '';
         }
       }
     },
@@ -51,61 +53,4 @@ export function mountReservableQuery(root, { onSubmit, onReset } = {}) {
       };
     },
   };
-}
-
-function reservableQueryHtml() {
-  return `
-    <form id="reservable-form" class="panel" autocomplete="off">
-      <div class="filters">
-        <label>
-          Type
-          <select name="type">
-            <option value="site">site</option>
-            <option value="">any</option>
-          </select>
-        </label>
-        <label>
-          Vendor
-          <input name="vendor" placeholder="recgov, aspira_pc">
-        </label>
-        <label>
-          Vendor ID
-          <input name="vendor_id" placeholder="330257">
-        </label>
-        <label>
-          Name
-          <input name="name" placeholder="A12">
-        </label>
-        <label>
-          Loop
-          <input name="loop" placeholder="Loop A">
-        </label>
-        <label>
-          Site Type
-          <input name="site_type" placeholder="STANDARD">
-        </label>
-        <label class="wide">
-          ID
-          <input name="id" placeholder="site:recgov:330257">
-        </label>
-        <label class="wide">
-          Raw contains
-          <textarea name="raw" spellcheck="false" placeholder='{"host":"reservation.pc.gc.ca"}'></textarea>
-        </label>
-        <label>
-          Limit
-          <select name="limit">
-            <option value="50">50</option>
-            <option value="100" selected>100</option>
-            <option value="250">250</option>
-            <option value="500">500</option>
-          </select>
-        </label>
-        <div class="actions">
-          <button class="primary" type="submit">Search</button>
-          <button data-action="reset-reservable-query" type="button">Reset</button>
-        </div>
-      </div>
-    </form>
-  `;
 }

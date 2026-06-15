@@ -300,6 +300,7 @@ class ReservableRepo(
         val names: List<String> = emptyList(),
         val loops: List<String> = emptyList(),
         val siteTypes: List<String> = emptyList(),
+        val poiIds: List<Long> = emptyList(),
         val rawContainsJson: List<String> = emptyList(),
     )
 
@@ -349,6 +350,17 @@ class ReservableRepo(
             filters.names.takeIf { it.isNotEmpty() }?.let { RESERVABLES.NAME.`in`(it) },
             filters.loops.takeIf { it.isNotEmpty() }?.let { RESERVABLES.LOOP.`in`(it) },
             filters.siteTypes.takeIf { it.isNotEmpty() }?.let { RESERVABLES.SITE_TYPE.`in`(it) },
+            orCondition(
+                filters.poiIds.map { poiId ->
+                    DSL.exists(
+                        DSL
+                            .selectOne()
+                            .from(RESERVABLE_POIS)
+                            .where(RESERVABLE_POIS.RESERVABLE_ID.eq(RESERVABLES.ID))
+                            .and(RESERVABLE_POIS.POI_ID.eq(poiId)),
+                    )
+                },
+            ),
             orCondition(
                 filters.rawContainsJson.map { rawJson ->
                     DSL.condition("{0} @> {1}::jsonb", RESERVABLES.RAW, DSL.inline(rawJson))
