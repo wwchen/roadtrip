@@ -1,4 +1,5 @@
 import { fetchReservableAvailabilityMonitors } from './api/reservable-api.js';
+import { escapeHtml, linkChip, links, renderRow } from './table-view.js';
 
 const statusEl = document.getElementById('status');
 const refreshBtn = document.getElementById('refresh-btn');
@@ -6,6 +7,78 @@ const rowsEl = document.getElementById('monitors');
 const emptyEl = document.getElementById('empty');
 
 let activeAbort = null;
+
+const monitorColumns = [
+  {
+    label: 'ID',
+    className: 'mono',
+    render: (monitor) => escapeHtml(monitor.id),
+  },
+  {
+    label: 'Reservable',
+    className: 'rid mono',
+    render: (monitor) => {
+      const reservable = monitor.reservable || {};
+      const rid = reservable.rid || '';
+      const meta = [reservable.vendor, reservable.type].filter(Boolean).join(' / ');
+      const pageUrl = `/reservables?id=${encodeURIComponent(rid)}`;
+      return `
+        <a href="${pageUrl}">${escapeHtml(rid || 'unknown')}</a>
+        <div class="muted">${escapeHtml(meta)}</div>
+      `;
+    },
+  },
+  {
+    label: 'Cadence',
+    render: (monitor) => escapeHtml(formatCadence(monitor.cadence)),
+  },
+  {
+    label: 'Action',
+    render: (monitor) => escapeHtml(monitor.trigger_action || '-'),
+  },
+  {
+    label: 'Stop',
+    render: (monitor) => (monitor.stop_when_triggered ? 'yes' : 'no'),
+  },
+  {
+    label: 'Status',
+    render: (monitor) => {
+      const status = monitor.status || '';
+      return `<span class="pill ${statusClass(status)}">${escapeHtml(status || 'unknown')}</span>`;
+    },
+  },
+  {
+    label: 'Last Checked',
+    render: (monitor) => escapeHtml(formatTime(monitor.last_checked_at)),
+  },
+  {
+    label: 'Last Triggered',
+    render: (monitor) => escapeHtml(formatTime(monitor.last_triggered_at)),
+  },
+  {
+    label: 'Created',
+    render: (monitor) => escapeHtml(formatTime(monitor.created_at)),
+  },
+  {
+    label: 'Links',
+    render: (monitor) => {
+      const reservable = monitor.reservable || {};
+      const rid = reservable.rid || '';
+      return links([
+        linkChip({
+          href: `/api/reservable/${encodeURIComponent(rid)}/availability?days=7`,
+          text: 'Availability',
+          kind: 'JSON',
+        }),
+        linkChip({
+          href: `/api/reservable/${encodeURIComponent(rid)}`,
+          text: 'Reservable',
+          kind: 'JSON',
+        }),
+      ]);
+    },
+  },
+];
 
 async function loadMonitors() {
   activeAbort?.abort();
@@ -42,34 +115,7 @@ function renderRows(monitors) {
 }
 
 function rowHtml(monitor) {
-  const reservable = monitor.reservable || {};
-  const rid = reservable.rid || '';
-  const meta = [reservable.vendor, reservable.type].filter(Boolean).join(' / ');
-  const detailUrl = `/api/reservable/${encodeURIComponent(rid)}`;
-  const availabilityUrl = `/api/reservable/${encodeURIComponent(rid)}/availability?days=7`;
-  const status = monitor.status || '';
-  return `
-    <tr>
-      <td class="mono">${escapeHtml(monitor.id)}</td>
-      <td class="rid mono">
-        <a href="${detailUrl}" target="_blank" rel="noreferrer">${escapeHtml(rid || 'unknown')}</a>
-        <div class="muted">${escapeHtml(meta)}</div>
-      </td>
-      <td>${escapeHtml(formatCadence(monitor.cadence))}</td>
-      <td>${escapeHtml(monitor.trigger_action || '-')}</td>
-      <td>${monitor.stop_when_triggered ? 'yes' : 'no'}</td>
-      <td><span class="pill ${statusClass(status)}">${escapeHtml(status || 'unknown')}</span></td>
-      <td>${escapeHtml(formatTime(monitor.last_checked_at))}</td>
-      <td>${escapeHtml(formatTime(monitor.last_triggered_at))}</td>
-      <td>${escapeHtml(formatTime(monitor.created_at))}</td>
-      <td>
-        <div class="links">
-          <a href="${availabilityUrl}" target="_blank" rel="noreferrer">Availability</a>
-          <a href="${detailUrl}" target="_blank" rel="noreferrer">Detail</a>
-        </div>
-      </td>
-    </tr>
-  `;
+  return renderRow(monitorColumns, monitor, { className: '' });
 }
 
 function formatCadence(seconds) {
@@ -105,15 +151,6 @@ function formatNumber(value) {
 function statusClass(status) {
   const value = String(status || '').toLowerCase();
   return ['active', 'paused', 'done'].includes(value) ? value : '';
-}
-
-function escapeHtml(value) {
-  return String(value)
-    .replaceAll('&', '&amp;')
-    .replaceAll('<', '&lt;')
-    .replaceAll('>', '&gt;')
-    .replaceAll('"', '&quot;')
-    .replaceAll("'", '&#039;');
 }
 
 refreshBtn.addEventListener('click', loadMonitors);

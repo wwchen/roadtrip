@@ -44,14 +44,6 @@ fun Route.reservableRoutes(ctx: DSLContext) {
     val pois = PoiServingRepo(ctx)
     val monitors = ReservableAvailabilityMonitorRepo(ctx)
 
-    suspend fun ApplicationCall.respondMonitorList() {
-        respondReservableJson(
-            ReservableAvailabilityMonitorListResponseSchema(
-                monitors = monitors.list().map { it.toSchema() },
-            ),
-        )
-    }
-
     get("/api/reservables", {
         tags = listOf("reservable")
         summary = "Search reservables"
@@ -123,23 +115,11 @@ fun Route.reservableRoutes(ctx: DSLContext) {
             }
         }
     }) {
-        call.respondMonitorList()
-    }
-
-    get("/api/reserverables/availability/monitors", {
-        tags = listOf("reservable")
-        summary = "Deprecated typo alias: list reservable availability monitors"
-        description =
-            "Deprecated spelling kept as a compatibility alias. Use " +
-            "`/api/reservables/availability/monitors`."
-        response {
-            code(HttpStatusCode.OK) {
-                description = "Monitor registrations."
-                body<ReservableAvailabilityMonitorListResponseSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
-    }) {
-        call.respondMonitorList()
+        call.respondReservableJson(
+            ReservableAvailabilityMonitorListResponseSchema(
+                monitors = monitors.list().map { it.toSchema() },
+            ),
+        )
     }
 
     get("/api/reservable/{rid}", {

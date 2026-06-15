@@ -67,9 +67,20 @@
   }
   .nav {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 10px 16px;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+  .nav-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .nav-group + .nav-group {
+    padding-left: 14px;
+    border-left: 1px solid var(--border-strong);
   }
   .nav a {
     border: 1px solid var(--border-strong);
@@ -86,6 +97,11 @@
   .nav a:hover {
     background: var(--bg-hover);
     text-decoration: none;
+  }
+  .nav a[aria-current="page"] {
+    border-color: rgba(76,185,106,0.45);
+    background: rgba(76,185,106,0.12);
+    color: #87d99b;
   }
   .nav a.outside-link {
     gap: 7px;
@@ -172,8 +188,44 @@
   .pill.done { color: var(--muted); }
   .links {
     display: flex;
-    flex-direction: column;
-    gap: 5px;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .link-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    max-width: 100%;
+    min-height: 26px;
+    padding: 3px 8px;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    background: var(--bg-subtle);
+    color: var(--accent);
+    font-size: 13px;
+    line-height: 1.25;
+  }
+  a.link-chip:hover {
+    background: var(--bg-hover);
+    text-decoration: none;
+  }
+  a.link-chip:hover .link-text {
+    text-decoration: underline;
+  }
+  .link-text {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .chip-kind {
+    color: var(--muted);
+    font-size: 10px;
+    font-weight: 750;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+  }
+  .chip-kind.json {
+    color: #f1c27d;
   }
   .empty {
     padding: 34px 14px;
@@ -188,6 +240,13 @@
       flex-direction: column;
     }
     .nav { justify-content: flex-start; }
+    .nav-group + .nav-group {
+      width: 100%;
+      padding-left: 0;
+      padding-top: 8px;
+      border-left: 0;
+      border-top: 1px solid var(--border-strong);
+    }
     th,
     td { padding: 9px; }
   }
@@ -201,10 +260,15 @@
       <div class="sub">Availability monitor registrations.</div>
     </div>
     <nav class="nav" aria-label="Page links">
-      <a class="outside-link" href="/">Map</a>
-      <a href="/pois">POIs</a>
-      <a href="/reservables">Reservables</a>
-      <a class="outside-link" href="/api/docs">API docs</a>
+      <div class="nav-group" aria-label="Catalog pages">
+        <a href="/pois">POIs</a>
+        <a href="/reservables">Reservables</a>
+        <a href="/monitors" aria-current="page">Monitors</a>
+      </div>
+      <div class="nav-group" aria-label="Outside links">
+        <a class="outside-link" href="/">Map</a>
+        <a class="outside-link" href="/api/docs">API docs</a>
+      </div>
     </nav>
   </header>
 

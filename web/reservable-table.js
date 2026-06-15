@@ -1,0 +1,107 @@
+import { dash, escapeHtml, linkChip, links, renderRow, renderTable } from './table-view.js';
+
+export const reservableColumns = [
+  {
+    label: 'RID',
+    colClass: 'col-rid',
+    className: 'rid mono',
+    render: (row) => `
+      <a href="${escapeHtml(reservablePageUrl(row))}">${escapeHtml(row.rid || '')}</a>
+      <div class="muted">${escapeHtml([row.vendor, row.type].filter(Boolean).join(' / '))}</div>
+    `,
+  },
+  {
+    label: 'Name',
+    colClass: 'col-name',
+    className: 'name',
+    render: (row) => dash(row.name),
+  },
+  {
+    label: 'Loop',
+    colClass: 'col-loop',
+    render: (row) => dash(row.loop),
+  },
+  {
+    label: 'Site Type',
+    colClass: 'col-site-type',
+    render: (row) => dash(row.site_type),
+  },
+  {
+    label: 'Links',
+    colClass: 'col-links',
+    render: (row) => defaultReservableLinks(row),
+  },
+];
+
+export function reservableRowHtml(row, { linksHtml = defaultReservableLinks(row), className = 'result-row' } = {}) {
+  return renderRow(
+    columnsWithLinks(() => linksHtml),
+    row,
+    { className },
+  );
+}
+
+export function reservableTableHtml(rows, { linksForRow = defaultReservableLinks } = {}) {
+  return renderTable({
+    columns: columnsWithLinks(linksForRow),
+    rows,
+    className: 'reservables-table',
+    rowClassName: 'result-row',
+  });
+}
+
+export function defaultReservableLinks(row) {
+  return links([
+    linkChip({
+      href: reservableJsonUrl(row.rid || ''),
+      text: 'Reservable',
+      kind: 'JSON',
+    }),
+    linkChip({
+      href: reservableAvailabilityJsonUrl(row.rid || ''),
+      text: 'Availability',
+      kind: 'JSON',
+    }),
+  ]);
+}
+
+export function reservableDetailLink(row) {
+  return links([
+    linkChip({
+      href: reservableJsonUrl(row.rid || ''),
+      text: 'Reservable',
+      kind: 'JSON',
+    }),
+  ]);
+}
+
+export function reservablePageUrl(row) {
+  return `/reservables?id=${encodeURIComponent(row.rid || '')}`;
+}
+
+export function reservableJsonUrl(rid) {
+  return `/api/reservable/${encodeURIComponent(rid)}`;
+}
+
+export function reservableAvailabilityJsonUrl(rid, { days = 7, start = utcYmd(new Date()), minNights = 1 } = {}) {
+  const params = new URLSearchParams({
+    days: String(days),
+    start,
+    min_nights: String(minNights),
+  });
+  return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
+}
+
+function columnsWithLinks(linksForRow) {
+  return reservableColumns.map((column) => {
+    if (column.label !== 'Links') return column;
+    return { ...column, render: linksForRow };
+  });
+}
+
+function utcYmd(date) {
+  const y = date.getUTCFullYear();
+  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(date.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}

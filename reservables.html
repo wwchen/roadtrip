@@ -55,9 +55,20 @@
   }
   .nav {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 10px 16px;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+  .nav-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .nav-group + .nav-group {
+    padding-left: 14px;
+    border-left: 1px solid var(--border-strong);
   }
   .nav a,
   button {
@@ -78,6 +89,11 @@
   button:hover {
     background: var(--bg-hover);
     text-decoration: none;
+  }
+  .nav a[aria-current="page"] {
+    border-color: rgba(76,185,106,0.45);
+    background: rgba(76,185,106,0.12);
+    color: #87d99b;
   }
   .nav a.outside-link {
     gap: 7px;
@@ -221,7 +237,7 @@
     max-width: 260px;
     overflow-wrap: anywhere;
   }
-  .row-links {
+  .links {
     display: flex;
     flex-wrap: wrap;
     gap: 6px;
@@ -389,21 +405,21 @@
     background: rgba(241,194,125,0.10);
     color: #f1c27d;
   }
-  .availability-url {
-    overflow-wrap: anywhere;
-  }
-  .availability-footer {
-    display: flex;
-    justify-content: flex-end;
-  }
   .sub-heading {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     gap: 12px;
     color: var(--muted);
     font-size: 13px;
   }
   .sub-heading strong { color: var(--text); }
+  .sub-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
   details summary {
     display: inline-flex;
     align-items: center;
@@ -450,6 +466,13 @@
     body { padding: 12px; }
     .top { align-items: flex-start; flex-direction: column; }
     .nav { justify-content: flex-start; }
+    .nav-group + .nav-group {
+      width: 100%;
+      padding-left: 0;
+      padding-top: 8px;
+      border-left: 0;
+      border-top: 1px solid var(--border-strong);
+    }
     .filters { grid-template-columns: 1fr; }
     .wide { grid-column: span 1; }
     .actions { flex-wrap: wrap; }
@@ -478,7 +501,7 @@
       background: rgba(255,255,255,0.018);
       overflow: hidden;
     }
-    tbody tr.result-row.is-expanded {
+    tbody tr.result-row.has-subrow {
       border-bottom-left-radius: 0;
       border-bottom-right-radius: 0;
       border-bottom-color: transparent;
@@ -517,7 +540,7 @@
     .name {
       max-width: none;
     }
-    .row-links { align-items: flex-start; }
+    .links { align-items: flex-start; }
     .sub-row td,
     .availability-row td {
       display: block;
@@ -547,10 +570,15 @@
       <div class="sub">Active bookable catalog rows across vendors.</div>
     </div>
     <nav class="nav" aria-label="Page links">
-      <a class="outside-link" href="/">Map</a>
-      <a href="/pois">POIs</a>
-      <a href="/monitors">Monitors</a>
-      <a class="outside-link" href="/api/docs">API docs</a>
+      <div class="nav-group" aria-label="Catalog pages">
+        <a href="/pois">POIs</a>
+        <a href="/reservables" aria-current="page">Reservables</a>
+        <a href="/monitors">Monitors</a>
+      </div>
+      <div class="nav-group" aria-label="Outside links">
+        <a class="outside-link" href="/">Map</a>
+        <a class="outside-link" href="/api/docs">API docs</a>
+      </div>
     </nav>
   </header>
 

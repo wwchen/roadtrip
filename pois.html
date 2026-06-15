@@ -54,9 +54,20 @@
   }
   .nav {
     display: flex;
-    gap: 10px;
+    align-items: center;
+    gap: 10px 16px;
     flex-wrap: wrap;
     justify-content: flex-end;
+  }
+  .nav-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+  }
+  .nav-group + .nav-group {
+    padding-left: 14px;
+    border-left: 1px solid var(--border-strong);
   }
   .nav a,
   button {
@@ -77,6 +88,11 @@
   button:hover {
     background: var(--bg-hover);
     text-decoration: none;
+  }
+  .nav a[aria-current="page"] {
+    border-color: rgba(76,185,106,0.45);
+    background: rgba(76,185,106,0.12);
+    color: #87d99b;
   }
   .nav a.outside-link {
     gap: 7px;
@@ -312,44 +328,43 @@
   .reservables-heading {
     display: flex;
     justify-content: space-between;
+    align-items: center;
     gap: 12px;
     color: var(--muted);
     font-size: 13px;
   }
   .reservables-heading strong { color: var(--text); }
-  .reservable-list {
-    display: grid;
-    gap: 8px;
-  }
-  .reservable-card {
-    display: grid;
-    grid-template-columns: minmax(240px, 1.2fr) minmax(160px, 0.8fr) minmax(260px, 1fr);
-    gap: 12px;
-    padding: 10px;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    background: rgba(255,255,255,0.018);
-  }
-  .reservable-title {
-    display: grid;
-    gap: 4px;
-  }
-  .reservable-meta {
-    color: var(--muted);
-    font-size: 12px;
-  }
-  .column-label {
-    color: var(--muted);
-    font-size: 11px;
-    font-weight: 650;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-  }
-  .reservable-links {
+  .reservables-title {
     display: flex;
+    align-items: center;
+    gap: 8px;
     flex-wrap: wrap;
-    gap: 6px;
-    align-items: flex-start;
+  }
+  .reservables-table-wrap {
+    width: 100%;
+    overflow-x: auto;
+  }
+  .reservables-table {
+    width: 100%;
+    min-width: 840px;
+    table-layout: fixed;
+  }
+  .reservables-table .col-rid { width: 25%; }
+  .reservables-table .col-name { width: 16%; }
+  .reservables-table .col-loop { width: 12%; }
+  .reservables-table .col-site-type { width: 16%; }
+  .reservables-table .col-links { width: 31%; }
+  .reservables-table .rid {
+    max-width: 340px;
+    overflow-wrap: anywhere;
+  }
+  .reservables-table .name {
+    max-width: 260px;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .reservables-table .links {
+    min-width: 0;
   }
   .json-details summary {
     display: inline-flex;
@@ -394,6 +409,13 @@
       flex-direction: column;
     }
     .nav { justify-content: flex-start; }
+    .nav-group + .nav-group {
+      width: 100%;
+      padding-left: 0;
+      padding-top: 8px;
+      border-left: 0;
+      border-top: 1px solid var(--border-strong);
+    }
     .filters { grid-template-columns: 1fr; }
     .actions { flex-wrap: wrap; }
     .table-wrap { overflow-x: visible; }
@@ -417,7 +439,7 @@
       background: rgba(255,255,255,0.018);
       overflow: hidden;
     }
-    tbody tr.result-row.is-expanded {
+    tbody tr.result-row.has-subrow {
       border-bottom-left-radius: 0;
       border-bottom-right-radius: 0;
       border-bottom-color: transparent;
@@ -465,9 +487,6 @@
       align-items: flex-start;
       flex-direction: column;
     }
-    .reservable-card {
-      grid-template-columns: 1fr;
-    }
     pre { max-width: 100%; }
   }
 </style>
@@ -480,10 +499,15 @@
       <div class="sub">Name search across active map points.</div>
     </div>
     <nav class="nav" aria-label="Page links">
-      <a class="outside-link" href="/">Map</a>
-      <a href="/reservables">Reservables</a>
-      <a href="/monitors">Monitors</a>
-      <a class="outside-link" href="/api/docs">API docs</a>
+      <div class="nav-group" aria-label="Catalog pages">
+        <a href="/pois" aria-current="page">POIs</a>
+        <a href="/reservables">Reservables</a>
+        <a href="/monitors">Monitors</a>
+      </div>
+      <div class="nav-group" aria-label="Outside links">
+        <a class="outside-link" href="/">Map</a>
+        <a class="outside-link" href="/api/docs">API docs</a>
+      </div>
     </nav>
   </header>
 

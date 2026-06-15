@@ -230,11 +230,6 @@ class ReservableRoutesTest {
             assertEquals(HttpStatusCode.OK, list.status)
             val listBody = Json.parseToJsonElement(list.bodyAsText()).jsonObject
             assertEquals(1, listBody["monitors"]!!.jsonArray.size)
-
-            val typoAlias = client.get("/api/reserverables/availability/monitors")
-            assertEquals(HttpStatusCode.OK, typoAlias.status)
-            val typoBody = Json.parseToJsonElement(typoAlias.bodyAsText()).jsonObject
-            assertEquals(1, typoBody["monitors"]!!.jsonArray.size)
         }
 
     @Test
