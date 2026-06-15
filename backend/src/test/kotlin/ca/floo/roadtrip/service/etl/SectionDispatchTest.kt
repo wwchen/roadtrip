@@ -238,6 +238,38 @@ class SectionDispatchTest {
         assertEquals(4, stats.staleLinksDeleted)
     }
 
+    @Test
+    fun `runJoiner refreshes planner stats before discovering links`() {
+        val fakeJoiner =
+            FakeJoiner(
+                adapter = "FakeJoinerAdapter",
+                links = emptyList(),
+            )
+        val orch =
+            EtlOrchestrator(
+                ctx = ctx,
+                rawDir = rawDir,
+                poiRegistry = registry,
+                etlRegistry = emptyMap(),
+                joinerRegistry = mapOf(fakeJoiner.adapter to fakeJoiner),
+            )
+
+        orch.runJoiner("Fake Joiner")
+
+        val analyzedTables =
+            ctx
+                .fetch(
+                    """
+                    SELECT relname
+                    FROM pg_stat_user_tables
+                    WHERE relname IN ('pois', 'reservables')
+                      AND last_analyze IS NOT NULL
+                    """.trimIndent(),
+                ).map { it.get("relname", String::class.java) }
+                .toSet()
+        assertEquals(setOf("pois", "reservables"), analyzedTables)
+    }
+
     private fun insertCampgroundPoi(
         source: String,
         sourceId: String,

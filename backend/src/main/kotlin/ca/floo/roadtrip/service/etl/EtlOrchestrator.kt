@@ -210,6 +210,7 @@ class EtlOrchestrator(
                 ?: error("no joiner adapter registered for '${row.adapter}' (poi_reservable_joiner '$name')")
         log.info("joiner '{}' adapter={} starting", name, row.adapter)
 
+        refreshJoinerPlannerStats(name)
         val joinerCtx = JoinerCtx(ctx = ctx, reservables = reservables, args = row.args)
         val links = joiner.discoverLinks(joinerCtx)
 
@@ -234,6 +235,12 @@ class EtlOrchestrator(
             linksInserted = inserted,
             staleLinksDeleted = staleDeleted,
         )
+    }
+
+    private fun refreshJoinerPlannerStats(name: String) {
+        log.info("joiner '{}' refreshing planner stats for pois/reservables", name)
+        ctx.execute("ANALYZE pois")
+        ctx.execute("ANALYZE reservables")
     }
 
     @Suppress("UNCHECKED_CAST")
