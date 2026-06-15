@@ -13,7 +13,7 @@ import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
-import ca.floo.roadtrip.repo.ReservableAvailabilityMonitorLogRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.dataSourceFor
@@ -201,7 +201,7 @@ fun Application.module() {
             CampsiteProviderRepo(ctx),
             bookingProviderRegistry,
             ReservableRepo(ctx),
-            ReservableAvailabilityMonitorLogRepo(ctx),
+            ReservableAvailabilityLogRepo(ctx),
         )
         adminIngestRoutes(ingestController, ctx)
         campsiteRoutes(campsite)

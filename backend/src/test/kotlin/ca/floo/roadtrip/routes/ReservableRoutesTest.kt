@@ -2,7 +2,7 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableAvailabilityMonitorLogRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
@@ -81,7 +81,7 @@ class ReservableRoutesTest {
 
     @BeforeEach
     fun reset() {
-        ctx.execute("DELETE FROM reservable_availability_monitor_log")
+        ctx.execute("DELETE FROM reservable_availability_log")
         ctx.execute("DELETE FROM reservable_availability_monitors")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
@@ -404,7 +404,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
-                        ReservableAvailabilityMonitorLogRepo(ctx),
+                        ReservableAvailabilityLogRepo(ctx),
                     )
                 }
             }
@@ -427,16 +427,15 @@ class ReservableRoutesTest {
             val logRows =
                 ctx.fetch(
                     """
-                    SELECT reservable_rid, target_date, min_nights, status, available,
-                           available_count, total, day_payload
-                    FROM reservable_availability_monitor_log
+                    SELECT reservable_rid, target_date, status, available, available_count,
+                           total, day_payload
+                    FROM reservable_availability_log
                     ORDER BY target_date
                     """.trimIndent(),
                 )
             assertEquals(2, logRows.size)
             assertEquals("site:recgov:330257", logRows[0].get("reservable_rid", String::class.java))
             assertEquals(java.time.LocalDate.parse("2026-07-01"), logRows[0].get("target_date", java.time.LocalDate::class.java))
-            assertEquals(1, logRows[0].get("min_nights", Int::class.java))
             assertEquals("available", logRows[0].get("status", String::class.java))
             assertEquals(true, logRows[0].get("available", Boolean::class.java))
             assertEquals(1, logRows[0].get("available_count", Int::class.java))
@@ -449,6 +448,14 @@ class ReservableRoutesTest {
                     .jsonPrimitive
                     .content,
             )
+
+            val multiNight = client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01&days=2&min_nights=2")
+            assertEquals(HttpStatusCode.OK, multiNight.status)
+            val rowCountAfterMultiNight =
+                ctx
+                    .fetchOne("SELECT count(*) FROM reservable_availability_log")!!
+                    .get(0, Long::class.java)
+            assertEquals(5L, rowCountAfterMultiNight)
         }
 
     private fun seedPoi(

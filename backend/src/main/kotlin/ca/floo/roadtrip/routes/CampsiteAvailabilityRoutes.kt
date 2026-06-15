@@ -3,6 +3,7 @@ package ca.floo.roadtrip.routes
 import ca.floo.campsite.recgov.booker.api.DEFAULT_AVAILABILITY_DAYS
 import ca.floo.campsite.recgov.booker.api.IpRateLimiter
 import ca.floo.campsite.recgov.booker.api.MAX_AVAILABILITY_DAYS
+import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityEmptySchema
@@ -12,13 +13,14 @@ import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
 import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableAvailabilityMonitorLogRepo
+import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
+import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderError
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.booking.ProviderRefParser
@@ -74,7 +76,7 @@ fun Route.campsiteAvailabilityRoutes(
     providerRefs: CampsiteProviderRepo,
     bookingProviders: BookingProviderRegistry,
     reservables: ReservableRepo,
-    monitorLogs: ReservableAvailabilityMonitorLogRepo? = null,
+    availabilityLogs: ReservableAvailabilityLogRepo? = null,
 ) {
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
 
@@ -301,10 +303,14 @@ fun Route.campsiteAvailabilityRoutes(
                         force = query.force,
                     ),
                 )
-            monitorLogs?.appendReservableAvailability(
+            availabilityLogs?.appendReservableAvailability(
                 reservableRid = rid.encode(),
+                provider = provider,
+                ref = ref,
+                vendorId = rid.vendorId,
                 response = response,
                 query = query,
+                days = days,
             )
             call.respondAvailabilityJson(response)
         } catch (e: BookingProviderError) {
@@ -468,17 +474,35 @@ private suspend fun fetchOneBulk(
     }
 }
 
-private fun ReservableAvailabilityMonitorLogRepo.appendReservableAvailability(
+private suspend fun ReservableAvailabilityLogRepo.appendReservableAvailability(
     reservableRid: String,
+    provider: BookingProvider,
+    ref: ProviderRef,
+    vendorId: String,
     response: AvailabilityResponseDto,
     query: AvailabilityQuery,
+    days: Int,
 ) {
     try {
+        val logResponse =
+            if (query.minNights == 1) {
+                response
+            } else {
+                provider.reservableAvailability(
+                    ReservableAvailabilityRequest(
+                        ref = ref,
+                        vendorId = vendorId,
+                        start = query.start,
+                        days = days + query.minNights - 1,
+                        minNights = 1,
+                        force = false,
+                    ),
+                )
+            }
         appendAvailabilityPoll(
-            ReservableAvailabilityMonitorLogRepo.AvailabilityPoll(
+            ReservableAvailabilityLogRepo.AvailabilityPoll(
                 reservableRid = reservableRid,
-                response = response,
-                minNights = query.minNights,
+                response = logResponse,
             ),
         )
     } catch (e: Exception) {
