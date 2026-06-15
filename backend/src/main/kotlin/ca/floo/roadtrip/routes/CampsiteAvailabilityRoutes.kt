@@ -3,7 +3,6 @@ package ca.floo.roadtrip.routes
 import ca.floo.campsite.recgov.booker.api.DEFAULT_AVAILABILITY_DAYS
 import ca.floo.campsite.recgov.booker.api.IpRateLimiter
 import ca.floo.campsite.recgov.booker.api.MAX_AVAILABILITY_DAYS
-import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityEmptySchema
@@ -15,16 +14,14 @@ import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
-import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderError
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
 import ca.floo.roadtrip.service.booking.ProviderRefParser
-import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -79,6 +76,7 @@ fun Route.campsiteAvailabilityRoutes(
     availabilityLogs: ReservableAvailabilityLogRepo? = null,
 ) {
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
+    val reservableAvailabilityFetches = ReservableAvailabilityFetchService(availabilityLogs)
 
     suspend fun ApplicationCall.handlePoiAvailability(poiIdParam: String) {
         val poiId =
@@ -293,8 +291,10 @@ fun Route.campsiteAvailabilityRoutes(
 
         try {
             val response =
-                provider.reservableAvailability(
-                    ReservableAvailabilityRequest(
+                reservableAvailabilityFetches.fetch(
+                    ReservableAvailabilityFetchService.Request(
+                        reservableRid = rid.encode(),
+                        provider = provider,
                         ref = ref,
                         vendorId = rid.vendorId,
                         start = query.start,
@@ -303,15 +303,6 @@ fun Route.campsiteAvailabilityRoutes(
                         force = query.force,
                     ),
                 )
-            availabilityLogs?.appendReservableAvailability(
-                reservableRid = rid.encode(),
-                provider = provider,
-                ref = ref,
-                vendorId = rid.vendorId,
-                response = response,
-                query = query,
-                days = days,
-            )
             call.respondAvailabilityJson(response)
         } catch (e: BookingProviderError) {
             val (status, error) = mapProviderError(e)
@@ -471,42 +462,6 @@ private suspend fun fetchOneBulk(
     } catch (e: BookingProviderError) {
         log.info("bulk availability poi={} provider={} failed: {}", poiId, provider.id, e.message)
         BulkAvailEntrySchema(id = poiId, status = httpStatusFor(e), available_dates = emptyList())
-    }
-}
-
-private suspend fun ReservableAvailabilityLogRepo.appendReservableAvailability(
-    reservableRid: String,
-    provider: BookingProvider,
-    ref: ProviderRef,
-    vendorId: String,
-    response: AvailabilityResponseDto,
-    query: AvailabilityQuery,
-    days: Int,
-) {
-    try {
-        val logResponse =
-            if (query.minNights == 1) {
-                response
-            } else {
-                provider.reservableAvailability(
-                    ReservableAvailabilityRequest(
-                        ref = ref,
-                        vendorId = vendorId,
-                        start = query.start,
-                        days = days + query.minNights - 1,
-                        minNights = 1,
-                        force = false,
-                    ),
-                )
-            }
-        appendAvailabilityPoll(
-            ReservableAvailabilityLogRepo.AvailabilityPoll(
-                reservableRid = reservableRid,
-                response = logResponse,
-            ),
-        )
-    } catch (e: Exception) {
-        log.warn("reservable availability log append failed rid={}: {}", reservableRid, e.message)
     }
 }
 
