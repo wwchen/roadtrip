@@ -11,6 +11,7 @@
 //   - week-grid.js          — 7 day cells.
 //   - day-detail.js         — selected-day panel + alert / reserve CTAs.
 //   - site-list.js          — all-site catalog or selected-day availability.
+//   - site-matrix.js        — reservable rows crossed with visible dates.
 //   - calendar-popover.js   — month picker shown when the user clicks the
 //                             week label (jump to any date).
 //
@@ -28,11 +29,19 @@ import { fetchPoiReservables } from '../api/reservable-api.js';
 import { isActiveFeature } from '../drawer/chrome.js';
 import { mountCalendarPopover } from './calendar-popover.js';
 import { renderDayDetail } from './day-detail.js';
+import { renderSiteMatrix } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 import { renderWeekGrid, renderWeekSkeleton } from './week-grid.js';
 
 const STORAGE_KEY_MIN_NIGHTS = 'cg.minNights';
+const STORAGE_KEY_AVAILABILITY_VIEW = 'cg.availabilityView';
+const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
 const DEFAULT_MIN_NIGHTS = 1;
+const DEFAULT_AVAILABILITY_VIEW = 'table';
+const DEFAULT_SITE_COLUMN_WIDTH = 178;
+const MIN_SITE_COLUMN_WIDTH = 30;
+const MAX_SITE_COLUMN_WIDTH = 320;
+const MATRIX_SCROLL_LOAD_THRESHOLD_PX = 140;
 const MIN_NIGHTS_CHIPS = [1, 2, 3, 7];
 const WEEK_DAYS = 7;
 const SKELETON_RENDER_DELAY_MS = 150;
@@ -67,6 +76,7 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
 
   return {
     dispose() {
+      endSiteColumnResize(ctx);
       clearTimeout(ctx.skeletonTimer);
       ctx.calendar?.dispose();
       ctx.calendar = null;
@@ -87,9 +97,17 @@ function makeContext(host, feature, signal) {
     signal,
     weekStart: startOfTodayUtc(),
     minNights: loadMinNights(),
+    availabilityView: loadAvailabilityView(),
+    siteColumnWidth: loadSiteColumnWidth(),
     selectedDate: null,
     state: 'loading', // 'loading' | 'success' | 'empty' | 'closed_for_season' | 'error'
     days: null,
+    matrixDays: null,
+    matrixLoading: false,
+    matrixEnd: false,
+    matrixError: null,
+    matrixScrollLeft: 0,
+    matrixRequestSeq: 0,
     cacheBlock: null,
     summary: '',
     season: null,
@@ -114,6 +132,7 @@ function makeContext(host, feature, signal) {
 
 function rerender(ctx) {
   ctx.host.innerHTML = renderShell(ctx);
+  restoreMatrixScroll(ctx);
 }
 
 function renderShell(ctx) {
@@ -123,7 +142,7 @@ function renderShell(ctx) {
     <section class="cg-availability">
       ${renderNightsRow(ctx)}
       ${renderWeekNav(ctx)}
-      ${renderBody(ctx)}
+      ${renderAvailabilitySurface(ctx)}
       <div class="cg-freshness">${renderFreshness(ctx)}</div>
       ${renderDetail(ctx)}
       ${renderSiteList({
@@ -145,9 +164,24 @@ function renderNightsRow(ctx) {
   ).join('');
   return `
     <div class="cg-nights-row">
-      <span class="cg-nights-label">Min nights</span>
-      ${chips}
+      <div class="cg-nights-group">
+        <span class="cg-nights-label">Min nights</span>
+        ${chips}
+      </div>
+      <div class="cg-view-toggle" role="group" aria-label="Availability view">
+        ${viewModeButton(ctx, 'table', 'Table')}
+        ${viewModeButton(ctx, 'week', 'Week')}
+      </div>
     </div>
+  `;
+}
+
+function viewModeButton(ctx, mode, label) {
+  const active = ctx.availabilityView === mode;
+  return `
+    <button type="button" class="cg-view-mode${active ? ' cg-view-mode-active' : ''}" data-view-mode="${mode}" aria-pressed="${active ? 'true' : 'false'}">
+      ${escapeHtml(label)}
+    </button>
   `;
 }
 
@@ -201,6 +235,21 @@ function renderBody(ctx) {
   });
 }
 
+function renderAvailabilitySurface(ctx) {
+  if (ctx.state !== 'success' || ctx.availabilityView === 'week') return renderBody(ctx);
+  const days = matrixAvailabilityDays(ctx);
+  return renderSiteMatrix({
+    state: ctx.sitesState,
+    reservables: ctx.sites,
+    days,
+    error: ctx.sitesError,
+    selectedDate: ctx.selectedDate,
+    siteColumnWidth: ctx.siteColumnWidth,
+    loadingMore: ctx.matrixLoading,
+    loadMoreError: ctx.matrixError,
+  });
+}
+
 function renderFreshness(ctx) {
   if (ctx.state !== 'success' || !ctx.cacheBlock) return '&nbsp;';
   const ageMin = Math.max(1, Math.round((ctx.cacheBlock.age_seconds ?? 0) / 60));
@@ -224,8 +273,9 @@ function selectedAvailabilityDay(ctx) {
   if (ctx.state === 'loading' || ctx.state === 'error' || ctx.state === 'empty' || ctx.state === 'closed_for_season') {
     return null;
   }
-  if (!ctx.selectedDate || !ctx.days || ctx.days.length === 0) return null;
-  return ctx.days.find((d) => d.date === ctx.selectedDate) || null;
+  const days = siteListAvailabilityDays(ctx);
+  if (!ctx.selectedDate || !days || days.length === 0) return null;
+  return days.find((d) => d.date === ctx.selectedDate) || null;
 }
 
 function availableCount(day) {
@@ -236,6 +286,17 @@ function availableCount(day) {
 
 function wireRoot(ctx) {
   ctx.host.addEventListener('click', (e) => onRootClick(ctx, e));
+  ctx.host.addEventListener('pointerdown', (e) => onRootPointerDown(ctx, e));
+  ctx.host.addEventListener('scroll', (e) => onRootScroll(ctx, e), true);
+}
+
+function onRootPointerDown(ctx, e) {
+  const tgt = e.target;
+  if (!(tgt instanceof Element)) return;
+  const siteColumnResizer = tgt.closest('[data-site-column-resizer]');
+  if (siteColumnResizer) {
+    beginSiteColumnResize(ctx, e, siteColumnResizer);
+  }
 }
 
 function onRootClick(ctx, e) {
@@ -256,6 +317,16 @@ function onRootClick(ctx, e) {
       // up the new "N-night stay" label after the response lands.
       fetchWeek(ctx);
       if (ctx.selectedDate) fetchSites(ctx);
+    }
+    return;
+  }
+  const viewModeBtn = tgt.closest('[data-view-mode]');
+  if (viewModeBtn) {
+    const mode = viewModeBtn.getAttribute('data-view-mode');
+    if (mode === 'table' || mode === 'week') {
+      ctx.availabilityView = mode;
+      saveAvailabilityView(mode);
+      rerender(ctx);
     }
     return;
   }
@@ -302,6 +373,25 @@ function onRootClick(ctx, e) {
     }
     return;
   }
+  const matrixDateBtn = tgt.closest('[data-matrix-date]');
+  if (matrixDateBtn) {
+    const date = matrixDateBtn.getAttribute('data-matrix-date');
+    if (!date) return;
+    const selected = ctx.selectedDate !== date;
+    ctx.selectedDate = selected ? date : null;
+    ctx.sitesExpanded = selected;
+    if (selected) {
+      fetchSites(ctx);
+    } else {
+      rerender(ctx);
+    }
+    return;
+  }
+  if (tgt.closest('[data-matrix-today]')) {
+    e.preventDefault();
+    jumpMatrixToToday(ctx);
+    return;
+  }
   if (tgt.closest('.cg-refresh')) {
     e.preventDefault();
     fetchWeek(ctx, { force: true });
@@ -328,6 +418,84 @@ function onRootClick(ctx, e) {
     e.preventDefault();
     fetchSites(ctx);
   }
+}
+
+function onRootScroll(ctx, e) {
+  const scroll = e.target;
+  if (!(scroll instanceof HTMLElement)) return;
+  if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
+  ctx.matrixScrollLeft = scroll.scrollLeft;
+  if (ctx.availabilityView !== 'table') return;
+  if (ctx.state !== 'success') return;
+  if (ctx.matrixLoading || ctx.matrixEnd) return;
+  const remaining = scroll.scrollWidth - scroll.clientWidth - scroll.scrollLeft;
+  if (remaining <= MATRIX_SCROLL_LOAD_THRESHOLD_PX) {
+    fetchMoreMatrixDays(ctx);
+  }
+}
+
+function beginSiteColumnResize(ctx, event, handle) {
+  if (event.pointerId == null) return;
+  event.preventDefault();
+  event.stopPropagation();
+
+  endSiteColumnResize(ctx);
+  const scroll = handle.closest('.cg-site-matrix-scroll');
+  const startWidth = ctx.siteColumnWidth || DEFAULT_SITE_COLUMN_WIDTH;
+  ctx.siteColumnResize = {
+    pointerId: event.pointerId,
+    startX: event.clientX,
+    startWidth,
+    scroll,
+    onMove: null,
+    onUp: null,
+  };
+  ctx.siteColumnResize.onMove = (moveEvent) => updateSiteColumnResize(ctx, moveEvent);
+  ctx.siteColumnResize.onUp = () => endSiteColumnResize(ctx);
+  try {
+    handle.setPointerCapture?.(event.pointerId);
+  } catch {
+    // Synthetic tests may not have an active pointer to capture.
+  }
+  document.body.classList.add('cg-site-column-resizing');
+  window.addEventListener('pointermove', ctx.siteColumnResize.onMove);
+  window.addEventListener('pointerup', ctx.siteColumnResize.onUp, { once: true });
+  window.addEventListener('pointercancel', ctx.siteColumnResize.onUp, { once: true });
+}
+
+function updateSiteColumnResize(ctx, event) {
+  const active = ctx.siteColumnResize;
+  if (!active) return;
+  const nextWidth = clampSiteColumnWidth(active.startWidth + event.clientX - active.startX);
+  ctx.siteColumnWidth = nextWidth;
+  active.scroll?.style.setProperty('--cg-site-column-width', `${nextWidth}px`);
+}
+
+function endSiteColumnResize(ctx) {
+  const active = ctx.siteColumnResize;
+  if (!active) return;
+  window.removeEventListener('pointermove', active.onMove);
+  window.removeEventListener('pointerup', active.onUp);
+  window.removeEventListener('pointercancel', active.onUp);
+  document.body.classList.remove('cg-site-column-resizing');
+  ctx.siteColumnResize = null;
+  saveSiteColumnWidth(ctx.siteColumnWidth || DEFAULT_SITE_COLUMN_WIDTH);
+}
+
+function jumpMatrixToToday(ctx) {
+  const today = startOfTodayUtc();
+  ctx.selectedDate = null;
+  ctx.sitesExpanded = false;
+  ctx.matrixScrollLeft = 0;
+  if (!sameDay(ctx.weekStart, today)) {
+    ctx.weekStart = today;
+    fetchWeek(ctx);
+    return;
+  }
+  ctx.matrixDays = Array.isArray(ctx.days) ? [...ctx.days] : ctx.matrixDays;
+  ctx.matrixEnd = false;
+  ctx.matrixError = null;
+  rerender(ctx);
 }
 
 function openCalendar(ctx, anchorBtn) {
@@ -369,6 +537,7 @@ function openCalendar(ctx, anchorBtn) {
 async function fetchWeek(ctx, { force = false } = {}) {
   ctx.state = 'loading';
   ctx.error = null;
+  resetMatrixRange(ctx);
   // Skeleton only flashes for slow fetches; cache hits feel instant.
   clearTimeout(ctx.skeletonTimer);
   ctx.skeletonTimer = setTimeout(() => rerender(ctx), SKELETON_RENDER_DELAY_MS);
@@ -402,6 +571,7 @@ async function fetchWeek(ctx, { force = false } = {}) {
     } else {
       ctx.state = 'success';
       ctx.days = json.availability || [];
+      ctx.matrixDays = [...ctx.days];
     }
     rerender(ctx);
   } catch (e) {
@@ -411,6 +581,53 @@ async function fetchWeek(ctx, { force = false } = {}) {
     ctx.state = 'error';
     ctx.error = e.message || 'network';
     rerender(ctx);
+  }
+}
+
+async function fetchMoreMatrixDays(ctx) {
+  const visibleDays = matrixAvailabilityDays(ctx);
+  const lastDay = visibleDays[visibleDays.length - 1];
+  if (!lastDay?.date) return;
+  const nextStart = addDays(parseIsoDate(lastDay.date), 1);
+  const requestSeq = ++ctx.matrixRequestSeq;
+  ctx.matrixLoading = true;
+  ctx.matrixError = null;
+  rerender(ctx);
+  try {
+    const resp = await requestCampsiteAvailability(ctx.poiId, {
+      days: WEEK_DAYS,
+      start: isoDate(nextStart),
+      minNights: 1,
+      signal: ctx.signal,
+    });
+    if (!isActiveFeature(ctx.feature)) return;
+    if (ctx.signal?.aborted) return;
+    if (requestSeq !== ctx.matrixRequestSeq) return;
+    if (!resp.ok) {
+      const json = await resp.json().catch(() => null);
+      if (json?.error === 'bad_start') {
+        ctx.matrixEnd = true;
+      } else {
+        ctx.matrixError = json?.error || `HTTP ${resp.status}`;
+      }
+      return;
+    }
+    const json = await resp.json();
+    const nextDays = Array.isArray(json.availability) ? json.availability : [];
+    const merged = mergeAvailabilityDays(visibleDays, nextDays);
+    ctx.matrixDays = merged;
+    ctx.matrixEnd = merged.length === visibleDays.length || nextDays.length < WEEK_DAYS;
+    if (json.cache) ctx.cacheBlock = json.cache;
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (!isActiveFeature(ctx.feature)) return;
+    if (requestSeq !== ctx.matrixRequestSeq) return;
+    ctx.matrixError = e.message || 'network';
+  } finally {
+    if (requestSeq === ctx.matrixRequestSeq) {
+      ctx.matrixLoading = false;
+      rerender(ctx);
+    }
   }
 }
 
@@ -536,6 +753,85 @@ function saveMinNights(n) {
   } catch {
     // Non-fatal: just won't persist.
   }
+}
+
+function loadAvailabilityView() {
+  try {
+    const mode = localStorage.getItem(STORAGE_KEY_AVAILABILITY_VIEW);
+    if (mode === 'table' || mode === 'week') return mode;
+  } catch {
+    // Non-fatal: default silently.
+  }
+  return DEFAULT_AVAILABILITY_VIEW;
+}
+
+function saveAvailabilityView(mode) {
+  try {
+    localStorage.setItem(STORAGE_KEY_AVAILABILITY_VIEW, mode);
+  } catch {
+    // Non-fatal: just won't persist.
+  }
+}
+
+function loadSiteColumnWidth() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_SITE_COLUMN_WIDTH);
+    const width = parseInt(raw, 10);
+    if (Number.isFinite(width)) return clampSiteColumnWidth(width);
+  } catch {
+    // Non-fatal: default silently.
+  }
+  return DEFAULT_SITE_COLUMN_WIDTH;
+}
+
+function saveSiteColumnWidth(width) {
+  try {
+    localStorage.setItem(STORAGE_KEY_SITE_COLUMN_WIDTH, String(clampSiteColumnWidth(width)));
+  } catch {
+    // Non-fatal: just won't persist.
+  }
+}
+
+function restoreMatrixScroll(ctx) {
+  if (ctx.availabilityView !== 'table' || !ctx.matrixScrollLeft) return;
+  const left = ctx.matrixScrollLeft;
+  window.requestAnimationFrame?.(() => {
+    const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
+    if (scroll instanceof HTMLElement) scroll.scrollLeft = left;
+  });
+}
+
+function resetMatrixRange(ctx) {
+  ctx.matrixDays = null;
+  ctx.matrixLoading = false;
+  ctx.matrixEnd = false;
+  ctx.matrixError = null;
+  ctx.matrixScrollLeft = 0;
+  ctx.matrixRequestSeq += 1;
+}
+
+function matrixAvailabilityDays(ctx) {
+  return Array.isArray(ctx.matrixDays) ? ctx.matrixDays : (Array.isArray(ctx.days) ? ctx.days : []);
+}
+
+function siteListAvailabilityDays(ctx) {
+  if (ctx.availabilityView === 'table') return matrixAvailabilityDays(ctx);
+  return Array.isArray(ctx.days) ? ctx.days : [];
+}
+
+function mergeAvailabilityDays(current, next) {
+  const byDate = new Map();
+  for (const day of current || []) {
+    if (day?.date) byDate.set(day.date, day);
+  }
+  for (const day of next || []) {
+    if (day?.date) byDate.set(day.date, day);
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function clampSiteColumnWidth(width) {
+  return Math.max(MIN_SITE_COLUMN_WIDTH, Math.min(MAX_SITE_COLUMN_WIDTH, Math.round(width)));
 }
 
 function startOfTodayUtc() {
