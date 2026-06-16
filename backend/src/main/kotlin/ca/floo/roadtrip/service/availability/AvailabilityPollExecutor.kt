@@ -47,7 +47,7 @@ class AvailabilityPollExecutor(
             val intent = AvailabilityJobIntent.fromJsonObject(job.intentPayload)
             snapshotCount =
                 when (intent) {
-                    is AvailabilityJobIntent.Reservable -> runReservable(job.id, intent)
+                    is AvailabilityJobIntent.Reservable -> runReservable(job.id, runId, intent)
                     is AvailabilityJobIntent.Poi -> {
                         log.info("job {} POI scope not yet executed (poi_id={})", job.id, intent.poiId)
                         0
@@ -84,6 +84,7 @@ class AvailabilityPollExecutor(
      */
     private suspend fun runReservable(
         jobId: Long,
+        runId: Long,
         intent: AvailabilityJobIntent.Reservable,
     ): Int {
         val reservable =
@@ -126,6 +127,7 @@ class AvailabilityPollExecutor(
         val response =
             fetches.fetch(
                 ReservableAvailabilityFetchService.Request(
+                    reservableId = reservable.id,
                     reservableRid = reservable.rid.encode(),
                     provider = provider,
                     ref = ref,
@@ -134,11 +136,12 @@ class AvailabilityPollExecutor(
                     days = days,
                     minNights = intent.minNights,
                     force = false,
+                    runId = runId,
                 ),
             )
         // Each day in the response window is one snapshot row in
-        // reservable_availability_log (ReservableAvailabilityFetchService
-        // calls appendAvailabilityPoll on the full response).
+        // availability_snapshot (ReservableAvailabilityFetchService
+        // calls AvailabilitySnapshotRepo.appendBatch on the full response).
         return response.availability.size
     }
 }

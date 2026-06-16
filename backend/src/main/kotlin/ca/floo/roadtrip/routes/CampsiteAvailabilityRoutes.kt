@@ -10,9 +10,9 @@ import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.models.api.BulkAvailEntrySchema
 import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
 import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
+import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -73,10 +73,10 @@ fun Route.campsiteAvailabilityRoutes(
     providerRefs: CampsiteProviderRepo,
     bookingProviders: BookingProviderRegistry,
     reservables: ReservableRepo,
-    availabilityLogs: ReservableAvailabilityLogRepo? = null,
+    snapshots: AvailabilitySnapshotRepo? = null,
 ) {
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
-    val reservableAvailabilityFetches = ReservableAvailabilityFetchService(availabilityLogs)
+    val reservableAvailabilityFetches = ReservableAvailabilityFetchService(snapshots)
 
     suspend fun ApplicationCall.handlePoiAvailability(poiIdParam: String) {
         val poiId =
@@ -293,6 +293,7 @@ fun Route.campsiteAvailabilityRoutes(
             val response =
                 reservableAvailabilityFetches.fetch(
                     ReservableAvailabilityFetchService.Request(
+                        reservableId = row.id,
                         reservableRid = rid.encode(),
                         provider = provider,
                         ref = ref,

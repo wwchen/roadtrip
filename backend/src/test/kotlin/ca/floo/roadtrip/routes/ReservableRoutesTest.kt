@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
@@ -76,7 +76,7 @@ class ReservableRoutesTest {
 
     @BeforeEach
     fun reset() {
-        ctx.execute("DELETE FROM reservable_availability_log")
+        ctx.execute("DELETE FROM availability_snapshot")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
         ctx.execute("DELETE FROM pois")
@@ -331,7 +331,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
-                        ReservableAvailabilityLogRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
                     )
                 }
             }
@@ -354,9 +354,15 @@ class ReservableRoutesTest {
             val logRows =
                 ctx.fetch(
                     """
-                    SELECT reservable_rid, target_date, status, available, day_payload
-                    FROM reservable_availability_log
-                    ORDER BY target_date
+                    SELECT
+                        r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,
+                        s.target_date,
+                        s.status,
+                        s.available,
+                        s.day_payload
+                    FROM availability_snapshot s
+                    JOIN reservables r ON r.id = s.reservable_id
+                    ORDER BY s.target_date
                     """.trimIndent(),
                 )
             assertEquals(2, logRows.size)
@@ -377,7 +383,7 @@ class ReservableRoutesTest {
             assertEquals(HttpStatusCode.OK, multiNight.status)
             val rowCountAfterMultiNight =
                 ctx
-                    .fetchOne("SELECT count(*) FROM reservable_availability_log")!!
+                    .fetchOne("SELECT count(*) FROM availability_snapshot")!!
                     .get(0, Long::class.java)
             assertEquals(5L, rowCountAfterMultiNight)
         }
