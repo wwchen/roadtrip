@@ -7,7 +7,8 @@ import { listJobs, getJobsSummary } from '/web/api/availability-dashboard-api.js
 export async function mount(rootEl, { onTabSwitch }) {
   rootEl.innerHTML = `
     <section class="panel">
-      <div class="form-stack" id="jobs-counters">Loading…</div>
+      <h2>Status</h2>
+      <div class="counter-row" id="jobs-counters">Loading…</div>
     </section>
     <section class="panel">
       <h2>Filter</h2>
@@ -60,11 +61,11 @@ export async function mount(rootEl, { onTabSwitch }) {
     try {
       const s = await getJobsSummary();
       countersEl.innerHTML = `
-        <div>active: <strong>${s.active}</strong></div>
-        <div>paused: <strong>${s.paused}</strong></div>
-        <div>done: <strong>${s.done}</strong></div>
-        <div>due now: <strong>${s.due_now}</strong></div>
-        <div>claimed: <strong>${s.claimed}</strong></div>
+        <span class="chip">active <strong>${s.active}</strong></span>
+        <span class="chip">paused <strong>${s.paused}</strong></span>
+        <span class="chip">done <strong>${s.done}</strong></span>
+        <span class="chip">due now <strong>${s.due_now}</strong></span>
+        <span class="chip">claimed <strong>${s.claimed}</strong></span>
       `;
     } catch (err) {
       countersEl.textContent = `Counters error: ${err.message}`;
