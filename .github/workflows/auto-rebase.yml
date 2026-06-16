@@ -98,9 +98,32 @@ jobs:
             # Push to master or manual dispatch w/o PR: only PRs whose merge
             # is currently CONFLICTING (typical for stacked PRs after the
             # bottom PR merges and GitHub retargets the next one to master).
-            gh pr list --repo "$REPO" --state open --base master \
-              --json number,headRefName,isCrossRepository,mergeable \
-              --jq '.[] | select(.isCrossRepository == false and .mergeable == "CONFLICTING") | "\(.number) \(.headRefName)"' \
+            #
+            # GitHub re-computes mergeability asynchronously after a push,
+            # so a fresh `gh pr list` immediately after a merge typically
+            # reports the still-stale UNKNOWN status. Poll until every open
+            # same-repo PR has a definitive mergeable verdict (CONFLICTING /
+            # MERGEABLE / UNMERGEABLE), or we hit the timeout. Without this
+            # the workflow misses exactly the case it exists for: stacked
+            # PRs whose parent just merged.
+            attempt=0
+            max_attempts=12   # 12 × 5s = 60s budget
+            while : ; do
+              attempt=$((attempt + 1))
+              raw=$(gh pr list --repo "$REPO" --state open --base master \
+                --json number,headRefName,isCrossRepository,mergeable)
+              unknown=$(printf '%s' "$raw" \
+                | jq '[.[] | select(.isCrossRepository == false and .mergeable == "UNKNOWN")] | length')
+              if [ "$unknown" -eq 0 ] || [ "$attempt" -ge "$max_attempts" ]; then
+                if [ "$unknown" -gt 0 ]; then
+                  echo "::warning::$unknown PR(s) still UNKNOWN after $((attempt * 5))s; proceeding without them."
+                fi
+                break
+              fi
+              sleep 5
+            done
+            printf '%s' "$raw" \
+              | jq -r '.[] | select(.isCrossRepository == false and .mergeable == "CONFLICTING") | "\(.number) \(.headRefName)"' \
               > prs.txt
           fi
 
@@ -148,6 +171,43 @@ jobs:
             return 1
           }
 
+          # When push/comment events trigger a rebase without an old_base,
+          # try to infer one by looking at recently merged PRs whose head
+          # SHA is an ancestor of the branch we're rebasing. That's the
+          # tip the stack was originally based on. Using `--onto master
+          # <inferred-tip> <branch>` skips ALL inherited commits cleanly
+          # — patch-id dedup can't, when squash-merge content diverges
+          # from cumulative pre-squash commits.
+          infer_stacked_base() {
+            local branch="$1"
+            local n
+            # Look back at the last 10 merged PRs. Stacks deeper than 10
+            # are unusual; scanning fewer keeps API calls bounded.
+            local merged_heads
+            merged_heads=$(
+              gh pr list --repo "$REPO" --state merged --base master --limit 10 \
+                --json headRefOid,mergedAt \
+                --jq 'sort_by(.mergedAt) | reverse | .[].headRefOid' \
+                || true
+            )
+            # Walk from most-recent to oldest, returning the first ancestor
+            # that's NOT already on origin/master. That's the lowest-still-
+            # present-in-branch commit from a parent PR. Fetch the SHA
+            # explicitly first since merged-PR heads aren't in the default
+            # checkout's object database.
+            for sha in $merged_heads; do
+              if ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+                git fetch origin "$sha" 2>/dev/null || continue
+              fi
+              if git merge-base --is-ancestor "$sha" "$branch" 2>/dev/null \
+                && ! git merge-base --is-ancestor "$sha" origin/master 2>/dev/null; then
+                printf '%s\n' "$sha"
+                return 0
+              fi
+            done
+            return 1
+          }
+
           while read -r pr_number branch old_base; do
             [ -z "$pr_number" ] && continue
             echo "::group::PR #$pr_number ($branch)"
@@ -171,9 +231,18 @@ jobs:
                 continue
               fi
 
-              # `git rebase master` drops patches already in master by patch-id,
-              # which is what un-sticks stacked PRs after their parent merges.
-              rebase_args=("$master_sha")
+              # Try to infer the parent-stack tip from recently merged PRs.
+              # When found, use --onto so we transplant only this PR's own
+              # commits. Falls back to patch-id rebase against master when
+              # no merged PR's head SHA is in the branch's ancestry.
+              if inferred_base=$(infer_stacked_base "$branch"); then
+                echo "Rebasing $branch onto origin/master from inferred parent tip $inferred_base."
+                rebase_args=(--onto origin/master "$inferred_base" "$branch")
+              else
+                # `git rebase master` drops patches already in master by patch-id,
+                # which is what un-sticks stacked PRs after their parent merges.
+                rebase_args=("$master_sha")
+              fi
             fi
 
             if git rebase "${rebase_args[@]}"; then
