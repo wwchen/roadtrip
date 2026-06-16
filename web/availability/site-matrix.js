@@ -16,6 +16,7 @@ export function renderSiteMatrix({
   siteColumnWidth,
   loadingMore = false,
   loadMoreError = null,
+  showToday = true,
 }) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
   if (visibleDays.length === 0) return '';
@@ -25,6 +26,7 @@ export function renderSiteMatrix({
       meta: `${visibleDays.length} dates`,
       loadingMore,
       loadMoreError,
+      showToday,
       body: '<div class="cg-site-matrix-status" aria-busy="true">Loading sites...</div>',
     });
   }
@@ -33,6 +35,7 @@ export function renderSiteMatrix({
       meta: `${visibleDays.length} dates`,
       loadingMore,
       loadMoreError,
+      showToday,
       body: `<div class="cg-site-matrix-status cg-site-matrix-error">${escapeHtml(error || "Couldn't load sites")} <a href="#" class="cg-sites-retry">Retry</a></div>`,
     });
   }
@@ -43,6 +46,7 @@ export function renderSiteMatrix({
       meta: `${visibleDays.length} dates`,
       loadingMore,
       loadMoreError,
+      showToday,
       body: '<div class="cg-site-matrix-status">No reservable sites found for this campground.</div>',
     });
   }
@@ -59,6 +63,7 @@ export function renderSiteMatrix({
     meta,
     loadingMore,
     loadMoreError,
+    showToday,
     body: `
       <div class="cg-site-matrix-scroll"${widthStyle}>
         <table class="cg-site-matrix-table">
@@ -79,12 +84,15 @@ export function renderSiteMatrix({
   });
 }
 
-function renderSection({ meta, body, loadingMore = false, loadMoreError = null }) {
+function renderSection({ meta, body, loadingMore = false, loadMoreError = null, showToday = true }) {
   const status = loadingMore
     ? '<span class="cg-site-matrix-meta-status">Loading...</span>'
     : loadMoreError
       ? '<span class="cg-site-matrix-meta-status cg-site-matrix-meta-error">Load failed</span>'
       : '';
+  const todayButton = showToday
+    ? '<button type="button" class="cg-site-matrix-today" data-matrix-today>Today</button>'
+    : '';
   return `
     <section class="cg-site-matrix" aria-label="Sites by date">
       <div class="cg-site-matrix-head">
@@ -97,7 +105,7 @@ function renderSection({ meta, body, loadingMore = false, loadMoreError = null }
           </div>
         </div>
         <div class="cg-site-matrix-actions">
-          <button type="button" class="cg-site-matrix-today" data-matrix-today>Today</button>
+          ${todayButton}
           <div class="cg-site-matrix-meta">${escapeHtml(meta)}${status ? ` ${status}` : ''}</div>
         </div>
       </div>
