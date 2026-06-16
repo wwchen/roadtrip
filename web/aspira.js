@@ -59,7 +59,6 @@ export function buildAspiraDeeplink({
     searchTime,
     flexibleSearch: `[false,false,"${flexAnchor}",1]`,
     view: 'list',
-    filterData: '{"-32756":"[[1],0,0,0]"}',
   };
   // Only include resourceLocationId when we actually have it. Sending the
   // string "NULL" (or omitting when required) makes WA bounce the user back

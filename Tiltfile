@@ -151,10 +151,6 @@ local_resource(
 # tail per resource — much friendlier than remembering Make targets in a
 # separate shell.
 #
-# Tesla Supercharger pricing has no Tilt row: the fetch is interactive
-# (cURL paste → smoke-test → loop on 403/429) and doesn't fit Tilt's log
-# pane. Run `make fetch-tesla-supercharger-pricing` from a terminal.
-#
 # Notes:
 # - 'data-fetch' / 'data-import' POST to the backend's RFC 0004 admin API.
 #   Two-step refresh: fetch upstream into data/*.{json,geojson}, then import

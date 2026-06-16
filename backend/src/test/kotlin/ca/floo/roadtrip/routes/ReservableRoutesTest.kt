@@ -300,6 +300,7 @@ class ReservableRoutesTest {
             assertTrue(url.contains("endDate=2026-07-03"), url)
             assertTrue(url.contains("nights=2"), url)
             assertTrue(url.contains("resourceLocationId=-2147483624"), url)
+            assertTrue(!url.contains("filterData="), url)
         }
 
     @Test

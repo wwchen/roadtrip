@@ -86,11 +86,12 @@ https://reservation.pc.gc.ca/create-booking/results
   &searchTime={ISO-8601}
   &flexibleSearch=[false,false,null,1]
   &view=list
-  &filterData={"-32756":"[[1],0,0,0]"}             -- default filters
 ```
 
 Most params are inert defaults — only `transactionLocationId`, `mapId`,
-and the dates per-trip. `startDate`/`endDate` can default to today/+1
+and the dates per-trip. Do not send `filterData` unless it is derived
+from the target site/category; a hardcoded filter can hide available
+sites on WA child maps. `startDate`/`endDate` can default to today/+1
 day; the user can change them on the booking page.
 
 ## Goals
@@ -168,7 +169,6 @@ export function buildAspiraDeeplink({ host, transactionLocationId, mapId, resour
     searchTime: new Date().toISOString().replace(/\.\d+/, '.000').replace(/Z$/, ''),
     flexibleSearch: '[false,false,null,1]',
     view: 'list',
-    filterData: '{"-32756":"[[1],0,0,0]"}',
   });
   return `https://${host}/create-booking/results?${params}`;
 }
