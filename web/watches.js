@@ -127,7 +127,9 @@ function renderRow(w) {
   const triggers = w.trigger_kinds.join(', ');
   return `
     <tr>
-      <td>${escapeHtml(w.id)}</td>
+      <td>
+        <a href="/watches/${encodeURIComponent(w.id)}">${escapeHtml(w.id)}</a>
+      </td>
       <td>${escapeHtml(scope)}</td>
       <td>${escapeHtml(dates)}</td>
       <td>${escapeHtml(w.cadence_sec)}s</td>

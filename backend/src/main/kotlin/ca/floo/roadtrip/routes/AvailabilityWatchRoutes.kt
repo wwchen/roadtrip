@@ -1,12 +1,19 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.Reservable
+import ca.floo.roadtrip.models.ReservableType
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchCreateRequest
+import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapCell
+import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapGroup
+import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapResponse
+import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapRow
 import ca.floo.roadtrip.models.api.AvailabilityWatchListResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.models.api.ReservableSchema
+import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.ReservableRepo
@@ -25,6 +32,8 @@ import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonPrimitive
 import org.jooq.DSLContext
 import java.time.LocalDate
 
@@ -45,6 +54,7 @@ fun Route.availabilityWatchRoutes(
 ) {
     val watches = AvailabilityWatchRepo(ctx)
     val reservables = ReservableRepo(ctx)
+    val heatmaps = AvailabilityHeatmapRepo(ctx)
 
     get("/api/availability/watches", {
         tags = listOf("availability")
@@ -213,6 +223,71 @@ fun Route.availabilityWatchRoutes(
             call.respondError("not_found", HttpStatusCode.NotFound)
         }
     }
+
+    get("/api/availability/watches/{id}/heatmap", {
+        tags = listOf("availability")
+        summary = "(child reservable × target_date) heatmap of latest snapshot statuses for a watch"
+        request {
+            pathParameter<Long>("id") { description = "Watch id." }
+        }
+        response {
+            code(HttpStatusCode.OK) {
+                body<AvailabilityWatchHeatmapResponse> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
+            code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
+        }
+    }) {
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@get call.respondError("invalid_id", HttpStatusCode.BadRequest)
+        val watch =
+            watches.findById(id)
+                ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
+
+        val children = resolveChildren(watch, reservables)
+        val cells = heatmaps.loadHeatmap(children.map { it.id }, watch.targetDates)
+        val cellsByPair = cells.associateBy { it.reservableId to it.targetDate }
+
+        val targetDateStrings = watch.targetDates.map { it.toString() }
+        val rowsByLoop = LinkedHashMap<String?, MutableList<AvailabilityWatchHeatmapRow>>()
+        for (r in children.sortedWith(
+            compareBy<Reservable, String?>(nullsLast()) {
+                it.loop
+            }.thenBy { it.name ?: "" }.thenBy { it.rid.vendorId },
+        )) {
+            val rowCells =
+                watch.targetDates.map { d ->
+                    val cell = cellsByPair[r.id to d]
+                    AvailabilityWatchHeatmapCell(
+                        targetDate = d.toString(),
+                        status = cell?.status,
+                        available = cell?.available,
+                        observedAt = cell?.observedAt?.toString(),
+                    )
+                }
+            val key = r.loop?.takeIf { it.isNotBlank() }
+            rowsByLoop.getOrPut(key) { mutableListOf() } +=
+                AvailabilityWatchHeatmapRow(
+                    reservableId = r.id,
+                    reservableRid = r.rid.encode(),
+                    name = r.name,
+                    cells = rowCells,
+                )
+        }
+
+        val groups =
+            rowsByLoop.entries.map { (loop, rows) ->
+                AvailabilityWatchHeatmapGroup(loop = loop, rows = rows)
+            }
+        call.respondJson(
+            AvailabilityWatchHeatmapResponse(
+                watchId = watch.id,
+                targetDates = targetDateStrings,
+                groups = groups,
+            ),
+        )
+    }
 }
 
 private sealed class ResolveResult {
@@ -310,4 +385,37 @@ private suspend fun ApplicationCall.respondError(
 ) {
     val payload = ApiErrorSchema(error = error, detail = detail)
     respondText(watchJson.encodeToString(payload), ContentType.Application.Json, status)
+}
+
+private fun resolveChildren(
+    watch: AvailabilityWatchRepo.Watch,
+    reservables: ReservableRepo,
+): List<Reservable> {
+    if (watch.reservableId != null) {
+        val r = reservables.findById(watch.reservableId) ?: return emptyList()
+        return listOf(r)
+    }
+    val poiId = watch.poiId ?: return emptyList()
+    val all = reservables.findByPoi(poiId, type = ReservableType.parse("site"))
+    val loops = collectStringFilter(watch.reservableFilters, "loop")
+    val siteTypes = collectStringFilter(watch.reservableFilters, "site_type")
+    return all.filter { r ->
+        (loops.isEmpty() || (r.loop != null && loops.contains(r.loop))) &&
+            (siteTypes.isEmpty() || (r.siteType != null && siteTypes.contains(r.siteType)))
+    }
+}
+
+private fun collectStringFilter(
+    filters: kotlinx.serialization.json.JsonObject,
+    key: String,
+): Set<String> {
+    val value = filters[key] ?: return emptySet()
+    return when (value) {
+        is JsonPrimitive -> if (value.isString) setOf(value.content) else emptySet()
+        is JsonArray ->
+            value
+                .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
+                .toSet()
+        else -> emptySet()
+    }
 }

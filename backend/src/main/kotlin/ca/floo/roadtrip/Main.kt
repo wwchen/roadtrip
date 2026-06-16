@@ -280,6 +280,9 @@ fun Application.module() {
         get("/watches/") {
             call.respondFile(File(staticDir, "watches.html"))
         }
+        get("/watches/{id}") {
+            call.respondFile(File(staticDir, "watch-detail.html"))
+        }
         get("/availability") {
             call.respondFile(File(staticDir, "availability.html"))
         }

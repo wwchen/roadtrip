@@ -60,3 +60,32 @@ data class AvailabilityWatchListResponse(
     val offset: Int,
     val watches: List<AvailabilityWatchSchema>,
 )
+
+@Serializable
+data class AvailabilityWatchHeatmapCell(
+    @SerialName("target_date") val targetDate: String,
+    val status: String? = null,
+    val available: Boolean? = null,
+    @SerialName("observed_at") val observedAt: String? = null,
+)
+
+@Serializable
+data class AvailabilityWatchHeatmapRow(
+    @SerialName("reservable_id") val reservableId: Long,
+    @SerialName("reservable_rid") val reservableRid: String,
+    val name: String? = null,
+    val cells: List<AvailabilityWatchHeatmapCell>,
+)
+
+@Serializable
+data class AvailabilityWatchHeatmapGroup(
+    val loop: String? = null,
+    val rows: List<AvailabilityWatchHeatmapRow>,
+)
+
+@Serializable
+data class AvailabilityWatchHeatmapResponse(
+    @SerialName("watch_id") val watchId: Long,
+    @SerialName("target_dates") val targetDates: List<String>,
+    val groups: List<AvailabilityWatchHeatmapGroup>,
+)
