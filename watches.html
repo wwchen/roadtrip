@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#26272d">
-<title>POIs</title>
+<title>Availability Watches</title>
 <style>
   :root {
     --surface: #26272d;
@@ -114,12 +114,64 @@
   }
   .filters {
     display: grid;
-    grid-template-columns: 120px minmax(240px, 2fr) minmax(170px, 1fr) 120px auto;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) auto;
     gap: 10px;
     align-items: end;
   }
-  .name-link {
-    color: var(--accent);
+  .form-stack {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px 20px;
+    align-items: flex-end;
+  }
+  .form-stack > label,
+  .form-stack > .actions { flex: 3 1 280px; }
+  .form-stack > label.narrow { flex: 0 0 160px; }
+  .form-stack label.checkbox {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 8px;
+    text-transform: none;
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 500;
+  }
+  .form-stack label.checkbox input {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+  }
+  @media (max-width: 640px) {
+    .form-stack { grid-template-columns: 1fr; }
+  }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .data-table th,
+  .data-table td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .data-table th {
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+  }
+  .empty {
+    color: var(--muted);
+    padding: 14px;
+    text-align: center;
+  }
+  .panel { padding: 14px; margin-bottom: 14px; }
+  .panel h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
   @media (max-width: 900px) {
     .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -148,14 +200,14 @@
 <main class="shell">
   <header class="top">
     <div>
-      <h1>POIs</h1>
-      <div class="sub">Name search across active map points.</div>
+      <h1>Availability Watches</h1>
+      <div class="sub">Reservable availability intents and their status.</div>
     </div>
     <nav class="nav" aria-label="Page links">
       <div class="nav-group" aria-label="Catalog pages">
-        <a href="/pois" aria-current="page">POIs</a>
+        <a href="/pois">POIs</a>
         <a href="/reservables">Reservables</a>
-        <a href="/watches">Watches</a>
+        <a href="/watches" aria-current="page">Watches</a>
       </div>
       <div class="nav-group" aria-label="Outside links">
         <a class="outside-link" href="/">Map</a>
@@ -164,17 +216,65 @@
     </nav>
   </header>
 
-  <div id="poi-query"></div>
+  <section class="panel">
+    <h2>Filter</h2>
+    <form id="filter-form" class="filters">
+      <label>Status
+        <select name="status">
+          <option value="">any</option>
+          <option value="active" selected>active</option>
+          <option value="paused">paused</option>
+          <option value="done">done</option>
+        </select>
+      </label>
+      <label>POI ID <input name="poi_id" inputmode="numeric"></label>
+      <label>Reservable ID <input name="reservable_id" inputmode="numeric"></label>
+      <div class="actions">
+        <button class="primary" type="submit">Apply</button>
+        <button type="reset">Reset</button>
+      </div>
+    </form>
+  </section>
+
+  <section class="panel">
+    <h2>Create watch</h2>
+    <form id="create-form" class="form-stack">
+      <label>POI ID (or)
+        <input name="poi_id" inputmode="numeric" placeholder="2258">
+      </label>
+      <label>Reservable RID
+        <input name="reservable_rid" placeholder="site:recgov:330257">
+      </label>
+      <label>Target dates (comma-separated YYYY-MM-DD)
+        <input name="target_dates" placeholder="2026-07-04, 2026-07-05" required>
+      </label>
+      <label class="narrow">Min nights <input name="min_nights" type="number" min="1" value="1"></label>
+      <label class="narrow">Cadence (seconds) <input name="cadence_sec" type="number" min="5" value="60" required></label>
+      <label>Trigger kinds (comma-separated)
+        <input name="trigger_kinds" value="atc" required>
+      </label>
+      <label>Reservable filters (JSON object)
+        <textarea name="reservable_filters" rows="2">{}</textarea>
+      </label>
+      <label>Trigger config (JSON)
+        <textarea name="trigger_config" rows="2">{}</textarea>
+      </label>
+      <label class="checkbox">
+        <input name="stop_when_triggered" type="checkbox" checked>
+        Stop when triggered
+      </label>
+      <div class="actions">
+        <button class="primary" type="submit">Create</button>
+      </div>
+    </form>
+  </section>
 
   <section class="panel" aria-live="polite">
-    <div id="status" class="status">
-      <span>Enter at least 2 characters.</span>
-      <span class="mono muted" id="query-url"></span>
-    </div>
+    <div id="status" class="status">Loading…</div>
     <div id="results"></div>
-    <div id="empty" class="empty">Enter at least 2 characters to search.</div>
+    <div id="empty" class="empty" hidden>No watches.</div>
   </section>
 </main>
-<script type="module" src="/web/pois.js"></script>
+<script type="module" src="/web/watches.js"></script>
 </body>
 </html>

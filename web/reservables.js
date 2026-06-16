@@ -1,4 +1,5 @@
 import { fetchReservable, searchReservables } from './api/reservable-api.js';
+import { availabilityQueryFromForm, createWatchUrlFromQuery } from './components/availability-panel.js';
 import { createAvailabilityPanels } from './components/availability-controller.js';
 import { mountReservableQuery } from './components/reservable-query.js';
 import { reservableDetailLink, reservableRowGroupRenderer, reservableTableHtml } from './components/reservable-table.js';
@@ -142,6 +143,15 @@ resultsEl.addEventListener('click', (event) => {
   const toggle = event.target.closest('[data-action="toggle-availability"]');
   if (toggle) {
     availabilityPanels.toggleAvailability(toggle.dataset.rid || '');
+    return;
+  }
+  const createWatchBtn = event.target.closest('[data-action="create-watch"]');
+  if (createWatchBtn) {
+    event.preventDefault();
+    const form = createWatchBtn.closest('form[data-action="availability-query"]');
+    const rid = createWatchBtn.dataset.rid || '';
+    const queryState = form ? availabilityQueryFromForm(form) : { start: '', days: '7', minNights: '1' };
+    window.location.href = createWatchUrlFromQuery(rid, queryState);
   }
 });
 

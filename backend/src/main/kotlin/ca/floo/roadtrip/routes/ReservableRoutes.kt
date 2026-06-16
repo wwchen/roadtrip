@@ -5,27 +5,19 @@ import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.models.ReservableType
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PoiReservablesResponseSchema
-import ca.floo.roadtrip.models.api.ReservableAvailabilityMonitorCreateRequestSchema
-import ca.floo.roadtrip.models.api.ReservableAvailabilityMonitorListResponseSchema
-import ca.floo.roadtrip.models.api.ReservableAvailabilityMonitorResponseSchema
-import ca.floo.roadtrip.models.api.ReservableAvailabilityMonitorSchema
 import ca.floo.roadtrip.models.api.ReservableDetailResponseSchema
 import ca.floo.roadtrip.models.api.ReservableSchema
 import ca.floo.roadtrip.models.api.ReservablesResponseSchema
 import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.repo.ReservableAvailabilityMonitorRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
-import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
-import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -42,7 +34,6 @@ private val reservableRoutesJson =
 fun Route.reservableRoutes(ctx: DSLContext) {
     val reservables = ReservableRepo(ctx)
     val pois = PoiServingRepo(ctx)
-    val monitors = ReservableAvailabilityMonitorRepo(ctx)
 
     get("/api/reservables", {
         tags = listOf("reservable")
@@ -107,24 +98,6 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         )
     }
 
-    get("/api/reservables/availability/monitors", {
-        tags = listOf("reservable")
-        summary = "List reservable availability monitors"
-        description = "Lists all persisted reservable availability monitor registrations."
-        response {
-            code(HttpStatusCode.OK) {
-                description = "Monitor registrations."
-                body<ReservableAvailabilityMonitorListResponseSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
-    }) {
-        call.respondReservableJson(
-            ReservableAvailabilityMonitorListResponseSchema(
-                monitors = monitors.list().map { it.toSchema() },
-            ),
-        )
-    }
-
     get("/api/reservable/{rid}", {
         tags = listOf("reservable")
         summary = "Single reservable catalog detail"
@@ -164,88 +137,6 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 reservable = row.toSchema(poiIds),
                 poiIds = poiIds,
             ),
-        )
-    }
-
-    post("/api/reservable/{rid}/availability/monitor", {
-        tags = listOf("reservable")
-        summary = "Create a reservable availability monitor"
-        description =
-            "Persists a monitor registration for one reservable. `cadence` is " +
-            "seconds and must be at least 5. `trigger_actions` is a non-empty " +
-            "JSON array describing the actions the future monitor worker " +
-            "should perform when availability matches; `stop_when_triggered` " +
-            "defaults to true."
-        request {
-            pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
-            body<ReservableAvailabilityMonitorCreateRequestSchema> {
-                mediaTypes(ContentType.Application.Json)
-            }
-        }
-        response {
-            code(HttpStatusCode.Created) {
-                description = "Created monitor registration."
-                body<ReservableAvailabilityMonitorResponseSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.BadRequest) {
-                description = "Malformed reservable id, JSON body, cadence, or trigger_actions."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.NotFound) {
-                description = "No reservable with that composite id."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
-    }) {
-        val rid =
-            call.parameters["rid"]
-                ?.let(ReservableId::parse)
-                ?: return@post call.respondReservableError("bad_rid", HttpStatusCode.BadRequest)
-        val row =
-            reservables.findByRid(rid)
-                ?: return@post call.respondReservableError("not_found", HttpStatusCode.NotFound)
-        val input =
-            try {
-                reservableRoutesJson.decodeFromString<ReservableAvailabilityMonitorCreateRequestSchema>(
-                    call.receiveText().ifBlank { "{}" },
-                )
-            } catch (e: Exception) {
-                return@post call.respondReservableError(
-                    "bad_json",
-                    HttpStatusCode.BadRequest,
-                    e.message,
-                )
-            }
-        if (input.cadence < 5) {
-            return@post call.respondReservableError(
-                "bad_cadence",
-                HttpStatusCode.BadRequest,
-                "cadence must be at least 5 seconds",
-            )
-        }
-        val triggerActions = input.triggerActions
-        if (triggerActions.isEmpty()) {
-            return@post call.respondReservableError(
-                "bad_trigger_actions",
-                HttpStatusCode.BadRequest,
-                "trigger_actions must be a non-empty array",
-            )
-        }
-
-        call.respondReservableJson(
-            ReservableAvailabilityMonitorResponseSchema(
-                monitor =
-                    monitors
-                        .create(
-                            row.id,
-                            ReservableAvailabilityMonitorRepo.CreateInput(
-                                cadenceSec = input.cadence,
-                                triggerActions = triggerActions,
-                                stopWhenTriggered = input.stopWhenTriggered,
-                            ),
-                        ).toSchema(),
-            ),
-            HttpStatusCode.Created,
         )
     }
 
@@ -366,20 +257,6 @@ private fun Reservable.toSchema(poiIds: List<Long> = emptyList()): ReservableSch
         siteType = siteType,
         poiIds = poiIds,
         raw = raw,
-    )
-
-private fun ReservableAvailabilityMonitorRepo.Monitor.toSchema(): ReservableAvailabilityMonitorSchema =
-    ReservableAvailabilityMonitorSchema(
-        id = id,
-        reservable = reservable.toSchema(),
-        cadence = cadenceSec,
-        triggerActions = triggerActions,
-        stopWhenTriggered = stopWhenTriggered,
-        status = status,
-        lastCheckedAt = lastCheckedAt?.toString(),
-        lastTriggeredAt = lastTriggeredAt?.toString(),
-        createdAt = createdAt.toString(),
-        updatedAt = updatedAt.toString(),
     )
 
 private suspend fun ApplicationCall.respondReservableError(

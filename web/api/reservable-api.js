@@ -9,9 +9,6 @@
 //   GET /api/reservables
 //     → { total, limit, offset, reservables: [{rid, poi_ids, name, loop, …}, …] }
 //
-//   GET /api/reservables/availability/monitors
-//     → { monitors: [{ id, reservable, cadence, trigger_action, … }, …] }
-//
 //   GET /api/reservable/{rid}/availability
 //     → provider availability response for one reservable
 //
@@ -40,16 +37,6 @@ export function searchReservables(params = {}) {
   }
   const suffix = qs.toString() ? `?${qs}` : '';
   return jsonGetOk(`/api/reservables${suffix}`, { signal });
-}
-
-/**
- * List persisted reservable availability monitor registrations.
- *
- * @param {object}      [opts]
- * @param {AbortSignal} [opts.signal]
- */
-export function fetchReservableAvailabilityMonitors({ signal } = {}) {
-  return jsonGetOk('/api/reservables/availability/monitors', { signal });
 }
 
 /**

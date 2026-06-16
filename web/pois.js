@@ -1,5 +1,6 @@
 import { fetchPoiDetail, poiSearchUrl, searchPoiCatalog } from './api/poi-api.js';
 import { fetchPoiReservables } from './api/reservable-api.js';
+import { availabilityQueryFromForm, createWatchUrlFromQuery } from './components/availability-panel.js';
 import { createAvailabilityPanels } from './components/availability-controller.js';
 import { mountPoiQuery } from './components/poi-query.js';
 import { poiReservablesRowHtml, poiRowHtml, poiTableHtml } from './components/poi-table.js';
@@ -217,6 +218,16 @@ resultsEl.addEventListener('click', (event) => {
   const availability = event.target.closest('[data-action="toggle-availability"]');
   if (availability) {
     availabilityPanels.toggleAvailability(availability.dataset.rid || '');
+    return;
+  }
+
+  const createWatchBtn = event.target.closest('[data-action="create-watch"]');
+  if (createWatchBtn) {
+    event.preventDefault();
+    const form = createWatchBtn.closest('form[data-action="availability-query"]');
+    const rid = createWatchBtn.dataset.rid || '';
+    const queryState = form ? availabilityQueryFromForm(form) : { start: '', days: '7', minNights: '1' };
+    window.location.href = createWatchUrlFromQuery(rid, queryState);
   }
 });
 

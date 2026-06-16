@@ -19,16 +19,11 @@ import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
-import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -82,7 +77,6 @@ class ReservableRoutesTest {
     @BeforeEach
     fun reset() {
         ctx.execute("DELETE FROM reservable_availability_log")
-        ctx.execute("DELETE FROM reservable_availability_monitors")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
         ctx.execute("DELETE FROM pois")
@@ -211,73 +205,6 @@ class ReservableRoutesTest {
             assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?type=permit").status)
             assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?limit=0").status)
             assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservables?raw=%7Bnot-json%7D").status)
-        }
-
-    @Test
-    fun `reservable availability monitor create and list`() =
-        testApplication {
-            seedReservable(vendorId = "330257", name = "A12", loop = "Loop A")
-            application { routing { reservableRoutes(ctx) } }
-
-            val created =
-                client.post("/api/reservable/site:recgov:330257/availability/monitor") {
-                    contentType(ContentType.Application.Json)
-                    setBody(
-                        """
-                        {"cadence":60,"trigger_actions":["notify_slack"],"stop_when_triggered":false}
-                        """.trimIndent(),
-                    )
-                }
-            assertEquals(HttpStatusCode.Created, created.status)
-            val createdBody = Json.parseToJsonElement(created.bodyAsText()).jsonObject
-            val monitor = createdBody["monitor"]!!.jsonObject
-            assertEquals("60", monitor["cadence"]!!.jsonPrimitive.content)
-            assertEquals(listOf("notify_slack"), monitor["trigger_actions"]!!.jsonArray.map { it.jsonPrimitive.content })
-            assertEquals(false, monitor["stop_when_triggered"]!!.jsonPrimitive.boolean)
-            assertEquals("active", monitor["status"]!!.jsonPrimitive.content)
-            assertEquals("site:recgov:330257", monitor["reservable"]!!.jsonObject["rid"]!!.jsonPrimitive.content)
-
-            val list = client.get("/api/reservables/availability/monitors")
-            assertEquals(HttpStatusCode.OK, list.status)
-            val listBody = Json.parseToJsonElement(list.bodyAsText()).jsonObject
-            assertEquals(1, listBody["monitors"]!!.jsonArray.size)
-            assertEquals(
-                listOf("notify_slack"),
-                listBody["monitors"]!!
-                    .jsonArray
-                    .single()
-                    .jsonObject["trigger_actions"]!!
-                    .jsonArray
-                    .map { it.jsonPrimitive.content },
-            )
-        }
-
-    @Test
-    fun `reservable availability monitor rejects invalid input`() =
-        testApplication {
-            seedReservable(vendorId = "330257", name = "A12")
-            application { routing { reservableRoutes(ctx) } }
-
-            val badCadence =
-                client.post("/api/reservable/site:recgov:330257/availability/monitor") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"cadence":1,"trigger_actions":["notify_slack"]}""")
-                }
-            assertEquals(HttpStatusCode.BadRequest, badCadence.status)
-
-            val emptyAction =
-                client.post("/api/reservable/site:recgov:330257/availability/monitor") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"cadence":60,"trigger_actions":[]}""")
-                }
-            assertEquals(HttpStatusCode.BadRequest, emptyAction.status)
-
-            val unknown =
-                client.post("/api/reservable/site:recgov:missing/availability/monitor") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"cadence":60,"trigger_actions":["notify_slack"]}""")
-                }
-            assertEquals(HttpStatusCode.NotFound, unknown.status)
         }
 
     @Test

@@ -2,7 +2,6 @@ package ca.floo.roadtrip.models.api
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 
 @Serializable
@@ -38,35 +37,4 @@ data class PoiReservablesResponseSchema(
     val type: String,
     @SerialName("total_at_poi") val totalAtPoi: Int,
     val reservables: List<ReservableSchema>,
-)
-
-@Serializable
-data class ReservableAvailabilityMonitorCreateRequestSchema(
-    val cadence: Int,
-    @SerialName("trigger_actions") val triggerActions: JsonArray,
-    @SerialName("stop_when_triggered") val stopWhenTriggered: Boolean = true,
-)
-
-@Serializable
-data class ReservableAvailabilityMonitorSchema(
-    val id: Long,
-    val reservable: ReservableSchema,
-    val cadence: Int,
-    @SerialName("trigger_actions") val triggerActions: JsonArray,
-    @SerialName("stop_when_triggered") val stopWhenTriggered: Boolean,
-    val status: String,
-    @SerialName("last_checked_at") val lastCheckedAt: String? = null,
-    @SerialName("last_triggered_at") val lastTriggeredAt: String? = null,
-    @SerialName("created_at") val createdAt: String,
-    @SerialName("updated_at") val updatedAt: String,
-)
-
-@Serializable
-data class ReservableAvailabilityMonitorResponseSchema(
-    val monitor: ReservableAvailabilityMonitorSchema,
-)
-
-@Serializable
-data class ReservableAvailabilityMonitorListResponseSchema(
-    val monitors: List<ReservableAvailabilityMonitorSchema>,
 )

@@ -20,6 +20,7 @@ import ca.floo.roadtrip.repo.dataSourceFor
 import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.routes.adminIngestRoutes
+import ca.floo.roadtrip.routes.availabilityWatchRoutes
 import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
 import ca.floo.roadtrip.routes.geocodeRoutes
 import ca.floo.roadtrip.routes.healthRoutes
@@ -193,6 +194,7 @@ fun Application.module() {
 
         poiRoutes(ctx, poiRegistry)
         reservableRoutes(ctx)
+        availabilityWatchRoutes(ctx)
         poisOnRouteRoutes(ctx, routeCache, poiRegistry)
         routeRoutes(routeCache, ctx)
         geocodeRoutes(mapboxGeocoder)
@@ -227,11 +229,11 @@ fun Application.module() {
         get("/reservables/") {
             call.respondFile(File(staticDir, "reservables.html"))
         }
-        get("/monitors") {
-            call.respondFile(File(staticDir, "monitors.html"))
+        get("/watches") {
+            call.respondFile(File(staticDir, "watches.html"))
         }
-        get("/monitors/") {
-            call.respondFile(File(staticDir, "monitors.html"))
+        get("/watches/") {
+            call.respondFile(File(staticDir, "watches.html"))
         }
         // Campsite UI served from the JAR's classpath
         // (backend/src/main/resources/static/campsite/), separate from
