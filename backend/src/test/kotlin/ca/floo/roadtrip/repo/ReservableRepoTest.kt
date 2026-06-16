@@ -74,6 +74,7 @@ class ReservableRepoTest {
     fun `upsert + findByRid round-trips`() {
         val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
         val rawJson = Json.parseToJsonElement("""{"campsite_id":"330257","loop":"AREA WHITE RIVER"}""")
+        val providerRefJson = Json.parseToJsonElement("""{"mapId":-2147483615,"resourceLocationId":-2147483624}""")
         val id =
             repo.upsert(
                 ReservableRepo.Input(
@@ -82,6 +83,7 @@ class ReservableRepoTest {
                     loop = "AREA WHITE RIVER",
                     siteType = "STANDARD NONELECTRIC",
                     raw = rawJson,
+                    providerRef = providerRefJson,
                 ),
             )
 
@@ -93,6 +95,7 @@ class ReservableRepoTest {
         assertEquals("AREA WHITE RIVER", found.loop)
         assertEquals("STANDARD NONELECTRIC", found.siteType)
         assertEquals(rawJson, found.raw)
+        assertEquals(providerRefJson, found.providerRef)
     }
 
     @Test

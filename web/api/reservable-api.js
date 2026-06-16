@@ -1,7 +1,7 @@
 // Reservable catalog API client (RFC 0008). Two endpoints:
 //
-//   GET /api/poi/{id}/reservables[?type=site]
-//     → { poi_id, type, total_at_poi, reservables: [{rid, poi_ids, name, loop, …}, …] }
+//   GET /api/poi/{id}/reservables[?type=site&start=YYYY-MM-DD&min_nights=1]
+//     → { poi_id, type, total_at_poi, reservables: [{rid, reservation_url, poi_ids, name, …}, …] }
 //
 //   GET /api/reservable/{rid}
 //     → { reservable: {rid, poi_ids, name, loop, raw, …}, poi_ids: [123, 456] }
@@ -45,11 +45,15 @@ export function searchReservables(params = {}) {
  * @param {number|string} poiId  pois.id
  * @param {object}        [opts]
  * @param {string}        [opts.type='site']  Reservable type filter.
+ * @param {string}        [opts.start]        Optional arrival date for BE-generated booking links.
+ * @param {number}        [opts.minNights]    Optional stay length for BE-generated booking links.
  * @param {AbortSignal}   [opts.signal]
  */
-export function fetchPoiReservables(poiId, { type, signal } = {}) {
+export function fetchPoiReservables(poiId, { type, start, minNights, signal } = {}) {
   const params = new URLSearchParams();
   if (type) params.set('type', type);
+  if (start) params.set('start', start);
+  if (minNights != null) params.set('min_nights', String(minNights));
   const qs = params.toString();
   const suffix = qs ? `?${qs}` : '';
   return jsonGetOk(`/api/poi/${encodeURIComponent(poiId)}/reservables${suffix}`, { signal });

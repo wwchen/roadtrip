@@ -37,6 +37,23 @@ interface BookingProvider {
     suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto
 
     /**
+     * POI-scoped availability narrowed to the catalog rows linked to the POI.
+     * Most providers can answer from the campground-level endpoint, so the
+     * default delegates to [availability]. Providers with a parent/child map
+     * split can override this to classify the actual linked resources.
+     */
+    suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto =
+        availability(
+            AvailabilityRequest(
+                ref = req.ref,
+                start = req.start,
+                days = req.days,
+                minNights = req.minNights,
+                force = req.force,
+            ),
+        )
+
+    /**
      * Per-day availability for one reservable under a campground. Providers
      * should share the same upstream cache as [availability]; this endpoint is
      * a narrower projection of the same inventory window, not a second
@@ -75,6 +92,21 @@ data class AvailabilityRequest(
     val days: Int,
     val minNights: Int = 1,
     val force: Boolean = false,
+)
+
+data class CatalogAvailabilityRequest(
+    val ref: ProviderRef,
+    val reservables: List<CatalogReservableRef>,
+    val start: LocalDate,
+    val days: Int,
+    val minNights: Int = 1,
+    val force: Boolean = false,
+)
+
+data class CatalogReservableRef(
+    val rid: String,
+    val vendorId: String,
+    val mapId: Long? = null,
 )
 
 /**

@@ -2,7 +2,6 @@
 // then filters the POI catalog by the week availability response's
 // available_reservable_ids so the visible rows match that day's count.
 
-import { buildAspiraDeeplink } from '../aspira.js';
 import { escapeHtml } from '../core.js';
 
 /**
@@ -15,12 +14,10 @@ import { escapeHtml } from '../core.js';
  *
  * @param {object} args
  * @param {'loading'|'success'|'error'} args.state
- * @param {Array<object>}        args.reservables  Rows from BE (rid/name/loop/site_type).
+ * @param {Array<object>}        args.reservables  Rows from BE (rid/name/loop/site_type/reservation_url).
  * @param {string|null}          args.error
  * @param {boolean}               args.expanded
  * @param {object|null}           args.selectedDay  Per-day availability row.
- * @param {number}                args.minNights
- * @param {string|null}           args.providerHost
  */
 export function renderSiteList({
   state,
@@ -28,8 +25,6 @@ export function renderSiteList({
   error,
   expanded,
   selectedDay = null,
-  minNights = 1,
-  providerHost = null,
 }) {
   const availableIds = availableReservableIds(selectedDay);
   if (availableIds == null || availableIds.length === 0) return '';
@@ -50,7 +45,7 @@ export function renderSiteList({
   }
   // success
   const rows = reservablesForIds(reservables, availableIds);
-  const body = expanded ? renderRows(rows, selectedDay, minNights, providerHost) : '';
+  const body = expanded ? renderRows(rows) : '';
   return renderSection({
     header: renderHeader({ count, total, expanded, disabled: false }),
     body,
@@ -84,14 +79,14 @@ function renderHeaderLabel(count, total) {
   return `Available sites (${count})`;
 }
 
-function renderRows(reservables, selectedDay, minNights, providerHost) {
+function renderRows(reservables) {
   if (!Array.isArray(reservables) || reservables.length === 0) {
     return '<div class="cg-sites-empty">No available sites for this date.</div>';
   }
   // Stable sort: loop alphabetical, then site name. Loop-less rows fall
   // to the bottom — that's what Aspira's resource-id-only rows look like.
   const sorted = [...reservables].sort(compareReservable);
-  const rows = sorted.map((r) => renderRow(r, selectedDay.date, minNights, providerHost)).join('');
+  const rows = sorted.map((r) => renderRow(r)).join('');
   return `<ol class="cg-sites-rows">${rows}</ol>`;
 }
 
@@ -118,19 +113,23 @@ function fallbackReservable(rid) {
   return { rid, vendor, vendor_id: vendorId };
 }
 
-function renderRow(r, selectedDate, minNights, providerHost) {
+function renderRow(r) {
   const name = r.name || formatFallbackName(r);
   const loopLine = r.loop ? `<div class="cg-sites-row-loop">${escapeHtml(r.loop)}</div>` : '';
+  const details = renderSiteDetails(r);
   const typeTag = r.site_type
     ? `<span class="cg-sites-row-type">${escapeHtml(r.site_type)}</span>`
     : '';
-  const url = reservationUrl(r, selectedDate, minNights, providerHost);
+  const url = r.reservation_url || r.reservationUrl || null;
+  const bookTag = url ? '<span class="cg-sites-row-book">Book</span>' : '';
+  const side = typeTag || bookTag ? `<div class="cg-sites-row-side">${typeTag}${bookTag}</div>` : '';
   const inner = `
     <div class="cg-sites-row-main">
       <div class="cg-sites-row-name">${escapeHtml(name)}</div>
       ${loopLine}
+      ${details}
     </div>
-    ${typeTag}
+    ${side}
   `;
   const body = url
     ? `<a class="cg-sites-row-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${inner}</a>`
@@ -142,61 +141,6 @@ function renderRow(r, selectedDate, minNights, providerHost) {
   `;
 }
 
-function reservationUrl(r, selectedDate, minNights, providerHost) {
-  if (!selectedDate) return null;
-  const endDate = checkoutDate(selectedDate, minNights);
-  const vendor = r.vendor || parseRid(r.rid).vendor;
-  const vendorId = r.vendor_id || r.vendorId || parseRid(r.rid).vendorId;
-  if (vendor === 'recgov' && vendorId) {
-    const siteId = encodeURIComponent(vendorId);
-    return `https://www.recreation.gov/camping/campsites/${siteId}?startDate=${encodeURIComponent(selectedDate)}&endDate=${encodeURIComponent(endDate)}`;
-  }
-  if (vendor && vendor.startsWith('aspira_')) {
-    const raw = r.raw || {};
-    const host = providerHost || hostForAspiraVendor(vendor);
-    const transactionLocationId = raw._parent_aspira_txn_loc;
-    const mapId = raw._parent_aspira_map_id;
-    if (host && transactionLocationId != null && mapId != null) {
-      return buildAspiraDeeplink({
-        host,
-        transactionLocationId,
-        mapId,
-        resourceLocationId: raw._parent_aspira_resource_loc,
-        startDate: selectedDate,
-        endDate,
-      });
-    }
-  }
-  return null;
-}
-
-function parseRid(rid) {
-  const parts = String(rid || '').split(':');
-  return {
-    vendor: parts[1] || '',
-    vendorId: parts.slice(2).join(':'),
-  };
-}
-
-function checkoutDate(selectedDate, minNights) {
-  const date = new Date(`${selectedDate}T00:00:00Z`);
-  date.setUTCDate(date.getUTCDate() + Math.max(1, Number(minNights) || 1));
-  return date.toISOString().slice(0, 10);
-}
-
-function hostForAspiraVendor(vendor) {
-  switch (vendor) {
-    case 'aspira_pc':
-      return 'reservation.pc.gc.ca';
-    case 'aspira_bc':
-      return 'camping.bcparks.ca';
-    case 'aspira_wa':
-      return 'washington.goingtocamp.com';
-    default:
-      return null;
-  }
-}
-
 /**
  * Aspira `/api/availability/map` doesn't ship per-resource names — only
  * resource ids. Show "Site #<vendor_id>" rather than "(unnamed)".
@@ -204,6 +148,41 @@ function hostForAspiraVendor(vendor) {
 function formatFallbackName(r) {
   if (r.vendor_id) return `Site #${r.vendor_id}`;
   return r.rid || '(unknown)';
+}
+
+function renderSiteDetails(r) {
+  const raw = r.raw && typeof r.raw === 'object' ? r.raw : {};
+  const details = [capacityLabel(raw), descriptionSummary(raw.description)].filter(Boolean);
+  if (details.length === 0) return '';
+  return `<div class="cg-sites-row-details">${details.map(escapeHtml).join(' · ')}</div>`;
+}
+
+function capacityLabel(raw) {
+  const min = numberValue(raw.min_capacity ?? raw.minCapacity ?? raw.min_num_people ?? raw.minNumPeople);
+  const max = numberValue(raw.max_capacity ?? raw.maxCapacity ?? raw.max_num_people ?? raw.maxNumPeople);
+  if (min != null && max != null && min !== max) return `Sleeps ${min}-${max}`;
+  if (max != null) return `Sleeps up to ${max}`;
+  if (min != null) return `Sleeps ${min}+`;
+  return '';
+}
+
+function numberValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function descriptionSummary(value) {
+  if (typeof value !== 'string') return '';
+  const text = value
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!text) return '';
+  return text.length > 120 ? `${text.slice(0, 117).trim()}...` : text;
 }
 
 function compareReservable(a, b) {

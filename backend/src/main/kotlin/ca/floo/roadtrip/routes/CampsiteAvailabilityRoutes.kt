@@ -3,7 +3,10 @@ package ca.floo.roadtrip.routes
 import ca.floo.campsite.recgov.booker.api.DEFAULT_AVAILABILITY_DAYS
 import ca.floo.campsite.recgov.booker.api.IpRateLimiter
 import ca.floo.campsite.recgov.booker.api.MAX_AVAILABILITY_DAYS
+import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.models.Reservable
 import ca.floo.roadtrip.models.ReservableId
+import ca.floo.roadtrip.models.ReservableType
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityEmptySchema
 import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
@@ -17,10 +20,11 @@ import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.booking.AvailabilityRequest
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
 import ca.floo.roadtrip.service.booking.BookingProviderError
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
+import ca.floo.roadtrip.service.booking.CatalogReservableRef
 import ca.floo.roadtrip.service.booking.ProviderRefParser
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
@@ -36,6 +40,9 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -127,10 +134,15 @@ fun Route.campsiteAvailabilityRoutes(
         }
 
         try {
+            val catalogRefs =
+                reservables
+                    .findByPoi(poiId, ReservableType.SITE)
+                    .map { it.toCatalogReservableRef() }
             val response =
-                provider.availability(
-                    AvailabilityRequest(
+                provider.catalogAvailability(
+                    CatalogAvailabilityRequest(
                         ref = ref,
+                        reservables = catalogRefs,
                         start = query.start,
                         days = days,
                         minNights = query.minNights,
@@ -281,7 +293,8 @@ fun Route.campsiteAvailabilityRoutes(
                 .firstOrNull { bookingProviders.forPoi(it) != null && ProviderRefParser.parse(it.providerRefJson) != null }
                 ?: return@get call.respondAvailabilityError("unknown_campground", HttpStatusCode.NotFound)
         val provider = bookingProviders.forPoi(parent)!!
-        val ref = ProviderRefParser.parse(parent.providerRefJson)!!
+        val parentRef = ProviderRefParser.parse(parent.providerRefJson)!!
+        val ref = row.providerRefForReservable(parentRef)
 
         val query = call.parseAvailabilityQuery(provider.capabilities.bookingHorizonDays)
         if (query == null) {
@@ -436,6 +449,29 @@ fun Route.campsiteAvailabilityRoutes(
         )
     }
 }
+
+private fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
+    CatalogReservableRef(
+        rid = rid.encode(),
+        vendorId = rid.vendorId,
+        mapId = aspiraProviderRefLong("mapId"),
+    )
+
+private fun Reservable.providerRefForReservable(parentRef: ProviderRef): ProviderRef =
+    when (parentRef) {
+        is ProviderRef.Aspira ->
+            parentRef.copy(
+                mapId = aspiraProviderRefLong("mapId") ?: parentRef.mapId,
+                resourceLocationId = aspiraProviderRefLong("resourceLocationId") ?: parentRef.resourceLocationId,
+            )
+        else -> parentRef
+    }
+
+private fun Reservable.aspiraProviderRefLong(key: String): Long? =
+    (providerRef as? JsonObject)
+        ?.get(key)
+        ?.jsonPrimitive
+        ?.longOrNull
 
 private suspend fun fetchOneBulk(
     poiId: Long,

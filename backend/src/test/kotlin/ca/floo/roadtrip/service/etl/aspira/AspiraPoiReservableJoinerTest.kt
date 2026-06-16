@@ -260,8 +260,8 @@ class AspiraPoiReservableJoinerTest {
         val resId = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
         reservables.linkToPoi(resId, poiId)
         ctx.execute(
-            "UPDATE reservables SET raw = ?::jsonb WHERE id = ?",
-            """{"_parent_aspira_txn_loc":"9999","_parent_aspira_map_id":"-2147483640"}""",
+            "UPDATE reservables SET provider_ref = ?::jsonb WHERE id = ?",
+            """{"transactionLocationId":9999,"mapId":-2147483640}""",
             resId,
         )
 
@@ -306,6 +306,10 @@ class AspiraPoiReservableJoinerTest {
                 loop = null,
                 siteType = null,
                 raw = raw,
+                providerRef =
+                    Json.parseToJsonElement(
+                        """{"transactionLocationId":$txnLoc,"mapId":$mapId}""",
+                    ),
             ),
         )
     }
@@ -381,6 +385,10 @@ class AspiraPoiReservableJoinerTest {
                 loop = null,
                 siteType = null,
                 raw = raw,
+                providerRef =
+                    Json.parseToJsonElement(
+                        """{"resourceLocationId":$resourceLocationId}""",
+                    ),
             ),
         )
     }

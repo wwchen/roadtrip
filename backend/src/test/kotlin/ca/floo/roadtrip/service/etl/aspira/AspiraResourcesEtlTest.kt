@@ -167,18 +167,24 @@ class AspiraResourcesEtlTest {
     }
 
     @Test
-    fun `each reservable carries synthetic parent metadata for the joiner`() {
-        // The whole point of these synthetic fields: the joiner needs a
-        // place to read txnLoc + mapId so it can match against the right
-        // parent POI. Without these, the joiner can't link a resource
-        // back to its campground.
+    fun `each reservable carries durable provider metadata`() {
+        // Raw still keeps synthetic parent fields for backfill/debug, but
+        // request-time booking and availability code should read the
+        // normalized provider_ref relationship.
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runReservableData("Parks Canada Aspira Resources")
 
-        fun rawOf(vendorId: String): JsonObject =
+        fun reservable(vendorId: String) =
             reservables
                 .findByRid(ReservableId(ReservableType.SITE, "aspira_pc", vendorId))!!
+
+        fun rawOf(vendorId: String): JsonObject =
+            reservable(vendorId)
                 .raw as JsonObject
+
+        fun providerRefOf(vendorId: String): JsonObject =
+            reservable(vendorId)
+                .providerRef as JsonObject
 
         val tunnel = rawOf("502")
         assertEquals("502", (tunnel["resource_id"] as JsonPrimitive).content)
@@ -186,11 +192,18 @@ class AspiraResourcesEtlTest {
         assertEquals("1001", (tunnel["_parent_aspira_txn_loc"] as JsonPrimitive).content)
         assertEquals("9001", (tunnel["_parent_aspira_resource_loc"] as JsonPrimitive).content)
         assertEquals("Tunnel Mountain Village I", (tunnel["_parent_leaf_name"] as JsonPrimitive).content)
+        val tunnelRef = providerRefOf("502")
+        assertEquals("-2147483640", (tunnelRef["mapId"] as JsonPrimitive).content)
+        assertEquals("1001", (tunnelRef["transactionLocationId"] as JsonPrimitive).content)
+        assertEquals("9001", (tunnelRef["resourceLocationId"] as JsonPrimitive).content)
 
         val twoJack = rawOf("601")
         assertEquals("-2147483641", (twoJack["_parent_aspira_map_id"] as JsonPrimitive).content)
         assertEquals("1002", (twoJack["_parent_aspira_txn_loc"] as JsonPrimitive).content)
         assertEquals("Two Jack Lakeside", (twoJack["_parent_leaf_name"] as JsonPrimitive).content)
+        val twoJackRef = providerRefOf("601")
+        assertEquals("-2147483641", (twoJackRef["mapId"] as JsonPrimitive).content)
+        assertEquals("1002", (twoJackRef["transactionLocationId"] as JsonPrimitive).content)
     }
 
     @Test

@@ -15,6 +15,7 @@ import ca.floo.roadtrip.service.booking.BookingCapabilities
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderId
 import ca.floo.roadtrip.service.booking.BookingProviderRegistry
+import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
@@ -24,6 +25,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -38,6 +40,7 @@ import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ReservableRoutesTest {
@@ -220,7 +223,7 @@ class ReservableRoutesTest {
             link(m01, otherPoiId)
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/poi/$poiId/reservables?type=site")
+            val resp = client.get("/api/poi/$poiId/reservables?type=site&start=2026-07-01&min_nights=2")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(poiId.toString(), body["poi_id"]!!.jsonPrimitive.content)
@@ -232,12 +235,71 @@ class ReservableRoutesTest {
                     .map { it.jsonObject["rid"]!!.jsonPrimitive.content }
                     .toSet()
             assertEquals(setOf("site:recgov:330257", "site:recgov:330258"), rids)
+            val urls =
+                body["reservables"]!!
+                    .jsonArray
+                    .associate {
+                        val row = it.jsonObject
+                        row["rid"]!!.jsonPrimitive.content to row["reservation_url"]!!.jsonPrimitive.content
+                    }
+            assertEquals(
+                "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-03",
+                urls["site:recgov:330257"],
+            )
             body["reservables"]!!
                 .jsonArray
                 .map { it.jsonObject }
                 .forEach { row ->
                     assertEquals(listOf(poiId.toString()), row["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
                 }
+        }
+
+    @Test
+    fun `poi reservables returns aspira booking links from parent provider ref`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "aspira--2147483630--2147483388",
+                    name = "Deep Tree Park",
+                    providerRefJson =
+                        """
+                        {
+                          "transactionLocationId": -2147483630,
+                          "mapId": -2147483388,
+                          "resourceLocationId": -2147483624
+                        }
+                        """.trimIndent(),
+                    source = "aspira-wa-pins",
+                )
+            val reservableId =
+                seedReservable(
+                    vendor = "aspira_wa",
+                    vendorId = "-100",
+                    source = "aspira-resources-wa",
+                    name = "A",
+                    raw = """{"_parent_aspira_map_id":-2147483615,"_parent_aspira_resource_loc":-2147483624}""",
+                    providerRefJson = """{"mapId":-2147483615,"resourceLocationId":-2147483624}""",
+                )
+            link(reservableId, poiId)
+            application { routing { reservableRoutes(ctx) } }
+
+            val resp = client.get("/api/poi/$poiId/reservables?start=2026-07-01&min_nights=2")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val row =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["reservables"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            val url = row["reservation_url"]!!.jsonPrimitive.content
+            assertTrue(url.startsWith("https://washington.goingtocamp.com/create-booking/results?"), url)
+            assertTrue(url.contains("transactionLocationId=-2147483630"), url)
+            assertTrue(url.contains("mapId=-2147483615"), url)
+            assertTrue(url.contains("startDate=2026-07-01"), url)
+            assertTrue(url.contains("endDate=2026-07-03"), url)
+            assertTrue(url.contains("nights=2"), url)
+            assertTrue(url.contains("resourceLocationId=-2147483624"), url)
         }
 
     @Test
@@ -388,10 +450,115 @@ class ReservableRoutesTest {
             assertEquals(5L, rowCountAfterMultiNight)
         }
 
+    @Test
+    fun `poi availability passes linked aspira child-map catalog to provider`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "aspira--2147483630--2147483388",
+                    name = "Deep Tree Park",
+                    providerRefJson =
+                        """
+                        {
+                          "transactionLocationId": -2147483630,
+                          "mapId": -2147483388,
+                          "resourceLocationId": -2147483624
+                        }
+                        """.trimIndent(),
+                    source = "aspira-wa-pins",
+                )
+            val a =
+                seedReservable(
+                    vendor = "aspira_wa",
+                    vendorId = "-100",
+                    source = "aspira-resources-wa",
+                    name = "A",
+                    raw = """{"_parent_aspira_map_id":-2147483615,"_parent_aspira_resource_loc":-2147483624}""",
+                    providerRefJson = """{"mapId":-2147483615,"resourceLocationId":-2147483624}""",
+                )
+            val b =
+                seedReservable(
+                    vendor = "aspira_wa",
+                    vendorId = "-200",
+                    source = "aspira-resources-wa",
+                    name = "B",
+                    raw = """{"_parent_aspira_map_id":-2147483613,"_parent_aspira_resource_loc":-2147483624}""",
+                    providerRefJson = """{"mapId":-2147483613,"resourceLocationId":-2147483624}""",
+                )
+            link(a, poiId)
+            link(b, poiId)
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeAspiraBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/poi/$poiId/availability?start=2026-07-01&days=1")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val day = body["availability"]!!.jsonArray.single().jsonObject
+            assertEquals("-2147483388", body["map_id"]!!.jsonPrimitive.content)
+            assertEquals(2, day["available_count"]!!.jsonPrimitive.int)
+            assertEquals(2, day["total"]!!.jsonPrimitive.int)
+            assertEquals(
+                listOf("site:aspira_wa:-100", "site:aspira_wa:-200"),
+                day["available_reservable_ids"]!!.jsonArray.map { it.jsonPrimitive.content },
+            )
+        }
+
+    @Test
+    fun `reservable availability uses aspira reservable child map when present`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "aspira--2147483630--2147483388",
+                    name = "Deep Tree Park",
+                    providerRefJson =
+                        """
+                        {
+                          "transactionLocationId": -2147483630,
+                          "mapId": -2147483388,
+                          "resourceLocationId": -2147483624
+                        }
+                        """.trimIndent(),
+                    source = "aspira-wa-pins",
+                )
+            val reservableId =
+                seedReservable(
+                    vendor = "aspira_wa",
+                    vendorId = "-100",
+                    source = "aspira-resources-wa",
+                    name = "A",
+                    raw = """{"_parent_aspira_map_id":-2147483615,"_parent_aspira_resource_loc":-2147483624}""",
+                    providerRefJson = """{"mapId":-2147483615,"resourceLocationId":-2147483624}""",
+                )
+            link(reservableId, poiId)
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeAspiraBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/reservable/site:aspira_wa:-100/availability?start=2026-07-01&days=1")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("-2147483615", body["map_id"]!!.jsonPrimitive.content)
+            assertEquals("site:aspira_wa:-100", body["reservable_id"]!!.jsonPrimitive.content)
+        }
+
     private fun seedPoi(
         sourceId: String,
         name: String,
         providerRefJson: String? = null,
+        source: String = "test",
     ): Long =
         ctx
             .fetchOne(
@@ -400,12 +567,13 @@ class ReservableRoutesTest {
                     source, source_id, category, name, geom,
                     region, properties, provider_ref, fetched_at
                 ) VALUES (
-                    'test', ?, 'campground', ?,
+                    ?, ?, 'campground', ?,
                     ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
                     'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
                 )
                 RETURNING id
                 """.trimIndent(),
+                source,
                 sourceId,
                 name,
                 providerRefJson,
@@ -421,14 +589,15 @@ class ReservableRoutesTest {
         loop: String? = null,
         siteType: String? = null,
         raw: String = """{"source":"test"}""",
+        providerRefJson: String? = null,
     ): Long =
         ctx
             .fetchOne(
                 """
                 INSERT INTO reservables (
-                    type, vendor, vendor_id, source, name, loop, site_type, raw
+                    type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?::jsonb
+                    ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb
                 )
                 RETURNING id
                 """.trimIndent(),
@@ -440,6 +609,7 @@ class ReservableRoutesTest {
                 loop,
                 siteType,
                 raw,
+                providerRefJson,
             )!!
             .get("id", Long::class.java)
 
@@ -460,6 +630,11 @@ class ReservableRoutesTest {
     private fun fakeBookingProviders(): BookingProviderRegistry =
         BookingProviderRegistry(
             adaptersBySource = mapOf("test" to FakeBookingProvider),
+        )
+
+    private fun fakeAspiraBookingProviders(): BookingProviderRegistry =
+        BookingProviderRegistry(
+            adaptersBySource = mapOf("aspira-wa-pins" to FakeAspiraBookingProvider),
         )
 
     private object FakeBookingProvider : BookingProvider {
@@ -517,6 +692,84 @@ class ReservableRoutesTest {
                 seasonBlock = null,
                 cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 0, ttlSeconds = 60),
                 campgroundId = campgroundId,
+                reservableId = reservableId,
+            )
+        }
+    }
+
+    private object FakeAspiraBookingProvider : BookingProvider {
+        override val id: BookingProviderId = BookingProviderId.ASPIRA
+        override val capabilities: BookingCapabilities =
+            BookingCapabilities(
+                supportsAvailability = true,
+                supportsAlerts = false,
+                supportsAutoBook = false,
+                bookingHorizonDays = 365,
+            )
+
+        override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
+            val ref = req.ref as ProviderRef.Aspira
+            return fakeResponse(
+                start = req.start,
+                days = req.days,
+                mapId = ref.mapId.toString(),
+                reservableId = null,
+                availableIds = emptyList(),
+            )
+        }
+
+        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+            val ref = req.ref as ProviderRef.Aspira
+            return fakeResponse(
+                start = req.start,
+                days = req.days,
+                mapId = ref.mapId.toString(),
+                reservableId = null,
+                availableIds = req.reservables.map { it.rid },
+            )
+        }
+
+        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
+            val ref = req.ref as ProviderRef.Aspira
+            return fakeResponse(
+                start = req.start,
+                days = req.days,
+                mapId = ref.mapId.toString(),
+                reservableId = "site:aspira_wa:${req.vendorId}",
+                availableIds = listOf("site:aspira_wa:${req.vendorId}"),
+            )
+        }
+
+        override suspend fun availableDates(req: AvailableDatesRequest): List<String> = listOf(req.start.toString())
+
+        private fun fakeResponse(
+            start: java.time.LocalDate,
+            days: Int,
+            mapId: String,
+            reservableId: String?,
+            availableIds: List<String>,
+        ): AvailabilityResponseDto {
+            val perDay =
+                (0 until days).map { offset ->
+                    DayClassification(
+                        date = start.plusDays(offset.toLong()).toString(),
+                        status = if (availableIds.isEmpty()) "booked" else "available",
+                        availableCount = availableIds.size,
+                        total = availableIds.size,
+                        availableReservableIds = availableIds,
+                    )
+                }
+            return availabilityResponseDto(
+                provider = "aspira",
+                today = start,
+                days = days,
+                perDay = perDay,
+                state = if (availableIds.isEmpty()) "zero_available" else "success",
+                summary = "${availableIds.size} available",
+                seasonBlock = null,
+                cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 0, ttlSeconds = 60),
+                host = "washington.goingtocamp.com",
+                mapId = mapId,
                 reservableId = reservableId,
             )
         }
