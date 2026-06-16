@@ -88,7 +88,10 @@ jobs:
             # Single PR from /rebase comment. Optional explicit base ref:
             # `/rebase <commit-or-branch>` → use as the rebase --onto source.
             # Without an explicit base, fall back to patch-id rebase onto master.
-            comment_body="${COMMENT_BODY:-}"
+            # Strip CR (GitHub delivers comment bodies with CRLF) before
+            # parsing — otherwise the captured SHA carries a trailing \r and
+            # every downstream lookup fails.
+            comment_body=$(printf '%s' "${COMMENT_BODY:-}" | tr -d '\r')
             explicit_base=$(printf '%s' "$comment_body" | awk '/^\/rebase[[:space:]]+/{print $2}')
             gh pr view "$COMMENT_PR" --repo "$REPO" \
               --json number,headRefName,isCrossRepository,baseRefName \
