@@ -115,24 +115,25 @@ function fallbackReservable(rid) {
 
 function renderRow(r) {
   const name = r.name || formatFallbackName(r);
+  const safeName = escapeHtml(name);
   const loopLine = r.loop ? `<div class="cg-sites-row-loop">${escapeHtml(r.loop)}</div>` : '';
   const details = renderSiteDetails(r);
   const typeTag = r.site_type
     ? `<span class="cg-sites-row-type">${escapeHtml(r.site_type)}</span>`
     : '';
   const url = r.reservation_url || r.reservationUrl || null;
-  const bookTag = url ? '<span class="cg-sites-row-book">Book</span>' : '';
+  const bookTag = url ? '<span class="cg-sites-row-book">book</span>' : '';
   const side = typeTag || bookTag ? `<div class="cg-sites-row-side">${typeTag}${bookTag}</div>` : '';
   const inner = `
     <div class="cg-sites-row-main">
-      <div class="cg-sites-row-name">${escapeHtml(name)}</div>
+      <div class="cg-sites-row-name">${safeName}</div>
       ${loopLine}
       ${details}
     </div>
     ${side}
   `;
   const body = url
-    ? `<a class="cg-sites-row-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${inner}</a>`
+    ? `<a class="cg-sites-row-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer" aria-label="Book site ${safeName}">${inner}</a>`
     : inner;
   return `
     <li class="cg-sites-row" data-rid="${escapeHtml(r.rid)}">
