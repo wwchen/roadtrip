@@ -115,6 +115,67 @@ class AspiraPoiReservableJoinerTest {
     }
 
     @Test
+    fun `links via resourceLocationId when txnLoc-mapId rule misses`() {
+        // Inventory-driven ETL emits some reservables whose mapIds[0]
+        // points at a sub-leaf AspiraLeavesWalk doesn't expose. Those
+        // resources have no _parent_aspira_txn_loc / _parent_aspira_map_id,
+        // but every site still carries _parent_aspira_resource_loc, and
+        // POIs carry resourceLocationId in provider_ref. The fallback
+        // join keeps Deception-Pass-shape parks linkable.
+        val poiId =
+            insertAspiraPoiWithProviderRef(
+                source = "aspira-wa-pins",
+                txnLoc = "-2147483630",
+                mapId = "-2147483388",
+                resourceLocationId = "-2147483624",
+            )
+        val resId =
+            upsertResourceByResourceLocationId(
+                vendorId = "-2147475889",
+                resourceLocationId = "-2147483624",
+                vendor = "aspira_wa",
+            )
+
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+
+        assertEquals(1, links.size)
+        assertEquals(resId, links[0].reservableId)
+        assertEquals(poiId, links[0].poiId)
+    }
+
+    @Test
+    fun `resourceLocationId fallback respects tenant pairing`() {
+        // A WA POI's resourceLocationId could collide with a PC park's;
+        // tenant pairing must still bind aspira_wa reservables to
+        // aspira-wa-pins POIs only.
+        insertAspiraPoiWithProviderRef(
+            source = "aspira-pc-pins",
+            txnLoc = "9001",
+            mapId = "-9000001",
+            resourceLocationId = "-2147483624",
+        )
+        val waPoi =
+            insertAspiraPoiWithProviderRef(
+                source = "aspira-wa-pins",
+                txnLoc = "-2147483630",
+                mapId = "-2147483388",
+                resourceLocationId = "-2147483624",
+            )
+        val waRes =
+            upsertResourceByResourceLocationId(
+                vendorId = "-2147475889",
+                resourceLocationId = "-2147483624",
+                vendor = "aspira_wa",
+            )
+
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+
+        assertEquals(1, links.size)
+        assertEquals(waRes, links[0].reservableId)
+        assertEquals(waPoi, links[0].poiId)
+    }
+
+    @Test
     fun `mismatched txnLoc or mapId yields no link`() {
         // The composite source_id "aspira-{txnLoc}-{mapId}" must match
         // exactly. Stale captures where one half has rotated produce
@@ -269,6 +330,60 @@ class AspiraPoiReservableJoinerTest {
                 "aspira-$txnLoc-$mapId",
             ).fetchOne()!!
             .get(0, Long::class.java)!!
+
+    private fun insertAspiraPoiWithProviderRef(
+        source: String,
+        txnLoc: String,
+        mapId: String,
+        resourceLocationId: String,
+    ): Long =
+        ctx
+            .resultQuery(
+                """
+                INSERT INTO pois (
+                  source, source_id, category, name, geom, fetched_at,
+                  provider_ref
+                ) VALUES (
+                  ?, ?, 'campground', 'aspira-test',
+                  ST_SetSRID(ST_MakePoint(-119.5, 37.7), 4326),
+                  now(),
+                  ?::jsonb
+                ) RETURNING id
+                """.trimIndent(),
+                source,
+                "aspira-$txnLoc-$mapId",
+                """{"transactionLocationId":$txnLoc,"mapId":$mapId,"resourceLocationId":$resourceLocationId}""",
+            ).fetchOne()!!
+            .get(0, Long::class.java)!!
+
+    private fun upsertResourceByResourceLocationId(
+        vendorId: String,
+        resourceLocationId: String,
+        vendor: String,
+    ): Long {
+        // Mirrors the inventory-driven ETL's fallback shape: when the
+        // mapIds[0] lookup misses, the ETL writes _parent_aspira_resource_loc
+        // (and _parent_aspira_map_id from inv.firstMapId) but no
+        // _parent_aspira_txn_loc.
+        val raw =
+            Json.parseToJsonElement(
+                """
+                {
+                  "resource_id":"$vendorId",
+                  "_parent_aspira_resource_loc":"$resourceLocationId"
+                }
+                """.trimIndent(),
+            )
+        return reservables.upsert(
+            ReservableRepo.Input(
+                rid = ReservableId(ReservableType.SITE, vendor, vendorId),
+                name = null,
+                loop = null,
+                siteType = null,
+                raw = raw,
+            ),
+        )
+    }
 
     private fun linkCount(): Int =
         ctx
