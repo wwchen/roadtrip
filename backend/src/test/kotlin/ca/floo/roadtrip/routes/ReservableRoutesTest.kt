@@ -151,7 +151,7 @@ class ReservableRoutesTest {
             seedReservable(
                 vendor = "aspira_pc",
                 vendorId = "-2147483641",
-                source = "aspira-resources-pc",
+                source = "aspira-pc-resources",
                 name = "A12",
                 loop = "Loop A",
                 raw = """{"host":"reservation.pc.gc.ca","map_id":101}""",
