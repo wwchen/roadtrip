@@ -107,7 +107,18 @@ export function defaultReservableLinks(row) {
       text: 'Availability',
       kind: 'JSON',
     }),
+    linkChip({
+      href: snapshotHistoryUrl(row.rid || ''),
+      text: 'History',
+      kind: 'PAGE',
+      target: '_self',
+    }),
   ]);
+}
+
+export function snapshotHistoryUrl(rid) {
+  const qs = new URLSearchParams({ tab: 'snapshots', reservable_rid: rid });
+  return `/availability?${qs}`;
 }
 
 export function reservableDetailLink(row) {
@@ -116,6 +127,12 @@ export function reservableDetailLink(row) {
       href: reservableJsonUrl(row.rid || ''),
       text: 'Reservable',
       kind: 'JSON',
+    }),
+    linkChip({
+      href: snapshotHistoryUrl(row.rid || ''),
+      text: 'History',
+      kind: 'PAGE',
+      target: '_self',
     }),
   ]);
 }

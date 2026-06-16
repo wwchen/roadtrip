@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="theme-color" content="#26272d">
-<title>POIs</title>
+<title>Availability Dashboard</title>
 <style>
   :root {
     --surface: #26272d;
@@ -37,10 +37,7 @@
   body { padding: 20px; }
   a { color: var(--accent); text-decoration: none; }
   a:hover { text-decoration: underline; }
-  .shell {
-    max-width: 1280px;
-    margin: 0 auto;
-  }
+  .shell { max-width: 1280px; margin: 0 auto; }
   .top {
     display: flex;
     align-items: center;
@@ -48,17 +45,8 @@
     gap: 16px;
     margin-bottom: 16px;
   }
-  h1 {
-    margin: 0;
-    font-size: 22px;
-    line-height: 1.2;
-    font-weight: 650;
-  }
-  .sub {
-    margin-top: 4px;
-    color: var(--muted);
-    font-size: 13px;
-  }
+  h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 650; }
+  .sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
   .nav {
     display: flex;
     align-items: center;
@@ -66,18 +54,12 @@
     flex-wrap: wrap;
     justify-content: flex-end;
   }
-  .nav-group {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-  }
+  .nav-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .nav-group + .nav-group {
     padding-left: 14px;
     border-left: 1px solid var(--border-strong);
   }
-  .nav a,
-  button {
+  .nav a, button {
     border: 1px solid var(--border-strong);
     background: var(--bg-subtle);
     color: var(--text);
@@ -91,8 +73,7 @@
     align-items: center;
     justify-content: center;
   }
-  .nav a:hover,
-  button:hover {
+  .nav a:hover, button:hover {
     background: var(--bg-hover);
     text-decoration: none;
   }
@@ -101,9 +82,7 @@
     background: rgba(76,185,106,0.12);
     color: #87d99b;
   }
-  .nav a.outside-link {
-    gap: 7px;
-  }
+  .nav a.outside-link { gap: 7px; }
   .nav a.outside-link::after {
     content: "";
     width: 10px;
@@ -112,25 +91,84 @@
     border-right: 1.5px solid currentColor;
     opacity: 0.7;
   }
+  .tabs {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+  }
+  .tabs a {
+    border: 1px solid var(--border-strong);
+    background: var(--bg-subtle);
+    color: var(--text);
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 14px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+  }
+  .tabs a:hover {
+    background: var(--bg-hover);
+    text-decoration: none;
+  }
+  .tabs a[aria-current="page"] {
+    border-color: rgba(76,185,106,0.45);
+    background: rgba(76,185,106,0.12);
+    color: #87d99b;
+  }
   .filters {
     display: grid;
-    grid-template-columns: 120px minmax(240px, 2fr) minmax(170px, 1fr) 120px auto;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto;
     gap: 10px;
     align-items: end;
   }
-  .name-link {
-    color: var(--accent);
+  .filters > label,
+  .filters > .actions { min-width: 0; }
+  .counter-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
   }
-  @media (max-width: 900px) {
-    .filters { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .counter-row .chip {
+    border: 1px solid var(--border-strong);
+    background: var(--bg-subtle);
+    color: var(--muted);
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 12px;
+    font-size: 13px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .counter-row .chip strong { color: var(--text); font-weight: 650; }
+  .data-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  .data-table th, .data-table td {
+    padding: 8px 10px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+    vertical-align: middle;
+  }
+  .data-table th {
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 11px;
+  }
+  .empty { color: var(--muted); padding: 14px; text-align: center; }
+  .panel { padding: 14px; margin-bottom: 14px; }
+  .panel h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
   }
   @media (max-width: 640px) {
     body { padding: 12px; }
-    .top,
-    .status {
-      align-items: flex-start;
-      flex-direction: column;
-    }
+    .top, .status { align-items: flex-start; flex-direction: column; }
     .nav { justify-content: flex-start; }
     .nav-group + .nav-group {
       width: 100%;
@@ -139,7 +177,6 @@
       border-left: 0;
       border-top: 1px solid var(--border-strong);
     }
-    .filters { grid-template-columns: 1fr; }
   }
 </style>
 <link rel="stylesheet" href="/web/components/catalog.css">
@@ -148,15 +185,15 @@
 <main class="shell">
   <header class="top">
     <div>
-      <h1>POIs</h1>
-      <div class="sub">Name search across active map points.</div>
+      <h1>Availability Dashboard</h1>
+      <div class="sub">Live view of polling jobs, recent runs, and observed snapshots.</div>
     </div>
     <nav class="nav" aria-label="Page links">
       <div class="nav-group" aria-label="Catalog pages">
-        <a href="/pois" aria-current="page">POIs</a>
+        <a href="/pois">POIs</a>
         <a href="/reservables">Reservables</a>
         <a href="/watches">Watches</a>
-        <a href="/availability">Activity</a>
+        <a href="/availability" aria-current="page">Activity</a>
       </div>
       <div class="nav-group" aria-label="Outside links">
         <a class="outside-link" href="/">Map</a>
@@ -165,17 +202,14 @@
     </nav>
   </header>
 
-  <div id="poi-query"></div>
+  <nav class="tabs" aria-label="Dashboard tabs">
+    <a href="?tab=jobs" data-tab="jobs">Jobs</a>
+    <a href="?tab=runs" data-tab="runs">Runs</a>
+    <a href="?tab=snapshots" data-tab="snapshots">Snapshots</a>
+  </nav>
 
-  <section class="panel" aria-live="polite">
-    <div id="status" class="status">
-      <span>Enter at least 2 characters.</span>
-      <span class="mono muted" id="query-url"></span>
-    </div>
-    <div id="results"></div>
-    <div id="empty" class="empty">Enter at least 2 characters to search.</div>
-  </section>
+  <div id="tab-root"></div>
 </main>
-<script type="module" src="/web/pois.js"></script>
+<script type="module" src="/web/availability.js"></script>
 </body>
 </html>

@@ -78,6 +78,98 @@ class AvailabilityJobRepo(
             .fetchOne()
             ?.let(::fromRecord)
 
+    /**
+     * Filtered list of jobs newest-first by created_at. Used by the
+     * /availability dashboard's Jobs tab.
+     */
+    fun list(
+        status: String? = null,
+        watchId: Long? = null,
+        limit: Int = 100,
+        offset: Int = 0,
+    ): List<Job> {
+        val effectiveLimit = limit.coerceIn(1, 500)
+        val conds = mutableListOf<org.jooq.Condition>()
+        if (status != null) conds += AVAILABILITY_JOB.STATUS.eq(status)
+        if (watchId != null) conds += AVAILABILITY_JOB.WATCH_ID.eq(watchId)
+        return ctx
+            .selectFrom(AVAILABILITY_JOB)
+            .where(if (conds.isEmpty()) DSL.noCondition() else DSL.and(conds))
+            .orderBy(AVAILABILITY_JOB.CREATED_AT.desc(), AVAILABILITY_JOB.ID.desc())
+            .limit(effectiveLimit)
+            .offset(offset.coerceAtLeast(0))
+            .fetch { fromRecord(it) }
+    }
+
+    fun count(
+        status: String? = null,
+        watchId: Long? = null,
+    ): Int {
+        val conds = mutableListOf<org.jooq.Condition>()
+        if (status != null) conds += AVAILABILITY_JOB.STATUS.eq(status)
+        if (watchId != null) conds += AVAILABILITY_JOB.WATCH_ID.eq(watchId)
+        return ctx
+            .selectCount()
+            .from(AVAILABILITY_JOB)
+            .where(if (conds.isEmpty()) DSL.noCondition() else DSL.and(conds))
+            .fetchOne(0, Int::class.java) ?: 0
+    }
+
+    /**
+     * Per-status counts plus a "due now" tally. One DB round-trip via
+     * conditional aggregates so the dashboard counter row is cheap.
+     */
+    data class Summary(
+        val active: Int,
+        val paused: Int,
+        val done: Int,
+        val dueNow: Int,
+        val claimed: Int,
+    )
+
+    fun summary(now: OffsetDateTime): Summary {
+        val record =
+            ctx
+                .select(
+                    DSL.count(DSL.case_().`when`(AVAILABILITY_JOB.STATUS.eq("active"), 1)).`as`("active"),
+                    DSL.count(DSL.case_().`when`(AVAILABILITY_JOB.STATUS.eq("paused"), 1)).`as`("paused"),
+                    DSL.count(DSL.case_().`when`(AVAILABILITY_JOB.STATUS.eq("done"), 1)).`as`("done"),
+                    DSL
+                        .count(
+                            DSL
+                                .case_()
+                                .`when`(
+                                    AVAILABILITY_JOB.STATUS
+                                        .eq("active")
+                                        .and(AVAILABILITY_JOB.NEXT_RUN_AT.le(now))
+                                        .and(
+                                            AVAILABILITY_JOB.CLAIMED_UNTIL.isNull
+                                                .or(AVAILABILITY_JOB.CLAIMED_UNTIL.lt(now)),
+                                        ),
+                                    1,
+                                ),
+                        ).`as`("due_now"),
+                    DSL
+                        .count(
+                            DSL
+                                .case_()
+                                .`when`(
+                                    AVAILABILITY_JOB.CLAIMED_UNTIL.isNotNull
+                                        .and(AVAILABILITY_JOB.CLAIMED_UNTIL.ge(now)),
+                                    1,
+                                ),
+                        ).`as`("claimed"),
+                ).from(AVAILABILITY_JOB)
+                .fetchOne()!!
+        return Summary(
+            active = record.get("active", Int::class.java),
+            paused = record.get("paused", Int::class.java),
+            done = record.get("done", Int::class.java),
+            dueNow = record.get("due_now", Int::class.java),
+            claimed = record.get("claimed", Int::class.java),
+        )
+    }
+
     fun deleteForWatch(watchId: Long): Boolean = ctx.deleteFrom(AVAILABILITY_JOB).where(AVAILABILITY_JOB.WATCH_ID.eq(watchId)).execute() > 0
 
     /**

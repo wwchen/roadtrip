@@ -55,4 +55,52 @@ class AvailabilitySnapshotRepo(
     }
 
     private fun AvailabilityDayDto.toJson(): String = availabilityResponseJson.encodeToString(AvailabilityDayDto.serializer(), this)
+
+    data class Snapshot(
+        val id: Long,
+        val reservableId: Long?,
+        val runId: Long?,
+        val targetDate: LocalDate,
+        val observedAt: OffsetDateTime,
+        val status: String,
+        val available: Boolean,
+        val dayPayload: String,
+    )
+
+    fun listForReservable(
+        reservableId: Long,
+        limit: Int = 200,
+    ): List<Snapshot> =
+        ctx
+            .selectFrom(AVAILABILITY_SNAPSHOT)
+            .where(AVAILABILITY_SNAPSHOT.RESERVABLE_ID.eq(reservableId))
+            .orderBy(
+                AVAILABILITY_SNAPSHOT.TARGET_DATE.desc(),
+                AVAILABILITY_SNAPSHOT.OBSERVED_AT.desc(),
+                AVAILABILITY_SNAPSHOT.ID.desc(),
+            ).limit(limit.coerceIn(1, 1000))
+            .fetch { fromRecord(it) }
+
+    fun listForRun(
+        runId: Long,
+        limit: Int = 500,
+    ): List<Snapshot> =
+        ctx
+            .selectFrom(AVAILABILITY_SNAPSHOT)
+            .where(AVAILABILITY_SNAPSHOT.RUN_ID.eq(runId))
+            .orderBy(AVAILABILITY_SNAPSHOT.TARGET_DATE.asc())
+            .limit(limit.coerceIn(1, 1000))
+            .fetch { fromRecord(it) }
+
+    private fun fromRecord(r: org.jooq.Record): Snapshot =
+        Snapshot(
+            id = r.get(AVAILABILITY_SNAPSHOT.ID)!!,
+            reservableId = r.get(AVAILABILITY_SNAPSHOT.RESERVABLE_ID),
+            runId = r.get(AVAILABILITY_SNAPSHOT.RUN_ID),
+            targetDate = r.get(AVAILABILITY_SNAPSHOT.TARGET_DATE)!!,
+            observedAt = r.get(AVAILABILITY_SNAPSHOT.OBSERVED_AT)!!,
+            status = r.get(AVAILABILITY_SNAPSHOT.STATUS)!!,
+            available = r.get(AVAILABILITY_SNAPSHOT.AVAILABLE)!!,
+            dayPayload = r.get(AVAILABILITY_SNAPSHOT.DAY_PAYLOAD)!!.data(),
+        )
 }
