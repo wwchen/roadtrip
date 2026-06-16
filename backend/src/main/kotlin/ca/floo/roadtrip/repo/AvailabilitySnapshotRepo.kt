@@ -92,6 +92,125 @@ class AvailabilitySnapshotRepo(
             .limit(limit.coerceIn(1, 1000))
             .fetch { fromRecord(it) }
 
+    data class TargetDateStats(
+        val targetDate: LocalDate,
+        val totalSnapshots: Int,
+        val lastOpenAt: OffsetDateTime?,
+        val isCurrentlyOpen: Boolean,
+        val currentOrLastOpenWindowSec: Int?,
+        val medianOpenWindowSec: Int?,
+        val flipsLast24h: Int,
+    )
+
+    /**
+     * Per-target-date stats computed from the snapshot rows in the
+     * given window. The window applies to `observed_at`; every snapshot
+     * within it counts toward `totalSnapshots`. flipsLast24h is always
+     * computed over a fixed 24h tail regardless of window length.
+     *
+     * Empty input (no snapshots for that target_date in window) yields
+     * an entry with totalSnapshots=0 so the UI can render "never seen
+     * open" rather than dropping the date.
+     */
+    fun summarize(
+        reservableId: Long,
+        targetDates: List<LocalDate>,
+        now: OffsetDateTime = OffsetDateTime.now(),
+        windowHours: Int = 24 * 7,
+    ): List<TargetDateStats> {
+        if (targetDates.isEmpty()) return emptyList()
+        val windowStart = now.minusHours(windowHours.toLong())
+        val flipWindowStart = now.minusHours(24)
+        val rows =
+            ctx
+                .selectFrom(AVAILABILITY_SNAPSHOT)
+                .where(AVAILABILITY_SNAPSHOT.RESERVABLE_ID.eq(reservableId))
+                .and(AVAILABILITY_SNAPSHOT.TARGET_DATE.`in`(targetDates))
+                .and(AVAILABILITY_SNAPSHOT.OBSERVED_AT.ge(windowStart))
+                .orderBy(
+                    AVAILABILITY_SNAPSHOT.TARGET_DATE.asc(),
+                    AVAILABILITY_SNAPSHOT.OBSERVED_AT.asc(),
+                ).fetch { fromRecord(it) }
+        val grouped = rows.groupBy { it.targetDate }
+        return targetDates.map { date ->
+            val group = grouped[date].orEmpty()
+            statsFor(date, group, flipWindowStart)
+        }
+    }
+
+    private fun statsFor(
+        date: LocalDate,
+        snapshots: List<Snapshot>,
+        flipWindowStart: OffsetDateTime,
+    ): TargetDateStats {
+        if (snapshots.isEmpty()) {
+            return TargetDateStats(
+                targetDate = date,
+                totalSnapshots = 0,
+                lastOpenAt = null,
+                isCurrentlyOpen = false,
+                currentOrLastOpenWindowSec = null,
+                medianOpenWindowSec = null,
+                flipsLast24h = 0,
+            )
+        }
+        // Walk for contiguous available=true runs.
+        data class Run(val start: OffsetDateTime, val end: OffsetDateTime)
+        val runs = mutableListOf<Run>()
+        var runStart: OffsetDateTime? = null
+        var lastTrueAt: OffsetDateTime? = null
+        for (s in snapshots) {
+            if (s.available) {
+                if (runStart == null) runStart = s.observedAt
+                lastTrueAt = s.observedAt
+            } else if (runStart != null) {
+                runs += Run(start = runStart, end = lastTrueAt!!)
+                runStart = null
+            }
+        }
+        val isCurrentlyOpen = snapshots.last().available
+        if (runStart != null) {
+            runs += Run(start = runStart, end = lastTrueAt!!)
+        }
+        val currentOrLastOpenWindowSec =
+            runs.lastOrNull()?.let {
+                java.time.Duration.between(it.start, it.end).seconds.toInt().coerceAtLeast(0)
+            }
+        val medianOpenWindowSec =
+            if (runs.isEmpty()) {
+                null
+            } else {
+                val durations =
+                    runs
+                        .map { java.time.Duration.between(it.start, it.end).seconds.toInt().coerceAtLeast(0) }
+                        .sorted()
+                val mid = durations.size / 2
+                if (durations.size % 2 == 0) {
+                    (durations[mid - 1] + durations[mid]) / 2
+                } else {
+                    durations[mid]
+                }
+            }
+        // Count false→true transitions within the last 24h.
+        var flips = 0
+        var prev: Snapshot? = null
+        for (s in snapshots) {
+            if (s.observedAt >= flipWindowStart && prev != null && !prev.available && s.available) {
+                flips += 1
+            }
+            prev = s
+        }
+        return TargetDateStats(
+            targetDate = date,
+            totalSnapshots = snapshots.size,
+            lastOpenAt = lastTrueAt,
+            isCurrentlyOpen = isCurrentlyOpen,
+            currentOrLastOpenWindowSec = currentOrLastOpenWindowSec,
+            medianOpenWindowSec = medianOpenWindowSec,
+            flipsLast24h = flips,
+        )
+    }
+
     private fun fromRecord(r: org.jooq.Record): Snapshot =
         Snapshot(
             id = r.get(AVAILABILITY_SNAPSHOT.ID)!!,
