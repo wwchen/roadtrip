@@ -70,7 +70,8 @@ class AvailabilityHeatmapRepoTest {
                 ) RETURNING id
                 """.trimIndent(),
                 vendorId,
-            )!!.get("id", Long::class.java)
+            )!!
+            .get("id", Long::class.java)
 
     private fun insertSnapshot(
         reservableId: Long,

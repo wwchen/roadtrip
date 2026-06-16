@@ -251,7 +251,11 @@ fun Route.availabilityWatchRoutes(
 
         val targetDateStrings = watch.targetDates.map { it.toString() }
         val rowsByLoop = LinkedHashMap<String?, MutableList<AvailabilityWatchHeatmapRow>>()
-        for (r in children.sortedWith(compareBy<Reservable, String?>(nullsLast()) { it.loop }.thenBy { it.name ?: "" }.thenBy { it.rid.vendorId })) {
+        for (r in children.sortedWith(
+            compareBy<Reservable, String?>(nullsLast()) {
+                it.loop
+            }.thenBy { it.name ?: "" }.thenBy { it.rid.vendorId },
+        )) {
             val rowCells =
                 watch.targetDates.map { d ->
                     val cell = cellsByPair[r.id to d]
@@ -263,12 +267,13 @@ fun Route.availabilityWatchRoutes(
                     )
                 }
             val key = r.loop?.takeIf { it.isNotBlank() }
-            rowsByLoop.getOrPut(key) { mutableListOf() } += AvailabilityWatchHeatmapRow(
-                reservableId = r.id,
-                reservableRid = r.rid.encode(),
-                name = r.name,
-                cells = rowCells,
-            )
+            rowsByLoop.getOrPut(key) { mutableListOf() } +=
+                AvailabilityWatchHeatmapRow(
+                    reservableId = r.id,
+                    reservableRid = r.rid.encode(),
+                    name = r.name,
+                    cells = rowCells,
+                )
         }
 
         val groups =

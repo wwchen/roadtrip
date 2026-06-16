@@ -352,7 +352,10 @@ class AvailabilityWatchRoutesTest {
             )!!
             .get("id", Long::class.java)
 
-    private fun linkReservableToPoi(reservableId: Long, poiId: Long) {
+    private fun linkReservableToPoi(
+        reservableId: Long,
+        poiId: Long,
+    ) {
         ctx.execute(
             "INSERT INTO reservable_pois (reservable_id, poi_id) VALUES (?, ?)",
             reservableId,
@@ -381,108 +384,126 @@ class AvailabilityWatchRoutesTest {
     }
 
     @Test
-    fun `GET watch heatmap returns 404 for unknown id`() = testApplication {
-        application {
-            routing {
-                availabilityWatchRoutes(
-                    ctx,
-                    ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+    fun `GET watch heatmap returns 404 for unknown id`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.repo.ReservableRepo(ctx),
-                    ),
-                )
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
+                        ),
+                    )
+                }
             }
+            val resp = client.get("/api/availability/watches/99999/heatmap")
+            assertEquals(HttpStatusCode.NotFound, resp.status)
         }
-        val resp = client.get("/api/availability/watches/99999/heatmap")
-        assertEquals(HttpStatusCode.NotFound, resp.status)
-    }
 
     @Test
-    fun `GET watch heatmap for reservable-scoped watch returns one row`() = testApplication {
-        application {
-            routing {
-                availabilityWatchRoutes(
-                    ctx,
-                    ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+    fun `GET watch heatmap for reservable-scoped watch returns one row`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.repo.ReservableRepo(ctx),
-                    ),
-                )
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
+                        ),
+                    )
+                }
             }
+            val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
+            val rid = seedReservable("100", name = "A12", loop = "Loop A")
+            linkReservableToPoi(rid, poiId)
+
+            val createBody =
+                """
+                {"reservable_rid": "site:recgov:100", "target_dates": ["2026-07-04", "2026-07-05"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody)
+                }
+            val watchId =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
+            insertSnapshot(rid, "2026-07-04", now.minusMinutes(1), available = true)
+
+            val resp = client.get("/api/availability/watches/$watchId/heatmap")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(2, body["target_dates"]!!.jsonArray.size)
+            val groups = body["groups"]!!.jsonArray
+            assertEquals(1, groups.size)
+            assertEquals("Loop A", groups[0].jsonObject["loop"]!!.jsonPrimitive.content)
+            val rows = groups[0].jsonObject["rows"]!!.jsonArray
+            assertEquals(1, rows.size)
+            val cells = rows[0].jsonObject["cells"]!!.jsonArray
+            assertEquals(2, cells.size)
+            assertEquals("available", cells[0].jsonObject["status"]!!.jsonPrimitive.content)
         }
-        val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
-        val rid = seedReservable("100", name = "A12", loop = "Loop A")
-        linkReservableToPoi(rid, poiId)
-
-        val createBody = """
-            {"reservable_rid": "site:recgov:100", "target_dates": ["2026-07-04", "2026-07-05"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
-        """.trimIndent()
-        val created =
-            client.post("/api/availability/watches") {
-                contentType(ContentType.Application.Json)
-                setBody(createBody)
-            }
-        val watchId = Json.parseToJsonElement(created.bodyAsText()).jsonObject["watch"]!!.jsonObject["id"]!!.jsonPrimitive.long
-
-        val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-        insertSnapshot(rid, "2026-07-04", now.minusMinutes(1), available = true)
-
-        val resp = client.get("/api/availability/watches/$watchId/heatmap")
-        assertEquals(HttpStatusCode.OK, resp.status)
-        val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-        assertEquals(2, body["target_dates"]!!.jsonArray.size)
-        val groups = body["groups"]!!.jsonArray
-        assertEquals(1, groups.size)
-        assertEquals("Loop A", groups[0].jsonObject["loop"]!!.jsonPrimitive.content)
-        val rows = groups[0].jsonObject["rows"]!!.jsonArray
-        assertEquals(1, rows.size)
-        val cells = rows[0].jsonObject["cells"]!!.jsonArray
-        assertEquals(2, cells.size)
-        assertEquals("available", cells[0].jsonObject["status"]!!.jsonPrimitive.content)
-    }
 
     @Test
-    fun `GET watch heatmap for poi-scoped watch filters by loop`() = testApplication {
-        application {
-            routing {
-                availabilityWatchRoutes(
-                    ctx,
-                    ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+    fun `GET watch heatmap for poi-scoped watch filters by loop`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.repo.ReservableRepo(ctx),
-                    ),
-                )
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
+                        ),
+                    )
+                }
             }
+            val poiId = seedPoi(sourceId = "p2", name = "Tunnel Mountain")
+            val rA1 = seedReservable("201", name = "A12", loop = "Loop A")
+            val rA2 = seedReservable("202", name = "A13", loop = "Loop A")
+            val rB1 = seedReservable("203", name = "B05", loop = "Loop B")
+            linkReservableToPoi(rA1, poiId)
+            linkReservableToPoi(rA2, poiId)
+            linkReservableToPoi(rB1, poiId)
+
+            val createBody =
+                """
+                {"poi_id": $poiId, "reservable_filters": {"loop": ["Loop A"]}, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody)
+                }
+            val watchId =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val resp = client.get("/api/availability/watches/$watchId/heatmap")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val groups = body["groups"]!!.jsonArray
+            assertEquals(1, groups.size)
+            assertEquals("Loop A", groups[0].jsonObject["loop"]!!.jsonPrimitive.content)
+            val rows = groups[0].jsonObject["rows"]!!.jsonArray
+            assertEquals(2, rows.size)
+            val ridsInResponse = rows.map { it.jsonObject["reservable_rid"]!!.jsonPrimitive.content }
+            assertEquals(true, ridsInResponse.contains("site:recgov:201"))
+            assertEquals(true, ridsInResponse.contains("site:recgov:202"))
+            assertEquals(false, ridsInResponse.contains("site:recgov:203"))
         }
-        val poiId = seedPoi(sourceId = "p2", name = "Tunnel Mountain")
-        val rA1 = seedReservable("201", name = "A12", loop = "Loop A")
-        val rA2 = seedReservable("202", name = "A13", loop = "Loop A")
-        val rB1 = seedReservable("203", name = "B05", loop = "Loop B")
-        linkReservableToPoi(rA1, poiId)
-        linkReservableToPoi(rA2, poiId)
-        linkReservableToPoi(rB1, poiId)
-
-        val createBody = """
-            {"poi_id": $poiId, "reservable_filters": {"loop": ["Loop A"]}, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
-        """.trimIndent()
-        val created =
-            client.post("/api/availability/watches") {
-                contentType(ContentType.Application.Json)
-                setBody(createBody)
-            }
-        val watchId = Json.parseToJsonElement(created.bodyAsText()).jsonObject["watch"]!!.jsonObject["id"]!!.jsonPrimitive.long
-
-        val resp = client.get("/api/availability/watches/$watchId/heatmap")
-        assertEquals(HttpStatusCode.OK, resp.status)
-        val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-        val groups = body["groups"]!!.jsonArray
-        assertEquals(1, groups.size)
-        assertEquals("Loop A", groups[0].jsonObject["loop"]!!.jsonPrimitive.content)
-        val rows = groups[0].jsonObject["rows"]!!.jsonArray
-        assertEquals(2, rows.size)
-        val ridsInResponse = rows.map { it.jsonObject["reservable_rid"]!!.jsonPrimitive.content }
-        assertEquals(true, ridsInResponse.contains("site:recgov:201"))
-        assertEquals(true, ridsInResponse.contains("site:recgov:202"))
-        assertEquals(false, ridsInResponse.contains("site:recgov:203"))
-    }
 }
