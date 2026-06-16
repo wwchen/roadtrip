@@ -11,6 +11,7 @@ import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
+import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
@@ -210,6 +211,7 @@ fun Application.module() {
             campsiteProviders = CampsiteProviderRepo(ctx),
             bookingProviders = bookingProviderRegistry,
             fetches = availabilityFetches,
+            runs = AvailabilityJobRunRepo(ctx),
         )
     val availabilityScheduler =
         Scheduler(
