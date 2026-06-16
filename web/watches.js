@@ -1,10 +1,16 @@
-import { createWatch, deleteWatch, listWatches, updateWatch } from '/web/api/watches-api.js';
+import { createWatch, deleteWatch, getWatch, listWatches, updateWatch } from '/web/api/watches-api.js';
 
 const filterForm = document.getElementById('filter-form');
 const createForm = document.getElementById('create-form');
 const statusEl = document.getElementById('status');
 const resultsEl = document.getElementById('results');
 const emptyEl = document.getElementById('empty');
+const formTitleEl = document.getElementById('create-form-title');
+const formSubmitEl = document.getElementById('create-form-submit');
+const formCancelEl = document.getElementById('create-form-cancel');
+
+// null = create mode; number = editing this watch id
+let editingId = null;
 
 filterForm.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -17,6 +23,18 @@ filterForm.addEventListener('reset', () => {
 createForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const fd = new FormData(createForm);
+  if (editingId != null) {
+    const body = buildUpdatePayload(fd);
+    if (!body) return;
+    try {
+      await updateWatch(editingId, body);
+      exitEditMode();
+      await refresh();
+    } catch (err) {
+      statusEl.textContent = `Update failed: ${err.message}${err.body ? ` — ${err.body}` : ''}`;
+    }
+    return;
+  }
   const body = buildCreatePayload(fd);
   if (!body) return;
   try {
@@ -27,6 +45,79 @@ createForm.addEventListener('submit', async (e) => {
     statusEl.textContent = `Create failed: ${err.message}${err.body ? ` — ${err.body}` : ''}`;
   }
 });
+
+formCancelEl.addEventListener('click', () => {
+  exitEditMode();
+});
+
+function buildUpdatePayload(fd) {
+  // Update path: scope (poi_id / reservable_rid) is locked; we never send it.
+  // Everything else is editable.
+  let filters = {};
+  let triggerConfig = {};
+  try {
+    filters = JSON.parse(fd.get('reservable_filters') || '{}');
+    triggerConfig = JSON.parse(fd.get('trigger_config') || '{}');
+  } catch (err) {
+    statusEl.textContent = `Invalid JSON: ${err.message}`;
+    return null;
+  }
+  const targetDates = (fd.get('target_dates') || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  const triggerKinds = (fd.get('trigger_kinds') || '')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  return {
+    reservable_filters: filters,
+    target_dates: targetDates,
+    min_nights: Number(fd.get('min_nights') || 1),
+    cadence_sec: Number(fd.get('cadence_sec') || 60),
+    trigger_kinds: triggerKinds,
+    trigger_config: triggerConfig,
+    stop_when_triggered: fd.get('stop_when_triggered') === 'on',
+  };
+}
+
+async function enterEditMode(id) {
+  try {
+    const data = await getWatch(id);
+    const w = data.watch;
+    editingId = w.id;
+    // Fill the form with the current values.
+    const set = (name, value) => {
+      const input = createForm.querySelector(`[name="${name}"]`);
+      if (input) input.value = value;
+    };
+    set('poi_id', w.poi_id != null ? String(w.poi_id) : '');
+    set('reservable_rid', w.reservable?.rid ?? '');
+    set('target_dates', w.target_dates.join(', '));
+    set('min_nights', String(w.min_nights));
+    set('cadence_sec', String(w.cadence_sec));
+    set('trigger_kinds', w.trigger_kinds.join(', '));
+    set('reservable_filters', JSON.stringify(w.reservable_filters));
+    set('trigger_config', JSON.stringify(w.trigger_config));
+    const checkbox = createForm.querySelector('[name="stop_when_triggered"]');
+    if (checkbox) checkbox.checked = !!w.stop_when_triggered;
+    // Lock scope inputs; PATCH doesn't accept these.
+    createForm.querySelector('[name="poi_id"]').readOnly = true;
+    createForm.querySelector('[name="reservable_rid"]').readOnly = true;
+    formTitleEl.textContent = `Edit watch #${w.id}`;
+    formSubmitEl.textContent = 'Update';
+    formCancelEl.hidden = false;
+    createForm.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  } catch (err) {
+    statusEl.textContent = `Load failed: ${err.message}`;
+  }
+}
+
+function exitEditMode() {
+  editingId = null;
+  createForm.reset();
+  createForm.querySelector('[name="poi_id"]').readOnly = false;
+  createForm.querySelector('[name="reservable_rid"]').readOnly = false;
+  formTitleEl.textContent = 'Create watch';
+  formSubmitEl.textContent = 'Create';
+  formCancelEl.hidden = true;
+}
 
 function buildCreatePayload(fd) {
   const poiId = (fd.get('poi_id') || '').trim();
@@ -137,11 +228,12 @@ function renderRow(w) {
       <td>${escapeHtml(w.status)}</td>
       <td>
         ${w.status === 'active'
-          ? `<button data-action="pause" data-id="${escapeHtml(w.id)}">⏸</button>`
+          ? `<button data-action="pause" data-id="${escapeHtml(w.id)}" title="Pause">⏸</button>`
           : w.status === 'paused'
-            ? `<button data-action="resume" data-id="${escapeHtml(w.id)}">▶</button>`
+            ? `<button data-action="resume" data-id="${escapeHtml(w.id)}" title="Resume">▶</button>`
             : ''}
-        <button data-action="delete" data-id="${escapeHtml(w.id)}">✕</button>
+        <button data-action="edit" data-id="${escapeHtml(w.id)}" title="Edit">✎</button>
+        <button data-action="delete" data-id="${escapeHtml(w.id)}" title="Delete">✕</button>
       </td>
     </tr>`;
 }
@@ -151,10 +243,20 @@ async function onAction(e) {
   const id = btn.dataset.id;
   const action = btn.dataset.action;
   try {
-    if (action === 'pause') await updateWatch(id, { status: 'paused' });
-    else if (action === 'resume') await updateWatch(id, { status: 'active' });
-    else if (action === 'delete') await deleteWatch(id);
-    await refresh();
+    if (action === 'pause') {
+      await updateWatch(id, { status: 'paused' });
+      await refresh();
+    } else if (action === 'resume') {
+      await updateWatch(id, { status: 'active' });
+      await refresh();
+    } else if (action === 'delete') {
+      await deleteWatch(id);
+      // If we were editing this row, reset the form.
+      if (editingId != null && String(editingId) === String(id)) exitEditMode();
+      await refresh();
+    } else if (action === 'edit') {
+      await enterEditMode(Number(id));
+    }
   } catch (err) {
     statusEl.textContent = `Action failed: ${err.message}`;
   }

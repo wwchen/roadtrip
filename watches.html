@@ -91,6 +91,7 @@
     align-items: center;
     justify-content: center;
   }
+  [hidden] { display: none !important; }
   .nav a:hover,
   button:hover {
     background: var(--bg-hover);
@@ -238,7 +239,7 @@
   </section>
 
   <section class="panel">
-    <h2>Create watch</h2>
+    <h2 id="create-form-title">Create watch</h2>
     <form id="create-form" class="form-stack">
       <label>POI ID (or)
         <input name="poi_id" inputmode="numeric" placeholder="2258">
@@ -265,7 +266,8 @@
         Stop when triggered
       </label>
       <div class="actions">
-        <button class="primary" type="submit">Create</button>
+        <button class="primary" type="submit" id="create-form-submit">Create</button>
+        <button type="button" id="create-form-cancel" hidden>Cancel</button>
       </div>
     </form>
   </section>
