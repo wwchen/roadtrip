@@ -319,6 +319,25 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `poi reservables filters by site type`() =
+        testApplication {
+            val poiId = seedPoi("upper-pines", "Upper Pines Campground")
+            val standard = seedReservable(vendorId = "330257", name = "A12", siteType = "STANDARD")
+            val tent = seedReservable(vendorId = "330258", name = "B03", siteType = "TENT ONLY")
+            link(standard, poiId)
+            link(tent, poiId)
+            application { routing { reservableRoutes(ctx) } }
+
+            val resp = client.get("/api/poi/$poiId/reservables?site_type=STANDARD")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("1", body["total_at_poi"]!!.jsonPrimitive.content)
+            val row = body["reservables"]!!.jsonArray.single().jsonObject
+            assertEquals("site:recgov:330257", row["rid"]!!.jsonPrimitive.content)
+            assertEquals("STANDARD", row["site_type"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `poi reservables returns empty list for active poi with no reservables`() =
         testApplication {
             val poiId = seedPoi("empty", "Empty Campground")
@@ -375,6 +394,68 @@ class ReservableRoutesTest {
             assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
             assertEquals("232447", body["campground_id"]!!.jsonPrimitive.content)
             assertEquals("2026-07-01", body["window"]!!.jsonObject["start"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `poi reservables availability returns available reservables grouped by date and site type`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            val a12 = seedReservable(vendorId = "330257", name = "A12", loop = "Loop A", siteType = "STANDARD")
+            val b03 = seedReservable(vendorId = "330258", name = "B03", loop = "Loop B", siteType = "TENT ONLY")
+            val c44 = seedReservable(vendorId = "330259", name = "C44", loop = "Loop C", siteType = "STANDARD")
+            link(a12, poiId)
+            link(b03, poiId)
+            link(c44, poiId)
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp =
+                client.get(
+                    "/api/poi/$poiId/reservables/availability?start=2026-07-01&days=2&min_nights=2&site_type=STANDARD",
+                )
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(poiId.toString(), body["poi_id"]!!.jsonPrimitive.content)
+            assertEquals("site", body["type"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-01", body["start"]!!.jsonPrimitive.content)
+            assertEquals(2, body["days"]!!.jsonPrimitive.int)
+            assertEquals(2, body["min_nights"]!!.jsonPrimitive.int)
+            assertEquals("2", body["total_at_poi"]!!.jsonPrimitive.content)
+            assertEquals(listOf("STANDARD"), body["site_types"]!!.jsonArray.map { it.jsonPrimitive.content })
+
+            val dates = body["dates"]!!.jsonArray
+            assertEquals(2, dates.size)
+            val first = dates.first().jsonObject
+            assertEquals("2026-07-01", first["date"]!!.jsonPrimitive.content)
+            assertEquals(2, first["available_count"]!!.jsonPrimitive.int)
+            assertEquals(2, first["total"]!!.jsonPrimitive.int)
+            val rows = first["available_reservables"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(
+                setOf("site:recgov:330257", "site:recgov:330259"),
+                rows.map { it["rid"]!!.jsonPrimitive.content }.toSet(),
+            )
+            assertTrue(rows.all { it["site_type"]!!.jsonPrimitive.content == "STANDARD" })
+            val a12Url =
+                rows
+                    .single { it["rid"]!!.jsonPrimitive.content == "site:recgov:330257" }["reservation_url"]!!
+                    .jsonPrimitive
+                    .content
+            assertEquals(
+                "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-03",
+                a12Url,
+            )
         }
 
     @Test
@@ -658,6 +739,17 @@ class ReservableRoutesTest {
             )
         }
 
+        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+            val ref = req.ref as ProviderRef.RecGov
+            return fakeResponse(
+                start = req.start,
+                days = req.days,
+                campgroundId = ref.recgovId,
+                reservableId = null,
+                availableIds = req.reservables.map { it.rid },
+            )
+        }
+
         override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto =
             fakeResponse(
                 start = req.start,
@@ -673,14 +765,17 @@ class ReservableRoutesTest {
             days: Int,
             campgroundId: String?,
             reservableId: String?,
+            availableIds: List<String>? = null,
         ): AvailabilityResponseDto {
             val perDay =
                 (0 until days).map { offset ->
+                    val availableCount = availableIds?.size ?: 1
                     DayClassification(
                         date = start.plusDays(offset.toLong()).toString(),
-                        status = "available",
-                        availableCount = 1,
-                        total = 1,
+                        status = if (availableIds?.isEmpty() == true) "booked" else "available",
+                        availableCount = availableCount,
+                        total = availableIds?.size ?: 1,
+                        availableReservableIds = availableIds,
                     )
                 }
             return availabilityResponseDto(

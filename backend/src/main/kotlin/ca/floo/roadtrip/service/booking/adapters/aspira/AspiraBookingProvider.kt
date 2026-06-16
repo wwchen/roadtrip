@@ -1,16 +1,13 @@
 package ca.floo.roadtrip.service.booking.adapters.aspira
 
-import ca.floo.roadtrip.client.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.AspiraException
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
-import ca.floo.roadtrip.repo.CachedAspiraOccupancy
 import ca.floo.roadtrip.service.api.AspiraCatalogReservable
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.availableDatesAspira
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspira
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraCatalog
-import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraCatalogOccupancy
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraResource
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
@@ -35,7 +32,6 @@ import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 class AspiraBookingProvider(
     private val tenant: AspiraTenant,
     private val cache: CachedAspiraAvailability,
-    private val occupancyCache: CachedAspiraOccupancy = CachedAspiraOccupancy(AspiraAvailabilityClient()),
 ) : BookingProvider {
     override val id: BookingProviderId = BookingProviderId.ASPIRA
 
@@ -84,32 +80,17 @@ class AspiraBookingProvider(
                     resourceLocationId = it.resourceLocationId?.let { value -> intOrThrow("resourceLocationId", value) },
                 )
             }
-        val resourceLocationId = ref.resourceLocationId ?: targets.singleResourceLocationId()
         return runWithErrorMapping {
-            if (resourceLocationId != null) {
-                fetchAndClassifyAspiraCatalogOccupancy(
-                    cache = occupancyCache,
-                    host = tenant.host,
-                    parentMapId = parentMapId,
-                    resourceLocationId = intOrThrow("resourceLocationId", resourceLocationId),
-                    reservables = targets,
-                    today = req.start,
-                    days = req.days,
-                    force = req.force,
-                    minNights = req.minNights,
-                )
-            } else {
-                fetchAndClassifyAspiraCatalog(
-                    cache = cache,
-                    host = tenant.host,
-                    parentMapId = parentMapId,
-                    reservables = targets,
-                    today = req.start,
-                    days = req.days,
-                    force = req.force,
-                    minNights = req.minNights,
-                )
-            }
+            fetchAndClassifyAspiraCatalog(
+                cache = cache,
+                host = tenant.host,
+                parentMapId = parentMapId,
+                reservables = targets,
+                today = req.start,
+                days = req.days,
+                force = req.force,
+                minNights = req.minNights,
+            )
         }
     }
 
@@ -141,11 +122,6 @@ class AspiraBookingProvider(
     }
 
     private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
-
-    private fun List<AspiraCatalogReservable>.singleResourceLocationId(): Long? {
-        val ids = mapNotNull { it.resourceLocationId?.toLong() }.distinct()
-        return ids.singleOrNull()
-    }
 
     private fun aspiraRefOrThrow(ref: ProviderRef): ProviderRef.Aspira =
         (ref as? ProviderRef.Aspira)

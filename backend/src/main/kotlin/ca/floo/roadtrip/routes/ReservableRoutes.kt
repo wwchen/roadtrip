@@ -158,6 +158,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         request {
             pathParameter<Long>("id") { description = "pois.id primary key" }
             queryParameter<String>("type") { description = "Reservable type, defaults to site." }
+            queryParameter<String>("site_type") { description = "Optional exact site type filter. Repeat or comma-separate for OR." }
             queryParameter<String>("start") { description = "Optional arrival date for per-site reservation_url links." }
             queryParameter<Int>("min_nights") { description = "Optional stay length for per-site reservation_url links." }
         }
@@ -188,18 +189,22 @@ fun Route.reservableRoutes(ctx: DSLContext) {
             } catch (e: BadReservableQuery) {
                 return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
             }
+        val siteTypes = call.queryValues("site_type", "siteType")
 
         val poi =
             pois.fetchPoiById(poiId)
                 ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
         val providerRef = poi.providerRefJson?.let { ProviderRefParser.parse(it) }
 
-        val rows = reservables.findByPoi(poiId, type)
+        val rows =
+            reservables
+                .findByPoi(poiId, type)
+                .filterBySiteTypes(siteTypes)
         call.respondReservableJson(
             PoiReservablesResponseSchema(
                 poiId = poiId,
                 type = type.encode(),
-                totalAtPoi = reservables.countByPoi(poiId, type),
+                totalAtPoi = rows.size,
                 reservables =
                     rows.map {
                         it.toSchema(
@@ -217,7 +222,7 @@ private class BadReservableQuery(
     val detail: String? = null,
 ) : IllegalArgumentException(detail)
 
-private fun parseReservableType(raw: String?): ReservableType? =
+internal fun parseReservableType(raw: String?): ReservableType? =
     if (raw.isNullOrBlank()) {
         ReservableType.SITE
     } else {
@@ -263,7 +268,7 @@ private fun ApplicationCall.intQuery(
     return value
 }
 
-private data class ReservationUrlOptions(
+internal data class ReservationUrlOptions(
     val start: LocalDate?,
     val minNights: Int,
 )
@@ -296,7 +301,7 @@ private fun ApplicationCall.queryValues(vararg names: String): List<String> =
         .filter { it.isNotEmpty() }
         .distinct()
 
-private fun Reservable.toSchema(
+internal fun Reservable.toSchema(
     poiIds: List<Long> = emptyList(),
     reservationUrl: String? = null,
 ): ReservableSchema =
@@ -314,7 +319,7 @@ private fun Reservable.toSchema(
         raw = raw,
     )
 
-private fun Reservable.reservationUrl(
+internal fun Reservable.reservationUrl(
     providerRef: ProviderRef?,
     options: ReservationUrlOptions,
 ): String? =
@@ -361,6 +366,12 @@ private fun Reservable.aspiraReservationUrl(
 
 private fun Reservable.aspiraProviderRefLong(key: String): Long? =
     ((providerRef as? JsonObject)?.get(key))?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+
+internal fun List<Reservable>.filterBySiteTypes(siteTypes: Collection<String>): List<Reservable> {
+    if (siteTypes.isEmpty()) return this
+    val allowed = siteTypes.toSet()
+    return filter { it.siteType != null && it.siteType in allowed }
+}
 
 private fun aspiraHostForVendor(vendor: String): String? =
     when (vendor) {

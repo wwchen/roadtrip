@@ -13,10 +13,13 @@ import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.models.api.BulkAvailEntrySchema
 import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
 import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
+import ca.floo.roadtrip.models.api.PoiReservablesAvailabilityDateSchema
+import ca.floo.roadtrip.models.api.PoiReservablesAvailabilityResponseSchema
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.api.AvailabilityDayDto
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
@@ -219,6 +222,145 @@ fun Route.campsiteAvailabilityRoutes(
         }
     }) {
         call.handlePoiAvailability("poi_id")
+    }
+
+    get("/api/poi/{poi_id}/reservables/availability", {
+        tags = listOf("campsite-availability", "reservable")
+        summary = "Available reservables grouped by date for one campground POI"
+        description =
+            "Returns a date-first availability matrix for one POI. Each date " +
+            "contains the linked reservables available for that arrival date. " +
+            "`site_type` filters the POI catalog before provider classification, " +
+            "so the response can answer questions like 'which tent sites are " +
+            "available next week?' without a per-site upstream loop."
+        request {
+            pathParameter<Long>("poi_id") { description = "pois.id primary key" }
+            queryParameter<Int>("days") { description = "Window length, default 30, max 60." }
+            queryParameter<String>("start") { description = "YYYY-MM-DD; default is today." }
+            queryParameter<Int>("min_nights") { description = "Same-site stay length, 1..31." }
+            queryParameter<String>("type") { description = "Reservable type, defaults to site." }
+            queryParameter<String>("site_type") { description = "Exact site type filter. Repeat or comma-separate for OR." }
+            queryParameter<String>("force") { description = "Set to 1 to bypass provider cache." }
+        }
+        response {
+            code(HttpStatusCode.OK) {
+                description = "Available dates with matching reservables embedded."
+                body<PoiReservablesAvailabilityResponseSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.BadRequest) {
+                description = "Malformed POI id, type, days, or start."
+                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.NotFound) {
+                description = "No campground/provider row exists for that POI id."
+                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.ServiceUnavailable) {
+                description = "Rate limited or upstream availability service unavailable."
+                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+        }
+    }) {
+        val poiId =
+            call.parameters["poi_id"]?.toLongOrNull()
+                ?: return@get call.respondAvailabilityError("bad_poi_id", HttpStatusCode.BadRequest)
+        val type =
+            parseReservableType(call.request.queryParameters["type"])
+                ?: return@get call.respondAvailabilityError("bad_type", HttpStatusCode.BadRequest)
+
+        val days =
+            call.request.queryParameters["days"]?.toIntOrNull()
+                ?: DEFAULT_AVAILABILITY_DAYS
+        if (days !in 1..MAX_AVAILABILITY_DAYS) {
+            call.respondAvailabilityError("bad_days", HttpStatusCode.BadRequest)
+            return@get
+        }
+
+        val ip = call.request.origin.remoteHost
+        if (!rateLimit.allow(ip)) {
+            call.respondAvailabilityError(
+                "ip_throttled",
+                HttpStatusCode.ServiceUnavailable,
+                retryAfterS = IP_THROTTLE_RETRY_AFTER_S,
+            )
+            return@get
+        }
+
+        val row =
+            providerRefs.findProviderRef(poiId)
+                ?: return@get call.respondAvailabilityError("unknown_campground", HttpStatusCode.NotFound)
+        val provider =
+            bookingProviders.forPoi(row)
+                ?: return@get call.respondAvailabilityError("unsupported_provider", HttpStatusCode.NotImplemented)
+        val ref =
+            ProviderRefParser.parse(row.providerRefJson)
+                ?: return@get call.respondAvailabilityError("bad_provider_ref", HttpStatusCode.InternalServerError)
+        val query =
+            call.parseAvailabilityQuery(provider.capabilities.bookingHorizonDays)
+                ?: return@get call.respondAvailabilityError("bad_start", HttpStatusCode.BadRequest)
+
+        val siteTypes = call.queryValues("site_type", "siteType")
+        val rows =
+            reservables
+                .findByPoi(poiId, type)
+                .filterBySiteTypes(siteTypes)
+
+        if (rows.isEmpty()) {
+            call.respondAvailabilityJson(
+                PoiReservablesAvailabilityResponseSchema(
+                    poiId = poiId,
+                    type = type.encode(),
+                    start = query.start.toString(),
+                    days = days,
+                    minNights = query.minNights,
+                    siteTypes = siteTypes,
+                    totalAtPoi = 0,
+                    dates = emptyList(),
+                ),
+            )
+            return@get
+        }
+
+        try {
+            val response =
+                provider.catalogAvailability(
+                    CatalogAvailabilityRequest(
+                        ref = ref,
+                        reservables = rows.map { it.toCatalogReservableRef() },
+                        start = query.start,
+                        days = days,
+                        minNights = query.minNights,
+                        force = query.force,
+                    ),
+                )
+            call.respondAvailabilityJson(
+                PoiReservablesAvailabilityResponseSchema(
+                    poiId = poiId,
+                    type = type.encode(),
+                    start = query.start.toString(),
+                    days = days,
+                    minNights = query.minNights,
+                    siteTypes = siteTypes,
+                    totalAtPoi = rows.size,
+                    dates =
+                        response.availability.toAvailableReservableDates(
+                            rows = rows,
+                            poiId = poiId,
+                            ref = ref,
+                            minNights = query.minNights,
+                        ),
+                ),
+            )
+        } catch (e: BookingProviderError) {
+            val (status, error) = mapProviderError(e)
+            log.info(
+                "poi reservables availability poi={} provider={} failed: {}",
+                poiId,
+                provider.id,
+                e.message,
+            )
+            call.respondAvailabilityJson(error, status)
+        }
     }
 
     get("/api/reservable/{rid}/availability", {
@@ -503,6 +645,43 @@ private suspend fun fetchOneBulk(
     }
 }
 
+private fun List<AvailabilityDayDto>.toAvailableReservableDates(
+    rows: List<Reservable>,
+    poiId: Long,
+    ref: ProviderRef,
+    minNights: Int,
+): List<PoiReservablesAvailabilityDateSchema> {
+    val rowsByRid = rows.associateBy { it.rid.encode() }
+    return mapNotNull { day ->
+        val availableRows =
+            day.availableReservableIds
+                .orEmpty()
+                .mapNotNull { rowsByRid[it] }
+                .distinctBy { it.id }
+        if (availableRows.isEmpty()) {
+            null
+        } else {
+            val arrival = LocalDate.parse(day.date)
+            PoiReservablesAvailabilityDateSchema(
+                date = day.date,
+                availableCount = availableRows.size,
+                total = rows.size,
+                availableReservables =
+                    availableRows.map { row ->
+                        row.toSchema(
+                            poiIds = listOf(poiId),
+                            reservationUrl =
+                                row.reservationUrl(
+                                    ref,
+                                    ReservationUrlOptions(start = arrival, minNights = minNights),
+                                ),
+                        )
+                    },
+            )
+        }
+    }
+}
+
 /**
  * Result of parsing the `?start=YYYY-MM-DD` query param against the provider's
  * booking horizon. Sealed so the route can branch on it without re-checking
@@ -555,6 +734,14 @@ private fun ApplicationCall.parseAvailabilityQuery(bookingHorizonDays: Int): Ava
     val force = request.queryParameters["force"] == "1"
     return AvailabilityQuery(start = start, minNights = minNights, force = force)
 }
+
+private fun ApplicationCall.queryValues(vararg names: String): List<String> =
+    names
+        .flatMap { name -> request.queryParameters.getAll(name).orEmpty() }
+        .flatMap { value -> value.split(",") }
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
 
 /** Map the typed provider error to (HTTP status, AvailabilityErrorSchema). */
 private fun mapProviderError(e: BookingProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> =
