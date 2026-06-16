@@ -134,6 +134,15 @@ class ReservableRepo(
         }
     }
 
+    /** Find one reservable by its surrogate ID. */
+    fun findById(id: Long): Reservable? =
+        ctx
+            .selectFrom(RESERVABLES)
+            .where(RESERVABLES.ID.eq(id))
+            .and(RESERVABLE_ACTIVE_CONDITION)
+            .fetchOne()
+            ?.let(::fromRecord)
+
     /** Find one reservable by its composite identity. */
     fun findByRid(rid: ReservableId): Reservable? =
         ctx
