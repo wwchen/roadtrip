@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.booking
 
 import ca.floo.roadtrip.models.ProviderRef
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -18,9 +19,15 @@ import kotlinx.serialization.json.longOrNull
 object ProviderRefParser {
     fun parse(json: String): ProviderRef? {
         val obj =
-            runCatching { Json.parseToJsonElement(json).jsonObject }.getOrNull()
+            runCatching { Json.parseToJsonElement(json) }.getOrNull()
                 ?: return null
+        return parse(obj)
+    }
 
+    fun parse(element: JsonElement): ProviderRef? {
+        val obj =
+            runCatching { element.jsonObject }.getOrNull()
+                ?: return null
         obj["recgov_id"]?.jsonPrimitive?.contentOrNull?.let {
             return ProviderRef.RecGov(recgovId = it)
         }

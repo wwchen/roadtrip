@@ -5,6 +5,7 @@ import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.models.ReservableType
 import ca.floo.roadtrip.models.ValidationResult
 import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.booking.recgovCampsiteUrl
 import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.ReservableEtlOutput
 import ca.floo.roadtrip.service.etl.SourceEtl
@@ -81,6 +82,7 @@ class RecGovCampsitesEtl(
                         // signals "synthetic, not from upstream"; we don't
                         // expect rec.gov to ever ship a field with that name.
                         raw = withSynthetic(raw, "_parent_facility_id", facilityId),
+                        reservationUrl = recgovCampsiteUrl(campsiteId),
                     )
             }
         }

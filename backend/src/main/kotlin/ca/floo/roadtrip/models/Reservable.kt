@@ -23,6 +23,7 @@ data class Reservable(
     val name: String?,
     val loop: String?,
     val siteType: String?,
+    val reservationUrl: String?,
     val raw: JsonElement?,
     val providerRef: JsonElement? = null,
 )
