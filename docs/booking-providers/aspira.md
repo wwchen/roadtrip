@@ -677,12 +677,11 @@ a tenant.
 - `service/booking/adapters/aspira/AspiraBookingProvider.kt` — the
   current adapter (availability only).
 - `service/etl/aspira/AspiraResourcesEtl.kt` — emits reservable rows
-  with `name = null` today; the place to wire
-  `/api/resourcelocation/resources` enrichment.
+  emits one reservable per inventory record; reads the `/api/maps`
+  tree only to label each row's `loop` via a `mapIds[0]` lookup.
 - `client/AspiraAvailabilityClient.kt` — the request-time HTTP
   client; pattern to copy for an inventory client.
-- `scripts/fetch_aspira_resources.py` — fetcher pattern for the
-  per-leaf `/api/availability/map` capture; pattern to copy for an
-  inventory fetcher.
+- `scripts/fetch_aspira_inventory.py` — per-park inventory fetcher
+  (one call per `resourceLocationId`, resumable).
 - `.claude/skills/probe-vendor-api/SKILL.md` — methodology used to
   build this doc.

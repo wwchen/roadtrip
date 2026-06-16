@@ -26,18 +26,18 @@ import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 /**
- * End-to-end AspiraResourcesEtl test. Captures the three inputs the ETL needs:
- *   - aspira-resources-pc/<ts>/leaf-<mapId>.json (multi-part availability)
- *   - aspira-maps-pc/<ts>.json                   (single-envelope /api/maps tree)
+ * End-to-end AspiraResourcesEtl test. Captures the two inputs the ETL needs:
  *   - aspira-inventory-pc/<ts>/park-<rid>.json   (multi-part named-site catalog)
- * …points the orchestrator at the production YAML, runs the import via
- * the reservable_data section, asserts the catalog landed with parent
- * leaf metadata stamped on each row and inventory enrichment applied.
+ *   - aspira-maps-pc/<ts>.json                   (single-envelope /api/maps tree)
+ * …points the orchestrator at the production YAML, runs the import via the
+ * reservable_data section, asserts the catalog landed with parent leaf
+ * metadata stamped on each row.
  *
- * Fixture has two leaves and 4 total resources:
- *   - mapId -2147483640 ("Tunnel Mountain Village I"): resources 501, 502, 503
- *   - mapId -2147483641 ("Two Jack Lakeside"): resource 601
- * Inventory has names/descriptions for all four.
+ * Fixture covers two parks:
+ *   - resourceLocationId 9001 ("Tunnel Mountain Village I", leaf -2147483640):
+ *     resources 501, 502, 503
+ *   - resourceLocationId 9002 ("Two Jack Lakeside", leaf -2147483641):
+ *     resource 601
  *
  * POI linking is NOT exercised here — that's the joiner's job. This test
  * confirms the ETL emits reservables independently of any POI state.
@@ -71,13 +71,6 @@ class AspiraResourcesEtlTest {
         reservables = ReservableRepo(ctx)
 
         rawDir = Files.createTempDirectory("etl-aspira-resources-").toFile()
-
-        // aspira-resources-pc: multi-part. One timestamped dir, one
-        // envelope per leaf.
-        val resCapture = File(File(rawDir, "aspira-resources-pc"), "2026-09-12T17-00-00Z")
-        resCapture.mkdirs()
-        copyFixtureTo("aspira-resources/leaf--2147483640.json", File(resCapture, "leaf--2147483640.json"))
-        copyFixtureTo("aspira-resources/leaf--2147483641.json", File(resCapture, "leaf--2147483641.json"))
 
         // aspira-maps-pc: single-file envelope (matches the live fetcher's
         // shape). Orchestrator's auto-detect picks single-file vs dir by
@@ -114,7 +107,7 @@ class AspiraResourcesEtlTest {
     }
 
     @Test
-    fun `imports reservables from every leaf envelope`() {
+    fun `imports a reservable per inventory record across every park envelope`() {
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         val stats = orch.runReservableData("Parks Canada Aspira Resources")
 
@@ -136,10 +129,10 @@ class AspiraResourcesEtlTest {
     }
 
     @Test
-    fun `resources land with leaf as loop and inventory-derived name`() {
-        // /api/availability/map carries no per-resource names; loop comes
-        // from the leaf title in /api/maps. Name now comes from the
-        // /api/resourcelocation/resources catalog (localizedValues[0].name).
+    fun `name comes from inventory, loop comes from leaf via mapIds lookup`() {
+        // /api/resourcelocation/resources carries name + description per
+        // resource. Each record's mapIds[0] points back to a leaf in
+        // /api/maps; AspiraLeavesWalk turns that into the loop label.
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runReservableData("Parks Canada Aspira Resources")
 
@@ -242,9 +235,9 @@ class AspiraResourcesEtlTest {
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runReservableData("Parks Canada Aspira Resources")
 
-        // 503 is the third resource under -2147483640 in the fixture; if
-        // the maps walk hadn't run, we'd have no leaf metadata and the
-        // loop would be null.
+        // 503 is the third resource at park 9001; if the maps walk
+        // hadn't run, we'd have no leaf metadata and the loop would
+        // be null.
         val r = reservables.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "503"))!!
         assertEquals("Tunnel Mountain Village I", r.loop)
     }
