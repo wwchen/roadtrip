@@ -54,6 +54,5 @@ class AvailabilitySnapshotRepo(
         return inserts.size
     }
 
-    private fun AvailabilityDayDto.toJson(): String =
-        availabilityResponseJson.encodeToString(AvailabilityDayDto.serializer(), this)
+    private fun AvailabilityDayDto.toJson(): String = availabilityResponseJson.encodeToString(AvailabilityDayDto.serializer(), this)
 }
