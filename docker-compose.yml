@@ -74,6 +74,7 @@ services:
       - ./pois.html:/app/static/pois.html:ro
       - ./reservables.html:/app/static/reservables.html:ro
       - ./watches.html:/app/static/watches.html:ro
+      - ./watch-detail.html:/app/static/watch-detail.html:ro
       - ./availability.html:/app/static/availability.html:ro
       - ./web:/app/static/web:ro
       - ./data:/app/static/data:ro
