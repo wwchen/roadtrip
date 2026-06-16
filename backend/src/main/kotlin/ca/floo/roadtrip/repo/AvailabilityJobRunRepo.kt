@@ -116,8 +116,15 @@ class AvailabilityJobRunRepo(
         if (jobId != null) conds += AVAILABILITY_JOB_RUN.JOB_ID.eq(jobId)
         return ctx
             .selectFrom(AVAILABILITY_JOB_RUN)
-            .where(if (conds.isEmpty()) org.jooq.impl.DSL.noCondition() else org.jooq.impl.DSL.and(conds))
-            .orderBy(AVAILABILITY_JOB_RUN.STARTED_AT.desc(), AVAILABILITY_JOB_RUN.ID.desc())
+            .where(
+                if (conds.isEmpty()) {
+                    org.jooq.impl.DSL
+                        .noCondition()
+                } else {
+                    org.jooq.impl.DSL
+                        .and(conds)
+                },
+            ).orderBy(AVAILABILITY_JOB_RUN.STARTED_AT.desc(), AVAILABILITY_JOB_RUN.ID.desc())
             .limit(limit.coerceIn(1, 500))
             .fetch { fromRecord(it) }
     }

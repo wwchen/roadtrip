@@ -62,7 +62,10 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         val limit =
             (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT)
                 .coerceIn(1, MAX_LIST_LIMIT)
-        val offset = call.request.queryParameters["offset"]?.toIntOrNull()?.coerceAtLeast(0) ?: 0
+        val offset =
+            call.request.queryParameters["offset"]
+                ?.toIntOrNull()
+                ?.coerceAtLeast(0) ?: 0
         val rows = jobs.list(status = status, watchId = watchId, limit = limit, offset = offset)
         val total = jobs.count(status = status, watchId = watchId)
         call.respondJson(

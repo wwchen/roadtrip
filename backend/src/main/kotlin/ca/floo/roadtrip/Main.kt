@@ -22,8 +22,8 @@ import ca.floo.roadtrip.repo.dataSourceFor
 import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.routes.adminIngestRoutes
-import ca.floo.roadtrip.routes.availabilityWatchRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
+import ca.floo.roadtrip.routes.availabilityWatchRoutes
 import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
 import ca.floo.roadtrip.routes.geocodeRoutes
 import ca.floo.roadtrip.routes.healthRoutes
