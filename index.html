@@ -841,8 +841,16 @@
     font-weight: 600;
     line-height: 1;
   }
-  .cg-sites-row-link:hover .cg-sites-row-book { background: var(--cg-accent-bg-hover); }
-  .cg-sites-row-link:active .cg-sites-row-book { background: #245031; }
+  .cg-sites-row-fit {
+    color: var(--cg-warn);
+    border: 1px solid color-mix(in srgb, var(--cg-warn) 45%, transparent);
+    border-radius: 999px;
+    padding: 2px 7px;
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 1.2;
+    white-space: nowrap;
+  }
   .cg-sites-skeleton, .cg-sites-error, .cg-sites-empty {
     color: var(--cg-muted); font-size: 12px;
     padding: 8px 0;

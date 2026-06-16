@@ -58,6 +58,7 @@ private const val MAX_NIGHTS = 14
 // Multi-night classifier upper bound. 31 covers any realistic stay; longer
 // windows would need a sliding-window optimization in the per-day classifier.
 private const val MAX_MIN_NIGHTS = 31
+private const val AVAILABILITY_QUERY_MIN_NIGHTS = 1
 
 // Per-IP rate-limit budget. Cross-provider — one bucket regardless of which
 // adapter ends up answering. See [IpRateLimiter] for the token-bucket math.
@@ -145,7 +146,7 @@ fun Route.campsiteAvailabilityRoutes(
                         reservables = catalogRefs,
                         start = query.start,
                         days = days,
-                        minNights = query.minNights,
+                        minNights = AVAILABILITY_QUERY_MIN_NIGHTS,
                         force = query.force,
                     ),
                 )
@@ -175,10 +176,9 @@ fun Route.campsiteAvailabilityRoutes(
             "extras (`campground_id` for rec.gov; `host`/`map_id` for Aspira) " +
             "are additive. Optional `?start=YYYY-MM-DD` shifts the window " +
             "(default: today); capped at `capabilities.bookingHorizonDays` " +
-            "ahead of today, per provider. Optional `?min_nights=N` (1..31, " +
-            "default 1) classifies each day under same-site multi-night " +
-            "semantics: 'available' means at least one site is open for all " +
-            "N consecutive nights starting that day."
+            "ahead of today, per provider. `?min_nights=N` is accepted for " +
+            "legacy clients but ignored here; this endpoint reports per-date " +
+            "inventory rather than filtering by stay length."
         response {
             code(HttpStatusCode.BadRequest) {
                 description = "Bad POI id, invalid days, or start out of range."
@@ -233,7 +233,7 @@ fun Route.campsiteAvailabilityRoutes(
             pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
             queryParameter<Int>("days") { description = "Window length, default 30, max 60." }
             queryParameter<String>("start") { description = "YYYY-MM-DD; default is today." }
-            queryParameter<Int>("min_nights") { description = "Same-site stay length, 1..31." }
+            queryParameter<Int>("min_nights") { description = "Accepted for legacy clients; ignored for per-date availability." }
             queryParameter<String>("force") { description = "Set to 1 to bypass provider cache." }
         }
         response {
@@ -313,7 +313,7 @@ fun Route.campsiteAvailabilityRoutes(
                         vendorId = rid.vendorId,
                         start = query.start,
                         days = days,
-                        minNights = query.minNights,
+                        minNights = AVAILABILITY_QUERY_MIN_NIGHTS,
                         force = query.force,
                     ),
                 )

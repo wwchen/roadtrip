@@ -9,9 +9,8 @@ import { jsonPostOk } from './http.js';
  * @param {object}        opts
  * @param {number}        [opts.days=30]   Inclusive window length, max 60.
  * @param {string}        [opts.start]     ISO date "YYYY-MM-DD". Default: today (server-side).
- * @param {number}        [opts.minNights] Min consecutive nights. BE may use it for stay-mode
- *                                         scoring (RFC 0007); included in the URL so the cache
- *                                         keys correctly even if today's BE ignores it.
+ * @param {number}        [opts.minNights] Legacy query param; current BE reports per-date
+ *                                         inventory and ignores stay length for availability.
  * @param {boolean}       [opts.force]     Bust the per-month cache.
  * @param {AbortSignal}   [opts.signal]
  */

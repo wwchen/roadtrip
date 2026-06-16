@@ -2,7 +2,7 @@
 // campground drawer and owns:
 //
 //   - the visible week start (LocalDate),
-//   - min_nights (default 1, persisted in localStorage),
+//   - preferred stay length (default 1, persisted in localStorage),
 //   - the selected day,
 //   - the in-flight controller (skeleton timer, AbortSignal),
 //   - the cached list of the user's existing alerts (for 🔔 badges).
@@ -138,6 +138,7 @@ function rerender(ctx) {
 function renderShell(ctx) {
   const selectedDay = selectedAvailabilityDay(ctx);
   const sitesDay = selectedDay && availableCount(selectedDay) > 0 ? selectedDay : null;
+  const siteListDays = siteListAvailabilityDays(ctx);
   return `
     <section class="cg-availability">
       ${renderNightsRow(ctx)}
@@ -152,6 +153,8 @@ function renderShell(ctx) {
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
         selectedDay: sitesDay,
+        days: siteListDays,
+        minNights: ctx.minNights,
       })}
     </section>
   `;
@@ -313,10 +316,9 @@ function onRootClick(ctx, e) {
     if (Number.isFinite(n) && n !== ctx.minNights) {
       ctx.minNights = n;
       saveMinNights(n);
-      // Refetch — BE may use min_nights for stay-mode scoring (RFC 0007).
-      // The URL changes, the cache key changes, and the day-detail picks
-      // up the new "N-night stay" label after the response lands.
-      fetchWeek(ctx);
+      // Min nights is a preference for booking links/site ordering, not an
+      // availability filter. Keep the visible availability grid stable.
+      rerender(ctx);
       if (ctx.selectedDate) fetchSites(ctx);
     }
     return;
@@ -546,7 +548,7 @@ async function fetchWeek(ctx, { force = false } = {}) {
     const resp = await requestCampsiteAvailability(ctx.poiId, {
       days: WEEK_DAYS,
       start: isoDate(ctx.weekStart),
-      minNights: ctx.minNights,
+      minNights: 1,
       force,
       signal: ctx.signal,
     });

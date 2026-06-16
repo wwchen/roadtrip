@@ -448,7 +448,7 @@ class ReservableRoutesTest {
                 ctx
                     .fetchOne("SELECT count(*) FROM availability_snapshot")!!
                     .get(0, Long::class.java)
-            assertEquals(5L, rowCountAfterMultiNight)
+            assertEquals(4L, rowCountAfterMultiNight)
         }
 
     @Test

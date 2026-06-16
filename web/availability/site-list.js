@@ -1,6 +1,7 @@
 // Selected-day available reservable list. Hidden until a day is selected,
-// then filters the POI catalog by the week availability response's
-// available_reservable_ids so the visible rows match that day's count.
+// then filters the POI catalog by that day's available_reservable_ids.
+// Preferred min-nights only reorders rows whose consecutive availability is
+// known inside the fetched week; it never filters availability.
 
 import { escapeHtml } from '../core.js';
 
@@ -18,6 +19,8 @@ import { escapeHtml } from '../core.js';
  * @param {string|null}          args.error
  * @param {boolean}               args.expanded
  * @param {object|null}           args.selectedDay  Per-day availability row.
+ * @param {Array<object>}          args.days         Current week availability rows.
+ * @param {number}                 args.minNights    Preferred stay length.
  */
 export function renderSiteList({
   state,
@@ -25,6 +28,8 @@ export function renderSiteList({
   error,
   expanded,
   selectedDay = null,
+  days = [],
+  minNights = 1,
 }) {
   const availableIds = availableReservableIds(selectedDay);
   if (availableIds == null || availableIds.length === 0) return '';
@@ -45,7 +50,8 @@ export function renderSiteList({
   }
   // success
   const rows = reservablesForIds(reservables, availableIds);
-  const body = expanded ? renderRows(rows) : '';
+  const preferredIds = preferredReservableIds({ days, selectedDay, minNights });
+  const body = expanded ? renderRows(rows, preferredIds) : '';
   return renderSection({
     header: renderHeader({ count, total, expanded, disabled: false }),
     body,
@@ -79,14 +85,12 @@ function renderHeaderLabel(count, total) {
   return `Available sites (${count})`;
 }
 
-function renderRows(reservables) {
+function renderRows(reservables, preferredIds = new Set()) {
   if (!Array.isArray(reservables) || reservables.length === 0) {
     return '<div class="cg-sites-empty">No available sites for this date.</div>';
   }
-  // Stable sort: loop alphabetical, then site name. Loop-less rows fall
-  // to the bottom — that's what Aspira's resource-id-only rows look like.
-  const sorted = [...reservables].sort(compareReservable);
-  const rows = sorted.map((r) => renderRow(r)).join('');
+  const sorted = [...reservables].sort((a, b) => comparePreferredReservable(a, b, preferredIds));
+  const rows = sorted.map((r) => renderRow(r, preferredIds)).join('');
   return `<ol class="cg-sites-rows">${rows}</ol>`;
 }
 
@@ -113,7 +117,7 @@ function fallbackReservable(rid) {
   return { rid, vendor, vendor_id: vendorId };
 }
 
-function renderRow(r) {
+function renderRow(r, preferredIds = new Set()) {
   const name = r.name || formatFallbackName(r);
   const safeName = escapeHtml(name);
   const loopLine = r.loop ? `<div class="cg-sites-row-loop">${escapeHtml(r.loop)}</div>` : '';
@@ -123,7 +127,10 @@ function renderRow(r) {
     : '';
   const url = r.reservation_url || r.reservationUrl || null;
   const bookTag = url ? '<span class="cg-sites-row-book">Book</span>' : '';
-  const side = typeTag || bookTag ? `<div class="cg-sites-row-side">${typeTag}${bookTag}</div>` : '';
+  const preferredTag = preferredIds.has(r.rid)
+    ? '<span class="cg-sites-row-fit">Fits stay</span>'
+    : '';
+  const side = typeTag || preferredTag || bookTag ? `<div class="cg-sites-row-side">${typeTag}${preferredTag}${bookTag}</div>` : '';
   const inner = `
     <div class="cg-sites-row-main">
       <div class="cg-sites-row-name">${safeName}</div>
@@ -193,4 +200,31 @@ function compareReservable(a, b) {
   const an = a.name || a.vendor_id || '';
   const bn = b.name || b.vendor_id || '';
   return an.localeCompare(bn, undefined, { numeric: true });
+}
+
+function comparePreferredReservable(a, b, preferredIds) {
+  const ap = preferredIds.has(a.rid) ? 0 : 1;
+  const bp = preferredIds.has(b.rid) ? 0 : 1;
+  if (ap !== bp) return ap - bp;
+  return compareReservable(a, b);
+}
+
+function preferredReservableIds({ days, selectedDay, minNights }) {
+  if (!selectedDay?.date || minNights <= 1 || !Array.isArray(days)) return new Set();
+  const byDate = new Map(days.map((day) => [day.date, availableReservableIds(day) || []]));
+  const dates = stayDates(selectedDay.date, minNights);
+  if (!dates.every((date) => byDate.has(date))) return new Set();
+  const ids = byDate.get(selectedDay.date) || [];
+  return new Set(
+    ids.filter((rid) => dates.every((date) => byDate.get(date)?.includes(rid))),
+  );
+}
+
+function stayDates(startDate, nights) {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  return Array.from({ length: nights }, (_, i) => {
+    const d = new Date(start);
+    d.setUTCDate(start.getUTCDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
 }
