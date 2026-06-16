@@ -149,6 +149,19 @@ jobs:
             local old_base="$1"
             local old_base_sha
 
+            # Raw commit SHA (full or short). Manual `/rebase <sha>` overrides
+            # land here; the checkout has fetch-depth: 0 so any reachable SHA
+            # on origin is already in the local object database.
+            if git cat-file -e "$old_base^{commit}" 2>/dev/null; then
+              git rev-parse "$old_base^{commit}"
+              return 0
+            fi
+            if git fetch origin "$old_base" 2>/dev/null \
+               && git cat-file -e "$old_base^{commit}" 2>/dev/null; then
+              git rev-parse "$old_base^{commit}"
+              return 0
+            fi
+
             if git fetch origin "+refs/heads/$old_base:refs/remotes/origin/$old_base"; then
               printf 'origin/%s\n' "$old_base"
               return 0
