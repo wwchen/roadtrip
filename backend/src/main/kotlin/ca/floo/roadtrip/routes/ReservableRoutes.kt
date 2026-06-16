@@ -394,7 +394,6 @@ private fun aspiraReservationUrl(
             "searchTime" to "${start}T00:00:00.000",
             "flexibleSearch" to """[false,false,"$start",1]""",
             "view" to "list",
-            "filterData" to """{"-32756":"[[1],0,0,0]"}""",
         )
     if (resourceLocationId != null) {
         params += "resourceLocationId" to resourceLocationId.toString()
