@@ -45,3 +45,8 @@ export function listSnapshotsForRun(runId, { limit, signal } = {}) {
   if (limit != null) qs.set('limit', limit);
   return jsonGetOk(`/api/availability/snapshots?${qs}`, { signal });
 }
+
+export function getSnapshotsSummary(reservableRid, { signal } = {}) {
+  const qs = new URLSearchParams({ reservable_rid: String(reservableRid) });
+  return jsonGetOk(`/api/availability/snapshots/summary?${qs}`, { signal });
+}
