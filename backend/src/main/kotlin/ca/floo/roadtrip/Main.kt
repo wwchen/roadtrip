@@ -28,6 +28,7 @@ import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
+import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.booking.BookingProviderRegistryFactory
 import ca.floo.roadtrip.service.etl.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.IngestController
@@ -181,6 +182,8 @@ fun Application.module() {
             aspiraCache = aspiraCache,
         )
 
+    val availabilityWatchService = AvailabilityWatchService(ctx, ReservableRepo(ctx))
+
     routing {
         // /api/docs — Swagger UI; /api/docs/openapi.json — the spec it loads.
         // Both must be mounted before the static file fallthrough at "/" so
@@ -194,7 +197,7 @@ fun Application.module() {
 
         poiRoutes(ctx, poiRegistry)
         reservableRoutes(ctx)
-        availabilityWatchRoutes(ctx)
+        availabilityWatchRoutes(ctx, availabilityWatchService)
         poisOnRouteRoutes(ctx, routeCache, poiRegistry)
         routeRoutes(routeCache, ctx)
         geocodeRoutes(mapboxGeocoder)

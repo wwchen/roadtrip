@@ -77,7 +77,17 @@ class AvailabilityWatchRoutesTest {
     @Test
     fun `POST creates a poi-scoped watch with filters`() =
         testApplication {
-            application { routing { availabilityWatchRoutes(ctx) } }
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
             val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
             val body =
                 """
@@ -105,7 +115,17 @@ class AvailabilityWatchRoutesTest {
     @Test
     fun `POST rejects missing scope`() =
         testApplication {
-            application { routing { availabilityWatchRoutes(ctx) } }
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
             val body =
                 """
                 {"target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
@@ -123,7 +143,17 @@ class AvailabilityWatchRoutesTest {
     @Test
     fun `GET list filters by status`() =
         testApplication {
-            application { routing { availabilityWatchRoutes(ctx) } }
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
             val poiId = seedPoi(sourceId = "p2", name = "Glacier")
             val body =
                 """
@@ -144,7 +174,17 @@ class AvailabilityWatchRoutesTest {
     @Test
     fun `PATCH pauses a watch`() =
         testApplication {
-            application { routing { availabilityWatchRoutes(ctx) } }
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
             val poiId = seedPoi(sourceId = "p3", name = "Yosemite")
             val body =
                 """
@@ -174,7 +214,17 @@ class AvailabilityWatchRoutesTest {
     @Test
     fun `DELETE removes a watch`() =
         testApplication {
-            application { routing { availabilityWatchRoutes(ctx) } }
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
             val poiId = seedPoi(sourceId = "p4", name = "Tunnel")
             val body =
                 """

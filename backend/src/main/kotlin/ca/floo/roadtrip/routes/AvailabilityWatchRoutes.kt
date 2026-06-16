@@ -39,7 +39,10 @@ private val watchJson =
         ignoreUnknownKeys = true
     }
 
-fun Route.availabilityWatchRoutes(ctx: DSLContext) {
+fun Route.availabilityWatchRoutes(
+    ctx: DSLContext,
+    watchService: ca.floo.roadtrip.service.availability.AvailabilityWatchService,
+) {
     val watches = AvailabilityWatchRepo(ctx)
     val reservables = ReservableRepo(ctx)
 
@@ -123,7 +126,7 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
         val err = validateCreateBody(req)
         if (err != null) return@post call.respondError(err.first, HttpStatusCode.BadRequest, err.second)
         val watch =
-            watches.create(
+            watchService.create(
                 AvailabilityWatchRepo.CreateInput(
                     poiId = resolved.poiId,
                     reservableId = resolved.reservableId,
@@ -170,7 +173,7 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
             }
         val updated =
             try {
-                watches.update(
+                watchService.update(
                     id,
                     AvailabilityWatchRepo.UpdateInput(
                         reservableFilters = req.reservableFilters,
@@ -204,7 +207,7 @@ fun Route.availabilityWatchRoutes(ctx: DSLContext) {
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@delete call.respondError("invalid_id", HttpStatusCode.BadRequest)
-        if (watches.delete(id)) {
+        if (watchService.delete(id)) {
             call.respond(HttpStatusCode.NoContent)
         } else {
             call.respondError("not_found", HttpStatusCode.NotFound)
