@@ -61,11 +61,11 @@ import io.ktor.server.response.respondFile
 import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
+import java.io.File
 
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
@@ -204,7 +204,9 @@ fun Application.module() {
         )
     val pollExecutor =
         AvailabilityPollExecutor(
-            reservables = ca.floo.roadtrip.repo.ReservableRepo(ctx),
+            reservables =
+                ca.floo.roadtrip.repo
+                    .ReservableRepo(ctx),
             campsiteProviders = CampsiteProviderRepo(ctx),
             bookingProviders = bookingProviderRegistry,
             fetches = availabilityFetches,

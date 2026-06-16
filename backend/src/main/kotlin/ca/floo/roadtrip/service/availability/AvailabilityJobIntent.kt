@@ -58,7 +58,6 @@ sealed class AvailabilityJobIntent {
                 ignoreUnknownKeys = true
             }
 
-        fun fromJsonObject(obj: JsonObject): AvailabilityJobIntent =
-            JSON.decodeFromJsonElement(serializer(), obj)
+        fun fromJsonObject(obj: JsonObject): AvailabilityJobIntent = JSON.decodeFromJsonElement(serializer(), obj)
     }
 }

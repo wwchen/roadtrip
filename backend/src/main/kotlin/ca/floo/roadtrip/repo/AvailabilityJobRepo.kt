@@ -78,8 +78,7 @@ class AvailabilityJobRepo(
             .fetchOne()
             ?.let(::fromRecord)
 
-    fun deleteForWatch(watchId: Long): Boolean =
-        ctx.deleteFrom(AVAILABILITY_JOB).where(AVAILABILITY_JOB.WATCH_ID.eq(watchId)).execute() > 0
+    fun deleteForWatch(watchId: Long): Boolean = ctx.deleteFrom(AVAILABILITY_JOB).where(AVAILABILITY_JOB.WATCH_ID.eq(watchId)).execute() > 0
 
     /**
      * Claim up to [limit] active jobs whose next_run_at has passed. Sets
@@ -110,8 +109,7 @@ class AvailabilityJobRepo(
                     .and(
                         AVAILABILITY_JOB.CLAIMED_UNTIL.isNull
                             .or(AVAILABILITY_JOB.CLAIMED_UNTIL.lt(now)),
-                    )
-                    .orderBy(AVAILABILITY_JOB.NEXT_RUN_AT.asc())
+                    ).orderBy(AVAILABILITY_JOB.NEXT_RUN_AT.asc())
                     .limit(limit)
                     .forUpdate()
                     .skipLocked()
@@ -168,8 +166,7 @@ class AvailabilityJobRepo(
             .and(AVAILABILITY_JOB.CLAIMED_UNTIL.lt(now))
             .execute()
 
-    private fun JsonObject.toJSONB(): JSONB =
-        JSONB.valueOf(json.encodeToString(JsonObject.serializer(), this))
+    private fun JsonObject.toJSONB(): JSONB = JSONB.valueOf(json.encodeToString(JsonObject.serializer(), this))
 
     private fun fromRecord(r: Record): Job =
         Job(

@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.scheduler
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.jupiter.api.Test
@@ -12,7 +11,6 @@ import java.time.OffsetDateTime
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicReference
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 private data class FakeJob(
@@ -46,11 +44,12 @@ private class FakeRepo : SchedulableRepo<FakeJob> {
         leaseDuration: Duration,
     ): List<FakeJob> {
         val claimable =
-            rows.filter {
-                val due = it["next_run_at"] as OffsetDateTime
-                val lease = it["claimed_until"] as OffsetDateTime?
-                due <= now && (lease == null || lease < now)
-            }.take(limit)
+            rows
+                .filter {
+                    val due = it["next_run_at"] as OffsetDateTime
+                    val lease = it["claimed_until"] as OffsetDateTime?
+                    due <= now && (lease == null || lease < now)
+                }.take(limit)
         val token = "tok-${now.toEpochSecond()}"
         for (row in claimable) {
             row["claim_token"] = token

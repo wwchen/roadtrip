@@ -80,7 +80,8 @@ class AvailabilityJobRepoTest {
                     'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
                 ) RETURNING id
                 """.trimIndent(),
-            )!!.get("id", Long::class.java)
+            )!!
+            .get("id", Long::class.java)
 
     private fun seedWatch(poiId: Long): Long =
         ctx
@@ -93,7 +94,8 @@ class AvailabilityJobRepoTest {
                 ) RETURNING id
                 """.trimIndent(),
                 poiId,
-            )!!.get("id", Long::class.java)
+            )!!
+            .get("id", Long::class.java)
 
     private val sampleIntent: JsonObject =
         buildJsonObject {
@@ -152,7 +154,8 @@ class AvailabilityJobRepoTest {
                     ) RETURNING id
                     """.trimIndent(),
                     poiId,
-                )!!.get("id", Long::class.java)
+                )!!
+                .get("id", Long::class.java)
         val repo = AvailabilityJobRepo(ctx)
         repo.upsertForWatch(activeWatch, sampleIntent, 60, "active", now().minusSeconds(5))
         repo.upsertForWatch(pausedWatchId, sampleIntent, 60, "paused", now().minusSeconds(5))
@@ -167,7 +170,8 @@ class AvailabilityJobRepoTest {
                     ) RETURNING id
                     """.trimIndent(),
                     poiId,
-                )!!.get("id", Long::class.java)
+                )!!
+                .get("id", Long::class.java)
         repo.upsertForWatch(futureWatchId, sampleIntent, 60, "active", now().plusMinutes(1))
         val claimed = repo.claimDue(now(), limit = 10, leaseDuration = Duration.ofSeconds(30))
         assertEquals(1, claimed.size)

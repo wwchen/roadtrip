@@ -79,7 +79,11 @@ class AvailabilityPollExecutor(
             intent.targetDates
                 .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
                 .maxOrNull()
-                ?.let { java.time.temporal.ChronoUnit.DAYS.between(start, it).toInt() + 1 }
+                ?.let {
+                    java.time.temporal.ChronoUnit.DAYS
+                        .between(start, it)
+                        .toInt() + 1
+                }
                 ?: 1
 
         fetches.fetch(

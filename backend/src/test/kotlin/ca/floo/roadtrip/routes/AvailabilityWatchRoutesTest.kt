@@ -86,7 +86,8 @@ class AvailabilityWatchRoutesTest {
                         ctx,
                         ca.floo.roadtrip.service.availability.AvailabilityWatchService(
                             ctx,
-                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
                         ),
                     )
                 }
@@ -124,7 +125,8 @@ class AvailabilityWatchRoutesTest {
                         ctx,
                         ca.floo.roadtrip.service.availability.AvailabilityWatchService(
                             ctx,
-                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
                         ),
                     )
                 }
@@ -152,7 +154,8 @@ class AvailabilityWatchRoutesTest {
                         ctx,
                         ca.floo.roadtrip.service.availability.AvailabilityWatchService(
                             ctx,
-                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
                         ),
                     )
                 }
@@ -183,7 +186,8 @@ class AvailabilityWatchRoutesTest {
                         ctx,
                         ca.floo.roadtrip.service.availability.AvailabilityWatchService(
                             ctx,
-                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
                         ),
                     )
                 }
@@ -223,7 +227,8 @@ class AvailabilityWatchRoutesTest {
                         ctx,
                         ca.floo.roadtrip.service.availability.AvailabilityWatchService(
                             ctx,
-                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
                         ),
                     )
                 }
@@ -259,7 +264,8 @@ class AvailabilityWatchRoutesTest {
                         ctx,
                         ca.floo.roadtrip.service.availability.AvailabilityWatchService(
                             ctx,
-                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
                         ),
                     )
                 }
@@ -274,9 +280,16 @@ class AvailabilityWatchRoutesTest {
                     contentType(ContentType.Application.Json)
                     setBody(createBody)
                 }
-            val watchId = Json.parseToJsonElement(created.bodyAsText()).jsonObject["watch"]!!.jsonObject["id"]!!.jsonPrimitive.long
+            val watchId =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
 
-            val jobs = ca.floo.roadtrip.repo.AvailabilityJobRepo(ctx)
+            val jobs =
+                ca.floo.roadtrip.repo
+                    .AvailabilityJobRepo(ctx)
             val job = jobs.findByWatchId(watchId)
             assertNotNull(job)
             assertEquals(60, job.cadenceSec)
