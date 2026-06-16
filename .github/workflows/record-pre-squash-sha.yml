@@ -1,0 +1,30 @@
+name: Record pre-squash SHA
+
+# When a PR merges (squash, rebase, or merge-commit), record the original
+# branch tip on the PR itself. auto-rebase.yml reads these markers to find
+# the parent-stack tip of a still-open child PR — squash-merge collapses the
+# parent's commits into a new SHA, so the child's inherited commits look
+# like brand-new content from git's perspective and patch-id dedup fails.
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  pull-requests: write
+
+jobs:
+  record:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Comment with pre-squash SHA
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
+          PR: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          gh pr comment "$PR" --repo "$REPO" \
+            --body "🤖 auto-rebase-meta: pre-squash-sha=$HEAD_SHA"

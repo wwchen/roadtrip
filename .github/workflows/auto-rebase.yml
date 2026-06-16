@@ -190,6 +190,39 @@ jobs:
             return 1
           }
 
+          # Find the parent-stack tip from `auto-rebase-meta: pre-squash-sha=`
+          # comments posted by record-pre-squash-sha.yml at merge time. Walk
+          # the last 30 merged PRs (newest first), and return the first
+          # recorded SHA that is an ancestor of the branch but not of master.
+          # That's the lowest still-present-in-branch commit from a parent PR.
+          lookup_recorded_pre_squash_sha() {
+            local branch="$1"
+            local recorded
+            recorded=$(
+              gh pr list --repo "$REPO" --state merged --base master --limit 30 \
+                --json number,mergedAt,comments \
+                --jq '
+                  sort_by(.mergedAt) | reverse
+                  | .[]
+                  | .comments[]?
+                  | .body
+                  | capture("auto-rebase-meta: pre-squash-sha=(?<sha>[0-9a-f]{40})")?
+                  | .sha
+                ' || true
+            )
+            for sha in $recorded; do
+              if ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
+                git fetch origin "$sha" 2>/dev/null || continue
+              fi
+              if git merge-base --is-ancestor "$sha" "$branch" 2>/dev/null \
+                && ! git merge-base --is-ancestor "$sha" origin/master 2>/dev/null; then
+                printf '%s\n' "$sha"
+                return 0
+              fi
+            done
+            return 1
+          }
+
           # `old_base` comes from one of:
           #   - pull_request_target retarget: the previous base branch name
           #   - issue_comment `/rebase <ref>`: an explicit commit or branch
@@ -228,13 +261,25 @@ jobs:
                 echo "::endgroup::"
                 continue
               fi
-              # `git rebase master` drops patches already in master by patch-id.
-              # Works for unstacked PRs and shallow stacks; can conflict on
-              # stacks where a parent rebased before squash-merging — in that
-              # case the user follows up with `/rebase <commit>` to give an
-              # explicit base.
-              rebase_args=("$master_sha")
-              strategy="patch-id rebase onto master"
+              # Look for a recorded pre-squash tip on a recently merged PR
+              # whose SHA appears in this branch's ancestry but isn't on
+              # master. record-pre-squash-sha.yml posts these markers when
+              # any PR merges; squash-merge would otherwise collapse parent
+              # commits into a new SHA, hiding the boundary from patch-id.
+              if inferred_base=$(lookup_recorded_pre_squash_sha "$branch"); then
+                echo "Rebasing $branch onto origin/master from recorded parent tip $inferred_base."
+                rebase_args=(--onto origin/master "$inferred_base" "$branch")
+                inferred_short=$(git rev-parse --short "$inferred_base")
+                strategy="--onto master from recorded parent tip \`$inferred_short\`"
+              else
+                # `git rebase master` drops patches already in master by patch-id.
+                # Works for unstacked PRs and shallow stacks; conflicts on
+                # stacks where a parent rebased before squash-merging without
+                # a recorded marker — in that case the user follows up with
+                # `/rebase <commit>` to give an explicit base.
+                rebase_args=("$master_sha")
+                strategy="patch-id rebase onto master"
+              fi
             fi
 
             run_url="https://github.com/$REPO/actions/runs/$GITHUB_RUN_ID"
