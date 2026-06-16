@@ -60,9 +60,10 @@ Three layers of identity:
   Bookable leaves carry a `transactionLocationId`; intermediate nodes
   don't. `AspiraLeavesWalk` flattens this tree.
 - `resourceId` — the **individual reservable site** (e.g. "C13 Phantom
-  RV Pad"). Stored as our `reservables.vendor_id`. This is the join
-  key between `/api/availability/map`'s `resourceAvailabilities`
-  block and `/api/resourcelocation/resources`'s catalog.
+  RV Pad"). Stored as our `reservables.vendor_id`. This is the key
+  in `/api/resourcelocation/resources` (the catalog source of truth)
+  and the key our `AspiraAvailabilityClient` looks up at request time
+  in `/api/availability/map`'s `resourceAvailabilities` block.
 
 ## Endpoint catalog
 
@@ -143,9 +144,12 @@ Status codes (see `AspiraStatus.kt`):
 | 6 | mostly booked |
 | 7 | mixed / some availability |
 
-Used for: drawer week grid, bulk score endpoint, alert poller. The
-per-resource block is what we walk in `AspiraResourcesEtl` to
-populate the reservable catalog.
+Used for: drawer week grid, bulk score endpoint, alert poller. Called
+at request time by `AspiraAvailabilityClient`; not captured by an
+ETL fetcher. The reservable catalog comes from
+`/api/resourcelocation/resources` instead — `resourceAvailabilities`
+returns empty for parent leaves whose children carry the actual
+sites, so it's an unreliable enumeration source.
 
 ### `GET /api/resourcelocation/resources`
 
