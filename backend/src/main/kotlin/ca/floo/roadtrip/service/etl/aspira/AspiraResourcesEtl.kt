@@ -11,9 +11,14 @@ import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
+import org.slf4j.LoggerFactory
 
 /**
  * Terminal ETL for the `reservable_data` section. Reads per-leaf
@@ -21,21 +26,29 @@ import kotlinx.serialization.json.put
  * `scripts/fetch_aspira_resources.py` and emits one reservable per
  * Aspira resource (per-individual-site).
  *
- * Two inputs per row:
- *   1. `aspira-resources-{tenant}` — the per-leaf availability captures.
+ * Three inputs per row:
+ *   1. `aspira-resources-{tenant}` — per-leaf availability captures.
  *      Each envelope's payload has a `resourceAvailabilities` JSON object
- *      keyed by resourceId; that's the catalog signal.
- *   2. `aspira-maps-{tenant}` — the same /api/maps capture
- *      [AspiraLeavesEtl] reads. We walk it via [AspiraLeavesWalk] to
- *      label each resource with its parent leaf's name + IDs. Cross-row
- *      etl refs aren't supported (RFC 0008 / [PoiRegistry] validator), so
- *      this ETL re-walks the maps tree itself rather than depending on
- *      `aspira-leaves-{tenant}` from the poi_data section.
+ *      keyed by resourceId; that's the resource ID set we monitor.
+ *   2. `aspira-maps-{tenant}` — same /api/maps capture
+ *      [AspiraLeavesEtl] reads. Walked here for leaf metadata
+ *      (transactionLocationId, name, parent name) used to label each
+ *      resource by its parent loop. Cross-row etl refs aren't supported
+ *      (RFC 0008 / [PoiRegistry] validator), so this ETL re-walks the
+ *      maps tree itself rather than depending on `aspira-leaves-{tenant}`.
+ *   3. `aspira-inventory-{tenant}` — per-park named-site catalog
+ *      (`/api/resourcelocation/resources`). Supplies
+ *      `localizedValues[].name` ("OFC13"), `description`
+ *      ("C13 Phantom RV Pad"), `allowedEquipment`, capacity, and
+ *      `definedAttributes` for every reservable site at that park.
+ *      The ETL still emits a row per resource even when this capture
+ *      is missing a particular `resourceId`; in that case the row's
+ *      `name`/`description` columns stay null. Use that to scope what
+ *      enrichment is "best-effort" vs strict — see [ResourceInventory].
  *
  * **No POI knowledge.** Linking these reservables to their parent
- * Aspira POI is the joiner's job (PR 4). Resources land in the catalog
- * with synthetic `_parent_*` fields the joiner reads to find the right
- * POI.
+ * Aspira POI is the joiner's job. Resources land in the catalog with
+ * synthetic `_parent_*` fields the joiner reads to find the right POI.
  *
  * Vendor strings: `aspira_wa` / `aspira_bc` / `aspira_pc` — ReservableId
  * disallows colons in the vendor field, so the per-tenant suffix uses
@@ -52,6 +65,14 @@ class AspiraResourcesEtl(
      */
     val mapsInputSlug: String,
     /**
+     * YAML data_source slug for the per-park inventory capture
+     * (`aspira-inventory-{tenant}`). The catalog source for
+     * `reservables.name` and richer attributes. Optional at runtime:
+     * if no envelopes exist yet, the ETL skips enrichment but still
+     * emits resource rows. See class kdoc.
+     */
+    val inventoryInputSlug: String,
+    /**
      * `aspira_wa` / `aspira_bc` / `aspira_pc`. Stamped into every
      * emitted [ReservableId.vendor]. ReservableId disallows ':' in
      * vendor, so we use underscore-separated tenant codes.
@@ -60,24 +81,35 @@ class AspiraResourcesEtl(
 ) : SourceEtl<AspiraResourcesEtl.Parsed, ReservableEtlOutput> {
     override val multiPart: Boolean = true
 
+    private val log = LoggerFactory.getLogger(javaClass)
+
     override fun parse(inputs: InputBundle): Parsed {
-        // The `aspira-resources-*` capture is multi-part (one envelope per
-        // leaf), so it's the *first* data_source slug in the YAML inputs:
-        // list. Anything beyond it is required to be a single-envelope
-        // companion data_source — today that's `aspira-maps-{tenant}`.
+        // Inputs are addressed by name so the YAML's order doesn't matter:
+        //  - mapsInputSlug      → single-envelope /api/maps capture
+        //  - inventoryInputSlug → multi-part /api/resourcelocation/resources
+        //  - everything else    → the per-leaf availability capture
         val slugs = inputs.dataSourceSlugs()
-        require(slugs.size == 2) {
-            "$etlSlug: expected 2 data_source inputs (resources + maps), got ${slugs.size}: $slugs"
+        require(slugs.contains(mapsInputSlug)) {
+            "$etlSlug: missing required input '$mapsInputSlug' in $slugs"
         }
-        val resourceEnvelopes = inputs.envelopes(slugs[0])
+        require(slugs.contains(inventoryInputSlug)) {
+            "$etlSlug: missing required input '$inventoryInputSlug' in $slugs"
+        }
+        val resourcesSlug =
+            slugs.firstOrNull { it != mapsInputSlug && it != inventoryInputSlug }
+                ?: error(
+                    "$etlSlug: expected three inputs (resources + maps + inventory); got $slugs",
+                )
+        val resourceEnvelopes = inputs.envelopes(resourcesSlug)
         require(resourceEnvelopes.isNotEmpty()) {
-            "$etlSlug: no envelopes in '${slugs[0]}' (run fetch_aspira_resources.py first)"
+            "$etlSlug: no envelopes in '$resourcesSlug' (run fetch_aspira_resources.py first)"
         }
-        val mapsEnvelope = inputs.envelope(mapsInputSlug)
-        val mapsArray = mapsEnvelope.payload.jsonArray
+        val mapsArray = inputs.envelope(mapsInputSlug).payload.jsonArray
+        val inventoryEnvelopes = inputs.envelopes(inventoryInputSlug)
         return Parsed(
             resources = resourceEnvelopes,
             maps = mapsArray,
+            inventory = inventoryEnvelopes,
         )
     }
 
@@ -105,38 +137,64 @@ class AspiraResourcesEtl(
                 .walk(dto.maps)
                 .associateBy { it.mapId }
 
+        // Index the inventory captures by resourceId. One envelope per park
+        // contains every reservable site at that park; we flatten across
+        // parks so per-resource lookup is O(1). Multiple parks can never
+        // share a resourceId — Aspira's IDs are tenant-global and unique.
+        val inventoryByResourceId = indexInventoryByResourceId(dto.inventory)
+        log.info(
+            "$etlSlug: inventory index built — {} resources from {} envelopes",
+            inventoryByResourceId.size,
+            dto.inventory.size,
+        )
+
         val out = mutableListOf<ReservableRepo.Input>()
+        var enriched = 0
         for (envelope in dto.resources) {
             val mapId = parseMapIdFromUrl(envelope.request.url) ?: continue
             val payload = envelope.payload as? JsonObject ?: continue
             val resourceAvailabilities = payload[RESOURCE_AVAILABILITIES] as? JsonObject ?: continue
-            val leaf = leavesByMapId[mapId] // may be null if the maps/resources captures are out of sync
+            val leaf = leavesByMapId[mapId] // may be null if maps/resources captures are out of sync
 
             for ((resourceId, _) in resourceAvailabilities) {
-                // resourceId is what Aspira keys the per-resource status
-                // array by. It's the stable identity we monitor and
-                // alert on; that becomes our vendor_id.
                 if (resourceId.isEmpty()) continue
                 val rid = ReservableId(ReservableType.SITE, vendor, resourceId)
+                val inv = inventoryByResourceId[resourceId]
+                if (inv != null) enriched++
                 out +=
                     ReservableRepo.Input(
                         rid = rid,
-                        // /api/availability/map doesn't carry per-resource
-                        // names. Loop is the parent leaf's name (PC's "AREA
-                        // WHITE RIVER" analogue); name stays null until a
-                        // future ETL pulls richer catalog data.
-                        name = null,
+                        // Short label from /api/resourcelocation/resources
+                        // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
+                        // Falls back to null when the inventory capture is
+                        // absent or out of sync with resources.
+                        name = inv?.name,
+                        // Loop is the parent leaf's name from /api/maps
+                        // (PC's "AREA WHITE RIVER" analogue). The inventory
+                        // catalog doesn't carry loop info; the maps tree
+                        // does. Keep using leaf.name even when we have
+                        // inventory.
                         loop = leaf?.name,
+                        // Site-type label requires resolving
+                        // `resourceCategoryId` against /api/resourcecategory.
+                        // Defer that fetch — for now pass through the raw
+                        // id in the JSON blob and leave the column null.
                         siteType = null,
                         raw =
                             buildResourceRaw(
                                 resourceId = resourceId,
                                 mapId = mapId,
                                 leaf = leaf,
+                                inventory = inv,
                             ),
                     )
             }
         }
+        log.info(
+            "$etlSlug: emitted {} reservables ({} enriched with inventory)",
+            out.size,
+            enriched,
+        )
         return ReservableEtlOutput(reservables = out)
     }
 
@@ -155,15 +213,65 @@ class AspiraResourcesEtl(
     }
 
     /**
+     * Flatten every park's `/api/resourcelocation/resources` body into a
+     * single `resourceId → [ResourceInventory]` index. Skips envelopes
+     * whose payload isn't an object (defensive: WAF-blocked captures
+     * would have been rejected at fetch time, but this keeps the ETL
+     * resilient to a stray malformed envelope).
+     */
+    private fun indexInventoryByResourceId(envelopes: List<Envelope>): Map<String, ResourceInventory> {
+        if (envelopes.isEmpty()) return emptyMap()
+        val out = mutableMapOf<String, ResourceInventory>()
+        for (env in envelopes) {
+            val payload = env.payload as? JsonObject ?: continue
+            for ((resourceId, raw) in payload) {
+                val obj = raw as? JsonObject ?: continue
+                val inv = parseResourceInventory(resourceId, obj) ?: continue
+                out[resourceId] = inv
+            }
+        }
+        return out
+    }
+
+    private fun parseResourceInventory(
+        resourceId: String,
+        obj: JsonObject,
+    ): ResourceInventory? {
+        val localized = obj["localizedValues"] as? JsonArray
+        val firstLocale = localized?.firstOrNull() as? JsonObject
+        val name = firstLocale?.get("name")?.jsonPrimitive?.contentOrNull
+        val description = firstLocale?.get("description")?.jsonPrimitive?.contentOrNull
+        val resourceCategoryId = obj["resourceCategoryId"]?.jsonPrimitive?.intOrNull
+        val maxCapacity = obj["maxCapacity"]?.jsonPrimitive?.intOrNull
+        val minCapacity = obj["minCapacity"]?.jsonPrimitive?.intOrNull
+        val maxBoatLength = obj["maxBoatLength"]?.jsonPrimitive?.intOrNull
+        val allowedEquipment = obj["allowedEquipment"] as? JsonArray
+        val definedAttributes = obj["definedAttributes"] as? JsonArray
+        return ResourceInventory(
+            resourceId = resourceId,
+            name = name,
+            description = description,
+            resourceCategoryId = resourceCategoryId,
+            maxCapacity = maxCapacity,
+            minCapacity = minCapacity,
+            maxBoatLength = maxBoatLength,
+            allowedEquipment = allowedEquipment,
+            definedAttributes = definedAttributes,
+        )
+    }
+
+    /**
      * Build the `raw` JSON we persist on the reservable. The per-resource
      * upstream availability array is intentionally *not* stored — that's
-     * availability data and lives elsewhere. We keep just the catalog
-     * signal: who this resource is and how to find its parent POI.
+     * availability data and lives elsewhere. We keep the catalog signal:
+     * who this resource is, how to find its parent POI, and (when
+     * available) the inventory attributes the booking SPA shows.
      */
     private fun buildResourceRaw(
         resourceId: String,
         mapId: Long,
         leaf: AspiraLeaf?,
+        inventory: ResourceInventory?,
     ): JsonObject =
         buildJsonObject {
             put("resource_id", resourceId)
@@ -178,12 +286,69 @@ class AspiraResourcesEtl(
                     put("_parent_leaf_parent_name", leaf.parentName)
                 }
             }
+            if (inventory != null) {
+                if (inventory.description != null) {
+                    put("description", inventory.description)
+                }
+                if (inventory.resourceCategoryId != null) {
+                    put("resource_category_id", inventory.resourceCategoryId)
+                }
+                if (inventory.maxCapacity != null) {
+                    put("max_capacity", inventory.maxCapacity)
+                }
+                if (inventory.minCapacity != null) {
+                    put("min_capacity", inventory.minCapacity)
+                }
+                if (inventory.maxBoatLength != null) {
+                    put("max_boat_length", inventory.maxBoatLength)
+                }
+                if (inventory.allowedEquipment != null) {
+                    put("allowed_equipment", inventory.allowedEquipment)
+                }
+                if (inventory.definedAttributes != null) {
+                    // Strip Aspira's outer wrapping (`attributeVisibility`,
+                    // duplicate `attributeId`/`attributeDefinitionId`) and
+                    // keep just (id, value, values) so downstream consumers
+                    // don't have to know Aspira-shaped JSON.
+                    put("defined_attributes", flattenAttributes(inventory.definedAttributes))
+                }
+            }
+        }
+
+    private fun flattenAttributes(attrs: JsonArray): JsonArray =
+        buildJsonArray {
+            for (raw in attrs) {
+                val a = raw as? JsonObject ?: continue
+                add(
+                    buildJsonObject {
+                        a["attributeDefinitionId"]?.jsonPrimitive?.intOrNull?.let {
+                            put("definition_id", it)
+                        }
+                        a["value"]?.let { put("value", it) }
+                        a["values"]?.let { put("values", it) }
+                    },
+                )
+            }
         }
 
     /** Parsed shape passed through validate→transform. */
     data class Parsed(
         val resources: List<Envelope>,
         val maps: JsonArray,
+        val inventory: List<Envelope>,
+    )
+
+    /** A single reservable's catalog row, normalized out of Aspira's wrapping. */
+    private data class ResourceInventory(
+        val resourceId: String,
+        val name: String?,
+        val description: String?,
+        val resourceCategoryId: Int?,
+        val maxCapacity: Int?,
+        val minCapacity: Int?,
+        val maxBoatLength: Int?,
+        val allowedEquipment: JsonArray?,
+        val definedAttributes: JsonArray?,
     )
 
     private companion object {

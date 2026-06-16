@@ -23,24 +23,24 @@ import org.testcontainers.utility.DockerImageName
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 /**
- * End-to-end AspiraResourcesEtl test. Captures both inputs the ETL needs:
+ * End-to-end AspiraResourcesEtl test. Captures the three inputs the ETL needs:
  *   - aspira-resources-pc/<ts>/leaf-<mapId>.json (multi-part availability)
- *   - aspira-maps-pc/<ts>.json (single-envelope /api/maps tree)
+ *   - aspira-maps-pc/<ts>.json                   (single-envelope /api/maps tree)
+ *   - aspira-inventory-pc/<ts>/park-<rid>.json   (multi-part named-site catalog)
  * …points the orchestrator at the production YAML, runs the import via
  * the reservable_data section, asserts the catalog landed with parent
- * leaf metadata stamped on each row.
+ * leaf metadata stamped on each row and inventory enrichment applied.
  *
  * Fixture has two leaves and 4 total resources:
- *   - mapId -2147483640 ("Tunnel Mountain Village I"): 3 resources
- *   - mapId -2147483641 ("Two Jack Lakeside"): 1 resource
+ *   - mapId -2147483640 ("Tunnel Mountain Village I"): resources 501, 502, 503
+ *   - mapId -2147483641 ("Two Jack Lakeside"): resource 601
+ * Inventory has names/descriptions for all four.
  *
- * POI linking is NOT exercised here — that's the joiner's job (PR 4).
- * This test confirms the ETL emits reservables independently of any POI
- * state.
+ * POI linking is NOT exercised here — that's the joiner's job. This test
+ * confirms the ETL emits reservables independently of any POI state.
  */
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AspiraResourcesEtlTest {
@@ -86,6 +86,14 @@ class AspiraResourcesEtlTest {
         mapsDir.mkdirs()
         copyFixtureTo("aspira-resources/maps.json", File(mapsDir, "2026-09-12T17-00-00Z.json"))
 
+        // aspira-inventory-pc: multi-part. One envelope per park
+        // (resourceLocationId), matching the fetch_aspira_inventory.py
+        // shape. Both parks the maps fixture exposes are present.
+        val invCapture = File(File(rawDir, "aspira-inventory-pc"), "2026-09-12T17-00-00Z")
+        invCapture.mkdirs()
+        copyFixtureTo("aspira-resources/park-9001.json", File(invCapture, "park-9001.json"))
+        copyFixtureTo("aspira-resources/park-9002.json", File(invCapture, "park-9002.json"))
+
         val yamlPath =
             File(System.getProperty("user.dir"))
                 .resolve("../config/poi-registry.yaml")
@@ -128,20 +136,41 @@ class AspiraResourcesEtlTest {
     }
 
     @Test
-    fun `resources land with their leaf as loop, name stays null`() {
-        // The /api/availability/map response carries no per-resource
-        // names. Loop is the parent leaf's title; name remains null
-        // until a future ETL pulls richer catalog data.
+    fun `resources land with leaf as loop and inventory-derived name`() {
+        // /api/availability/map carries no per-resource names; loop comes
+        // from the leaf title in /api/maps. Name now comes from the
+        // /api/resourcelocation/resources catalog (localizedValues[0].name).
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runReservableData("Parks Canada Aspira Resources")
 
         val tunnel = reservables.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
-        assertNull(tunnel.name)
+        assertEquals("TMV1-A1", tunnel.name)
         assertEquals("Tunnel Mountain Village I", tunnel.loop)
 
         val twoJack = reservables.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "601"))!!
-        assertNull(twoJack.name)
+        assertEquals("TJL-1", twoJack.name)
         assertEquals("Two Jack Lakeside", twoJack.loop)
+    }
+
+    @Test
+    fun `inventory description and equipment land in the raw blob`() {
+        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
+        orch.runReservableData("Parks Canada Aspira Resources")
+
+        val raw =
+            reservables
+                .findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
+                .raw as JsonObject
+        assertEquals(
+            "Tunnel Mountain V1 — Site A1",
+            (raw["description"] as JsonPrimitive).content,
+        )
+        assertEquals("6", (raw["max_capacity"] as JsonPrimitive).content)
+        assertEquals("1", (raw["min_capacity"] as JsonPrimitive).content)
+        // allowed_equipment is the raw Aspira array; defined_attributes
+        // is the flattened (id, value, values) shape.
+        assertTrue(raw.containsKey("allowed_equipment"))
+        assertTrue(raw.containsKey("defined_attributes"))
     }
 
     @Test

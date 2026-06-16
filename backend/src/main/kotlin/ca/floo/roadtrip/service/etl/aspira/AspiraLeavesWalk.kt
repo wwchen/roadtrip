@@ -4,7 +4,6 @@ import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
-import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 
@@ -48,20 +47,21 @@ object AspiraLeavesWalk {
      */
     fun walk(maps: JsonArray): List<AspiraLeaf> {
         val byId =
-            maps.associate { node ->
-                val obj = node.jsonObject
-                val id =
-                    obj["mapId"]?.jsonPrimitive?.long
-                        ?: error("aspira maps walk: node without mapId: $obj")
-                id to obj
-            }
+            maps
+                .mapNotNull { node ->
+                    val obj = node as? JsonObject ?: return@mapNotNull null
+                    val id =
+                        obj["mapId"]?.jsonPrimitive?.long
+                            ?: error("aspira maps walk: node without mapId: $obj")
+                    id to obj
+                }.toMap()
 
         val seen = mutableSetOf<Long>()
         val leaves = mutableListOf<AspiraLeaf>()
 
         // First pass: direct nodes.
         for (node in maps) {
-            val obj = node.jsonObject
+            val obj = node as? JsonObject ?: continue
             val txnLoc = obj["transactionLocationId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: continue
             val mapId = obj["mapId"]!!.jsonPrimitive.long
             if (mapId in seen) continue
@@ -80,15 +80,20 @@ object AspiraLeavesWalk {
         }
 
         // Second pass: leaves only declared via parent.mapLinks entries.
+        // PC's payload uses explicit nulls for absent fields; lift each
+        // step through `as? Json{Object,Array}` so a null mapLinks /
+        // localizations doesn't crash the walk.
         for (node in maps) {
-            for (link in node.jsonObject["mapLinks"]?.jsonArray.orEmpty()) {
-                val l = link.jsonObject
+            val nodeObj = node as? JsonObject ?: continue
+            val mapLinks = nodeObj["mapLinks"] as? JsonArray ?: continue
+            for (link in mapLinks) {
+                val l = link as? JsonObject ?: continue
                 val txnLoc = l["transactionLocationId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: continue
                 val childMapId = l["childMapId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: continue
                 if (childMapId in seen) continue
-                val title = localizedTitle(l["localizations"]?.jsonArray) ?: continue
+                val title = localizedTitle(l["localizations"] as? JsonArray) ?: continue
                 val resLoc = l["resourceLocationId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull()
-                val parentName = localizedTitle(node.jsonObject["localizedValues"]?.jsonArray)
+                val parentName = localizedTitle(nodeObj["localizedValues"] as? JsonArray)
                 leaves +=
                     AspiraLeaf(
                         name = title,
@@ -110,18 +115,22 @@ object AspiraLeavesWalk {
     ): String? {
         val direct = localizedTitle(node["localizedValues"]?.jsonArray)
         if (direct != null) return direct
+        // PC's /api/maps emits explicit "parentMap": null for top-level
+        // nodes (vs WA/BC, which omit the key). `?.jsonObject` throws on
+        // JsonNull; route through `as? JsonObject` so absence and null
+        // both fall through to "no parent".
         val parentId =
-            node["parentMap"]
-                ?.jsonObject
+            (node["parentMap"] as? JsonObject)
                 ?.get("mapId")
                 ?.jsonPrimitive
                 ?.long ?: return null
         val parent = byId[parentId] ?: return null
         val ourId = node["mapId"]!!.jsonPrimitive.long
-        for (link in parent["mapLinks"]?.jsonArray.orEmpty()) {
-            val l = link.jsonObject
+        val mapLinks = parent["mapLinks"] as? JsonArray ?: return null
+        for (link in mapLinks) {
+            val l = link as? JsonObject ?: continue
             if (l["childMapId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() == ourId) {
-                return localizedTitle(l["localizations"]?.jsonArray)
+                return localizedTitle(l["localizations"] as? JsonArray)
             }
         }
         return null
@@ -131,14 +140,14 @@ object AspiraLeavesWalk {
         node: JsonObject,
         byId: Map<Long, JsonObject>,
     ): String? {
+        // Same parentMap-may-be-null pattern as titleFor.
         val parentId =
-            node["parentMap"]
-                ?.jsonObject
+            (node["parentMap"] as? JsonObject)
                 ?.get("mapId")
                 ?.jsonPrimitive
                 ?.long ?: return null
         val parent = byId[parentId] ?: return null
-        return localizedTitle(parent["localizedValues"]?.jsonArray)
+        return localizedTitle(parent["localizedValues"] as? JsonArray)
     }
 
     /**
@@ -149,7 +158,7 @@ object AspiraLeavesWalk {
     private fun localizedTitle(arr: JsonArray?): String? {
         if (arr == null) return null
         for (entry in arr) {
-            val o = entry.jsonObject
+            val o = entry as? JsonObject ?: continue
             val culture = o["cultureName"]?.jsonPrimitive?.contentOrNull ?: continue
             if (!culture.startsWith("en", ignoreCase = true)) continue
             val title = o["title"]?.jsonPrimitive?.contentOrNull?.takeIf { it.isNotBlank() }

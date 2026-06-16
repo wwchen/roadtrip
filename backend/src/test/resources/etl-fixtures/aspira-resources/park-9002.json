@@ -1,0 +1,28 @@
+{
+  "fetcher": "fetch_aspira_inventory",
+  "fetcher_version": "1",
+  "fetched_at": "2026-09-12T17:00:00Z",
+  "request": {
+    "url": "https://reservation.pc.gc.ca/api/resourcelocation/resources?resourceLocationId=9002",
+    "method": "GET"
+  },
+  "response": { "status": 200 },
+  "part": "park-9002",
+  "payload": {
+    "601": {
+      "resourceId": 601,
+      "resourceLocationId": 9002,
+      "resourceCategoryId": -2147483646,
+      "localizedValues": [
+        { "cultureName": "en-US", "name": "TJL-1", "description": "Two Jack Lakeside — Site 1" }
+      ],
+      "allowedEquipment": [
+        { "equipmentCategoryId": -32768, "subEquipmentCategoryId": -32768 }
+      ],
+      "minCapacity": 1,
+      "maxCapacity": 4,
+      "definedAttributes": [],
+      "mapIds": [-2147483641]
+    }
+  }
+}

@@ -526,8 +526,7 @@ class ReservableRoutesTest {
 
     private fun fakeBookingProviders(): BookingProviderRegistry =
         BookingProviderRegistry(
-            adapters = mapOf(BookingProviderId.RECGOV to FakeBookingProvider),
-            sourceToProviderId = mapOf("test" to BookingProviderId.RECGOV),
+            adaptersBySource = mapOf("test" to FakeBookingProvider),
         )
 
     private object FakeBookingProvider : BookingProvider {
