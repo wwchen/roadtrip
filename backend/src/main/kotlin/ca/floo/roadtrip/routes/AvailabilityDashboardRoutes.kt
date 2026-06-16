@@ -7,7 +7,9 @@ import ca.floo.roadtrip.models.api.AvailabilityJobSchema
 import ca.floo.roadtrip.models.api.AvailabilityJobsListResponse
 import ca.floo.roadtrip.models.api.AvailabilityJobsSummary
 import ca.floo.roadtrip.models.api.AvailabilitySnapshotSchema
+import ca.floo.roadtrip.models.api.AvailabilitySnapshotStatsSchema
 import ca.floo.roadtrip.models.api.AvailabilitySnapshotsListResponse
+import ca.floo.roadtrip.models.api.AvailabilitySnapshotsSummaryResponse
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
@@ -41,7 +43,9 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
     val jobs = AvailabilityJobRepo(ctx)
     val runs = AvailabilityJobRunRepo(ctx)
     val snapshots = AvailabilitySnapshotRepo(ctx)
-    val reservables = ca.floo.roadtrip.repo.ReservableRepo(ctx)
+    val reservables =
+        ca.floo.roadtrip.repo
+            .ReservableRepo(ctx)
 
     get("/api/availability/jobs", {
         tags = listOf("availability")
@@ -156,7 +160,10 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         tags = listOf("availability")
         summary = "Snapshot rows filtered by reservable rid or run id"
         request {
-            queryParameter<String>("reservable_rid") { description = "Snapshots for this reservable (e.g. site:recgov:330257), newest first." }
+            queryParameter<String>("reservable_rid") {
+                description =
+                    "Snapshots for this reservable (e.g. site:recgov:330257), newest first."
+            }
             queryParameter<Long>("run_id") { description = "Snapshots produced by this run." }
             queryParameter<Int>("limit") { description = "Page size, default 200, max 1000." }
         }
@@ -183,7 +190,8 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         val rows =
             if (rid != null) {
                 val parsed =
-                    ca.floo.roadtrip.models.ReservableId.parse(rid)
+                    ca.floo.roadtrip.models.ReservableId
+                        .parse(rid)
                         ?: return@get call.respondError(
                             "invalid_reservable_rid",
                             HttpStatusCode.BadRequest,
@@ -201,6 +209,87 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                 snapshots.listForRun(runId!!, limit = limit)
             }
         call.respondJson(AvailabilitySnapshotsListResponse(snapshots = rows.map { it.toSchema() }))
+    }
+
+    get("/api/availability/snapshots/summary", {
+        tags = listOf("availability")
+        summary = "Per-target-date stats for one reservable's snapshot history"
+        request {
+            queryParameter<String>("reservable_rid") { description = "Reservable composite id (e.g. site:recgov:330257)." }
+            queryParameter<String>("target_dates") {
+                description = "Comma-separated YYYY-MM-DD list. If omitted, every date with snapshots in the window is returned."
+            }
+            queryParameter<Int>("window_hours") { description = "Snapshot window in hours, default 168 (7 days)." }
+        }
+        response {
+            code(HttpStatusCode.OK) {
+                body<AvailabilitySnapshotsSummaryResponse> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
+            code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
+        }
+    }) {
+        val rid =
+            call.request.queryParameters["reservable_rid"]?.takeIf { it.isNotBlank() }
+                ?: return@get call.respondError(
+                    "missing_reservable_rid",
+                    HttpStatusCode.BadRequest,
+                    "reservable_rid is required",
+                )
+        val parsed =
+            ca.floo.roadtrip.models.ReservableId
+                .parse(rid)
+                ?: return@get call.respondError(
+                    "invalid_reservable_rid",
+                    HttpStatusCode.BadRequest,
+                    "could not parse reservable_rid '$rid'",
+                )
+        val reservable =
+            reservables.findByRid(parsed)
+                ?: return@get call.respondError(
+                    "reservable_not_found",
+                    HttpStatusCode.NotFound,
+                    "no reservable with rid $rid",
+                )
+        val windowHours =
+            call.request.queryParameters["window_hours"]
+                ?.toIntOrNull()
+                ?.coerceIn(1, 24 * 30) ?: (24 * 7)
+        val explicitDates =
+            call.request.queryParameters["target_dates"]
+                ?.split(",")
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.mapNotNull { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
+                .orEmpty()
+        val targetDates =
+            explicitDates.ifEmpty {
+                // Discover distinct target_dates that have any snapshot in the window.
+                val windowStart =
+                    java.time.OffsetDateTime
+                        .now()
+                        .minusHours(windowHours.toLong())
+                ctx
+                    .selectDistinct(ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT.TARGET_DATE)
+                    .from(ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT)
+                    .where(
+                        ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT.RESERVABLE_ID
+                            .eq(reservable.id),
+                    ).and(
+                        ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT.OBSERVED_AT
+                            .ge(windowStart),
+                    ).orderBy(
+                        ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT.TARGET_DATE
+                            .asc(),
+                    ).fetch { it.value1() }
+            }
+        val stats = snapshots.summarize(reservable.id, targetDates, windowHours = windowHours)
+        call.respondJson(
+            AvailabilitySnapshotsSummaryResponse(
+                reservableRid = rid,
+                stats = stats.map { it.toSchema() },
+            ),
+        )
     }
 }
 
@@ -238,6 +327,17 @@ private fun AvailabilitySnapshotRepo.Snapshot.toSchema(): AvailabilitySnapshotSc
         observedAt = observedAt.toString(),
         status = status,
         available = available,
+    )
+
+private fun AvailabilitySnapshotRepo.TargetDateStats.toSchema(): AvailabilitySnapshotStatsSchema =
+    AvailabilitySnapshotStatsSchema(
+        targetDate = targetDate.toString(),
+        totalSnapshots = totalSnapshots,
+        lastOpenAt = lastOpenAt?.toString(),
+        isCurrentlyOpen = isCurrentlyOpen,
+        currentOrLastOpenWindowSec = currentOrLastOpenWindowSec,
+        medianOpenWindowSec = medianOpenWindowSec,
+        flipsLast24h = flipsLast24h,
     )
 
 private suspend inline fun <reified T> ApplicationCall.respondJson(

@@ -12,6 +12,7 @@ import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
@@ -117,6 +118,39 @@ class AvailabilityDashboardRoutesTest {
             ).id
     }
 
+    private fun seedReservable(): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO reservables (
+                    type, vendor, vendor_id, source, name
+                ) VALUES (
+                    'site', 'recgov', '330257', 'federal-campsites', 'A12'
+                ) RETURNING id
+                """.trimIndent(),
+            )!!
+            .get("id", Long::class.java)
+
+    private fun insertSnapshot(
+        reservableId: Long,
+        targetDate: String,
+        observedAt: OffsetDateTime,
+        available: Boolean,
+    ) {
+        ctx.execute(
+            """
+            INSERT INTO availability_snapshot (
+                reservable_id, observed_at, target_date, status, available, day_payload
+            ) VALUES (?, ?::timestamptz, ?::date, ?, ?, '{}'::jsonb)
+            """.trimIndent(),
+            reservableId,
+            observedAt.toString(),
+            targetDate,
+            if (available) "available" else "booked",
+            available,
+        )
+    }
+
     @Test
     fun `GET jobs returns the seeded job`() =
         testApplication {
@@ -220,5 +254,45 @@ class AvailabilityDashboardRoutesTest {
             application { routing { availabilityDashboardRoutes(ctx) } }
             val resp = client.get("/api/availability/jobs/not-a-number/runs")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
+        }
+
+    @Test
+    fun `GET snapshots summary returns stats per date`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val reservableId = seedReservable()
+            val now = OffsetDateTime.now(ZoneOffset.UTC)
+            insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(3), available = false)
+            insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(2), available = true)
+            insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(1), available = true)
+            val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:330257")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("site:recgov:330257", body["reservable_rid"]!!.jsonPrimitive.content)
+            val stats = body["stats"]!!.jsonArray
+            assertEquals(1, stats.size)
+            val row = stats[0].jsonObject
+            assertEquals("2026-07-04", row["target_date"]!!.jsonPrimitive.content)
+            assertEquals(3, row["total_snapshots"]!!.jsonPrimitive.int)
+            assertEquals(true, row["is_currently_open"]!!.jsonPrimitive.boolean)
+            assertEquals(1, row["flips_last_24h"]!!.jsonPrimitive.int)
+        }
+
+    @Test
+    fun `GET snapshots summary requires rid`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val resp = client.get("/api/availability/snapshots/summary")
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("missing_reservable_rid", body["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `GET snapshots summary returns 404 on unknown rid`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:999999")
+            assertEquals(HttpStatusCode.NotFound, resp.status)
         }
 }
