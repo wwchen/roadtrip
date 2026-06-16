@@ -31,6 +31,8 @@ import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class AvailabilityWatchRoutesTest {
@@ -68,6 +70,7 @@ class AvailabilityWatchRoutesTest {
 
     @BeforeEach
     fun cleanup() {
+        ctx.execute("DELETE FROM availability_job")
         ctx.execute("DELETE FROM availability_watch")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
@@ -245,6 +248,49 @@ class AvailabilityWatchRoutesTest {
             assertEquals(HttpStatusCode.NoContent, del.status)
             val getAfter = client.get("/api/availability/watches/$id")
             assertEquals(HttpStatusCode.NotFound, getAfter.status)
+        }
+
+    @Test
+    fun `POST creates a job and PATCH paused parks it`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo.ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p99", name = "Atomic")
+            val createBody =
+                """
+                {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(createBody)
+                }
+            val watchId = Json.parseToJsonElement(created.bodyAsText()).jsonObject["watch"]!!.jsonObject["id"]!!.jsonPrimitive.long
+
+            val jobs = ca.floo.roadtrip.repo.AvailabilityJobRepo(ctx)
+            val job = jobs.findByWatchId(watchId)
+            assertNotNull(job)
+            assertEquals(60, job.cadenceSec)
+            assertEquals("active", job.status)
+
+            val paused =
+                client.patch("/api/availability/watches/$watchId") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"status": "paused"}""")
+                }
+            assertEquals(HttpStatusCode.OK, paused.status)
+            val pausedJob = jobs.findByWatchId(watchId)!!
+            assertEquals("paused", pausedJob.status)
+            assertTrue(pausedJob.nextRunAt.year >= 9990, "nextRunAt should be parked in far future, got ${pausedJob.nextRunAt}")
         }
 
     private fun seedPoi(
