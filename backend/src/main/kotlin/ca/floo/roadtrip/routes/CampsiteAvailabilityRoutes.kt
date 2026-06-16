@@ -455,6 +455,7 @@ private fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
         rid = rid.encode(),
         vendorId = rid.vendorId,
         mapId = aspiraProviderRefLong("mapId"),
+        resourceLocationId = aspiraProviderRefLong("resourceLocationId"),
     )
 
 private fun Reservable.providerRefForReservable(parentRef: ProviderRef): ProviderRef =

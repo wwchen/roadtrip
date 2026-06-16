@@ -1,13 +1,16 @@
 package ca.floo.roadtrip.service.booking.adapters.aspira
 
+import ca.floo.roadtrip.client.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.AspiraException
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.CachedAspiraOccupancy
 import ca.floo.roadtrip.service.api.AspiraCatalogReservable
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.availableDatesAspira
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspira
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraCatalog
+import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraCatalogOccupancy
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraResource
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
@@ -32,6 +35,7 @@ import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 class AspiraBookingProvider(
     private val tenant: AspiraTenant,
     private val cache: CachedAspiraAvailability,
+    private val occupancyCache: CachedAspiraOccupancy = CachedAspiraOccupancy(AspiraAvailabilityClient()),
 ) : BookingProvider {
     override val id: BookingProviderId = BookingProviderId.ASPIRA
 
@@ -69,26 +73,43 @@ class AspiraBookingProvider(
     }
 
     override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
-        val parentMapId = mapIdOrThrow(req.ref)
+        val ref = aspiraRefOrThrow(req.ref)
+        val parentMapId = mapIdOrThrow(ref.mapId)
         val targets =
             req.reservables.map {
                 AspiraCatalogReservable(
                     rid = it.rid,
                     resourceId = it.vendorId,
                     mapId = it.mapId?.let(::mapIdOrThrow),
+                    resourceLocationId = it.resourceLocationId?.let { value -> intOrThrow("resourceLocationId", value) },
                 )
             }
+        val resourceLocationId = ref.resourceLocationId ?: targets.singleResourceLocationId()
         return runWithErrorMapping {
-            fetchAndClassifyAspiraCatalog(
-                cache = cache,
-                host = tenant.host,
-                parentMapId = parentMapId,
-                reservables = targets,
-                today = req.start,
-                days = req.days,
-                force = req.force,
-                minNights = req.minNights,
-            )
+            if (resourceLocationId != null) {
+                fetchAndClassifyAspiraCatalogOccupancy(
+                    cache = occupancyCache,
+                    host = tenant.host,
+                    parentMapId = parentMapId,
+                    resourceLocationId = intOrThrow("resourceLocationId", resourceLocationId),
+                    reservables = targets,
+                    today = req.start,
+                    days = req.days,
+                    force = req.force,
+                    minNights = req.minNights,
+                )
+            } else {
+                fetchAndClassifyAspiraCatalog(
+                    cache = cache,
+                    host = tenant.host,
+                    parentMapId = parentMapId,
+                    reservables = targets,
+                    today = req.start,
+                    days = req.days,
+                    force = req.force,
+                    minNights = req.minNights,
+                )
+            }
         }
     }
 
@@ -115,24 +136,31 @@ class AspiraBookingProvider(
      * silent truncation.
      */
     private fun mapIdOrThrow(ref: ProviderRef): Int {
-        val ar =
-            (ref as? ProviderRef.Aspira)
-                ?: throw BookingProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
-        if (ar.mapId !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
-            throw BookingProviderError.UpstreamUnavailable(
-                IllegalStateException("aspira mapId ${ar.mapId} does not fit in Int"),
-            )
-        }
-        return ar.mapId.toInt()
+        val ar = aspiraRefOrThrow(ref)
+        return intOrThrow("mapId", ar.mapId)
     }
 
-    private fun mapIdOrThrow(mapId: Long): Int {
-        if (mapId !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
+    private fun mapIdOrThrow(mapId: Long): Int = intOrThrow("mapId", mapId)
+
+    private fun List<AspiraCatalogReservable>.singleResourceLocationId(): Long? {
+        val ids = mapNotNull { it.resourceLocationId?.toLong() }.distinct()
+        return ids.singleOrNull()
+    }
+
+    private fun aspiraRefOrThrow(ref: ProviderRef): ProviderRef.Aspira =
+        (ref as? ProviderRef.Aspira)
+            ?: throw BookingProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
+
+    private fun intOrThrow(
+        label: String,
+        value: Long,
+    ): Int {
+        if (value !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
             throw BookingProviderError.UpstreamUnavailable(
-                IllegalStateException("aspira mapId $mapId does not fit in Int"),
+                IllegalStateException("aspira $label $value does not fit in Int"),
             )
         }
-        return mapId.toInt()
+        return value.toInt()
     }
 
     private inline fun <T> runWithErrorMapping(block: () -> T): T =

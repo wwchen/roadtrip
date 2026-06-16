@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.client.AspiraSearchDefaults
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.Reservable
 import ca.floo.roadtrip.models.ReservableId
@@ -382,17 +383,17 @@ private fun aspiraReservationUrl(
         mutableListOf(
             "transactionLocationId" to transactionLocationId.toString(),
             "mapId" to mapId.toString(),
-            "searchTabGroupId" to "0",
-            "bookingCategoryId" to "0",
+            "searchTabGroupId" to AspiraSearchDefaults.SEARCH_TAB_GROUP_ID.toString(),
+            "bookingCategoryId" to AspiraSearchDefaults.BOOKING_CATEGORY_ID.toString(),
             "startDate" to start.toString(),
             "endDate" to end.toString(),
             "nights" to minNights.toString(),
             "isReserving" to "true",
-            "equipmentId" to "-32768",
-            "subEquipmentId" to "-32768",
-            "peopleCapacityCategoryCounts" to "[[-32767,null,1,null]]",
+            "equipmentId" to AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID.toString(),
+            "subEquipmentId" to AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID.toString(),
+            "peopleCapacityCategoryCounts" to AspiraSearchDefaults.deeplinkPeopleCapacityCategoryCounts(),
             "searchTime" to "${start}T00:00:00.000",
-            "flexibleSearch" to """[false,false,"$start",1]""",
+            "flexibleSearch" to AspiraSearchDefaults.flexibleSearch(start),
             "view" to "list",
         )
     if (resourceLocationId != null) {
