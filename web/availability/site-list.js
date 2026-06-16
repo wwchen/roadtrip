@@ -122,7 +122,7 @@ function renderRow(r) {
     ? `<span class="cg-sites-row-type">${escapeHtml(r.site_type)}</span>`
     : '';
   const url = r.reservation_url || r.reservationUrl || null;
-  const bookTag = url ? '<span class="cg-sites-row-book">book</span>' : '';
+  const bookTag = url ? '<span class="cg-sites-row-book">Book</span>' : '';
   const side = typeTag || bookTag ? `<div class="cg-sites-row-side">${typeTag}${bookTag}</div>` : '';
   const inner = `
     <div class="cg-sites-row-main">

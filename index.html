@@ -792,11 +792,19 @@
     overflow-wrap: anywhere;
   }
   .cg-sites-row-book {
-    color: var(--cg-accent);
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 44px;
+    height: 24px;
+    padding: 0 10px;
+    border-radius: 6px;
+    background: var(--cg-accent-bg);
+    color: #fff;
     font-size: 12px;
     font-weight: 600;
     line-height: 1;
   }
+  .cg-sites-row-link:hover .cg-sites-row-book { background: var(--cg-accent-bg-hover); }
+  .cg-sites-row-link:active .cg-sites-row-book { background: #245031; }
   .cg-sites-skeleton, .cg-sites-error, .cg-sites-empty {
     color: var(--cg-muted); font-size: 12px;
     padding: 8px 0;
