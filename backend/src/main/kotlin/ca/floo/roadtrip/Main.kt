@@ -10,6 +10,7 @@ import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
+import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
@@ -28,6 +29,8 @@ import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
+import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
+import ca.floo.roadtrip.service.availability.AvailabilityPollExecutor
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.booking.BookingProviderRegistryFactory
 import ca.floo.roadtrip.service.etl.EtlOrchestrator
@@ -35,11 +38,13 @@ import ca.floo.roadtrip.service.etl.IngestController
 import ca.floo.roadtrip.service.etl.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.scheduler.Scheduler
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
 import io.ktor.http.ContentType
 import io.ktor.server.application.Application
+import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticFiles
@@ -57,6 +62,10 @@ import io.ktor.server.routing.get
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
 import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 
 fun main() {
     val port = System.getenv("PORT")?.toIntOrNull() ?: 8080
@@ -183,6 +192,33 @@ fun Application.module() {
         )
 
     val availabilityWatchService = AvailabilityWatchService(ctx, ReservableRepo(ctx))
+
+    // Availability poller. One Scheduler<AvailabilityJob> ticks every few
+    // seconds, claims due jobs, calls AvailabilityPollExecutor, and writes
+    // snapshot rows. Cancelled on app shutdown so tests don't leak threads.
+    val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    val availabilityJobs = AvailabilityJobRepo(ctx)
+    val availabilityFetches =
+        ReservableAvailabilityFetchService(
+            availabilityLogs = ReservableAvailabilityLogRepo(ctx),
+        )
+    val pollExecutor =
+        AvailabilityPollExecutor(
+            reservables = ca.floo.roadtrip.repo.ReservableRepo(ctx),
+            campsiteProviders = CampsiteProviderRepo(ctx),
+            bookingProviders = bookingProviderRegistry,
+            fetches = availabilityFetches,
+        )
+    val availabilityScheduler =
+        Scheduler(
+            repo = availabilityJobs,
+            handler = pollExecutor::handle,
+            name = "availability",
+        )
+    availabilityScheduler.start(schedulerScope)
+    environment.monitor.subscribe(ApplicationStopping) {
+        schedulerScope.cancel()
+    }
 
     routing {
         // /api/docs — Swagger UI; /api/docs/openapi.json — the spec it loads.
