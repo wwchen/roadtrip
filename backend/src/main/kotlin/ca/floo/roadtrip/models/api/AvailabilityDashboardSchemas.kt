@@ -65,3 +65,20 @@ data class AvailabilitySnapshotSchema(
 data class AvailabilitySnapshotsListResponse(
     val snapshots: List<AvailabilitySnapshotSchema>,
 )
+
+@Serializable
+data class AvailabilitySnapshotStatsSchema(
+    @SerialName("target_date") val targetDate: String,
+    @SerialName("total_snapshots") val totalSnapshots: Int,
+    @SerialName("last_open_at") val lastOpenAt: String? = null,
+    @SerialName("is_currently_open") val isCurrentlyOpen: Boolean,
+    @SerialName("current_or_last_open_window_sec") val currentOrLastOpenWindowSec: Int? = null,
+    @SerialName("median_open_window_sec") val medianOpenWindowSec: Int? = null,
+    @SerialName("flips_last_24h") val flipsLast24h: Int,
+)
+
+@Serializable
+data class AvailabilitySnapshotsSummaryResponse(
+    @SerialName("reservable_rid") val reservableRid: String,
+    val stats: List<AvailabilitySnapshotStatsSchema>,
+)
