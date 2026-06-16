@@ -13,9 +13,11 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import java.net.URI
+import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.time.LocalDate
 
@@ -63,6 +65,7 @@ class AspiraAvailabilityClient(
     private val throttleMs: Long = 1_500,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val json = Json { ignoreUnknownKeys = true }
 
     // Single global mutex: one in-flight Aspira call at a time. Aspira's WAF
     // is host-side (Azure App Gateway), and the threat is volume-from-our-IP.
@@ -126,6 +129,66 @@ class AspiraAvailabilityClient(
             parse(body, mapId)
         }
 
+    suspend fun fetchOccupancy(
+        host: String,
+        resourceLocationId: Int,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AspiraOccupancy =
+        mutex.withLock {
+            val sinceLast = System.currentTimeMillis() - lastFetchAtMs
+            if (sinceLast < throttleMs) {
+                kotlinx.coroutines.delay(throttleMs - sinceLast)
+            }
+            val people =
+                """[{"capacityCategoryId":-32767,"subCapacityCategoryId":null,"count":1,"isAdult":null}]"""
+            val url =
+                "https://$host/api/occupancy" +
+                    "?bookingCategoryId=0" +
+                    "&equipmentCategoryId=-32768" +
+                    "&subEquipmentCategoryId=-32768" +
+                    "&startDate=$startDate" +
+                    "&endDate=$endDate" +
+                    "&boatLength=0" +
+                    "&boatDraft=0" +
+                    "&boatWidth=0" +
+                    "&peopleCapacityCategoryCounts=${people.urlEncode()}" +
+                    "&numEquipment=0" +
+                    "&resourceLocationId=$resourceLocationId" +
+                    "&cartUid=" +
+                    "&cartTransactionUid=" +
+                    "&bookingUid=" +
+                    "&groupHoldUid="
+            log.debug("aspira occupancy GET {}", url)
+            val req =
+                HttpRequest
+                    .newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("User-Agent", USER_AGENT)
+                    .header("Accept", "application/json")
+                    .header("Referer", "https://$host/")
+                    .GET()
+                    .build()
+            val resp =
+                try {
+                    client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
+                } catch (e: Exception) {
+                    throw AspiraException("aspira occupancy request failed: ${e.message}", httpStatus = null)
+                }
+            lastFetchAtMs = System.currentTimeMillis()
+            if (resp.statusCode() != 200) {
+                throw AspiraException(
+                    "aspira occupancy HTTP ${resp.statusCode()} for resourceLocationId=$resourceLocationId",
+                    httpStatus = resp.statusCode(),
+                )
+            }
+            val body = resp.body()
+            if (body.startsWith("<")) {
+                throw AspiraException("aspira occupancy WAF challenge (HTML response)", httpStatus = 503)
+            }
+            json.decodeFromString(AspiraOccupancy.serializer(), body)
+        }
+
     internal fun parse(
         body: String,
         mapId: Int,
@@ -171,6 +234,8 @@ class AspiraAvailabilityClient(
     }
 }
 
+private fun String.urlEncode(): String = URLEncoder.encode(this, StandardCharsets.UTF_8)
+
 class AspiraException(
     message: String,
     val httpStatus: Int? = null,
@@ -188,4 +253,17 @@ data class AspiraAvailability(
     val parkRollup: List<Int>,
     val byMapLink: Map<String, List<Int>>,
     val byResource: Map<String, List<Int>> = emptyMap(),
+)
+
+@Serializable
+data class AspiraOccupancy(
+    val resourceLocationId: Int,
+    val resourceOccupancy: List<AspiraResourceOccupancy> = emptyList(),
+)
+
+@Serializable
+data class AspiraResourceOccupancy(
+    val resourceId: Long,
+    val filtered: Boolean = false,
+    val availability: Int,
 )

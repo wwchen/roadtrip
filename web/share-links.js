@@ -80,6 +80,10 @@ export function clearVisibleShareUrl() {
   const url = new URL(window.location.href);
   url.searchParams.delete('poi');
   url.searchParams.delete('route');
+  url.searchParams.delete('start');
+  url.searchParams.delete('min_nights');
+  url.searchParams.delete('minNights');
+  url.searchParams.delete('nights');
   replaceVisibleUrl(url.toString());
 }
 

@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.booking
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.CachedAspiraOccupancy
 import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraBookingProvider
 import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraTenants
 import ca.floo.roadtrip.service.booking.adapters.camis.CamisBookingProvider
@@ -25,6 +26,7 @@ object BookingProviderRegistryFactory {
         registry: PoiRegistry,
         recgovCache: CachedAvailability,
         aspiraCache: CachedAspiraAvailability,
+        aspiraOccupancyCache: CachedAspiraOccupancy,
     ): BookingProviderRegistry {
         val adaptersBySource = mutableMapOf<String, BookingProvider>()
 
@@ -48,7 +50,11 @@ object BookingProviderRegistryFactory {
                                 "Aspira host '$host' has no AspiraTenant config row; " +
                                     "add it to AspiraTenants.kt.",
                             )
-                    AspiraBookingProvider(tenant = tenant, cache = aspiraCache)
+                    AspiraBookingProvider(
+                        tenant = tenant,
+                        cache = aspiraCache,
+                        occupancyCache = aspiraOccupancyCache,
+                    )
                 }
             adaptersBySource[source] = adapter
         }

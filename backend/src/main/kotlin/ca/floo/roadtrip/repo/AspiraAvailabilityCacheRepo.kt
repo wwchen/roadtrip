@@ -2,6 +2,7 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.client.AspiraAvailability
 import ca.floo.roadtrip.client.AspiraAvailabilityClient
+import ca.floo.roadtrip.client.AspiraOccupancy
 import ca.floo.roadtrip.config.ApiCacheEntity
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
@@ -152,6 +153,132 @@ private fun CachedAspiraAvailability.Key.persistentKey(): String =
 
 data class CachedResult(
     val data: AspiraAvailability,
+    val hit: Boolean,
+    val ageSeconds: Long,
+    val ttlSeconds: Long,
+)
+
+class CachedAspiraOccupancy(
+    private val fetcher: suspend (host: String, resourceLocationId: Int, startDate: LocalDate, endDate: LocalDate) -> AspiraOccupancy,
+    private val ttl: Duration = ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl,
+    private val clock: Clock = Clock.systemUTC(),
+    private val persistentCache: PersistentCache = NoopPersistentCache,
+    private val json: Json = Json,
+    scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+) {
+    constructor(
+        client: AspiraAvailabilityClient,
+        ttl: Duration = ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl,
+        clock: Clock = Clock.systemUTC(),
+        persistentCache: PersistentCache = NoopPersistentCache,
+        json: Json = Json,
+        scope: CoroutineScope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
+    ) : this(client::fetchOccupancy, ttl, clock, persistentCache, json, scope)
+
+    private val log = LoggerFactory.getLogger(javaClass)
+    private val ownedScope = scope
+
+    data class Key(
+        val host: String,
+        val resourceLocationId: Int,
+        val startDate: LocalDate,
+        val endDate: LocalDate,
+    )
+
+    private data class Entry(
+        val deferred: Deferred<AspiraOccupancy>,
+        val fetchedAt: Instant,
+    )
+
+    private val entries = ConcurrentHashMap<Key, Entry>()
+
+    suspend fun get(
+        host: String,
+        resourceLocationId: Int,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        force: Boolean = false,
+    ): CachedOccupancyResult {
+        val key = Key(host, resourceLocationId, startDate, endDate)
+        val persistentKey = key.persistentKey()
+        val now = Instant.now(clock)
+
+        if (force) {
+            entries.remove(key)
+            persistentCache.delete(OCCUPANCY_NAMESPACE, persistentKey)
+        } else {
+            val existing = entries[key]
+            if (existing != null && existing.deferred.isCompleted) {
+                val ageS = Duration.between(existing.fetchedAt, now).seconds
+                if (ageS < ttl.seconds) {
+                    return CachedOccupancyResult(
+                        data = existing.deferred.await(),
+                        hit = true,
+                        ageSeconds = ageS,
+                        ttlSeconds = ttl.seconds,
+                    )
+                }
+                entries.remove(key, existing)
+            }
+        }
+
+        if (!force) {
+            val persisted = persistentCache.get(OCCUPANCY_NAMESPACE, persistentKey)
+            if (persisted != null) {
+                try {
+                    val data = json.decodeFromJsonElement(AspiraOccupancy.serializer(), persisted.payload)
+                    entries[key] = Entry(CompletableDeferred(data), persisted.createdAt)
+                    return CachedOccupancyResult(
+                        data = data,
+                        hit = true,
+                        ageSeconds = persisted.ageSeconds(clock),
+                        ttlSeconds = persisted.ttlSeconds(),
+                    )
+                } catch (e: Exception) {
+                    log.warn("aspira occupancy persistent cache decode failed key={}", persistentKey)
+                    persistentCache.delete(OCCUPANCY_NAMESPACE, persistentKey)
+                }
+            }
+        }
+
+        var createdFresh = false
+        val entry =
+            entries.computeIfAbsent(key) {
+                createdFresh = true
+                log.debug("aspira occupancy fetch start host={} resourceLocationId={}", host, resourceLocationId)
+                Entry(
+                    deferred = ownedScope.async { fetcher(host, resourceLocationId, startDate, endDate) },
+                    fetchedAt = now,
+                )
+            }
+        val data = entry.deferred.await()
+        val ageSeconds = Duration.between(entry.fetchedAt, Instant.now(clock)).seconds
+        if (createdFresh) {
+            persistentCache.put(
+                OCCUPANCY_NAMESPACE,
+                persistentKey,
+                json.encodeToJsonElement(AspiraOccupancy.serializer(), data),
+                ttl,
+            )
+        }
+        return CachedOccupancyResult(
+            data = data,
+            hit = !createdFresh,
+            ageSeconds = ageSeconds,
+            ttlSeconds = ttl.seconds,
+        )
+    }
+
+    companion object {
+        private const val OCCUPANCY_NAMESPACE = "aspira_occupancy"
+    }
+}
+
+private fun CachedAspiraOccupancy.Key.persistentKey(): String =
+    listOf(host, resourceLocationId.toString(), startDate.toString(), endDate.toString()).joinToString(":")
+
+data class CachedOccupancyResult(
+    val data: AspiraOccupancy,
     val hit: Boolean,
     val ageSeconds: Long,
     val ttlSeconds: Long,

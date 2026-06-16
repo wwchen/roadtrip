@@ -2,7 +2,7 @@
 // campground drawer and owns:
 //
 //   - the visible week start (LocalDate),
-//   - min_nights (default 1, persisted in localStorage),
+//   - min_nights (default 7, URL-addressable, persisted in localStorage),
 //   - the selected day,
 //   - the in-flight controller (skeleton timer, AbortSignal),
 //   - the cached list of the user's existing alerts (for 🔔 badges).
@@ -32,7 +32,7 @@ import { renderSiteList } from './site-list.js';
 import { renderWeekGrid, renderWeekSkeleton } from './week-grid.js';
 
 const STORAGE_KEY_MIN_NIGHTS = 'cg.minNights';
-const DEFAULT_MIN_NIGHTS = 1;
+const DEFAULT_MIN_NIGHTS = 7;
 const MIN_NIGHTS_CHIPS = [1, 2, 3, 7];
 const WEEK_DAYS = 7;
 const SKELETON_RENDER_DELAY_MS = 150;
@@ -79,14 +79,17 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
 function makeContext(host, feature, signal) {
   const recgovId =
     feature.properties?.recgov_id ?? feature.properties?.provider_ref?.recgov_id ?? null;
+  const initialQuery = readInitialQuery();
+  const initialMinNights =
+    initialQuery.minNights || (initialQuery.hasPoi ? DEFAULT_MIN_NIGHTS : loadMinNights());
   return {
     host,
     feature,
     poiId: feature.id,
     recgovId,
     signal,
-    weekStart: startOfTodayUtc(),
-    minNights: loadMinNights(),
+    weekStart: initialQuery.startDate || startOfTodayUtc(),
+    minNights: initialMinNights,
     selectedDate: null,
     state: 'loading', // 'loading' | 'success' | 'empty' | 'closed_for_season' | 'error'
     days: null,
@@ -367,6 +370,7 @@ function openCalendar(ctx, anchorBtn) {
 // ---- data -----------------------------------------------------------------
 
 async function fetchWeek(ctx, { force = false } = {}) {
+  syncAvailabilityUrl(ctx);
   ctx.state = 'loading';
   ctx.error = null;
   // Skeleton only flashes for slow fetches; cache hits feel instant.
@@ -521,9 +525,8 @@ function buildAlertPayload(ctx, date) {
 
 function loadMinNights() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_MIN_NIGHTS);
-    const n = parseInt(raw, 10);
-    if (Number.isFinite(n) && n > 0 && n < 32) return n;
+    const n = parseMinNights(localStorage.getItem(STORAGE_KEY_MIN_NIGHTS));
+    if (n != null) return n;
   } catch {
     // localStorage blocked (private mode, etc.) — default silently.
   }
@@ -535,6 +538,50 @@ function saveMinNights(n) {
     localStorage.setItem(STORAGE_KEY_MIN_NIGHTS, String(n));
   } catch {
     // Non-fatal: just won't persist.
+  }
+}
+
+function readInitialQuery() {
+  if (typeof window === 'undefined') return {};
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return {
+      hasPoi: params.has('poi'),
+      startDate: parseDateParam(params.get('start')),
+      minNights: parseMinNights(
+        params.get('min_nights') || params.get('minNights') || params.get('nights'),
+      ),
+    };
+  } catch {
+    return {};
+  }
+}
+
+function parseMinNights(value) {
+  const n = parseInt(value, 10);
+  return Number.isFinite(n) && n > 0 && n < 32 ? n : null;
+}
+
+function parseDateParam(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ''))) return null;
+  const parsed = parseIsoDate(value);
+  return Number.isFinite(parsed.getTime()) && isoDate(parsed) === value ? parsed : null;
+}
+
+function syncAvailabilityUrl(ctx) {
+  if (typeof window === 'undefined' || !ctx?.poiId) return;
+  try {
+    const url = new URL(window.location.href);
+    if (url.searchParams.get('poi') !== String(ctx.poiId)) return;
+    url.searchParams.set('start', isoDate(ctx.weekStart));
+    url.searchParams.set('min_nights', String(ctx.minNights));
+    const next = `${url.pathname}${url.search}${url.hash}`;
+    const current = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (next !== current) {
+      window.history.replaceState(window.history.state, '', next);
+    }
+  } catch {
+    // URL sync is convenience only; availability still works without it.
   }
 }
 
