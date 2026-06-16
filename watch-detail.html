@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#26272d">
+<title>Watch Detail</title>
+<style>
+  :root {
+    --surface: #26272d;
+    --bg: #1c1d21;
+    --bg-subtle: rgba(255,255,255,0.04);
+    --bg-hover: rgba(255,255,255,0.06);
+    --border: rgba(255,255,255,0.08);
+    --border-strong: rgba(255,255,255,0.14);
+    --text: #e6e8eb;
+    --muted: #8a8f96;
+    --faint: #5a6068;
+    --accent: #4cb96a;
+    --error: #f56565;
+    --status-available: rgba(76,185,106,0.55);
+    --status-booked: rgba(245,101,101,0.45);
+    --status-closed: rgba(150,150,150,0.30);
+    --status-empty: rgba(255,255,255,0.05);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body { padding: 20px; }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .shell { max-width: 1280px; margin: 0 auto; }
+  .top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    margin-bottom: 16px;
+  }
+  h1 { margin: 0; font-size: 22px; line-height: 1.2; font-weight: 650; }
+  .sub { margin-top: 4px; color: var(--muted); font-size: 13px; }
+  .nav {
+    display: flex;
+    align-items: center;
+    gap: 10px 16px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .nav-group { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .nav-group + .nav-group {
+    padding-left: 14px;
+    border-left: 1px solid var(--border-strong);
+  }
+  .nav a, button {
+    border: 1px solid var(--border-strong);
+    background: var(--bg-subtle);
+    color: var(--text);
+    border-radius: 8px;
+    height: 34px;
+    padding: 0 12px;
+    font: inherit;
+    font-size: 13px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .nav a:hover, button:hover { background: var(--bg-hover); text-decoration: none; }
+  .nav a[aria-current="page"] {
+    border-color: rgba(76,185,106,0.45);
+    background: rgba(76,185,106,0.12);
+    color: #87d99b;
+  }
+  .nav a.outside-link { gap: 7px; }
+  .nav a.outside-link::after {
+    content: "";
+    width: 10px;
+    height: 10px;
+    border-top: 1.5px solid currentColor;
+    border-right: 1.5px solid currentColor;
+    opacity: 0.7;
+  }
+  .panel { padding: 14px; margin-bottom: 14px; }
+  .panel h2 {
+    margin: 0 0 10px;
+    font-size: 14px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  .meta-grid {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    gap: 4px 14px;
+    font-size: 13px;
+  }
+  .meta-grid dt { color: var(--muted); text-transform: uppercase; font-size: 11px; letter-spacing: 0.04em; }
+  .meta-grid dd { margin: 0; }
+  .heatmap-legend {
+    display: flex;
+    gap: 14px;
+    align-items: center;
+    margin-bottom: 12px;
+    color: var(--muted);
+    font-size: 12px;
+  }
+  .legend-swatch {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border-radius: 3px;
+    margin-right: 4px;
+    vertical-align: middle;
+    border: 1px solid var(--border);
+  }
+  .heatmap-group-title {
+    margin: 12px 0 6px;
+    font-size: 13px;
+    color: var(--text);
+    font-weight: 600;
+  }
+  .heatmap-table {
+    width: auto;
+    border-collapse: collapse;
+    font-size: 12px;
+    margin-bottom: 10px;
+  }
+  .heatmap-table th, .heatmap-table td {
+    border: 1px solid var(--border);
+    padding: 4px 6px;
+    text-align: center;
+    min-width: 36px;
+  }
+  .heatmap-table .rowhead {
+    text-align: left;
+    padding: 4px 10px;
+    min-width: 220px;
+    background: var(--bg-subtle);
+  }
+  .heatmap-table th {
+    color: var(--muted);
+    font-weight: 600;
+    text-transform: none;
+    font-size: 11px;
+  }
+  .heatmap-cell { width: 28px; height: 22px; padding: 0; }
+  .cell-available { background: var(--status-available); }
+  .cell-booked { background: var(--status-booked); }
+  .cell-closed { background: var(--status-closed); }
+  .cell-empty { background: var(--status-empty); }
+  .cell-unknown { background: var(--status-empty); }
+  .cell-partial { background: linear-gradient(135deg, var(--status-available) 50%, var(--status-booked) 50%); }
+  .muted { color: var(--muted); }
+  @media (max-width: 640px) {
+    body { padding: 12px; }
+    .top, .status { align-items: flex-start; flex-direction: column; }
+    .nav { justify-content: flex-start; }
+  }
+</style>
+<link rel="stylesheet" href="/web/components/catalog.css">
+</head>
+<body>
+<main class="shell">
+  <header class="top">
+    <div>
+      <h1 id="page-title">Watch</h1>
+      <div class="sub" id="page-sub">Loading…</div>
+    </div>
+    <nav class="nav" aria-label="Page links">
+      <div class="nav-group" aria-label="Catalog pages">
+        <a href="/pois">POIs</a>
+        <a href="/reservables">Reservables</a>
+        <a href="/watches">Watches</a>
+        <a href="/availability">Activity</a>
+      </div>
+      <div class="nav-group" aria-label="Outside links">
+        <a class="outside-link" href="/">Map</a>
+        <a class="outside-link" href="/api/docs">API docs</a>
+      </div>
+    </nav>
+  </header>
+
+  <section class="panel">
+    <h2>Metadata</h2>
+    <dl class="meta-grid" id="meta"></dl>
+  </section>
+
+  <section class="panel">
+    <h2>Heatmap</h2>
+    <div id="heatmap-status" class="status">Loading…</div>
+    <div id="heatmap"></div>
+  </section>
+</main>
+<script type="module" src="/web/watch-detail.js"></script>
+</body>
+</html>
