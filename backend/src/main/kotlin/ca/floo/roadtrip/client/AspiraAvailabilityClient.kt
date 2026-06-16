@@ -13,9 +13,11 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.slf4j.LoggerFactory
 import java.net.URI
+import java.net.URLEncoder
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.time.LocalDate
 
@@ -28,14 +30,14 @@ import java.time.LocalDate
  *
  *   GET /api/availability/map
  *     ?mapId={int}
- *     &bookingCategoryId=0
+ *     &bookingCategoryId={AspiraSearchDefaults.BOOKING_CATEGORY_ID}
  *     &startDate=YYYY-MM-DD
  *     &endDate=YYYY-MM-DD
  *     &isReserving=true
  *     &getDailyAvailability=true     <-- per-day breakdown
- *     &partySize=1
- *     &equipmentCategoryId=-32768    <-- "any equipment" sentinel
- *     &subEquipmentCategoryId=-32768
+ *     &partySize={AspiraSearchDefaults.DEFAULT_PEOPLE_COUNT}
+ *     &equipmentCategoryId={AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID}
+ *     &subEquipmentCategoryId={AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID}
  *
  *   Response:
  *     { "mapId": -2147483630,
@@ -63,6 +65,7 @@ class AspiraAvailabilityClient(
     private val throttleMs: Long = 1_500,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val json = Json { ignoreUnknownKeys = true }
 
     // Single global mutex: one in-flight Aspira call at a time. Aspira's WAF
     // is host-side (Azure App Gateway), and the threat is volume-from-our-IP.
@@ -84,14 +87,14 @@ class AspiraAvailabilityClient(
             val url =
                 "https://$host/api/availability/map" +
                     "?mapId=$mapId" +
-                    "&bookingCategoryId=0" +
+                    "&bookingCategoryId=${AspiraSearchDefaults.BOOKING_CATEGORY_ID}" +
                     "&startDate=$startDate" +
                     "&endDate=$endDate" +
                     "&isReserving=true" +
                     "&getDailyAvailability=true" +
-                    "&partySize=1" +
-                    "&equipmentCategoryId=-32768" +
-                    "&subEquipmentCategoryId=-32768"
+                    "&partySize=${AspiraSearchDefaults.DEFAULT_PEOPLE_COUNT}" +
+                    "&equipmentCategoryId=${AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID}" +
+                    "&subEquipmentCategoryId=${AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID}"
             log.debug("aspira GET {}", url)
             val req =
                 HttpRequest
@@ -124,6 +127,66 @@ class AspiraAvailabilityClient(
                 throw AspiraException("aspira WAF challenge (HTML response)", httpStatus = 503)
             }
             parse(body, mapId)
+        }
+
+    suspend fun fetchOccupancy(
+        host: String,
+        resourceLocationId: Int,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AspiraOccupancy =
+        mutex.withLock {
+            val sinceLast = System.currentTimeMillis() - lastFetchAtMs
+            if (sinceLast < throttleMs) {
+                kotlinx.coroutines.delay(throttleMs - sinceLast)
+            }
+            val url =
+                "https://$host/api/occupancy?" +
+                    queryString(
+                        "bookingCategoryId" to AspiraSearchDefaults.BOOKING_CATEGORY_ID.toString(),
+                        "equipmentCategoryId" to AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID.toString(),
+                        "subEquipmentCategoryId" to AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID.toString(),
+                        "startDate" to startDate.toString(),
+                        "endDate" to endDate.toString(),
+                        "boatLength" to AspiraSearchDefaults.DEFAULT_BOAT_LENGTH.toString(),
+                        "boatDraft" to AspiraSearchDefaults.DEFAULT_BOAT_DRAFT.toString(),
+                        "boatWidth" to AspiraSearchDefaults.DEFAULT_BOAT_WIDTH.toString(),
+                        "peopleCapacityCategoryCounts" to AspiraSearchDefaults.occupancyPeopleCapacityCategoryCounts(),
+                        "numEquipment" to AspiraSearchDefaults.NO_EQUIPMENT_COUNT.toString(),
+                        "resourceLocationId" to resourceLocationId.toString(),
+                        "cartUid" to "",
+                        "cartTransactionUid" to "",
+                        "bookingUid" to "",
+                        "groupHoldUid" to "",
+                    )
+            log.debug("aspira occupancy GET {}", url)
+            val req =
+                HttpRequest
+                    .newBuilder(URI.create(url))
+                    .timeout(Duration.ofSeconds(30))
+                    .header("User-Agent", USER_AGENT)
+                    .header("Accept", "application/json")
+                    .header("Referer", "https://$host/")
+                    .GET()
+                    .build()
+            val resp =
+                try {
+                    client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
+                } catch (e: Exception) {
+                    throw AspiraException("aspira occupancy request failed: ${e.message}", httpStatus = null)
+                }
+            lastFetchAtMs = System.currentTimeMillis()
+            if (resp.statusCode() != 200) {
+                throw AspiraException(
+                    "aspira occupancy HTTP ${resp.statusCode()} for resourceLocationId=$resourceLocationId",
+                    httpStatus = resp.statusCode(),
+                )
+            }
+            val body = resp.body()
+            if (body.startsWith("<")) {
+                throw AspiraException("aspira occupancy WAF challenge (HTML response)", httpStatus = 503)
+            }
+            json.decodeFromString(AspiraOccupancy.serializer(), body)
         }
 
     internal fun parse(
@@ -171,6 +234,11 @@ class AspiraAvailabilityClient(
     }
 }
 
+private fun queryString(vararg params: Pair<String, String>): String =
+    params.joinToString("&") { (key, value) -> "${key.urlEncode()}=${value.urlEncode()}" }
+
+private fun String.urlEncode(): String = URLEncoder.encode(this, StandardCharsets.UTF_8)
+
 class AspiraException(
     message: String,
     val httpStatus: Int? = null,
@@ -188,4 +256,17 @@ data class AspiraAvailability(
     val parkRollup: List<Int>,
     val byMapLink: Map<String, List<Int>>,
     val byResource: Map<String, List<Int>> = emptyMap(),
+)
+
+@Serializable
+data class AspiraOccupancy(
+    val resourceLocationId: Int,
+    val resourceOccupancy: List<AspiraResourceOccupancy> = emptyList(),
+)
+
+@Serializable
+data class AspiraResourceOccupancy(
+    val resourceId: Long,
+    val filtered: Boolean = false,
+    val availability: Int,
 )

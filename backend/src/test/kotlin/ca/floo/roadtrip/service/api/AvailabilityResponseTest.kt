@@ -2,7 +2,10 @@ package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.client.AspiraAvailability
 import ca.floo.roadtrip.client.AspiraException
+import ca.floo.roadtrip.client.AspiraOccupancy
+import ca.floo.roadtrip.client.AspiraResourceOccupancy
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.CachedAspiraOccupancy
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -209,5 +212,58 @@ class AvailabilityResponseTest {
             )
             assertEquals(2, dto.availability[1].availableCount)
             assertEquals(4, dto.availability[1].total)
+        }
+
+    @Test
+    fun `aspira catalog availability uses occupancy search availability`() =
+        runBlocking {
+            val cache =
+                CachedAspiraOccupancy(
+                    fetcher = { _, resourceLocationId, start, _ ->
+                        val rows =
+                            when (start) {
+                                LocalDate.parse("2026-06-17") ->
+                                    listOf(
+                                        AspiraResourceOccupancy(resourceId = 100, availability = 0),
+                                        AspiraResourceOccupancy(resourceId = 200, availability = 2),
+                                        AspiraResourceOccupancy(resourceId = 300, availability = 0, filtered = true),
+                                    )
+                                else ->
+                                    listOf(
+                                        AspiraResourceOccupancy(resourceId = 100, availability = 2),
+                                        AspiraResourceOccupancy(resourceId = 200, availability = 2),
+                                        AspiraResourceOccupancy(resourceId = 300, availability = 2),
+                                    )
+                            }
+                        AspiraOccupancy(
+                            resourceLocationId = resourceLocationId,
+                            resourceOccupancy = rows,
+                        )
+                    },
+                )
+
+            val dto =
+                fetchAndClassifyAspiraCatalogOccupancy(
+                    cache = cache,
+                    host = "reservation.pc.gc.ca",
+                    parentMapId = -999,
+                    resourceLocationId = -123,
+                    reservables =
+                        listOf(
+                            AspiraCatalogReservable("site:aspira_pc:100", "100", -101),
+                            AspiraCatalogReservable("site:aspira_pc:200", "200", -101),
+                            AspiraCatalogReservable("site:aspira_pc:300", "300", -101),
+                        ),
+                    today = LocalDate.parse("2026-06-17"),
+                    days = 2,
+                    force = false,
+                    minNights = 7,
+                )
+
+            assertEquals(1, dto.availability[0].availableCount)
+            assertEquals(3, dto.availability[0].total)
+            assertEquals(listOf("site:aspira_pc:100"), dto.availability[0].availableReservableIds)
+            assertEquals("booked", dto.availability[1].status)
+            assertEquals(0, dto.availability[1].availableCount)
         }
 }

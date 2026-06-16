@@ -107,6 +107,7 @@ data class CatalogReservableRef(
     val rid: String,
     val vendorId: String,
     val mapId: Long? = null,
+    val resourceLocationId: Long? = null,
 )
 
 /**

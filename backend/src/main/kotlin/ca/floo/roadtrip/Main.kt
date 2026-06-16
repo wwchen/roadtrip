@@ -14,6 +14,7 @@ import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.CachedAspiraOccupancy
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.ReservableRepo
@@ -176,9 +177,16 @@ fun Application.module() {
     // Same pattern as rec.gov's CachedAvailability — process-wide singleton
     // with config-driven TTL and a 1.5s mutex against Aspira's Azure WAF.
     // See ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
+    val aspiraClient = AspiraAvailabilityClient()
     val aspiraCache =
         CachedAspiraAvailability(
-            AspiraAvailabilityClient(),
+            aspiraClient,
+            ttl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY),
+            persistentCache = persistentCache,
+        )
+    val aspiraOccupancyCache =
+        CachedAspiraOccupancy(
+            aspiraClient,
             ttl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY),
             persistentCache = persistentCache,
         )
@@ -191,6 +199,7 @@ fun Application.module() {
             registry = poiRegistry,
             recgovCache = campsite.cachedAvailability,
             aspiraCache = aspiraCache,
+            aspiraOccupancyCache = aspiraOccupancyCache,
         )
 
     val availabilityWatchService = AvailabilityWatchService(ctx, ReservableRepo(ctx))
