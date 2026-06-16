@@ -14,9 +14,9 @@ import kotlinx.serialization.json.jsonObject
  * polls. The watch service rebuilds and writes a fresh intent_payload
  * whenever any underlying watch field changes.
  *
- * Two variants today:
+ * Two variants:
  *   - [Reservable]: poll one reservable's per-day availability.
- *   - [Poi]: POI-scoped watch — full fan-out lands in PR 3.
+ *   - [Poi]: POI-scoped watch (fan-out to child reservables).
  *
  * `kind` is the discriminator used at the JSONB layer.
  */

@@ -1,20 +1,18 @@
--- PR 3: availability_job_run — one row per poll execution.
+-- availability_job_run — one row per poll execution.
 --
 -- Every time the scheduler claims an availability_job and hands it to
 -- AvailabilityPollExecutor, the executor writes one row here. The row
 -- records the run's outcome (started / completed / failed), how many
 -- snapshot rows it produced, and any error string for failed runs.
 --
--- Why a separate table: PR 2 deliberately kept availability_job as
--- just-the-current-state. Per-run history (was this run successful, what
--- did it return, how long did it take) is append-only and unbounded;
--- mixing it onto the job row would conflate "what's the latest state"
--- with "what's the audit log of every execution."
+-- Why a separate table: availability_job stores just-the-current-state.
+-- Per-run history (was this run successful, what did it return, how long
+-- did it take) is append-only and unbounded; mixing it onto the job row
+-- would conflate "what's the latest state" with "what's the audit log of
+-- every execution."
 --
--- Retention: indefinite for now. PR 4+ may add a sweeper if row count
--- becomes operationally annoying. The hot index supports per-job
--- "give me the N most recent runs" queries (the dashboard's load-bearing
--- query in a later PR).
+-- Retention: indefinite. The hot index supports per-job "give me the N
+-- most recent runs" queries (the dashboard's load-bearing query).
 
 CREATE TABLE availability_job_run (
   id              BIGSERIAL    PRIMARY KEY,

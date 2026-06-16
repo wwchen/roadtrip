@@ -16,16 +16,16 @@ import java.time.OffsetDateTime
  * Executes one polling job. Wired into [Scheduler] as the handler.
  *
  * Reservable-scope: fetches per-day availability through the booking
- * provider and appends snapshot rows. POI-scope: deferred (fan-out
- * logic ships in a later PR).
+ * provider and appends snapshot rows. POI-scope: not yet implemented
+ * (fan-out to child reservables is a separate concern).
  *
  * Per-run audit: every invocation writes one [AvailabilityJobRunRepo]
  * row. Successful runs (including no-op runs for unresolvable scopes
- * and for POI-scope until fan-out lands) are recorded as 'completed'
- * with `snapshot_count`. Upstream / unexpected exceptions are recorded
- * as 'failed' with the error message. Runs are never lost — even if
- * `start` succeeds and the work errors, the row gets a terminal
- * status so the operator can see the failure.
+ * and POI-scope) are recorded as 'completed' with `snapshot_count`.
+ * Upstream / unexpected exceptions are recorded as 'failed' with the
+ * error message. Runs are never lost — even if `start` succeeds and
+ * the work errors, the row gets a terminal status so the operator can
+ * see the failure.
  *
  * Handler always returns a [HandlerResult] — even on upstream failure —
  * because losing the row would mean the watch silently stops polling.
