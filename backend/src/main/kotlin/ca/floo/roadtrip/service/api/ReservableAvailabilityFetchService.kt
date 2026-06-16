@@ -1,18 +1,19 @@
 package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.models.ProviderRef
-import ca.floo.roadtrip.repo.ReservableAvailabilityLogRepo
+import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
 class ReservableAvailabilityFetchService(
-    private val availabilityLogs: ReservableAvailabilityLogRepo? = null,
+    private val snapshots: AvailabilitySnapshotRepo? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     data class Request(
+        val reservableId: Long,
         val reservableRid: String,
         val provider: BookingProvider,
         val ref: ProviderRef,
@@ -21,6 +22,7 @@ class ReservableAvailabilityFetchService(
         val days: Int,
         val minNights: Int,
         val force: Boolean,
+        val runId: Long? = null,
     )
 
     suspend fun fetch(request: Request): AvailabilityResponseDto {
@@ -35,17 +37,20 @@ class ReservableAvailabilityFetchService(
                     force = request.force,
                 ),
             )
-        appendBaseAvailabilityLog(request, response)
+        appendBaseAvailabilitySnapshot(request, response)
         return response
     }
 
-    private suspend fun appendBaseAvailabilityLog(
+    private suspend fun appendBaseAvailabilitySnapshot(
         request: Request,
         response: AvailabilityResponseDto,
     ) {
-        val logs = availabilityLogs ?: return
+        val sink = snapshots ?: return
         try {
-            val logResponse =
+            // For multi-night requests we re-fetch with min_nights=1 so the
+            // snapshot timeline records real per-day state, not the
+            // collapsed multi-night view.
+            val snapshotResponse =
                 if (request.minNights == 1) {
                     response
                 } else {
@@ -60,14 +65,20 @@ class ReservableAvailabilityFetchService(
                         ),
                     )
                 }
-            logs.appendAvailabilityPoll(
-                ReservableAvailabilityLogRepo.AvailabilityPoll(
-                    reservableRid = request.reservableRid,
-                    response = logResponse,
+            sink.appendBatch(
+                AvailabilitySnapshotRepo.SnapshotBatch(
+                    reservableId = request.reservableId,
+                    runId = request.runId,
+                    response = snapshotResponse,
                 ),
             )
         } catch (e: Exception) {
-            log.warn("reservable availability log append failed rid={}: {}", request.reservableRid, e.message)
+            log.warn(
+                "availability snapshot append failed reservable_id={} rid={}: {}",
+                request.reservableId,
+                request.reservableRid,
+                e.message,
+            )
         }
     }
 }
