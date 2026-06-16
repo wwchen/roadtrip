@@ -98,6 +98,30 @@ class AvailabilityJobRunRepo(
             .limit(limit.coerceIn(1, 500))
             .fetch { fromRecord(it) }
 
+    /**
+     * Recent runs across all jobs newest-first. Optional filters:
+     * - [since]: only runs whose started_at is after this instant
+     * - [status]: 'started' | 'completed' | 'failed'
+     * - [jobId]: scope to one job (used by drill-down from Jobs tab)
+     */
+    fun listSince(
+        since: OffsetDateTime? = null,
+        status: String? = null,
+        jobId: Long? = null,
+        limit: Int = 100,
+    ): List<Run> {
+        val conds = mutableListOf<org.jooq.Condition>()
+        if (since != null) conds += AVAILABILITY_JOB_RUN.STARTED_AT.ge(since)
+        if (status != null) conds += AVAILABILITY_JOB_RUN.STATUS.eq(status)
+        if (jobId != null) conds += AVAILABILITY_JOB_RUN.JOB_ID.eq(jobId)
+        return ctx
+            .selectFrom(AVAILABILITY_JOB_RUN)
+            .where(if (conds.isEmpty()) org.jooq.impl.DSL.noCondition() else org.jooq.impl.DSL.and(conds))
+            .orderBy(AVAILABILITY_JOB_RUN.STARTED_AT.desc(), AVAILABILITY_JOB_RUN.ID.desc())
+            .limit(limit.coerceIn(1, 500))
+            .fetch { fromRecord(it) }
+    }
+
     private fun fromRecord(r: Record): Run =
         Run(
             id = r.get(AVAILABILITY_JOB_RUN.ID)!!,
