@@ -49,9 +49,8 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
     e.preventDefault();
     if (link.dataset.action === 'goto-snapshots-for-run') {
       onTabSwitch('snapshots', { run_id: link.dataset.runId });
-    } else if (link.dataset.action === 'filter-by-job') {
-      filterForm.querySelector('[name=job_id]').value = link.dataset.jobId;
-      refresh();
+    } else if (link.dataset.action === 'goto-jobs-tab') {
+      onTabSwitch('jobs', {});
     }
   });
 
@@ -99,7 +98,7 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
           <a href="#" data-action="goto-snapshots-for-run" data-run-id="${escapeHtml(r.id)}">${escapeHtml(r.id)}</a>
         </td>
         <td>
-          <a href="#" data-action="filter-by-job" data-job-id="${escapeHtml(r.job_id)}">#${escapeHtml(r.job_id)}</a>
+          <a href="#" data-action="goto-jobs-tab" data-job-id="${escapeHtml(r.job_id)}">#${escapeHtml(r.job_id)}</a>
         </td>
         <td>${escapeHtml(r.status)}</td>
         <td>${escapeHtml(r.snapshot_count)}</td>
