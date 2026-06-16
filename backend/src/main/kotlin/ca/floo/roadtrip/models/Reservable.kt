@@ -24,4 +24,5 @@ data class Reservable(
     val loop: String?,
     val siteType: String?,
     val raw: JsonElement?,
+    val providerRef: JsonElement? = null,
 )

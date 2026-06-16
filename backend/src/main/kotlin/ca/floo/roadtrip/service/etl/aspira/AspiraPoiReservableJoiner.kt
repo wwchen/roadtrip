@@ -12,11 +12,11 @@ import org.jooq.impl.DSL
  * Two match rules, OR'd:
  *
  *   (A) `pois.source_id = "aspira-{T}-{M}"`
- *       where T = `reservables.raw->>'_parent_aspira_txn_loc'`
- *             M = `reservables.raw->>'_parent_aspira_map_id'`
+ *       where T = `reservables.provider_ref->>'transactionLocationId'`
+ *             M = `reservables.provider_ref->>'mapId'`
  *
  *   (B) `pois.provider_ref->>'resourceLocationId' =
- *        reservables.raw->>'_parent_aspira_resource_loc'`
+ *        reservables.provider_ref->>'resourceLocationId'`
  *
  * Rule (A) is the original `(txnLoc, mapId)` join, established when
  * AspiraResourcesEtl emitted only resources whose parent leaf was
@@ -41,14 +41,14 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
         // jsonb_extract_path_text is more forgiving than `->>` against
         // jOOQ's plain-SQL rendering — it accepts an explicit jsonb cast
         // without ambiguity over the operator's right-hand-type.
-        val txnLoc = jsonField(RESERVABLES.RAW, PARENT_TXN_LOC_KEY)
-        val mapId = jsonField(RESERVABLES.RAW, PARENT_MAP_ID_KEY)
+        val txnLoc = jsonField(RESERVABLES.PROVIDER_REF, PROVIDER_REF_TXN_LOC_KEY)
+        val mapId = jsonField(RESERVABLES.PROVIDER_REF, PROVIDER_REF_MAP_ID_KEY)
         val expectedSourceId =
             DSL.concat(DSL.value(POI_SOURCE_ID_PREFIX), txnLoc, DSL.value("-"), mapId)
 
         // Rule (B): match by resourceLocationId on both sides.
         val poiResLoc = jsonField(POIS.PROVIDER_REF, POI_PROVIDER_REF_RES_LOC_KEY)
-        val reservableResLoc = jsonField(RESERVABLES.RAW, PARENT_RES_LOC_KEY)
+        val reservableResLoc = jsonField(RESERVABLES.PROVIDER_REF, PROVIDER_REF_RES_LOC_KEY)
         val resLocMatch =
             poiResLoc
                 .isNotNull
@@ -91,26 +91,26 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
                   -- Neither match rule still holds: stale link.
                   p.source_id IS DISTINCT FROM concat(
                     ?,
-                    jsonb_extract_path_text(r.raw::jsonb, ?),
+                    jsonb_extract_path_text(r.provider_ref::jsonb, ?),
                     '-',
-                    jsonb_extract_path_text(r.raw::jsonb, ?)
+                    jsonb_extract_path_text(r.provider_ref::jsonb, ?)
                   )
                   AND (
                     jsonb_extract_path_text(p.provider_ref::jsonb, ?) IS NULL
-                    OR jsonb_extract_path_text(r.raw::jsonb, ?) IS NULL
+                    OR jsonb_extract_path_text(r.provider_ref::jsonb, ?) IS NULL
                     OR jsonb_extract_path_text(p.provider_ref::jsonb, ?) IS DISTINCT FROM
-                       jsonb_extract_path_text(r.raw::jsonb, ?)
+                       jsonb_extract_path_text(r.provider_ref::jsonb, ?)
                   )
                 )
               )
             """.trimIndent(),
             POI_SOURCE_ID_PREFIX,
-            PARENT_TXN_LOC_KEY,
-            PARENT_MAP_ID_KEY,
+            PROVIDER_REF_TXN_LOC_KEY,
+            PROVIDER_REF_MAP_ID_KEY,
             POI_PROVIDER_REF_RES_LOC_KEY,
-            PARENT_RES_LOC_KEY,
+            PROVIDER_REF_RES_LOC_KEY,
             POI_PROVIDER_REF_RES_LOC_KEY,
-            PARENT_RES_LOC_KEY,
+            PROVIDER_REF_RES_LOC_KEY,
         )
 
     private fun tenantCondition() =
@@ -131,11 +131,11 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
     private companion object {
         const val ADAPTER_NAME = "AspiraPoiReservableJoiner"
 
-        // Synthetic JSONB keys AspiraResourcesEtl writes; the joiner's
-        // contract with the ETL.
-        const val PARENT_TXN_LOC_KEY = "_parent_aspira_txn_loc"
-        const val PARENT_MAP_ID_KEY = "_parent_aspira_map_id"
-        const val PARENT_RES_LOC_KEY = "_parent_aspira_resource_loc"
+        // Durable reservables.provider_ref keys AspiraResourcesEtl writes;
+        // the joiner's contract with the ETL.
+        const val PROVIDER_REF_TXN_LOC_KEY = "transactionLocationId"
+        const val PROVIDER_REF_MAP_ID_KEY = "mapId"
+        const val PROVIDER_REF_RES_LOC_KEY = "resourceLocationId"
 
         // POI keying for Aspira pins. AspiraJoinByNameEtl writes
         // pois.source_id = "aspira-{txnLoc}-{mapId}". PoiRepo writes

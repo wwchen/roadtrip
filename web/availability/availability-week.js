@@ -93,7 +93,6 @@ function makeContext(host, feature, signal) {
     cacheBlock: null,
     summary: '',
     season: null,
-    availabilityHost: null,
     error: null,
     alertsByDate: new Map(),
     skeletonTimer: null,
@@ -107,6 +106,7 @@ function makeContext(host, feature, signal) {
     sitesTotal: null,
     sitesError: null,
     sitesExpanded: false,
+    sitesRequestSeq: 0,
   };
 }
 
@@ -133,8 +133,6 @@ function renderShell(ctx) {
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
         selectedDay: sitesDay,
-        minNights: ctx.minNights,
-        providerHost: ctx.availabilityHost,
       })}
     </section>
   `;
@@ -257,6 +255,7 @@ function onRootClick(ctx, e) {
       // The URL changes, the cache key changes, and the day-detail picks
       // up the new "N-night stay" label after the response lands.
       fetchWeek(ctx);
+      if (ctx.selectedDate) fetchSites(ctx);
     }
     return;
   }
@@ -296,7 +295,11 @@ function onRootClick(ctx, e) {
     const selected = ctx.selectedDate !== date;
     ctx.selectedDate = selected ? date : null;
     ctx.sitesExpanded = selected;
-    rerender(ctx);
+    if (selected) {
+      fetchSites(ctx);
+    } else {
+      rerender(ctx);
+    }
     return;
   }
   if (tgt.closest('.cg-refresh')) {
@@ -388,7 +391,6 @@ async function fetchWeek(ctx, { force = false } = {}) {
     }
     const json = await resp.json();
     ctx.cacheBlock = json.cache || null;
-    ctx.availabilityHost = json.host || null;
     if (json.state === 'empty') {
       ctx.state = 'empty';
       ctx.days = [];
@@ -414,13 +416,20 @@ async function fetchWeek(ctx, { force = false } = {}) {
 
 async function fetchSites(ctx) {
   if (ctx.poiId == null) return;
+  const requestSeq = ++ctx.sitesRequestSeq;
+  const start = ctx.selectedDate;
   ctx.sitesState = 'loading';
   ctx.sitesError = null;
   rerender(ctx);
   try {
-    const json = await fetchPoiReservables(ctx.poiId, { signal: ctx.signal });
+    const json = await fetchPoiReservables(ctx.poiId, {
+      start,
+      minNights: start ? ctx.minNights : null,
+      signal: ctx.signal,
+    });
     if (ctx.signal?.aborted) return;
     if (!isActiveFeature(ctx.feature)) return;
+    if (requestSeq !== ctx.sitesRequestSeq) return;
     ctx.sitesState = 'success';
     ctx.sites = Array.isArray(json?.reservables) ? json.reservables : [];
     ctx.sitesTotal = typeof json?.total_at_poi === 'number' ? json.total_at_poi : ctx.sites.length;
@@ -428,6 +437,7 @@ async function fetchSites(ctx) {
   } catch (e) {
     if (e.name === 'AbortError') return;
     if (!isActiveFeature(ctx.feature)) return;
+    if (requestSeq !== ctx.sitesRequestSeq) return;
     ctx.sitesState = 'error';
     ctx.sitesError = e.message || 'network';
     rerender(ctx);

@@ -145,4 +145,69 @@ class AvailabilityResponseTest {
                 dto.availability.single().availableReservableIds,
             )
         }
+
+    @Test
+    fun `aspira catalog availability aggregates linked resources across child maps`() =
+        runBlocking {
+            val cache =
+                CachedAspiraAvailability(
+                    fetcher = { _, mapId, _, _ ->
+                        when (mapId) {
+                            -101 ->
+                                AspiraAvailability(
+                                    mapId = mapId,
+                                    parkRollup = emptyList(),
+                                    byMapLink = emptyMap(),
+                                    byResource =
+                                        mapOf(
+                                            "a" to listOf(1, 1),
+                                            "b" to listOf(5, 1),
+                                        ),
+                                )
+                            -202 ->
+                                AspiraAvailability(
+                                    mapId = mapId,
+                                    parkRollup = emptyList(),
+                                    byMapLink = emptyMap(),
+                                    byResource = mapOf("c" to listOf(1, 5)),
+                                )
+                            else ->
+                                AspiraAvailability(
+                                    mapId = mapId,
+                                    parkRollup = emptyList(),
+                                    byMapLink = emptyMap(),
+                                    byResource = emptyMap(),
+                                )
+                        }
+                    },
+                )
+
+            val dto =
+                fetchAndClassifyAspiraCatalog(
+                    cache = cache,
+                    host = "washington.goingtocamp.com",
+                    parentMapId = -999,
+                    reservables =
+                        listOf(
+                            AspiraCatalogReservable("site:aspira_wa:a", "a", -101),
+                            AspiraCatalogReservable("site:aspira_wa:b", "b", -101),
+                            AspiraCatalogReservable("site:aspira_wa:c", "c", -202),
+                            AspiraCatalogReservable("site:aspira_wa:missing", "missing", -202),
+                        ),
+                    today = LocalDate.parse("2026-07-01"),
+                    days = 2,
+                    force = false,
+                    minNights = 1,
+                )
+
+            assertEquals((-999).toString(), dto.mapId)
+            assertEquals(2, dto.availability[0].availableCount)
+            assertEquals(4, dto.availability[0].total)
+            assertEquals(
+                listOf("site:aspira_wa:a", "site:aspira_wa:c"),
+                dto.availability[0].availableReservableIds,
+            )
+            assertEquals(2, dto.availability[1].availableCount)
+            assertEquals(4, dto.availability[1].total)
+        }
 }

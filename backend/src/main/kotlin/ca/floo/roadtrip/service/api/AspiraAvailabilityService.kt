@@ -5,6 +5,7 @@ import ca.floo.roadtrip.client.AspiraException
 import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.models.aspira.AspiraStatus
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.repo.CachedResult
 import io.ktor.http.HttpStatusCode
 import java.time.LocalDate
 
@@ -68,6 +69,76 @@ internal suspend fun fetchAndClassifyAspira(
         cacheBlock = cacheBlock,
         host = host,
         mapId = mapId.toString(),
+    )
+}
+
+/**
+ * POI-scoped Aspira availability using the linked reservable catalog instead
+ * of only the POI's parent map. WA deep-tree parks can have one visible POI
+ * map whose linked sites live under several child maps; this groups by the
+ * per-reservable child map and classifies the actual resource ids.
+ */
+internal suspend fun fetchAndClassifyAspiraCatalog(
+    cache: CachedAspiraAvailability,
+    host: String,
+    parentMapId: Int,
+    reservables: List<AspiraCatalogReservable>,
+    today: LocalDate,
+    days: Int,
+    force: Boolean,
+    minNights: Int = 1,
+): AvailabilityResponseDto {
+    val targets =
+        reservables
+            .distinctBy { it.rid }
+            .map { it.copy(mapId = it.mapId ?: parentMapId) }
+    if (targets.isEmpty()) {
+        return fetchAndClassifyAspira(
+            cache = cache,
+            host = host,
+            mapId = parentMapId,
+            today = today,
+            days = days,
+            force = force,
+            minNights = minNights,
+        )
+    }
+
+    val nights = minNights.coerceAtLeast(1)
+    val rollingEnd = today.plusDays((days + nights - 2).toLong())
+    val cachedByMap = mutableMapOf<Int, CachedResult>()
+    for (mapId in targets.map { it.mapId!! }.distinct()) {
+        cachedByMap[mapId] = cache.get(host, mapId, today, rollingEnd, force)
+    }
+
+    val resourceRows =
+        targets.map { target ->
+            CatalogResourceDays(
+                rid = target.rid,
+                days = cachedByMap[target.mapId]?.data?.byResource?.get(target.resourceId),
+            )
+        }
+    val perDay = classifyLinkedResourceCatalogDays(resourceRows, today, days, nights)
+    val state = classifyWindowState(perDay)
+    val summary = summarizeWindow(days, perDay, state)
+    val cacheResults = cachedByMap.values
+    val cacheBlock =
+        AvailabilityCacheBlock(
+            hit = cacheResults.all { it.hit },
+            ageSeconds = cacheResults.maxOfOrNull { it.ageSeconds } ?: 0,
+            ttlSeconds = cacheResults.minOfOrNull { it.ttlSeconds } ?: 0,
+        )
+    return availabilityResponseDto(
+        provider = "aspira",
+        today = today,
+        days = days,
+        perDay = perDay,
+        state = state,
+        summary = summary,
+        seasonBlock = null,
+        cacheBlock = cacheBlock,
+        host = host,
+        mapId = parentMapId.toString(),
     )
 }
 
@@ -210,6 +281,17 @@ private fun classifyResourceCatalogDays(
         classifyResourceCatalogArrivalDay(byResource, d, minNights, date, reservableVendor)
     }
 
+private fun classifyLinkedResourceCatalogDays(
+    resources: List<CatalogResourceDays>,
+    start: LocalDate,
+    days: Int,
+    minNights: Int,
+): List<DayClassification> =
+    (0 until days).map { d ->
+        val date = start.plusDays(d.toLong()).toString()
+        classifyLinkedResourceCatalogArrivalDay(resources, d, minNights, date)
+    }
+
 private fun classifyResourceCatalogArrivalDay(
     byResource: Map<String, List<Int>>,
     d: Int,
@@ -231,6 +313,50 @@ private fun classifyResourceCatalogArrivalDay(
                 if (windowAllOpen(resourceDays, d, nights)) {
                     availForStay++
                     availableReservableIds += "site:$reservableVendor:$resourceId"
+                } else {
+                    booked++
+                    openButTooShort++
+                }
+            }
+            else -> booked++
+        }
+    }
+    val total = availForStay + booked + closed
+    val status =
+        when {
+            total == 0 -> "closed"
+            closed == total -> "closed"
+            availForStay > 0 -> "available"
+            openButTooShort > 0 -> "partial"
+            else -> "booked"
+        }
+    return DayClassification(date, status, availForStay, total, availableReservableIds.sorted())
+}
+
+private fun classifyLinkedResourceCatalogArrivalDay(
+    resources: List<CatalogResourceDays>,
+    d: Int,
+    nights: Int,
+    date: String,
+): DayClassification {
+    var availForStay = 0
+    var booked = 0
+    var closed = 0
+    var openButTooShort = 0
+    val availableReservableIds = mutableListOf<String>()
+    for (resource in resources) {
+        val days = resource.days
+        if (days == null || d >= days.size) {
+            closed++
+            continue
+        }
+        val arrivalCls = AspiraStatus.classify(days[d])
+        when (arrivalCls) {
+            "closed" -> closed++
+            "available", "partial" -> {
+                if (windowAllOpen(days, d, nights)) {
+                    availForStay++
+                    availableReservableIds += resource.rid
                 } else {
                     booked++
                     openButTooShort++
@@ -297,6 +423,17 @@ private fun classifyResourceArrivalDay(
             )
     }
 }
+
+internal data class AspiraCatalogReservable(
+    val rid: String,
+    val resourceId: String,
+    val mapId: Int?,
+)
+
+private data class CatalogResourceDays(
+    val rid: String,
+    val days: List<Int>?,
+)
 
 private fun knownEmptyReservableIds(reservableId: String?): List<String>? = if (reservableId == null) null else emptyList()
 

@@ -156,6 +156,7 @@ class AspiraResourcesEtl(
                         // id in the JSON blob and leave the column null.
                         siteType = null,
                         raw = buildResourceRaw(inv = inv, leaf = leaf),
+                        providerRef = buildResourceProviderRef(inv = inv, leaf = leaf),
                     )
             }
         }
@@ -266,6 +267,28 @@ class AspiraResourcesEtl(
                 put("defined_attributes", flattenAttributes(inv.definedAttributes))
             }
         }
+
+    private fun buildResourceProviderRef(
+        inv: ResourceInventory,
+        leaf: AspiraLeaf?,
+    ): JsonObject? {
+        val mapId = leaf?.mapId ?: inv.firstMapId
+        val transactionLocationId = leaf?.transactionLocationId
+        val resourceLocationId = leaf?.resourceLocationId ?: inv.resourceLocationId
+        if (mapId == null && transactionLocationId == null && resourceLocationId == null) return null
+
+        return buildJsonObject {
+            if (transactionLocationId != null) {
+                put("transactionLocationId", transactionLocationId)
+            }
+            if (mapId != null) {
+                put("mapId", mapId)
+            }
+            if (resourceLocationId != null) {
+                put("resourceLocationId", resourceLocationId)
+            }
+        }
+    }
 
     private fun flattenAttributes(attrs: JsonArray): JsonArray =
         buildJsonArray {

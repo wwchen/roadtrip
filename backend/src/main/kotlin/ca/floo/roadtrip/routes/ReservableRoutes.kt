@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.Reservable
 import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.models.ReservableType
@@ -10,6 +11,7 @@ import ca.floo.roadtrip.models.api.ReservableSchema
 import ca.floo.roadtrip.models.api.ReservablesResponseSchema
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.booking.ProviderRefParser
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -21,7 +23,13 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+import java.time.LocalDate
 
 @OptIn(ExperimentalSerializationApi::class)
 private val reservableRoutesJson =
@@ -149,6 +157,8 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         request {
             pathParameter<Long>("id") { description = "pois.id primary key" }
             queryParameter<String>("type") { description = "Reservable type, defaults to site." }
+            queryParameter<String>("start") { description = "Optional arrival date for per-site reservation_url links." }
+            queryParameter<Int>("min_nights") { description = "Optional stay length for per-site reservation_url links." }
         }
         response {
             code(HttpStatusCode.OK) {
@@ -171,9 +181,17 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         val type =
             parseReservableType(call.request.queryParameters["type"])
                 ?: return@get call.respondReservableError("bad_type", HttpStatusCode.BadRequest)
+        val linkOptions =
+            try {
+                call.reservationUrlOptions()
+            } catch (e: BadReservableQuery) {
+                return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
+            }
 
-        pois.fetchPoiById(poiId)
-            ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
+        val poi =
+            pois.fetchPoiById(poiId)
+                ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
+        val providerRef = poi.providerRefJson?.let { ProviderRefParser.parse(it) }
 
         val rows = reservables.findByPoi(poiId, type)
         call.respondReservableJson(
@@ -181,7 +199,13 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 poiId = poiId,
                 type = type.encode(),
                 totalAtPoi = reservables.countByPoi(poiId, type),
-                reservables = rows.map { it.toSchema(listOf(poiId)) },
+                reservables =
+                    rows.map {
+                        it.toSchema(
+                            poiIds = listOf(poiId),
+                            reservationUrl = it.reservationUrl(providerRef, linkOptions),
+                        )
+                    },
             ),
         )
     }
@@ -238,6 +262,31 @@ private fun ApplicationCall.intQuery(
     return value
 }
 
+private data class ReservationUrlOptions(
+    val start: LocalDate?,
+    val minNights: Int,
+)
+
+private fun ApplicationCall.reservationUrlOptions(): ReservationUrlOptions {
+    val start =
+        request.queryParameters["start"]
+            ?.takeIf { it.isNotBlank() }
+            ?.let { raw ->
+                runCatching { LocalDate.parse(raw) }
+                    .getOrElse { throw BadReservableQuery("bad_start", "start must be YYYY-MM-DD") }
+            }
+    val minNightsRaw = request.queryParameters["min_nights"] ?: request.queryParameters["minNights"]
+    val minNights =
+        minNightsRaw
+            ?.takeIf { it.isNotBlank() }
+            ?.toIntOrNull()
+            ?: 1
+    if (minNights !in 1..31) {
+        throw BadReservableQuery("bad_min_nights", "min_nights must be between 1 and 31")
+    }
+    return ReservationUrlOptions(start = start, minNights = minNights)
+}
+
 private fun ApplicationCall.queryValues(vararg names: String): List<String> =
     names
         .flatMap { name -> request.queryParameters.getAll(name).orEmpty() }
@@ -246,7 +295,10 @@ private fun ApplicationCall.queryValues(vararg names: String): List<String> =
         .filter { it.isNotEmpty() }
         .distinct()
 
-private fun Reservable.toSchema(poiIds: List<Long> = emptyList()): ReservableSchema =
+private fun Reservable.toSchema(
+    poiIds: List<Long> = emptyList(),
+    reservationUrl: String? = null,
+): ReservableSchema =
     ReservableSchema(
         rid = rid.encode(),
         type = rid.type.encode(),
@@ -255,9 +307,105 @@ private fun Reservable.toSchema(poiIds: List<Long> = emptyList()): ReservableSch
         name = name,
         loop = loop,
         siteType = siteType,
+        reservationUrl = reservationUrl,
         poiIds = poiIds,
+        providerRef = providerRef,
         raw = raw,
     )
+
+private fun Reservable.reservationUrl(
+    providerRef: ProviderRef?,
+    options: ReservationUrlOptions,
+): String? =
+    when {
+        rid.vendor == "recgov" -> recgovReservationUrl(options)
+        rid.vendor.startsWith("aspira_") -> aspiraReservationUrl(providerRef, options)
+        else -> null
+    }
+
+private fun Reservable.recgovReservationUrl(options: ReservationUrlOptions): String {
+    val base = "https://www.recreation.gov/camping/campsites/${urlEncode(rid.vendorId)}"
+    val start = options.start ?: return base
+    val end = start.plusDays(options.minNights.toLong())
+    return "$base?${queryString("startDate" to start.toString(), "endDate" to end.toString())}"
+}
+
+private fun Reservable.aspiraReservationUrl(
+    providerRef: ProviderRef?,
+    options: ReservationUrlOptions,
+): String? {
+    val start = options.start ?: return null
+    val parentRef = providerRef as? ProviderRef.Aspira
+    val host = aspiraHostForVendor(rid.vendor) ?: return null
+    val transactionLocationId =
+        aspiraProviderRefLong("transactionLocationId")
+            ?: parentRef?.transactionLocationId
+            ?: return null
+    val mapId =
+        aspiraProviderRefLong("mapId")
+            ?: parentRef?.mapId
+            ?: return null
+    val resourceLocationId =
+        aspiraProviderRefLong("resourceLocationId")
+            ?: parentRef?.resourceLocationId
+    return aspiraReservationUrl(
+        host = host,
+        transactionLocationId = transactionLocationId,
+        mapId = mapId,
+        resourceLocationId = resourceLocationId,
+        start = start,
+        minNights = options.minNights,
+    )
+}
+
+private fun Reservable.aspiraProviderRefLong(key: String): Long? =
+    ((providerRef as? JsonObject)?.get(key))?.jsonPrimitive?.contentOrNull?.toLongOrNull()
+
+private fun aspiraHostForVendor(vendor: String): String? =
+    when (vendor) {
+        "aspira_pc" -> "reservation.pc.gc.ca"
+        "aspira_bc" -> "camping.bcparks.ca"
+        "aspira_wa" -> "washington.goingtocamp.com"
+        else -> null
+    }
+
+private fun aspiraReservationUrl(
+    host: String,
+    transactionLocationId: Long,
+    mapId: Long,
+    resourceLocationId: Long?,
+    start: LocalDate,
+    minNights: Int,
+): String {
+    val end = start.plusDays(minNights.toLong())
+    val params =
+        mutableListOf(
+            "transactionLocationId" to transactionLocationId.toString(),
+            "mapId" to mapId.toString(),
+            "searchTabGroupId" to "0",
+            "bookingCategoryId" to "0",
+            "startDate" to start.toString(),
+            "endDate" to end.toString(),
+            "nights" to minNights.toString(),
+            "isReserving" to "true",
+            "equipmentId" to "-32768",
+            "subEquipmentId" to "-32768",
+            "peopleCapacityCategoryCounts" to "[[-32767,null,1,null]]",
+            "searchTime" to "${start}T00:00:00.000",
+            "flexibleSearch" to """[false,false,"$start",1]""",
+            "view" to "list",
+            "filterData" to """{"-32756":"[[1],0,0,0]"}""",
+        )
+    if (resourceLocationId != null) {
+        params += "resourceLocationId" to resourceLocationId.toString()
+    }
+    return "https://$host/create-booking/results?${queryString(*params.toTypedArray())}"
+}
+
+private fun queryString(vararg params: Pair<String, String>): String =
+    params.joinToString("&") { (key, value) -> "${urlEncode(key)}=${urlEncode(value)}" }
+
+private fun urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
 
 private suspend fun ApplicationCall.respondReservableError(
     error: String,

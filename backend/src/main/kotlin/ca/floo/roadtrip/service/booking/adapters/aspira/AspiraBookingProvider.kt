@@ -3,9 +3,11 @@ package ca.floo.roadtrip.service.booking.adapters.aspira
 import ca.floo.roadtrip.client.AspiraException
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.service.api.AspiraCatalogReservable
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.availableDatesAspira
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspira
+import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraCatalog
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraResource
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
@@ -13,6 +15,7 @@ import ca.floo.roadtrip.service.booking.BookingCapabilities
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderError
 import ca.floo.roadtrip.service.booking.BookingProviderId
+import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 
 /**
@@ -65,6 +68,30 @@ class AspiraBookingProvider(
         }
     }
 
+    override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+        val parentMapId = mapIdOrThrow(req.ref)
+        val targets =
+            req.reservables.map {
+                AspiraCatalogReservable(
+                    rid = it.rid,
+                    resourceId = it.vendorId,
+                    mapId = it.mapId?.let(::mapIdOrThrow),
+                )
+            }
+        return runWithErrorMapping {
+            fetchAndClassifyAspiraCatalog(
+                cache = cache,
+                host = tenant.host,
+                parentMapId = parentMapId,
+                reservables = targets,
+                today = req.start,
+                days = req.days,
+                force = req.force,
+                minNights = req.minNights,
+            )
+        }
+    }
+
     override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
         val mapId = mapIdOrThrow(req.ref)
         return runWithErrorMapping {
@@ -97,6 +124,15 @@ class AspiraBookingProvider(
             )
         }
         return ar.mapId.toInt()
+    }
+
+    private fun mapIdOrThrow(mapId: Long): Int {
+        if (mapId !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
+            throw BookingProviderError.UpstreamUnavailable(
+                IllegalStateException("aspira mapId $mapId does not fit in Int"),
+            )
+        }
+        return mapId.toInt()
     }
 
     private inline fun <T> runWithErrorMapping(block: () -> T): T =
