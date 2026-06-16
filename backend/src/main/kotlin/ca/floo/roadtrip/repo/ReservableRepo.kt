@@ -57,9 +57,9 @@ class ReservableRepo(
             .resultQuery(
                 """
                 INSERT INTO reservables (
-                  type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref, reservation_url, last_seen_run_id
+                  type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref, last_seen_run_id
                 ) VALUES (
-                  ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?
+                  ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?
                 )
                 ON CONFLICT (type, vendor, vendor_id)
                 DO UPDATE SET
@@ -69,7 +69,6 @@ class ReservableRepo(
                   site_type = EXCLUDED.site_type,
                   raw = EXCLUDED.raw,
                   provider_ref = EXCLUDED.provider_ref,
-                  reservation_url = EXCLUDED.reservation_url,
                   last_seen_run_id = COALESCE(EXCLUDED.last_seen_run_id, reservables.last_seen_run_id),
                   deleted_at = NULL,
                   updated_at = now()
@@ -84,7 +83,6 @@ class ReservableRepo(
                 input.siteType,
                 rawJson,
                 providerRefJson,
-                input.reservationUrl,
                 runId,
             ).fetchOne()!!
             .get(0, Long::class.java)!!
@@ -300,7 +298,6 @@ class ReservableRepo(
         val siteType: String?,
         val raw: JsonElement?,
         val providerRef: JsonElement? = null,
-        val reservationUrl: String? = null,
     )
 
     data class LinkInput(
@@ -342,7 +339,6 @@ class ReservableRepo(
             name = r.get(RESERVABLES.NAME),
             loop = r.get(RESERVABLES.LOOP),
             siteType = r.get(RESERVABLES.SITE_TYPE),
-            reservationUrl = r.get(RESERVABLES.RESERVATION_URL),
             raw = rawJson,
             providerRef = providerRefJson,
         )
@@ -390,7 +386,7 @@ class ReservableRepo(
     ): Int {
         var seen = 0
         for (chunk in inputs.chunked(RESERVABLE_UPSERT_CHUNK_SIZE)) {
-            val values = chunk.joinToString(", ") { "(?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?, ?)" }
+            val values = chunk.joinToString(", ") { "(?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?)" }
             val args = mutableListOf<Any?>()
             for (input in chunk) {
                 args += input.rid.type.encode()
@@ -402,13 +398,12 @@ class ReservableRepo(
                 args += input.siteType
                 args += input.raw?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
                 args += input.providerRef?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
-                args += input.reservationUrl
                 args += runId
             }
             ctx.execute(
                 """
                 INSERT INTO reservables (
-                  type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref, reservation_url, last_seen_run_id
+                  type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref, last_seen_run_id
                 ) VALUES $values
                 ON CONFLICT (type, vendor, vendor_id)
                 DO UPDATE SET
@@ -418,7 +413,6 @@ class ReservableRepo(
                   site_type = EXCLUDED.site_type,
                   raw = EXCLUDED.raw,
                   provider_ref = EXCLUDED.provider_ref,
-                  reservation_url = EXCLUDED.reservation_url,
                   last_seen_run_id = EXCLUDED.last_seen_run_id,
                   deleted_at = NULL,
                   updated_at = now()

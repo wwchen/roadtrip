@@ -97,7 +97,6 @@ class ReservableRoutesTest {
                     loop = "Loop A",
                     siteType = "STANDARD",
                     raw = """{"campsite_id":"330257","reservable":true}""",
-                    reservationUrl = "https://www.recreation.gov/camping/campsites/330257",
                 )
             link(reservableId, poiId)
             application { routing { reservableRoutes(ctx) } }
@@ -225,14 +224,12 @@ class ReservableRoutesTest {
                     vendorId = "330257",
                     name = "A12",
                     loop = "Loop A",
-                    reservationUrl = "https://www.recreation.gov/camping/campsites/330257",
                 )
             val b03 =
                 seedReservable(
                     vendorId = "330258",
                     name = "B03",
                     loop = "Loop B",
-                    reservationUrl = "https://www.recreation.gov/camping/campsites/330258",
                 )
             val m01 = seedReservable(vendorId = "330999", name = "M01", loop = "Loop M")
             link(a12, poiId)
@@ -296,9 +293,6 @@ class ReservableRoutesTest {
                     name = "A",
                     raw = """{"_parent_aspira_map_id":-2147483615,"_parent_aspira_resource_loc":-2147483624}""",
                     providerRefJson = """{"mapId":-2147483615,"resourceLocationId":-2147483624}""",
-                    reservationUrl =
-                        "https://washington.goingtocamp.com/create-booking/results" +
-                            "?transactionLocationId=-2147483630&mapId=-2147483615&resourceLocationId=-2147483624",
                 )
             link(reservableId, poiId)
             application { routing { reservableRoutes(ctx) } }
@@ -330,7 +324,6 @@ class ReservableRoutesTest {
                 seedReservable(
                     vendorId = "330257",
                     name = "A12",
-                    reservationUrl = "https://www.recreation.gov/camping/campsites/330257",
                 )
             link(site, poiId)
             application { routing { reservableRoutes(ctx) } }
@@ -620,15 +613,14 @@ class ReservableRoutesTest {
         siteType: String? = null,
         raw: String = """{"source":"test"}""",
         providerRefJson: String? = null,
-        reservationUrl: String? = null,
     ): Long =
         ctx
             .fetchOne(
                 """
                 INSERT INTO reservables (
-                    type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref, reservation_url
+                    type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?
+                    ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb
                 )
                 RETURNING id
                 """.trimIndent(),
@@ -641,7 +633,6 @@ class ReservableRoutesTest {
                 siteType,
                 raw,
                 providerRefJson,
-                reservationUrl,
             )!!
             .get("id", Long::class.java)
 

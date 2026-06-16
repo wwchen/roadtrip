@@ -84,7 +84,6 @@ class ReservableRepoTest {
                     siteType = "STANDARD NONELECTRIC",
                     raw = rawJson,
                     providerRef = providerRefJson,
-                    reservationUrl = "https://www.recreation.gov/camping/campsites/330257",
                 ),
             )
 
@@ -95,7 +94,6 @@ class ReservableRepoTest {
         assertEquals("FS1-20", found.name)
         assertEquals("AREA WHITE RIVER", found.loop)
         assertEquals("STANDARD NONELECTRIC", found.siteType)
-        assertEquals("https://www.recreation.gov/camping/campsites/330257", found.reservationUrl)
         assertEquals(rawJson, found.raw)
         assertEquals(providerRefJson, found.providerRef)
     }
@@ -103,34 +101,13 @@ class ReservableRepoTest {
     @Test
     fun `upsert is idempotent and refreshes mutable fields`() {
         val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
-        val firstId =
-            repo.upsert(
-                ReservableRepo.Input(
-                    rid = rid,
-                    name = "FS1-20",
-                    loop = "loop A",
-                    siteType = "STANDARD",
-                    raw = null,
-                    reservationUrl = "https://www.recreation.gov/camping/campsites/330257",
-                ),
-            )
-        val secondId =
-            repo.upsert(
-                ReservableRepo.Input(
-                    rid = rid,
-                    name = "FS1-20-renamed",
-                    loop = "loop A",
-                    siteType = "TENT ONLY",
-                    raw = null,
-                    reservationUrl = "https://www.recreation.gov/camping/campsites/330257?updated=1",
-                ),
-            )
+        val firstId = repo.upsert(ReservableRepo.Input(rid, "FS1-20", "loop A", "STANDARD", null))
+        val secondId = repo.upsert(ReservableRepo.Input(rid, "FS1-20-renamed", "loop A", "TENT ONLY", null))
 
         assertEquals(firstId, secondId, "upsert on same composite must reuse the row")
         val found = repo.findByRid(rid)!!
         assertEquals("FS1-20-renamed", found.name)
         assertEquals("TENT ONLY", found.siteType)
-        assertEquals("https://www.recreation.gov/camping/campsites/330257?updated=1", found.reservationUrl)
     }
 
     @Test

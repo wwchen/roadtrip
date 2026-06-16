@@ -5,8 +5,6 @@ import ca.floo.roadtrip.models.ReservableId
 import ca.floo.roadtrip.models.ReservableType
 import ca.floo.roadtrip.models.ValidationResult
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.booking.aspiraHostForVendor
-import ca.floo.roadtrip.service.booking.aspiraReservableUrl
 import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.ReservableEtlOutput
 import ca.floo.roadtrip.service.etl.SourceEtl
@@ -143,7 +141,6 @@ class AspiraResourcesEtl(
                 val leafMapId = inv.firstMapId
                 val leaf = leafMapId?.let { leavesByMapId[it] }
                 if (leafMapId != null && leaf == null) unmatchedLeaf++
-                val providerRef = buildResourceProviderRef(inv = inv, leaf = leaf)
                 out +=
                     ReservableRepo.Input(
                         rid = ReservableId(ReservableType.SITE, vendor, resourceId),
@@ -159,8 +156,7 @@ class AspiraResourcesEtl(
                         // id in the JSON blob and leave the column null.
                         siteType = null,
                         raw = buildResourceRaw(inv = inv, leaf = leaf),
-                        providerRef = providerRef,
-                        reservationUrl = buildReservationUrl(providerRef),
+                        providerRef = buildResourceProviderRef(inv = inv, leaf = leaf),
                     )
             }
         }
@@ -292,32 +288,6 @@ class AspiraResourcesEtl(
                 put("resourceLocationId", resourceLocationId)
             }
         }
-    }
-
-    private fun buildReservationUrl(providerRef: JsonObject?): String? {
-        val host = aspiraHostForVendor(vendor) ?: return null
-        val ref = providerRef ?: return null
-        val transactionLocationId =
-            ref["transactionLocationId"]
-                ?.jsonPrimitive
-                ?.contentOrNull
-                ?.toLongOrNull() ?: return null
-        val mapId =
-            ref["mapId"]
-                ?.jsonPrimitive
-                ?.contentOrNull
-                ?.toLongOrNull() ?: return null
-        val resourceLocationId =
-            ref["resourceLocationId"]
-                ?.jsonPrimitive
-                ?.contentOrNull
-                ?.toLongOrNull()
-        return aspiraReservableUrl(
-            host = host,
-            transactionLocationId = transactionLocationId,
-            mapId = mapId,
-            resourceLocationId = resourceLocationId,
-        )
     }
 
     private fun flattenAttributes(attrs: JsonArray): JsonArray =

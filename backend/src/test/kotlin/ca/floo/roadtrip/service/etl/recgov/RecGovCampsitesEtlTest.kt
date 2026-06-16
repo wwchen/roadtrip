@@ -109,7 +109,6 @@ class RecGovCampsitesEtlTest {
         assertEquals("FS1-20", r.name)
         assertEquals("AREA WHITE RIVER", r.loop)
         assertEquals("STANDARD NONELECTRIC", r.siteType)
-        assertEquals("https://www.recreation.gov/camping/campsites/330257", r.reservationUrl)
 
         // Synthetic _parent_facility_id is injected so the joiner has a
         // place to read it. Without this the joiner has no way to match

@@ -296,7 +296,7 @@ private fun ApplicationCall.queryValues(vararg names: String): List<String> =
 
 private fun Reservable.toSchema(
     poiIds: List<Long> = emptyList(),
-    reservationUrl: String? = this.reservationUrl,
+    reservationUrl: String? = reservationUrlFor(stay = null, parentRef = null),
 ): ReservableSchema =
     ReservableSchema(
         rid = rid.encode(),
@@ -315,17 +315,15 @@ private fun Reservable.toSchema(
 private fun Reservable.reservationUrlFor(
     stay: ReservationStay?,
     parentRef: ProviderRef?,
-): String? {
-    if (stay == null) return reservationUrl
-    return when (rid.vendor) {
+): String? =
+    when (rid.vendor) {
         "recgov" -> recgovCampsiteUrl(rid.vendorId, stay)
-        "aspira_pc", "aspira_bc", "aspira_wa" -> aspiraReservationUrlFor(stay, parentRef) ?: reservationUrl
-        else -> reservationUrl
+        "aspira_pc", "aspira_bc", "aspira_wa" -> aspiraReservationUrlFor(stay, parentRef)
+        else -> null
     }
-}
 
 private fun Reservable.aspiraReservationUrlFor(
-    stay: ReservationStay,
+    stay: ReservationStay?,
     parentRef: ProviderRef?,
 ): String? {
     val parentAspira = parentRef as? ProviderRef.Aspira

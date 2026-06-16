@@ -196,11 +196,6 @@ class AspiraResourcesEtlTest {
         assertEquals("-2147483640", (tunnelRef["mapId"] as JsonPrimitive).content)
         assertEquals("1001", (tunnelRef["transactionLocationId"] as JsonPrimitive).content)
         assertEquals("9001", (tunnelRef["resourceLocationId"] as JsonPrimitive).content)
-        val tunnelUrl = reservable("502").reservationUrl!!
-        assertTrue(tunnelUrl.startsWith("https://reservation.pc.gc.ca/create-booking/results?"), tunnelUrl)
-        assertTrue(tunnelUrl.contains("transactionLocationId=1001"), tunnelUrl)
-        assertTrue(tunnelUrl.contains("mapId=-2147483640"), tunnelUrl)
-        assertTrue(tunnelUrl.contains("resourceLocationId=9001"), tunnelUrl)
 
         val twoJack = rawOf("601")
         assertEquals("-2147483641", (twoJack["_parent_aspira_map_id"] as JsonPrimitive).content)
