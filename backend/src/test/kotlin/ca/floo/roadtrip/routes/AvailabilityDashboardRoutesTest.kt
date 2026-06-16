@@ -1,0 +1,207 @@
+package ca.floo.roadtrip.routes
+
+import ca.floo.roadtrip.repo.AvailabilityJobRepo
+import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
+import ca.floo.roadtrip.repo.migrate
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
+import io.ktor.client.request.get
+import io.ktor.client.statement.bodyAsText
+import io.ktor.http.HttpStatusCode
+import io.ktor.server.routing.routing
+import io.ktor.server.testing.testApplication
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
+import org.jooq.DSLContext
+import org.jooq.SQLDialect
+import org.jooq.impl.DSL
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
+import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.utility.DockerImageName
+import java.time.OffsetDateTime
+import java.time.ZoneOffset
+import kotlin.test.assertEquals
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class AvailabilityDashboardRoutesTest {
+    private lateinit var pg: PostgreSQLContainer<Nothing>
+    private lateinit var ds: HikariDataSource
+    private lateinit var ctx: DSLContext
+
+    @BeforeAll
+    fun start() {
+        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
+        pg =
+            PostgreSQLContainer<Nothing>(image).apply {
+                withDatabaseName("roadtrip_test")
+                withUsername("test")
+                withPassword("test")
+            }
+        pg.start()
+        val cfg =
+            HikariConfig().apply {
+                jdbcUrl = pg.jdbcUrl
+                username = pg.username
+                password = pg.password
+                maximumPoolSize = 2
+            }
+        ds = HikariDataSource(cfg)
+        migrate(ds)
+        ctx = DSL.using(ds, SQLDialect.POSTGRES)
+    }
+
+    @AfterAll
+    fun stop() {
+        ds.close()
+        pg.stop()
+    }
+
+    @BeforeEach
+    fun cleanup() {
+        ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability_job_run")
+        ctx.execute("DELETE FROM availability_job")
+        ctx.execute("DELETE FROM availability_watch")
+        ctx.execute("DELETE FROM reservable_pois")
+        ctx.execute("DELETE FROM reservables")
+        ctx.execute("DELETE FROM pois")
+    }
+
+    private fun seedPoi(): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO pois (
+                    source, source_id, category, name, geom, region,
+                    properties, provider_ref, fetched_at
+                ) VALUES (
+                    'test', 'p1', 'campground', 'Upper Pines',
+                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
+                    'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
+                ) RETURNING id
+                """.trimIndent(),
+            )!!.get("id", Long::class.java)
+
+    private fun seedJob(poiId: Long): Long {
+        val watchId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO availability_watch (
+                        poi_id, target_dates, cadence_sec, trigger_kinds
+                    ) VALUES (
+                        ?, ARRAY['2026-07-04'::date], 60, ARRAY['atc']
+                    ) RETURNING id
+                    """.trimIndent(),
+                    poiId,
+                )!!.get("id", Long::class.java)
+        return AvailabilityJobRepo(ctx).upsertForWatch(
+            watchId = watchId,
+            intentPayload = buildJsonObject { put("kind", JsonPrimitive("reservable")) },
+            cadenceSec = 60,
+            status = "active",
+            nextRunAt = OffsetDateTime.now(ZoneOffset.UTC),
+        ).id
+    }
+
+    @Test
+    fun `GET jobs returns the seeded job`() = testApplication {
+        application { routing { availabilityDashboardRoutes(ctx) } }
+        seedJob(seedPoi())
+        val resp = client.get("/api/availability/jobs")
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+        assertEquals(1, body["total"]!!.jsonPrimitive.int)
+        assertEquals(1, body["jobs"]!!.jsonArray.size)
+        assertEquals("active", body["jobs"]!!.jsonArray[0].jsonObject["status"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `GET jobs summary counts by status`() = testApplication {
+        application { routing { availabilityDashboardRoutes(ctx) } }
+        seedJob(seedPoi())
+        val resp = client.get("/api/availability/jobs/summary")
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+        assertEquals(1, body["active"]!!.jsonPrimitive.int)
+        assertEquals(0, body["paused"]!!.jsonPrimitive.int)
+        assertEquals(0, body["done"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `GET runs lists runs newest first`() = testApplication {
+        application { routing { availabilityDashboardRoutes(ctx) } }
+        val jobId = seedJob(seedPoi())
+        val runRepo = AvailabilityJobRunRepo(ctx)
+        val now = OffsetDateTime.now(ZoneOffset.UTC)
+        val older = runRepo.start(jobId, now.minusMinutes(5))
+        runRepo.complete(older, snapshotCount = 1, completedAt = now.minusMinutes(4), durationMs = 100)
+        val newer = runRepo.start(jobId, now.minusMinutes(1))
+        runRepo.complete(newer, snapshotCount = 2, completedAt = now, durationMs = 100)
+        val resp = client.get("/api/availability/runs")
+        assertEquals(HttpStatusCode.OK, resp.status)
+        val rows = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["runs"]!!.jsonArray
+        assertEquals(2, rows.size)
+        assertEquals(newer, rows[0].jsonObject["id"]!!.jsonPrimitive.long)
+        assertEquals(older, rows[1].jsonObject["id"]!!.jsonPrimitive.long)
+    }
+
+    @Test
+    fun `GET runs filters by job_id`() = testApplication {
+        application { routing { availabilityDashboardRoutes(ctx) } }
+        val poiId = seedPoi()
+        val jobA = seedJob(poiId)
+        val jobB =
+            AvailabilityJobRepo(ctx).upsertForWatch(
+                watchId =
+                    ctx
+                        .fetchOne(
+                            """
+                            INSERT INTO availability_watch (
+                                poi_id, target_dates, cadence_sec, trigger_kinds
+                            ) VALUES (
+                                ?, ARRAY['2026-07-04'::date], 60, ARRAY['atc']
+                            ) RETURNING id
+                            """.trimIndent(),
+                            poiId,
+                        )!!.get("id", Long::class.java),
+                intentPayload = buildJsonObject { put("kind", JsonPrimitive("reservable")) },
+                cadenceSec = 60,
+                status = "active",
+                nextRunAt = OffsetDateTime.now(ZoneOffset.UTC),
+            ).id
+        val runRepo = AvailabilityJobRunRepo(ctx)
+        runRepo.start(jobA, OffsetDateTime.now(ZoneOffset.UTC))
+        runRepo.start(jobB, OffsetDateTime.now(ZoneOffset.UTC))
+        val resp = client.get("/api/availability/runs?job_id=$jobA")
+        val rows = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["runs"]!!.jsonArray
+        assertEquals(1, rows.size)
+        assertEquals(jobA, rows[0].jsonObject["job_id"]!!.jsonPrimitive.long)
+    }
+
+    @Test
+    fun `GET snapshots requires exactly one filter`() = testApplication {
+        application { routing { availabilityDashboardRoutes(ctx) } }
+        val resp = client.get("/api/availability/snapshots")
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+        val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+        assertEquals("invalid_filter", body["error"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `GET jobs id runs returns 400 on invalid id`() = testApplication {
+        application { routing { availabilityDashboardRoutes(ctx) } }
+        val resp = client.get("/api/availability/jobs/not-a-number/runs")
+        assertEquals(HttpStatusCode.BadRequest, resp.status)
+    }
+}
