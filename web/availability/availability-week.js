@@ -141,7 +141,7 @@ function renderShell(ctx) {
   return `
     <section class="cg-availability">
       ${renderNightsRow(ctx)}
-      ${renderWeekNav(ctx)}
+      ${ctx.availabilityView === 'week' ? renderWeekNav(ctx) : ''}
       ${renderAvailabilitySurface(ctx)}
       <div class="cg-freshness">${renderFreshness(ctx)}</div>
       ${renderDetail(ctx)}
@@ -247,6 +247,7 @@ function renderAvailabilitySurface(ctx) {
     siteColumnWidth: ctx.siteColumnWidth,
     loadingMore: ctx.matrixLoading,
     loadMoreError: ctx.matrixError,
+    showToday: shouldShowMatrixToday(ctx),
   });
 }
 
@@ -812,6 +813,12 @@ function resetMatrixRange(ctx) {
 
 function matrixAvailabilityDays(ctx) {
   return Array.isArray(ctx.matrixDays) ? ctx.matrixDays : (Array.isArray(ctx.days) ? ctx.days : []);
+}
+
+function shouldShowMatrixToday(ctx) {
+  const days = matrixAvailabilityDays(ctx);
+  const firstDate = days[0]?.date;
+  return days.length > WEEK_DAYS || (firstDate != null && firstDate !== isoDate(startOfTodayUtc()));
 }
 
 function siteListAvailabilityDays(ctx) {
