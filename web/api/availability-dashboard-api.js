@@ -34,8 +34,8 @@ export function listRuns({ status, jobId, since, limit, signal } = {}) {
   return jsonGetOk(`/api/availability/runs${suffix}`, { signal });
 }
 
-export function listSnapshotsForReservable(reservableId, { limit, signal } = {}) {
-  const qs = new URLSearchParams({ reservable_id: String(reservableId) });
+export function listSnapshotsForReservable(reservableRid, { limit, signal } = {}) {
+  const qs = new URLSearchParams({ reservable_rid: String(reservableRid) });
   if (limit != null) qs.set('limit', limit);
   return jsonGetOk(`/api/availability/snapshots?${qs}`, { signal });
 }
