@@ -215,17 +215,25 @@ jobs:
             git fetch origin "+refs/heads/$branch:refs/remotes/origin/$branch"
             git checkout -B "$branch" "origin/$branch"
 
+            before_sha=$(git rev-parse HEAD)
+            strategy=""
             if [ -n "${old_base:-}" ]; then
               if old_base_ref=$(resolve_old_base_ref "$old_base"); then
                 echo "Rebasing $branch onto origin/master from old base $old_base ($old_base_ref)."
                 rebase_args=(--onto origin/master "$old_base_ref" "$branch")
+                strategy="--onto master from retargeted old base \`$old_base\` (\`$old_base_ref\`)"
               else
                 rebase_args=("$master_sha")
+                strategy="patch-id rebase onto master (old base \`$old_base\` could not be resolved)"
               fi
             else
               base=$(git merge-base HEAD "$master_sha")
               if [ "$base" = "$master_sha" ]; then
                 echo "Already up to date with master."
+                run_url="https://github.com/$REPO/actions/runs/$GITHUB_RUN_ID"
+                gh pr comment "$pr_number" --repo "$REPO" --body \
+                  "🤖 auto-rebase: already up to date with master, no rebase needed. ([log]($run_url))" \
+                  || true
                 git checkout --detach "$master_sha"
                 echo "::endgroup::"
                 continue
@@ -238,24 +246,36 @@ jobs:
               if inferred_base=$(infer_stacked_base "$branch"); then
                 echo "Rebasing $branch onto origin/master from inferred parent tip $inferred_base."
                 rebase_args=(--onto origin/master "$inferred_base" "$branch")
+                inferred_short=$(git rev-parse --short "$inferred_base")
+                strategy="--onto master from inferred parent tip \`$inferred_short\`"
               else
                 # `git rebase master` drops patches already in master by patch-id,
                 # which is what un-sticks stacked PRs after their parent merges.
                 rebase_args=("$master_sha")
+                strategy="patch-id rebase onto master"
               fi
             fi
 
+            run_url="https://github.com/$REPO/actions/runs/$GITHUB_RUN_ID"
+            before_short=$(git rev-parse --short "$before_sha")
             if git rebase "${rebase_args[@]}"; then
+              after_short=$(git rev-parse --short HEAD)
               if git push --force-with-lease origin "$branch"; then
                 echo "Rebased and pushed."
+                gh pr comment "$pr_number" --repo "$REPO" --body \
+                  "🤖 auto-rebase: rebased \`$branch\` (\`$before_short\` → \`$after_short\`) using $strategy. ([log]($run_url))" \
+                  || true
               else
                 echo "Push rejected (branch moved). Skipping."
+                gh pr comment "$pr_number" --repo "$REPO" --body \
+                  "🤖 auto-rebase: rebase succeeded but force-push was rejected (branch moved). Try \`/rebase\` again, or rebase manually. ([log]($run_url))" \
+                  || true
               fi
             else
               echo "Rebase conflict on PR #$pr_number; aborting."
               git rebase --abort || true
               gh pr comment "$pr_number" --repo "$REPO" --body \
-                "Auto-rebase onto \`master\` hit a conflict. Please rebase manually." \
+                "🤖 auto-rebase: hit a conflict using $strategy. Please rebase manually. ([log]($run_url))" \
                 || true
             fi
 
