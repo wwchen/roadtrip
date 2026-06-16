@@ -154,8 +154,12 @@ class AvailabilitySnapshotRepo(
                 flipsLast24h = 0,
             )
         }
+
         // Walk for contiguous available=true runs.
-        data class Run(val start: OffsetDateTime, val end: OffsetDateTime)
+        data class Run(
+            val start: OffsetDateTime,
+            val end: OffsetDateTime,
+        )
         val runs = mutableListOf<Run>()
         var runStart: OffsetDateTime? = null
         var lastTrueAt: OffsetDateTime? = null
@@ -174,7 +178,11 @@ class AvailabilitySnapshotRepo(
         }
         val currentOrLastOpenWindowSec =
             runs.lastOrNull()?.let {
-                java.time.Duration.between(it.start, it.end).seconds.toInt().coerceAtLeast(0)
+                java.time.Duration
+                    .between(it.start, it.end)
+                    .seconds
+                    .toInt()
+                    .coerceAtLeast(0)
             }
         val medianOpenWindowSec =
             if (runs.isEmpty()) {
@@ -182,8 +190,13 @@ class AvailabilitySnapshotRepo(
             } else {
                 val durations =
                     runs
-                        .map { java.time.Duration.between(it.start, it.end).seconds.toInt().coerceAtLeast(0) }
-                        .sorted()
+                        .map {
+                            java.time.Duration
+                                .between(it.start, it.end)
+                                .seconds
+                                .toInt()
+                                .coerceAtLeast(0)
+                        }.sorted()
                 val mid = durations.size / 2
                 if (durations.size % 2 == 0) {
                     (durations[mid - 1] + durations[mid]) / 2

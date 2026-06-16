@@ -128,7 +128,8 @@ class AvailabilityDashboardRoutesTest {
                     'site', 'recgov', '330257', 'federal-campsites', 'A12'
                 ) RETURNING id
                 """.trimIndent(),
-            )!!.get("id", Long::class.java)
+            )!!
+            .get("id", Long::class.java)
 
     private fun insertSnapshot(
         reservableId: Long,
@@ -256,39 +257,42 @@ class AvailabilityDashboardRoutesTest {
         }
 
     @Test
-    fun `GET snapshots summary returns stats per date`() = testApplication {
-        application { routing { availabilityDashboardRoutes(ctx) } }
-        val reservableId = seedReservable()
-        val now = OffsetDateTime.now(ZoneOffset.UTC)
-        insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(3), available = false)
-        insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(2), available = true)
-        insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(1), available = true)
-        val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:330257")
-        assertEquals(HttpStatusCode.OK, resp.status)
-        val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-        assertEquals("site:recgov:330257", body["reservable_rid"]!!.jsonPrimitive.content)
-        val stats = body["stats"]!!.jsonArray
-        assertEquals(1, stats.size)
-        val row = stats[0].jsonObject
-        assertEquals("2026-07-04", row["target_date"]!!.jsonPrimitive.content)
-        assertEquals(3, row["total_snapshots"]!!.jsonPrimitive.int)
-        assertEquals(true, row["is_currently_open"]!!.jsonPrimitive.boolean)
-        assertEquals(1, row["flips_last_24h"]!!.jsonPrimitive.int)
-    }
+    fun `GET snapshots summary returns stats per date`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val reservableId = seedReservable()
+            val now = OffsetDateTime.now(ZoneOffset.UTC)
+            insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(3), available = false)
+            insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(2), available = true)
+            insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(1), available = true)
+            val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:330257")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("site:recgov:330257", body["reservable_rid"]!!.jsonPrimitive.content)
+            val stats = body["stats"]!!.jsonArray
+            assertEquals(1, stats.size)
+            val row = stats[0].jsonObject
+            assertEquals("2026-07-04", row["target_date"]!!.jsonPrimitive.content)
+            assertEquals(3, row["total_snapshots"]!!.jsonPrimitive.int)
+            assertEquals(true, row["is_currently_open"]!!.jsonPrimitive.boolean)
+            assertEquals(1, row["flips_last_24h"]!!.jsonPrimitive.int)
+        }
 
     @Test
-    fun `GET snapshots summary requires rid`() = testApplication {
-        application { routing { availabilityDashboardRoutes(ctx) } }
-        val resp = client.get("/api/availability/snapshots/summary")
-        assertEquals(HttpStatusCode.BadRequest, resp.status)
-        val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-        assertEquals("missing_reservable_rid", body["error"]!!.jsonPrimitive.content)
-    }
+    fun `GET snapshots summary requires rid`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val resp = client.get("/api/availability/snapshots/summary")
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("missing_reservable_rid", body["error"]!!.jsonPrimitive.content)
+        }
 
     @Test
-    fun `GET snapshots summary returns 404 on unknown rid`() = testApplication {
-        application { routing { availabilityDashboardRoutes(ctx) } }
-        val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:999999")
-        assertEquals(HttpStatusCode.NotFound, resp.status)
-    }
+    fun `GET snapshots summary returns 404 on unknown rid`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:999999")
+            assertEquals(HttpStatusCode.NotFound, resp.status)
+        }
 }

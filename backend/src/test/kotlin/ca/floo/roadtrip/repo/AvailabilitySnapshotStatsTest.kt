@@ -71,7 +71,8 @@ class AvailabilitySnapshotStatsTest {
                     'site', 'recgov', '330257', 'federal-campsites', 'A12'
                 ) RETURNING id
                 """.trimIndent(),
-            )!!.get("id", Long::class.java)
+            )!!
+            .get("id", Long::class.java)
 
     private fun insertSnapshot(
         reservableId: Long,
@@ -175,14 +176,14 @@ class AvailabilitySnapshotStatsTest {
         val now = now()
         // Three runs of 30s, 120s, 60s.
         insertSnapshot(reservableId, date, now.minusSeconds(700), available = false)
-        insertSnapshot(reservableId, date, now.minusSeconds(630), available = true)   // r1 start
-        insertSnapshot(reservableId, date, now.minusSeconds(600), available = true)   // r1 end (30s)
+        insertSnapshot(reservableId, date, now.minusSeconds(630), available = true) // r1 start
+        insertSnapshot(reservableId, date, now.minusSeconds(600), available = true) // r1 end (30s)
         insertSnapshot(reservableId, date, now.minusSeconds(570), available = false)
-        insertSnapshot(reservableId, date, now.minusSeconds(450), available = true)   // r2 start
-        insertSnapshot(reservableId, date, now.minusSeconds(330), available = true)   // r2 end (120s)
+        insertSnapshot(reservableId, date, now.minusSeconds(450), available = true) // r2 start
+        insertSnapshot(reservableId, date, now.minusSeconds(330), available = true) // r2 end (120s)
         insertSnapshot(reservableId, date, now.minusSeconds(300), available = false)
-        insertSnapshot(reservableId, date, now.minusSeconds(180), available = true)   // r3 start
-        insertSnapshot(reservableId, date, now.minusSeconds(120), available = true)   // r3 end (60s)
+        insertSnapshot(reservableId, date, now.minusSeconds(180), available = true) // r3 start
+        insertSnapshot(reservableId, date, now.minusSeconds(120), available = true) // r3 end (60s)
         insertSnapshot(reservableId, date, now.minusSeconds(60), available = false)
         val repo = AvailabilitySnapshotRepo(ctx)
         val stats = repo.summarize(reservableId, listOf(date), now).single()
