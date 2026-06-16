@@ -100,58 +100,16 @@ data_sources:
       args: { slug: recgov-campgrounds }
       output_dir_prefix: data/raw/recgov-campgrounds
 
-  # --- Aspira per-resource availability captures (RFC 0008) -----------------
-  # One fetcher, three tenants. The fetcher walks the paired aspira-maps-{tenant}
-  # capture for leaves and calls /api/availability/map per leaf so the response's
-  # `resourceAvailabilities` block names every individual reservable. We persist
-  # only the catalog signal — request-time availability stays in the existing
-  # CachedAvailability path.
-  - slug: aspira-resources-wa
-    name: Aspira resource catalog (Washington State Parks)
-    fetcher:
-      executor: python3
-      filename: scripts/fetch_aspira_resources.py
-      args:
-        slug: aspira-resources-wa
-        maps-slug: aspira-maps-wa
-        host: washington.goingtocamp.com
-      output_dir_prefix: data/raw/aspira-resources-wa
-    depends_on: [aspira-maps-wa]
-
-  - slug: aspira-resources-bc
-    name: Aspira resource catalog (BC Parks)
-    fetcher:
-      executor: python3
-      filename: scripts/fetch_aspira_resources.py
-      args:
-        slug: aspira-resources-bc
-        maps-slug: aspira-maps-bc
-        host: camping.bcparks.ca
-      output_dir_prefix: data/raw/aspira-resources-bc
-    depends_on: [aspira-maps-bc]
-
-  - slug: aspira-resources-pc
-    name: Aspira resource catalog (Parks Canada)
-    fetcher:
-      executor: python3
-      filename: scripts/fetch_aspira_resources.py
-      args:
-        slug: aspira-resources-pc
-        maps-slug: aspira-maps-pc
-        host: reservation.pc.gc.ca
-      output_dir_prefix: data/raw/aspira-resources-pc
-    depends_on: [aspira-maps-pc]
-
   # --- Aspira per-park named-site inventory ---------------------------------
   # One fetcher, three tenants. Walks the paired aspira-maps-{tenant} capture
   # for unique resourceLocationIds and calls /api/resourcelocation/resources
   # per park. The response carries the human label ("OFC13"), description
-  # ("C13 Phantom RV Pad"), allowed equipment, capacity, and attribute IDs
-  # for every reservable site at that park. This is the catalog
-  # AspiraResourcesEtl joins against to populate reservables.name/description.
+  # ("C13 Phantom RV Pad"), allowed equipment, capacity, attribute IDs, and
+  # mapIds[] (parent leaf reference) for every reservable site at that park.
+  # AspiraResourcesEtl reads this catalog as the source of truth for both
+  # the reservable set and per-site enrichment.
   #
-  # Lighter than aspira-resources-{tenant} (one call per park, ~120-170
-  # parks vs ~3000+ leaves). At our 1.5s throttle, ~3-5 minutes per tenant.
+  # ~120-170 calls per tenant at our 1.5s throttle, ~3-5 min wall-clock.
   - slug: aspira-inventory-wa
     name: Aspira park inventory (Washington State Parks)
     fetcher:
@@ -337,35 +295,34 @@ reservable_data:
         adapter: RecGovCampsitesEtl
         inputs: [recgov-campsites]
 
-  # Aspira per-tenant reservable catalogs. Each row's terminal reads three
+  # Aspira per-tenant reservable catalogs. Each row's terminal reads two
   # data_sources:
-  #   1. per-leaf availability capture (multi-part) — supplies the resource
-  #      ID set we monitor (key into resourceAvailabilities).
-  #   2. /api/maps capture — leaf metadata (transactionLocationId, name,
-  #      parent name) used to label resources by their parent loop.
-  #   3. per-park inventory capture (multi-part) — named-site catalog
-  #      (localizedValues[].name/description, allowedEquipment,
-  #      definedAttributes). Optional: when absent, the ETL falls back to
-  #      the previous "name=null" behavior so backfill order doesn't matter.
+  #   1. per-park inventory capture (multi-part) — named-site catalog from
+  #      /api/resourcelocation/resources. The source of truth for both the
+  #      reservable set AND per-site enrichment (name, description,
+  #      allowedEquipment, definedAttributes, capacity, mapIds[]).
+  #   2. /api/maps capture — leaf metadata. Each inventory record carries
+  #      mapIds[] referencing parent leaves; AspiraLeavesWalk turns the
+  #      maps tree into a mapId-keyed leaf index for loop labeling.
   # Cross-row etl refs aren't supported, so the maps tree gets walked
   # again here via AspiraLeavesWalk — same code path AspiraLeavesEtl uses.
   - name: Washington Aspira Resources
     etls:
       - slug: aspira-wa-resources
         adapter: AspiraResourcesEtl
-        inputs: [aspira-resources-wa, aspira-maps-wa, aspira-inventory-wa]
+        inputs: [aspira-inventory-wa, aspira-maps-wa]
 
   - name: BC Aspira Resources
     etls:
       - slug: aspira-bc-resources
         adapter: AspiraResourcesEtl
-        inputs: [aspira-resources-bc, aspira-maps-bc, aspira-inventory-bc]
+        inputs: [aspira-inventory-bc, aspira-maps-bc]
 
   - name: Parks Canada Aspira Resources
     etls:
       - slug: aspira-pc-resources
         adapter: AspiraResourcesEtl
-        inputs: [aspira-resources-pc, aspira-maps-pc, aspira-inventory-pc]
+        inputs: [aspira-inventory-pc, aspira-maps-pc]
 
 # ============================================================================
 # poi_reservable_joiner — link rows in the reservable_pois table. Each row
