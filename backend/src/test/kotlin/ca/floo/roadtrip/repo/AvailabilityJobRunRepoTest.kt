@@ -80,7 +80,8 @@ class AvailabilityJobRunRepoTest {
                     'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
                 ) RETURNING id
                 """.trimIndent(),
-            )!!.get("id", Long::class.java)
+            )!!
+            .get("id", Long::class.java)
 
     private fun seedJob(poiId: Long): Long {
         val watchId =
@@ -94,19 +95,21 @@ class AvailabilityJobRunRepoTest {
                     ) RETURNING id
                     """.trimIndent(),
                     poiId,
-                )!!.get("id", Long::class.java)
+                )!!
+                .get("id", Long::class.java)
         val intent: JsonObject =
             buildJsonObject {
                 put("kind", JsonPrimitive("reservable"))
                 put("reservable_id", JsonPrimitive(0))
             }
-        return AvailabilityJobRepo(ctx).upsertForWatch(
-            watchId = watchId,
-            intentPayload = intent,
-            cadenceSec = 60,
-            status = "active",
-            nextRunAt = now(),
-        ).id
+        return AvailabilityJobRepo(ctx)
+            .upsertForWatch(
+                watchId = watchId,
+                intentPayload = intent,
+                cadenceSec = 60,
+                status = "active",
+                nextRunAt = now(),
+            ).id
     }
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)

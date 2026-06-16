@@ -54,12 +54,22 @@ class AvailabilityPollExecutor(
                     }
                 }
             val completedAt = OffsetDateTime.now()
-            val durationMs = java.time.Duration.between(startedAt, completedAt).toMillis().toInt().coerceAtLeast(0)
+            val durationMs =
+                java.time.Duration
+                    .between(startedAt, completedAt)
+                    .toMillis()
+                    .toInt()
+                    .coerceAtLeast(0)
             runs.complete(runId, snapshotCount, completedAt, durationMs)
         } catch (e: Exception) {
             log.warn("job {} run {} failed: {}", job.id, runId, e.message)
             val completedAt = OffsetDateTime.now()
-            val durationMs = java.time.Duration.between(startedAt, completedAt).toMillis().toInt().coerceAtLeast(0)
+            val durationMs =
+                java.time.Duration
+                    .between(startedAt, completedAt)
+                    .toMillis()
+                    .toInt()
+                    .coerceAtLeast(0)
             runs.fail(runId, error = e.message ?: e::class.simpleName ?: "unknown", completedAt = completedAt, durationMs = durationMs)
         }
         return HandlerResult(nextRunAt = OffsetDateTime.now().plusSeconds(job.cadenceSec.toLong()))
@@ -106,7 +116,11 @@ class AvailabilityPollExecutor(
             intent.targetDates
                 .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
                 .maxOrNull()
-                ?.let { java.time.temporal.ChronoUnit.DAYS.between(start, it).toInt() + 1 }
+                ?.let {
+                    java.time.temporal.ChronoUnit.DAYS
+                        .between(start, it)
+                        .toInt() + 1
+                }
                 ?: 1
 
         val response =
