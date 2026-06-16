@@ -1,9 +1,23 @@
-.PHONY: help run deploy stop check-pushed fetch-tesla-supercharger-pricing data-fetch data-import poll-raw qa install install-hooks companion
+.PHONY: help run deploy stop check-pushed fetch-tesla-supercharger-pricing data-fetch data-import clean-db poll-raw qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
 DEPLOY_USER ?= mini
 DEPLOY_DIR  ?= ~/workspace/roadtrip
+POSTGRES_DB ?= roadtrip
+POSTGRES_USER ?= roadtrip
+POSTGRES_PASSWORD ?= roadtrip
+export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
+
+DB_HOST ?= 127.0.0.1
+DB_PORT ?= 5432
+DB_NAME ?= $(POSTGRES_DB)
+DB_USER ?= $(POSTGRES_USER)
+DB_PASSWORD ?= $(POSTGRES_PASSWORD)
+DB_JDBC_URL ?= jdbc:postgresql://$(DB_HOST):$(DB_PORT)/$(DB_NAME)
+
+COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
+CLEAN_DB_TABLES := availability_snapshot, availability_job_run, availability_job, availability_watch, reservable_pois, reservables, pois, ingest_runs, import_runs, api_cache
 
 help:
 	@echo "Targets:"
@@ -14,6 +28,7 @@ help:
 	@echo "  make poll-raw         Pick a fetcher via fzf, run it, print the raw-cache path (RFC 0007). SOURCE=<name> or --all to skip the picker."
 	@echo "  make data-fetch       Fetch upstream data via admin API (TARGET=<data_source slug> for one). Wraps the same fetchers as poll-raw."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / reservable_data / poi_reservable_joiner)."
+	@echo "  make clean-db         Clear local imported POI/reservable data so make data-import can replay from scratch."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make stop             Stop all compose services locally"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
@@ -27,10 +42,10 @@ help:
 # pricing-cache, which is exposed only via /api/pricing/{slug}), plus all
 # four /api/* routes.
 run:
-	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
+	$(COMPOSE) up -d postgres
 	cd backend && PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
-	  ROADTRIP_DB_URL=jdbc:postgresql://127.0.0.1:5432/roadtrip \
-	  ROADTRIP_DB_USER=roadtrip ROADTRIP_DB_PASSWORD=roadtrip \
+	  ROADTRIP_DB_URL=$(DB_JDBC_URL) \
+	  ROADTRIP_DB_USER=$(DB_USER) ROADTRIP_DB_PASSWORD=$(DB_PASSWORD) \
 	  ./gradlew run
 
 companion:
@@ -55,7 +70,7 @@ deploy: check-pushed
 	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && (cd backend && ./gradlew shadowJar) && docker compose --profile tunnel --profile pois up -d --build'
 
 stop:
-	- docker compose -f docker-compose.yml -f docker-compose.local.yml --profile pois down
+	- $(COMPOSE) down
 
 # End-to-end Tesla Supercharger pricing fetch: build the curl-impersonate
 # image (no-op if cached), mint cookies, smoke-test, walk bulk index +
@@ -85,6 +100,14 @@ data-fetch:
 
 data-import:
 	curl --fail-with-body -sS --max-time 1800 -X POST '$(ADMIN_BASE)/api/admin/data/import$(if $(TARGET),/$(shell python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=''))" "$(TARGET)"))'
+
+# Clear only local import-derived data while preserving schema/migrations.
+# This lets Flyway stay current and makes `make data-import` immediately
+# repopulate POIs, reservables, joins, ingest audit rows, and API cache.
+clean-db:
+	$(COMPOSE) up -d postgres
+	@echo "clearing local tables: $(CLEAN_DB_TABLES)"
+	$(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'TRUNCATE TABLE $(CLEAN_DB_TABLES) RESTART IDENTITY CASCADE;'
 
 # RFC 0007 raw poller. One entry point for every thin fetcher; uses fzf
 # to pick a source unless SOURCE=<name> or SOURCE=--all is set. Prints
