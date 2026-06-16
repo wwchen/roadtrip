@@ -34,7 +34,7 @@ jobs:
       (github.event_name == 'issue_comment' &&
        github.event.issue.pull_request != null &&
        github.event.comment.user.login == github.repository_owner &&
-       github.event.comment.body == '/rebase')
+       startsWith(github.event.comment.body, '/rebase'))
     runs-on: ubuntu-latest
     steps:
       # Use a GitHub App token (same one self-approve.yml uses) so force-pushes
@@ -63,6 +63,7 @@ jobs:
           REPO: ${{ github.repository }}
           EVENT: ${{ github.event_name }}
           COMMENT_PR: ${{ github.event.issue.number }}
+          COMMENT_BODY: ${{ github.event.comment.body }}
           DISPATCH_PR: ${{ github.event.inputs.pr_number }}
           RETARGET_PR: ${{ github.event.pull_request.number }}
           RETARGET_HEAD: ${{ github.event.pull_request.head.ref }}
@@ -84,10 +85,15 @@ jobs:
               : > prs.txt
             fi
           elif [ "$EVENT" = "issue_comment" ]; then
-            # Single PR from /rebase comment.
+            # Single PR from /rebase comment. Optional explicit base ref:
+            # `/rebase <commit-or-branch>` → use as the rebase --onto source.
+            # Without an explicit base, fall back to patch-id rebase onto master.
+            comment_body="${COMMENT_BODY:-}"
+            explicit_base=$(printf '%s' "$comment_body" | awk '/^\/rebase[[:space:]]+/{print $2}')
             gh pr view "$COMMENT_PR" --repo "$REPO" \
               --json number,headRefName,isCrossRepository,baseRefName \
               --jq 'select(.isCrossRepository == false and .baseRefName == "master") | "\(.number) \(.headRefName)"' \
+              | awk -v base="$explicit_base" '{print $0 (base != "" ? " " base : "")}' \
               > prs.txt
           elif [ "$EVENT" = "workflow_dispatch" ] && [ -n "$DISPATCH_PR" ]; then
             gh pr view "$DISPATCH_PR" --repo "$REPO" \
@@ -171,43 +177,14 @@ jobs:
             return 1
           }
 
-          # When push/comment events trigger a rebase without an old_base,
-          # try to infer one by looking at recently merged PRs whose head
-          # SHA is an ancestor of the branch we're rebasing. That's the
-          # tip the stack was originally based on. Using `--onto master
-          # <inferred-tip> <branch>` skips ALL inherited commits cleanly
-          # — patch-id dedup can't, when squash-merge content diverges
-          # from cumulative pre-squash commits.
-          infer_stacked_base() {
-            local branch="$1"
-            local n
-            # Look back at the last 10 merged PRs. Stacks deeper than 10
-            # are unusual; scanning fewer keeps API calls bounded.
-            local merged_heads
-            merged_heads=$(
-              gh pr list --repo "$REPO" --state merged --base master --limit 10 \
-                --json headRefOid,mergedAt \
-                --jq 'sort_by(.mergedAt) | reverse | .[].headRefOid' \
-                || true
-            )
-            # Walk from most-recent to oldest, returning the first ancestor
-            # that's NOT already on origin/master. That's the lowest-still-
-            # present-in-branch commit from a parent PR. Fetch the SHA
-            # explicitly first since merged-PR heads aren't in the default
-            # checkout's object database.
-            for sha in $merged_heads; do
-              if ! git cat-file -e "$sha^{commit}" 2>/dev/null; then
-                git fetch origin "$sha" 2>/dev/null || continue
-              fi
-              if git merge-base --is-ancestor "$sha" "$branch" 2>/dev/null \
-                && ! git merge-base --is-ancestor "$sha" origin/master 2>/dev/null; then
-                printf '%s\n' "$sha"
-                return 0
-              fi
-            done
-            return 1
-          }
-
+          # `old_base` comes from one of:
+          #   - pull_request_target retarget: the previous base branch name
+          #   - issue_comment `/rebase <ref>`: an explicit commit or branch
+          # When it's set we use `--onto master <old-base> <branch>` so the
+          # rebase transplants only the PR's own commits. When unset we use
+          # patch-id rebase against master (`git rebase master`), which works
+          # for non-stacked PRs but can conflict on stacks where a parent
+          # was rebased before squash-merging.
           while read -r pr_number branch old_base; do
             [ -z "$pr_number" ] && continue
             echo "::group::PR #$pr_number ($branch)"
@@ -221,10 +198,10 @@ jobs:
               if old_base_ref=$(resolve_old_base_ref "$old_base"); then
                 echo "Rebasing $branch onto origin/master from old base $old_base ($old_base_ref)."
                 rebase_args=(--onto origin/master "$old_base_ref" "$branch")
-                strategy="--onto master from retargeted old base \`$old_base\` (\`$old_base_ref\`)"
+                strategy="--onto master from \`$old_base\` (\`$old_base_ref\`)"
               else
                 rebase_args=("$master_sha")
-                strategy="patch-id rebase onto master (old base \`$old_base\` could not be resolved)"
+                strategy="patch-id rebase onto master (\`$old_base\` could not be resolved)"
               fi
             else
               base=$(git merge-base HEAD "$master_sha")
@@ -238,22 +215,13 @@ jobs:
                 echo "::endgroup::"
                 continue
               fi
-
-              # Try to infer the parent-stack tip from recently merged PRs.
-              # When found, use --onto so we transplant only this PR's own
-              # commits. Falls back to patch-id rebase against master when
-              # no merged PR's head SHA is in the branch's ancestry.
-              if inferred_base=$(infer_stacked_base "$branch"); then
-                echo "Rebasing $branch onto origin/master from inferred parent tip $inferred_base."
-                rebase_args=(--onto origin/master "$inferred_base" "$branch")
-                inferred_short=$(git rev-parse --short "$inferred_base")
-                strategy="--onto master from inferred parent tip \`$inferred_short\`"
-              else
-                # `git rebase master` drops patches already in master by patch-id,
-                # which is what un-sticks stacked PRs after their parent merges.
-                rebase_args=("$master_sha")
-                strategy="patch-id rebase onto master"
-              fi
+              # `git rebase master` drops patches already in master by patch-id.
+              # Works for unstacked PRs and shallow stacks; can conflict on
+              # stacks where a parent rebased before squash-merging — in that
+              # case the user follows up with `/rebase <commit>` to give an
+              # explicit base.
+              rebase_args=("$master_sha")
+              strategy="patch-id rebase onto master"
             fi
 
             run_url="https://github.com/$REPO/actions/runs/$GITHUB_RUN_ID"
@@ -275,7 +243,7 @@ jobs:
               echo "Rebase conflict on PR #$pr_number; aborting."
               git rebase --abort || true
               gh pr comment "$pr_number" --repo "$REPO" --body \
-                "🤖 auto-rebase: hit a conflict using $strategy. Please rebase manually. ([log]($run_url))" \
+                "🤖 auto-rebase: hit a conflict using $strategy. Try \`/rebase <commit>\` with the parent stack tip, or rebase locally. ([log]($run_url))" \
                 || true
             fi
 
