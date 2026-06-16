@@ -1,4 +1,4 @@
-.PHONY: help run deploy stop check-pushed fetch-tesla-supercharger-pricing data-fetch data-import clean-db poll-raw qa install install-hooks companion
+.PHONY: help run deploy check-pushed data-fetch data-import clean-db qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -25,14 +25,11 @@ help:
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (per-clone)"
 	@echo "  make run              Build + run backend locally on 127.0.0.1:$(PORT) (serves static + /api)"
 	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
-	@echo "  make poll-raw         Pick a fetcher via fzf, run it, print the raw-cache path (RFC 0007). SOURCE=<name> or --all to skip the picker."
-	@echo "  make data-fetch       Fetch upstream data via admin API (TARGET=<data_source slug> for one). Wraps the same fetchers as poll-raw."
+	@echo "  make data-fetch       Fetch upstream data via admin API (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / reservable_data / poi_reservable_joiner)."
 	@echo "  make clean-db         Clear local imported POI/reservable data so make data-import can replay from scratch."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
-	@echo "  make stop             Stop all compose services locally"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
-	@echo "  make fetch-tesla-supercharger-pricing  Mint Tesla cookies → smoke-test → bulk index + per-slug detail (interactive, loops on 403/429)"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
@@ -69,17 +66,6 @@ check-pushed:
 deploy: check-pushed
 	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && (cd backend && ./gradlew shadowJar) && docker compose --profile tunnel --profile pois up -d --build'
 
-stop:
-	- $(COMPOSE) down
-
-# End-to-end Tesla Supercharger pricing fetch: build the curl-impersonate
-# image (no-op if cached), mint cookies, smoke-test, walk bulk index +
-# per-slug detail. Loops on 403/429. Akamai fingerprints stock OpenSSL
-# curl, so the image bundles curl-impersonate-chrome — that's why this is
-# a Docker'd flow at all.
-fetch-tesla-supercharger-pricing:
-	@scripts/fetch-tesla-supercharger-pricing.sh
-
 # Two-step refresh through the backend's admin API (RFC 0004 / issue #44):
 #   make data-fetch                       # all targets
 #   make data-fetch TARGET=campgrounds    # one target
@@ -108,17 +94,6 @@ clean-db:
 	$(COMPOSE) up -d postgres
 	@echo "clearing local tables: $(CLEAN_DB_TABLES)"
 	$(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'TRUNCATE TABLE $(CLEAN_DB_TABLES) RESTART IDENTITY CASCADE;'
-
-# RFC 0007 raw poller. One entry point for every thin fetcher; uses fzf
-# to pick a source unless SOURCE=<name> or SOURCE=--all is set. Prints
-# the data/raw/<source>/<ts>.json path each fetcher writes.
-#
-#   make poll-raw                  # fzf picker (interactive)
-#   make poll-raw SOURCE=osm-pf    # one source
-#   make poll-raw SOURCE=--all     # everything in registry order
-#   make poll-raw SOURCE=--list    # JSON registry, no fetch
-poll-raw:
-	@python3 scripts/poll_raw.py $(SOURCE)
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first

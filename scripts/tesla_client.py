@@ -5,7 +5,7 @@ serving stack does NOT use this — pricing is served from data/pricing-cache/
 by the Kotlin backend, no Tesla calls in the user request path.
 
 Cookies are bound to the egress IP that minted them, so this only works from
-the machine where you ran `make fetch-tesla-supercharger-pricing` (or equivalent).
+the machine where you ran the Tesla pricing fetch script.
 """
 import json
 import os

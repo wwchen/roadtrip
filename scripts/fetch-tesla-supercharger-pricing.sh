@@ -13,8 +13,7 @@
 # "ran the full fetch, hit 429 on slug 12 of 1500, now what?" trap.
 #
 # Usage:
-#   make fetch-tesla-supercharger-pricing         (canonical entry point)
-#   ./scripts/fetch-tesla-supercharger-pricing.sh (direct invocation)
+#   ./scripts/fetch-tesla-supercharger-pricing.sh
 
 set -euo pipefail
 
