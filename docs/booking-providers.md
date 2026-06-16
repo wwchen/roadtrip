@@ -223,6 +223,23 @@ Steps 1–6 should be the entire diff. If you find yourself editing route
 files or the alert poller core, the abstraction is leaking — fix that
 before merging.
 
+## Per-vendor API docs
+
+Each adapter's upstream API is documented separately under
+`docs/booking-providers/`:
+
+- [aspira.md](booking-providers/aspira.md) — Aspira NextGen
+  (`reservation.pc.gc.ca`, `camping.bcparks.ca`,
+  `washington.goingtocamp.com`).
+- _recgov.md, camis.md — to be written._
+
+When adding a new vendor, follow the
+[probe-vendor-api skill](../.claude/skills/probe-vendor-api/SKILL.md)
+to capture the wire shape, then write `booking-providers/<vendor>.md`
+using `aspira.md` as the template. **Do not inline vendor wire
+shapes in this doc** — this doc owns the architecture contract;
+per-vendor docs own the wire details.
+
 ## See also
 
 - [backend-architecture.md](backend-architecture.md) — overall layer
@@ -230,3 +247,5 @@ before merging.
   not the adapters directly.
 - `rfcs/0007-availability-search-and-alerts.md` — the RFC that introduced
   this abstraction and the monitoring lifecycle it enables.
+- [.claude/skills/probe-vendor-api/SKILL.md](../.claude/skills/probe-vendor-api/SKILL.md)
+  — methodology for reverse-engineering a new booking vendor's API.

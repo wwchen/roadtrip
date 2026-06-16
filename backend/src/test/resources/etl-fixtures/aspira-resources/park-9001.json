@@ -1,0 +1,61 @@
+{
+  "fetcher": "fetch_aspira_inventory",
+  "fetcher_version": "1",
+  "fetched_at": "2026-09-12T17:00:00Z",
+  "request": {
+    "url": "https://reservation.pc.gc.cca/api/resourcelocation/resources?resourceLocationId=9001",
+    "method": "GET"
+  },
+  "response": { "status": 200 },
+  "part": "park-9001",
+  "payload": {
+    "501": {
+      "resourceId": 501,
+      "resourceLocationId": 9001,
+      "resourceCategoryId": -2147483647,
+      "localizedValues": [
+        { "cultureName": "en-US", "name": "TMV1-A1", "description": "Tunnel Mountain V1 — Site A1" }
+      ],
+      "allowedEquipment": [
+        { "equipmentCategoryId": -32768, "subEquipmentCategoryId": -32768 },
+        { "equipmentCategoryId": -32768, "subEquipmentCategoryId": -32764 }
+      ],
+      "minCapacity": 1,
+      "maxCapacity": 6,
+      "maxBoatLength": null,
+      "definedAttributes": [
+        { "attributeDefinitionId": -32715, "attributeId": -2147464259, "attributeVisibility": 0, "value": 60, "values": [] },
+        { "attributeDefinitionId": -32714, "attributeId": -2147464258, "attributeVisibility": 0, "value": 11, "values": [] }
+      ],
+      "mapIds": [-2147483640]
+    },
+    "502": {
+      "resourceId": 502,
+      "resourceLocationId": 9001,
+      "resourceCategoryId": -2147483647,
+      "localizedValues": [
+        { "cultureName": "en-US", "name": "TMV1-A2", "description": "Tunnel Mountain V1 — Site A2" }
+      ],
+      "allowedEquipment": [
+        { "equipmentCategoryId": -32768, "subEquipmentCategoryId": -32768 }
+      ],
+      "minCapacity": 1,
+      "maxCapacity": 6,
+      "definedAttributes": [],
+      "mapIds": [-2147483640]
+    },
+    "503": {
+      "resourceId": 503,
+      "resourceLocationId": 9001,
+      "resourceCategoryId": -2147483647,
+      "localizedValues": [
+        { "cultureName": "en-US", "name": "TMV1-A3", "description": "Tunnel Mountain V1 — Site A3" }
+      ],
+      "allowedEquipment": [],
+      "minCapacity": 1,
+      "maxCapacity": 4,
+      "definedAttributes": [],
+      "mapIds": [-2147483640]
+    }
+  }
+}

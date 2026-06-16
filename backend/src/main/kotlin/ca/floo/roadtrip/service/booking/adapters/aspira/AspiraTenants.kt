@@ -1,0 +1,64 @@
+package ca.floo.roadtrip.service.booking.adapters.aspira
+
+/**
+ * Per-tenant Aspira NextGen configuration. One row per upstream host.
+ *
+ * Aspira runs the same SPA build behind every tenant — see
+ * `docs/booking-providers/aspira.md`. The wire shape is identical;
+ * only the host, the data, and a few presentation details differ. So
+ * adding a new tenant (Ontario, Quebec, etc.) is one row here, not a
+ * new enum value, adapter, or registry branch.
+ *
+ * The `vendorCode` is what gets stamped into [ca.floo.roadtrip.models.ReservableId.vendor]
+ * for sites under that tenant. ReservableId disallows ':' in vendor, so
+ * use underscore-separated tenant codes (`aspira_pc`, `aspira_bc`, …).
+ *
+ * `bookingHorizonDays` is the rolling booking window the upstream
+ * exposes. Eventually this should come from each tenant's
+ * `/api/dateschedule/resourcelocationid` response so changes don't
+ * require a deploy; for now it's a per-tenant constant since the
+ * value is stable and identical across tenants.
+ */
+data class AspiraTenant(
+    val host: String,
+    val vendorCode: String,
+    val bookingHorizonDays: Int,
+)
+
+object AspiraTenants {
+    /** Aspira NextGen typical horizon. */
+    private const val DEFAULT_HORIZON_DAYS: Int = 365
+
+    /**
+     * The tenant table. Order does not matter; lookup is by host.
+     *
+     * Adding a tenant: append a row. Validation at boot
+     * ([BookingProviderRegistryFactory]) ensures every host the YAML
+     * registry declares has a row here, so a forgotten entry fails
+     * loudly instead of silently routing to a missing adapter.
+     */
+    private val ALL: List<AspiraTenant> =
+        listOf(
+            AspiraTenant(
+                host = "reservation.pc.gc.ca",
+                vendorCode = "aspira_pc",
+                bookingHorizonDays = DEFAULT_HORIZON_DAYS,
+            ),
+            AspiraTenant(
+                host = "camping.bcparks.ca",
+                vendorCode = "aspira_bc",
+                bookingHorizonDays = DEFAULT_HORIZON_DAYS,
+            ),
+            AspiraTenant(
+                host = "washington.goingtocamp.com",
+                vendorCode = "aspira_wa",
+                bookingHorizonDays = DEFAULT_HORIZON_DAYS,
+            ),
+        )
+
+    private val BY_HOST: Map<String, AspiraTenant> = ALL.associateBy { it.host }
+
+    fun byHost(host: String): AspiraTenant? = BY_HOST[host]
+
+    fun knownHosts(): Set<String> = BY_HOST.keys
+}

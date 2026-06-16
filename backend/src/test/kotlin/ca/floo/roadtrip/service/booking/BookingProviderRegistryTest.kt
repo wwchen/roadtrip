@@ -6,6 +6,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertSame
 
 class BookingProviderRegistryTest {
     private class FakeProvider(
@@ -19,20 +20,15 @@ class BookingProviderRegistryTest {
     }
 
     @Test
-    fun `forPoi resolves source through to adapter`() {
+    fun `forPoi resolves source to its adapter instance`() {
         val recgov = FakeProvider(BookingProviderId.RECGOV)
-        val aspiraPc = FakeProvider(BookingProviderId.ASPIRA_PC)
+        val aspiraPc = FakeProvider(BookingProviderId.ASPIRA)
         val registry =
             BookingProviderRegistry(
-                adapters =
+                adaptersBySource =
                     mapOf(
-                        BookingProviderId.RECGOV to recgov,
-                        BookingProviderId.ASPIRA_PC to aspiraPc,
-                    ),
-                sourceToProviderId =
-                    mapOf(
-                        "federal-campgrounds" to BookingProviderId.RECGOV,
-                        "aspira-pc-pins" to BookingProviderId.ASPIRA_PC,
+                        "federal-campgrounds" to recgov,
+                        "aspira-pc-pins" to aspiraPc,
                     ),
             )
 
@@ -42,27 +38,49 @@ class BookingProviderRegistryTest {
 
         val pc = registry.forPoi(row("aspira-pc-pins"))
         assertNotNull(pc)
-        assertEquals(BookingProviderId.ASPIRA_PC, pc.id)
+        assertEquals(BookingProviderId.ASPIRA, pc.id)
     }
 
     @Test
     fun `forPoi returns null for unmapped source`() {
-        val registry =
-            BookingProviderRegistry(
-                adapters = emptyMap(),
-                sourceToProviderId = emptyMap(),
-            )
+        val registry = BookingProviderRegistry(adaptersBySource = emptyMap())
         assertNull(registry.forPoi(row("never-registered")))
     }
 
     @Test
-    fun `forPoi returns null when source maps to id but adapter missing`() {
+    fun `multiple sources can share one adapter instance`() {
+        val recgov = FakeProvider(BookingProviderId.RECGOV)
         val registry =
             BookingProviderRegistry(
-                adapters = emptyMap(),
-                sourceToProviderId = mapOf("federal-campgrounds" to BookingProviderId.RECGOV),
+                adaptersBySource =
+                    mapOf(
+                        "federal-campgrounds" to recgov,
+                        "another-recgov-source" to recgov,
+                    ),
             )
-        assertNull(registry.forPoi(row("federal-campgrounds")))
+        assertSame(recgov, registry.forPoi(row("federal-campgrounds")))
+        assertSame(recgov, registry.forPoi(row("another-recgov-source")))
+        assertEquals(1, registry.all().size)
+    }
+
+    @Test
+    fun `multiple Aspira tenants share an id but have distinct instances`() {
+        val pc = FakeProvider(BookingProviderId.ASPIRA)
+        val bc = FakeProvider(BookingProviderId.ASPIRA)
+        val wa = FakeProvider(BookingProviderId.ASPIRA)
+        val registry =
+            BookingProviderRegistry(
+                adaptersBySource =
+                    mapOf(
+                        "aspira-pc-pins" to pc,
+                        "aspira-bc-pins" to bc,
+                        "aspira-wa-pins" to wa,
+                    ),
+            )
+        assertSame(pc, registry.forPoi(row("aspira-pc-pins")))
+        assertSame(bc, registry.forPoi(row("aspira-bc-pins")))
+        assertSame(wa, registry.forPoi(row("aspira-wa-pins")))
+        assertEquals(3, registry.all().size)
     }
 
     private fun row(source: String): CampsiteProviderRefRow = CampsiteProviderRefRow(poiId = 1L, source = source, providerRefJson = "{}")

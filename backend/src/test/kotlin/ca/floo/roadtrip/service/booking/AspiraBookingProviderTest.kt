@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.AspiraAvailability
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraBookingProvider
+import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraTenant
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import kotlin.test.Test
@@ -11,7 +12,7 @@ import kotlin.test.assertEquals
 
 class AspiraBookingProviderTest {
     @Test
-    fun `reservable availability maps each tenant to its reservable vendor`() =
+    fun `reservable availability stamps the tenant's vendor code on the reservable id`() =
         runBlocking {
             val cache =
                 CachedAspiraAvailability(
@@ -27,12 +28,18 @@ class AspiraBookingProviderTest {
 
             val cases =
                 listOf(
-                    BookingProviderId.ASPIRA_PC to "aspira_pc",
-                    BookingProviderId.ASPIRA_BC to "aspira_bc",
-                    BookingProviderId.ASPIRA_WA to "aspira_wa",
+                    "reservation.pc.gc.ca" to "aspira_pc",
+                    "camping.bcparks.ca" to "aspira_bc",
+                    "washington.goingtocamp.com" to "aspira_wa",
                 )
-            for ((providerId, vendor) in cases) {
-                val adapter = AspiraBookingProvider(providerId, "example.goaspira.com", cache)
+            for ((host, vendor) in cases) {
+                val tenant =
+                    AspiraTenant(
+                        host = host,
+                        vendorCode = vendor,
+                        bookingHorizonDays = 365,
+                    )
+                val adapter = AspiraBookingProvider(tenant = tenant, cache = cache)
                 val dto =
                     adapter.reservableAvailability(
                         ReservableAvailabilityRequest(

@@ -16,9 +16,10 @@ import ca.floo.roadtrip.service.booking.BookingProviderId
 import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 
 /**
- * Aspira NextGen adapter. One instance per host (Parks Canada, BC Provincial,
- * WA State Parks). The host is bound at construction so route-time dispatch
- * doesn't carry the registry's host map down to every call.
+ * Aspira NextGen adapter. One adapter *class* for the whole vendor; one
+ * adapter *instance* per upstream host (Parks Canada, BC Parks, WA State
+ * Parks). Tenant-shaped data — host, vendor code, booking horizon —
+ * lives in [AspiraTenant], not in code branches.
  *
  * The downstream classifier (`fetchAndClassifyAspira`) takes `mapId: Int`;
  * the column type is `Long`. We narrow at the boundary and reject
@@ -26,10 +27,11 @@ import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
  * dropping the high bits.
  */
 class AspiraBookingProvider(
-    override val id: BookingProviderId,
-    private val host: String,
+    private val tenant: AspiraTenant,
     private val cache: CachedAspiraAvailability,
 ) : BookingProvider {
+    override val id: BookingProviderId = BookingProviderId.ASPIRA
+
     override val capabilities: BookingCapabilities =
         BookingCapabilities(
             supportsAvailability = true,
@@ -37,7 +39,7 @@ class AspiraBookingProvider(
             // (see RFC 0007). Keep this honest until the poller adapter lands.
             supportsAlerts = false,
             supportsAutoBook = false,
-            bookingHorizonDays = ASPIRA_BOOKING_HORIZON_DAYS,
+            bookingHorizonDays = tenant.bookingHorizonDays,
         )
 
     override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
@@ -45,13 +47,13 @@ class AspiraBookingProvider(
         return runWithErrorMapping {
             fetchAndClassifyAspira(
                 cache = cache,
-                host = host,
+                host = tenant.host,
                 mapId = mapId,
                 today = req.start,
                 days = req.days,
                 force = req.force,
                 minNights = req.minNights,
-                reservableVendor = reservableVendor(),
+                reservableVendor = tenant.vendorCode,
             )
         }
     }
@@ -59,7 +61,7 @@ class AspiraBookingProvider(
     override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
         val mapId = mapIdOrThrow(req.ref)
         return runWithErrorMapping {
-            availableDatesAspira(cache, host, mapId, req.start, req.nights)
+            availableDatesAspira(cache, tenant.host, mapId, req.start, req.nights)
         }
     }
 
@@ -68,10 +70,10 @@ class AspiraBookingProvider(
         return runWithErrorMapping {
             fetchAndClassifyAspiraResource(
                 cache = cache,
-                host = host,
+                host = tenant.host,
                 mapId = mapId,
                 resourceId = req.vendorId,
-                reservableVendor = reservableVendor(),
+                reservableVendor = tenant.vendorCode,
                 today = req.start,
                 days = req.days,
                 force = req.force,
@@ -97,14 +99,6 @@ class AspiraBookingProvider(
         return ar.mapId.toInt()
     }
 
-    private fun reservableVendor(): String =
-        when (id) {
-            BookingProviderId.ASPIRA_PC -> "aspira_pc"
-            BookingProviderId.ASPIRA_BC -> "aspira_bc"
-            BookingProviderId.ASPIRA_WA -> "aspira_wa"
-            else -> "aspira"
-        }
-
     private inline fun <T> runWithErrorMapping(block: () -> T): T =
         try {
             block()
@@ -120,9 +114,4 @@ class AspiraBookingProvider(
         } catch (e: Exception) {
             throw BookingProviderError.UpstreamUnavailable(e)
         }
-
-    companion object {
-        /** Aspira upstreams typically expose the next 12 months. */
-        private const val ASPIRA_BOOKING_HORIZON_DAYS: Int = 365
-    }
 }
