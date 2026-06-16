@@ -140,8 +140,8 @@ class AvailabilityPollExecutor(
                 ),
             )
         // Each day in the response window is one snapshot row in
-        // reservable_availability_log (ReservableAvailabilityFetchService
-        // calls appendAvailabilityPoll on the full response).
+        // availability_snapshot (ReservableAvailabilityFetchService
+        // calls AvailabilitySnapshotRepo.appendBatch on the full response).
         return response.availability.size
     }
 }
