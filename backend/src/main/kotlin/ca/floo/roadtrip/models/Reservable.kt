@@ -15,6 +15,11 @@ import kotlinx.serialization.json.JsonElement
  * future audit / forensic queries see the source of truth, not what we
  * chose to project.
  *
+ * `tags` is the provider-neutral projection ETLs build for common catalog
+ * traits: capacity, equipment, and named attributes. It is safe for UI and
+ * search code to depend on; unlike `raw`, it should not expose vendor id
+ * vocabularies as its primary interface.
+ *
  * RFC 0008 §"Data model".
  */
 data class Reservable(
@@ -24,5 +29,6 @@ data class Reservable(
     val loop: String?,
     val siteType: String?,
     val raw: JsonElement?,
+    val tags: JsonElement? = null,
     val providerRef: JsonElement? = null,
 )

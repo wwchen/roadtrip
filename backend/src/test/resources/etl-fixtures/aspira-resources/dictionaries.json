@@ -45,19 +45,33 @@
         ]
       }
     ],
-    "attributes": [
-      {
+    "attributes": {
+      "-32715": {
         "attributeDefinitionId": -32715,
         "localizedValues": [
           { "cultureName": "en-US", "displayName": "Max Vehicle Length" }
         ]
       },
-      {
+      "-32714": {
         "attributeDefinitionId": -32714,
         "localizedValues": [
           { "cultureName": "en-US", "displayName": "Driveway Width" }
         ]
+      },
+      "-32731": {
+        "attributeDefinitionId": -32731,
+        "localizedValues": [
+          { "cultureName": "en-US", "displayName": "Ground Cover" }
+        ],
+        "values": [
+          {
+            "enumValue": 3,
+            "localizedValues": [
+              { "cultureName": "en-US", "displayName": "Soil" }
+            ]
+          }
+        ]
       }
-    ]
+    }
   }
 }

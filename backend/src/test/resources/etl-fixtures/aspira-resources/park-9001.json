@@ -25,7 +25,8 @@
       "maxBoatLength": null,
       "definedAttributes": [
         { "attributeDefinitionId": -32715, "attributeId": -2147464259, "attributeVisibility": 0, "value": 60, "values": [] },
-        { "attributeDefinitionId": -32714, "attributeId": -2147464258, "attributeVisibility": 0, "value": 11, "values": [] }
+        { "attributeDefinitionId": -32714, "attributeId": -2147464258, "attributeVisibility": 0, "value": 11, "values": [] },
+        { "attributeDefinitionId": -32731, "attributeId": -2147464257, "attributeVisibility": 0, "value": null, "values": [3] }
       ],
       "mapIds": [-2147483640]
     },

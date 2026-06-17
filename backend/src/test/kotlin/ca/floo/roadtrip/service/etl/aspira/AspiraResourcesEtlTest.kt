@@ -8,9 +8,14 @@ import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.etl.EtlOrchestrator
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
@@ -194,6 +199,33 @@ class AspiraResourcesEtlTest {
         assertEquals("-32715", (length["definition_id"] as JsonPrimitive).content)
         assertEquals("Max Vehicle Length", (length["name"] as JsonPrimitive).content)
         assertEquals("60", (length["value"] as JsonPrimitive).content)
+        val groundCover = attrs[2] as JsonObject
+        assertEquals("-32731", (groundCover["definition_id"] as JsonPrimitive).content)
+        assertEquals("Ground Cover", (groundCover["name"] as JsonPrimitive).content)
+        assertEquals(
+            listOf("Soil"),
+            groundCover["value_labels"]!!.jsonArray.map { it.jsonPrimitive.content },
+        )
+    }
+
+    @Test
+    fun `aspira resources project normalized tags from dictionary data`() {
+        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
+        orch.runReservableData("Parks Canada Aspira Resources")
+
+        val tags = tagsFor(ReservableId(ReservableType.SITE, "aspira_pc", "501"))
+        assertEquals("Campsite", tags["resource_category"]!!.jsonPrimitive.content)
+        assertEquals(1, tags["capacity"]!!.jsonObject["min"]!!.jsonPrimitive.int)
+        assertEquals(6, tags["capacity"]!!.jsonObject["max"]!!.jsonPrimitive.int)
+        assertEquals(
+            listOf("1 Tent", "1 RV/Trailer up to 20'"),
+            tags["equipment"]!!.jsonArray.map { it.jsonPrimitive.content },
+        )
+
+        val attributes = tags["attributes"]!!.jsonObject
+        assertEquals(60, attributes["max_vehicle_length"]!!.jsonPrimitive.int)
+        assertEquals(11, attributes["driveway_width"]!!.jsonPrimitive.int)
+        assertEquals("Soil", attributes["ground_cover"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -296,5 +328,22 @@ class AspiraResourcesEtlTest {
                     .toURI(),
             )
         src.copyTo(dest, overwrite = true)
+    }
+
+    private fun tagsFor(rid: ReservableId): JsonObject {
+        val raw =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT tags::text
+                    FROM reservables
+                    WHERE type = ? AND vendor = ? AND vendor_id = ?
+                    """.trimIndent(),
+                    rid.type.encode(),
+                    rid.vendor,
+                    rid.vendorId,
+                )!!
+                .get(0, String::class.java)!!
+        return Json.parseToJsonElement(raw).jsonObject
     }
 }

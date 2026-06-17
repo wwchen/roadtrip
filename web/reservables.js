@@ -162,6 +162,7 @@ function applyPoiClientFilters(rows, params) {
     if (!matchesCsv(row.loop, params.loop)) return false;
     if (!matchesCsv(row.site_type ?? row.siteType, params.site_type)) return false;
     if (!rawContains(row.raw, params.raw)) return false;
+    if (!jsonContainsFilter(row.tags, params.tags)) return false;
     return true;
   });
 }
@@ -177,6 +178,30 @@ function rawContains(raw, filter) {
   const needle = String(filter || '').trim();
   if (!needle) return true;
   return JSON.stringify(raw ?? {}).toLowerCase().includes(needle.toLowerCase());
+}
+
+function jsonContainsFilter(value, filter) {
+  const text = String(filter || '').trim();
+  if (!text) return true;
+  try {
+    return jsonContains(value ?? {}, JSON.parse(text));
+  } catch {
+    return JSON.stringify(value ?? {}).toLowerCase().includes(text.toLowerCase());
+  }
+}
+
+function jsonContains(actual, expected) {
+  if (expected == null || typeof expected !== 'object') return Object.is(actual, expected);
+  if (Array.isArray(expected)) {
+    if (!Array.isArray(actual)) return false;
+    return expected.every((expectedItem) => (
+      actual.some((actualItem) => jsonContains(actualItem, expectedItem))
+    ));
+  }
+  if (!actual || typeof actual !== 'object' || Array.isArray(actual)) return false;
+  return Object.entries(expected).every(([key, expectedValue]) => (
+    Object.prototype.hasOwnProperty.call(actual, key) && jsonContains(actual[key], expectedValue)
+  ));
 }
 
 function csvValues(value) {

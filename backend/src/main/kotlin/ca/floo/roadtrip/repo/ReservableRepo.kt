@@ -52,14 +52,15 @@ class ReservableRepo(
         runId: Long? = null,
     ): Long {
         val rawJson = input.raw?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
+        val tagsJson = input.tags?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
         val providerRefJson = input.providerRef?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
         return ctx
             .resultQuery(
                 """
                 INSERT INTO reservables (
-                  type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref, last_seen_run_id
+                  type, vendor, vendor_id, source, name, loop, site_type, raw, tags, provider_ref, last_seen_run_id
                 ) VALUES (
-                  ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?
+                  ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?
                 )
                 ON CONFLICT (type, vendor, vendor_id)
                 DO UPDATE SET
@@ -68,6 +69,7 @@ class ReservableRepo(
                   loop = EXCLUDED.loop,
                   site_type = EXCLUDED.site_type,
                   raw = EXCLUDED.raw,
+                  tags = EXCLUDED.tags,
                   provider_ref = EXCLUDED.provider_ref,
                   last_seen_run_id = COALESCE(EXCLUDED.last_seen_run_id, reservables.last_seen_run_id),
                   deleted_at = NULL,
@@ -82,6 +84,7 @@ class ReservableRepo(
                 input.loop,
                 input.siteType,
                 rawJson,
+                tagsJson,
                 providerRefJson,
                 runId,
             ).fetchOne()!!
@@ -297,6 +300,7 @@ class ReservableRepo(
         val loop: String?,
         val siteType: String?,
         val raw: JsonElement?,
+        val tags: JsonElement? = null,
         val providerRef: JsonElement? = null,
     )
 
@@ -314,6 +318,7 @@ class ReservableRepo(
         val loops: List<String> = emptyList(),
         val siteTypes: List<String> = emptyList(),
         val rawContainsJson: List<String> = emptyList(),
+        val tagsContainsJson: List<String> = emptyList(),
     )
 
     /**
@@ -332,6 +337,7 @@ class ReservableRepo(
                 ?: error("reservables.type=$typeStr is not a known ReservableType (row id=${r.get(RESERVABLES.ID)})")
         val rid = ReservableId(type = type, vendor = vendor, vendorId = vendorId)
         val rawJson = r.get(RESERVABLES.RAW)?.data()?.let { Json.parseToJsonElement(it) }
+        val tagsJson = r.get(RESERVABLES.TAGS)?.data()?.let { Json.parseToJsonElement(it) }
         val providerRefJson = r.get(RESERVABLES.PROVIDER_REF)?.data()?.let { Json.parseToJsonElement(it) }
         return Reservable(
             id = r.get(RESERVABLES.ID)!!,
@@ -340,6 +346,7 @@ class ReservableRepo(
             loop = r.get(RESERVABLES.LOOP),
             siteType = r.get(RESERVABLES.SITE_TYPE),
             raw = rawJson,
+            tags = tagsJson,
             providerRef = providerRefJson,
         )
     }
@@ -369,6 +376,11 @@ class ReservableRepo(
                     DSL.condition("{0} @> {1}::jsonb", RESERVABLES.RAW, DSL.inline(rawJson))
                 },
             ),
+            orCondition(
+                filters.tagsContainsJson.map { tagsJson ->
+                    DSL.condition("{0} @> {1}::jsonb", RESERVABLES.TAGS, DSL.inline(tagsJson))
+                },
+            ),
         ).fold(RESERVABLE_ACTIVE_CONDITION) { acc, condition -> acc.and(condition) }
 
     private fun activeCount(source: String): Int =
@@ -386,7 +398,7 @@ class ReservableRepo(
     ): Int {
         var seen = 0
         for (chunk in inputs.chunked(RESERVABLE_UPSERT_CHUNK_SIZE)) {
-            val values = chunk.joinToString(", ") { "(?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?)" }
+            val values = chunk.joinToString(", ") { "(?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?)" }
             val args = mutableListOf<Any?>()
             for (input in chunk) {
                 args += input.rid.type.encode()
@@ -397,13 +409,14 @@ class ReservableRepo(
                 args += input.loop
                 args += input.siteType
                 args += input.raw?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
+                args += input.tags?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
                 args += input.providerRef?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
                 args += runId
             }
             ctx.execute(
                 """
                 INSERT INTO reservables (
-                  type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref, last_seen_run_id
+                  type, vendor, vendor_id, source, name, loop, site_type, raw, tags, provider_ref, last_seen_run_id
                 ) VALUES $values
                 ON CONFLICT (type, vendor, vendor_id)
                 DO UPDATE SET
@@ -412,6 +425,7 @@ class ReservableRepo(
                   loop = EXCLUDED.loop,
                   site_type = EXCLUDED.site_type,
                   raw = EXCLUDED.raw,
+                  tags = EXCLUDED.tags,
                   provider_ref = EXCLUDED.provider_ref,
                   last_seen_run_id = EXCLUDED.last_seen_run_id,
                   deleted_at = NULL,

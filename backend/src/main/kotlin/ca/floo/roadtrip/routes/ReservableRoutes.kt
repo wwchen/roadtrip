@@ -62,6 +62,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
             queryParameter<String>("loop") { description = "Exact loop value." }
             queryParameter<String>("site_type") { description = "Exact site type value." }
             queryParameter<String>("raw") { description = "JSON object contained by the raw JSONB payload." }
+            queryParameter<String>("tags") { description = "JSON object contained by the normalized tags JSONB payload." }
             queryParameter<Int>("limit") { description = "Page size, default 100, max 500." }
             queryParameter<Int>("offset") { description = "Page offset, default 0." }
         }
@@ -253,6 +254,16 @@ private fun ApplicationCall.reservableSearchFilters(): ReservableRepo.SearchFilt
                         throw BadReservableQuery("bad_raw", e.message)
                     }
                 },
+        tagsContainsJson =
+            queryValues("tags")
+                .map { raw ->
+                    try {
+                        val parsed = reservableRoutesJson.parseToJsonElement(raw)
+                        reservableRoutesJson.encodeToString(JsonElement.serializer(), parsed)
+                    } catch (e: Exception) {
+                        throw BadReservableQuery("bad_tags", e.message)
+                    }
+                },
     )
 
 private fun ApplicationCall.intQuery(
@@ -321,6 +332,7 @@ internal fun Reservable.toSchema(
         reservationUrl = reservationUrl,
         poiIds = poiIds,
         providerRef = providerRef,
+        tags = tags,
         raw = raw,
     )
 

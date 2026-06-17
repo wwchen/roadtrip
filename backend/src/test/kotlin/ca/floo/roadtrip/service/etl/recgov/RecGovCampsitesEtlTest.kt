@@ -8,8 +8,13 @@ import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.etl.EtlOrchestrator
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
@@ -145,6 +150,23 @@ class RecGovCampsitesEtlTest {
     }
 
     @Test
+    fun `recgov campsites project normalized tags from readable catalog data`() {
+        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
+        orch.runReservableData("Federal Campsites")
+
+        val tags = tagsFor(ReservableId(ReservableType.SITE, "recgov", "330257"))
+        assertEquals(8, tags["capacity"]!!.jsonObject["max"]!!.jsonPrimitive.int)
+        assertEquals(
+            listOf("Tent", "Small RV"),
+            tags["equipment"]!!.jsonArray.map { it.jsonPrimitive.content },
+        )
+
+        val attributes = tags["attributes"]!!.jsonObject
+        assertEquals("Yes", attributes["picnic_table"]!!.jsonPrimitive.content)
+        assertEquals("Yes", attributes["fire_pit"]!!.jsonPrimitive.content)
+    }
+
+    @Test
     fun `re-running is idempotent`() {
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runReservableData("Federal Campsites")
@@ -203,5 +225,22 @@ class RecGovCampsitesEtlTest {
                     .toURI(),
             )
         src.copyTo(dest, overwrite = true)
+    }
+
+    private fun tagsFor(rid: ReservableId): JsonObject {
+        val raw =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT tags::text
+                    FROM reservables
+                    WHERE type = ? AND vendor = ? AND vendor_id = ?
+                    """.trimIndent(),
+                    rid.type.encode(),
+                    rid.vendor,
+                    rid.vendorId,
+                )!!
+                .get(0, String::class.java)!!
+        return Json.parseToJsonElement(raw).jsonObject
     }
 }

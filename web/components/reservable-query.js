@@ -96,6 +96,10 @@ function reservableQueryHtml() {
           Raw contains
           <textarea name="raw" spellcheck="false" placeholder='{"host":"reservation.pc.gc.ca"}'></textarea>
         </label>
+        <label class="wide">
+          Tags contains
+          <textarea name="tags" spellcheck="false" placeholder='{"attributes":{"firepit_on_site":"Yes"}}'></textarea>
+        </label>
         <label>
           Limit
           <select name="limit">
