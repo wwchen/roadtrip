@@ -24,7 +24,7 @@ and the API contract, with these canonical states:
 | `first_come` | `FF` | First come first served / not reservable online |
 | `reserved` | `R` | Reserved or otherwise unavailable to book online |
 | `available` | `A` | Available to reserve/book online |
-| `closed` | `C` | Explicitly closed for the season/date |
+| `closed` | `C` | Provider explicitly says the reservable/date is closed, for any reason |
 | `unknown` | `?` | No provider data for the reservable/date |
 
 ## Non-Goals
@@ -124,7 +124,7 @@ Aggregate day `status` is a scan-friendly rollup with this precedence:
    first served.
 3. `reserved` if no reservable is available/first-come and at least one is
    reserved.
-4. `closed` if every linked reservable has explicit closed data.
+4. `closed` if every linked reservable has explicit provider-closed data.
 5. `unknown` if no actionable status exists and at least one linked reservable
    has no provider data for the date.
 
