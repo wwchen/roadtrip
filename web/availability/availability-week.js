@@ -700,22 +700,17 @@ function saveSiteColumnWidth(width) {
 }
 
 function applyMatrixViewportWidth(ctx) {
-  window.requestAnimationFrame?.(() => {
-    const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
-    if (!(scroll instanceof HTMLElement)) return;
-    scroll.style.setProperty('--cg-site-matrix-viewport-width', `${scroll.clientWidth}px`);
-  });
+  const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
+  if (!(scroll instanceof HTMLElement)) return;
+  scroll.style.setProperty('--cg-site-matrix-viewport-width', `${scroll.clientWidth}px`);
 }
 
 function restoreMatrixScroll(ctx) {
   if (!ctx.matrixScrollLeft) return;
-  const left = ctx.matrixScrollLeft;
-  window.requestAnimationFrame?.(() => {
-    const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
-    if (!(scroll instanceof HTMLElement)) return;
-    ctx.suppressNextScroll = true;
-    scroll.scrollLeft = left;
-  });
+  const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
+  if (!(scroll instanceof HTMLElement)) return;
+  ctx.suppressNextScroll = true;
+  scroll.scrollLeft = ctx.matrixScrollLeft;
 }
 
 function resetMatrixRange(ctx) {
