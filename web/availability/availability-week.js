@@ -1,19 +1,15 @@
-// 7-day availability search component (RFC 0007). Mounts inside the
-// campground drawer and owns:
+// Availability table component. Mounts inside the campground drawer and owns:
 //
 //   - the visible week start (LocalDate),
-//   - min_nights (default 1, persisted in localStorage),
+//   - min_nights (fixed at 1 in this drawer),
 //   - the selected day,
 //   - the in-flight controller (skeleton timer, AbortSignal),
 //   - the cached list of the user's active watches (for badges).
 //
 // Render is split into pure modules:
-//   - week-grid.js          — 7 day cells.
 //   - day-detail.js         — selected-day panel + alert / reserve CTAs.
 //   - site-list.js          — all-site catalog or selected-day availability.
 //   - site-matrix.js        — reservable rows crossed with visible dates.
-//   - calendar-popover.js   — month picker shown when the user clicks the
-//                             week label (jump to any date).
 //
 // The drawer chrome (chrome.js) supplies the AbortSignal and active-feature
 // guard; see openCampgroundDrawer in drawer/campground.js.
@@ -22,41 +18,27 @@ import { escapeHtml } from '../core.js';
 import { requestPoiAvailability } from '../api/availability-api.js';
 import { fetchPoiReservables } from '../api/reservable-api.js';
 import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
-import { isActiveFeature } from '../drawer/chrome.js';
-import { mountCalendarPopover } from './calendar-popover.js';
 import { renderDayDetail } from './day-detail.js';
 import { renderSiteDetail } from './site-detail.js';
-import { renderSiteMatrix } from './site-matrix.js';
+import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
-import { renderWeekGrid, renderWeekSkeleton } from './week-grid.js';
 
-const STORAGE_KEY_MIN_NIGHTS = 'cg.minNights';
-const STORAGE_KEY_AVAILABILITY_VIEW = 'cg.availabilityView';
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
 const DEFAULT_MIN_NIGHTS = 1;
-const DEFAULT_AVAILABILITY_VIEW = 'table';
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
 const LEGACY_DEFAULT_SITE_COLUMN_WIDTH = 178;
 const MIN_SITE_COLUMN_WIDTH = 88;
 const MAX_SITE_COLUMN_WIDTH = 270;
 const MATRIX_SCROLL_LOAD_THRESHOLD_PX = 140;
-const MIN_NIGHTS_CHIPS = [1, 2, 3, 7];
 const WEEK_DAYS = 7;
 const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-// Provider-agnostic horizon used by the calendar popover to disable
-// dates beyond what the upstream is likely to expose. The route also
-// enforces this server-side based on the actual provider capabilities;
-// the FE bound is informational. Six months matches rec.gov's window.
-const CALENDAR_MAX_DAYS_OUT = 180;
-
 /**
- * Mount the week grid into the host element. Returns a controller with a
- * `dispose()` method the drawer should call on close (clears any pending
- * skeleton timer, removes calendar listeners; in-flight fetches are killed
- * via the drawer's AbortSignal already).
+ * Mount the availability table into the host element. Returns a controller with a
+ * `dispose()` method the drawer should call on close. In-flight fetches are
+ * killed via the drawer's AbortSignal already.
  *
  * @param {HTMLElement} host
  * @param {object}      feature   POI feature (used for poi id, recgov_id, name).
@@ -69,15 +51,13 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
   rerender(ctx);
   wireRoot(ctx);
   fetchWeek(ctx);
-    fetchWatches(ctx);
+  fetchWatches(ctx);
   fetchSites(ctx);
 
   return {
     dispose() {
       endSiteColumnResize(ctx);
       clearTimeout(ctx.skeletonTimer);
-      ctx.calendar?.dispose();
-      ctx.calendar = null;
     },
   };
 }
@@ -91,8 +71,7 @@ function makeContext(host, feature, signal) {
     poiId: feature.id,
     signal,
     weekStart: startOfTodayUtc(),
-    minNights: loadMinNights(),
-    availabilityView: loadAvailabilityView(),
+    minNights: DEFAULT_MIN_NIGHTS,
     siteColumnWidth: loadSiteColumnWidth(),
     selectedDate: null,
     state: 'loading', // 'loading' | 'success' | 'empty' | 'closed_for_season' | 'error'
@@ -107,7 +86,7 @@ function makeContext(host, feature, signal) {
       query: '',
       loop: '',
       type: '',
-      sort: 'fit',
+      sort: 'open',
     },
     selectedSiteRid: null,
     selectedSiteDate: null,
@@ -117,7 +96,6 @@ function makeContext(host, feature, signal) {
     error: null,
     watchesByDate: new Map(),
     skeletonTimer: null,
-    calendar: null,
     // Catalog (RFC 0008): the per-POI reservable list the BE serves at
     // /api/poi/{id}/reservables. When a day is selected, the week response's
     // available_reservable_ids filters this list to the sites available for
@@ -143,8 +121,6 @@ function renderShell(ctx) {
   const sitesDay = selectedDay && availableCount(selectedDay) > 0 ? selectedDay : null;
   return `
     <section class="cg-availability">
-      ${renderNightsRow(ctx)}
-      ${ctx.availabilityView === 'week' ? renderWeekNav(ctx) : ''}
       ${renderAvailabilitySurface(ctx)}
       <div class="cg-freshness">${renderFreshness(ctx)}</div>
       ${renderSelectedSiteDetail(ctx)}
@@ -161,65 +137,14 @@ function renderShell(ctx) {
   `;
 }
 
-function renderNightsRow(ctx) {
-  const chips = MIN_NIGHTS_CHIPS.map(
-    (n) =>
-      `<button type="button" class="cg-chip ${n === ctx.minNights ? 'cg-chip-active' : ''}" data-nights="${n}">${n}</button>`,
-  ).join('');
-  return `
-    <div class="cg-nights-row">
-      <div class="cg-nights-group">
-        <span class="cg-nights-label">Min nights</span>
-        ${chips}
-      </div>
-      <div class="cg-view-toggle" role="group" aria-label="Availability view">
-        ${viewModeButton(ctx, 'table', 'Table')}
-        ${viewModeButton(ctx, 'week', 'Week')}
-      </div>
-    </div>
-  `;
-}
-
-function viewModeButton(ctx, mode, label) {
-  const active = ctx.availabilityView === mode;
-  return `
-    <button type="button" class="cg-view-mode${active ? ' cg-view-mode-active' : ''}" data-view-mode="${mode}" aria-pressed="${active ? 'true' : 'false'}">
-      ${escapeHtml(label)}
-    </button>
-  `;
-}
-
-function renderWeekNav(ctx) {
-  const start = ctx.weekStart;
-  const end = addDays(start, WEEK_DAYS - 1);
-  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
-  const fmt = (d, opts) => d.toLocaleDateString('en-US', { ...opts, timeZone: 'UTC' });
-  const label = sameMonth
-    ? `${fmt(start, { month: 'short', day: 'numeric' })} – ${fmt(end, { day: 'numeric' })}, ${start.getUTCFullYear()}`
-    : `${fmt(start, { month: 'short', day: 'numeric' })} – ${fmt(end, { month: 'short', day: 'numeric' })}, ${start.getUTCFullYear()}`;
-  const today = startOfTodayUtc();
-  const onCurrentWeek = sameDay(start, today);
-  const prevDisabled = isBefore(addDays(start, -WEEK_DAYS), today);
-  // "Today" shortcut sits next to the prev arrow when the user has paged
-  // away from the current week. Hidden otherwise so it doesn't add noise
-  // for the most common case.
-  const todayBtn = onCurrentWeek
-    ? ''
-    : `<button type="button" class="cg-week-today" aria-label="Jump to today">Today</button>`;
-  return `
-    <div class="cg-week-nav">
-      <div class="cg-week-nav-left">
-        <button type="button" class="cg-week-prev" aria-label="Previous week" ${prevDisabled ? 'disabled' : ''}>‹</button>
-        ${todayBtn}
-      </div>
-      <button type="button" class="cg-week-label" aria-label="Pick a date">${escapeHtml(label)}</button>
-      <button type="button" class="cg-week-next" aria-label="Next week">›</button>
-    </div>
-  `;
-}
-
 function renderBody(ctx) {
-  if (ctx.state === 'loading' || ctx.days == null) return renderWeekSkeleton();
+  if (ctx.state === 'loading') {
+    return renderSiteMatrixSkeleton({
+      days: placeholderMatrixDays(ctx),
+      siteColumnWidth: ctx.siteColumnWidth,
+      showToday: false,
+    });
+  }
   if (ctx.state === 'error') {
     return `<div class="cg-summary"><span class="cg-error">${escapeHtml(ctx.error || "Couldn't load availability")}</span> · <a href="#" class="cg-retry">Retry</a></div>`;
   }
@@ -231,16 +156,22 @@ function renderBody(ctx) {
     const msg = reopens ? `Reopens ${reopens}` : 'Closed for season';
     return `<div class="cg-closed-banner">⛰️ ${escapeHtml(msg)}</div>`;
   }
-  return renderWeekGrid({
+  if (ctx.days == null) {
+    return renderSiteMatrixSkeleton({
+      days: placeholderMatrixDays(ctx),
+      siteColumnWidth: ctx.siteColumnWidth,
+      showToday: false,
+    });
+  }
+  return renderSiteMatrixSkeleton({
     days: ctx.days,
-    todayIso: isoDate(startOfTodayUtc()),
-      selectedDate: ctx.selectedDate,
-      watchedDates: new Set(ctx.watchesByDate.keys()),
+    siteColumnWidth: ctx.siteColumnWidth,
+    showToday: false,
   });
 }
 
 function renderAvailabilitySurface(ctx) {
-  if (ctx.state !== 'success' || ctx.availabilityView === 'week') return renderBody(ctx);
+  if (ctx.state !== 'success') return renderBody(ctx);
   const days = matrixAvailabilityDays(ctx);
   return renderSiteMatrix({
     state: ctx.sitesState,
@@ -249,7 +180,6 @@ function renderAvailabilitySurface(ctx) {
     error: ctx.sitesError,
     selectedDate: null,
     siteColumnWidth: ctx.siteColumnWidth,
-    minNights: ctx.minNights,
     filters: ctx.matrixFilters,
     selectedSiteRid: ctx.selectedSiteRid,
     loadingMore: ctx.matrixLoading,
@@ -271,20 +201,17 @@ function renderDetail(ctx) {
   if (!day || availableCount(day) > 0) return '';
   return renderDayDetail({
     day,
-    minNights: ctx.minNights,
     watching: ctx.watchesByDate.has(day.date),
     canWatch: ctx.poiId != null,
   });
 }
 
 function renderSelectedSiteDetail(ctx) {
-  if (ctx.availabilityView !== 'table') return '';
   const site = selectedMatrixSite(ctx);
   if (!site) return '';
   return renderSiteDetail({
     site,
     selectedDate: ctx.selectedSiteDate,
-    minNights: ctx.minNights,
   });
 }
 
@@ -329,77 +256,6 @@ function onRootClick(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
 
-  // Close calendar if the click landed elsewhere; the popover handles its
-  // own outside-click via document listeners but the explicit checks below
-  // win first.
-  const chipBtn = tgt.closest('[data-nights]');
-  if (chipBtn) {
-    const n = parseInt(chipBtn.getAttribute('data-nights'), 10);
-    if (Number.isFinite(n) && n !== ctx.minNights) {
-      ctx.minNights = n;
-      saveMinNights(n);
-      // Refetch — BE may use min_nights for stay-mode scoring (RFC 0007).
-      // The URL changes, the cache key changes, and the day-detail picks
-      // up the new "N-night stay" label after the response lands.
-      fetchWeek(ctx);
-      fetchWatches(ctx);
-      if (ctx.selectedDate) fetchSites(ctx);
-    }
-    return;
-  }
-  const viewModeBtn = tgt.closest('[data-view-mode]');
-  if (viewModeBtn) {
-    const mode = viewModeBtn.getAttribute('data-view-mode');
-    if (mode === 'table' || mode === 'week') {
-      ctx.availabilityView = mode;
-      saveAvailabilityView(mode);
-      rerender(ctx);
-    }
-    return;
-  }
-  if (tgt.closest('.cg-week-prev')) {
-    if (tgt.closest('.cg-week-prev').disabled) return;
-    ctx.weekStart = addDays(ctx.weekStart, -WEEK_DAYS);
-    ctx.selectedDate = null;
-    ctx.sitesExpanded = false;
-    fetchWeek(ctx);
-    return;
-  }
-  if (tgt.closest('.cg-week-next')) {
-    ctx.weekStart = addDays(ctx.weekStart, WEEK_DAYS);
-    ctx.selectedDate = null;
-    ctx.sitesExpanded = false;
-    fetchWeek(ctx);
-    return;
-  }
-  if (tgt.closest('.cg-week-today')) {
-    const today = startOfTodayUtc();
-    if (sameDay(ctx.weekStart, today)) return;
-    ctx.weekStart = today;
-    ctx.selectedDate = null;
-    ctx.sitesExpanded = false;
-    fetchWeek(ctx);
-    return;
-  }
-  if (tgt.closest('.cg-week-label')) {
-    e.preventDefault();
-    e.stopPropagation();
-    openCalendar(ctx, tgt.closest('.cg-week-label'));
-    return;
-  }
-  const dayBtn = tgt.closest('.cg-day:not(.cg-day-skeleton)');
-  if (dayBtn) {
-    const date = dayBtn.getAttribute('data-date');
-    const selected = ctx.selectedDate !== date;
-    ctx.selectedDate = selected ? date : null;
-    ctx.sitesExpanded = selected;
-    if (selected) {
-      fetchSites(ctx);
-    } else {
-      rerender(ctx);
-    }
-    return;
-  }
   const matrixDateBtn = tgt.closest('[data-matrix-date]');
   if (matrixDateBtn) {
     const date = matrixDateBtn.getAttribute('data-matrix-date');
@@ -495,7 +351,7 @@ function updateMatrixFilter(ctx, key, value) {
     query: current.query || '',
     loop: current.loop || '',
     type: current.type || '',
-    sort: current.sort || 'fit',
+    sort: current.sort || 'open',
     [key]: nextValue,
   };
   return true;
@@ -517,7 +373,6 @@ function onRootScroll(ctx, e) {
   if (!(scroll instanceof HTMLElement)) return;
   if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
   ctx.matrixScrollLeft = scroll.scrollLeft;
-  if (ctx.availabilityView !== 'table') return;
   if (ctx.state !== 'success') return;
   if (ctx.matrixLoading || ctx.matrixEnd) return;
   const remaining = scroll.scrollWidth - scroll.clientWidth - scroll.scrollLeft;
@@ -590,40 +445,6 @@ function jumpMatrixToToday(ctx) {
   rerender(ctx);
 }
 
-function openCalendar(ctx, anchorBtn) {
-  // Close any prior popover (idempotent).
-  ctx.calendar?.dispose();
-  ctx.calendar = null;
-
-  // Mount a sibling div next to the label so absolute positioning can hang
-  // it under the anchor without disturbing layout.
-  const popoverHost = document.createElement('div');
-  popoverHost.className = 'cg-cal-host';
-  anchorBtn.parentElement.appendChild(popoverHost);
-
-  const today = startOfTodayUtc();
-  ctx.calendar = mountCalendarPopover(popoverHost, {
-    viewMonth: ctx.weekStart,
-    today,
-    selectedDate: ctx.weekStart,
-    maxDate: addDays(today, CALENDAR_MAX_DAYS_OUT),
-    onPick: (date) => {
-      ctx.weekStart = date;
-      ctx.selectedDate = null;
-      ctx.sitesExpanded = false;
-      ctx.calendar?.dispose();
-      ctx.calendar = null;
-      fetchWeek(ctx);
-    },
-    onClose: () => {
-      ctx.calendar?.dispose();
-      ctx.calendar = null;
-      // The popover lives in the rendered tree; rerender drops it.
-      rerender(ctx);
-    },
-  });
-}
-
 // ---- data -----------------------------------------------------------------
 
 async function fetchWeek(ctx, { force = false } = {}) {
@@ -642,7 +463,6 @@ async function fetchWeek(ctx, { force = false } = {}) {
       signal: ctx.signal,
     });
     clearTimeout(ctx.skeletonTimer);
-    if (!isActiveFeature(ctx.feature)) return;
     if (!resp.ok) {
       const json = await resp.json().catch(() => null);
       ctx.state = 'error';
@@ -669,7 +489,6 @@ async function fetchWeek(ctx, { force = false } = {}) {
   } catch (e) {
     clearTimeout(ctx.skeletonTimer);
     if (e.name === 'AbortError') return;
-    if (!isActiveFeature(ctx.feature)) return;
     ctx.state = 'error';
     ctx.error = e.message || 'network';
     rerender(ctx);
@@ -692,7 +511,6 @@ async function fetchMoreMatrixDays(ctx) {
       minNights: 1,
       signal: ctx.signal,
     });
-    if (!isActiveFeature(ctx.feature)) return;
     if (ctx.signal?.aborted) return;
     if (requestSeq !== ctx.matrixRequestSeq) return;
     if (!resp.ok) {
@@ -712,7 +530,7 @@ async function fetchMoreMatrixDays(ctx) {
     if (json.cache) ctx.cacheBlock = json.cache;
   } catch (e) {
     if (e.name === 'AbortError') return;
-    if (!isActiveFeature(ctx.feature)) return;
+    if (ctx.signal?.aborted) return;
     if (requestSeq !== ctx.matrixRequestSeq) return;
     ctx.matrixError = e.message || 'network';
   } finally {
@@ -737,7 +555,6 @@ async function fetchSites(ctx) {
       signal: ctx.signal,
     });
     if (ctx.signal?.aborted) return;
-    if (!isActiveFeature(ctx.feature)) return;
     if (requestSeq !== ctx.sitesRequestSeq) return;
     ctx.sitesState = 'success';
     ctx.sites = Array.isArray(json?.reservables) ? json.reservables : [];
@@ -745,7 +562,7 @@ async function fetchSites(ctx) {
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
-    if (!isActiveFeature(ctx.feature)) return;
+    if (ctx.signal?.aborted) return;
     if (requestSeq !== ctx.sitesRequestSeq) return;
     ctx.sitesState = 'error';
     ctx.sitesError = e.message || 'network';
@@ -826,43 +643,6 @@ function buildWatchPayload(ctx, date) {
 
 // ---- helpers --------------------------------------------------------------
 
-function loadMinNights() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_MIN_NIGHTS);
-    const n = parseInt(raw, 10);
-    if (Number.isFinite(n) && n > 0 && n < 32) return n;
-  } catch {
-    // localStorage blocked (private mode, etc.) — default silently.
-  }
-  return DEFAULT_MIN_NIGHTS;
-}
-
-function saveMinNights(n) {
-  try {
-    localStorage.setItem(STORAGE_KEY_MIN_NIGHTS, String(n));
-  } catch {
-    // Non-fatal: just won't persist.
-  }
-}
-
-function loadAvailabilityView() {
-  try {
-    const mode = localStorage.getItem(STORAGE_KEY_AVAILABILITY_VIEW);
-    if (mode === 'table' || mode === 'week') return mode;
-  } catch {
-    // Non-fatal: default silently.
-  }
-  return DEFAULT_AVAILABILITY_VIEW;
-}
-
-function saveAvailabilityView(mode) {
-  try {
-    localStorage.setItem(STORAGE_KEY_AVAILABILITY_VIEW, mode);
-  } catch {
-    // Non-fatal: just won't persist.
-  }
-}
-
 function loadSiteColumnWidth() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SITE_COLUMN_WIDTH);
@@ -886,7 +666,7 @@ function saveSiteColumnWidth(width) {
 }
 
 function restoreMatrixScroll(ctx) {
-  if (ctx.availabilityView !== 'table' || !ctx.matrixScrollLeft) return;
+  if (!ctx.matrixScrollLeft) return;
   const left = ctx.matrixScrollLeft;
   window.requestAnimationFrame?.(() => {
     const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
@@ -907,6 +687,13 @@ function matrixAvailabilityDays(ctx) {
   return Array.isArray(ctx.matrixDays) ? ctx.matrixDays : (Array.isArray(ctx.days) ? ctx.days : []);
 }
 
+function placeholderMatrixDays(ctx) {
+  return Array.from({ length: WEEK_DAYS }, (_, i) => {
+    const date = addDays(ctx.weekStart, i);
+    return { date: isoDate(date) };
+  });
+}
+
 function shouldShowMatrixToday(ctx) {
   const days = matrixAvailabilityDays(ctx);
   const firstDate = days[0]?.date;
@@ -914,8 +701,7 @@ function shouldShowMatrixToday(ctx) {
 }
 
 function siteListAvailabilityDays(ctx) {
-  if (ctx.availabilityView === 'table') return matrixAvailabilityDays(ctx);
-  return Array.isArray(ctx.days) ? ctx.days : [];
+  return matrixAvailabilityDays(ctx);
 }
 
 function mergeAvailabilityDays(current, next) {
@@ -940,14 +726,6 @@ function startOfTodayUtc() {
 
 function addDays(date, days) {
   return new Date(date.getTime() + days * MS_PER_DAY);
-}
-
-function isBefore(a, b) {
-  return a.getTime() < b.getTime();
-}
-
-function sameDay(a, b) {
-  return isoDate(a) === isoDate(b);
 }
 
 function isoDate(date) {

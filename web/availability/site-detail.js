@@ -6,7 +6,7 @@ import { escapeHtml } from '../core.js';
 
 const MAX_FEATURES = 12;
 
-export function renderSiteDetail({ site, selectedDate = null, minNights = 1 } = {}) {
+export function renderSiteDetail({ site, selectedDate = null } = {}) {
   if (!site) return '';
   const raw = objectValue(site.raw);
   const name = siteName(site);
@@ -15,9 +15,7 @@ export function renderSiteDetail({ site, selectedDate = null, minNights = 1 } = 
   const facts = detailFacts(site, raw);
   const features = featureLabels(raw);
   const url = site.reservation_url || site.reservationUrl || '';
-  const subtitle = selectedDate
-    ? `${selectedDate}${minNights > 1 ? `, ${minNights} nights` : ''}`
-    : '';
+  const subtitle = selectedDate || '';
 
   return `
     <section class="cg-site-detail" aria-label="Site details">
