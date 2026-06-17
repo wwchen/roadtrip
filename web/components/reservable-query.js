@@ -65,6 +65,10 @@ function reservableQueryHtml() {
           </select>
         </label>
         <label>
+          POI ID
+          <input name="poi_id" inputmode="numeric" placeholder="31337">
+        </label>
+        <label>
           Vendor
           <input name="vendor" placeholder="recgov, aspira_pc">
         </label>

@@ -1,27 +1,14 @@
-import { escapeHtml, expanderButton } from './result-table.js';
+import { renderSiteMatrix } from '../availability/site-matrix.js';
+import { escapeHtml } from './result-table.js';
 
-export function availabilityPanelHtml(rid, state, { colspan = 5 } = {}) {
-  const expanded = !!state?.expanded;
+export function availabilityPanelHtml(rid, state, { colspan = 5, row = null } = {}) {
+  const expanded = !!state && (state.mode === 'availability' || state.expanded);
   const query = state?.query || defaultAvailabilityQuery();
-  const url = reservableAvailabilityUrl(rid, query);
-  const result = expanded ? availabilityResultHtml(state) : '';
+  const result = expanded ? availabilityResultHtml(state, row, rid) : '';
   return `
     <tr class="availability-row${expanded ? ' is-expanded' : ''}" data-panel-rid="${escapeHtml(rid)}">
       <td colspan="${colspan}">
         <div class="availability-panel">
-          <div class="sub-heading">
-            <div class="sub-title">
-              ${expanderButton({
-                action: 'toggle-availability',
-                idName: 'rid',
-                id: rid,
-                label: 'Availability',
-                expanded,
-              })}
-              <span class="muted">Query availability for this reservable</span>
-            </div>
-            <span class="mono muted">${escapeHtml(url)}</span>
-          </div>
           ${expanded ? availabilityQueryHtml(rid, query, { loading: !!state?.loading }) : ''}
           ${result}
         </div>
@@ -36,14 +23,6 @@ export function availabilityQueryHtml(rid, query, { loading = false } = {}) {
       <label>
         Start
         <input name="start" type="date" value="${escapeHtml(query.start)}">
-      </label>
-      <label>
-        Days
-        <input name="days" type="number" min="1" max="60" value="${escapeHtml(query.days)}">
-      </label>
-      <label>
-        Min nights
-        <input name="min_nights" type="number" min="1" max="31" value="${escapeHtml(query.minNights)}">
       </label>
       <label class="availability-force">
         <input name="force" type="checkbox"${query.force ? ' checked' : ''}>
@@ -82,7 +61,7 @@ export function createWatchUrlFromQuery(rid, query) {
   return `/watches?${params}`;
 }
 
-export function availabilityResultHtml(state) {
+export function availabilityResultHtml(state, row = null, rid = '') {
   if (state.loading) {
     return '<div class="availability-summary">Loading availability...</div>';
   }
@@ -94,21 +73,62 @@ export function availabilityResultHtml(state) {
   }
   const body = state.data;
   const days = Array.isArray(body.availability) ? body.availability : [];
-  const pills = days.slice(0, 14).map(dayPillHtml).join('');
+  const matrix = row ? availabilityMatrixHtml(row, rid, days) : '';
+  const pills = matrix ? '' : days.slice(0, 14).map(dayPillHtml).join('');
   const remainder = days.length > 14 ? `<span class="muted">+${days.length - 14} more</span>` : '';
   return `
     <div class="availability-result">
-      <div class="availability-summary">
-        <strong>${escapeHtml(body.summary || body.state || 'Availability response')}</strong>
-        ${body.provider ? ` / ${escapeHtml(body.provider)}` : ''}
-      </div>
-      <div class="availability-days">${pills}${remainder}</div>
+      ${matrix || `<div class="availability-days">${pills}${remainder}</div>`}
       <details class="json-details">
         <summary><span class="action-icon inline" aria-hidden="true"></span><span>JSON</span></summary>
         <pre>${escapeHtml(JSON.stringify(body, null, 2))}</pre>
       </details>
     </div>
   `;
+}
+
+function availabilityMatrixHtml(row, rid, days) {
+  const visibleDays = normalizeReservableDays(rid, days);
+  if (visibleDays.length === 0) return '';
+  return renderSiteMatrix({
+    state: 'success',
+    reservables: [row],
+    days: visibleDays,
+    error: '',
+    selectedDate: null,
+    siteColumnWidth: 128,
+    filters: {
+      query: '',
+      loop: '',
+      type: '',
+      sort: 'site',
+    },
+    selectedSiteRid: null,
+    loadingMore: false,
+    loadMoreError: null,
+    showToday: false,
+  });
+}
+
+function normalizeReservableDays(rid, days) {
+  return (Array.isArray(days) ? days : [])
+    .filter((day) => day?.date)
+    .map((day) => {
+      const ids = day.available_reservable_ids ?? day.availableReservableIds;
+      if (Array.isArray(ids)) return day;
+      const open = reservableDayOpen(day);
+      return {
+        ...day,
+        available_count: open ? 1 : 0,
+        total: day.total ?? 1,
+        available_reservable_ids: open ? [rid] : [],
+      };
+    });
+}
+
+function reservableDayOpen(day) {
+  const status = String(day.status || '').toLowerCase();
+  return ['available', 'partial', 'open'].includes(status) || Number(day.available_count ?? day.availableCount ?? 0) > 0;
 }
 
 export function availabilityQueryFromForm(formEl) {
@@ -128,16 +148,6 @@ export function defaultAvailabilityQuery() {
     minNights: '1',
     force: false,
   };
-}
-
-function reservableAvailabilityUrl(rid, query) {
-  const params = new URLSearchParams({
-    days: String(query.days || 7),
-    start: query.start || utcYmd(new Date()),
-    min_nights: String(query.minNights || 1),
-  });
-  if (query.force) params.set('force', 'true');
-  return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
 }
 
 function dayPillHtml(day) {

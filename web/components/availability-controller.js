@@ -10,7 +10,7 @@ export function createAvailabilityPanels({ render }) {
   function stateForRid(rid) {
     if (!panels.has(rid)) {
       panels.set(rid, {
-        expanded: false,
+        mode: null,
         query: defaultAvailabilityQuery(),
         loading: false,
         error: '',
@@ -25,17 +25,28 @@ export function createAvailabilityPanels({ render }) {
     return panels.get(row.rid);
   }
 
-  function toggleAvailability(rid) {
+  function toggleDetails(rid) {
     const state = stateForRid(rid);
-    state.expanded = !state.expanded;
+    state.mode = state.mode === 'details' ? null : 'details';
     render();
   }
 
-  async function queryAvailability(rid, formEl) {
+  function toggleAvailability(rid) {
+    const state = stateForRid(rid);
+    const opening = state.mode !== 'availability';
+    state.mode = opening ? 'availability' : null;
+    render();
+    if (opening && !state.data && !state.loading) {
+      queryAvailability(rid);
+    }
+  }
+
+  async function queryAvailability(rid, formEl = null) {
     const state = stateForRid(rid);
     state.abort?.abort();
     state.abort = new AbortController();
-    state.query = availabilityQueryFromForm(formEl);
+    state.mode = 'availability';
+    state.query = formEl ? availabilityQueryFromForm(formEl) : state.query;
     state.loading = true;
     state.error = '';
     state.data = null;
@@ -57,6 +68,7 @@ export function createAvailabilityPanels({ render }) {
 
   return {
     stateForRow,
+    toggleDetails,
     toggleAvailability,
     queryAvailability,
   };

@@ -1,5 +1,6 @@
 import { availabilityPanelHtml } from './availability-panel.js';
-import { dash, escapeHtml, linkChip, links, renderRow, renderTable } from './result-table.js';
+import { renderSiteDetail } from '../availability/site-detail.js';
+import { dash, escapeHtml, expanderButton, linkChip, links, renderRow, renderTable } from './result-table.js';
 
 export const reservableColumns = [
   {
@@ -14,7 +15,7 @@ export const reservableColumns = [
     label: 'Name',
     colClass: 'col-name',
     className: 'name',
-    render: (row) => dash(row.name),
+    render: (row) => reservableNameButton(row),
   },
   {
     label: 'Loop',
@@ -51,29 +52,30 @@ export function reservableRowGroupHtml(
   row,
   {
     state = null,
-    linksHtml = reservableDetailLink(row),
-    includeAvailability = true,
+    linksHtml = reservableDetailLink(row, state),
   } = {},
 ) {
+  const mode = rowPanelMode(state);
   return [
     reservableRowHtml(row, {
-      className: 'result-row has-subrow',
+      className: `result-row${mode ? ' has-subrow is-expanded' : ''}`,
       linksHtml,
     }),
-    includeAvailability ? availabilityPanelHtml(row.rid, state, { colspan: reservableColumns.length }) : '',
+    reservablePanelRowHtml(row, state, mode),
   ].join('');
 }
 
 export function reservableRowGroupRenderer({
   stateForRow = () => null,
   linksForRow = reservableDetailLink,
-  includeAvailability = true,
 } = {}) {
-  return (row) => reservableRowGroupHtml(row, {
-    state: stateForRow(row),
-    linksHtml: linksForRow(row),
-    includeAvailability,
-  });
+  return (row) => {
+    const state = stateForRow(row);
+    return reservableRowGroupHtml(row, {
+      state,
+      linksHtml: linksForRow(row, state),
+    });
+  };
 }
 
 export function reservableTableHtml(
@@ -121,12 +123,19 @@ export function snapshotHistoryUrl(rid) {
   return `/availability?${qs}`;
 }
 
-export function reservableDetailLink(row) {
+export function reservableDetailLink(row, state = null) {
   return links([
     linkChip({
       href: reservableJsonUrl(row.rid || ''),
       text: 'Reservable',
       kind: 'JSON',
+    }),
+    expanderButton({
+      action: 'toggle-availability',
+      idName: 'rid',
+      id: row.rid || '',
+      label: 'Availability',
+      expanded: rowPanelMode(state) === 'availability',
     }),
     linkChip({
       href: snapshotHistoryUrl(row.rid || ''),
@@ -135,6 +144,43 @@ export function reservableDetailLink(row) {
       target: '_self',
     }),
   ]);
+}
+
+function reservableNameButton(row) {
+  const label = row.name || row.rid || '';
+  if (!label) return dash(null);
+  return `
+    <button
+      class="text-link-button name-link"
+      type="button"
+      data-action="toggle-reservable-detail"
+      data-rid="${escapeHtml(row.rid || '')}"
+    >${escapeHtml(label)}</button>
+  `;
+}
+
+function rowPanelMode(state) {
+  if (state?.mode === 'details' || state?.mode === 'availability') return state.mode;
+  if (state?.expanded) return 'availability';
+  return null;
+}
+
+function reservablePanelRowHtml(row, state, mode) {
+  if (!mode) return '';
+  const rid = row.rid || '';
+  const body = mode === 'details'
+    ? renderSiteDetail({ site: row })
+    : availabilityPanelHtml(rid, state, { colspan: reservableColumns.length, row });
+  if (mode === 'availability') return body;
+  return `
+    <tr class="reservable-panel-row is-expanded" data-panel-rid="${escapeHtml(rid)}">
+      <td colspan="${reservableColumns.length}">
+        <div class="reservable-inline-panel">
+          ${body}
+        </div>
+      </td>
+    </tr>
+  `;
 }
 
 export function reservablePageUrl(row) {
