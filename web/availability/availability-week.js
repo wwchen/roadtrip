@@ -262,11 +262,7 @@ function onRootClick(ctx, e) {
     const selected = ctx.selectedDate !== date;
     ctx.selectedDate = selected ? date : null;
     ctx.sitesExpanded = selected;
-    if (selected) {
-      fetchSites(ctx);
-    } else {
-      rerender(ctx);
-    }
+    rerender(ctx);
     return;
   }
   const siteHeaderBtn = tgt.closest('[data-site-header-rid]');
