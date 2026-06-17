@@ -5,7 +5,10 @@
 //         [{rid, reservation_url_template, poi_ids, name, …}, …] }
 //
 //   GET /api/reservable/{rid}
-//     → { reservable: {rid, poi_ids, name, loop, raw, …}, poi_ids: [123, 456] }
+//     → { reservable: {rid, poi_ids, name, loop, …}, poi_ids: [123, 456] }
+//
+//   GET /api/reservable/{rid}/details
+//     → same shape as /api/reservable/{rid}, used by site detail panels
 //
 //   GET /api/reservables
 //     → { total, limit, offset, reservables: [{rid, poi_ids, name, loop, …}, …] }
@@ -71,6 +74,17 @@ export function poiReservablesUrl(poiId, { type, siteType } = {}) {
  */
 export function fetchReservable(rid, { signal } = {}) {
   return jsonGetOk(`/api/reservable/${encodeURIComponent(rid)}`, { signal });
+}
+
+/**
+ * Fetch the site-detail payload for a single reservable.
+ *
+ * @param {string}      rid    Composite reservable id.
+ * @param {object}      [opts]
+ * @param {AbortSignal} [opts.signal]
+ */
+export function fetchReservableDetails(rid, { signal } = {}) {
+  return jsonGetOk(`/api/reservable/${encodeURIComponent(rid)}/details`, { signal });
 }
 
 /**

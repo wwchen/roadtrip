@@ -1,11 +1,38 @@
-// Site detail panel for reservable rows. This is intentionally read-only:
-// it normalizes fields already present on the reservable catalog payload
-// and does not fetch extra provider data.
+// Site detail panel for reservable rows. Rendering stays pure; callers can use
+// fetchSiteDetail to load the detail payload and merge it with the catalog row.
 
 import { escapeHtml } from '../core.js';
+import { fetchReservableDetails } from '../api/reservable-api.js';
 import { reservationUrlFromTemplate } from './booking-links.js';
 
 const MAX_FEATURES = 12;
+
+export async function fetchSiteDetail(rid, { signal } = {}) {
+  const body = await fetchReservableDetails(rid, { signal });
+  const detail = objectValue(body?.reservable);
+  const poiIds = Array.isArray(body?.poi_ids) ? body.poi_ids : [];
+  if (!Array.isArray(detail.poi_ids) || detail.poi_ids.length === 0) {
+    return { ...detail, poi_ids: poiIds };
+  }
+  return detail;
+}
+
+export function mergeSiteDetail(baseSite, detailSite) {
+  const base = objectValue(baseSite);
+  const detail = objectValue(detailSite);
+  const merged = { ...base, ...detail };
+  if (base.reservation_url_template && !detail.reservation_url_template) {
+    merged.reservation_url_template = base.reservation_url_template;
+  }
+  if (base.raw && !detail.raw) {
+    merged.raw = base.raw;
+  }
+  if (Array.isArray(base.poi_ids) && base.poi_ids.length > 0) {
+    const detailPoiIds = Array.isArray(detail.poi_ids) ? detail.poi_ids : [];
+    if (detailPoiIds.length === 0) merged.poi_ids = base.poi_ids;
+  }
+  return merged;
+}
 
 export function renderSiteDetail({ site, selectedDate = null, selectedEndDate = null } = {}) {
   if (!site) return '';

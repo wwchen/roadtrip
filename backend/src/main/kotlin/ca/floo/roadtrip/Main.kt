@@ -236,7 +236,7 @@ fun Application.module() {
         }
 
         poiRoutes(ctx, poiRegistry)
-        reservableRoutes(ctx)
+        reservableRoutes(ctx, includeRawResponses = appConfig.debug.enabled)
         availabilityWatchRoutes(ctx, availabilityWatchService)
         availabilityDashboardRoutes(ctx)
         poisOnRouteRoutes(ctx, routeCache, poiRegistry)

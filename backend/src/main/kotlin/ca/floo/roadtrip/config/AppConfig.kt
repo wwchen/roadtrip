@@ -4,11 +4,26 @@ import java.time.Duration
 
 data class AppConfig(
     val cache: ApiCacheConfig,
+    val debug: DebugConfig,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig =
             AppConfig(
                 cache = ApiCacheConfig.fromEnv(env),
+                debug = DebugConfig.fromEnv(env),
+            )
+    }
+}
+
+data class DebugConfig(
+    val enabled: Boolean = false,
+) {
+    companion object {
+        private const val DEBUG_ENV_KEY = "ROADTRIP_DEBUG"
+
+        fun fromEnv(env: Map<String, String> = System.getenv()): DebugConfig =
+            DebugConfig(
+                enabled = parseBoolean(env[DEBUG_ENV_KEY], DEBUG_ENV_KEY),
             )
     }
 }
@@ -58,6 +73,19 @@ data class ApiCacheConfig(
 }
 
 private val SIMPLE_DURATION = Regex("""^(\d+)(ms|s|m|h|d)?$""")
+
+private fun parseBoolean(
+    raw: String?,
+    key: String,
+): Boolean {
+    val value = raw?.trim()?.lowercase().orEmpty()
+    if (value.isBlank()) return false
+    return when (value) {
+        "true" -> true
+        "false" -> false
+        else -> throw IllegalArgumentException("$key must be true or false")
+    }
+}
 
 private fun parseDuration(
     raw: String?,

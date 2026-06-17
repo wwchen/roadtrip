@@ -7,6 +7,20 @@ import kotlin.test.assertFailsWith
 
 class AppConfigTest {
     @Test
+    fun `debug config defaults to disabled`() {
+        val config = AppConfig.fromEnv(emptyMap())
+
+        assertEquals(false, config.debug.enabled)
+    }
+
+    @Test
+    fun `debug config parses boolean flag`() {
+        val config = AppConfig.fromEnv(mapOf("ROADTRIP_DEBUG" to "true"))
+
+        assertEquals(true, config.debug.enabled)
+    }
+
+    @Test
     fun `cache config uses entity defaults when env is empty`() {
         val config = AppConfig.fromEnv(emptyMap())
 
@@ -52,5 +66,15 @@ class AppConfigTest {
             }
 
         assertEquals("ROADTRIP_CACHE_ROUTE_TTL must be positive", err.message)
+    }
+
+    @Test
+    fun `debug config rejects invalid boolean`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                AppConfig.fromEnv(mapOf("ROADTRIP_DEBUG" to "sometimes"))
+            }
+
+        assertEquals("ROADTRIP_DEBUG must be true or false", err.message)
     }
 }

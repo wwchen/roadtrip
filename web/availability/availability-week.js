@@ -18,7 +18,7 @@ import { requestPoiAvailability } from '../api/availability-api.js';
 import { fetchPoiReservables } from '../api/reservable-api.js';
 import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
 import { renderDayDetail } from './day-detail.js';
-import { renderSiteDetail } from './site-detail.js';
+import { fetchSiteDetail, mergeSiteDetail, renderSiteDetail } from './site-detail.js';
 import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 
@@ -56,6 +56,7 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
     dispose() {
       endSiteColumnResize(ctx);
       clearTimeout(ctx.skeletonTimer);
+      ctx.selectedSiteDetailRequestSeq += 1;
     },
   };
 }
@@ -87,6 +88,10 @@ function makeContext(host, feature, signal) {
     },
     selectedSiteRid: null,
     selectedSiteDate: null,
+    selectedSiteDetail: null,
+    selectedSiteDetailState: 'idle',
+    selectedSiteDetailError: null,
+    selectedSiteDetailRequestSeq: 0,
     cacheBlock: null,
     summary: '',
     season: null,
@@ -216,7 +221,11 @@ function renderSelectedSiteDetail(ctx) {
 
 function selectedMatrixSite(ctx) {
   if (!ctx.selectedSiteRid) return null;
-  return ctx.sites.find((site) => String(site.rid) === String(ctx.selectedSiteRid)) || null;
+  const site = ctx.sites.find((candidate) => String(candidate.rid) === String(ctx.selectedSiteRid)) || null;
+  if (!site) return null;
+  const detail = ctx.selectedSiteDetail;
+  if (!detail || String(detail.rid) !== String(ctx.selectedSiteRid)) return site;
+  return mergeSiteDetail(site, detail);
 }
 
 function selectedAvailabilityDay(ctx) {
@@ -273,14 +282,23 @@ function onRootClick(ctx, e) {
   if (siteDetailBtn) {
     const rid = siteDetailBtn.getAttribute('data-site-detail-rid');
     if (!rid) return;
+    const previousRid = ctx.selectedSiteRid;
     ctx.selectedSiteRid = rid;
     ctx.selectedSiteDate = siteDetailBtn.getAttribute('data-site-detail-date') || null;
-    rerender(ctx);
+    if (previousRid !== rid) {
+      ctx.selectedSiteDetail = null;
+      ctx.selectedSiteDetailError = null;
+    }
+    fetchSelectedSiteDetail(ctx);
     return;
   }
   if (tgt.closest('[data-site-detail-close]')) {
     ctx.selectedSiteRid = null;
     ctx.selectedSiteDate = null;
+    ctx.selectedSiteDetail = null;
+    ctx.selectedSiteDetailState = 'idle';
+    ctx.selectedSiteDetailError = null;
+    ctx.selectedSiteDetailRequestSeq += 1;
     rerender(ctx);
     return;
   }
@@ -561,6 +579,33 @@ async function fetchSites(ctx) {
     ctx.sitesState = 'error';
     ctx.sitesError = e.message || 'network';
     rerender(ctx);
+  }
+}
+
+async function fetchSelectedSiteDetail(ctx) {
+  const rid = ctx.selectedSiteRid;
+  if (!rid) return;
+  const requestSeq = ++ctx.selectedSiteDetailRequestSeq;
+  ctx.selectedSiteDetailState = 'loading';
+  ctx.selectedSiteDetailError = null;
+  rerender(ctx);
+  try {
+    const detail = await fetchSiteDetail(rid, { signal: ctx.signal });
+    if (ctx.signal?.aborted) return;
+    if (requestSeq !== ctx.selectedSiteDetailRequestSeq) return;
+    ctx.selectedSiteDetail = detail;
+    ctx.selectedSiteDetailState = 'success';
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (ctx.signal?.aborted) return;
+    if (requestSeq !== ctx.selectedSiteDetailRequestSeq) return;
+    ctx.selectedSiteDetailState = 'error';
+    ctx.selectedSiteDetailError = e.message || 'network';
+    console.warn('site detail fetch failed', e);
+  } finally {
+    if (requestSeq === ctx.selectedSiteDetailRequestSeq) {
+      rerender(ctx);
+    }
   }
 }
 

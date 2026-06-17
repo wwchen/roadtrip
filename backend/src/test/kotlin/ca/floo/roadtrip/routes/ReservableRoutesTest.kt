@@ -93,7 +93,7 @@ class ReservableRoutesTest {
     }
 
     @Test
-    fun `reservable detail returns catalog fields and linked poi ids`() =
+    fun `reservable detail returns catalog fields and linked poi ids without raw by default`() =
         testApplication {
             val poiId = seedPoi("upper-pines", "Upper Pines Campground")
             val reservableId =
@@ -135,9 +135,52 @@ class ReservableRoutesTest {
                     .jsonPrimitive
                     .content,
             )
-            assertEquals("330257", reservable["raw"]!!.jsonObject["campsite_id"]!!.jsonPrimitive.content)
+            assertTrue(!reservable.containsKey("raw"), "raw should be hidden unless backend debug mode is enabled")
             assertEquals(listOf(poiId.toString()), body["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
             assertEquals(listOf(poiId.toString()), reservable["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+        }
+
+    @Test
+    fun `reservable details endpoint returns raw when debug responses are enabled`() =
+        testApplication {
+            val poiId = seedPoi("upper-pines", "Upper Pines Campground")
+            val reservableId =
+                seedReservable(
+                    vendorId = "330257",
+                    name = "A12",
+                    loop = "Loop A",
+                    siteType = "STANDARD",
+                    raw = """{"campsite_id":"330257","reservable":true}""",
+                )
+            link(reservableId, poiId)
+            application { routing { reservableRoutes(ctx, includeRawResponses = true) } }
+
+            val resp = client.get("/api/reservable/site:recgov:330257/details")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val reservable = body["reservable"]!!.jsonObject
+            assertEquals("site:recgov:330257", reservable["rid"]!!.jsonPrimitive.content)
+            assertEquals("330257", reservable["raw"]!!.jsonObject["campsite_id"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `reservable details endpoint hides raw by default`() =
+        testApplication {
+            val poiId = seedPoi("upper-pines", "Upper Pines Campground")
+            val reservableId =
+                seedReservable(
+                    vendorId = "330257",
+                    name = "A12",
+                    raw = """{"campsite_id":"330257","reservable":true}""",
+                )
+            link(reservableId, poiId)
+            application { routing { reservableRoutes(ctx) } }
+
+            val resp = client.get("/api/reservable/site:recgov:330257/details")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val reservable = body["reservable"]!!.jsonObject
+            assertTrue(!reservable.containsKey("raw"), "raw should be hidden unless backend debug mode is enabled")
         }
 
     @Test

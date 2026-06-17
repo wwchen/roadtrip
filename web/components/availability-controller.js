@@ -1,4 +1,5 @@
 import { fetchReservableAvailability } from '../api/reservable-api.js';
+import { fetchSiteDetail } from '../availability/site-detail.js';
 import {
   availabilityQueryFromForm,
   defaultAvailabilityQuery,
@@ -16,6 +17,10 @@ export function createAvailabilityPanels({ render }) {
         error: '',
         data: null,
         abort: null,
+        detailsLoading: false,
+        detailsError: '',
+        details: null,
+        detailsAbort: null,
       });
     }
     return panels.get(rid);
@@ -27,8 +32,17 @@ export function createAvailabilityPanels({ render }) {
 
   function toggleDetails(rid) {
     const state = stateForRid(rid);
-    state.mode = state.mode === 'details' ? null : 'details';
+    const opening = state.mode !== 'details';
+    state.mode = opening ? 'details' : null;
     render();
+    if (!opening) {
+      state.detailsAbort?.abort();
+      state.detailsLoading = false;
+      return;
+    }
+    if (!state.details && !state.detailsLoading) {
+      queryDetails(rid);
+    }
   }
 
   function toggleAvailability(rid) {
@@ -62,6 +76,27 @@ export function createAvailabilityPanels({ render }) {
       state.error = errorMessage(err);
     } finally {
       state.loading = false;
+      render();
+    }
+  }
+
+  async function queryDetails(rid) {
+    const state = stateForRid(rid);
+    state.detailsAbort?.abort();
+    state.detailsAbort = new AbortController();
+    state.detailsLoading = true;
+    state.detailsError = '';
+    render();
+
+    try {
+      state.details = await fetchSiteDetail(rid, {
+        signal: state.detailsAbort.signal,
+      });
+    } catch (err) {
+      if (err.name === 'AbortError') return;
+      state.detailsError = errorMessage(err);
+    } finally {
+      state.detailsLoading = false;
       render();
     }
   }
