@@ -9,19 +9,17 @@ import { escapeHtml } from '../core.js';
 /**
  * @param {object} args
  * @param {object} args.day           Per-day classification.
- * @param {number} args.minNights
  * @param {boolean} args.watching
  * @param {boolean} args.canWatch
  */
-export function renderDayDetail({ day, minNights, watching, canWatch }) {
+export function renderDayDetail({ day, watching, canWatch }) {
   const dateLabel = new Date(day.date + 'T00:00:00Z').toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',
   });
-  const stayLabel = `${minNights}-night stay`;
-  const statusLine = renderStatusLine(day, stayLabel);
+  const statusLine = renderStatusLine(day);
   const actions = renderActions({ day, watching, canWatch });
 
   return `
@@ -35,23 +33,23 @@ export function renderDayDetail({ day, minNights, watching, canWatch }) {
   `;
 }
 
-function renderStatusLine(day, stayLabel) {
+function renderStatusLine(day) {
   const total = day.total ?? 0;
   const count = availableCount(day) ?? 0;
   switch (renderStatus(day)) {
     case 'available':
-      return `<span class="cg-status-ok">Available</span> · ${count} of ${total} sites · ${stayLabel}`;
+      return `<span class="cg-status-ok">Available</span> · ${count} of ${total} sites`;
     case 'partial':
       if (count === 0) {
-        return `<span class="cg-status-partial">Open, not for ${escapeHtml(stayLabel)}</span> · ${total} ${total === 1 ? 'site' : 'sites'}`;
+        return `<span class="cg-status-partial">Open, no matching sites</span> · ${total} ${total === 1 ? 'site' : 'sites'}`;
       }
-      return `<span class="cg-status-partial">Partial</span> · ${count} of ${total} sites · ${stayLabel}`;
+      return `<span class="cg-status-partial">Partial</span> · ${count} of ${total} sites`;
     case 'booked':
-      return `<span class="cg-status-full">Full</span> · ${stayLabel}`;
+      return '<span class="cg-status-full">Full</span>';
     case 'closed':
-      return `<span class="cg-status-full">Closed</span> · ${stayLabel}`;
+      return '<span class="cg-status-full">Closed</span>';
     default:
-      return stayLabel;
+      return 'No availability details';
   }
 }
 
