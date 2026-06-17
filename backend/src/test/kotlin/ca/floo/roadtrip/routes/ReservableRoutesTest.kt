@@ -20,8 +20,12 @@ import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
@@ -397,6 +401,57 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `poi availability uses exclusive start and end date window`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-window",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-04")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-04", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+            assertEquals(3, body["availability"]!!.jsonArray.size)
+        }
+
+    @Test
+    fun `availability routes reject removed days and min nights params`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-removed-params",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/availability?days=7").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/availability?min_nights=2").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservable/site:recgov:330257/availability?min_nights=2").status)
+        }
+
+    @Test
     fun `poi availability filters available reservable ids by site type`() =
         testApplication {
             val poiId =
@@ -511,6 +566,67 @@ class ReservableRoutesTest {
                     .fetchOne("SELECT count(*) FROM availability_snapshot")!!
                     .get(0, Long::class.java)
             assertEquals(5L, rowCountAfterMultiNight)
+        }
+
+    @Test
+    fun `reservable availability uses exclusive start and end date window`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-reservable-window",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            val reservableId = seedReservable(vendorId = "330257", name = "A12")
+            link(reservableId, poiId)
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-04")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-04", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+            assertEquals(3, body["availability"]!!.jsonArray.size)
+            assertEquals(3L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
+        }
+
+    @Test
+    fun `bulk availability accepts start and end date window`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "bulk-window",
+                    name = "Bulk Window Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp =
+                client.post("/api/campsite/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"ids":[$poiId],"start_date":"2026-07-01","end_date":"2026-07-04"}""")
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-04", body["end_date"]!!.jsonPrimitive.content)
         }
 
     @Test
