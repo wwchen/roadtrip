@@ -15,7 +15,45 @@ class PoiCtaTest {
     }
 
     @Test
-    fun `aspira provider_ref returns null because dated deeplink lives on the FE`() {
+    fun `aspira parks canada produces homepage URL plus tenant label`() {
+        val cta =
+            PoiCta.computeCta(
+                row(
+                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
+                    infoUrl = "https://reservation.pc.gc.ca/",
+                ),
+            )
+        assertEquals("https://reservation.pc.gc.ca/", cta?.url)
+        assertEquals("Reserve on parks.canada.ca", cta?.label)
+        assertEquals("reserve", cta?.kind)
+    }
+
+    @Test
+    fun `aspira BC parks gets BC Parks label`() {
+        val cta =
+            PoiCta.computeCta(
+                row(
+                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
+                    infoUrl = "https://camping.bcparks.ca/",
+                ),
+            )
+        assertEquals("Book on BC Parks", cta?.label)
+    }
+
+    @Test
+    fun `aspira WA state parks gets WA label`() {
+        val cta =
+            PoiCta.computeCta(
+                row(
+                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
+                    infoUrl = "https://washington.goingtocamp.com/",
+                ),
+            )
+        assertEquals("Book WA State Park", cta?.label)
+    }
+
+    @Test
+    fun `aspira without info_url returns null because we cannot derive a host`() {
         val cta =
             PoiCta.computeCta(
                 row(providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}"""),
