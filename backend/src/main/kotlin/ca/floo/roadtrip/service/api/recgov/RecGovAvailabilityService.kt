@@ -4,10 +4,12 @@ import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.AvailabilitySeasonBlock
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.DayClassification
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.availabilityResponseDto
 import ca.floo.roadtrip.service.api.classifyWindowState
+import ca.floo.roadtrip.service.api.dayClassificationFromReservableStatuses
 import ca.floo.roadtrip.service.api.summarizeWindow
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
@@ -114,7 +116,7 @@ internal suspend fun fetchAndClassifyRecgovCatalog(
                 .awaitAll()
 
         val merged = mergeCampsites(results.map { it.data })
-        val catalogSites = merged.filterKeys { it in campsiteIds }
+        val catalogSites = campsiteIds.associateWith { siteId -> merged[siteId].orEmpty() }
 
         val dates = (0 until days).map { startDate.plusDays(it.toLong()).toString() }
         val perDay = dates.map { date -> classifyDay(catalogSites, date) }
@@ -158,7 +160,7 @@ internal suspend fun fetchAndClassifyRecgovReservable(
                 .awaitAll()
 
         val merged = mergeCampsites(results.map { it.data })
-        val oneSite = merged[campsiteId]?.let { mapOf(campsiteId to it) } ?: emptyMap()
+        val oneSite = mapOf(campsiteId to merged[campsiteId].orEmpty())
 
         val dates = (0 until days).map { startDate.plusDays(it.toLong()).toString() }
         val perDay = dates.map { date -> classifyDay(oneSite, date) }
@@ -228,33 +230,27 @@ private fun classifyDay(
     merged: Map<String, Map<String, String>>,
     date: String,
 ): DayClassification {
-    var available = 0
-    var booked = 0
-    var closed = 0
-    val availableReservableIds = mutableListOf<String>()
-    for ((siteId, byDate) in merged) {
-        val statusForDate = byDate[date] ?: continue
-        when {
-            statusForDate.equals("Closed", true) -> closed++
-            isOpen(statusForDate) -> {
-                available++
-                availableReservableIds += "site:recgov:$siteId"
-            }
-            else -> booked++
-        }
-    }
-    val total = available + booked + closed
-    val status =
-        when {
-            total == 0 -> "closed"
-            closed == total -> "closed"
-            available > 0 -> "available"
-            else -> "booked"
-        }
-    return DayClassification(date, status, available, total, availableReservableIds.sorted())
+    val statuses =
+        merged
+            .mapKeys { (siteId, _) -> recgovReservableId(siteId) }
+            .mapValues { (_, byDate) -> classifyRecgovStatus(byDate[date]) }
+    return dayClassificationFromReservableStatuses(date, statuses)
 }
 
-private fun isOpen(s: String?): Boolean = s != null && (s.equals("Available", true) || s.equals("Open", true))
+private fun recgovReservableId(siteId: String): String = "site:recgov:$siteId"
+
+private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
+    val status = raw?.trim()
+    if (status.isNullOrEmpty()) return AvailabilityStatus.UNKNOWN
+    return when {
+        status.equals("null", true) -> AvailabilityStatus.UNKNOWN
+        status.equals("Available", true) || status.equals("Open", true) -> AvailabilityStatus.AVAILABLE
+        status.equals("Not Reservable", true) -> AvailabilityStatus.FIRST_COME
+        status.equals("Closed", true) -> AvailabilityStatus.CLOSED
+        status.equals("Reserved", true) -> AvailabilityStatus.RESERVED
+        else -> AvailabilityStatus.RESERVED
+    }
+}
 
 private fun inferReopenDate(
     merged: Map<String, Map<String, String>>,
@@ -264,7 +260,7 @@ private fun inferReopenDate(
         merged.values
             .flatMap { it.entries }
             .filter { (_, status) ->
-                status.equals("Available", true) || status.equals("Open", true)
+                classifyRecgovStatus(status).isOnlineBookable
             }.mapNotNull { (date, _) ->
                 runCatching { LocalDate.parse(date) }.getOrNull()
             }.filter { !it.isBefore(today) }

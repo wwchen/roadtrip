@@ -5,6 +5,10 @@
 // Pure renderer; click handling lives in availability-week.js.
 
 import { escapeHtml } from '../core.js';
+import {
+  availabilityStatusMeta,
+  normalizeAvailabilityStatus,
+} from '../utils/availability-status.js';
 
 /**
  * @param {object} args
@@ -36,31 +40,11 @@ export function renderDayDetail({ day, watching, canWatch }) {
 function renderStatusLine(day) {
   const total = day.total ?? 0;
   const count = availableCount(day) ?? 0;
-  switch (renderStatus(day)) {
-    case 'available':
-      return `<span class="cg-status-ok">Available</span> · ${count} of ${total} sites`;
-    case 'partial':
-      if (count === 0) {
-        return `<span class="cg-status-partial">Open, no matching sites</span> · ${total} ${total === 1 ? 'site' : 'sites'}`;
-      }
-      return `<span class="cg-status-partial">Partial</span> · ${count} of ${total} sites`;
-    case 'booked':
-      return '<span class="cg-status-full">Full</span>';
-    case 'closed':
-      return '<span class="cg-status-full">Closed</span>';
-    default:
-      return 'No availability details';
+  const meta = availabilityStatusMeta(day.status);
+  if (meta.value === 'available') {
+    return `<span class="${meta.detailClass}">${meta.text}</span> · ${count} of ${total} sites`;
   }
-}
-
-function renderStatus(day) {
-  const status = day.status || 'closed';
-  const count = availableCount(day);
-  if (count != null) {
-    if (count > 0) return 'available';
-    if (status === 'available') return 'booked';
-  }
-  return status;
+  return `<span class="${meta.detailClass}">${meta.text}</span>`;
 }
 
 function availableCount(day) {
@@ -70,9 +54,10 @@ function availableCount(day) {
 function renderActions({ day, watching, canWatch }) {
   const parts = [];
 
-  // Watch toggle: hidden on closed days because there is no open inventory
+  // Watch toggle: hidden on closed days because there is no available inventory
   // state to monitor.
-  const canAlert = day.status !== 'closed' && Boolean(canWatch);
+  const status = normalizeAvailabilityStatus(day.status);
+  const canAlert = status !== 'closed' && status !== 'unknown' && Boolean(canWatch);
   if (canAlert) {
     parts.push(
       watching
@@ -82,7 +67,7 @@ function renderActions({ day, watching, canWatch }) {
   } else if (!canWatch) {
     parts.push(`<span class="cg-day-detail-meta">Watches are not available for this campground.</span>`);
   } else {
-    parts.push(`<span class="cg-day-detail-meta">No openings to watch on a closed day.</span>`);
+    parts.push(`<span class="cg-day-detail-meta">No online openings to watch for this day.</span>`);
   }
 
   return parts.join('');

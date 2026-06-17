@@ -1,12 +1,7 @@
 // Watch detail heatmap: groups of (reservable × date) cells colored
 // by latest snapshot status.
 
-const STATUS_CLASS = {
-  available: 'cell-available',
-  partial: 'cell-partial',
-  booked: 'cell-booked',
-  closed: 'cell-closed',
-};
+import { availabilityStatusHeatmapClass } from '../../utils/availability-status.js';
 
 export function renderWatchHeatmap(rootEl, response) {
   const dates = response.dates || [];
@@ -19,9 +14,11 @@ export function renderWatchHeatmap(rootEl, response) {
   const groupsHtml = response.groups.map((g) => renderGroup(g, headerRow)).join('');
   rootEl.innerHTML = `
     <div class="heatmap-legend">
-      <span class="legend-swatch cell-available"></span> available
-      <span class="legend-swatch cell-booked"></span> booked
-      <span class="legend-swatch cell-closed"></span> closed
+      <span class="legend-swatch cell-available"></span> A
+      <span class="legend-swatch cell-first-come"></span> FF
+      <span class="legend-swatch cell-reserved"></span> R
+      <span class="legend-swatch cell-closed"></span> C
+      <span class="legend-swatch cell-unknown"></span> ?
       <span class="legend-swatch cell-empty"></span> no snapshot
     </div>
     ${groupsHtml}
@@ -56,7 +53,7 @@ function renderRow(row) {
 }
 
 function renderCell(cell) {
-  const cls = cell.status ? STATUS_CLASS[cell.status] || 'cell-unknown' : 'cell-empty';
+  const cls = cell.status ? availabilityStatusHeatmapClass(cell.status) : 'cell-empty';
   const title = cell.observed_at
     ? `${cell.status || 'unknown'} as of ${formatTimestamp(cell.observed_at)}`
     : 'no snapshot';

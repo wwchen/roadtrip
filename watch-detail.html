@@ -19,8 +19,10 @@
     --accent: #4cb96a;
     --error: #f56565;
     --status-available: rgba(76,185,106,0.55);
-    --status-booked: rgba(245,101,101,0.45);
+    --status-first-come: rgba(241,160,74,0.42);
+    --status-reserved: rgba(245,101,101,0.45);
     --status-closed: rgba(150,150,150,0.30);
+    --status-unknown: rgba(255,255,255,0.08);
     --status-empty: rgba(255,255,255,0.05);
   }
   * { box-sizing: border-box; }
@@ -150,11 +152,11 @@
   }
   .heatmap-cell { width: 28px; height: 22px; padding: 0; }
   .cell-available { background: var(--status-available); }
-  .cell-booked { background: var(--status-booked); }
+  .cell-first-come { background: var(--status-first-come); }
+  .cell-reserved { background: var(--status-reserved); }
   .cell-closed { background: var(--status-closed); }
   .cell-empty { background: var(--status-empty); }
-  .cell-unknown { background: var(--status-empty); }
-  .cell-partial { background: linear-gradient(135deg, var(--status-available) 50%, var(--status-booked) 50%); }
+  .cell-unknown { background: var(--status-unknown); }
   .muted { color: var(--muted); }
   @media (max-width: 640px) {
     body { padding: 12px; }

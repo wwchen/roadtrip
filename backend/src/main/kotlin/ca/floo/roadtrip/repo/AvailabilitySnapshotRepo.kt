@@ -3,6 +3,7 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.Companion.AVAILABILITY_SNAPSHOT
 import ca.floo.roadtrip.service.api.AvailabilityDayDto
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.availabilityResponseJson
 import kotlinx.serialization.encodeToString
 import org.jooq.DSLContext
@@ -12,6 +13,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import ca.floo.roadtrip.db.generated.enums.AvailabilityStatus as DbAvailabilityStatus
 
 /**
  * Append-only per-day availability snapshots. Replaces the
@@ -43,8 +45,8 @@ class AvailabilitySnapshotRepo(
                     .set(AVAILABILITY_SNAPSHOT.RUN_ID, input.runId)
                     .set(AVAILABILITY_SNAPSHOT.OBSERVED_AT, observedAt)
                     .set(AVAILABILITY_SNAPSHOT.TARGET_DATE, LocalDate.parse(day.date))
-                    .set(AVAILABILITY_SNAPSHOT.STATUS, day.status)
-                    .set(AVAILABILITY_SNAPSHOT.AVAILABLE, day.availableCount > 0)
+                    .set(AVAILABILITY_SNAPSHOT.STATUS, day.status.toDb())
+                    .set(AVAILABILITY_SNAPSHOT.AVAILABLE, day.status.isOnlineBookable)
                     .set(AVAILABILITY_SNAPSHOT.DAY_PAYLOAD, JSONB.valueOf(day.toJson()))
             }
         ctx.batch(inserts).execute()
@@ -59,7 +61,7 @@ class AvailabilitySnapshotRepo(
         val runId: Long?,
         val targetDate: LocalDate,
         val observedAt: OffsetDateTime,
-        val status: String,
+        val status: AvailabilityStatus,
         val available: Boolean,
         val dayPayload: String,
     )
@@ -228,8 +230,12 @@ class AvailabilitySnapshotRepo(
             runId = r.get(AVAILABILITY_SNAPSHOT.RUN_ID),
             targetDate = r.get(AVAILABILITY_SNAPSHOT.TARGET_DATE)!!,
             observedAt = r.get(AVAILABILITY_SNAPSHOT.OBSERVED_AT)!!,
-            status = r.get(AVAILABILITY_SNAPSHOT.STATUS)!!,
+            status = AvailabilityStatus.parse(r.get(AVAILABILITY_SNAPSHOT.STATUS)?.literal),
             available = r.get(AVAILABILITY_SNAPSHOT.AVAILABLE)!!,
             dayPayload = r.get(AVAILABILITY_SNAPSHOT.DAY_PAYLOAD)!!.data(),
         )
 }
+
+private fun AvailabilityStatus.toDb(): DbAvailabilityStatus =
+    DbAvailabilityStatus.entries.firstOrNull { it.literal == wireValue }
+        ?: error("availability status has no DB enum literal: $wireValue")

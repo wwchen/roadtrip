@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import org.jooq.DSLContext
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -10,7 +11,7 @@ class AvailabilityHeatmapRepo(
     data class LatestCell(
         val reservableId: Long,
         val targetDate: LocalDate,
-        val status: String,
+        val status: AvailabilityStatus,
         val available: Boolean,
         val observedAt: OffsetDateTime,
     )
@@ -47,7 +48,7 @@ class AvailabilityHeatmapRepo(
                 LatestCell(
                     reservableId = r.get("reservable_id", Long::class.java),
                     targetDate = r.get("target_date", LocalDate::class.java),
-                    status = r.get("status", String::class.java),
+                    status = AvailabilityStatus.parse(r.get("status", String::class.java)),
                     available = r.get("available", Boolean::class.java),
                     observedAt = r.get("observed_at", OffsetDateTime::class.java),
                 )

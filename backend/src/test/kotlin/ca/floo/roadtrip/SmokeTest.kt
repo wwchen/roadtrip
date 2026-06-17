@@ -396,8 +396,8 @@ class SmokeTest {
                           "summary": "No availability data",
                           "provider": "aspira",
                           "availability": [
-                            { "date": "2026-06-16", "available_count": 1, "total": 1, "available_reservable_ids": ["site:matrix:001"] },
-                            { "date": "2026-06-17", "available_count": 0, "total": 1, "available_reservable_ids": [] }
+                            { "date": "2026-06-16", "status": "available", "available_count": 1, "total": 1, "available_reservable_ids": ["site:matrix:001"] },
+                            { "date": "2026-06-17", "status": "reserved", "available_count": 0, "total": 1, "available_reservable_ids": [] }
                           ]
                         }
                         """.trimIndent(),
@@ -476,7 +476,7 @@ class SmokeTest {
                 "availability result should omit response summary/provider chrome: $availabilityVisibleText",
             )
             assertThat(page.locator(".cg-site-matrix-cell-available")).hasCount(1)
-            assertThat(page.locator(".cg-site-matrix-cell-booked")).hasCount(1)
+            assertThat(page.locator(".cg-site-matrix-cell-reserved")).hasCount(1)
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during catalog reservables smoke: ${pageErrors.joinToString(" | ")}",
@@ -548,13 +548,27 @@ class SmokeTest {
                           "summary": "7 dates",
                           "cache": { "age_seconds": 60 },
                           "availability": [
-                            { "date": "2026-06-16", "available_count": 3, "total": 6, "available_reservable_ids": ["site:matrix:001", "site:matrix:002", "site:matrix:003"] },
-                            { "date": "2026-06-17", "available_count": 2, "total": 6, "available_reservable_ids": ["site:matrix:002", "site:matrix:004"] },
-                            { "date": "2026-06-18", "available_count": 1, "total": 6, "available_reservable_ids": ["site:matrix:005"] },
-                            { "date": "2026-06-19", "available_count": 0, "total": 6, "available_reservable_ids": [] },
-                            { "date": "2026-06-20", "available_count": 2, "total": 6, "available_reservable_ids": ["site:matrix:001", "site:matrix:006"] },
+                            { "date": "2026-06-16", "status": "available", "available_count": 3, "total": 6, "available_reservable_ids": ["site:matrix:001", "site:matrix:002", "site:matrix:003"] },
+                            { "date": "2026-06-17", "status": "available", "available_count": 2, "total": 6, "available_reservable_ids": ["site:matrix:002", "site:matrix:004"] },
+                            { "date": "2026-06-18", "status": "available", "available_count": 1, "total": 6, "available_reservable_ids": ["site:matrix:005"] },
+                            {
+                              "date": "2026-06-19",
+                              "status": "first_come",
+                              "available_count": 0,
+                              "total": 6,
+                              "available_reservable_ids": [],
+                              "reservable_statuses": {
+                                "site:matrix:001": "first_come",
+                                "site:matrix:002": "reserved",
+                                "site:matrix:003": "closed",
+                                "site:matrix:004": "unknown",
+                                "site:matrix:005": "reserved",
+                                "site:matrix:006": "first_come"
+                              }
+                            },
+                            { "date": "2026-06-20", "status": "available", "available_count": 2, "total": 6, "available_reservable_ids": ["site:matrix:001", "site:matrix:006"] },
                             { "date": "2026-06-21", "available_count": 0, "total": 0, "status": "closed", "available_reservable_ids": [] },
-                            { "date": "2026-06-22", "available_count": 3, "total": 6, "available_reservable_ids": ["site:matrix:003", "site:matrix:004", "site:matrix:005"] }
+                            { "date": "2026-06-22", "status": "available", "available_count": 3, "total": 6, "available_reservable_ids": ["site:matrix:003", "site:matrix:004", "site:matrix:005"] }
                           ]
                         }
                         """.trimIndent(),
@@ -618,6 +632,17 @@ class SmokeTest {
                     .setTimeout(15_000.0),
             )
             assertThat(page.locator(".cg-availability")).not().containsText("Stay length")
+            assertThat(page.locator(".cg-site-matrix")).not().containsText("Full")
+            assertThat(page.locator(".cg-site-matrix")).not().containsText("Open")
+            assertThat(page.locator(".cg-site-matrix-legend")).containsText("A")
+            assertThat(page.locator(".cg-site-matrix-legend")).containsText("FF")
+            assertThat(page.locator(".cg-site-matrix-legend")).containsText("R")
+            assertThat(page.locator(".cg-site-matrix-legend")).containsText("C")
+            assertThat(page.locator(".cg-site-matrix-legend")).containsText("?")
+            assertThat(page.locator(".cg-site-matrix-cell-first-come .cg-site-matrix-cell-button").first()).containsText("FF")
+            assertThat(page.locator(".cg-site-matrix-cell-reserved .cg-site-matrix-cell-button").first()).containsText("R")
+            assertThat(page.locator(".cg-site-matrix-cell-closed .cg-site-matrix-cell-button").first()).containsText("C")
+            assertThat(page.locator(".cg-site-matrix-cell-unknown .cg-site-matrix-cell-button").first()).containsText("?")
             assertTrue(
                 page.evaluate(
                     """

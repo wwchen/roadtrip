@@ -137,12 +137,14 @@ Status codes (see `AspiraStatus.kt`):
 
 | Code | Meaning |
 |---|---|
-| 0 | no data |
+| 0 | unknown / no data |
 | 1 | available |
-| 3 | partial |
+| 2 | available |
+| 3 | available |
 | 5 | closed |
-| 6 | mostly booked |
-| 7 | mixed / some availability |
+| 6 | available |
+| 7 | available |
+| unknown | unknown |
 
 Used for: drawer week grid, bulk score endpoint, alert poller. Called
 at request time by `AspiraAvailabilityClient`; not captured by an

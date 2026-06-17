@@ -6,6 +6,10 @@
 import { escapeHtml } from '../core.js';
 import { renderSiteDetail } from './site-detail.js';
 import { bookingLabel, hasReservationUrlTemplate } from './booking-links.js';
+import {
+  availabilityStatusMeta,
+  normalizeAvailabilityStatus,
+} from '../utils/availability-status.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT_FILTERS = {
@@ -16,11 +20,10 @@ const DEFAULT_FILTERS = {
 };
 const SORT_OPTIONS = [
   ['site', 'Site'],
-  ['open', 'Open first'],
+  ['available', 'Available first'],
   ['loop', 'Loop'],
   ['type', 'Type'],
 ];
-
 export function renderSiteMatrix({
   state,
   reservables,
@@ -70,6 +73,7 @@ export function renderSiteMatrix({
   const rows = sortReservables(filterReservables(allRows, activeFilters), activeFilters.sort, {
     availabilityByDate,
     selectedDate,
+    visibleDays,
   });
   const tools = renderTools({
     filters: activeFilters,
@@ -192,9 +196,11 @@ function renderSection({
         <div>
           <div class="cg-site-matrix-title">${escapeHtml(title)}</div>
           <div class="cg-site-matrix-legend">
-            <span class="cg-site-matrix-key cg-site-matrix-key-available">Open</span>
-            <span class="cg-site-matrix-key cg-site-matrix-key-booked">Full</span>
-            <span class="cg-site-matrix-key cg-site-matrix-key-closed">Closed</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-available" title="Available">A</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-first-come" title="First come first served">FF</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-reserved" title="Reserved">R</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-closed" title="Closed">C</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-unknown" title="Unknown">?</span>
           </div>
         </div>
         <div class="cg-site-matrix-actions">
@@ -434,15 +440,21 @@ function siteTitleText(row, siteLabel) {
 }
 
 function cellState(row, day, availableIds) {
-  if (availableIds?.has(rowRid(row))) {
-    return { kind: 'available', label: 'Open', aria: 'open' };
-  }
-  const total = numeric(day.total ?? day.totalAtPoi);
-  const status = String(day.status || '').toLowerCase();
-  if (status === 'closed' || total === 0) {
-    return { kind: 'closed', label: 'Closed', aria: 'closed' };
-  }
-  return { kind: 'booked', label: 'Full', aria: 'full' };
+  const rid = rowRid(row);
+  const directStatus = reservableStatus(day, rid);
+  if (directStatus) return availabilityStatusMeta(directStatus);
+  if (availableIds?.has(rid)) return availabilityStatusMeta('available');
+
+  const status = normalizeAvailabilityStatus(day.status);
+  if (status === 'available' && availableIds) return availabilityStatusMeta('reserved');
+  return availabilityStatusMeta(status);
+}
+
+function reservableStatus(day, rid) {
+  const statuses = day?.reservable_statuses ?? day?.reservableStatuses;
+  if (!statuses || typeof statuses !== 'object') return null;
+  if (!Object.prototype.hasOwnProperty.call(statuses, rid)) return null;
+  return normalizeAvailabilityStatus(statuses[rid]);
 }
 
 function availableReservableIds(day) {
@@ -488,9 +500,9 @@ function filterReservables(rows, filters) {
 
 function sortReservables(rows, sortKey, context) {
   return [...rows].sort((a, b) => {
-    if (sortKey === 'open') {
-      const ao = openDateCount(a, context.availabilityByDate);
-      const bo = openDateCount(b, context.availabilityByDate);
+    if (sortKey === 'available') {
+      const ao = availableDateCount(a, context.availabilityByDate, context.visibleDays);
+      const bo = availableDateCount(b, context.availabilityByDate, context.visibleDays);
       if (ao !== bo) return bo - ao;
       return compareReservable(a, b);
     }
@@ -501,11 +513,13 @@ function sortReservables(rows, sortKey, context) {
   });
 }
 
-function openDateCount(row, availabilityByDate) {
+function availableDateCount(row, availabilityByDate, days = []) {
   const rid = rowRid(row);
   let count = 0;
-  for (const ids of availabilityByDate.values()) {
-    if (ids.has(rid)) count += 1;
+  for (const day of days) {
+    const status = reservableStatus(day, rid);
+    if (status === 'available') count += 1;
+    else if (!status && availabilityByDate.get(day.date)?.has(rid)) count += 1;
   }
   return count;
 }
@@ -543,13 +557,4 @@ function compareByType(a, b) {
   const bt = b.site_type || '\uffff';
   if (at !== bt) return at.localeCompare(bt, undefined, { numeric: true });
   return compareReservable(a, b);
-}
-
-function numeric(value) {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
 }
