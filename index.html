@@ -424,7 +424,130 @@
   .cg-freshness .cg-stale { color: var(--cg-warn); }
   .cg-freshness .cg-refresh { color: var(--cg-warn); text-decoration: underline; }
 
-  /* Week-nav and month-calendar popover styles live in catalog.css. */
+  /* Week-nav and month-calendar popover. Mirrors catalog.css (used by the
+     dashboard pages); kept inline because index.html doesn't link catalog.css. */
+  .cg-week-nav {
+    position: relative;
+    display: grid;
+    grid-template-columns: auto 32px 1fr 32px;
+    align-items: center;
+    gap: 8px;
+    margin: 12px 0 8px;
+  }
+  .cg-week-nav .cg-week-today  { grid-column: 1 / 2; }
+  .cg-week-nav .cg-week-prev   { grid-column: 2 / 3; }
+  .cg-week-nav .cg-week-label  { grid-column: 3 / 4; }
+  .cg-week-nav .cg-week-next   { grid-column: 4 / 5; }
+
+  .cg-week-nav .cg-week-label {
+    height: 32px; padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--cg-border-strong);
+    background: var(--cg-bg-subtle); color: var(--cg-text);
+    font: inherit;
+    font-size: 13px; font-weight: 600;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.005em;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .cg-week-nav .cg-week-label:hover { background: var(--cg-bg-hover); }
+
+  .cg-week-nav .cg-week-prev,
+  .cg-week-nav .cg-week-next {
+    width: 32px; height: 32px;
+    border-radius: 8px;
+    border: 1px solid var(--cg-border-strong);
+    background: var(--cg-bg-subtle); color: var(--cg-text);
+    font-size: 16px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    line-height: 1;
+    padding: 0;
+  }
+  .cg-week-nav .cg-week-prev:hover,
+  .cg-week-nav .cg-week-next:hover { background: var(--cg-bg-hover); }
+  .cg-week-nav .cg-week-prev:disabled,
+  .cg-week-nav .cg-week-next:disabled { opacity: 0.35; cursor: not-allowed; }
+
+  .cg-week-nav .cg-week-today {
+    height: 32px; padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--cg-border-strong);
+    background: var(--cg-bg-subtle); color: var(--cg-text);
+    font: inherit;
+    font-size: 12px; font-weight: 600;
+    cursor: pointer;
+    display: inline-flex; align-items: center;
+  }
+  .cg-week-nav .cg-week-today:hover { background: var(--cg-bg-hover); }
+
+  .cg-cal-host {
+    position: absolute;
+    top: 100%; left: 50%;
+    transform: translate(-50%, 6px);
+    z-index: 50;
+  }
+  .cg-cal-popover {
+    width: 280px;
+    background: var(--cg-surface);
+    border: 1px solid var(--cg-border-strong);
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.40);
+    padding: 12px;
+  }
+  .cg-cal-head-row {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+  }
+  .cg-cal-head-row button {
+    width: 26px; height: 26px;
+    border-radius: 6px;
+    border: 1px solid var(--cg-border-strong);
+    background: var(--cg-bg-subtle); color: var(--cg-text);
+    font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .cg-cal-head-row button:hover { background: var(--cg-bg-hover); }
+  .cg-cal-title {
+    font-size: 13px; font-weight: 600; color: var(--cg-text);
+    letter-spacing: -0.005em;
+  }
+  .cg-cal-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 2px;
+  }
+  .cg-cal-head {
+    text-align: center;
+    font-size: 10px; font-weight: 600; color: var(--cg-faint);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    padding: 4px 0;
+  }
+  .cg-cal-cell {
+    aspect-ratio: 1;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; color: var(--cg-text);
+    border-radius: 6px;
+    font-variant-numeric: tabular-nums;
+  }
+  .cg-cal-empty { visibility: hidden; }
+  .cg-cal-day {
+    border: 0;
+    background: transparent;
+    color: var(--cg-text);
+    cursor: pointer;
+  }
+  .cg-cal-day:hover:not(:disabled) { background: var(--cg-bg-hover); }
+  .cg-cal-day:disabled { color: var(--cg-faint); cursor: not-allowed; }
+  .cg-cal-day.cg-cal-faint { color: var(--cg-faint); }
+  .cg-cal-day.cg-cal-today {
+    box-shadow: inset 0 0 0 1px var(--cg-accent);
+    color: var(--cg-accent); font-weight: 600;
+  }
+  .cg-cal-day.cg-cal-selected {
+    background: var(--cg-accent-bg);
+    color: #fff;
+  }
+  .cg-cal-day.cg-cal-selected:hover { background: var(--cg-accent-bg-hover); }
 
   .cg-week {
     display: grid;

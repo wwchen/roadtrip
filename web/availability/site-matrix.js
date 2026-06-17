@@ -215,10 +215,10 @@ function renderWeekNav({ weekStart, visibleDays, showToday }) {
     : '';
   return `
     <div class="cg-week-nav" role="group" aria-label="Week navigation">
+      ${todayBtn}
       <button type="button" class="cg-week-prev" aria-label="Previous week">‹</button>
       <button type="button" class="cg-week-label" aria-label="Pick a date">${escapeHtml(formatWeekLabel(startIso, endIso))}</button>
       <button type="button" class="cg-week-next" aria-label="Next week">›</button>
-      ${todayBtn}
     </div>
   `;
 }

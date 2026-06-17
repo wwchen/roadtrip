@@ -567,22 +567,22 @@ pre {
 .cg-week-nav {
   position: relative;
   display: grid;
-  grid-template-columns: 32px 1fr 32px auto;
+  grid-template-columns: auto 32px 1fr 32px;
   align-items: center;
   gap: 8px;
 }
 
-.cg-week-nav .cg-week-prev { grid-column: 1 / 2; }
-.cg-week-nav .cg-week-label { grid-column: 2 / 3; }
-.cg-week-nav .cg-week-next { grid-column: 3 / 4; }
-.cg-week-nav .cg-week-today { grid-column: 4 / 5; }
+.cg-week-nav .cg-week-today { grid-column: 1 / 2; }
+.cg-week-nav .cg-week-prev { grid-column: 2 / 3; }
+.cg-week-nav .cg-week-label { grid-column: 3 / 4; }
+.cg-week-nav .cg-week-next { grid-column: 4 / 5; }
 
 .cg-week-nav .cg-week-label {
   height: 32px;
   padding: 0 12px;
   border-radius: 8px;
-  border: 1px solid transparent;
-  background: transparent;
+  border: 1px solid var(--cg-border-strong);
+  background: var(--cg-bg-subtle);
   color: var(--cg-text);
   font: inherit;
   font-size: 13px;
@@ -596,8 +596,7 @@ pre {
 }
 
 .cg-week-nav .cg-week-label:hover {
-  background: var(--cg-bg-subtle);
-  border-color: var(--cg-border);
+  background: var(--cg-bg-hover);
 }
 
 .cg-week-nav .cg-week-prev,
