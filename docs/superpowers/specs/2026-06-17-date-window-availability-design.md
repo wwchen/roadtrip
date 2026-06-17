@@ -42,10 +42,15 @@ Keep these concepts:
 
 ### POI Availability
 
-Current:
+Current canonical route:
 
 ```
 GET /api/poi/{poi_id}/availability?start=YYYY-MM-DD&days=7&min_nights=2
+```
+
+Current deprecated legacy route:
+
+```
 GET /api/campsite/availability/{poi_id}?start=YYYY-MM-DD&days=7&min_nights=2
 ```
 
@@ -58,6 +63,9 @@ GET /api/campsite/availability/{poi_id}?start_date=YYYY-MM-DD&end_date=YYYY-MM-D
 
 Rules:
 
+- `/api/campsite/availability/{poi_id}` remains the deprecated legacy alias.
+  It gets the new date-window params while it exists, but the canonical FE
+  route is `/api/poi/{poi_id}/availability`.
 - `start_date` defaults to today.
 - `end_date` defaults to `start_date + 7 days` for drawer-style queries.
 - `end_date` must be after `start_date`.
@@ -179,7 +187,8 @@ repo's normal Gradle workflow.
 ## Backend Shape
 
 - Introduce a shared date-window parser in routes or a small route helper:
-  `startDate`, `endDate`, `spanDays`.
+  `startDate`, `endDate`, and the derived number of calendar dates in the
+  exclusive window.
 - Keep route code responsible for HTTP parsing and validation only.
 - Keep provider requests typed. Rename request fields from
   `start`/`days`/`minNights` to `startDate`/`endDate` or
