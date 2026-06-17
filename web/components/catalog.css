@@ -566,20 +566,18 @@ pre {
 
 .cg-week-nav {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-template-columns: 32px 1fr 32px auto;
   align-items: center;
   gap: 8px;
 }
 
-.cg-week-nav-left {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex: 0 0 auto;
-}
+.cg-week-nav .cg-week-prev { grid-column: 1 / 2; }
+.cg-week-nav .cg-week-label { grid-column: 2 / 3; }
+.cg-week-nav .cg-week-next { grid-column: 3 / 4; }
+.cg-week-nav .cg-week-today { grid-column: 4 / 5; }
 
 .cg-week-nav .cg-week-label {
-  flex: 1 1 auto;
   height: 32px;
   padding: 0 12px;
   border-radius: 8px;
@@ -627,11 +625,11 @@ pre {
 
 .cg-week-nav .cg-week-today {
   height: 32px;
-  padding: 0 10px;
-  border-radius: 999px;
-  border: 1px solid var(--cg-accent);
-  background: rgba(76,185,106,0.10);
-  color: var(--cg-accent);
+  padding: 0 12px;
+  border-radius: 8px;
+  border: 1px solid var(--cg-border-strong);
+  background: var(--cg-bg-subtle);
+  color: var(--cg-text);
   font: inherit;
   font-size: 12px;
   font-weight: 600;
@@ -640,7 +638,7 @@ pre {
   align-items: center;
 }
 
-.cg-week-nav .cg-week-today:hover { background: rgba(76,185,106,0.18); }
+.cg-week-nav .cg-week-today:hover { background: var(--cg-bg-hover); }
 
 .cg-cal-host {
   position: absolute;
