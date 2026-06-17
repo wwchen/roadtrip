@@ -86,6 +86,23 @@ class AvailabilityResponseTest {
     }
 
     @Test
+    fun `unknown reservable status dominates reserved in day rollup`() {
+        val day =
+            dayClassificationFromReservableStatuses(
+                date = "2026-06-10",
+                statuses =
+                    mapOf(
+                        "site:recgov:100" to AvailabilityStatus.RESERVED,
+                        "site:recgov:200" to AvailabilityStatus.UNKNOWN,
+                    ),
+            )
+
+        assertEquals(AvailabilityStatus.UNKNOWN, day.status)
+        assertEquals("success", classifyWindowState(listOf(day)))
+        assertEquals("Availability unknown", summarizeWindow(1, listOf(day), "success"))
+    }
+
+    @Test
     fun `summary has reserved fallback for non-bookable known statuses`() {
         val days =
             listOf(

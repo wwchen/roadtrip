@@ -78,6 +78,7 @@ fun rollupStatus(statuses: Iterable<AvailabilityStatus>): AvailabilityStatus {
     return when {
         values.any { it == AvailabilityStatus.AVAILABLE } -> AvailabilityStatus.AVAILABLE
         values.any { it == AvailabilityStatus.FIRST_COME } -> AvailabilityStatus.FIRST_COME
+        values.any { it == AvailabilityStatus.UNKNOWN } -> AvailabilityStatus.UNKNOWN
         values.any { it == AvailabilityStatus.RESERVED } -> AvailabilityStatus.RESERVED
         values.all { it == AvailabilityStatus.CLOSED } -> AvailabilityStatus.CLOSED
         else -> AvailabilityStatus.UNKNOWN

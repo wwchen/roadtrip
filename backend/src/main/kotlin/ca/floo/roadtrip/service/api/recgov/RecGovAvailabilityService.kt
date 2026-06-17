@@ -116,7 +116,7 @@ internal suspend fun fetchAndClassifyRecgovCatalog(
                 .awaitAll()
 
         val merged = mergeCampsites(results.map { it.data })
-        val catalogSites = merged.filterKeys { it in campsiteIds }
+        val catalogSites = campsiteIds.associateWith { siteId -> merged[siteId].orEmpty() }
 
         val dates = (0 until days).map { startDate.plusDays(it.toLong()).toString() }
         val perDay = dates.map { date -> classifyDay(catalogSites, date) }
@@ -160,7 +160,7 @@ internal suspend fun fetchAndClassifyRecgovReservable(
                 .awaitAll()
 
         val merged = mergeCampsites(results.map { it.data })
-        val oneSite = merged[campsiteId]?.let { mapOf(campsiteId to it) } ?: emptyMap()
+        val oneSite = mapOf(campsiteId to merged[campsiteId].orEmpty())
 
         val dates = (0 until days).map { startDate.plusDays(it.toLong()).toString() }
         val perDay = dates.map { date -> classifyDay(oneSite, date) }
