@@ -41,7 +41,7 @@ export function bookingLabel(row) {
 }
 
 export function agencyLabel(row) {
-  const template = reservationUrlTemplateOf(row);
+  const template = reservationUrlTemplate(row);
   const host = hostFromUrl(template);
   if (host === 'recreation.gov' || host === 'www.recreation.gov') return 'Recreation.gov';
   if (host === 'reservation.pc.gc.ca') return 'Parks Canada';
@@ -55,11 +55,6 @@ export function agencyLabel(row) {
   if (vendor === 'aspira_wa') return 'Washington State Parks';
   if (vendor.startsWith('aspira_')) return 'Aspira';
   return labelFromHost(host) || humanizeAgency(vendor);
-}
-
-function reservationUrlTemplateOf(row) {
-  const raw = row?.reservation_url_template;
-  return typeof raw === 'string' ? raw.trim() : '';
 }
 
 function hostFromUrl(url) {

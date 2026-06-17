@@ -3,7 +3,7 @@
 // and does not fetch extra provider data.
 
 import { escapeHtml } from '../core.js';
-import { reservationUrlFromTemplate, bookingLabel as sharedBookingLabel } from './booking-links.js';
+import { reservationUrlFromTemplate, bookingLabel } from './booking-links.js';
 
 const MAX_FEATURES = 12;
 
@@ -17,7 +17,7 @@ export function renderSiteDetail({ site, selectedDate = null, selectedEndDate = 
   const facts = detailFacts(site, raw, tags);
   const features = featureLabels(raw, tags);
   const url = reservationUrlFromTemplate(site, { startDate: selectedDate, endDate: selectedEndDate });
-  const bookLabel = bookingLabel(site, url);
+  const bookLabel = bookingLabel(site);
   const subtitle = selectedDate || '';
 
   return `
@@ -53,10 +53,6 @@ function detailFacts(site, raw, tags) {
   addFact(facts, 'Provider', site.vendor);
   addFact(facts, 'Provider ID', site.vendor_id || site.vendorId);
   return facts;
-}
-
-function bookingLabel(site, _url) {
-  return sharedBookingLabel(site);
 }
 
 function addFact(facts, label, value) {
