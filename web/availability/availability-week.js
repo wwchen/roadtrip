@@ -111,6 +111,8 @@ function makeContext(host, feature, signal) {
 // ---- render ---------------------------------------------------------------
 
 function rerender(ctx) {
+  ctx.calendar?.dispose();
+  ctx.calendar = null;
   ctx.host.innerHTML = renderShell(ctx);
   applyMatrixViewportWidth(ctx);
 }
@@ -141,6 +143,8 @@ function renderBody(ctx) {
     return renderSiteMatrixSkeleton({
       days: placeholderMatrixDays(ctx),
       siteColumnWidth: ctx.siteColumnWidth,
+      weekStart: isoDate(ctx.weekStart),
+      showToday: !sameDay(ctx.weekStart, startOfTodayUtc()),
     });
   }
   if (ctx.state === 'error') {
@@ -157,6 +161,8 @@ function renderBody(ctx) {
   return renderSiteMatrixSkeleton({
     days: ctx.days,
     siteColumnWidth: ctx.siteColumnWidth,
+    weekStart: isoDate(ctx.weekStart),
+    showToday: !sameDay(ctx.weekStart, startOfTodayUtc()),
   });
 }
 
@@ -280,10 +286,8 @@ function onRootClick(ctx, e) {
     rerender(ctx);
     return;
   }
-  const prevBtn = tgt.closest('.cg-week-prev');
-  if (prevBtn) {
+  if (tgt.closest('.cg-week-prev')) {
     e.preventDefault();
-    if (prevBtn.disabled) return;
     shiftWeek(ctx, -WEEK_DAYS);
     return;
   }

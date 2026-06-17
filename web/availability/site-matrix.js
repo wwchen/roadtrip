@@ -130,11 +130,13 @@ export function renderSiteMatrix({
 export function renderSiteMatrixSkeleton({
   days,
   siteColumnWidth,
-  nav = '',
+  weekStart = null,
+  showToday = false,
   rowCount = 6,
 } = {}) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
   const dateCount = visibleDays.length || 7;
+  const nav = renderWeekNav({ weekStart, visibleDays, showToday });
   const headers = visibleDays.length > 0
     ? visibleDays.map(dateHeaderHtml).join('')
     : Array.from({ length: dateCount }, () => '<th scope="col" class="cg-site-matrix-date cg-site-matrix-skeleton-cell"></th>').join('');
@@ -313,13 +315,6 @@ function matrixScrollStyle(siteColumnWidth, dateCount) {
 
 function dateHeaderHtml(day) {
   const date = day.date;
-  if (day.placeholder) {
-    return `
-      <th scope="col" class="cg-site-matrix-date cg-site-matrix-skeleton-cell">
-        <span class="cg-site-matrix-skeleton-bar cg-site-matrix-skeleton-meta"></span>
-      </th>
-    `;
-  }
   const parsed = new Date(`${date}T00:00:00Z`);
   const dow = DOW_LABELS[parsed.getUTCDay()] || '';
   const dayNum = parseInt(date.slice(8, 10), 10);
@@ -362,7 +357,7 @@ function rowHtml(row, context) {
   return `
     <tr${rowClass}>
       <th scope="row" class="cg-site-matrix-site" title="${escapeHtml(siteTitle)}">
-        ${siteLabelHtml(row, siteLabel, siteTitle)}
+        ${siteLabelHtml(row, siteLabel, siteTitle, isSelected)}
       </th>
       ${cells}
     </tr>
@@ -370,7 +365,7 @@ function rowHtml(row, context) {
   `;
 }
 
-function siteLabelHtml(row, siteLabel, siteTitle) {
+function siteLabelHtml(row, siteLabel, siteTitle, isSelected) {
   const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
   const prefix = loop ? `<span class="cg-site-matrix-loop-prefix">${escapeHtml(loop)} / </span>` : '';
   return `
@@ -380,6 +375,7 @@ function siteLabelHtml(row, siteLabel, siteTitle) {
       data-site-header-rid="${escapeHtml(row.rid)}"
       title="${escapeHtml(siteTitle)}"
       aria-label="View details for ${escapeHtml(siteTitle)}"
+      aria-expanded="${isSelected ? 'true' : 'false'}"
     >
       <span class="cg-site-matrix-site-title">${prefix}<span class="cg-site-matrix-name">${escapeHtml(siteLabel)}</span></span>
     </button>
@@ -387,13 +383,6 @@ function siteLabelHtml(row, siteLabel, siteTitle) {
 }
 
 function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook }) {
-  if (day.placeholder) {
-    return `
-      <td class="cg-site-matrix-cell cg-site-matrix-skeleton-cell">
-        <span class="cg-site-matrix-skeleton-bar cg-site-matrix-skeleton-pill"></span>
-      </td>
-    `;
-  }
   const state = cellState(row, day, availableIds);
   const isSelected = selectedDate === day.date;
   const selectedClass = isSelected ? ' is-selected' : '';
