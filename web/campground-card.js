@@ -173,18 +173,23 @@ export function seasonVerdictHTML(seasonStr, reservable) {
 }
 
 /**
- * Reserve button — picks the right vendor URL by precedence: explicit
- * reserve_url, parks_canada, parks_alberta, bcparks, recgov_id, federal
- * search, Google. `btnClass` is the CSS class prefix the caller wants
- * (popup uses "btn", drawer uses "cg-btn"). Returns full <a> HTML or a
- * disabled span for first-come-first-served pins.
+ * Reserve / info button. The backend computes a {url, label, kind} CTA for
+ * every campground pin (provider_ref → recgov page; info_url → host-aware
+ * label) and ships it as p.cta — render it verbatim. Two cases stay on the
+ * FE: Aspira deeplinks (need today/tomorrow in the browser's TZ) and the
+ * name-search fallback for pins with no upstream link at all.
+ *
+ * `btnClass` is the CSS class prefix the caller wants (popup uses "btn",
+ * drawer uses "cg-btn"). Returns full <a> HTML or a disabled span for
+ * first-come-first-served pins with no info link.
  */
 export function reserveButtonHTML(p, btnClass = 'btn') {
   let url = '';
   let label = 'Reserve';
-  // Aspira NextGen deeplink takes priority across all providers (Parks Canada,
-  // BC Parks, WA State Parks). When we have the per-park IDs, we can drop the
-  // user straight onto the booking flow instead of an info/homepage.
+  // Aspira NextGen deeplink takes priority — when we have the per-park IDs,
+  // drop the user straight onto the booking flow instead of the host home.
+  // FE-owned (vs p.cta) because the deeplink encodes today/tomorrow in the
+  // user's local TZ, which the backend can't compute.
   if (p.aspira?.transactionLocationId != null && p.aspira?.mapId != null) {
     url = buildAspiraDeeplink({
       host: p.aspira.host || 'reservation.pc.gc.ca',
@@ -193,38 +198,16 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
       resourceLocationId: p.aspira.resourceLocationId,
     });
     label = labelForAspiraHost(p.aspira.host);
-  } else if (p.reserve_url) {
-    url = p.reserve_url;
-    label = labelForReserveUrl(url);
-  } else if (p.parks_canada_url && p.reservable) {
-    // No aspira IDs but the pin is reservable on Parks Canada — homepage is
-    // the best we can do.
-    url = 'https://reservation.pc.gc.ca';
-    label = 'Reserve on parks.canada.ca';
-  } else if (p.parks_canada_url) {
-    url = p.parks_canada_url;
-    label = 'Park info on parks.canada.ca';
-  } else if (p.parks_alberta_url && p.reservable) {
-    url = 'https://www.reservecamping.alberta.ca';
-    label = 'Reserve on Alberta Parks';
-  } else if (p.parks_alberta_url) {
-    url = p.parks_alberta_url;
-    label = 'Park info on albertaparks.ca';
-  } else if (p.bcparks_url) {
-    url = p.bcparks_url;
-    label = 'Reserve on bcparks.ca';
-  } else if (p.recgov_id) {
-    url = `https://www.recreation.gov/camping/campgrounds/${p.recgov_id}`;
-    label = 'Reserve on recreation.gov';
-  } else if (p.category === 'federal') {
-    const recq = encodeURIComponent(p.name);
-    url = `https://www.recreation.gov/search?q=${recq}&entity_type=campground&inventory_type=camping`;
-    label = 'Search recreation.gov';
+  } else if (p.cta?.url) {
+    url = p.cta.url;
+    label = p.cta.label;
+  } else if (p.reservable === false) {
+    // No CTA, no aspira, marked FCFS — there's nothing to link to.
+    return `<span class="${btnClass} ${btnClass}-disabled">First-come, first-served</span>`;
   } else {
-    // Region-specific park-system search beats a raw Google for the cases
-    // we can route confidently. Each entry returns [url, label].
-    // Falls through to Google if the (state, country) tuple isn't here —
-    // a Google query is at least targeted, not random.
+    // No backend CTA and no booking provider — best-effort name search.
+    // Region-specific park-system search beats raw Google when we can route
+    // it confidently; falls through to Google otherwise.
     const regional = regionalParkSearch(p);
     if (regional) {
       [url, label] = regional;
@@ -233,9 +216,6 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
       url = `https://www.google.com/search?q=${gq}+campground`;
       label = 'Search Google';
     }
-  }
-  if (p.reservable === false && !p.reserve_url) {
-    return `<span class="${btnClass} ${btnClass}-disabled">First-come, first-served</span>`;
   }
   return `<a class="${btnClass} ${btnClass}-primary" href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
 }
@@ -270,12 +250,4 @@ function labelForAspiraHost(host) {
   if (host === 'camping.bcparks.ca') return 'Book on BC Parks';
   if (host === 'washington.goingtocamp.com') return 'Book WA State Park';
   return 'Reserve on parks.canada.ca';
-}
-
-function labelForReserveUrl(url) {
-  if (url.includes('reservation.pc.gc.ca')) return 'Reserve on parks.canada.ca';
-  if (url.includes('reserve.albertaparks')) return 'Reserve on Alberta Parks';
-  if (url.includes('camping.bcparks')) return 'Reserve on bcparks.ca';
-  if (url.includes('recreation.gov')) return 'Reserve on recreation.gov';
-  return 'Reserve';
 }
