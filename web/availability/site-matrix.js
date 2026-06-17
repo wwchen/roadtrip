@@ -272,6 +272,7 @@ function dateHeaderHtml(day) {
 
 function rowHtml(row, context) {
   const siteLabel = siteName(row);
+  const siteTitle = siteTitleText(row, siteLabel);
   const rowClass = String(row.rid) === String(context.selectedSiteRid) ? ' class="cg-site-matrix-row-selected"' : '';
   const cells = context.visibleDays
     .map((day) =>
@@ -288,29 +289,33 @@ function rowHtml(row, context) {
     .join('');
   return `
     <tr${rowClass}>
-      <th scope="row" class="cg-site-matrix-site" title="${escapeHtml(siteLabel)}">
-        ${siteLabelHtml(row, siteLabel)}
+      <th scope="row" class="cg-site-matrix-site" title="${escapeHtml(siteTitle)}">
+        ${siteLabelHtml(row, siteLabel, siteTitle)}
       </th>
       ${cells}
     </tr>
   `;
 }
 
-function siteLabelHtml(row, siteLabel) {
-  const meta = [row.loop, row.site_type].filter(Boolean).join(' · ');
-  const metaLine = meta ? `<span class="cg-site-matrix-meta-line">${escapeHtml(meta)}</span>` : '';
+function siteLabelHtml(row, siteLabel, siteTitle) {
+  const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
+  const prefix = loop ? `<span class="cg-site-matrix-loop-prefix">${escapeHtml(loop)} / </span>` : '';
   return `
     <button
       type="button"
       class="cg-site-matrix-site-button"
       data-site-detail-rid="${escapeHtml(row.rid)}"
-      title="${escapeHtml(siteLabel)}"
-      aria-label="View details for ${escapeHtml(siteLabel)}"
+      title="${escapeHtml(siteTitle)}"
+      aria-label="View details for ${escapeHtml(siteTitle)}"
     >
-      <span class="cg-site-matrix-name">${escapeHtml(siteLabel)}</span>
-      ${metaLine}
+      <span class="cg-site-matrix-site-title">${prefix}<span class="cg-site-matrix-name">${escapeHtml(siteLabel)}</span></span>
     </button>
   `;
+}
+
+function siteTitleText(row, siteLabel) {
+  const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
+  return loop ? `${loop} / ${siteLabel}` : siteLabel;
 }
 
 function cellHtml({ row, day, availableIds, fitIds, selectedDate, siteLabel, minNights }) {
@@ -375,6 +380,7 @@ function filterReservables(rows, filters) {
     if (filters.type && row.site_type !== filters.type) return false;
     if (!query) return true;
     const haystack = [
+      siteTitleText(row, siteName(row)),
       siteName(row),
       row.loop,
       row.site_type,

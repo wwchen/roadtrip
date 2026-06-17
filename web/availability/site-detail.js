@@ -15,7 +15,7 @@ export function renderSiteDetail({ site, selectedDate = null, minNights = 1 } = 
   const facts = detailFacts(site, raw);
   const features = featureLabels(raw);
   const url = site.reservation_url || site.reservationUrl || '';
-  const stayLine = selectedDate
+  const subtitle = selectedDate
     ? `${selectedDate}${minNights > 1 ? `, ${minNights} nights` : ''}`
     : '';
 
@@ -24,7 +24,7 @@ export function renderSiteDetail({ site, selectedDate = null, minNights = 1 } = 
       <div class="cg-site-detail-head">
         <div class="cg-site-detail-title-wrap">
           <div class="cg-site-detail-title" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
-          <div class="cg-site-detail-subtitle">${escapeHtml(detailSubtitle(site, stayLine))}</div>
+          ${subtitle ? `<div class="cg-site-detail-subtitle">${escapeHtml(subtitle)}</div>` : ''}
         </div>
         <button type="button" class="cg-site-detail-close" data-site-detail-close aria-label="Close site details">Close</button>
       </div>
@@ -39,10 +39,6 @@ export function renderSiteDetail({ site, selectedDate = null, minNights = 1 } = 
       }
     </section>
   `;
-}
-
-function detailSubtitle(site, stayLine) {
-  return [site.loop, site.site_type, stayLine].filter(Boolean).join(' / ');
 }
 
 function detailFacts(site, raw) {
@@ -158,6 +154,7 @@ function attributeLabels(value) {
     const formatted = formatValue(rawValue);
     if (name && formatted && formatted !== 'true') return [`${name}: ${formatted}`];
     if (name) return [name];
+    if (isUnresolvedAttribute(value)) return [];
     return Object.entries(value)
       .filter(([key]) => !/^id$/i.test(key))
       .map(([key, entryValue]) => `${humanize(key)}: ${formatValue(entryValue)}`)
@@ -165,6 +162,15 @@ function attributeLabels(value) {
   }
   const text = formatValue(value);
   return text ? [text] : [];
+}
+
+function isUnresolvedAttribute(value) {
+  return (
+    value.definition_id != null ||
+    value.definitionId != null ||
+    value.attribute_definition_id != null ||
+    value.attributeDefinitionId != null
+  );
 }
 
 function itemList(value) {
