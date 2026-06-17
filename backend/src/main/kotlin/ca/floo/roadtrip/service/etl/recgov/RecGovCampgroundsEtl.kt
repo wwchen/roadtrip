@@ -13,6 +13,7 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
@@ -28,10 +29,9 @@ import java.time.Instant
 //
 // One ETL class, multiple registry entries (one per agency). The
 // agency identity isn't on the row — every facility in a given
-// data_source belongs to that source's agency. provider_ref is RecGov
-// with the FacilityID as the recgov_id, so the booker (which keys
-// alerts off recgov_id) FKs cleanly to whatever the user picks on the
-// map.
+// data_source belongs to that source's agency. Reservable facilities get
+// provider_ref=RecGov(FacilityID); non-reservable facilities remain useful
+// map POIs but are not live availability targets.
 class RecGovCampgroundsEtl(
     override val etlSlug: String,
 ) : SourceEtl<RecGovDto, List<Poi.Campground>> {
@@ -86,8 +86,9 @@ class RecGovCampgroundsEtl(
         // RIDB ships ORGANIZATION[0].OrgAbbrevName per row when full=true.
         // Stamps each campground with its actual managing agency (NPS, FS,
         // BLM, USACE, FWS, BOR, TVA, …) without us splitting the dataset.
+        val rawObj = raw as? JsonObject
         val agency =
-            (raw as? JsonObject)
+            rawObj
                 ?.get("ORGANIZATION")
                 ?.jsonArray
                 ?.firstOrNull()
@@ -131,7 +132,12 @@ class RecGovCampgroundsEtl(
                     ?: "https://www.recreation.gov/camping/campgrounds/${row.FacilityID}",
             fetchedAt = fetchedAt,
             lastVerified = null,
-            providerRef = ProviderRef.RecGov(recgovId = row.FacilityID.toString()),
+            providerRef =
+                if (isReservable(rawObj)) {
+                    ProviderRef.RecGov(recgovId = row.FacilityID.toString())
+                } else {
+                    null
+                },
             amenities = emptyList(),
             activities = emptyList(),
             sites = null,
@@ -144,6 +150,11 @@ class RecGovCampgroundsEtl(
             agency = agency,
             extras = raw,
         )
+    }
+
+    private fun isReservable(raw: JsonObject?): Boolean {
+        val primitive = raw?.get("Reservable")?.jsonPrimitive ?: return false
+        return primitive.booleanOrNull == true || primitive.contentOrNull.equals("true", ignoreCase = true)
     }
 
     /**
