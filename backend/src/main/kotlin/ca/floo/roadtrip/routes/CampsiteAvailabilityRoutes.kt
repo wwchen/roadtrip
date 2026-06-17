@@ -589,7 +589,7 @@ private fun ApplicationCall.parseAvailabilityWindow(
     bookingHorizonDays: Int,
     defaultDays: Int = 7,
 ): AvailabilityWindowQuery? {
-    if (listOf("days", "min_nights", "minNights").any { request.queryParameters[it] != null }) return null
+    if (listOf("start", "days", "min_nights", "minNights").any { request.queryParameters[it] != null }) return null
     val today = LocalDate.now(ZoneOffset.UTC)
     val start =
         when (val parsed = parseStartParam(request.queryParameters["start_date"], today, bookingHorizonDays)) {

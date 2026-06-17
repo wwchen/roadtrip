@@ -471,9 +471,12 @@ class ReservableRoutesTest {
             }
 
             val windowQuery = "start_date=2026-07-01&end_date=2026-07-04"
+            val poiStartStatus = client.get("/api/poi/$poiId/availability?start=2026-07-01").status
             val poiDaysStatus = client.get("/api/poi/$poiId/availability?$windowQuery&days=7").status
             val poiMinNightsStatus = client.get("/api/poi/$poiId/availability?$windowQuery&min_nights=2").status
             val poiMinNightsCamelStatus = client.get("/api/poi/$poiId/availability?$windowQuery&minNights=2").status
+            val reservableStartStatus =
+                client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01").status
             val reservableDaysStatus = client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&days=7").status
             val reservableMinNightsStatus =
                 client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&min_nights=2").status
@@ -481,9 +484,11 @@ class ReservableRoutesTest {
                 client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&minNights=2").status
 
             assertAll(
+                { assertEquals(HttpStatusCode.BadRequest, poiStartStatus) },
                 { assertEquals(HttpStatusCode.BadRequest, poiDaysStatus) },
                 { assertEquals(HttpStatusCode.BadRequest, poiMinNightsStatus) },
                 { assertEquals(HttpStatusCode.BadRequest, poiMinNightsCamelStatus) },
+                { assertEquals(HttpStatusCode.BadRequest, reservableStartStatus) },
                 { assertEquals(HttpStatusCode.BadRequest, reservableDaysStatus) },
                 {
                     assertEquals(
@@ -493,6 +498,33 @@ class ReservableRoutesTest {
                 },
                 { assertEquals(HttpStatusCode.BadRequest, reservableMinNightsCamelStatus) },
             )
+        }
+
+    @Test
+    fun `poi availability defaults missing end date to seven day window`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-default-end",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    campsiteAvailabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-08", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+            assertEquals(7, body["availability"]!!.jsonArray.size)
         }
 
     @Test
