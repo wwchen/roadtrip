@@ -5,6 +5,7 @@
 
 import { escapeHtml } from '../core.js';
 import { renderSiteDetail } from './site-detail.js';
+import { bookingLabel } from './booking-links.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT_FILTERS = {
@@ -32,6 +33,7 @@ export function renderSiteMatrix({
   loadingMore = false,
   loadMoreError = null,
   showToday = true,
+  armedBook = null,
 }) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
   if (visibleDays.length === 0) return '';
@@ -97,6 +99,7 @@ export function renderSiteMatrix({
         selectedDate,
         selectedSiteRid,
         visibleDays,
+        armedBook,
       }),
     )
     .join('');
@@ -341,6 +344,7 @@ function rowHtml(row, context) {
         row,
         selectedDate: context.selectedDate,
         siteLabel,
+        armedBook: context.armedBook,
       }),
     )
     .join('');
@@ -380,7 +384,7 @@ function siteLabelHtml(row, siteLabel, siteTitle) {
   `;
 }
 
-function cellHtml({ row, day, availableIds, selectedDate, siteLabel }) {
+function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook }) {
   if (day.placeholder) {
     return `
       <td class="cg-site-matrix-cell cg-site-matrix-skeleton-cell">
@@ -392,16 +396,34 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel }) {
   const isSelected = selectedDate === day.date;
   const selectedClass = isSelected ? ' is-selected' : '';
   const aria = `${siteLabel} ${day.date}: ${state.aria}`;
+
+  if (state.kind !== 'available') {
+    return `
+      <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}" aria-label="${escapeHtml(aria)}">
+        <span class="cg-site-matrix-cell-label">${escapeHtml(state.label)}</span>
+      </td>
+    `;
+  }
+
+  const armed = !!armedBook
+    && String(armedBook.rid) === rowRid(row)
+    && armedBook.date === day.date;
+  const label = armed ? bookingLabel(row) : state.label;
+  const armedClass = armed ? ' is-armed' : '';
+  const ariaLabel = armed
+    ? `${aria}; ${label}, click to open booking page`
+    : `${aria}; click to book`;
+
   return `
     <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}">
       <button
         type="button"
-        class="cg-site-matrix-cell-button"
-        data-site-detail-rid="${escapeHtml(rowRid(row))}"
-        data-site-detail-date="${escapeHtml(day.date)}"
-        aria-label="${escapeHtml(`${aria}; view site details`)}"
+        class="cg-site-matrix-cell-button${armedClass}"
+        data-book-rid="${escapeHtml(rowRid(row))}"
+        data-book-date="${escapeHtml(day.date)}"
+        aria-label="${escapeHtml(ariaLabel)}"
       >
-        ${escapeHtml(state.label)}
+        ${escapeHtml(label)}
       </button>
     </td>
   `;

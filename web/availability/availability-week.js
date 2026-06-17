@@ -20,6 +20,7 @@ import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
 import { renderDayDetail } from './day-detail.js';
 import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
+import { reservationUrlFromTemplate } from './booking-links.js';
 
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
@@ -87,6 +88,7 @@ function makeContext(host, feature, signal) {
     },
     selectedSiteRid: null,
     selectedSiteDate: null,
+    armedBook: null,
     cacheBlock: null,
     summary: '',
     season: null,
@@ -182,6 +184,7 @@ function renderAvailabilitySurface(ctx) {
     loadingMore: ctx.matrixLoading,
     loadMoreError: ctx.matrixError,
     showToday: shouldShowMatrixToday(ctx),
+    armedBook: ctx.armedBook,
   });
 }
 
@@ -238,6 +241,30 @@ function onRootPointerDown(ctx, e) {
 function onRootClick(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
+
+  const bookBtn = tgt.closest('[data-book-rid]');
+  if (bookBtn) {
+    e.preventDefault();
+    const rid = bookBtn.getAttribute('data-book-rid');
+    const date = bookBtn.getAttribute('data-book-date');
+    if (!rid || !date) return;
+    const armed = ctx.armedBook && String(ctx.armedBook.rid) === String(rid) && ctx.armedBook.date === date;
+    if (armed) {
+      const site = ctx.sites.find((s) => String(s.rid) === String(rid));
+      const url = site
+        ? reservationUrlFromTemplate(site, { startDate: date, endDate: stayEndDate(ctx, date) })
+        : '';
+      if (url) window.open(url, '_blank', 'noreferrer');
+      ctx.armedBook = null;
+    } else {
+      ctx.armedBook = { rid: String(rid), date };
+    }
+    rerender(ctx);
+    return;
+  }
+
+  const wasArmed = ctx.armedBook != null;
+  if (wasArmed) ctx.armedBook = null;
 
   const matrixDateBtn = tgt.closest('[data-matrix-date], .cg-day[data-date]');
   if (matrixDateBtn) {
@@ -298,7 +325,10 @@ function onRootClick(ctx, e) {
   if (tgt.closest('.cg-sites-retry')) {
     e.preventDefault();
     fetchSites(ctx);
+    return;
   }
+
+  if (wasArmed) rerender(ctx);
 }
 
 function onRootInput(ctx, e) {
@@ -337,6 +367,7 @@ function updateMatrixFilter(ctx, key, value) {
     sort: current.sort || 'open',
     [key]: nextValue,
   };
+  ctx.armedBook = null;
   return true;
 }
 
@@ -355,6 +386,10 @@ function onRootScroll(ctx, e) {
   const scroll = e.target;
   if (!(scroll instanceof HTMLElement)) return;
   if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
+  if (ctx.armedBook) {
+    ctx.armedBook = null;
+    window.requestAnimationFrame?.(() => rerender(ctx));
+  }
   ctx.matrixScrollLeft = scroll.scrollLeft;
   if (ctx.state !== 'success') return;
   if (ctx.matrixLoading || ctx.matrixEnd) return;
@@ -417,6 +452,7 @@ function jumpMatrixToToday(ctx) {
   ctx.selectedDate = null;
   ctx.sitesExpanded = false;
   ctx.matrixScrollLeft = 0;
+  ctx.armedBook = null;
   if (!sameDay(ctx.weekStart, today)) {
     ctx.weekStart = today;
     fetchWeek(ctx);
