@@ -18,6 +18,8 @@ import kotlinx.coroutines.sync.Mutex
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 
 /**
@@ -198,7 +200,7 @@ class AvailabilityManager(
                         alertMaxPeople = alert.maxPeople,
                     )
                 if (!passes) continue
-                val windows = Matcher.findConsecutiveWindows(cs.availabilities, alert.startDate, alert.endDate, alert.minNights)
+                val windows = Matcher.findConsecutiveWindows(cs.availabilities, alert.startDate, alert.endDate, stayLength(alert))
                 for (dates in windows) {
                     val id =
                         matches.create(
@@ -220,5 +222,11 @@ class AvailabilityManager(
             alerts.markChecked(alert.id)
             return newMatches
         }
+
+        private fun stayLength(alert: Alert): Int =
+            ChronoUnit.DAYS
+                .between(LocalDate.parse(alert.startDate), LocalDate.parse(alert.endDate))
+                .toInt()
+                .coerceAtLeast(1)
     }
 }

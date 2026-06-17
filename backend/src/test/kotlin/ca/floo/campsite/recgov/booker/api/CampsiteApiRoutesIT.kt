@@ -239,7 +239,6 @@ class CampsiteApiRoutesIT {
                           "parent_id":"2991",
                           "start_date":"2026-07-01",
                           "end_date":"2026-07-04",
-                          "min_nights":2,
                           "campsite_types":["STANDARD NONELECTRIC"],
                           "equipment_types":["Tent"],
                           "max_people":4,
@@ -271,7 +270,7 @@ class CampsiteApiRoutesIT {
             assertEquals("2991", item["parent_id"]!!.jsonPrimitive.content)
             assertEquals("2026-07-01", item["start_date"]!!.jsonPrimitive.content)
             assertEquals("2026-07-04", item["end_date"]!!.jsonPrimitive.content)
-            assertEquals("2", item["min_nights"]!!.jsonPrimitive.content)
+            assertTrue("min_nights" !in item)
             assertEquals("4", item["max_people"]!!.jsonPrimitive.content)
             assertEquals(
                 "001",
@@ -492,7 +491,6 @@ class CampsiteApiRoutesIT {
                 parentId = null,
                 startDate = "2026-07-01",
                 endDate = "2026-07-05",
-                minNights = 1,
                 campsiteTypes = emptyList(),
                 equipmentTypes = emptyList(),
                 maxPeople = null,

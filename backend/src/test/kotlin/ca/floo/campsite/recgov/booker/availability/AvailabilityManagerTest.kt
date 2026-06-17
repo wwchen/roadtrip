@@ -31,7 +31,6 @@ class AvailabilityManagerTest {
         campgroundName = "Test $id",
         startDate = "2026-08-01",
         endDate = "2026-08-05",
-        minNights = 1,
         status = "active",
         createdAt = "2026-06-05T00:00:00Z",
     )

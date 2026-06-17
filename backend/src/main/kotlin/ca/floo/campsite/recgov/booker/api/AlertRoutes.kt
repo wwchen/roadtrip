@@ -52,7 +52,6 @@ fun Route.alertRoutes(
                     parentId = body.parentId,
                     startDate = startDate,
                     endDate = endDate,
-                    minNights = body.minNights,
                     campsiteTypes = body.campsiteTypes,
                     equipmentTypes = body.equipmentTypes,
                     maxPeople = body.maxPeople,
@@ -93,7 +92,6 @@ fun Route.alertRoutes(
         }
         body.startDate?.let { updates["start_date"] = it }
         body.endDate?.let { updates["end_date"] = it }
-        body.minNights?.let { updates["min_nights"] = it }
         body.maxPeople?.let { updates["max_people"] = it }
         body.campsiteTypes?.let { updates["campsite_types"] = it }
         body.equipmentTypes?.let { updates["equipment_types"] = it }

@@ -13,7 +13,6 @@ data class Alert(
     val parentId: String? = null,
     val startDate: String,
     val endDate: String,
-    val minNights: Int = 1,
     val campsiteTypes: List<String> = emptyList(),
     val equipmentTypes: List<String> = emptyList(),
     val maxPeople: Int? = null,

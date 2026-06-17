@@ -17,7 +17,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import org.slf4j.LoggerFactory
+import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.temporal.ChronoUnit
 import kotlin.time.Duration.Companion.seconds
 
 /**
@@ -146,7 +148,7 @@ class Poller(
                     alertMaxPeople = alert.maxPeople,
                 )
             if (!passes) continue
-            val windows = Matcher.findConsecutiveWindows(cs.availabilities, alert.startDate, alert.endDate, alert.minNights)
+            val windows = Matcher.findConsecutiveWindows(cs.availabilities, alert.startDate, alert.endDate, stayLength(alert))
             for (dates in windows) {
                 val id =
                     matches.create(
@@ -170,4 +172,10 @@ class Poller(
         alerts.markChecked(alert.id)
         return newMatches
     }
+
+    private fun stayLength(alert: Alert): Int =
+        ChronoUnit.DAYS
+            .between(LocalDate.parse(alert.startDate), LocalDate.parse(alert.endDate))
+            .toInt()
+            .coerceAtLeast(1)
 }

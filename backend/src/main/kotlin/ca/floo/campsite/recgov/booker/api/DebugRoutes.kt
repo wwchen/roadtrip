@@ -32,7 +32,6 @@ fun Route.campsiteDebugRoutes(
                     parentId = null,
                     startDate = startDate,
                     endDate = endDate,
-                    minNights = 1,
                     campsiteTypes = emptyList(),
                     equipmentTypes = emptyList(),
                     maxPeople = null,

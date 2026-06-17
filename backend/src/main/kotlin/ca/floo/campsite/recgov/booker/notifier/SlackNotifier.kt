@@ -75,7 +75,6 @@ class SlackNotifier(
                             mrkdwn("*Campground*\n${alert.campgroundName}"),
                             mrkdwn("*Sites found*\n$count${if (count > 10) " (showing 10)" else ""}"),
                             mrkdwn("*Your window*\n${alert.startDate} → ${alert.endDate}"),
-                            mrkdwn("*Min nights*\n${alert.minNights}"),
                         ),
                 ),
                 SlackBlockDto(

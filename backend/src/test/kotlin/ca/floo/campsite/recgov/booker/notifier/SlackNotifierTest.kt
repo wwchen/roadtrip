@@ -33,7 +33,6 @@ class SlackNotifierTest {
             campgroundName = "Tunnel Mountain",
             startDate = "2026-08-01",
             endDate = "2026-08-05",
-            minNights = 2,
             createdAt = "2026-06-05T00:00:00Z",
         )
 
@@ -134,6 +133,15 @@ class SlackNotifierTest {
             assertEquals(4, blocks.size)
             assertEquals("header", blocks[0].jsonObject["type"]?.jsonPrimitive?.content)
             assertEquals("actions", blocks[3].jsonObject["type"]?.jsonPrimitive?.content)
+            val fields = blocks[1].jsonObject["fields"]!!.jsonArray
+            assertFalse(
+                fields.any {
+                    it.jsonObject["text"]
+                        ?.jsonPrimitive
+                        ?.content
+                        ?.contains("Min nights") == true
+                },
+            )
 
             val button = blocks[3].jsonObject["elements"]!!.jsonArray[0].jsonObject
             assertEquals(

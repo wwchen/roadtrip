@@ -51,7 +51,6 @@ class AlertRepo(
         val parentId: String?,
         val startDate: String,
         val endDate: String,
-        val minNights: Int,
         val campsiteTypes: List<String>,
         val equipmentTypes: List<String>,
         val maxPeople: Int?,
@@ -70,7 +69,6 @@ class AlertRepo(
         rec.parentId = input.parentId
         rec.startDate = LocalDate.parse(input.startDate)
         rec.endDate = LocalDate.parse(input.endDate)
-        rec.minNights = input.minNights
         rec.campsiteTypes = jsonbList(input.campsiteTypes)
         rec.equipmentTypes = jsonbList(input.equipmentTypes)
         rec.maxPeople = input.maxPeople
@@ -94,7 +92,6 @@ class AlertRepo(
                 "status" -> rec.status = v as String
                 "start_date" -> rec.startDate = LocalDate.parse(v as String)
                 "end_date" -> rec.endDate = LocalDate.parse(v as String)
-                "min_nights" -> rec.minNights = (v as Number).toInt()
                 "max_people" -> rec.maxPeople = (v as? Number)?.toInt()
                 "campsite_types" -> rec.campsiteTypes = jsonbList(v as List<String>)
                 "equipment_types" -> rec.equipmentTypes = jsonbList(v as List<String>)
@@ -156,7 +153,6 @@ private fun Record.toDomain(): Alert {
         parentId = r.parentId,
         startDate = r.startDate.toString(),
         endDate = r.endDate.toString(),
-        minNights = r.minNights ?: 1,
         campsiteTypes = parseStringList(r.campsiteTypes),
         equipmentTypes = parseStringList(r.equipmentTypes),
         maxPeople = r.maxPeople,

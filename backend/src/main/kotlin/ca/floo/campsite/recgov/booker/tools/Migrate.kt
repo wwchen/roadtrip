@@ -94,7 +94,6 @@ private fun importAlerts(
         rec.parentId = a.string("parent_id")
         rec.startDate = LocalDate.parse(a.string("start_date") ?: continue)
         rec.endDate = LocalDate.parse(a.string("end_date") ?: continue)
-        rec.minNights = a.int("min_nights") ?: 1
         rec.campsiteTypes = jsonbList(a.stringList("campsite_types"))
         rec.equipmentTypes = jsonbList(a.stringList("equipment_types"))
         rec.maxPeople = a.int("max_people")
