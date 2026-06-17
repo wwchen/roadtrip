@@ -351,6 +351,14 @@ class SmokeTest {
                               "site_type": "Tent",
                               "poi_ids": [31337],
                               "reservation_url": "https://example.test/1",
+                              "tags": {
+                                "capacity": { "max": 8 },
+                                "equipment": ["Small Tent"],
+                                "attributes": {
+                                  "ground_cover": "Soil",
+                                  "firepit_on_site": "Yes"
+                                }
+                              },
                               "raw": {
                                 "max_num_people": 6,
                                 "defined_attributes": [
@@ -406,6 +414,7 @@ class SmokeTest {
             poiNameLink.click()
             page.waitForURL(Pattern.compile(".*/reservables\\?poi_id=31337"))
             assertThat(page.locator("input[name=\"poi_id\"]")).hasValue("31337")
+            assertThat(page.locator("textarea[name=\"tags\"]")).isVisible()
             page.waitForFunction(
                 "() => document.querySelectorAll('.reservables-table tbody tr.result-row').length === 2",
                 null,
@@ -413,11 +422,25 @@ class SmokeTest {
             )
             assertEquals(1, poiReservableCalls.get(), "POI-scoped reservable page should use /api/poi/{id}/reservables")
             assertEquals(0, globalReservableCalls.get(), "POI-scoped reservable page should not call /api/reservables")
+            assertThat(page.locator(".reservables-table th", Page.LocatorOptions().setHasText("Tags"))).containsText("Tags")
+            assertThat(page.locator(".reservables-table td[data-label=\"Tags\"]").first()).containsText("Small Tent")
+            assertThat(page.locator(".reservables-table td[data-label=\"Tags\"]").first()).containsText("Ground Cover: Soil")
 
             page.locator("button[data-action=\"toggle-reservable-detail\"][data-rid=\"site:matrix:001\"]").click()
             assertThat(page.locator(".cg-site-detail")).containsText("Site 1")
-            assertThat(page.locator(".cg-site-detail")).containsText("Up to 6 people")
-            assertThat(page.locator(".cg-site-detail")).containsText("Shade")
+            assertThat(page.locator(".cg-site-detail")).containsText("Up to 8 people")
+            assertThat(page.locator(".cg-site-detail")).containsText("Small Tent")
+            assertThat(page.locator(".cg-site-detail")).containsText("Ground Cover: Soil")
+            assertThat(page.locator(".cg-site-detail")).containsText("Firepit On Site: Yes")
+
+            page.locator("button[data-action=\"toggle-reservable-detail\"][data-rid=\"site:matrix:001\"]").click()
+            page.fill("textarea[name=\"tags\"]", """{"attributes":{"firepit_on_site":"Yes"}}""")
+            page.locator("#reservable-form button[type=\"submit\"]").click()
+            page.waitForFunction(
+                "() => document.querySelectorAll('.reservables-table tbody tr.result-row').length === 1",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(10_000.0),
+            )
 
             page.locator("button[data-action=\"toggle-availability\"][data-rid=\"site:matrix:001\"]").click()
             assertThat(page.locator(".cg-site-matrix")).isVisible()

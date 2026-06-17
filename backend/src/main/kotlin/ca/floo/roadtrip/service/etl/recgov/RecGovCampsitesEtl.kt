@@ -9,10 +9,14 @@ import ca.floo.roadtrip.service.etl.InputBundle
 import ca.floo.roadtrip.service.etl.ReservableEtlOutput
 import ca.floo.roadtrip.service.etl.SourceEtl
 import ca.floo.roadtrip.service.etl.TransformCtx
+import ca.floo.roadtrip.service.etl.reservableTagKey
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
@@ -81,10 +85,51 @@ class RecGovCampsitesEtl(
                         // signals "synthetic, not from upstream"; we don't
                         // expect rec.gov to ever ship a field with that name.
                         raw = withSynthetic(raw, "_parent_facility_id", facilityId),
+                        tags = buildCampsiteTags(raw),
                     )
             }
         }
         return ReservableEtlOutput(reservables = reservables)
+    }
+
+    private fun buildCampsiteTags(raw: JsonObject): JsonObject =
+        buildJsonObject {
+            val capacity =
+                buildJsonObject {
+                    raw["min_num_people"]?.jsonPrimitive?.intOrNull?.let { put("min", it) }
+                    raw["max_num_people"]?.jsonPrimitive?.intOrNull?.let { put("max", it) }
+                }
+            if (capacity.isNotEmpty()) {
+                put("capacity", capacity)
+            }
+
+            val equipment = raw["equipment_types"] as? JsonArray
+            if (equipment != null && equipment.isNotEmpty()) {
+                put("equipment", equipment)
+            }
+
+            raw["campsite_reserve_type"]?.jsonPrimitive?.contentOrNull?.let { put("reserve_type", it) }
+            raw["type_of_use"]?.jsonPrimitive?.contentOrNull?.let { put("use", it) }
+            raw["capacity_rating"]?.jsonPrimitive?.contentOrNull?.let { put("capacity_rating", it) }
+
+            val attributes = recgovAttributeTags(raw["attributes"] as? JsonArray)
+            if (attributes.isNotEmpty()) {
+                put("attributes", attributes)
+            }
+        }
+
+    private fun recgovAttributeTags(attributes: JsonArray?): JsonObject {
+        if (attributes == null) return JsonObject(emptyMap())
+        return buildJsonObject {
+            for (rawAttribute in attributes) {
+                val attr = rawAttribute as? JsonObject ?: continue
+                val name = attr["attribute_name"]?.jsonPrimitive?.contentOrNull ?: continue
+                val key = reservableTagKey(name)
+                if (key.isEmpty()) continue
+                val value = attr["attribute_value"]?.jsonPrimitive?.contentOrNull ?: continue
+                put(key, value)
+            }
+        }
     }
 
     /**

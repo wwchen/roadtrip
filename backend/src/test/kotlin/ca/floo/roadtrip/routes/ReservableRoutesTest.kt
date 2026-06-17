@@ -103,6 +103,7 @@ class ReservableRoutesTest {
                     loop = "Loop A",
                     siteType = "STANDARD",
                     raw = """{"campsite_id":"330257","reservable":true}""",
+                    tagsJson = """{"capacity":{"max":8},"equipment":["Tent"],"attributes":{"fire_pit":"Yes"}}""",
                 )
             link(reservableId, poiId)
             application { routing { reservableRoutes(ctx) } }
@@ -118,6 +119,22 @@ class ReservableRoutesTest {
             assertEquals("A12", reservable["name"]!!.jsonPrimitive.content)
             assertEquals("Loop A", reservable["loop"]!!.jsonPrimitive.content)
             assertEquals("STANDARD", reservable["site_type"]!!.jsonPrimitive.content)
+            val tags = reservable["tags"]!!.jsonObject
+            assertEquals("8", tags["capacity"]!!.jsonObject["max"]!!.jsonPrimitive.content)
+            val equipment =
+                tags["equipment"]!!
+                    .jsonArray
+                    .single()
+                    .jsonPrimitive
+                    .content
+            assertEquals("Tent", equipment)
+            assertEquals(
+                "Yes",
+                tags["attributes"]!!
+                    .jsonObject["fire_pit"]!!
+                    .jsonPrimitive
+                    .content,
+            )
             assertEquals("330257", reservable["raw"]!!.jsonObject["campsite_id"]!!.jsonPrimitive.content)
             assertEquals(listOf(poiId.toString()), body["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
             assertEquals(listOf(poiId.toString()), reservable["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
@@ -158,6 +175,7 @@ class ReservableRoutesTest {
                 name = "A12",
                 loop = "Loop A",
                 raw = """{"host":"reservation.pc.gc.ca","map_id":101}""",
+                tagsJson = """{"equipment":["Small Tent"],"attributes":{"firepit_on_site":"Yes"}}""",
             )
             link(linkedReservable, poiId)
             application { routing { reservableRoutes(ctx) } }
@@ -204,6 +222,19 @@ class ReservableRoutesTest {
                 "site:aspira_pc:-2147483641",
                 rawRid,
             )
+
+            val tags = client.get("/api/reservables?tags=%7B%22attributes%22%3A%7B%22firepit_on_site%22%3A%22Yes%22%7D%7D")
+            assertEquals(HttpStatusCode.OK, tags.status)
+            val tagsBody = Json.parseToJsonElement(tags.bodyAsText()).jsonObject
+            assertEquals("1", tagsBody["total"]!!.jsonPrimitive.content)
+            val tagsRid =
+                tagsBody["reservables"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject["rid"]!!
+                    .jsonPrimitive
+                    .content
+            assertEquals("site:aspira_pc:-2147483641", tagsRid)
         }
 
     @Test
@@ -853,15 +884,16 @@ class ReservableRoutesTest {
         loop: String? = null,
         siteType: String? = null,
         raw: String = """{"source":"test"}""",
+        tagsJson: String? = null,
         providerRefJson: String? = null,
     ): Long =
         ctx
             .fetchOne(
                 """
                 INSERT INTO reservables (
-                    type, vendor, vendor_id, source, name, loop, site_type, raw, provider_ref
+                    type, vendor, vendor_id, source, name, loop, site_type, raw, tags, provider_ref
                 ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb
+                    ?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb
                 )
                 RETURNING id
                 """.trimIndent(),
@@ -873,6 +905,7 @@ class ReservableRoutesTest {
                 loop,
                 siteType,
                 raw,
+                tagsJson,
                 providerRefJson,
             )!!
             .get("id", Long::class.java)

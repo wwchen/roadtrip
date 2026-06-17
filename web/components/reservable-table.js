@@ -28,6 +28,12 @@ export const reservableColumns = [
     render: (row) => dash(row.site_type),
   },
   {
+    label: 'Tags',
+    colClass: 'col-tags',
+    className: 'tags',
+    render: (row) => reservableTags(row),
+  },
+  {
     label: 'POIs',
     colClass: 'col-pois',
     className: 'poi-ids mono',
@@ -157,6 +163,91 @@ function reservableNameButton(row) {
       data-rid="${escapeHtml(row.rid || '')}"
     >${escapeHtml(label)}</button>
   `;
+}
+
+function reservableTags(row) {
+  const labels = tagLabels(row.tags).slice(0, 5);
+  if (labels.length === 0) return dash(null);
+  return `
+    <div class="reservable-tag-list">
+      ${labels.map((label) => `<span class="reservable-tag">${escapeHtml(label)}</span>`).join('')}
+    </div>
+  `;
+}
+
+function tagLabels(tags) {
+  if (!tags || typeof tags !== 'object' || Array.isArray(tags)) return [];
+  const labels = [];
+  const capacity = tags.capacity && typeof tags.capacity === 'object' ? tags.capacity : null;
+  if (capacity) {
+    const min = numberValue(capacity.min);
+    const max = numberValue(capacity.max);
+    if (min != null && max != null && min !== max) labels.push(`${min}-${max} people`);
+    else if (max != null) labels.push(`Up to ${max}`);
+    else if (min != null) labels.push(`${min}+ people`);
+  }
+  for (const label of stringList(tags.equipment)) labels.push(label);
+  const attrs = tags.attributes && typeof tags.attributes === 'object' && !Array.isArray(tags.attributes)
+    ? tags.attributes
+    : {};
+  for (const [key, value] of Object.entries(attrs)) {
+    const formatted = formatTagValue(value);
+    if (formatted) labels.push(`${humanize(key)}: ${formatted}`);
+  }
+  for (const key of ['resource_category', 'reserve_type', 'use', 'capacity_rating']) {
+    const formatted = formatTagValue(tags[key]);
+    if (formatted) labels.push(formatted);
+  }
+  return unique(labels.map((label) => truncateText(label, 42)).filter(Boolean));
+}
+
+function stringList(value) {
+  if (Array.isArray(value)) return value.flatMap((entry) => stringList(entry));
+  const formatted = formatTagValue(value);
+  return formatted ? [formatted] : [];
+}
+
+function formatTagValue(value) {
+  if (value == null || value === false) return '';
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  if (value === true) return 'true';
+  if (Array.isArray(value)) return value.map(formatTagValue).filter(Boolean).join(', ');
+  if (typeof value === 'object') return formatTagValue(value.name ?? value.label ?? value.value);
+  return '';
+}
+
+function humanize(key) {
+  return String(key)
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function numberValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function truncateText(value, maxLength) {
+  if (!value || value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 3).trim()}...`;
+}
+
+function unique(values) {
+  const seen = new Set();
+  const out = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
 }
 
 function rowPanelMode(state) {

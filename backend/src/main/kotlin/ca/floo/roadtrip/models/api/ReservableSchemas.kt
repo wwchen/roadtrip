@@ -16,6 +16,7 @@ data class ReservableSchema(
     @SerialName("reservation_url") val reservationUrl: String? = null,
     @SerialName("poi_ids") val poiIds: List<Long> = emptyList(),
     @SerialName("provider_ref") val providerRef: JsonElement? = null,
+    val tags: JsonElement? = null,
     val raw: JsonElement? = null,
 )
 

@@ -9,11 +9,12 @@ const MAX_FEATURES = 12;
 export function renderSiteDetail({ site, selectedDate = null } = {}) {
   if (!site) return '';
   const raw = objectValue(site.raw);
+  const tags = objectValue(site.tags);
   const name = siteName(site);
   const imageUrl = findImageUrl(site);
   const description = descriptionText(site.description ?? raw.description ?? raw.campsite_description);
-  const facts = detailFacts(site, raw);
-  const features = featureLabels(raw);
+  const facts = detailFacts(site, raw, tags);
+  const features = featureLabels(raw, tags);
   const url = site.reservation_url || site.reservationUrl || '';
   const subtitle = selectedDate || '';
 
@@ -39,14 +40,14 @@ export function renderSiteDetail({ site, selectedDate = null } = {}) {
   `;
 }
 
-function detailFacts(site, raw) {
+function detailFacts(site, raw, tags) {
   const facts = [];
   addFact(facts, 'Loop', site.loop || raw.loop || raw._parent_leaf_name);
   addFact(facts, 'Type', site.site_type || raw.site_type || raw.campsite_type);
-  addFact(facts, 'Capacity', capacityLabel(site, raw));
-  addFact(facts, 'Reserve', firstString(raw.campsite_reserve_type, raw.reserve_type, raw.reserveType));
-  addFact(facts, 'Use', firstString(raw.type_of_use, raw.typeOfUse));
-  addFact(facts, 'Equipment', equipmentLabel(raw));
+  addFact(facts, 'Capacity', capacityLabel(site, raw, tags));
+  addFact(facts, 'Reserve', firstString(tags.reserve_type, raw.campsite_reserve_type, raw.reserve_type, raw.reserveType));
+  addFact(facts, 'Use', firstString(tags.use, raw.type_of_use, raw.typeOfUse));
+  addFact(facts, 'Equipment', equipmentLabel(raw, tags));
   addFact(facts, 'Provider', site.vendor);
   addFact(facts, 'Provider ID', site.vendor_id || site.vendorId);
   return facts;
@@ -87,9 +88,11 @@ function siteName(site) {
   return site.rid || '(unknown)';
 }
 
-function capacityLabel(site, raw) {
+function capacityLabel(site, raw, tags = {}) {
+  const tagCapacity = objectValue(tags.capacity);
   const min = numberValue(
-    site.min_capacity ??
+    tagCapacity.min ??
+      site.min_capacity ??
       site.minCapacity ??
       raw.min_capacity ??
       raw.minCapacity ??
@@ -97,7 +100,8 @@ function capacityLabel(site, raw) {
       raw.minNumPeople,
   );
   const max = numberValue(
-    site.max_capacity ??
+    tagCapacity.max ??
+      site.max_capacity ??
       site.maxCapacity ??
       raw.max_capacity ??
       raw.maxCapacity ??
@@ -111,20 +115,31 @@ function capacityLabel(site, raw) {
   return '';
 }
 
-function equipmentLabel(raw) {
-  return itemList(raw.allowed_equipment ?? raw.allowedEquipment ?? raw.equipment)
+function equipmentLabel(raw, tags = {}) {
+  return itemList(tags.equipment ?? raw.allowed_equipment ?? raw.allowedEquipment ?? raw.equipment)
     .slice(0, 4)
     .join(', ');
 }
 
-function featureLabels(raw) {
+function featureLabels(raw, tags = {}) {
   const labels = [
+    ...tagAttributeLabels(tags.attributes),
     ...attributeLabels(raw.defined_attributes ?? raw.definedAttributes),
     ...attributeLabels(raw.attributes),
     ...attributeLabels(raw.campsite_rules ?? raw.campsiteRules),
     ...attributeLabels(raw.supplemental_camping ?? raw.supplementalCamping),
   ];
   return unique(labels.map((label) => truncateText(compactText(label), 84)).filter(Boolean));
+}
+
+function tagAttributeLabels(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return [];
+  return Object.entries(value)
+    .map(([key, entryValue]) => {
+      const formatted = formatValue(entryValue);
+      return formatted ? `${humanize(key)}: ${formatted}` : humanize(key);
+    })
+    .filter(Boolean);
 }
 
 function attributeLabels(value) {
