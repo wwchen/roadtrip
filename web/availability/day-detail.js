@@ -39,27 +39,23 @@ function renderStatusLine(day) {
   switch (renderStatus(day)) {
     case 'available':
       return `<span class="cg-status-ok">Available</span> · ${count} of ${total} sites`;
-    case 'partial':
-      if (count === 0) {
-        return `<span class="cg-status-partial">Open, no matching sites</span> · ${total} ${total === 1 ? 'site' : 'sites'}`;
-      }
-      return `<span class="cg-status-partial">Partial</span> · ${count} of ${total} sites`;
-    case 'booked':
-      return '<span class="cg-status-full">Full</span>';
+    case 'first_come':
+      return '<span class="cg-status-first-come">First come first served</span>';
+    case 'reserved':
+      return '<span class="cg-status-full">Reserved</span>';
     case 'closed':
       return '<span class="cg-status-full">Closed</span>';
+    case 'unknown':
+      return '<span class="cg-status-unknown">Unknown</span>';
     default:
       return 'No availability details';
   }
 }
 
 function renderStatus(day) {
-  const status = day.status || 'closed';
+  const status = normalizeStatus(day.status);
   const count = availableCount(day);
-  if (count != null) {
-    if (count > 0) return 'available';
-    if (status === 'available') return 'booked';
-  }
+  if (count != null && count > 0) return 'available';
   return status;
 }
 
@@ -67,12 +63,21 @@ function availableCount(day) {
   return day.available_count ?? day.availableCount;
 }
 
+function normalizeStatus(raw) {
+  const value = String(raw || '').toLowerCase();
+  if (value === 'booked' || value === 'full') return 'reserved';
+  if (value === 'partial' || value === 'open') return 'available';
+  if (['available', 'first_come', 'reserved', 'closed', 'unknown'].includes(value)) return value;
+  return 'unknown';
+}
+
 function renderActions({ day, watching, canWatch }) {
   const parts = [];
 
   // Watch toggle: hidden on closed days because there is no open inventory
   // state to monitor.
-  const canAlert = day.status !== 'closed' && Boolean(canWatch);
+  const status = normalizeStatus(day.status);
+  const canAlert = status !== 'closed' && status !== 'unknown' && Boolean(canWatch);
   if (canAlert) {
     parts.push(
       watching
@@ -82,7 +87,7 @@ function renderActions({ day, watching, canWatch }) {
   } else if (!canWatch) {
     parts.push(`<span class="cg-day-detail-meta">Watches are not available for this campground.</span>`);
   } else {
-    parts.push(`<span class="cg-day-detail-meta">No openings to watch on a closed day.</span>`);
+    parts.push(`<span class="cg-day-detail-meta">No online openings to watch for this day.</span>`);
   }
 
   return parts.join('');

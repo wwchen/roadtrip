@@ -103,7 +103,7 @@ export async function mount(rootEl, { urlParams }) {
         <td>${s.run_id != null ? `#${escapeHtml(s.run_id)}` : '—'}</td>
         <td>${escapeHtml(s.target_date)}</td>
         <td>${escapeHtml(formatTimestamp(s.observed_at))}</td>
-        <td>${escapeHtml(s.status)}</td>
+        <td title="${escapeHtml(s.status)}">${escapeHtml(statusLabel(s.status))}</td>
         <td>${s.available ? '✓' : '✗'}</td>
       </tr>
     `;
@@ -175,6 +175,15 @@ function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => (
     { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
   ));
+}
+
+function statusLabel(status) {
+  const value = String(status || '').toLowerCase();
+  if (value === 'available') return 'A';
+  if (value === 'first_come') return 'FF';
+  if (value === 'reserved' || value === 'booked') return 'R';
+  if (value === 'closed') return 'C';
+  return '?';
 }
 
 function formatTimestamp(iso) {

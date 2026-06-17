@@ -69,30 +69,31 @@ export function renderWeekSkeleton() {
  * label when the count is missing rather than printing 'undefined'.
  */
 function renderAvailLabel(day) {
-  const status = day.status || 'closed';
-  if (status === 'closed') return 'closed';
-  if (status === 'booked') return 'full';
+  const status = normalizeStatus(day.status);
   const count = availableCount(day);
-  if (status === 'partial' && count === 0) return 'no stays';
-  if (count === 0) return 'full';
-  if (count == null) {
-    // We know status is available/partial but the BE didn't ship a count —
-    // tell the user what we do know rather than printing nothing.
-    return status === 'partial' ? 'some open' : 'open';
-  }
-  return `${count} ${count === 1 ? 'site' : 'sites'}`;
+  if (status === 'available' && count != null) return `${count} ${count === 1 ? 'site' : 'sites'}`;
+  if (status === 'available') return 'A';
+  if (status === 'first_come') return 'FF';
+  if (status === 'reserved') return 'R';
+  if (status === 'closed') return 'C';
+  return '?';
 }
 
 function renderStatus(day) {
-  const status = day.status || 'closed';
+  const status = normalizeStatus(day.status);
   const count = availableCount(day);
-  if (count != null) {
-    if (count > 0) return 'available';
-    if (status === 'available') return 'booked';
-  }
+  if (count != null && count > 0) return 'available';
   return status;
 }
 
 function availableCount(day) {
   return day.available_count ?? day.availableCount;
+}
+
+function normalizeStatus(raw) {
+  const value = String(raw || '').toLowerCase();
+  if (value === 'booked' || value === 'full') return 'reserved';
+  if (value === 'partial' || value === 'open') return 'available';
+  if (['available', 'first_come', 'reserved', 'closed', 'unknown'].includes(value)) return value;
+  return 'unknown';
 }
