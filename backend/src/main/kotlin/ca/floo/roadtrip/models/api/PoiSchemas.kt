@@ -64,6 +64,10 @@ data class PoiDetailPropertiesSchema(
     // render blindly without owning per-vendor precedence rules. null when
     // the row has no usable upstream link (FE falls back to name search).
     val cta: PoiCtaSchema? = null,
+    // Display name for the booking system that reservations on this pin
+    // flow through ("Recreation.gov", "Aspira NextGen (BC Parks)", …).
+    // Used by the drawer footer; null when the pin has no known provider.
+    @SerialName("booking_system") val bookingSystem: String? = null,
     val raw: JsonElement,
 )
 

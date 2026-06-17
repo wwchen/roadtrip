@@ -155,6 +155,7 @@ class FeatureCollectionContractTest {
         assert(!out.contains("\"info_url\""))
         assert(!out.contains("\"address\""))
         assert(!out.contains("\"cta\""))
+        assert(!out.contains("\"booking_system\""))
     }
 
     @Test
