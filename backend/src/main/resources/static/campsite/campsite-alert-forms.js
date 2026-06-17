@@ -64,7 +64,7 @@
       }
 
       if (startDate >= endDate) {
-        showToast('Departure must be after arrival', 'error');
+        showToast('End date must be after start date', 'error');
         return;
       }
 
@@ -76,7 +76,6 @@
       const base = {
         start_date: startDate,
         end_date: endDate,
-        min_nights: parseInt(el('min-nights').value || '1', 10),
         campsite_types: campsiteTypes,
         equipment_types: equipmentTypes,
         max_people: parseInt(el('max-people').value || '0', 10) || null,
@@ -121,7 +120,6 @@
         el('edit-campground-label').textContent = `Campground: ${a.campground_name} (#${a.campground_id})`;
         el('edit-start-date').value = a.start_date;
         el('edit-end-date').value = a.end_date;
-        el('edit-min-nights').value = a.min_nights;
         el('edit-max-people').value = a.max_people || '';
         el('edit-notify-slack').checked = a.notify_slack !== false;
         el('edit-auto-cart').checked = Boolean(a.auto_cart);
@@ -162,7 +160,7 @@
       const endDate = el('edit-end-date').value;
 
       if (startDate >= endDate) {
-        showToast('Departure must be after arrival', 'error');
+        showToast('End date must be after start date', 'error');
         return;
       }
 
@@ -172,7 +170,6 @@
       const payload = {
         start_date: startDate,
         end_date: endDate,
-        min_nights: parseInt(el('edit-min-nights').value || '1', 10),
         max_people: parseInt(el('edit-max-people').value || '0', 10) || null,
         campsite_types: [...el('edit-campsite-types').querySelectorAll('input:checked')].map(i => i.value),
         equipment_types: [...el('edit-equipment-types').querySelectorAll('input:checked')].map(i => i.value),

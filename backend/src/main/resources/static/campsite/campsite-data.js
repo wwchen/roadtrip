@@ -30,7 +30,6 @@
               ${a.parent_name ? `<div class="alert-park"><a href="https://www.recreation.gov/camping/gateways/${a.parent_id}" target="_blank" rel="noopener" class="card-link-muted">${escapeHtml(a.parent_name)}</a></div>` : ''}
               <div class="alert-meta">
                 <span>&#x1f4c5; ${fmtDate(a.start_date)} &ndash; ${fmtDate(a.end_date)}</span>
-                <span>&#x1f319; ${a.min_nights}+ nights</span>
                 ${a.max_people ? `<span>&#x1f465; ${a.max_people} people</span>` : ''}
                 ${a.campsite_types?.length ? `<span>&#x1f3d5; ${a.campsite_types.join(', ')}</span>` : ''}
                 ${a.auto_cart ? '<span style="color:var(--accent)">&#x26a1; Auto-cart</span>' : ''}

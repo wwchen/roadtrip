@@ -255,7 +255,6 @@ class AvailabilityResponseTest {
                     today = LocalDate.parse("2026-06-17"),
                     days = 2,
                     force = false,
-                    minNights = 7,
                 )
 
             assertEquals(1, dto.availability[0].availableCount)

@@ -24,14 +24,14 @@ object Matcher {
     }
 
     /**
-     * Find every consecutive run of exactly `minNights` available days within [start, end).
-     * Returns a list of date-list windows (each of length minNights).
+     * Find every consecutive run of exactly `stayLength` available days within [start, end).
+     * Returns a list of date-list windows (each of length stayLength).
      */
     fun findConsecutiveWindows(
         availabilities: Map<String, String>,
         startDate: String,
         endDate: String,
-        minNights: Int,
+        stayLength: Int,
     ): List<List<String>> {
         val start = LocalDate.parse(startDate)
         val end = LocalDate.parse(endDate)
@@ -45,7 +45,7 @@ object Matcher {
                     day
                 }.sorted()
 
-        if (days.size < minNights) return emptyList()
+        if (days.size < stayLength) return emptyList()
 
         val windows = mutableListOf<List<String>>()
         var runStart = 0
@@ -53,9 +53,9 @@ object Matcher {
             val isConsecutive = i < days.size && days[i - 1].plusDays(1) == days[i]
             if (!isConsecutive) {
                 val runLen = i - runStart
-                if (runLen >= minNights) {
-                    for (j in runStart..(runStart + runLen - minNights)) {
-                        windows += days.subList(j, j + minNights).map { it.toString() }
+                if (runLen >= stayLength) {
+                    for (j in runStart..(runStart + runLen - stayLength)) {
+                        windows += days.subList(j, j + stayLength).map { it.toString() }
                     }
                 }
                 runStart = i

@@ -23,15 +23,15 @@ export function deleteCampsiteAlert(id, { signal } = {}) {
 }
 
 /**
- * Find an active alert that already covers (campgroundId, startDate, minNights).
+ * Find an active alert that already covers (campgroundId, startDate, endDate).
  * Used by the day-detail toggle so a second click on a watched day removes the
  * existing alert instead of creating a duplicate. Returns the matching alert
  * row or null.
  *
  * @param {Array}  alerts  output of listCampsiteAlerts (or a cached snapshot)
- * @param {object} match   { campgroundId, startDate, minNights }
+ * @param {object} match   { campgroundId, startDate, endDate }
  */
-export function findMatchingAlert(alerts, { campgroundId, startDate, minNights }) {
+export function findMatchingAlert(alerts, { campgroundId, startDate, endDate }) {
   if (!Array.isArray(alerts)) return null;
   const cgId = String(campgroundId);
   return (
@@ -41,7 +41,7 @@ export function findMatchingAlert(alerts, { campgroundId, startDate, minNights }
         a.status !== 'done' &&
         String(a.campground_id ?? a.campgroundId) === cgId &&
         (a.start_date ?? a.startDate) === startDate &&
-        Number(a.min_nights ?? a.minNights ?? 1) === Number(minNights),
+        (a.end_date ?? a.endDate) === endDate,
     ) || null
   );
 }

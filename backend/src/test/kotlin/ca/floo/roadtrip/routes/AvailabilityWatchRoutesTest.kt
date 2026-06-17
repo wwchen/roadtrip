@@ -558,7 +558,7 @@ class AvailabilityWatchRoutesTest {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(
                 listOf("2026-07-04", "2026-07-05"),
-                body["target_dates"]!!.jsonArray.map { it.jsonPrimitive.content },
+                body["dates"]!!.jsonArray.map { it.jsonPrimitive.content },
             )
             val groups = body["groups"]!!.jsonArray
             assertEquals(1, groups.size)

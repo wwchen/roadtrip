@@ -249,7 +249,7 @@ fun Route.availabilityWatchRoutes(
 
     get("/api/availability/watches/{id}/heatmap", {
         tags = listOf("availability")
-        summary = "(child reservable × target_date) heatmap of latest snapshot statuses for a watch"
+        summary = "(child reservable × date) heatmap of latest snapshot statuses for a watch"
         request {
             pathParameter<Long>("id") { description = "Watch id." }
         }
@@ -269,11 +269,11 @@ fun Route.availabilityWatchRoutes(
                 ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
 
         val children = resolveChildren(watch, reservables)
-        val targetDates = datesInWindow(watch.startDate, watch.endDate)
-        val cells = heatmaps.loadHeatmap(children.map { it.id }, targetDates)
+        val dates = datesInWindow(watch.startDate, watch.endDate)
+        val cells = heatmaps.loadHeatmap(children.map { it.id }, dates)
         val cellsByPair = cells.associateBy { it.reservableId to it.targetDate }
 
-        val targetDateStrings = targetDates.map { it.toString() }
+        val dateStrings = dates.map { it.toString() }
         val rowsByLoop = LinkedHashMap<String?, MutableList<AvailabilityWatchHeatmapRow>>()
         for (r in children.sortedWith(
             compareBy<Reservable, String?>(nullsLast()) {
@@ -281,7 +281,7 @@ fun Route.availabilityWatchRoutes(
             }.thenBy { it.name ?: "" }.thenBy { it.rid.vendorId },
         )) {
             val rowCells =
-                targetDates.map { d ->
+                dates.map { d ->
                     val cell = cellsByPair[r.id to d]
                     AvailabilityWatchHeatmapCell(
                         targetDate = d.toString(),
@@ -307,7 +307,7 @@ fun Route.availabilityWatchRoutes(
         call.respondJson(
             AvailabilityWatchHeatmapResponse(
                 watchId = watch.id,
-                targetDates = targetDateStrings,
+                dates = dateStrings,
                 groups = groups,
             ),
         )

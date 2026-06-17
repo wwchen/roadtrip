@@ -35,15 +35,11 @@ export function availabilityQueryHtml(rid, query, { loading = false } = {}) {
     <form class="availability-controls" data-action="availability-query" data-rid="${escapeHtml(rid)}">
       <label>
         Start
-        <input name="start" type="date" value="${escapeHtml(query.start)}">
+        <input name="start_date" type="date" value="${escapeHtml(query.startDate)}">
       </label>
       <label>
-        Days
-        <input name="days" type="number" min="1" max="60" value="${escapeHtml(query.days)}">
-      </label>
-      <label>
-        Min nights
-        <input name="min_nights" type="number" min="1" max="31" value="${escapeHtml(query.minNights)}">
+        End
+        <input name="end_date" type="date" value="${escapeHtml(query.endDate)}">
       </label>
       <label class="availability-force">
         <input name="force" type="checkbox"${query.force ? ' checked' : ''}>
@@ -58,24 +54,10 @@ export function availabilityQueryHtml(rid, query, { loading = false } = {}) {
 }
 
 export function createWatchUrlFromQuery(rid, query) {
-  const start = query.start;
-  const days = Math.max(1, Number(query.days) || 7);
-  const dates = [];
-  if (start && /^\d{4}-\d{2}-\d{2}$/.test(start)) {
-    const base = new Date(`${start}T00:00:00Z`);
-    for (let i = 0; i < days; i += 1) {
-      const d = new Date(base);
-      d.setUTCDate(base.getUTCDate() + i);
-      const y = d.getUTCFullYear();
-      const m = String(d.getUTCMonth() + 1).padStart(2, '0');
-      const day = String(d.getUTCDate()).padStart(2, '0');
-      dates.push(`${y}-${m}-${day}`);
-    }
-  }
   const params = new URLSearchParams({
     reservable_rid: rid,
-    target_dates: dates.join(','),
-    min_nights: String(query.minNights || 1),
+    start_date: query.startDate,
+    end_date: query.endDate,
     cadence_sec: '60',
     trigger_kinds: 'atc',
   });
@@ -113,28 +95,27 @@ export function availabilityResultHtml(state) {
 
 export function availabilityQueryFromForm(formEl) {
   const data = new FormData(formEl);
+  const startDate = String(data.get('start_date') || '').trim() || utcYmd(new Date());
   return {
-    start: String(data.get('start') || '').trim(),
-    days: String(data.get('days') || '7').trim() || '7',
-    minNights: String(data.get('min_nights') || '1').trim() || '1',
+    startDate,
+    endDate: String(data.get('end_date') || '').trim() || utcYmd(addUtcDays(parseUtcYmd(startDate), 7)),
     force: data.get('force') === 'on',
   };
 }
 
 export function defaultAvailabilityQuery() {
+  const startDate = utcYmd(new Date());
   return {
-    start: utcYmd(new Date()),
-    days: '7',
-    minNights: '1',
+    startDate,
+    endDate: utcYmd(addUtcDays(parseUtcYmd(startDate), 7)),
     force: false,
   };
 }
 
 function reservableAvailabilityUrl(rid, query) {
   const params = new URLSearchParams({
-    days: String(query.days || 7),
-    start: query.start || utcYmd(new Date()),
-    min_nights: String(query.minNights || 1),
+    start_date: query.startDate || utcYmd(new Date()),
+    end_date: query.endDate || utcYmd(addUtcDays(parseUtcYmd(query.startDate || utcYmd(new Date())), 7)),
   });
   if (query.force) params.set('force', 'true');
   return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
@@ -158,4 +139,14 @@ function utcYmd(date) {
   const m = String(date.getUTCMonth() + 1).padStart(2, '0');
   const d = String(date.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function parseUtcYmd(value) {
+  return new Date(`${value}T00:00:00Z`);
+}
+
+function addUtcDays(date, days) {
+  const next = new Date(date);
+  next.setUTCDate(date.getUTCDate() + days);
+  return next;
 }

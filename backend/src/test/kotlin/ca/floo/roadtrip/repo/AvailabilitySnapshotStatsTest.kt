@@ -198,7 +198,7 @@ class AvailabilitySnapshotStatsTest {
     }
 
     @Test
-    fun `multiple target_dates returned in input order`() {
+    fun `multiple dates returned in input order`() {
         val reservableId = seedReservable()
         val now = now()
         val d1 = LocalDate.parse("2026-07-04")

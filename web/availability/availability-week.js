@@ -2,7 +2,7 @@
 // campground drawer and owns:
 //
 //   - the visible week start (LocalDate),
-//   - min_nights (default 1, persisted in localStorage),
+//   - stay length for local visualization (default 1, persisted in localStorage),
 //   - the selected day,
 //   - the in-flight controller (skeleton timer, AbortSignal),
 //   - the cached list of the user's existing alerts (for 🔔 badges).
@@ -34,17 +34,17 @@ import { renderSiteMatrix } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 import { renderWeekGrid, renderWeekSkeleton } from './week-grid.js';
 
-const STORAGE_KEY_MIN_NIGHTS = 'cg.minNights';
+const STORAGE_KEY_STAY_LENGTH = 'cg.stayLength';
 const STORAGE_KEY_AVAILABILITY_VIEW = 'cg.availabilityView';
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
-const DEFAULT_MIN_NIGHTS = 1;
+const DEFAULT_STAY_LENGTH = 1;
 const DEFAULT_AVAILABILITY_VIEW = 'table';
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
 const LEGACY_DEFAULT_SITE_COLUMN_WIDTH = 178;
 const MIN_SITE_COLUMN_WIDTH = 88;
 const MAX_SITE_COLUMN_WIDTH = 270;
 const MATRIX_SCROLL_LOAD_THRESHOLD_PX = 140;
-const MIN_NIGHTS_CHIPS = [1, 2, 3, 7];
+const STAY_LENGTH_CHIPS = [1, 2, 3, 7];
 const WEEK_DAYS = 7;
 const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
@@ -98,7 +98,7 @@ function makeContext(host, feature, signal) {
     recgovId,
     signal,
     weekStart: startOfTodayUtc(),
-    minNights: loadMinNights(),
+    stayLength: loadStayLength(),
     availabilityView: loadAvailabilityView(),
     siteColumnWidth: loadSiteColumnWidth(),
     selectedDate: null,
@@ -122,7 +122,7 @@ function makeContext(host, feature, signal) {
     summary: '',
     season: null,
     error: null,
-    alertsByDate: new Map(),
+    alertsByWindow: new Map(),
     skeletonTimer: null,
     calendar: null,
     // Catalog (RFC 0008): the per-POI reservable list the BE serves at
@@ -169,14 +169,14 @@ function renderShell(ctx) {
 }
 
 function renderNightsRow(ctx) {
-  const chips = MIN_NIGHTS_CHIPS.map(
+  const chips = STAY_LENGTH_CHIPS.map(
     (n) =>
-      `<button type="button" class="cg-chip ${n === ctx.minNights ? 'cg-chip-active' : ''}" data-nights="${n}">${n}</button>`,
+      `<button type="button" class="cg-chip ${n === ctx.stayLength ? 'cg-chip-active' : ''}" data-stay-length="${n}">${n}</button>`,
   ).join('');
   return `
     <div class="cg-nights-row">
       <div class="cg-nights-group">
-        <span class="cg-nights-label">Min nights</span>
+        <span class="cg-nights-label">Stay length</span>
         ${chips}
       </div>
       <div class="cg-view-toggle" role="group" aria-label="Availability view">
@@ -242,7 +242,7 @@ function renderBody(ctx) {
     days: ctx.days,
     todayIso: isoDate(startOfTodayUtc()),
     selectedDate: ctx.selectedDate,
-    watchedDates: new Set(ctx.alertsByDate.keys()),
+    watchedDates: matchingAlertStartDates(ctx),
   });
 }
 
@@ -256,7 +256,7 @@ function renderAvailabilitySurface(ctx) {
     error: ctx.sitesError,
     selectedDate: null,
     siteColumnWidth: ctx.siteColumnWidth,
-    minNights: ctx.minNights,
+    stayLength: ctx.stayLength,
     filters: ctx.matrixFilters,
     selectedSiteRid: ctx.selectedSiteRid,
     loadingMore: ctx.matrixLoading,
@@ -278,8 +278,8 @@ function renderDetail(ctx) {
   if (!day || availableCount(day) > 0) return '';
   return renderDayDetail({
     day,
-    minNights: ctx.minNights,
-    watching: ctx.alertsByDate.has(day.date),
+    stayLength: ctx.stayLength,
+    watching: ctx.alertsByWindow.has(alertWindowKey(day.date, stayEndDate(ctx, day.date))),
     recgovId: ctx.recgovId,
   });
 }
@@ -291,7 +291,7 @@ function renderSelectedSiteDetail(ctx) {
   return renderSiteDetail({
     site,
     selectedDate: ctx.selectedSiteDate,
-    minNights: ctx.minNights,
+    stayLength: ctx.stayLength,
   });
 }
 
@@ -339,17 +339,17 @@ function onRootClick(ctx, e) {
   // Close calendar if the click landed elsewhere; the popover handles its
   // own outside-click via document listeners but the explicit checks below
   // win first.
-  const chipBtn = tgt.closest('[data-nights]');
+  const chipBtn = tgt.closest('[data-stay-length]');
   if (chipBtn) {
-    const n = parseInt(chipBtn.getAttribute('data-nights'), 10);
-    if (Number.isFinite(n) && n !== ctx.minNights) {
-      ctx.minNights = n;
-      saveMinNights(n);
-      // Refetch — BE may use min_nights for stay-mode scoring (RFC 0007).
-      // The URL changes, the cache key changes, and the day-detail picks
-      // up the new "N-night stay" label after the response lands.
-      fetchWeek(ctx);
-      if (ctx.selectedDate) fetchSites(ctx);
+    const n = parseInt(chipBtn.getAttribute('data-stay-length'), 10);
+    if (Number.isFinite(n) && n !== ctx.stayLength) {
+      ctx.stayLength = n;
+      saveStayLength(n);
+      if (ctx.selectedDate) {
+        fetchSites(ctx);
+      } else {
+        rerender(ctx);
+      }
     }
     return;
   }
@@ -641,9 +641,8 @@ async function fetchWeek(ctx, { force = false } = {}) {
   ctx.skeletonTimer = setTimeout(() => rerender(ctx), SKELETON_RENDER_DELAY_MS);
   try {
     const resp = await requestCampsiteAvailability(ctx.poiId, {
-      days: WEEK_DAYS,
-      start: isoDate(ctx.weekStart),
-      minNights: ctx.minNights,
+      startDate: isoDate(ctx.weekStart),
+      endDate: isoDate(addDays(ctx.weekStart, WEEK_DAYS)),
       force,
       signal: ctx.signal,
     });
@@ -693,9 +692,8 @@ async function fetchMoreMatrixDays(ctx) {
   rerender(ctx);
   try {
     const resp = await requestCampsiteAvailability(ctx.poiId, {
-      days: WEEK_DAYS,
-      start: isoDate(nextStart),
-      minNights: 1,
+      startDate: isoDate(nextStart),
+      endDate: isoDate(addDays(nextStart, WEEK_DAYS)),
       signal: ctx.signal,
     });
     if (!isActiveFeature(ctx.feature)) return;
@@ -737,9 +735,14 @@ async function fetchSites(ctx) {
   ctx.sitesError = null;
   rerender(ctx);
   try {
+    const dateWindow = start
+      ? {
+          startDate: start,
+          endDate: stayEndDate(ctx, start),
+        }
+      : {};
     const json = await fetchPoiReservables(ctx.poiId, {
-      start,
-      minNights: start ? ctx.minNights : null,
+      ...dateWindow,
       signal: ctx.signal,
     });
     if (ctx.signal?.aborted) return;
@@ -764,7 +767,7 @@ async function fetchAlerts(ctx) {
   try {
     const alerts = await listCampsiteAlerts({ signal: ctx.signal });
     if (ctx.signal?.aborted) return;
-    ctx.alertsByDate = indexAlertsByDate(alerts, ctx.recgovId);
+    ctx.alertsByWindow = indexAlertsByWindow(alerts, ctx.recgovId);
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -773,7 +776,7 @@ async function fetchAlerts(ctx) {
   }
 }
 
-function indexAlertsByDate(alerts, campgroundId) {
+function indexAlertsByWindow(alerts, campgroundId) {
   const out = new Map();
   if (!Array.isArray(alerts)) return out;
   const cgId = String(campgroundId);
@@ -782,7 +785,8 @@ function indexAlertsByDate(alerts, campgroundId) {
     if (a.status === 'done') continue;
     if (String(a.campground_id ?? a.campgroundId) !== cgId) continue;
     const date = a.start_date ?? a.startDate;
-    if (date) out.set(date, a);
+    const end = a.end_date ?? a.endDate;
+    if (date && end) out.set(alertWindowKey(date, end), a);
   }
   return out;
 }
@@ -790,20 +794,22 @@ function indexAlertsByDate(alerts, campgroundId) {
 async function toggleAlert(ctx, button) {
   const date = ctx.selectedDate;
   if (!date) return;
-  const watching = ctx.alertsByDate.has(date);
+  const endDate = stayEndDate(ctx, date);
+  const key = alertWindowKey(date, endDate);
+  const watching = ctx.alertsByWindow.has(key);
   const previousLabel = button.textContent;
   button.disabled = true;
   try {
     if (watching) {
-      const existing = ctx.alertsByDate.get(date);
+      const existing = ctx.alertsByWindow.get(key);
       button.textContent = 'Removing…';
       await deleteCampsiteAlert(existing.id, { signal: ctx.signal });
-      ctx.alertsByDate.delete(date);
+      ctx.alertsByWindow.delete(key);
     } else {
       button.textContent = 'Setting alert…';
-      const payload = buildAlertPayload(ctx, date);
+      const payload = buildAlertPayload(ctx, date, endDate);
       const created = await createCampsiteAlert(payload, { signal: ctx.signal });
-      ctx.alertsByDate.set(date, { ...created, ...payload });
+      ctx.alertsByWindow.set(key, { ...created, ...payload });
     }
     rerender(ctx);
   } catch (e) {
@@ -814,16 +820,14 @@ async function toggleAlert(ctx, button) {
   }
 }
 
-function buildAlertPayload(ctx, date) {
-  const endDate = addDays(parseIsoDate(date), ctx.minNights);
+function buildAlertPayload(ctx, date, endDate) {
   return {
     campground_id: String(ctx.recgovId),
     campground_name: ctx.feature.properties?.name || `Campground ${ctx.recgovId}`,
     parent_name: ctx.feature.properties?.parent_name || null,
     parent_id: ctx.feature.properties?.parent_id || null,
     start_date: date,
-    end_date: isoDate(endDate),
-    min_nights: ctx.minNights,
+    end_date: endDate,
     campsite_types: [],
     equipment_types: [],
     notify_slack: false,
@@ -834,20 +838,37 @@ function buildAlertPayload(ctx, date) {
 
 // ---- helpers --------------------------------------------------------------
 
-function loadMinNights() {
+function matchingAlertStartDates(ctx) {
+  const out = new Set();
+  for (const key of ctx.alertsByWindow.keys()) {
+    const [start, end] = key.split('|');
+    if (start && end === stayEndDate(ctx, start)) out.add(start);
+  }
+  return out;
+}
+
+function stayEndDate(ctx, startDate) {
+  return isoDate(addDays(parseIsoDate(startDate), ctx.stayLength));
+}
+
+function alertWindowKey(startDate, endDate) {
+  return `${startDate}|${endDate}`;
+}
+
+function loadStayLength() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY_MIN_NIGHTS);
+    const raw = localStorage.getItem(STORAGE_KEY_STAY_LENGTH);
     const n = parseInt(raw, 10);
     if (Number.isFinite(n) && n > 0 && n < 32) return n;
   } catch {
     // localStorage blocked (private mode, etc.) — default silently.
   }
-  return DEFAULT_MIN_NIGHTS;
+  return DEFAULT_STAY_LENGTH;
 }
 
-function saveMinNights(n) {
+function saveStayLength(n) {
   try {
-    localStorage.setItem(STORAGE_KEY_MIN_NIGHTS, String(n));
+    localStorage.setItem(STORAGE_KEY_STAY_LENGTH, String(n));
   } catch {
     // Non-fatal: just won't persist.
   }

@@ -247,10 +247,12 @@
       <label>Reservable RID
         <input name="reservable_rid" placeholder="site:recgov:330257">
       </label>
-      <label>Target dates (comma-separated YYYY-MM-DD)
-        <input name="target_dates" placeholder="2026-07-04, 2026-07-05" required>
+      <label>Start date
+        <input name="start_date" type="date" required>
       </label>
-      <label class="narrow">Min nights <input name="min_nights" type="number" min="1" value="1"></label>
+      <label>End date (exclusive)
+        <input name="end_date" type="date" required>
+      </label>
       <label class="narrow">Cadence (seconds) <input name="cadence_sec" type="number" min="5" value="60" required></label>
       <label>Trigger kinds (comma-separated)
         <input name="trigger_kinds" value="atc" required>

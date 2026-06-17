@@ -1,4 +1,4 @@
-// Watch detail heatmap: groups of (reservable × target_date) cells colored
+// Watch detail heatmap: groups of (reservable × date) cells colored
 // by latest snapshot status.
 
 const STATUS_CLASS = {
@@ -9,7 +9,7 @@ const STATUS_CLASS = {
 };
 
 export function renderWatchHeatmap(rootEl, response) {
-  const dates = response.target_dates;
+  const dates = response.dates || [];
   const headerRow = `
     <tr>
       <th class="rowhead">site</th>

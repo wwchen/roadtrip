@@ -11,18 +11,18 @@ import { escapeHtml } from '../core.js';
 /**
  * @param {object} args
  * @param {object} args.day           Per-day classification.
- * @param {number} args.minNights
+ * @param {number} args.stayLength
  * @param {boolean} args.watching
  * @param {string|null} args.recgovId Reserve link target. Null hides the link.
  */
-export function renderDayDetail({ day, minNights, watching, recgovId }) {
+export function renderDayDetail({ day, stayLength, watching, recgovId }) {
   const dateLabel = new Date(day.date + 'T00:00:00Z').toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
     day: 'numeric',
     timeZone: 'UTC',
   });
-  const stayLabel = `${minNights}-night stay`;
+  const stayLabel = `${stayLength}-night stay`;
   const statusLine = renderStatusLine(day, stayLabel);
   const actions = renderActions({ day, watching, recgovId });
 

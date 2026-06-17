@@ -62,14 +62,12 @@ function buildUpdatePayload(fd) {
     statusEl.textContent = `Invalid JSON: ${err.message}`;
     return null;
   }
-  const targetDates = (fd.get('target_dates') || '')
-    .split(',').map((s) => s.trim()).filter(Boolean);
   const triggerKinds = (fd.get('trigger_kinds') || '')
     .split(',').map((s) => s.trim()).filter(Boolean);
   return {
     reservable_filters: filters,
-    target_dates: targetDates,
-    min_nights: Number(fd.get('min_nights') || 1),
+    start_date: String(fd.get('start_date') || '').trim(),
+    end_date: String(fd.get('end_date') || '').trim(),
     cadence_sec: Number(fd.get('cadence_sec') || 60),
     trigger_kinds: triggerKinds,
     trigger_config: triggerConfig,
@@ -89,8 +87,8 @@ async function enterEditMode(id) {
     };
     set('poi_id', w.poi_id != null ? String(w.poi_id) : '');
     set('reservable_rid', w.reservable?.rid ?? '');
-    set('target_dates', w.target_dates.join(', '));
-    set('min_nights', String(w.min_nights));
+    set('start_date', w.start_date);
+    set('end_date', w.end_date);
     set('cadence_sec', String(w.cadence_sec));
     set('trigger_kinds', w.trigger_kinds.join(', '));
     set('reservable_filters', JSON.stringify(w.reservable_filters));
@@ -135,16 +133,14 @@ function buildCreatePayload(fd) {
     statusEl.textContent = `Invalid JSON: ${err.message}`;
     return null;
   }
-  const targetDates = (fd.get('target_dates') || '')
-    .split(',').map((s) => s.trim()).filter(Boolean);
   const triggerKinds = (fd.get('trigger_kinds') || '')
     .split(',').map((s) => s.trim()).filter(Boolean);
   return {
     poi_id: poiId ? Number(poiId) : null,
     reservable_rid: reservableRid || null,
     reservable_filters: filters,
-    target_dates: targetDates,
-    min_nights: Number(fd.get('min_nights') || 1),
+    start_date: String(fd.get('start_date') || '').trim(),
+    end_date: String(fd.get('end_date') || '').trim(),
     cadence_sec: Number(fd.get('cadence_sec') || 60),
     trigger_kinds: triggerKinds,
     trigger_config: triggerConfig,
@@ -154,7 +150,7 @@ function buildCreatePayload(fd) {
 
 function prefillCreateFormFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  const fields = ['poi_id', 'reservable_rid', 'target_dates', 'min_nights', 'cadence_sec', 'trigger_kinds'];
+  const fields = ['poi_id', 'reservable_rid', 'start_date', 'end_date', 'cadence_sec', 'trigger_kinds'];
   let prefilled = false;
   for (const name of fields) {
     const value = params.get(name);
@@ -214,7 +210,7 @@ function renderRow(w) {
   const scope = w.poi_id != null
     ? `poi:${w.poi_id}${Object.keys(w.reservable_filters).length ? ' (filtered)' : ''}`
     : `resv:${w.reservable?.rid ?? w.reservable_id}`;
-  const dates = `${w.target_dates.length} dt${w.target_dates.length === 1 ? '' : 's'}`;
+  const dates = `${w.start_date} to ${w.end_date}`;
   const triggers = w.trigger_kinds.join(', ');
   return `
     <tr>

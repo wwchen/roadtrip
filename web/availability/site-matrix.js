@@ -27,7 +27,7 @@ export function renderSiteMatrix({
   error,
   selectedDate,
   siteColumnWidth,
-  minNights = 1,
+  stayLength = 1,
   filters = DEFAULT_FILTERS,
   selectedSiteRid = null,
   loadingMore = false,
@@ -71,11 +71,11 @@ export function renderSiteMatrix({
   const availabilityByDate = new Map(
     visibleDays.map((day) => [day.date, new Set(availableReservableIds(day))]),
   );
-  const fitStartsByDate = fitStartIndex(visibleDays, availabilityByDate, minNights);
+  const fitStartsByDate = fitStartIndex(visibleDays, availabilityByDate, stayLength);
   const rows = sortReservables(filterReservables(allRows, activeFilters), activeFilters.sort, {
     availabilityByDate,
     fitStartsByDate,
-    minNights,
+    stayLength,
     selectedDate,
     visibleDays,
   });
@@ -102,7 +102,7 @@ export function renderSiteMatrix({
       rowHtml(row, {
         availabilityByDate,
         fitStartsByDate,
-        minNights,
+        stayLength,
         selectedDate,
         selectedSiteRid,
         visibleDays,
@@ -279,7 +279,7 @@ function rowHtml(row, context) {
         availableIds: context.availabilityByDate.get(day.date),
         day,
         fitIds: context.fitStartsByDate.get(day.date),
-        minNights: context.minNights,
+        stayLength: context.stayLength,
         row,
         selectedDate: context.selectedDate,
         siteLabel,
@@ -313,14 +313,14 @@ function siteLabelHtml(row, siteLabel) {
   `;
 }
 
-function cellHtml({ row, day, availableIds, fitIds, selectedDate, siteLabel, minNights }) {
+function cellHtml({ row, day, availableIds, fitIds, selectedDate, siteLabel, stayLength }) {
   const state = cellState(row, day, availableIds);
   const isSelected = selectedDate === day.date;
-  const isFit = minNights > 1 && state.kind === 'available' && fitIds?.has(rowRid(row));
+  const isFit = stayLength > 1 && state.kind === 'available' && fitIds?.has(rowRid(row));
   const selectedClass = isSelected ? ' is-selected' : '';
   const fitClass = isFit ? ' cg-site-matrix-cell-fit' : '';
   const label = isFit ? 'Fits' : state.label;
-  const fitAria = isFit ? `; fits ${minNights} nights` : '';
+  const fitAria = isFit ? `; fits ${stayLength} nights` : '';
   const aria = `${siteLabel} ${day.date}: ${state.aria}${fitAria}`;
   return `
     <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}${fitClass}">
@@ -410,9 +410,9 @@ function sortReservables(rows, sortKey, context) {
   });
 }
 
-function fitSortScore(row, { availabilityByDate, fitStartsByDate, minNights, selectedDate, visibleDays }) {
+function fitSortScore(row, { availabilityByDate, fitStartsByDate, stayLength, selectedDate, visibleDays }) {
   const rid = rowRid(row);
-  if (minNights <= 1) {
+  if (stayLength <= 1) {
     const selectedOpen = selectedDate && availabilityByDate.get(selectedDate)?.has(rid) ? 1000 : 0;
     return selectedOpen + openDateCount(row, availabilityByDate);
   }
@@ -437,8 +437,8 @@ function filterOptions(rows, key) {
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
 }
 
-function fitStartIndex(days, availabilityByDate, minNights) {
-  const nights = Math.max(1, Math.floor(numeric(minNights) || 1));
+function fitStartIndex(days, availabilityByDate, stayLength) {
+  const nights = Math.max(1, Math.floor(numeric(stayLength) || 1));
   const out = new Map();
   for (const day of days) {
     const startDate = day.date;

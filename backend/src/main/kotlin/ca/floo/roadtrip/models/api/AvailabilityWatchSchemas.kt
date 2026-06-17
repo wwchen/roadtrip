@@ -86,6 +86,6 @@ data class AvailabilityWatchHeatmapGroup(
 @Serializable
 data class AvailabilityWatchHeatmapResponse(
     @SerialName("watch_id") val watchId: Long,
-    @SerialName("target_dates") val targetDates: List<String>,
+    val dates: List<String>,
     val groups: List<AvailabilityWatchHeatmapGroup>,
 )

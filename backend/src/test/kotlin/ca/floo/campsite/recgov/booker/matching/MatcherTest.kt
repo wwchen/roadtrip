@@ -37,7 +37,7 @@ class MatcherTest {
     }
 
     @Test
-    fun `findConsecutiveWindows skips runs shorter than minNights`() {
+    fun `findConsecutiveWindows skips runs shorter than stay length`() {
         val avail =
             mapOf(
                 "2026-07-01T00:00:00Z" to "Available",
