@@ -159,10 +159,14 @@ successful poll appends rows to `availability_snapshots`, keyed by
 
 History is read through provider-agnostic SQL on the snapshot table.
 Adapters do not own history queries — the snapshot shape
-(`available_count`, `total`, `status`) is the lingua franca. Provider-
-specific richness (per-site detail, equipment-type breakdowns) is *not*
-captured in snapshots; that fidelity lives in the live availability
-call. Snapshots are the long-tail summary, not a replay log.
+(`available_count`, `total`, `status`) is the lingua franca. The shared
+status enum is `first_come | reserved | available | closed | unknown`.
+`available_count` counts only online-bookable `available` reservables.
+`first_come` is visible to users but does not count as online availability;
+missing provider data is `unknown`, not `closed`. Provider-specific
+richness (per-site detail, equipment-type breakdowns) is *not* captured in
+snapshots; that fidelity lives in the live availability call. Snapshots are
+the long-tail summary, not a replay log.
 
 Retention is tiered: raw rows for 90 days, daily aggregates beyond,
 discard raw past 1 year. The query layer reads raw or aggregates

@@ -158,7 +158,7 @@ job_run_id      FK → avail_job_run (ON DELETE SET NULL)
 reservable_id   FK → reservables   (NOT NULL; replaces stringly reservable_rid)
 target_date     DATE
 observed_at     TIMESTAMPTZ
-status          TEXT                -- 'available' | 'partial' | 'booked' | 'closed'
+status          availability_status -- 'first_come' | 'reserved' | 'available' | 'closed' | 'unknown'
 available       BOOLEAN
 day_payload     JSONB
 ```
