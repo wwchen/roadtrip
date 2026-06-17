@@ -44,6 +44,7 @@ import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.assertAll
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -228,7 +229,7 @@ class ReservableRoutesTest {
             link(m01, otherPoiId)
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/poi/$poiId/reservables?type=site&start=2026-07-01&min_nights=2")
+            val resp = client.get("/api/poi/$poiId/reservables?type=site&start_date=2026-07-01&end_date=2026-07-03")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(poiId.toString(), body["poi_id"]!!.jsonPrimitive.content)
@@ -288,7 +289,7 @@ class ReservableRoutesTest {
             link(reservableId, poiId)
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/poi/$poiId/reservables?start=2026-07-01&min_nights=2")
+            val resp = client.get("/api/poi/$poiId/reservables?start_date=2026-07-01&end_date=2026-07-03")
             assertEquals(HttpStatusCode.OK, resp.status)
             val row =
                 Json
@@ -366,6 +367,24 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `poi reservables rejects removed booking link params`() =
+        testApplication {
+            val poiId = seedPoi("upper-pines", "Upper Pines Campground")
+            application { routing { reservableRoutes(ctx) } }
+
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?start=2026-07-01").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?min_nights=2").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?minNights=2").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?start_date=2026-07-01").status)
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                client
+                    .get("/api/poi/$poiId/reservables?start_date=2026-07-03&end_date=2026-07-01")
+                    .status,
+            )
+        }
+
+    @Test
     fun `poi reservables returns 404 for unknown poi`() =
         testApplication {
             application { routing { reservableRoutes(ctx) } }
@@ -393,12 +412,14 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/poi/$poiId/availability?start=2026-07-01&days=1")
+            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
             assertEquals("232447", body["campground_id"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-01", body["window"]!!.jsonObject["start"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-02", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+            assertEquals(1, body["availability"]!!.jsonArray.size)
         }
 
     @Test
@@ -452,13 +473,17 @@ class ReservableRoutesTest {
             val windowQuery = "start_date=2026-07-01&end_date=2026-07-04"
             val poiDaysStatus = client.get("/api/poi/$poiId/availability?$windowQuery&days=7").status
             val poiMinNightsStatus = client.get("/api/poi/$poiId/availability?$windowQuery&min_nights=2").status
+            val poiMinNightsCamelStatus = client.get("/api/poi/$poiId/availability?$windowQuery&minNights=2").status
             val reservableDaysStatus = client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&days=7").status
             val reservableMinNightsStatus =
                 client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&min_nights=2").status
+            val reservableMinNightsCamelStatus =
+                client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&minNights=2").status
 
             assertAll(
                 { assertEquals(HttpStatusCode.BadRequest, poiDaysStatus) },
                 { assertEquals(HttpStatusCode.BadRequest, poiMinNightsStatus) },
+                { assertEquals(HttpStatusCode.BadRequest, poiMinNightsCamelStatus) },
                 { assertEquals(HttpStatusCode.BadRequest, reservableDaysStatus) },
                 {
                     assertEquals(
@@ -466,6 +491,7 @@ class ReservableRoutesTest {
                         reservableMinNightsStatus,
                     )
                 },
+                { assertEquals(HttpStatusCode.BadRequest, reservableMinNightsCamelStatus) },
             )
         }
 
@@ -496,12 +522,13 @@ class ReservableRoutesTest {
 
             val resp =
                 client.get(
-                    "/api/poi/$poiId/availability?start=2026-07-01&days=2&min_nights=2&site_type=STANDARD",
+                    "/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-03&site_type=STANDARD",
                 )
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-01", body["window"]!!.jsonObject["start"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-03", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
             val first = body["availability"]!!.jsonArray.first().jsonObject
             assertEquals("2026-07-01", first["date"]!!.jsonPrimitive.content)
             assertEquals(2, first["available_count"]!!.jsonPrimitive.int)
@@ -534,7 +561,7 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01&days=2")
+            val resp = client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-03")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
@@ -577,13 +604,14 @@ class ReservableRoutesTest {
                     .content,
             )
 
-            val multiNight = client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01&days=2&min_nights=2")
-            assertEquals(HttpStatusCode.OK, multiNight.status)
+            val removedMinNights =
+                client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-03&min_nights=2")
+            assertEquals(HttpStatusCode.BadRequest, removedMinNights.status)
             val rowCountAfterMultiNight =
                 ctx
                     .fetchOne("SELECT count(*) FROM availability_snapshot")!!
                     .get(0, Long::class.java)
-            assertEquals(5L, rowCountAfterMultiNight)
+            assertEquals(2L, rowCountAfterMultiNight)
         }
 
     @Test
@@ -645,6 +673,13 @@ class ReservableRoutesTest {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
             assertEquals("2026-07-04", body["end_date"]!!.jsonPrimitive.content)
+            val result = body["results"]!!.jsonArray.single().jsonObject
+            assertEquals(
+                listOf("2026-07-01", "2026-07-02", "2026-07-03"),
+                result["available_dates"]!!
+                    .jsonArray
+                    .map { it.jsonPrimitive.content },
+            )
         }
 
     @Test
@@ -694,7 +729,7 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/poi/$poiId/availability?start=2026-07-01&days=1")
+            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val day = body["availability"]!!.jsonArray.single().jsonObject
@@ -744,7 +779,7 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/reservable/site:aspira_wa:-100/availability?start=2026-07-01&days=1")
+            val resp = client.get("/api/reservable/site:aspira_wa:-100/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("-2147483615", body["map_id"]!!.jsonPrimitive.content)
@@ -873,7 +908,10 @@ class ReservableRoutesTest {
                 reservableId = "site:recgov:${req.vendorId}",
             )
 
-        override suspend fun availableDates(req: AvailableDatesRequest): List<String> = listOf(req.startDate.toString())
+        override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
+            val days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt()
+            return (0 until days).map { req.startDate.plusDays(it.toLong()).toString() }
+        }
 
         private fun fakeResponse(
             startDate: java.time.LocalDate,
@@ -955,7 +993,10 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun availableDates(req: AvailableDatesRequest): List<String> = listOf(req.startDate.toString())
+        override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
+            val days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt()
+            return (0 until days).map { req.startDate.plusDays(it.toLong()).toString() }
+        }
 
         private fun fakeResponse(
             startDate: java.time.LocalDate,
