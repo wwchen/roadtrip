@@ -364,7 +364,12 @@ async function load() {
     if (wantCG) cats.push('campground');
 
     const currentBbox = [west, south, east, north];
-    const catsKey = cats.slice().sort().join(',');
+    // Cache key includes the campground server-gate state because the backend
+    // silently strips `campground` from the response below CG_MIN_ZOOM. A
+    // cached low-zoom response would otherwise be reused by a higher-zoom
+    // sub-bbox that *should* include campgrounds — leaving them invisible.
+    const cgIncluded = wantCG && zoom >= CG_ZOOM_THRESHOLD;
+    const catsKey = cats.slice().sort().join(',') + '|cg=' + (cgIncluded ? '1' : '0');
 
     // Cache short-circuit. The cached FC may carry features outside the new
     // viewport — that's fine, MapLibre filters by geometry intersection at
