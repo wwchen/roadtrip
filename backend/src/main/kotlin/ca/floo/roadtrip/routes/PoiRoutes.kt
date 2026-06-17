@@ -15,6 +15,7 @@ import ca.floo.roadtrip.repo.Bbox
 import ca.floo.roadtrip.repo.PoiDetailRow
 import ca.floo.roadtrip.repo.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.service.api.PoiCta
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -351,6 +352,8 @@ internal fun poiDetailFeature(r: PoiDetailRow): PoiDetailFeatureSchema =
                 infoUrl = r.infoUrl,
                 address = r.addressJson?.let { Json.parseToJsonElement(it) },
                 providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
+                cta = PoiCta.Default.computeCta(r),
+                bookingSystem = PoiCta.Default.bookingSystem(r),
                 raw = Json.parseToJsonElement(r.propertiesJson),
             ),
     )

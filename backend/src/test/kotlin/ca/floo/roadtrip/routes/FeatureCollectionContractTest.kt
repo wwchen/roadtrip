@@ -120,6 +120,8 @@ class FeatureCollectionContractTest {
                 """"reserve_url":"https://reservation.pc.gc.ca",""" +
                 """"phone":"1-877-737-3783","info_url":"https://parks.canada.ca/banff",""" +
                 """"address":{"city":"Banff","state":"AB"},""" +
+                """"cta":{"url":"https://parks.canada.ca/banff",""" +
+                """"label":"Park info on parks.canada.ca","kind":"info"},""" +
                 """"raw":{"category":"federal","amenities":["showers"]}}}"""
         )
         assertEquals(expected, encodePoiFeatureJson(poiDetailFeature(row)))
@@ -152,6 +154,8 @@ class FeatureCollectionContractTest {
         assert(!out.contains("\"phone\""))
         assert(!out.contains("\"info_url\""))
         assert(!out.contains("\"address\""))
+        assert(!out.contains("\"cta\""))
+        assert(!out.contains("\"booking_system\""))
     }
 
     @Test
