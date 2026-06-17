@@ -5,7 +5,7 @@
 
 import { escapeHtml } from '../core.js';
 import { renderSiteDetail } from './site-detail.js';
-import { bookingLabel } from './booking-links.js';
+import { bookingLabel, hasReservationUrlTemplate } from './booking-links.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT_FILTERS = {
@@ -398,6 +398,14 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook }
   const aria = `${siteLabel} ${day.date}: ${state.aria}`;
 
   if (state.kind !== 'available') {
+    return `
+      <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}" aria-label="${escapeHtml(aria)}">
+        <span class="cg-site-matrix-cell-label">${escapeHtml(state.label)}</span>
+      </td>
+    `;
+  }
+
+  if (!hasReservationUrlTemplate(row)) {
     return `
       <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}" aria-label="${escapeHtml(aria)}">
         <span class="cg-site-matrix-cell-label">${escapeHtml(state.label)}</span>
