@@ -117,6 +117,7 @@ function makeContext(host, feature, signal) {
       sort: 'fit',
     },
     selectedSiteRid: null,
+    selectedSiteDate: null,
     cacheBlock: null,
     summary: '',
     season: null,
@@ -253,7 +254,7 @@ function renderAvailabilitySurface(ctx) {
     reservables: ctx.sites,
     days,
     error: ctx.sitesError,
-    selectedDate: ctx.selectedDate,
+    selectedDate: null,
     siteColumnWidth: ctx.siteColumnWidth,
     minNights: ctx.minNights,
     filters: ctx.matrixFilters,
@@ -289,7 +290,7 @@ function renderSelectedSiteDetail(ctx) {
   if (!site) return '';
   return renderSiteDetail({
     site,
-    selectedDate: ctx.selectedDate,
+    selectedDate: ctx.selectedSiteDate,
     minNights: ctx.minNights,
   });
 }
@@ -424,11 +425,13 @@ function onRootClick(ctx, e) {
     const rid = siteDetailBtn.getAttribute('data-site-detail-rid');
     if (!rid) return;
     ctx.selectedSiteRid = rid;
+    ctx.selectedSiteDate = siteDetailBtn.getAttribute('data-site-detail-date') || null;
     rerender(ctx);
     return;
   }
   if (tgt.closest('[data-site-detail-close]')) {
     ctx.selectedSiteRid = null;
+    ctx.selectedSiteDate = null;
     rerender(ctx);
     return;
   }
