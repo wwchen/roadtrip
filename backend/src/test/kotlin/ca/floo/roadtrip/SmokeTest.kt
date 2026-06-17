@@ -280,6 +280,191 @@ class SmokeTest {
     }
 
     @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
+    fun `poi catalog links to poi reservables and reservable rows expand details and availability`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        val poiReservableCalls = AtomicInteger(0)
+        val globalReservableCalls = AtomicInteger(0)
+        page.onPageError { pageErrors.add(it) }
+
+        context.route("**/api/pois/search?**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "results": [{
+                            "id": 31337,
+                            "name": "Tunnel Mountain Village II",
+                            "category": "campground",
+                            "region": "AB",
+                            "lng": -115.55,
+                            "lat": 51.18
+                          }]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/reservables**") { route: Route ->
+            globalReservableCalls.incrementAndGet()
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"total":0,"limit":100,"offset":0,"reservables":[]}"""),
+            )
+        }
+        context.route("**/api/poi/31337/reservables**") { route: Route ->
+            poiReservableCalls.incrementAndGet()
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "poi_id": 31337,
+                          "type": "site",
+                          "total_at_poi": 2,
+                          "reservables": [
+                            {
+                              "rid": "site:matrix:001",
+                              "type": "site",
+                              "vendor": "matrix",
+                              "vendor_id": "001",
+                              "name": "Site 1",
+                              "loop": "A",
+                              "site_type": "Tent",
+                              "poi_ids": [31337],
+                              "reservation_url": "https://example.test/1",
+                              "raw": {
+                                "max_num_people": 6,
+                                "defined_attributes": [
+                                  { "name": "Shade", "value": "Partial" }
+                                ]
+                              }
+                            },
+                            {
+                              "rid": "site:matrix:002",
+                              "type": "site",
+                              "vendor": "matrix",
+                              "vendor_id": "002",
+                              "name": "Site 2",
+                              "loop": "B",
+                              "site_type": "RV",
+                              "poi_ids": [31337],
+                              "reservation_url": "https://example.test/2"
+                            }
+                          ]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/reservable/site%3Amatrix%3A001/availability?**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "state": "success",
+                          "summary": "No availability data",
+                          "provider": "aspira",
+                          "availability": [
+                            { "date": "2026-06-16", "available_count": 1, "total": 1, "available_reservable_ids": ["site:matrix:001"] },
+                            { "date": "2026-06-17", "available_count": 0, "total": 1, "available_reservable_ids": [] }
+                          ]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+
+        try {
+            page.navigate("/pois?q=tunnel&limit=25")
+            val poiNameLink = page.locator(".poi-table td[data-label=\"Name\"] a").first()
+            assertThat(poiNameLink).hasAttribute("href", Pattern.compile(".*/reservables\\?poi_id=31337"))
+            assertThat(page.locator(".reservables-row")).hasCount(0)
+
+            poiNameLink.click()
+            page.waitForURL(Pattern.compile(".*/reservables\\?poi_id=31337"))
+            assertThat(page.locator("input[name=\"poi_id\"]")).hasValue("31337")
+            page.waitForFunction(
+                "() => document.querySelectorAll('.reservables-table tbody tr.result-row').length === 2",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(10_000.0),
+            )
+            assertEquals(1, poiReservableCalls.get(), "POI-scoped reservable page should use /api/poi/{id}/reservables")
+            assertEquals(0, globalReservableCalls.get(), "POI-scoped reservable page should not call /api/reservables")
+
+            page.locator("button[data-action=\"toggle-reservable-detail\"][data-rid=\"site:matrix:001\"]").click()
+            assertThat(page.locator(".cg-site-detail")).containsText("Site 1")
+            assertThat(page.locator(".cg-site-detail")).containsText("Up to 6 people")
+            assertThat(page.locator(".cg-site-detail")).containsText("Shade")
+
+            page.locator("button[data-action=\"toggle-availability\"][data-rid=\"site:matrix:001\"]").click()
+            assertThat(page.locator(".cg-site-matrix")).isVisible()
+            assertThat(page.locator("button[data-action=\"toggle-availability\"][data-rid=\"site:matrix:001\"]")).hasCount(1)
+            assertThat(page.locator(".availability-panel")).not().containsText("Query availability for this reservable")
+            assertThat(page.locator(".availability-panel input[name=\"days\"]")).hasCount(0)
+            assertThat(page.locator(".availability-panel input[name=\"min_nights\"]")).hasCount(0)
+            assertTrue(
+                page.evaluate(
+                    """
+                    () => {
+                      const form = document.querySelector('.availability-controls');
+                      const actions = form?.querySelector('.actions');
+                      const finalButton = actions?.querySelector('button:last-of-type');
+                      if (!form || !finalButton) return false;
+                      const formRect = form.getBoundingClientRect();
+                      const buttonRect = finalButton.getBoundingClientRect();
+                      return Math.abs(formRect.right - buttonRect.right) <= 2;
+                    }
+                    """.trimIndent(),
+                ) as Boolean,
+                "availability query actions should align to the right edge of the form",
+            )
+            assertThat(page.locator(".availability-panel .availability-result > .availability-summary")).hasCount(0)
+            val availabilityVisibleText =
+                page.evaluate(
+                    """
+                    () => document.querySelector('.availability-result')?.innerText || ''
+                    """.trimIndent(),
+                ) as String
+            assertFalse(
+                availabilityVisibleText.contains("No availability data") || availabilityVisibleText.contains("aspira"),
+                "availability result should omit response summary/provider chrome: $availabilityVisibleText",
+            )
+            assertThat(page.locator(".cg-site-matrix-cell-available")).hasCount(1)
+            assertThat(page.locator(".cg-site-matrix-cell-booked")).hasCount(1)
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during catalog reservables smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    @Test
     fun `horizontal matrix swipe does not drag mobile drawer`() {
         val context =
             browser.newContext(

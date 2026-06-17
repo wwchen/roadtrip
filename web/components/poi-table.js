@@ -1,4 +1,4 @@
-import { dash, escapeHtml, expanderButton, linkChip, links, renderRow, renderTable } from './result-table.js';
+import { dash, escapeHtml, linkChip, links, renderRow, renderTable } from './result-table.js';
 
 export const poiColumns = [
   {
@@ -13,7 +13,11 @@ export const poiColumns = [
     label: 'Name',
     colClass: 'col-name',
     className: 'name',
-    render: (row) => escapeHtml(row.name || 'unknown'),
+    render: (row) => {
+      const name = row.name || 'unknown';
+      if (row.id == null || row.id === '') return escapeHtml(name);
+      return `<a class="name-link" href="${escapeHtml(poiReservablesPageUrl(row.id))}">${escapeHtml(name)}</a>`;
+    },
   },
   {
     label: 'Category',
@@ -48,36 +52,10 @@ export function poiTableHtml(rows, { rowRenderer = null } = {}) {
   });
 }
 
-export function poiRowHtml(row, { expanded = false } = {}) {
+export function poiRowHtml(row) {
   return renderRow(poiColumns, row, {
-    className: `result-row has-subrow${expanded ? ' is-expanded' : ''}`,
+    className: 'result-row',
   });
-}
-
-export function poiReservablesRowHtml(row, state, { contentHtml = '' } = {}) {
-  const id = String(row.id);
-  const expanded = !!state?.expanded;
-  return `
-    <tr class="reservables-row${expanded ? ' is-expanded' : ''}" data-panel-poi-id="${escapeHtml(id)}">
-      <td colspan="${poiColumns.length}">
-        <div class="reservables-panel">
-          <div class="reservables-heading">
-            <div class="reservables-title">
-              ${expanderButton({
-                action: 'toggle-reservables',
-                idName: 'poi-id',
-                id,
-                label: 'Reservables',
-                expanded,
-              })}
-            </div>
-            <div class="mono muted">/api/poi/${escapeHtml(id)}/reservables</div>
-          </div>
-          ${expanded ? contentHtml : ''}
-        </div>
-      </td>
-    </tr>
-  `;
 }
 
 export function poiLinks(row) {
@@ -97,6 +75,10 @@ export function poiLinks(row) {
 
 export function poiPageUrl(row) {
   return `/?poi=${encodeURIComponent(row.id ?? '')}`;
+}
+
+export function poiReservablesPageUrl(id) {
+  return `/reservables?poi_id=${encodeURIComponent(id ?? '')}`;
 }
 
 export function poiJsonUrl(id) {

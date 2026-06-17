@@ -1,4 +1,4 @@
-import { fetchReservable, searchReservables } from './api/reservable-api.js';
+import { fetchPoiReservables, fetchReservable, poiReservablesUrl, searchReservables } from './api/reservable-api.js';
 import { availabilityQueryFromForm, createWatchUrlFromQuery, defaultAvailabilityQuery } from './components/availability-panel.js';
 import { createAvailabilityPanels } from './components/availability-controller.js';
 import { mountReservableQuery } from './components/reservable-query.js';
@@ -43,9 +43,18 @@ function syncUrl(params) {
   const suffix = qs.toString();
   const next = suffix ? `/reservables?${suffix}` : '/reservables';
   window.history.replaceState(null, '', next);
-  queryUrlEl.textContent = params.id
-    ? `/api/reservable/${encodeURIComponent(params.id)}`
-    : `/api/reservables${suffix ? `?${suffix}` : ''}`;
+  queryUrlEl.textContent = apiUrl(params, suffix);
+}
+
+function apiUrl(params, suffix) {
+  if (params.id) return `/api/reservable/${encodeURIComponent(params.id)}`;
+  if (params.poi_id) {
+    return poiReservablesUrl(params.poi_id, {
+      type: params.type || undefined,
+      siteType: params.site_type || undefined,
+    });
+  }
+  return `/api/reservables${suffix ? `?${suffix}` : ''}`;
 }
 
 function setBusy(busy) {
@@ -72,6 +81,11 @@ async function runSearch() {
     return;
   }
 
+  if ((params.poi_id || '').trim()) {
+    await runPoiLookup(params);
+    return;
+  }
+
   try {
     const body = await searchReservables({ ...params, signal: activeAbort.signal });
     total = body.total || 0;
@@ -80,6 +94,39 @@ async function runSearch() {
     const first = total === 0 ? 0 : offset + 1;
     const last = Math.min(offset + (body.reservables || []).length, total);
     setStatus(`<strong>${formatNumber(total)}</strong> matches / ${formatNumber(first)}-${formatNumber(last)}`);
+  } catch (err) {
+    if (err.name === 'AbortError') return;
+    total = 0;
+    renderResults([]);
+    setStatus(escapeHtml(errorMessage(err)), 'error');
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function runPoiLookup(params) {
+  try {
+    const body = await fetchPoiReservables(params.poi_id, {
+      type: params.type || undefined,
+      siteType: params.site_type || undefined,
+      signal: activeAbort.signal,
+    });
+    const linkedPoiIds = [body.poi_id ?? params.poi_id].map((id) => String(id || '').trim()).filter(Boolean);
+    const rows = (body.reservables || []).map((row) => ({
+      ...row,
+      poi_ids: Array.isArray(row.poi_ids) && row.poi_ids.length > 0 ? row.poi_ids : linkedPoiIds,
+    }));
+    const filtered = applyPoiClientFilters(rows, params);
+    total = filtered.length;
+    offset = Math.max(0, parseInt(params.offset || '0', 10) || 0);
+    const limit = query.limitValue();
+    const pageRows = filtered.slice(offset, offset + limit);
+    renderResults(pageRows);
+    const first = total === 0 ? 0 : offset + 1;
+    const last = Math.min(offset + pageRows.length, total);
+    setStatus(
+      `<strong>${formatNumber(total)}</strong> matches at POI ${escapeHtml(params.poi_id)} / ${formatNumber(first)}-${formatNumber(last)}`,
+    );
   } catch (err) {
     if (err.name === 'AbortError') return;
     total = 0;
@@ -105,6 +152,38 @@ async function runIdLookup(id) {
   } finally {
     setBusy(false);
   }
+}
+
+function applyPoiClientFilters(rows, params) {
+  return rows.filter((row) => {
+    if (!matchesCsv(row.vendor, params.vendor)) return false;
+    if (!matchesCsv(row.vendor_id ?? row.vendorId, params.vendor_id)) return false;
+    if (!matchesCsv(row.name, params.name)) return false;
+    if (!matchesCsv(row.loop, params.loop)) return false;
+    if (!matchesCsv(row.site_type ?? row.siteType, params.site_type)) return false;
+    if (!rawContains(row.raw, params.raw)) return false;
+    return true;
+  });
+}
+
+function matchesCsv(value, filter) {
+  const values = csvValues(filter);
+  if (values.length === 0) return true;
+  const text = String(value ?? '');
+  return values.some((candidate) => text === candidate);
+}
+
+function rawContains(raw, filter) {
+  const needle = String(filter || '').trim();
+  if (!needle) return true;
+  return JSON.stringify(raw ?? {}).toLowerCase().includes(needle.toLowerCase());
+}
+
+function csvValues(value) {
+  return String(value || '')
+    .split(',')
+    .map((part) => part.trim())
+    .filter(Boolean);
 }
 
 function renderResults(rows) {
@@ -140,8 +219,22 @@ nextBtn.addEventListener('click', () => {
 });
 
 resultsEl.addEventListener('click', (event) => {
+  const detail = event.target.closest('[data-action="toggle-reservable-detail"]');
+  if (detail) {
+    availabilityPanels.toggleDetails(detail.dataset.rid || '');
+    return;
+  }
+
+  const detailClose = event.target.closest('[data-site-detail-close]');
+  if (detailClose) {
+    const panel = detailClose.closest('[data-panel-rid]');
+    availabilityPanels.toggleDetails(panel?.dataset.panelRid || '');
+    return;
+  }
+
   const toggle = event.target.closest('[data-action="toggle-availability"]');
   if (toggle) {
+    event.preventDefault();
     availabilityPanels.toggleAvailability(toggle.dataset.rid || '');
     return;
   }
