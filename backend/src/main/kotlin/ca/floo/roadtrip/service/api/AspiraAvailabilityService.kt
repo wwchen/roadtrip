@@ -29,28 +29,25 @@ val ASPIRA_ALLOWED_HOSTS: Set<String> =
  * Fetch + classify + render the unified response for an Aspira-backed
  * campground. Throws on upstream failure — caller maps to a 503.
  *
- * `minNights` enforces same-sub-area multi-night classification: a day D is
- * "available" iff at least one sub-area is reported Available for all N
- * consecutive nights starting D. Aspira's per-day status array is fetched
- * for the rolling window so the last visible day's lookup doesn't truncate.
+ * The half-open window `[startDate, endDate)` is classified as independent
+ * calendar days. Same-sub-area stay-length matching belongs to alert
+ * execution, not public/provider availability.
  */
 internal suspend fun fetchAndClassifyAspira(
     cache: CachedAspiraAvailability,
     host: String,
     mapId: Int,
-    today: LocalDate,
-    days: Int,
+    startDate: LocalDate,
+    endDate: LocalDate,
     force: Boolean,
-    minNights: Int = 1,
     reservableVendor: String? = null,
 ): AvailabilityResponseDto {
-    val nights = minNights.coerceAtLeast(1)
-    // Pull enough trailing data for the rolling window, but only classify
-    // the visible `days`. Aspira returns an indexed array per sub-area so
-    // extra data is cheap.
-    val rollingEnd = today.plusDays((days + nights - 2).toLong())
-    val cached = cache.get(host, mapId, today, rollingEnd, force)
-    val perDay = classifyDays(cached.data, today, days, nights, reservableVendor)
+    val days =
+        java.time.temporal.ChronoUnit.DAYS
+            .between(startDate, endDate)
+            .toInt()
+    val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
+    val perDay = classifyDays(cached.data, startDate, days, 1, reservableVendor)
     val state = classifyWindowState(perDay)
     val summary = summarizeWindow(days, perDay, state)
     val cacheBlock =
@@ -61,8 +58,8 @@ internal suspend fun fetchAndClassifyAspira(
         )
     return availabilityResponseDto(
         provider = "aspira",
-        startDate = today,
-        endDate = today.plusDays(days.toLong()),
+        startDate = startDate,
+        endDate = endDate,
         perDay = perDay,
         state = state,
         summary = summary,
@@ -84,11 +81,14 @@ internal suspend fun fetchAndClassifyAspiraCatalog(
     host: String,
     parentMapId: Int,
     reservables: List<AspiraCatalogReservable>,
-    today: LocalDate,
-    days: Int,
+    startDate: LocalDate,
+    endDate: LocalDate,
     force: Boolean,
-    minNights: Int = 1,
 ): AvailabilityResponseDto {
+    val days =
+        java.time.temporal.ChronoUnit.DAYS
+            .between(startDate, endDate)
+            .toInt()
     val targets =
         reservables
             .distinctBy { it.rid }
@@ -98,18 +98,15 @@ internal suspend fun fetchAndClassifyAspiraCatalog(
             cache = cache,
             host = host,
             mapId = parentMapId,
-            today = today,
-            days = days,
+            startDate = startDate,
+            endDate = endDate,
             force = force,
-            minNights = minNights,
         )
     }
 
-    val nights = minNights.coerceAtLeast(1)
-    val rollingEnd = today.plusDays((days + nights - 2).toLong())
     val cachedByMap = mutableMapOf<Int, CachedResult>()
     for (mapId in targets.map { it.mapId!! }.distinct()) {
-        cachedByMap[mapId] = cache.get(host, mapId, today, rollingEnd, force)
+        cachedByMap[mapId] = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
     }
 
     val resourceRows =
@@ -119,7 +116,7 @@ internal suspend fun fetchAndClassifyAspiraCatalog(
                 days = cachedByMap[target.mapId]?.data?.byResource?.get(target.resourceId),
             )
         }
-    val perDay = classifyLinkedResourceCatalogDays(resourceRows, today, days, nights)
+    val perDay = classifyLinkedResourceCatalogDays(resourceRows, startDate, days, 1)
     val state = classifyWindowState(perDay)
     val summary = summarizeWindow(days, perDay, state)
     val cacheResults = cachedByMap.values
@@ -131,8 +128,8 @@ internal suspend fun fetchAndClassifyAspiraCatalog(
         )
     return availabilityResponseDto(
         provider = "aspira",
-        startDate = today,
-        endDate = today.plusDays(days.toLong()),
+        startDate = startDate,
+        endDate = endDate,
         perDay = perDay,
         state = state,
         summary = summary,
@@ -221,17 +218,18 @@ internal suspend fun fetchAndClassifyAspiraResource(
     mapId: Int,
     resourceId: String,
     reservableVendor: String,
-    today: LocalDate,
-    days: Int,
+    startDate: LocalDate,
+    endDate: LocalDate,
     force: Boolean,
-    minNights: Int = 1,
 ): AvailabilityResponseDto {
-    val nights = minNights.coerceAtLeast(1)
-    val rollingEnd = today.plusDays((days + nights - 2).toLong())
-    val cached = cache.get(host, mapId, today, rollingEnd, force)
+    val days =
+        java.time.temporal.ChronoUnit.DAYS
+            .between(startDate, endDate)
+            .toInt()
+    val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
     val resourceDays = cached.data.byResource[resourceId].orEmpty()
     val reservableId = "site:$reservableVendor:$resourceId"
-    val perDay = classifyResourceDays(resourceDays, today, days, nights, reservableId)
+    val perDay = classifyResourceDays(resourceDays, startDate, days, 1, reservableId)
     val state = classifyWindowState(perDay)
     val summary = summarizeWindow(days, perDay, state)
     val cacheBlock =
@@ -242,8 +240,8 @@ internal suspend fun fetchAndClassifyAspiraResource(
         )
     return availabilityResponseDto(
         provider = "aspira",
-        startDate = today,
-        endDate = today.plusDays(days.toLong()),
+        startDate = startDate,
+        endDate = endDate,
         perDay = perDay,
         state = state,
         summary = summary,
@@ -256,21 +254,22 @@ internal suspend fun fetchAndClassifyAspiraResource(
 }
 
 /**
- * Bulk variant: arrival dates in [start, start+nights-1] where at least one
- * sub-area is bookable for an N-consecutive-night same-sub-area stay.
+ * Bulk variant: dates in `[startDate, endDate)` where at least one sub-area
+ * is available that day.
  */
 suspend fun availableDatesAspira(
     cache: CachedAspiraAvailability,
     host: String,
     mapId: Int,
-    start: LocalDate,
-    nights: Int,
+    startDate: LocalDate,
+    endDate: LocalDate,
 ): List<String> {
-    val n = nights.coerceAtLeast(1)
-    // Cover the last arrival's trailing nights too.
-    val end = start.plusDays((n - 1).toLong()).plusDays((n - 1).toLong())
-    val cached = cache.get(host, mapId, start, end, force = false)
-    val perDay = classifyDays(cached.data, start, n, n)
+    val days =
+        java.time.temporal.ChronoUnit.DAYS
+            .between(startDate, endDate)
+            .toInt()
+    val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force = false)
+    val perDay = classifyDays(cached.data, startDate, days, 1)
     return perDay
         .filter { it.availableCount > 0 }
         .map { it.date }

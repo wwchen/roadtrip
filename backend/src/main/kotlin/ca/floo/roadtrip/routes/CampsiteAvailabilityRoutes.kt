@@ -327,9 +327,8 @@ fun Route.campsiteAvailabilityRoutes(
                         provider = provider,
                         ref = ref,
                         vendorId = rid.vendorId,
-                        start = query.start,
-                        days = days,
-                        minNights = query.minNights,
+                        startDate = query.start,
+                        endDate = query.start.plusDays(days.toLong()),
                         force = query.force,
                     ),
                 )

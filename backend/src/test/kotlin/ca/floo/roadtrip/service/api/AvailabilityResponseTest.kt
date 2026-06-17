@@ -100,15 +100,14 @@ class AvailabilityResponseTest {
                     mapId = -2147483516,
                     resourceId = "-2147478966",
                     reservableVendor = "aspira_bc",
-                    today = LocalDate.parse("2026-07-01"),
-                    days = 2,
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
                     force = false,
-                    minNights = 2,
                 )
 
             assertEquals("site:aspira_bc:-2147478966", dto.reservableId)
             assertEquals("available", dto.availability[0].status)
-            assertEquals("partial", dto.availability[1].status)
+            assertEquals("available", dto.availability[1].status)
         }
 
     @Test
@@ -135,17 +134,16 @@ class AvailabilityResponseTest {
                     cache = cache,
                     host = "camping.bcparks.ca",
                     mapId = -2147483516,
-                    today = LocalDate.parse("2026-07-01"),
-                    days = 1,
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
                     force = false,
-                    minNights = 2,
                     reservableVendor = "aspira_bc",
                 )
 
-            assertEquals(1, dto.availability.single().availableCount)
+            assertEquals(2, dto.availability.single().availableCount)
             assertEquals("available", dto.availability.single().status)
             assertEquals(
-                listOf("site:aspira_bc:-2147478966"),
+                listOf("site:aspira_bc:-2147478966", "site:aspira_bc:-2147478967"),
                 dto.availability.single().availableReservableIds,
             )
         }
@@ -198,10 +196,9 @@ class AvailabilityResponseTest {
                             AspiraCatalogReservable("site:aspira_wa:c", "c", -202),
                             AspiraCatalogReservable("site:aspira_wa:missing", "missing", -202),
                         ),
-                    today = LocalDate.parse("2026-07-01"),
-                    days = 2,
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
                     force = false,
-                    minNights = 1,
                 )
 
             assertEquals((-999).toString(), dto.mapId)

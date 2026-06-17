@@ -113,16 +113,12 @@ class AvailabilityPollExecutor(
 
         val firstDate = intent.targetDates.firstOrNull() ?: return 0
         val start = LocalDate.parse(firstDate)
-        val days =
+        val end =
             intent.targetDates
                 .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
                 .maxOrNull()
-                ?.let {
-                    java.time.temporal.ChronoUnit.DAYS
-                        .between(start, it)
-                        .toInt() + 1
-                }
-                ?: 1
+                ?.plusDays(1)
+                ?: start.plusDays(1)
 
         val response =
             fetches.fetch(
@@ -132,9 +128,8 @@ class AvailabilityPollExecutor(
                     provider = provider,
                     ref = ref,
                     vendorId = reservable.rid.vendorId,
-                    start = start,
-                    days = days,
-                    minNights = intent.minNights,
+                    startDate = start,
+                    endDate = end,
                     force = false,
                     runId = runId,
                 ),

@@ -114,4 +114,50 @@ class AspiraBookingProviderTest {
                 assertEquals("available", dto.availability.single().status)
             }
         }
+
+    @Test
+    fun `available dates returns per-day facts without requiring a same-sub-area stay`() =
+        runBlocking {
+            val cache =
+                CachedAspiraAvailability(
+                    fetcher = { _, mapId, _, _ ->
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink =
+                                mapOf(
+                                    "100" to listOf(1, 0),
+                                    "101" to listOf(0, 1),
+                                ),
+                            byResource = emptyMap(),
+                        )
+                    },
+                )
+            val adapter =
+                AspiraBookingProvider(
+                    tenant =
+                        AspiraTenant(
+                            host = "reservation.pc.gc.ca",
+                            vendorCode = "aspira_pc",
+                            bookingHorizonDays = 365,
+                        ),
+                    cache = cache,
+                )
+
+            val dates =
+                adapter.availableDates(
+                    AvailableDatesRequest(
+                        ref =
+                            ProviderRef.Aspira(
+                                transactionLocationId = -2147483630,
+                                mapId = -2147483388,
+                                resourceLocationId = null,
+                            ),
+                        startDate = LocalDate.parse("2026-07-01"),
+                        endDate = LocalDate.parse("2026-07-03"),
+                    ),
+                )
+
+            assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
+        }
 }
