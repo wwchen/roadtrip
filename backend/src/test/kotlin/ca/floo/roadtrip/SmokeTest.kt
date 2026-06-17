@@ -17,6 +17,7 @@ import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.regex.Pattern
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 // Trip-critical smoke. Mirrors the deleted qa/smoke.spec.mjs: cold load →
@@ -271,6 +272,248 @@ class SmokeTest {
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during POI share smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    @Test
+    fun `horizontal matrix swipe does not drag mobile drawer`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(390, 844)
+                    .setHasTouch(true)
+                    .setIsMobile(true),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        context.route("**/api/pois") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"type":"FeatureCollection","features":[],"truncated":false}"""),
+            )
+        }
+        context.route("**/api/pois/31337") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "Feature",
+                          "id": 31337,
+                          "geometry": { "type": "Point", "coordinates": [-115.55, 51.18] },
+                          "properties": {
+                            "category": "campground",
+                            "subcategory": "federal",
+                            "name": "Matrix Campground",
+                            "state": "AB",
+                            "provider_ref": { "recgov_id": "31337" }
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/poi/31337/availability?**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "state": "success",
+                          "summary": "7 dates",
+                          "cache": { "age_seconds": 60 },
+                          "availability": [
+                            { "date": "2026-06-16", "available_count": 3, "total": 6, "available_reservable_ids": ["site:matrix:001", "site:matrix:002", "site:matrix:003"] },
+                            { "date": "2026-06-17", "available_count": 2, "total": 6, "available_reservable_ids": ["site:matrix:002", "site:matrix:004"] },
+                            { "date": "2026-06-18", "available_count": 1, "total": 6, "available_reservable_ids": ["site:matrix:005"] },
+                            { "date": "2026-06-19", "available_count": 0, "total": 6, "available_reservable_ids": [] },
+                            { "date": "2026-06-20", "available_count": 2, "total": 6, "available_reservable_ids": ["site:matrix:001", "site:matrix:006"] },
+                            { "date": "2026-06-21", "available_count": 0, "total": 0, "status": "closed", "available_reservable_ids": [] },
+                            { "date": "2026-06-22", "available_count": 3, "total": 6, "available_reservable_ids": ["site:matrix:003", "site:matrix:004", "site:matrix:005"] }
+                          ]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/poi/31337/reservables**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "poi_id": 31337,
+                          "total_at_poi": 6,
+                          "reservables": [
+                            {
+                              "rid": "site:matrix:001",
+                              "name": "Site 1",
+                              "loop": "A",
+                              "site_type": "Tent",
+                              "reservation_url": "https://example.test/1",
+                              "raw": {
+                                "defined_attributes": [
+                                  { "definition_id": -32751, "values": [1] },
+                                  { "definition_id": -32748, "value": null }
+                                ]
+                              }
+                            },
+                            { "rid": "site:matrix:002", "name": "Site 2", "loop": "A", "site_type": "Tent", "reservation_url": "https://example.test/2" },
+                            { "rid": "site:matrix:003", "name": "Site 3", "loop": "B", "site_type": "RV", "reservation_url": "https://example.test/3" },
+                            { "rid": "site:matrix:004", "name": "Site 4", "loop": "B", "site_type": "RV", "reservation_url": "https://example.test/4" },
+                            { "rid": "site:matrix:005", "name": "Site 5", "loop": "C", "site_type": "Cabin", "reservation_url": "https://example.test/5" },
+                            { "rid": "site:matrix:006", "name": "Site 6", "loop": "C", "site_type": "Cabin", "reservation_url": "https://example.test/6" }
+                          ]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/campsite/alerts") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("[]"),
+            )
+        }
+
+        try {
+            page.navigate("/?poi=31337")
+            val matrix = page.locator(".cg-site-matrix-scroll")
+            assertThat(matrix).isVisible(
+                com.microsoft.playwright.assertions.LocatorAssertions
+                    .IsVisibleOptions()
+                    .setTimeout(15_000.0),
+            )
+            assertTrue(
+                page.evaluate(
+                    """
+                    () => {
+                      const matrix = document.querySelector('.cg-site-matrix-scroll');
+                      return matrix.scrollWidth > matrix.clientWidth;
+                    }
+                    """.trimIndent(),
+                ) as Boolean,
+                "matrix fixture should require horizontal scrolling",
+            )
+
+            val availableCellPaint =
+                page.evaluate(
+                    """
+                    () => {
+                      const cell = document.querySelector('.cg-site-matrix-cell-available');
+                      const button = cell?.querySelector('.cg-site-matrix-cell-button');
+                      if (!cell || !button) return '';
+                      return getComputedStyle(cell).backgroundColor + '|' + getComputedStyle(button).backgroundColor;
+                    }
+                    """.trimIndent(),
+                ) as String
+            assertTrue(
+                availableCellPaint.startsWith("rgba(76, 185, 106, 0.16)|rgba(0, 0, 0, 0)"),
+                "available matrix cell state should fill the full table cell height",
+            )
+            val firstSiteLabel =
+                page.evaluate(
+                    """
+                    () => document.querySelector('.cg-site-matrix-site-button')?.innerText.trim() || ''
+                    """.trimIndent(),
+                ) as String
+            assertTrue(
+                firstSiteLabel.startsWith("A / Site 1"),
+                "site row title should render as loop / site: $firstSiteLabel",
+            )
+            page.locator(".cg-site-matrix-site-button").first().click()
+            val detailSubtitle =
+                page.evaluate(
+                    """
+                    () => document.querySelector('.cg-site-detail-subtitle')?.innerText.trim() || ''
+                    """.trimIndent(),
+                ) as String
+            assertEquals(
+                "",
+                detailSubtitle,
+                "site detail header should not reuse the matrix loop/type label",
+            )
+            val detailText =
+                page.evaluate(
+                    """
+                    () => document.querySelector('.cg-site-detail')?.innerText || ''
+                    """.trimIndent(),
+                ) as String
+            assertFalse(
+                detailText.contains("Definition Id") || detailText.contains("Values:"),
+                "site detail should hide unresolved provider attribute ids: $detailText",
+            )
+            val dateSortControlCount =
+                page.evaluate(
+                    """
+                    () => document.querySelectorAll('[data-matrix-sort-date]').length
+                    """.trimIndent(),
+                ) as Int
+            assertEquals(
+                0,
+                dateSortControlCount,
+                "date columns should not be clickable sort controls",
+            )
+
+            val drawerHeightAfterMove =
+                page.evaluate(
+                    """
+                    () => {
+                      const target = document.querySelector('.cg-site-matrix-scroll');
+                      const drawer = document.getElementById('cg-drawer');
+                      drawer.style.height = '';
+                      drawer.scrollTop = 0;
+                      const send = (type, x, y) => {
+                        const touch = new Touch({ identifier: 1, target, clientX: x, clientY: y });
+                        const activeTouches = type === 'touchend' ? [] : [touch];
+                        target.dispatchEvent(new TouchEvent(type, {
+                          bubbles: true,
+                          cancelable: true,
+                          touches: activeTouches,
+                          targetTouches: activeTouches,
+                          changedTouches: [touch],
+                        }));
+                      };
+                      send('touchstart', 340, 540);
+                      send('touchmove', 80, 558);
+                      const heightAfterMove = drawer.style.height;
+                      send('touchend', 80, 558);
+                      return heightAfterMove;
+                    }
+                    """.trimIndent(),
+                ) as String
+
+            assertEquals(
+                "",
+                drawerHeightAfterMove,
+                "horizontal swipes in the matrix should not resize or drag the mobile drawer",
+            )
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during matrix gesture smoke: ${pageErrors.joinToString(" | ")}",
             )
         } finally {
             page.close()

@@ -191,6 +191,7 @@ export function attachDragHandlers(root) {
 
   const handle = root.querySelector('.cg-drawer-handle');
 
+  let startX = 0;
   let startY = 0;
   let startH = 0;
   // 'pending' = touch started but we haven't decided drag-vs-scroll yet
@@ -210,6 +211,7 @@ export function attachDragHandlers(root) {
 
   function onStart(e, originatedAtHandle) {
     if (e.touches.length !== 1) return;
+    startX = e.touches[0].clientX;
     startY = e.touches[0].clientY;
     startH = root.getBoundingClientRect().height;
     startedOnInteractive =
@@ -219,10 +221,18 @@ export function attachDragHandlers(root) {
 
   function onMove(e) {
     if (phase == null) return;
-    const dy = e.touches[0].clientY - startY;
+    const touch = e.touches[0];
+    const dx = touch.clientX - startX;
+    const dy = touch.clientY - startY;
 
     // Pending body touch → decide whether this is a drag or a scroll.
     if (phase === 'pending') {
+      if (Math.abs(dx) > SLOP && Math.abs(dx) > Math.abs(dy)) {
+        // Let horizontal scrollers, especially the availability matrix,
+        // keep the gesture. The drawer only owns vertical drag intent.
+        phase = null;
+        return;
+      }
       if (dy > SLOP) {
         // Body drag exceeded slop. If content is scrolled mid-drawer,
         // hand back to the native scroll. Otherwise we own the gesture

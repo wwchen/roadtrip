@@ -265,6 +265,7 @@
     z-index: 999;
     padding: 0 16px 24px;
     padding-bottom: max(24px, env(safe-area-inset-bottom));
+    overflow-x: hidden;
     overflow-y: auto;
     overscroll-behavior: contain;
     -webkit-overflow-scrolling: touch;
@@ -965,6 +966,8 @@
     --cg-site-column-width: 128px;
     max-height: min(430px, 52dvh);
     overflow: auto;
+    overscroll-behavior: contain;
+    touch-action: pan-x pan-y;
     border: 1px solid var(--cg-border);
     border-radius: 8px;
     background: var(--cg-bg-subtle);
@@ -1079,24 +1082,22 @@
     font-size: 15px;
     font-variant-numeric: tabular-nums;
   }
-  .cg-site-matrix-name,
-  .cg-site-matrix-meta-line {
+  .cg-site-matrix-site-title {
     display: block;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  .cg-site-matrix-loop-prefix {
+    color: var(--cg-muted);
+    font-size: 12px;
+    font-weight: 500;
+  }
   .cg-site-matrix-name {
     color: var(--cg-text);
     font-size: 12px;
     font-weight: 600;
-  }
-  .cg-site-matrix-meta-line {
-    margin-top: 2px;
-    color: var(--cg-muted);
-    font-size: 10px;
-    font-weight: 500;
   }
   .cg-site-matrix-site-button {
     display: block;
