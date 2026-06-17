@@ -25,33 +25,31 @@ export function renderSiteMatrix({
   state,
   reservables,
   days,
-  sortDays = null,
   error,
   selectedDate,
   siteColumnWidth,
   filters = DEFAULT_FILTERS,
   selectedSiteRid = null,
-  loadingMore = false,
-  loadMoreError = null,
+  weekStart = null,
   showToday = true,
   armedBook = null,
 }) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
   if (visibleDays.length === 0) return '';
 
+  const nav = renderWeekNav({ weekStart, visibleDays, showToday });
+
   if (state === 'loading') {
     return renderSiteMatrixSkeleton({
       days: visibleDays,
       siteColumnWidth,
-      showToday,
+      nav,
     });
   }
   if (state === 'error') {
     return renderSection({
       meta: `${visibleDays.length} dates`,
-      loadingMore,
-      loadMoreError,
-      showToday,
+      nav,
       body: `<div class="cg-site-matrix-status cg-site-matrix-error">${escapeHtml(error || "Couldn't load sites")} <a href="#" class="cg-sites-retry">Retry</a></div>`,
     });
   }
@@ -60,9 +58,7 @@ export function renderSiteMatrix({
   if (allRows.length === 0) {
     return renderSection({
       meta: `${visibleDays.length} dates`,
-      loadingMore,
-      loadMoreError,
-      showToday,
+      nav,
       body: '<div class="cg-site-matrix-status">No reservable sites found for this campground.</div>',
     });
   }
@@ -71,11 +67,8 @@ export function renderSiteMatrix({
   const availabilityByDate = new Map(
     visibleDays.map((day) => [day.date, new Set(availableReservableIds(day))]),
   );
-  const sortAvailabilityByDate = Array.isArray(sortDays) && sortDays.length > 0
-    ? new Map(sortDays.filter((d) => d?.date).map((day) => [day.date, new Set(availableReservableIds(day))]))
-    : availabilityByDate;
   const rows = sortReservables(filterReservables(allRows, activeFilters), activeFilters.sort, {
-    availabilityByDate: sortAvailabilityByDate,
+    availabilityByDate,
     selectedDate,
   });
   const tools = renderTools({
@@ -88,9 +81,7 @@ export function renderSiteMatrix({
     return renderSection({
       meta: `0 of ${allRows.length} sites / ${visibleDays.length} dates`,
       tools,
-      loadingMore,
-      loadMoreError,
-      showToday,
+      nav,
       body: '<div class="cg-site-matrix-status">No sites match these filters.</div>',
     });
   }
@@ -117,9 +108,7 @@ export function renderSiteMatrix({
   return renderSection({
     meta,
     tools,
-    loadingMore,
-    loadMoreError,
-    showToday,
+    nav,
     body: `
       <div class="cg-site-matrix-scroll"${widthStyle}>
         <table class="cg-site-matrix-table">
@@ -135,7 +124,6 @@ export function renderSiteMatrix({
           <tbody>${bodyRows}</tbody>
         </table>
       </div>
-      ${renderLoadMoreStatus({ loadingMore, loadMoreError })}
     `,
   });
 }
@@ -143,7 +131,7 @@ export function renderSiteMatrix({
 export function renderSiteMatrixSkeleton({
   days,
   siteColumnWidth,
-  showToday = false,
+  nav = '',
   rowCount = 6,
 } = {}) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
@@ -172,7 +160,7 @@ export function renderSiteMatrixSkeleton({
   return renderSection({
     meta: `${dateCount} dates`,
     tools: renderSkeletonTools(),
-    showToday,
+    nav,
     body: `
       <div class="cg-site-matrix-scroll cg-site-matrix-skeleton" aria-busy="true"${widthStyle}>
         <table class="cg-site-matrix-table">
@@ -195,18 +183,8 @@ function renderSection({
   meta,
   body,
   tools = '',
-  loadingMore = false,
-  loadMoreError = null,
-  showToday = true,
+  nav = '',
 }) {
-  const status = loadingMore
-    ? '<span class="cg-site-matrix-meta-status">Loading...</span>'
-    : loadMoreError
-      ? '<span class="cg-site-matrix-meta-status cg-site-matrix-meta-error">Load failed</span>'
-      : '';
-  const todayButton = showToday
-    ? '<button type="button" class="cg-site-matrix-today" data-matrix-today>Today</button>'
-    : '';
   return `
     <section class="cg-site-matrix" aria-label="Sites by date">
       <div class="cg-site-matrix-head">
@@ -219,14 +197,53 @@ function renderSection({
           </div>
         </div>
         <div class="cg-site-matrix-actions">
-          ${todayButton}
-          <div class="cg-site-matrix-meta">${escapeHtml(meta)}${status ? ` ${status}` : ''}</div>
+          ${nav}
+          <div class="cg-site-matrix-meta">${escapeHtml(meta)}</div>
         </div>
       </div>
       ${tools}
       ${body}
     </section>
   `;
+}
+
+function renderWeekNav({ weekStart, visibleDays, showToday }) {
+  const start = typeof weekStart === 'string' && weekStart ? weekStart : visibleDays[0]?.date || '';
+  const todayBtn = showToday
+    ? '<button type="button" class="cg-site-matrix-today" data-matrix-today>Today</button>'
+    : '';
+  return `
+    <div class="cg-week-nav" role="group" aria-label="Week navigation">
+      <button type="button" class="cg-week-nav-arrow" data-week-nav="prev" aria-label="Previous week">‹</button>
+      <label class="cg-week-nav-label">
+        <span>${escapeHtml(formatWeekRange(visibleDays, start))}</span>
+        <input
+          type="date"
+          class="cg-week-nav-date"
+          data-week-date-picker
+          value="${escapeHtml(start)}"
+          aria-label="Jump to week starting"
+        >
+      </label>
+      <button type="button" class="cg-week-nav-arrow" data-week-nav="next" aria-label="Next week">›</button>
+      ${todayBtn}
+    </div>
+  `;
+}
+
+function formatWeekRange(visibleDays, fallbackStart) {
+  const start = visibleDays[0]?.date || fallbackStart;
+  const end = visibleDays[visibleDays.length - 1]?.date || fallbackStart;
+  if (!start) return '';
+  return `${formatShortDate(start)} – ${formatShortDate(end)}`;
+}
+
+function formatShortDate(iso) {
+  if (!iso) return '';
+  const parsed = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(parsed.getTime())) return iso;
+  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parsed.getUTCMonth()];
+  return `${month} ${parsed.getUTCDate()}`;
 }
 
 function renderSkeletonTools() {
@@ -304,13 +321,6 @@ function matrixScrollStyle(siteColumnWidth, dateCount) {
     props.push(`--cg-site-column-width: ${Math.round(siteColumnWidth)}px;`);
   }
   return ` style="${props.join(' ')}"`;
-}
-
-function renderLoadMoreStatus({ loadingMore, loadMoreError }) {
-  if (loadMoreError) {
-    return `<div class="cg-site-matrix-load-status cg-site-matrix-error">${escapeHtml(loadMoreError)}</div>`;
-  }
-  return '';
 }
 
 function dateHeaderHtml(day) {

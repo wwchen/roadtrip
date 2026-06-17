@@ -564,6 +564,59 @@ pre {
 
 .cg-site-matrix-meta-error { color: var(--cg-error); }
 
+.cg-week-nav {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.cg-week-nav-arrow {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--cg-border-strong);
+  border-radius: 6px;
+  background: var(--cg-bg-subtle);
+  color: var(--cg-muted);
+  font: inherit;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.cg-week-nav-arrow:hover {
+  background: var(--cg-bg-hover);
+  color: var(--cg-text);
+}
+
+.cg-week-nav-label {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 132px;
+  height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--cg-border-strong);
+  border-radius: 6px;
+  background: var(--cg-bg-subtle);
+  color: var(--cg-text);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.cg-week-nav-label:hover { background: var(--cg-bg-hover); }
+
+.cg-week-nav-date {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+
 .cg-site-matrix-legend {
   display: flex;
   flex-wrap: wrap;
