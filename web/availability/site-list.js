@@ -44,7 +44,7 @@ export function renderSiteList({
     });
   }
   // success
-  const rows = reservablesForIds(reservables, availableIds);
+  const rows = reservablesForIds(reservables, availableIds, selectedDay);
   const body = expanded ? renderRows(rows) : '';
   return renderSection({
     header: renderHeader({ count, total, expanded, disabled: false }),
@@ -101,9 +101,15 @@ function availableCount(day) {
   return typeof count === 'number' ? count : null;
 }
 
-function reservablesForIds(reservables, ids) {
+function reservablesForIds(reservables, ids, selectedDay) {
   const byRid = new Map((Array.isArray(reservables) ? reservables : []).map((r) => [r.rid, r]));
-  return ids.map((rid) => byRid.get(rid) || fallbackReservable(rid));
+  const urlsByRid = availableReservableUrls(selectedDay);
+  return ids.map((rid) => {
+    const row = byRid.get(rid) || fallbackReservable(rid);
+    const url = urlsByRid.get(rid);
+    if (!url || row.reservation_url || row.reservationUrl) return row;
+    return { ...row, reservation_url: url };
+  });
 }
 
 function fallbackReservable(rid) {
@@ -111,6 +117,18 @@ function fallbackReservable(rid) {
   const vendor = parts[1] || '';
   const vendorId = parts.slice(2).join(':') || String(rid);
   return { rid, vendor, vendor_id: vendorId };
+}
+
+function availableReservableUrls(day) {
+  const rows = day?.available_reservables ?? day?.availableReservables;
+  const urls = new Map();
+  if (!Array.isArray(rows)) return urls;
+  for (const row of rows) {
+    const rid = String(row?.rid || '').trim();
+    const url = row?.reservation_url || row?.reservationUrl || '';
+    if (rid && url) urls.set(rid, url);
+  }
+  return urls;
 }
 
 function renderRow(r) {

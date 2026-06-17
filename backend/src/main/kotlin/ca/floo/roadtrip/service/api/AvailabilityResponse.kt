@@ -150,6 +150,13 @@ data class AvailabilityDayDto(
     @SerialName("available_count") val availableCount: Int,
     val total: Int,
     @SerialName("available_reservable_ids") val availableReservableIds: List<String>? = null,
+    @SerialName("available_reservables") val availableReservables: List<AvailabilityReservableDto>? = null,
+)
+
+@Serializable
+data class AvailabilityReservableDto(
+    val rid: String,
+    @SerialName("reservation_url") val reservationUrl: String? = null,
 )
 
 @Serializable

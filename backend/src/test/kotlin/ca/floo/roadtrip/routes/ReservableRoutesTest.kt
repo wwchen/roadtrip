@@ -572,6 +572,49 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `poi availability includes backend generated booking urls for available reservables`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-booking-links",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            val a12 = seedReservable(vendorId = "330257", name = "A12", loop = "Loop A", siteType = "STANDARD")
+            val b03 = seedReservable(vendorId = "330258", name = "B03", loop = "Loop B", siteType = "STANDARD")
+            link(a12, poiId)
+            link(b03, poiId)
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-03")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val day =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["availability"]!!
+                    .jsonArray
+                    .first()
+                    .jsonObject
+            val reservables = day["available_reservables"]!!.jsonArray.map { it.jsonObject }
+            assertEquals(
+                listOf("site:recgov:330257", "site:recgov:330258"),
+                reservables.map { it["rid"]!!.jsonPrimitive.content },
+            )
+            assertEquals(
+                "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-03",
+                reservables[0]["reservation_url"]!!.jsonPrimitive.content,
+            )
+        }
+
+    @Test
     fun `reservable availability dispatches by linked campground provider`() =
         testApplication {
             val poiId =

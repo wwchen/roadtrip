@@ -525,7 +525,17 @@ class SmokeTest {
                           "summary": "7 dates",
                           "cache": { "age_seconds": 60 },
                           "availability": [
-                            { "date": "2026-06-16", "available_count": 3, "total": 6, "available_reservable_ids": ["site:matrix:001", "site:matrix:002", "site:matrix:003"] },
+                            {
+                              "date": "2026-06-16",
+                              "available_count": 3,
+                              "total": 6,
+                              "available_reservable_ids": ["site:matrix:001", "site:matrix:002", "site:matrix:003"],
+                              "available_reservables": [
+                                { "rid": "site:matrix:001", "reservation_url": "https://availability.example.test/1" },
+                                { "rid": "site:matrix:002", "reservation_url": "https://availability.example.test/2" },
+                                { "rid": "site:matrix:003", "reservation_url": "https://availability.example.test/3" }
+                              ]
+                            },
                             { "date": "2026-06-17", "available_count": 2, "total": 6, "available_reservable_ids": ["site:matrix:002", "site:matrix:004"] },
                             { "date": "2026-06-18", "available_count": 1, "total": 6, "available_reservable_ids": ["site:matrix:005"] },
                             { "date": "2026-06-19", "available_count": 0, "total": 6, "available_reservable_ids": [] },
@@ -555,7 +565,6 @@ class SmokeTest {
                               "name": "Site 1",
                               "loop": "A",
                               "site_type": "Tent",
-                              "reservation_url": "https://example.test/1",
                               "raw": {
                                 "defined_attributes": [
                                   { "definition_id": -32751, "values": [1] },
@@ -650,6 +659,11 @@ class SmokeTest {
             assertFalse(
                 detailText.contains("Definition Id") || detailText.contains("Values:"),
                 "site detail should hide unresolved provider attribute ids: $detailText",
+            )
+            page.locator(".cg-site-matrix-cell-available .cg-site-matrix-cell-button").first().click()
+            assertThat(page.locator(".cg-site-detail-book")).hasAttribute(
+                "href",
+                Pattern.compile("https://availability\\.example\\.test/1"),
             )
             val dateSortControlCount =
                 page.evaluate(

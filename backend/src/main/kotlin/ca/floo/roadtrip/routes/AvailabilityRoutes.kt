@@ -15,6 +15,8 @@ import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
+import ca.floo.roadtrip.service.api.AvailabilityReservableDto
+import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.DayClassification
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -148,7 +150,13 @@ fun Route.availabilityRoutes(
                         force = query.force,
                     ),
                 )
-            respondAvailabilityJson(response)
+            respondAvailabilityJson(
+                response.withAvailableReservableLinks(
+                    catalogRows = catalogRows,
+                    providerRef = ref,
+                    options = ReservationUrlOptions(startDate = query.startDate, endDate = query.endDate),
+                ),
+            )
         } catch (e: BookingProviderError) {
             val (status, error) = mapProviderError(e)
             log.info(
@@ -522,6 +530,27 @@ private fun Reservable.aspiraProviderRefLong(key: String): Long? =
         ?.get(key)
         ?.jsonPrimitive
         ?.longOrNull
+
+private fun AvailabilityResponseDto.withAvailableReservableLinks(
+    catalogRows: List<Reservable>,
+    providerRef: ProviderRef,
+    options: ReservationUrlOptions,
+): AvailabilityResponseDto {
+    val rowsByRid = catalogRows.associateBy { it.rid.encode() }
+    return copy(
+        availability =
+            availability.map { day ->
+                val ids = day.availableReservableIds.orEmpty()
+                val availableReservables =
+                    ids
+                        .map { rid ->
+                            val reservationUrl = rowsByRid[rid]?.reservationUrl(providerRef, options)
+                            AvailabilityReservableDto(rid = rid, reservationUrl = reservationUrl)
+                        }.takeIf { it.isNotEmpty() }
+                day.copy(availableReservables = availableReservables)
+            },
+    )
+}
 
 private fun emptyPoiAvailability(
     ref: ProviderRef,

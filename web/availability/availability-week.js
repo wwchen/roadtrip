@@ -236,7 +236,11 @@ function renderSelectedSiteDetail(ctx) {
 
 function selectedMatrixSite(ctx) {
   if (!ctx.selectedSiteRid) return null;
-  return ctx.sites.find((site) => String(site.rid) === String(ctx.selectedSiteRid)) || null;
+  const site = ctx.sites.find((row) => String(row.rid) === String(ctx.selectedSiteRid)) || null;
+  if (!site) return null;
+  const url = availableReservableUrlForDate(ctx, ctx.selectedSiteDate, ctx.selectedSiteRid);
+  if (!url || site.reservation_url || site.reservationUrl) return site;
+  return { ...site, reservation_url: url };
 }
 
 function selectedAvailabilityDay(ctx) {
@@ -250,6 +254,15 @@ function selectedAvailabilityDay(ctx) {
 
 function availableCount(day) {
   return day?.available_count ?? day?.availableCount ?? 0;
+}
+
+function availableReservableUrlForDate(ctx, date, rid) {
+  if (!date || !rid) return '';
+  const day = matrixAvailabilityDays(ctx).find((d) => d?.date === date);
+  const rows = day?.available_reservables ?? day?.availableReservables;
+  if (!Array.isArray(rows)) return '';
+  const found = rows.find((row) => String(row?.rid || '') === String(rid));
+  return found?.reservation_url || found?.reservationUrl || '';
 }
 
 // ---- event wiring ---------------------------------------------------------
