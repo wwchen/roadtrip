@@ -48,7 +48,7 @@ export function renderSiteMatrix({
   }
   if (state === 'error') {
     return renderSection({
-      meta: `${visibleDays.length} dates`,
+      title: 'Sites by date',
       nav,
       body: `<div class="cg-site-matrix-status cg-site-matrix-error">${escapeHtml(error || "Couldn't load sites")} <a href="#" class="cg-sites-retry">Retry</a></div>`,
     });
@@ -57,7 +57,7 @@ export function renderSiteMatrix({
   const allRows = sortedReservables(reservables);
   if (allRows.length === 0) {
     return renderSection({
-      meta: `${visibleDays.length} dates`,
+      title: 'Sites by date',
       nav,
       body: '<div class="cg-site-matrix-status">No reservable sites found for this campground.</div>',
     });
@@ -79,7 +79,7 @@ export function renderSiteMatrix({
 
   if (rows.length === 0) {
     return renderSection({
-      meta: `0 of ${allRows.length} sites / ${visibleDays.length} dates`,
+      title: `0 of ${allRows.length} Sites by date`,
       tools,
       nav,
       body: '<div class="cg-site-matrix-status">No sites match these filters.</div>',
@@ -98,15 +98,14 @@ export function renderSiteMatrix({
       }),
     )
     .join('');
-  const siteLabel = rows.length === 1 ? 'site' : 'sites';
-  const meta =
+  const title =
     rows.length === allRows.length
-      ? `${rows.length} ${siteLabel} / ${visibleDays.length} dates`
-      : `${rows.length} of ${allRows.length} sites / ${visibleDays.length} dates`;
+      ? `${rows.length} Sites by date`
+      : `${rows.length} of ${allRows.length} Sites by date`;
   const widthStyle = matrixScrollStyle(siteColumnWidth, visibleDays.length);
 
   return renderSection({
-    meta,
+    title,
     tools,
     nav,
     body: `
@@ -158,7 +157,7 @@ export function renderSiteMatrixSkeleton({
   const widthStyle = matrixScrollStyle(siteColumnWidth, dateCount);
 
   return renderSection({
-    meta: `${dateCount} dates`,
+    title: 'Sites by date',
     tools: renderSkeletonTools(),
     nav,
     body: `
@@ -180,7 +179,7 @@ export function renderSiteMatrixSkeleton({
 }
 
 function renderSection({
-  meta,
+  title,
   body,
   tools = '',
   nav = '',
@@ -189,7 +188,7 @@ function renderSection({
     <section class="cg-site-matrix" aria-label="Sites by date">
       <div class="cg-site-matrix-head">
         <div>
-          <div class="cg-site-matrix-title">Sites by date</div>
+          <div class="cg-site-matrix-title">${escapeHtml(title)}</div>
           <div class="cg-site-matrix-legend">
             <span class="cg-site-matrix-key cg-site-matrix-key-available">Open</span>
             <span class="cg-site-matrix-key cg-site-matrix-key-booked">Full</span>
@@ -198,7 +197,6 @@ function renderSection({
         </div>
         <div class="cg-site-matrix-actions">
           ${nav}
-          <div class="cg-site-matrix-meta">${escapeHtml(meta)}</div>
         </div>
       </div>
       ${tools}
