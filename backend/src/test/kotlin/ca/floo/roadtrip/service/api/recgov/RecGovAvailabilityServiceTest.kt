@@ -162,6 +162,22 @@ class RecGovAvailabilityServiceTest {
     }
 
     @Test
+    fun `null availability artifact maps to unknown rather than reserved`() {
+        val map = mapOf("100" to campsiteWith(mapOf(futureKey(0) to "null")))
+        val body = classify(cacheReturning(map), days = 1)
+        val day = body["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals("success", body["state"]!!.jsonPrimitive.content)
+        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
+        assertEquals(
+            "unknown",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:100"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
     fun `upstream error propagates so route layer can 503`() {
         val cache =
             CachedAvailability(

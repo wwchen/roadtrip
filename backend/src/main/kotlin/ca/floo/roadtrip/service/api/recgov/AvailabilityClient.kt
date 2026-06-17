@@ -108,7 +108,13 @@ private fun parseCampsites(body: String): Map<String, Campsite> {
     val out = mutableMapOf<String, Campsite>()
     for ((id, element) in campsites) {
         val obj = element as? JsonObject ?: continue
-        val avail = (obj["availabilities"] as? JsonObject)?.mapValues { (it.value as JsonPrimitive).content } ?: emptyMap()
+        val avail =
+            (obj["availabilities"] as? JsonObject)
+                ?.mapNotNull { (date, value) ->
+                    val status = (value as? JsonPrimitive)?.contentOrNull() ?: return@mapNotNull null
+                    date to status
+                }?.toMap()
+                ?: emptyMap()
         val equip =
             (obj["equipment_types"] as? kotlinx.serialization.json.JsonArray)
                 ?.map { (it as JsonPrimitive).content } ?: emptyList()
