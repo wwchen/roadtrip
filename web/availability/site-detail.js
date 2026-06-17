@@ -1,0 +1,296 @@
+// Site detail panel for reservable rows. This is intentionally read-only:
+// it normalizes fields already present on the reservable catalog payload
+// and does not fetch extra provider data.
+
+import { escapeHtml } from '../core.js';
+
+const MAX_FEATURES = 12;
+
+export function renderSiteDetail({ site, selectedDate = null, minNights = 1 } = {}) {
+  if (!site) return '';
+  const raw = objectValue(site.raw);
+  const name = siteName(site);
+  const imageUrl = findImageUrl(site);
+  const description = descriptionText(site.description ?? raw.description ?? raw.campsite_description);
+  const facts = detailFacts(site, raw);
+  const features = featureLabels(raw);
+  const url = site.reservation_url || site.reservationUrl || '';
+  const stayLine = selectedDate
+    ? `${selectedDate}${minNights > 1 ? `, ${minNights} nights` : ''}`
+    : '';
+
+  return `
+    <section class="cg-site-detail" aria-label="Site details">
+      <div class="cg-site-detail-head">
+        <div class="cg-site-detail-title-wrap">
+          <div class="cg-site-detail-title" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
+          <div class="cg-site-detail-subtitle">${escapeHtml(detailSubtitle(site, stayLine))}</div>
+        </div>
+        <button type="button" class="cg-site-detail-close" data-site-detail-close aria-label="Close site details">Close</button>
+      </div>
+      ${imageUrl ? `<div class="cg-site-detail-media"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}"></div>` : ''}
+      ${description ? `<p class="cg-site-detail-description">${escapeHtml(description)}</p>` : ''}
+      ${renderFacts(facts)}
+      ${renderFeatures(features)}
+      ${
+        url
+          ? `<a class="cg-site-detail-book" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">Book on provider site</a>`
+          : ''
+      }
+    </section>
+  `;
+}
+
+function detailSubtitle(site, stayLine) {
+  return [site.loop, site.site_type, stayLine].filter(Boolean).join(' / ');
+}
+
+function detailFacts(site, raw) {
+  const facts = [];
+  addFact(facts, 'Loop', site.loop || raw.loop || raw._parent_leaf_name);
+  addFact(facts, 'Type', site.site_type || raw.site_type || raw.campsite_type);
+  addFact(facts, 'Capacity', capacityLabel(site, raw));
+  addFact(facts, 'Reserve', firstString(raw.campsite_reserve_type, raw.reserve_type, raw.reserveType));
+  addFact(facts, 'Use', firstString(raw.type_of_use, raw.typeOfUse));
+  addFact(facts, 'Equipment', equipmentLabel(raw));
+  addFact(facts, 'Provider', site.vendor);
+  addFact(facts, 'Provider ID', site.vendor_id || site.vendorId);
+  return facts;
+}
+
+function addFact(facts, label, value) {
+  const text = compactText(formatValue(value));
+  if (text) facts.push({ label, value: text });
+}
+
+function renderFacts(facts) {
+  if (!facts.length) return '';
+  const rows = facts
+    .map(
+      (fact) => `
+        <div class="cg-site-detail-fact">
+          <span>${escapeHtml(fact.label)}</span>
+          <strong>${escapeHtml(fact.value)}</strong>
+        </div>
+      `,
+    )
+    .join('');
+  return `<div class="cg-site-detail-facts">${rows}</div>`;
+}
+
+function renderFeatures(features) {
+  if (!features.length) return '';
+  const tags = features
+    .slice(0, MAX_FEATURES)
+    .map((feature) => `<span class="cg-site-detail-feature">${escapeHtml(feature)}</span>`)
+    .join('');
+  return `<div class="cg-site-detail-features">${tags}</div>`;
+}
+
+function siteName(site) {
+  if (site.name) return site.name;
+  if (site.vendor_id) return `Site #${site.vendor_id}`;
+  return site.rid || '(unknown)';
+}
+
+function capacityLabel(site, raw) {
+  const min = numberValue(
+    site.min_capacity ??
+      site.minCapacity ??
+      raw.min_capacity ??
+      raw.minCapacity ??
+      raw.min_num_people ??
+      raw.minNumPeople,
+  );
+  const max = numberValue(
+    site.max_capacity ??
+      site.maxCapacity ??
+      raw.max_capacity ??
+      raw.maxCapacity ??
+      raw.max_num_people ??
+      raw.maxNumPeople ??
+      raw.capacity_rating,
+  );
+  if (min != null && max != null && min !== max) return `${min}-${max} people`;
+  if (max != null) return `Up to ${max} people`;
+  if (min != null) return `${min}+ people`;
+  return '';
+}
+
+function equipmentLabel(raw) {
+  return itemList(raw.allowed_equipment ?? raw.allowedEquipment ?? raw.equipment)
+    .slice(0, 4)
+    .join(', ');
+}
+
+function featureLabels(raw) {
+  const labels = [
+    ...attributeLabels(raw.defined_attributes ?? raw.definedAttributes),
+    ...attributeLabels(raw.attributes),
+    ...attributeLabels(raw.campsite_rules ?? raw.campsiteRules),
+    ...attributeLabels(raw.supplemental_camping ?? raw.supplementalCamping),
+  ];
+  return unique(labels.map((label) => truncateText(compactText(label), 84)).filter(Boolean));
+}
+
+function attributeLabels(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => attributeLabels(item));
+  }
+  if (value && typeof value === 'object') {
+    const name = firstString(
+      value.name,
+      value.label,
+      value.title,
+      value.display_name,
+      value.displayName,
+      value.attribute_name,
+      value.attributeName,
+      value.description,
+    );
+    const rawValue =
+      value.value ??
+      value.values ??
+      value.attribute_value ??
+      value.attributeValue ??
+      value.boolean_value ??
+      value.booleanValue;
+    const formatted = formatValue(rawValue);
+    if (name && formatted && formatted !== 'true') return [`${name}: ${formatted}`];
+    if (name) return [name];
+    return Object.entries(value)
+      .filter(([key]) => !/^id$/i.test(key))
+      .map(([key, entryValue]) => `${humanize(key)}: ${formatValue(entryValue)}`)
+      .filter((label) => !label.endsWith(': '));
+  }
+  const text = formatValue(value);
+  return text ? [text] : [];
+}
+
+function itemList(value) {
+  if (Array.isArray(value)) {
+    return value.flatMap((item) => itemList(item));
+  }
+  if (value && typeof value === 'object') {
+    const label = firstString(
+      value.name,
+      value.label,
+      value.title,
+      value.description,
+      value.equipment_name,
+      value.equipmentName,
+    );
+    return label ? [label] : [];
+  }
+  const text = formatValue(value);
+  return text ? [text] : [];
+}
+
+function formatValue(value) {
+  if (value == null || value === false) return '';
+  if (value === true) return 'true';
+  if (typeof value === 'number') return Number.isFinite(value) ? String(value) : '';
+  if (typeof value === 'string') return stripHtml(value);
+  if (Array.isArray(value)) return value.map(formatValue).filter(Boolean).join(', ');
+  if (typeof value === 'object') {
+    return firstString(value.name, value.label, value.title, value.description, value.value);
+  }
+  return '';
+}
+
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return stripHtml(value);
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return '';
+}
+
+function descriptionText(value) {
+  const text = compactText(formatValue(value));
+  if (!text) return '';
+  return text.length > 260 ? `${text.slice(0, 257).trim()}...` : text;
+}
+
+function stripHtml(value) {
+  return String(value)
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function compactText(value) {
+  return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+function truncateText(value, maxLength) {
+  if (!value || value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength - 3).trim()}...`;
+}
+
+function humanize(key) {
+  return String(key)
+    .replace(/[_-]+/g, ' ')
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function numberValue(value) {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string' && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return null;
+}
+
+function objectValue(value) {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+}
+
+function unique(values) {
+  const seen = new Set();
+  const out = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function findImageUrl(site) {
+  const urls = [];
+  collectImageUrls(site.raw, urls);
+  collectImageUrls(site, urls);
+  return urls[0] || '';
+}
+
+function collectImageUrls(value, urls, key = '', seen = new WeakSet(), depth = 0) {
+  if (urls.length > 0 || value == null || depth > 6) return;
+  if (typeof value === 'string') {
+    if (isPlausibleImageUrl(value, key)) urls.push(value);
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) collectImageUrls(item, urls, key, seen, depth + 1);
+    return;
+  }
+  if (typeof value !== 'object') return;
+  if (seen.has(value)) return;
+  seen.add(value);
+  for (const [childKey, childValue] of Object.entries(value)) {
+    collectImageUrls(childValue, urls, childKey, seen, depth + 1);
+    if (urls.length > 0) return;
+  }
+}
+
+function isPlausibleImageUrl(value, key) {
+  if (!/^https?:\/\//i.test(value)) return false;
+  const normalizedKey = String(key).toLowerCase();
+  if (normalizedKey.includes('map')) return false;
+  const keyLooksLikeImage = /(image|img|photo|media|thumbnail|thumb)/i.test(normalizedKey);
+  const urlLooksLikeImage = /\.(avif|gif|jpe?g|png|webp)(\?|#|$)/i.test(value);
+  return keyLooksLikeImage || urlLooksLikeImage;
+}

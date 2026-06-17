@@ -29,6 +29,7 @@ import { fetchPoiReservables } from '../api/reservable-api.js';
 import { isActiveFeature } from '../drawer/chrome.js';
 import { mountCalendarPopover } from './calendar-popover.js';
 import { renderDayDetail } from './day-detail.js';
+import { renderSiteDetail } from './site-detail.js';
 import { renderSiteMatrix } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 import { renderWeekGrid, renderWeekSkeleton } from './week-grid.js';
@@ -108,6 +109,13 @@ function makeContext(host, feature, signal) {
     matrixError: null,
     matrixScrollLeft: 0,
     matrixRequestSeq: 0,
+    matrixFilters: {
+      query: '',
+      loop: '',
+      type: '',
+      sort: 'fit',
+    },
+    selectedSiteRid: null,
     cacheBlock: null,
     summary: '',
     season: null,
@@ -144,6 +152,7 @@ function renderShell(ctx) {
       ${ctx.availabilityView === 'week' ? renderWeekNav(ctx) : ''}
       ${renderAvailabilitySurface(ctx)}
       <div class="cg-freshness">${renderFreshness(ctx)}</div>
+      ${renderSelectedSiteDetail(ctx)}
       ${renderDetail(ctx)}
       ${renderSiteList({
         state: ctx.sitesState,
@@ -245,6 +254,9 @@ function renderAvailabilitySurface(ctx) {
     error: ctx.sitesError,
     selectedDate: ctx.selectedDate,
     siteColumnWidth: ctx.siteColumnWidth,
+    minNights: ctx.minNights,
+    filters: ctx.matrixFilters,
+    selectedSiteRid: ctx.selectedSiteRid,
     loadingMore: ctx.matrixLoading,
     loadMoreError: ctx.matrixError,
     showToday: shouldShowMatrixToday(ctx),
@@ -270,6 +282,22 @@ function renderDetail(ctx) {
   });
 }
 
+function renderSelectedSiteDetail(ctx) {
+  if (ctx.availabilityView !== 'table') return '';
+  const site = selectedMatrixSite(ctx);
+  if (!site) return '';
+  return renderSiteDetail({
+    site,
+    selectedDate: ctx.selectedDate,
+    minNights: ctx.minNights,
+  });
+}
+
+function selectedMatrixSite(ctx) {
+  if (!ctx.selectedSiteRid) return null;
+  return ctx.sites.find((site) => String(site.rid) === String(ctx.selectedSiteRid)) || null;
+}
+
 function selectedAvailabilityDay(ctx) {
   if (ctx.state === 'loading' || ctx.state === 'error' || ctx.state === 'empty' || ctx.state === 'closed_for_season') {
     return null;
@@ -287,6 +315,8 @@ function availableCount(day) {
 
 function wireRoot(ctx) {
   ctx.host.addEventListener('click', (e) => onRootClick(ctx, e));
+  ctx.host.addEventListener('input', (e) => onRootInput(ctx, e));
+  ctx.host.addEventListener('change', (e) => onRootChange(ctx, e));
   ctx.host.addEventListener('pointerdown', (e) => onRootPointerDown(ctx, e));
   ctx.host.addEventListener('scroll', (e) => onRootScroll(ctx, e), true);
 }
@@ -388,6 +418,19 @@ function onRootClick(ctx, e) {
     }
     return;
   }
+  const siteDetailBtn = tgt.closest('[data-site-detail-rid]');
+  if (siteDetailBtn) {
+    const rid = siteDetailBtn.getAttribute('data-site-detail-rid');
+    if (!rid) return;
+    ctx.selectedSiteRid = rid;
+    rerender(ctx);
+    return;
+  }
+  if (tgt.closest('[data-site-detail-close]')) {
+    ctx.selectedSiteRid = null;
+    rerender(ctx);
+    return;
+  }
   if (tgt.closest('[data-matrix-today]')) {
     e.preventDefault();
     jumpMatrixToToday(ctx);
@@ -419,6 +462,56 @@ function onRootClick(ctx, e) {
     e.preventDefault();
     fetchSites(ctx);
   }
+}
+
+function onRootInput(ctx, e) {
+  const tgt = e.target;
+  if (!(tgt instanceof Element)) return;
+  const control = tgt.closest('[data-matrix-filter="query"]');
+  if (!control || !('value' in control)) return;
+  const cursor = typeof control.selectionStart === 'number' ? control.selectionStart : null;
+  if (updateMatrixFilter(ctx, 'query', control.value)) {
+    rerender(ctx);
+    restoreMatrixFilterFocus(ctx, 'query', cursor);
+  }
+}
+
+function onRootChange(ctx, e) {
+  const tgt = e.target;
+  if (!(tgt instanceof Element)) return;
+  const control = tgt.closest('[data-matrix-filter]');
+  if (!control || !('value' in control)) return;
+  const key = control.getAttribute('data-matrix-filter');
+  if (key !== 'loop' && key !== 'type' && key !== 'sort') return;
+  if (updateMatrixFilter(ctx, key, control.value)) {
+    rerender(ctx);
+    restoreMatrixFilterFocus(ctx, key);
+  }
+}
+
+function updateMatrixFilter(ctx, key, value) {
+  const current = ctx.matrixFilters || {};
+  const nextValue = typeof value === 'string' ? value : '';
+  if ((current[key] || '') === nextValue) return false;
+  ctx.matrixFilters = {
+    query: current.query || '',
+    loop: current.loop || '',
+    type: current.type || '',
+    sort: current.sort || 'fit',
+    [key]: nextValue,
+  };
+  return true;
+}
+
+function restoreMatrixFilterFocus(ctx, key, cursor = null) {
+  window.requestAnimationFrame?.(() => {
+    const control = ctx.host.querySelector(`[data-matrix-filter="${key}"]`);
+    if (!(control instanceof HTMLElement)) return;
+    control.focus({ preventScroll: true });
+    if (typeof cursor === 'number' && 'setSelectionRange' in control) {
+      control.setSelectionRange(cursor, cursor);
+    }
+  });
 }
 
 function onRootScroll(ctx, e) {
