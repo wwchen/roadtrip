@@ -243,6 +243,7 @@ private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
     val status = raw?.trim()
     if (status.isNullOrEmpty()) return AvailabilityStatus.UNKNOWN
     return when {
+        status.equals("null", true) -> AvailabilityStatus.UNKNOWN
         status.equals("Available", true) || status.equals("Open", true) -> AvailabilityStatus.AVAILABLE
         status.equals("Not Reservable", true) -> AvailabilityStatus.FIRST_COME
         status.equals("Closed", true) -> AvailabilityStatus.CLOSED
