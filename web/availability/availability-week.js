@@ -74,6 +74,7 @@ function makeContext(host, feature, signal) {
     state: 'loading', // 'loading' | 'success' | 'empty' | 'closed_for_season' | 'error'
     days: null,
     matrixDays: null,
+    matrixPendingDays: null,
     matrixLoading: false,
     matrixEnd: false,
     matrixError: null,
@@ -170,7 +171,7 @@ function renderBody(ctx) {
 
 function renderAvailabilitySurface(ctx) {
   if (ctx.state !== 'success') return renderBody(ctx);
-  const days = matrixAvailabilityDays(ctx);
+  const days = matrixAvailabilityDaysWithPending(ctx);
   return renderSiteMatrix({
     state: ctx.sitesState,
     reservables: ctx.sites,
@@ -501,6 +502,9 @@ async function fetchMoreMatrixDays(ctx) {
   const requestSeq = ++ctx.matrixRequestSeq;
   ctx.matrixLoading = true;
   ctx.matrixError = null;
+  ctx.matrixPendingDays = Array.from({ length: WEEK_DAYS }, (_, i) =>
+    isoDate(addDays(nextStart, i)),
+  );
   rerender(ctx);
   try {
     const resp = await requestPoiAvailability(ctx.poiId, {
@@ -533,6 +537,7 @@ async function fetchMoreMatrixDays(ctx) {
   } finally {
     if (requestSeq === ctx.matrixRequestSeq) {
       ctx.matrixLoading = false;
+      ctx.matrixPendingDays = null;
       rerender(ctx);
     }
   }
@@ -677,6 +682,7 @@ function restoreMatrixScroll(ctx) {
 
 function resetMatrixRange(ctx) {
   ctx.matrixDays = null;
+  ctx.matrixPendingDays = null;
   ctx.matrixLoading = false;
   ctx.matrixEnd = false;
   ctx.matrixError = null;
@@ -686,6 +692,13 @@ function resetMatrixRange(ctx) {
 
 function matrixAvailabilityDays(ctx) {
   return Array.isArray(ctx.matrixDays) ? ctx.matrixDays : (Array.isArray(ctx.days) ? ctx.days : []);
+}
+
+function matrixAvailabilityDaysWithPending(ctx) {
+  const real = matrixAvailabilityDays(ctx);
+  const pending = Array.isArray(ctx.matrixPendingDays) ? ctx.matrixPendingDays : [];
+  if (pending.length === 0) return real;
+  return [...real, ...pending.map((date) => ({ date, placeholder: true }))];
 }
 
 function placeholderMatrixDays(ctx) {

@@ -299,9 +299,6 @@ function matrixScrollStyle(siteColumnWidth, dateCount) {
 }
 
 function renderLoadMoreStatus({ loadingMore, loadMoreError }) {
-  if (loadingMore) {
-    return '<div class="cg-site-matrix-load-status" aria-live="polite">Loading next week...</div>';
-  }
   if (loadMoreError) {
     return `<div class="cg-site-matrix-load-status cg-site-matrix-error">${escapeHtml(loadMoreError)}</div>`;
   }
@@ -310,6 +307,13 @@ function renderLoadMoreStatus({ loadingMore, loadMoreError }) {
 
 function dateHeaderHtml(day) {
   const date = day.date;
+  if (day.placeholder) {
+    return `
+      <th scope="col" class="cg-site-matrix-date cg-site-matrix-skeleton-cell">
+        <span class="cg-site-matrix-skeleton-bar cg-site-matrix-skeleton-meta"></span>
+      </th>
+    `;
+  }
   const parsed = new Date(`${date}T00:00:00Z`);
   const dow = DOW_LABELS[parsed.getUTCDay()] || '';
   const dayNum = parseInt(date.slice(8, 10), 10);
@@ -365,6 +369,13 @@ function siteLabelHtml(row, siteLabel, siteTitle) {
 }
 
 function cellHtml({ row, day, availableIds, selectedDate, siteLabel }) {
+  if (day.placeholder) {
+    return `
+      <td class="cg-site-matrix-cell cg-site-matrix-skeleton-cell">
+        <span class="cg-site-matrix-skeleton-bar cg-site-matrix-skeleton-pill"></span>
+      </td>
+    `;
+  }
   const state = cellState(row, day, availableIds);
   const isSelected = selectedDate === day.date;
   const selectedClass = isSelected ? ' is-selected' : '';
