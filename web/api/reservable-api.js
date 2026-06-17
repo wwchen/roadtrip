@@ -51,6 +51,10 @@ export function searchReservables(params = {}) {
  * @param {AbortSignal}   [opts.signal]
  */
 export function fetchPoiReservables(poiId, { type, siteType, start, minNights, signal } = {}) {
+  return jsonGetOk(poiReservablesUrl(poiId, { type, siteType, start, minNights }), { signal });
+}
+
+export function poiReservablesUrl(poiId, { type, siteType, start, minNights } = {}) {
   const params = new URLSearchParams();
   if (type) params.set('type', type);
   if (siteType) params.set('site_type', siteType);
@@ -58,7 +62,7 @@ export function fetchPoiReservables(poiId, { type, siteType, start, minNights, s
   if (minNights != null) params.set('min_nights', String(minNights));
   const qs = params.toString();
   const suffix = qs ? `?${qs}` : '';
-  return jsonGetOk(`/api/poi/${encodeURIComponent(poiId)}/reservables${suffix}`, { signal });
+  return `/api/poi/${encodeURIComponent(poiId)}/reservables${suffix}`;
 }
 
 /**
