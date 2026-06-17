@@ -1,7 +1,6 @@
 // Availability table component. Mounts inside the campground drawer and owns:
 //
 //   - the visible week start (LocalDate),
-//   - stay length for local visualization (default 1, persisted in localStorage),
 //   - the selected day,
 //   - the in-flight controller (skeleton timer, AbortSignal),
 //   - the cached list of the user's active watches (for badges).
@@ -23,15 +22,12 @@ import { renderSiteDetail } from './site-detail.js';
 import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 
-const STORAGE_KEY_STAY_LENGTH = 'cg.stayLength';
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
-const DEFAULT_STAY_LENGTH = 1;
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
 const LEGACY_DEFAULT_SITE_COLUMN_WIDTH = 178;
 const MIN_SITE_COLUMN_WIDTH = 88;
 const MAX_SITE_COLUMN_WIDTH = 270;
 const MATRIX_SCROLL_LOAD_THRESHOLD_PX = 140;
-const STAY_LENGTH_CHIPS = [1, 2, 3, 7];
 const WEEK_DAYS = 7;
 const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
@@ -73,7 +69,6 @@ function makeContext(host, feature, signal) {
     poiId: feature.id,
     signal,
     weekStart: startOfTodayUtc(),
-    stayLength: loadStayLength(),
     siteColumnWidth: loadSiteColumnWidth(),
     selectedDate: null,
     state: 'loading', // 'loading' | 'success' | 'empty' | 'closed_for_season' | 'error'
@@ -88,7 +83,7 @@ function makeContext(host, feature, signal) {
       query: '',
       loop: '',
       type: '',
-      sort: 'fit',
+      sort: 'open',
     },
     selectedSiteRid: null,
     selectedSiteDate: null,
@@ -123,7 +118,6 @@ function renderShell(ctx) {
   const sitesDay = selectedDay && availableCount(selectedDay) > 0 ? selectedDay : null;
   return `
     <section class="cg-availability">
-      ${renderStayLengthRow(ctx)}
       ${renderAvailabilitySurface(ctx)}
       <div class="cg-freshness">${renderFreshness(ctx)}</div>
       ${renderSelectedSiteDetail(ctx)}
@@ -135,23 +129,9 @@ function renderShell(ctx) {
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
         selectedDay: sitesDay,
+        selectedEndDate: sitesDay ? stayEndDate(ctx, sitesDay.date) : null,
       })}
     </section>
-  `;
-}
-
-function renderStayLengthRow(ctx) {
-  const chips = STAY_LENGTH_CHIPS.map(
-    (n) =>
-      `<button type="button" class="cg-chip ${n === ctx.stayLength ? 'cg-chip-active' : ''}" data-stay-length="${n}">${n}</button>`,
-  ).join('');
-  return `
-    <div class="cg-nights-row">
-      <div class="cg-nights-group">
-        <span class="cg-nights-label">Stay length</span>
-        ${chips}
-      </div>
-    </div>
   `;
 }
 
@@ -198,7 +178,6 @@ function renderAvailabilitySurface(ctx) {
     error: ctx.sitesError,
     selectedDate: null,
     siteColumnWidth: ctx.siteColumnWidth,
-    stayLength: ctx.stayLength,
     filters: ctx.matrixFilters,
     selectedSiteRid: ctx.selectedSiteRid,
     loadingMore: ctx.matrixLoading,
@@ -231,6 +210,7 @@ function renderSelectedSiteDetail(ctx) {
   return renderSiteDetail({
     site,
     selectedDate: ctx.selectedSiteDate,
+    selectedEndDate: ctx.selectedSiteDate ? stayEndDate(ctx, ctx.selectedSiteDate) : null,
   });
 }
 
@@ -275,24 +255,9 @@ function onRootClick(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
 
-  const chipBtn = tgt.closest('[data-stay-length]');
-  if (chipBtn) {
-    const n = parseInt(chipBtn.getAttribute('data-stay-length'), 10);
-    if (Number.isFinite(n) && n !== ctx.stayLength) {
-      ctx.stayLength = n;
-      saveStayLength(n);
-      if (ctx.selectedDate) {
-        fetchSites(ctx);
-      } else {
-        rerender(ctx);
-      }
-    }
-    return;
-  }
-
-  const matrixDateBtn = tgt.closest('[data-matrix-date]');
+  const matrixDateBtn = tgt.closest('[data-matrix-date], .cg-day[data-date]');
   if (matrixDateBtn) {
-    const date = matrixDateBtn.getAttribute('data-matrix-date');
+    const date = matrixDateBtn.getAttribute('data-matrix-date') || matrixDateBtn.getAttribute('data-date');
     if (!date) return;
     const selected = ctx.selectedDate !== date;
     ctx.selectedDate = selected ? date : null;
@@ -385,7 +350,7 @@ function updateMatrixFilter(ctx, key, value) {
     query: current.query || '',
     loop: current.loop || '',
     type: current.type || '',
-    sort: current.sort || 'fit',
+    sort: current.sort || 'open',
     [key]: nextValue,
   };
   return true;
@@ -576,19 +541,11 @@ async function fetchMoreMatrixDays(ctx) {
 async function fetchSites(ctx) {
   if (ctx.poiId == null) return;
   const requestSeq = ++ctx.sitesRequestSeq;
-  const start = ctx.selectedDate;
   ctx.sitesState = 'loading';
   ctx.sitesError = null;
   rerender(ctx);
   try {
-    const dateWindow = start
-      ? {
-          startDate: start,
-          endDate: stayEndDate(ctx, start),
-        }
-      : {};
     const json = await fetchPoiReservables(ctx.poiId, {
-      ...dateWindow,
       signal: ctx.signal,
     });
     if (ctx.signal?.aborted) return;
@@ -680,30 +637,11 @@ function buildWatchPayload(ctx, date, endDate) {
 // ---- helpers --------------------------------------------------------------
 
 function stayEndDate(ctx, startDate) {
-  return isoDate(addDays(parseIsoDate(startDate), ctx.stayLength));
+  return isoDate(addDays(parseIsoDate(startDate), 1));
 }
 
 function watchWindowKey(startDate, endDate) {
   return `${startDate}|${endDate}`;
-}
-
-function loadStayLength() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY_STAY_LENGTH);
-    const n = parseInt(raw, 10);
-    if (Number.isFinite(n) && n > 0 && n < 32) return n;
-  } catch {
-    // Non-fatal: default silently.
-  }
-  return DEFAULT_STAY_LENGTH;
-}
-
-function saveStayLength(n) {
-  try {
-    localStorage.setItem(STORAGE_KEY_STAY_LENGTH, String(n));
-  } catch {
-    // Non-fatal: just won't persist.
-  }
 }
 
 function loadSiteColumnWidth() {

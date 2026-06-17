@@ -807,6 +807,22 @@ pre {
   font-weight: 600;
 }
 
+.cg-site-matrix-date-button {
+  width: 100%;
+  min-height: 46px;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+
+.cg-site-matrix-date-button:hover,
+.cg-site-matrix-date-button:focus-visible {
+  background: rgba(255,255,255,0.05);
+  outline: none;
+}
+
 .cg-site-matrix-date span,
 .cg-site-matrix-date strong {
   display: block;

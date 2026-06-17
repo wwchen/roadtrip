@@ -3,10 +3,11 @@
 // and does not fetch extra provider data.
 
 import { escapeHtml } from '../core.js';
+import { reservationUrlFromTemplate } from './booking-links.js';
 
 const MAX_FEATURES = 12;
 
-export function renderSiteDetail({ site, selectedDate = null } = {}) {
+export function renderSiteDetail({ site, selectedDate = null, selectedEndDate = null } = {}) {
   if (!site) return '';
   const raw = objectValue(site.raw);
   const tags = objectValue(site.tags);
@@ -15,7 +16,8 @@ export function renderSiteDetail({ site, selectedDate = null } = {}) {
   const description = descriptionText(site.description ?? raw.description ?? raw.campsite_description);
   const facts = detailFacts(site, raw, tags);
   const features = featureLabels(raw, tags);
-  const url = site.reservation_url || site.reservationUrl || '';
+  const url = reservationUrlFromTemplate(site, { startDate: selectedDate, endDate: selectedEndDate });
+  const bookLabel = bookingLabel(site, url);
   const subtitle = selectedDate || '';
 
   return `
@@ -33,7 +35,7 @@ export function renderSiteDetail({ site, selectedDate = null } = {}) {
       ${renderFeatures(features)}
       ${
         url
-          ? `<a class="cg-site-detail-book" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">Book on provider site</a>`
+          ? `<a class="cg-site-detail-book" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(bookLabel)}</a>`
           : ''
       }
     </section>
@@ -51,6 +53,41 @@ function detailFacts(site, raw, tags) {
   addFact(facts, 'Provider', site.vendor);
   addFact(facts, 'Provider ID', site.vendor_id || site.vendorId);
   return facts;
+}
+
+function bookingLabel(site, url) {
+  const agency = agencyLabel(site, url);
+  return agency ? `Book on ${agency}` : 'Book';
+}
+
+function agencyLabel(site, url) {
+  const host = hostFromUrl(site.reservation_url_template || url);
+  if (host === 'recreation.gov' || host === 'www.recreation.gov') return 'Recreation.gov';
+  if (host === 'reservation.pc.gc.ca') return 'Parks Canada';
+  if (host === 'camping.bcparks.ca' || host === 'discovercamping.ca') return 'BC Parks';
+  if (host === 'washington.goingtocamp.com') return 'Washington State Parks';
+
+  const vendor = String(site.vendor || '').toLowerCase();
+  if (vendor === 'recgov') return 'Recreation.gov';
+  if (vendor === 'aspira_pc') return 'Parks Canada';
+  if (vendor === 'aspira_bc') return 'BC Parks';
+  if (vendor === 'aspira_wa') return 'Washington State Parks';
+  if (vendor.startsWith('aspira_')) return 'Aspira';
+  return labelFromHost(host) || humanize(vendor);
+}
+
+function hostFromUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+}
+
+function labelFromHost(host) {
+  const base = String(host || '').replace(/^www\./, '').split('.')[0];
+  return base ? humanize(base) : '';
 }
 
 function addFact(facts, label, value) {
