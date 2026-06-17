@@ -178,6 +178,70 @@ class RecGovAvailabilityServiceTest {
     }
 
     @Test
+    fun `catalog availability keeps requested sites omitted by upstream as unknown`() {
+        val body =
+            encodeAvailabilityJson(
+                runBlocking {
+                    fetchAndClassifyRecgovCatalog(
+                        cache = cacheReturning(emptyMap()),
+                        recgovId = "232447",
+                        campsiteIds = setOf("100", "200"),
+                        startDate = today,
+                        endDate = today.plusDays(1),
+                        force = false,
+                    )
+                },
+            )
+        val day = parseJson(body)["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
+        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
+        assertEquals(2, day["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(
+            "unknown",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:100"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "unknown",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:200"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `reservable availability keeps requested site omitted by upstream as unknown`() {
+        val body =
+            encodeAvailabilityJson(
+                runBlocking {
+                    fetchAndClassifyRecgovReservable(
+                        cache = cacheReturning(emptyMap()),
+                        recgovId = "232447",
+                        campsiteId = "100",
+                        startDate = today,
+                        endDate = today.plusDays(1),
+                        force = false,
+                    )
+                },
+            )
+        val json = parseJson(body)
+        val day = json["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals("site:recgov:100", json["reservable_id"]!!.jsonPrimitive.content)
+        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
+        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
+        assertEquals(1, day["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(
+            "unknown",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:100"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
     fun `upstream error propagates so route layer can 503`() {
         val cache =
             CachedAvailability(
