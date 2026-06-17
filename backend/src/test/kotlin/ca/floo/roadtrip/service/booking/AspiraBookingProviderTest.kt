@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.booking
 import ca.floo.roadtrip.client.AspiraAvailability
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraBookingProvider
 import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraTenant
 import kotlinx.coroutines.runBlocking
@@ -63,6 +64,7 @@ class AspiraBookingProviderTest {
                 )
 
             assertEquals(1, dto.availability.single().availableCount)
+            assertEquals(AvailabilityStatus.AVAILABLE, dto.availability.single().status)
             assertEquals(listOf("site:aspira_pc:100"), dto.availability.single().availableReservableIds)
         }
 
@@ -111,7 +113,7 @@ class AspiraBookingProviderTest {
                     )
 
                 assertEquals("site:$vendor:-2147478966", dto.reservableId)
-                assertEquals("available", dto.availability.single().status)
+                assertEquals(AvailabilityStatus.AVAILABLE, dto.availability.single().status)
             }
         }
 

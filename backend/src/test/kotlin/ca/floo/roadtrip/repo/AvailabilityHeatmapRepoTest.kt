@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.jooq.DSLContext
@@ -78,13 +79,13 @@ class AvailabilityHeatmapRepoTest {
         targetDate: LocalDate,
         observedAt: OffsetDateTime,
         available: Boolean,
-        status: String = if (available) "available" else "booked",
+        status: String = if (available) "available" else "reserved",
     ) {
         ctx.execute(
             """
             INSERT INTO availability_snapshot (
                 reservable_id, observed_at, target_date, status, available, day_payload
-            ) VALUES (?::bigint, ?::timestamptz, ?::date, ?, ?::boolean, '{}'::jsonb)
+            ) VALUES (?::bigint, ?::timestamptz, ?::date, ?::availability_status, ?::boolean, '{}'::jsonb)
             """.trimIndent(),
             reservableId,
             observedAt.toString(),
@@ -114,7 +115,7 @@ class AvailabilityHeatmapRepoTest {
         assertEquals(rid, cells[0].reservableId)
         assertEquals(date, cells[0].targetDate)
         assertEquals(true, cells[0].available)
-        assertEquals("available", cells[0].status)
+        assertEquals(AvailabilityStatus.AVAILABLE, cells[0].status)
     }
 
     @Test
@@ -123,12 +124,12 @@ class AvailabilityHeatmapRepoTest {
         val date = LocalDate.parse("2026-07-04")
         insertSnapshot(rid, date, now().minusMinutes(5), available = false)
         insertSnapshot(rid, date, now().minusMinutes(2), available = true)
-        insertSnapshot(rid, date, now().minusMinutes(1), available = false, status = "booked")
+        insertSnapshot(rid, date, now().minusMinutes(1), available = false, status = "reserved")
         val repo = AvailabilityHeatmapRepo(ctx)
         val cells = repo.loadHeatmap(listOf(rid), listOf(date))
         assertEquals(1, cells.size)
         assertEquals(false, cells[0].available)
-        assertEquals("booked", cells[0].status)
+        assertEquals(AvailabilityStatus.RESERVED, cells[0].status)
     }
 
     @Test
@@ -138,15 +139,31 @@ class AvailabilityHeatmapRepoTest {
         val d1 = LocalDate.parse("2026-07-04")
         val d2 = LocalDate.parse("2026-07-05")
         insertSnapshot(r1, d1, now().minusMinutes(1), available = true)
-        insertSnapshot(r1, d2, now().minusMinutes(1), available = false, status = "booked")
+        insertSnapshot(r1, d2, now().minusMinutes(1), available = false, status = "reserved")
         insertSnapshot(r2, d1, now().minusMinutes(1), available = false, status = "closed")
         val repo = AvailabilityHeatmapRepo(ctx)
         val cells = repo.loadHeatmap(listOf(r1, r2), listOf(d1, d2))
         assertEquals(3, cells.size)
         val byPair = cells.associateBy { it.reservableId to it.targetDate }
-        assertEquals("available", byPair[r1 to d1]!!.status)
-        assertEquals("booked", byPair[r1 to d2]!!.status)
-        assertEquals("closed", byPair[r2 to d1]!!.status)
+        assertEquals(AvailabilityStatus.AVAILABLE, byPair[r1 to d1]!!.status)
+        assertEquals(AvailabilityStatus.RESERVED, byPair[r1 to d2]!!.status)
+        assertEquals(AvailabilityStatus.CLOSED, byPair[r2 to d1]!!.status)
         assertEquals(null, byPair[r2 to d2])
+    }
+
+    @Test
+    fun `heatmap preserves first come and unknown enum statuses`() {
+        val r1 = seedReservable("100")
+        val r2 = seedReservable("200")
+        val date = LocalDate.parse("2026-07-04")
+        insertSnapshot(r1, date, now().minusMinutes(1), available = false, status = "first_come")
+        insertSnapshot(r2, date, now().minusMinutes(1), available = false, status = "unknown")
+        val repo = AvailabilityHeatmapRepo(ctx)
+
+        val cells = repo.loadHeatmap(listOf(r1, r2), listOf(date))
+
+        val byReservable = cells.associateBy { it.reservableId }
+        assertEquals(AvailabilityStatus.FIRST_COME, byReservable[r1]!!.status)
+        assertEquals(AvailabilityStatus.UNKNOWN, byReservable[r2]!!.status)
     }
 }

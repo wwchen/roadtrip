@@ -7,6 +7,7 @@ import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.DayClassification
 import ca.floo.roadtrip.service.api.availabilityResponseDto
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
@@ -725,7 +726,7 @@ class ReservableRoutesTest {
                     SELECT
                         r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,
                         s.target_date,
-                        s.status,
+                        s.status::text AS status,
                         s.available,
                         s.day_payload
                     FROM availability_snapshot s
@@ -1074,7 +1075,7 @@ class ReservableRoutesTest {
                     val availableCount = availableIds?.size ?: 1
                     DayClassification(
                         date = startDate.plusDays(offset.toLong()).toString(),
-                        status = if (availableIds?.isEmpty() == true) "booked" else "available",
+                        status = if (availableIds?.isEmpty() == true) AvailabilityStatus.RESERVED else AvailabilityStatus.AVAILABLE,
                         availableCount = availableCount,
                         total = availableIds?.size ?: 1,
                         availableReservableIds = availableIds,
@@ -1158,7 +1159,7 @@ class ReservableRoutesTest {
                 (0 until days).map { offset ->
                     DayClassification(
                         date = startDate.plusDays(offset.toLong()).toString(),
-                        status = if (availableIds.isEmpty()) "booked" else "available",
+                        status = if (availableIds.isEmpty()) AvailabilityStatus.RESERVED else AvailabilityStatus.AVAILABLE,
                         availableCount = availableIds.size,
                         total = availableIds.size,
                         availableReservableIds = availableIds,

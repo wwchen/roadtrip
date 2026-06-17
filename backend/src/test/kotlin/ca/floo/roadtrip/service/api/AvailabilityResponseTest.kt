@@ -31,10 +31,18 @@ class AvailabilityResponseTest {
                         listOf(
                             DayClassification(
                                 date = "2026-06-10",
-                                status = "available",
+                                status = AvailabilityStatus.AVAILABLE,
                                 availableCount = 3,
                                 total = 5,
                                 availableReservableIds = listOf("site:recgov:100", "site:recgov:200", "site:recgov:300"),
+                                reservableStatuses =
+                                    mapOf(
+                                        "site:recgov:100" to AvailabilityStatus.AVAILABLE,
+                                        "site:recgov:200" to AvailabilityStatus.AVAILABLE,
+                                        "site:recgov:300" to AvailabilityStatus.AVAILABLE,
+                                        "site:recgov:400" to AvailabilityStatus.RESERVED,
+                                        "site:recgov:500" to AvailabilityStatus.FIRST_COME,
+                                    ),
                             ),
                         ),
                     state = "success",
@@ -52,9 +60,47 @@ class AvailabilityResponseTest {
         assertEquals(JsonNull, json["season"])
         assertEquals("2026-06-10", json["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
         assertEquals("2026-06-11", json["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+        assertEquals("available", availabilityDay["status"]!!.jsonPrimitive.content)
         assertEquals(3, availabilityDay["available_count"]!!.jsonPrimitive.int)
         assertEquals(3, availabilityDay["available_reservable_ids"]!!.jsonArray.size)
+        assertEquals(
+            "first_come",
+            availabilityDay["reservable_statuses"]!!
+                .jsonObject["site:recgov:500"]!!
+                .jsonPrimitive.content,
+        )
         assertEquals(false, json["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test
+    fun `unknown day rollup is not closed for season`() {
+        val day =
+            dayClassificationFromStatuses(
+                date = "2026-06-10",
+                statuses = listOf(AvailabilityStatus.UNKNOWN),
+            )
+
+        assertEquals(AvailabilityStatus.UNKNOWN, day.status)
+        assertEquals("success", classifyWindowState(listOf(day)))
+        assertEquals("Availability unknown", summarizeWindow(1, listOf(day), "success"))
+    }
+
+    @Test
+    fun `summary has reserved fallback for non-bookable known statuses`() {
+        val days =
+            listOf(
+                dayClassificationFromStatuses(
+                    date = "2026-06-10",
+                    statuses = listOf(AvailabilityStatus.RESERVED),
+                ),
+                dayClassificationFromStatuses(
+                    date = "2026-06-11",
+                    statuses = listOf(AvailabilityStatus.CLOSED),
+                ),
+            )
+
+        assertEquals("success", classifyWindowState(days))
+        assertEquals("Reserved next 2 days", summarizeWindow(2, days, "success"))
     }
 
     @Test
@@ -106,8 +152,8 @@ class AvailabilityResponseTest {
                 )
 
             assertEquals("site:aspira_bc:-2147478966", dto.reservableId)
-            assertEquals("available", dto.availability[0].status)
-            assertEquals("available", dto.availability[1].status)
+            assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
+            assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[1].status)
         }
 
     @Test
@@ -141,7 +187,7 @@ class AvailabilityResponseTest {
                 )
 
             assertEquals(2, dto.availability.single().availableCount)
-            assertEquals("available", dto.availability.single().status)
+            assertEquals(AvailabilityStatus.AVAILABLE, dto.availability.single().status)
             assertEquals(
                 listOf("site:aspira_bc:-2147478966", "site:aspira_bc:-2147478967"),
                 dto.availability.single().availableReservableIds,
@@ -213,6 +259,44 @@ class AvailabilityResponseTest {
         }
 
     @Test
+    fun `aspira catalog missing resource day is unknown with reservable status`() =
+        runBlocking {
+            val cache =
+                CachedAspiraAvailability(
+                    fetcher = { _, mapId, _, _ ->
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink = emptyMap(),
+                            byResource = emptyMap(),
+                        )
+                    },
+                )
+
+            val dto =
+                fetchAndClassifyAspiraCatalog(
+                    cache = cache,
+                    host = "reservation.pc.gc.ca",
+                    parentMapId = -999,
+                    reservables =
+                        listOf(
+                            AspiraCatalogReservable("site:aspira_pc:100", "100", -101),
+                        ),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
+                    force = false,
+                )
+
+            assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
+            assertEquals(0, dto.availability.single().availableCount)
+            assertEquals(1, dto.availability.single().total)
+            assertEquals(
+                mapOf("site:aspira_pc:100" to AvailabilityStatus.UNKNOWN),
+                dto.availability.single().reservableStatuses,
+            )
+        }
+
+    @Test
     fun `aspira catalog availability uses occupancy search availability`() =
         runBlocking {
             val cache =
@@ -260,7 +344,7 @@ class AvailabilityResponseTest {
             assertEquals(1, dto.availability[0].availableCount)
             assertEquals(3, dto.availability[0].total)
             assertEquals(listOf("site:aspira_pc:100"), dto.availability[0].availableReservableIds)
-            assertEquals("booked", dto.availability[1].status)
+            assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
             assertEquals(0, dto.availability[1].availableCount)
         }
 }
