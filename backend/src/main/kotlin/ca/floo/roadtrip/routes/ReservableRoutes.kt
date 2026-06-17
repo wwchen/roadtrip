@@ -33,6 +33,12 @@ import java.nio.charset.StandardCharsets
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
+private const val RESERVATION_TEMPLATE_START_DATE = "{start_date}"
+private const val RESERVATION_TEMPLATE_END_DATE = "{end_date}"
+private const val RESERVATION_TEMPLATE_NIGHTS = "{nights}"
+private val ASPIRA_TEMPLATE_START_DATE: LocalDate = LocalDate.parse("2001-01-02")
+private val ASPIRA_TEMPLATE_END_DATE: LocalDate = LocalDate.parse("2001-01-03")
+
 @OptIn(ExperimentalSerializationApi::class)
 private val reservableRoutesJson =
     Json {
@@ -156,13 +162,13 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         summary = "Reservables linked to a POI"
         description =
             "Lists reservables at one active POI. `type` defaults to `site`; " +
-            "future reservable types can be added without changing the response envelope."
+            "future reservable types can be added without changing the response envelope. " +
+            "Providers that support booking links return reservation_url_template with " +
+            "{start_date}, {end_date}, and optional {nights} placeholders."
         request {
             pathParameter<Long>("id") { description = "pois.id primary key" }
             queryParameter<String>("type") { description = "Reservable type, defaults to site." }
             queryParameter<String>("site_type") { description = "Optional exact site type filter. Repeat or comma-separate for OR." }
-            queryParameter<String>("start_date") { description = "Optional arrival date for per-site reservation_url links." }
-            queryParameter<String>("end_date") { description = "Optional exclusive departure date for per-site reservation_url links." }
         }
         response {
             code(HttpStatusCode.OK) {
@@ -185,12 +191,11 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         val type =
             parseReservableType(call.request.queryParameters["type"])
                 ?: return@get call.respondReservableError("bad_type", HttpStatusCode.BadRequest)
-        val linkOptions =
-            try {
-                call.reservationUrlOptions()
-            } catch (e: BadReservableQuery) {
-                return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
-            }
+        try {
+            call.rejectBookingLinkParams()
+        } catch (e: BadReservableQuery) {
+            return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
+        }
         val siteTypes = call.queryValues("site_type", "siteType")
 
         val poi =
@@ -211,7 +216,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                     rows.map {
                         it.toSchema(
                             poiIds = listOf(poiId),
-                            reservationUrl = it.reservationUrl(providerRef, linkOptions),
+                            reservationUrlTemplate = it.reservationUrlTemplate(providerRef),
                         )
                     },
             ),
@@ -280,33 +285,10 @@ private fun ApplicationCall.intQuery(
     return value
 }
 
-internal data class ReservationUrlOptions(
-    val startDate: LocalDate?,
-    val endDate: LocalDate?,
-)
-
-private fun ApplicationCall.reservationUrlOptions(): ReservationUrlOptions {
-    if (listOf("start", "min_nights", "minNights").any { request.queryParameters[it] != null }) {
-        throw BadReservableQuery("bad_date_window", "use start_date and end_date")
+private fun ApplicationCall.rejectBookingLinkParams() {
+    if (listOf("start", "start_date", "end_date").any { request.queryParameters[it] != null }) {
+        throw BadReservableQuery("bad_booking_link_params", "booking links use reservation_url_template")
     }
-    val startDate = request.queryParameters["start_date"]?.takeIf { it.isNotBlank() }
-    val endDate = request.queryParameters["end_date"]?.takeIf { it.isNotBlank() }
-    if ((startDate == null) != (endDate == null)) {
-        throw BadReservableQuery("bad_date_window", "use start_date and end_date")
-    }
-    if (startDate == null || endDate == null) {
-        return ReservationUrlOptions(startDate = null, endDate = null)
-    }
-    val parsedStart =
-        runCatching { LocalDate.parse(startDate) }
-            .getOrElse { throw BadReservableQuery("bad_date_window", "use start_date and end_date") }
-    val parsedEnd =
-        runCatching { LocalDate.parse(endDate) }
-            .getOrElse { throw BadReservableQuery("bad_date_window", "use start_date and end_date") }
-    if (!parsedEnd.isAfter(parsedStart)) {
-        throw BadReservableQuery("bad_date_window", "use start_date and end_date")
-    }
-    return ReservationUrlOptions(startDate = parsedStart, endDate = parsedEnd)
 }
 
 private fun ApplicationCall.queryValues(vararg names: String): List<String> =
@@ -319,7 +301,7 @@ private fun ApplicationCall.queryValues(vararg names: String): List<String> =
 
 internal fun Reservable.toSchema(
     poiIds: List<Long> = emptyList(),
-    reservationUrl: String? = null,
+    reservationUrlTemplate: String? = null,
 ): ReservableSchema =
     ReservableSchema(
         rid = rid.encode(),
@@ -329,36 +311,47 @@ internal fun Reservable.toSchema(
         name = name,
         loop = loop,
         siteType = siteType,
-        reservationUrl = reservationUrl,
+        reservationUrlTemplate = reservationUrlTemplate,
         poiIds = poiIds,
         providerRef = providerRef,
         tags = tags,
         raw = raw,
     )
 
-internal fun Reservable.reservationUrl(
-    providerRef: ProviderRef?,
-    options: ReservationUrlOptions,
-): String? =
+internal fun Reservable.reservationUrlTemplate(providerRef: ProviderRef?): String? =
     when {
-        rid.vendor == "recgov" -> recgovReservationUrl(options)
-        rid.vendor.startsWith("aspira_") -> aspiraReservationUrl(providerRef, options)
+        rid.vendor == "recgov" -> recgovReservationUrlTemplate()
+        rid.vendor.startsWith("aspira_") -> aspiraReservationUrlTemplate(providerRef)
         else -> null
     }
 
-private fun Reservable.recgovReservationUrl(options: ReservationUrlOptions): String {
+private fun Reservable.recgovReservationUrlTemplate(): String {
     val base = "https://www.recreation.gov/camping/campsites/${urlEncode(rid.vendorId)}"
-    val startDate = options.startDate ?: return base
-    val endDate = options.endDate ?: return base
-    return "$base?${queryString("startDate" to startDate.toString(), "endDate" to endDate.toString())}"
+    return "$base?startDate=$RESERVATION_TEMPLATE_START_DATE&endDate=$RESERVATION_TEMPLATE_END_DATE"
 }
 
-private fun Reservable.aspiraReservationUrl(
-    providerRef: ProviderRef?,
-    options: ReservationUrlOptions,
-): String? {
-    val startDate = options.startDate ?: return null
-    val endDate = options.endDate ?: return null
+private fun Reservable.aspiraReservationUrlTemplate(providerRef: ProviderRef?): String? {
+    val parts = aspiraReservationLinkParts(providerRef) ?: return null
+    return aspiraReservationUrl(
+        host = parts.host,
+        transactionLocationId = parts.transactionLocationId,
+        mapId = parts.mapId,
+        resourceLocationId = parts.resourceLocationId,
+        startDate = ASPIRA_TEMPLATE_START_DATE,
+        endDate = ASPIRA_TEMPLATE_END_DATE,
+    ).replace(ASPIRA_TEMPLATE_START_DATE.toString(), RESERVATION_TEMPLATE_START_DATE)
+        .replace(ASPIRA_TEMPLATE_END_DATE.toString(), RESERVATION_TEMPLATE_END_DATE)
+        .replace("nights=1", "nights=$RESERVATION_TEMPLATE_NIGHTS")
+}
+
+private data class AspiraReservationLinkParts(
+    val host: String,
+    val transactionLocationId: Long,
+    val mapId: Long,
+    val resourceLocationId: Long?,
+)
+
+private fun Reservable.aspiraReservationLinkParts(providerRef: ProviderRef?): AspiraReservationLinkParts? {
     val parentRef = providerRef as? ProviderRef.Aspira
     val host = aspiraHostForVendor(rid.vendor) ?: return null
     val transactionLocationId =
@@ -372,13 +365,11 @@ private fun Reservable.aspiraReservationUrl(
     val resourceLocationId =
         aspiraProviderRefLong("resourceLocationId")
             ?: parentRef?.resourceLocationId
-    return aspiraReservationUrl(
+    return AspiraReservationLinkParts(
         host = host,
         transactionLocationId = transactionLocationId,
         mapId = mapId,
         resourceLocationId = resourceLocationId,
-        startDate = startDate,
-        endDate = endDate,
     )
 }
 

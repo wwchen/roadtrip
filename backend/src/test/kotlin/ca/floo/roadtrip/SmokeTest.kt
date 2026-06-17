@@ -350,7 +350,7 @@ class SmokeTest {
                               "loop": "A",
                               "site_type": "Tent",
                               "poi_ids": [31337],
-                              "reservation_url": "https://example.test/1",
+                              "reservation_url_template": "https://example.test/book?site=1&start={start_date}&end={end_date}&nights={nights}",
                               "tags": {
                                 "capacity": { "max": 8 },
                                 "equipment": ["Small Tent"],
@@ -375,7 +375,7 @@ class SmokeTest {
                               "loop": "B",
                               "site_type": "RV",
                               "poi_ids": [31337],
-                              "reservation_url": "https://example.test/2"
+                              "reservation_url_template": "https://example.test/2"
                             }
                           ]
                         }
@@ -575,10 +575,12 @@ class SmokeTest {
                           "reservables": [
                             {
                               "rid": "site:matrix:001",
+                              "vendor": "recgov",
+                              "vendor_id": "001",
                               "name": "Site 1",
                               "loop": "A",
                               "site_type": "Tent",
-                              "reservation_url": "https://example.test/1",
+                              "reservation_url_template": "https://www.recreation.gov/camping/campsites/001?startDate={start_date}&endDate={end_date}",
                               "raw": {
                                 "defined_attributes": [
                                   { "definition_id": -32751, "values": [1] },
@@ -586,11 +588,11 @@ class SmokeTest {
                                 ]
                               }
                             },
-                            { "rid": "site:matrix:002", "name": "Site 2", "loop": "A", "site_type": "Tent", "reservation_url": "https://example.test/2" },
-                            { "rid": "site:matrix:003", "name": "Site 3", "loop": "B", "site_type": "RV", "reservation_url": "https://example.test/3" },
-                            { "rid": "site:matrix:004", "name": "Site 4", "loop": "B", "site_type": "RV", "reservation_url": "https://example.test/4" },
-                            { "rid": "site:matrix:005", "name": "Site 5", "loop": "C", "site_type": "Cabin", "reservation_url": "https://example.test/5" },
-                            { "rid": "site:matrix:006", "name": "Site 6", "loop": "C", "site_type": "Cabin", "reservation_url": "https://example.test/6" }
+                            { "rid": "site:matrix:002", "name": "Site 2", "loop": "A", "site_type": "Tent", "reservation_url_template": "https://example.test/2" },
+                            { "rid": "site:matrix:003", "name": "Site 3", "loop": "B", "site_type": "RV", "reservation_url_template": "https://example.test/3" },
+                            { "rid": "site:matrix:004", "name": "Site 4", "loop": "B", "site_type": "RV", "reservation_url_template": "https://example.test/4" },
+                            { "rid": "site:matrix:005", "name": "Site 5", "loop": "C", "site_type": "Cabin", "reservation_url_template": "https://example.test/5" },
+                            { "rid": "site:matrix:006", "name": "Site 6", "loop": "C", "site_type": "Cabin", "reservation_url_template": "https://example.test/6" }
                           ]
                         }
                         """.trimIndent(),
@@ -615,6 +617,7 @@ class SmokeTest {
                     .IsVisibleOptions()
                     .setTimeout(15_000.0),
             )
+            assertThat(page.locator(".cg-availability")).not().containsText("Stay length")
             assertTrue(
                 page.evaluate(
                     """
@@ -652,6 +655,12 @@ class SmokeTest {
                 firstSiteLabel.startsWith("A / Site 1"),
                 "site row title should render as loop / site: $firstSiteLabel",
             )
+            page.locator(".cg-site-matrix-date-button[data-matrix-date=\"2026-06-16\"]").click()
+            assertThat(page.locator(".cg-sites-row[data-rid=\"site:matrix:001\"] .cg-sites-row-book")).containsText("Book")
+            assertThat(page.locator(".cg-sites-row[data-rid=\"site:matrix:001\"] .cg-sites-row-link")).hasAttribute(
+                "href",
+                "https://www.recreation.gov/camping/campsites/001?startDate=2026-06-16&endDate=2026-06-17",
+            )
             page.locator(".cg-site-matrix-site-button").first().click()
             val detailSubtitle =
                 page.evaluate(
@@ -674,6 +683,14 @@ class SmokeTest {
                 detailText.contains("Definition Id") || detailText.contains("Values:"),
                 "site detail should hide unresolved provider attribute ids: $detailText",
             )
+            assertThat(page.locator(".cg-site-detail-book")).hasCount(0)
+            page.locator(".cg-site-matrix-cell-available .cg-site-matrix-cell-button").first().click()
+            assertThat(page.locator(".cg-site-detail-subtitle")).containsText("2026-06-16")
+            assertThat(page.locator(".cg-site-detail-book")).hasAttribute(
+                "href",
+                "https://www.recreation.gov/camping/campsites/001?startDate=2026-06-16&endDate=2026-06-17",
+            )
+            assertThat(page.locator(".cg-site-detail-book")).containsText("Book on Recreation.gov")
             val dateSortControlCount =
                 page.evaluate(
                     """

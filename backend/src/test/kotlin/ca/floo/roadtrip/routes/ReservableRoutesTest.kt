@@ -260,7 +260,7 @@ class ReservableRoutesTest {
             link(m01, otherPoiId)
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/poi/$poiId/reservables?type=site&start_date=2026-07-01&end_date=2026-07-03")
+            val resp = client.get("/api/poi/$poiId/reservables?type=site")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(poiId.toString(), body["poi_id"]!!.jsonPrimitive.content)
@@ -272,16 +272,25 @@ class ReservableRoutesTest {
                     .map { it.jsonObject["rid"]!!.jsonPrimitive.content }
                     .toSet()
             assertEquals(setOf("site:recgov:330257", "site:recgov:330258"), rids)
-            val urls =
+            val templates =
                 body["reservables"]!!
                     .jsonArray
                     .associate {
                         val row = it.jsonObject
-                        row["rid"]!!.jsonPrimitive.content to row["reservation_url"]!!.jsonPrimitive.content
+                        row["rid"]!!.jsonPrimitive.content to row["reservation_url_template"]!!.jsonPrimitive.content
                     }
+            body["reservables"]!!
+                .jsonArray
+                .map { it.jsonObject }
+                .forEach { row ->
+                    assertTrue(
+                        !row.containsKey("reservation_url"),
+                        "rec.gov rows should expose reservation_url_template, not concrete reservation_url",
+                    )
+                }
             assertEquals(
-                "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-03",
-                urls["site:recgov:330257"],
+                "https://www.recreation.gov/camping/campsites/330257?startDate={start_date}&endDate={end_date}",
+                templates["site:recgov:330257"],
             )
             body["reservables"]!!
                 .jsonArray
@@ -292,7 +301,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `poi reservables returns aspira booking links from parent provider ref`() =
+    fun `poi reservables returns aspira booking template from parent provider ref`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -320,7 +329,7 @@ class ReservableRoutesTest {
             link(reservableId, poiId)
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/poi/$poiId/reservables?start_date=2026-07-01&end_date=2026-07-03")
+            val resp = client.get("/api/poi/$poiId/reservables")
             assertEquals(HttpStatusCode.OK, resp.status)
             val row =
                 Json
@@ -329,15 +338,63 @@ class ReservableRoutesTest {
                     .jsonArray
                     .single()
                     .jsonObject
-            val url = row["reservation_url"]!!.jsonPrimitive.content
-            assertTrue(url.startsWith("https://washington.goingtocamp.com/create-booking/results?"), url)
-            assertTrue(url.contains("transactionLocationId=-2147483630"), url)
-            assertTrue(url.contains("mapId=-2147483615"), url)
-            assertTrue(url.contains("startDate=2026-07-01"), url)
-            assertTrue(url.contains("endDate=2026-07-03"), url)
-            assertTrue(url.contains("nights=2"), url)
-            assertTrue(url.contains("resourceLocationId=-2147483624"), url)
-            assertTrue(!url.contains("filterData="), url)
+            assertTrue(
+                !row.containsKey("reservation_url"),
+                "Aspira rows should expose reservation_url_template, not concrete reservation_url",
+            )
+            val template = row["reservation_url_template"]!!.jsonPrimitive.content
+            assertTrue(template.startsWith("https://washington.goingtocamp.com/create-booking/results?"), template)
+            assertTrue(template.contains("transactionLocationId=-2147483630"), template)
+            assertTrue(template.contains("mapId=-2147483615"), template)
+            assertTrue(template.contains("startDate={start_date}"), template)
+            assertTrue(template.contains("endDate={end_date}"), template)
+            assertTrue(template.contains("nights={nights}"), template)
+            assertTrue(template.contains("resourceLocationId=-2147483624"), template)
+        }
+
+    @Test
+    fun `poi reservables returns aspira booking template without dates`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "aspira--2147483630--2147483388",
+                    name = "Deep Tree Park",
+                    providerRefJson =
+                        """
+                        {
+                          "transactionLocationId": -2147483630,
+                          "mapId": -2147483388,
+                          "resourceLocationId": -2147483624
+                        }
+                        """.trimIndent(),
+                    source = "aspira-wa-pins",
+                )
+            val reservableId =
+                seedReservable(
+                    vendor = "aspira_wa",
+                    vendorId = "-100",
+                    source = "aspira-resources-wa",
+                    name = "A",
+                    providerRefJson = """{"mapId":-2147483615,"resourceLocationId":-2147483624}""",
+                )
+            link(reservableId, poiId)
+            application { routing { reservableRoutes(ctx) } }
+
+            val resp = client.get("/api/poi/$poiId/reservables")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val row =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["reservables"]!!
+                    .jsonArray
+                    .single()
+                    .jsonObject
+            assertTrue(!row.containsKey("reservation_url"), "undated Aspira rows should not emit a concrete URL")
+            val template = row["reservation_url_template"]!!.jsonPrimitive.content
+            assertTrue(template.startsWith("https://washington.goingtocamp.com/create-booking/results?"), template)
+            assertTrue(template.contains("startDate={start_date}"), template)
+            assertTrue(template.contains("endDate={end_date}"), template)
+            assertTrue(template.contains("nights={nights}"), template)
         }
 
     @Test
@@ -404,13 +461,11 @@ class ReservableRoutesTest {
             application { routing { reservableRoutes(ctx) } }
 
             assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?start=2026-07-01").status)
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?min_nights=2").status)
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?minNights=2").status)
             assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?start_date=2026-07-01").status)
             assertEquals(
                 HttpStatusCode.BadRequest,
                 client
-                    .get("/api/poi/$poiId/reservables?start_date=2026-07-03&end_date=2026-07-01")
+                    .get("/api/poi/$poiId/reservables?start_date=2026-07-01&end_date=2026-07-03")
                     .status,
             )
         }

@@ -3,6 +3,7 @@
 // available_reservable_ids so the visible rows match that day's count.
 
 import { escapeHtml } from '../core.js';
+import { hasReservationUrlTemplate, reservationUrlFromTemplate } from './booking-links.js';
 
 /**
  * The "Available sites" panel for the selected date.
@@ -14,10 +15,11 @@ import { escapeHtml } from '../core.js';
  *
  * @param {object} args
  * @param {'loading'|'success'|'error'} args.state
- * @param {Array<object>}        args.reservables  Rows from BE (rid/name/loop/site_type/reservation_url).
+ * @param {Array<object>}        args.reservables  Rows from BE (rid/name/loop/site_type/reservation_url_template).
  * @param {string|null}          args.error
  * @param {boolean}               args.expanded
  * @param {object|null}           args.selectedDay  Per-day availability row.
+ * @param {string|null}           args.selectedEndDate  Exclusive selected stay end date.
  */
 export function renderSiteList({
   state,
@@ -25,6 +27,7 @@ export function renderSiteList({
   error,
   expanded,
   selectedDay = null,
+  selectedEndDate = null,
 }) {
   const availableIds = availableReservableIds(selectedDay);
   if (availableIds == null || availableIds.length === 0) return '';
@@ -45,7 +48,9 @@ export function renderSiteList({
   }
   // success
   const rows = reservablesForIds(reservables, availableIds);
-  const body = expanded ? renderRows(rows) : '';
+  const body = expanded
+    ? renderRows(rows, { selectedDate: selectedDay?.date || null, selectedEndDate })
+    : '';
   return renderSection({
     header: renderHeader({ count, total, expanded, disabled: false }),
     body,
@@ -79,14 +84,14 @@ function renderHeaderLabel(count, total) {
   return `Available sites (${count})`;
 }
 
-function renderRows(reservables) {
+function renderRows(reservables, dateWindow) {
   if (!Array.isArray(reservables) || reservables.length === 0) {
     return '<div class="cg-sites-empty">No available sites for this date.</div>';
   }
   // Stable sort: loop alphabetical, then site name. Loop-less rows fall
   // to the bottom — that's what Aspira's resource-id-only rows look like.
   const sorted = [...reservables].sort(compareReservable);
-  const rows = sorted.map((r) => renderRow(r)).join('');
+  const rows = sorted.map((r) => renderRow(r, dateWindow)).join('');
   return `<ol class="cg-sites-rows">${rows}</ol>`;
 }
 
@@ -113,7 +118,7 @@ function fallbackReservable(rid) {
   return { rid, vendor, vendor_id: vendorId };
 }
 
-function renderRow(r) {
+function renderRow(r, dateWindow) {
   const name = r.name || formatFallbackName(r);
   const safeName = escapeHtml(name);
   const loopLine = r.loop ? `<div class="cg-sites-row-loop">${escapeHtml(r.loop)}</div>` : '';
@@ -121,8 +126,11 @@ function renderRow(r) {
   const typeTag = r.site_type
     ? `<span class="cg-sites-row-type">${escapeHtml(r.site_type)}</span>`
     : '';
-  const url = r.reservation_url || r.reservationUrl || null;
-  const bookTag = url ? '<span class="cg-sites-row-book">Book</span>' : '';
+  const url = reservationUrlFromTemplate(r, {
+    startDate: dateWindow?.selectedDate,
+    endDate: dateWindow?.selectedEndDate,
+  });
+  const bookTag = (url || hasReservationUrlTemplate(r)) ? '<span class="cg-sites-row-book">Book</span>' : '';
   const side = typeTag || bookTag ? `<div class="cg-sites-row-side">${typeTag}${bookTag}</div>` : '';
   const inner = `
     <div class="cg-sites-row-main">

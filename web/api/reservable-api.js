@@ -1,7 +1,8 @@
 // Reservable catalog API client (RFC 0008). Two endpoints:
 //
-//   GET /api/poi/{id}/reservables[?type=site&start_date=YYYY-MM-DD&end_date=YYYY-MM-DD]
-//     → { poi_id, type, total_at_poi, reservables: [{rid, reservation_url, poi_ids, name, …}, …] }
+//   GET /api/poi/{id}/reservables[?type=site]
+//     → { poi_id, type, total_at_poi, reservables:
+//         [{rid, reservation_url_template, poi_ids, name, …}, …] }
 //
 //   GET /api/reservable/{rid}
 //     → { reservable: {rid, poi_ids, name, loop, raw, …}, poi_ids: [123, 456] }
@@ -46,22 +47,16 @@ export function searchReservables(params = {}) {
  * @param {object}        [opts]
  * @param {string}        [opts.type='site']  Reservable type filter.
  * @param {string}        [opts.siteType]     Exact site type filter.
- * @param {string}        [opts.startDate]    Optional arrival date for BE-generated booking links.
- * @param {string}        [opts.endDate]      Optional exclusive departure date for booking links.
  * @param {AbortSignal}   [opts.signal]
  */
-export function fetchPoiReservables(poiId, { type, siteType, startDate, endDate, signal } = {}) {
-  return jsonGetOk(poiReservablesUrl(poiId, { type, siteType, startDate, endDate }), { signal });
+export function fetchPoiReservables(poiId, { type, siteType, signal } = {}) {
+  return jsonGetOk(poiReservablesUrl(poiId, { type, siteType }), { signal });
 }
 
-export function poiReservablesUrl(poiId, { type, siteType, startDate, endDate } = {}) {
+export function poiReservablesUrl(poiId, { type, siteType } = {}) {
   const params = new URLSearchParams();
   if (type) params.set('type', type);
   if (siteType) params.set('site_type', siteType);
-  if (startDate && endDate) {
-    params.set('start_date', startDate);
-    params.set('end_date', endDate);
-  }
   const qs = params.toString();
   const suffix = qs ? `?${qs}` : '';
   return `/api/poi/${encodeURIComponent(poiId)}/reservables${suffix}`;
