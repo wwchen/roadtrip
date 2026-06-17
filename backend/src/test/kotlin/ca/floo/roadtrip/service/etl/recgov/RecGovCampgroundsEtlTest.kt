@@ -30,17 +30,18 @@ class RecGovCampgroundsEtlTest {
     }
 
     @Test
-    fun `transform only sets recgov provider ref for reservable facilities`() {
+    fun `transform treats nonreservable RIDB facilities as agency info pages, not RecGov booking targets`() {
         val etl = RecGovCampgroundsEtl("federal-campgrounds")
         val pois = etl.transform(etl.parse(bundle()), transformCtx).associateBy { it.sourceId }
 
         val reservable = pois.getValue("recgov-232447")
         val reservableRef = assertIs<ProviderRef.RecGov>(reservable.providerRef)
         assertEquals("232447", reservableRef.recgovId)
+        assertEquals("https://www.recreation.gov/camping/campgrounds/232447", reservable.infoUrl)
 
-        val nonReservable = pois.getValue("recgov-245566")
+        val nonReservable = pois.getValue("recgov-248965")
         assertNull(nonReservable.providerRef)
-        assertEquals("https://www.recreation.gov/camping/campgrounds/245566", nonReservable.infoUrl)
+        assertEquals("https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276", nonReservable.infoUrl)
     }
 
     private fun bundle(): InputBundle =
@@ -77,13 +78,20 @@ class RecGovCampgroundsEtlTest {
                           ]
                         },
                         {
-                          "FacilityID": 245566,
-                          "FacilityName": "Niagara Creek Campground",
-                          "FacilityLatitude": 38.3239,
-                          "FacilityLongitude": -119.917,
+                          "FacilityID": 248965,
+                          "FacilityName": "Butte Meadows Campground",
+                          "FacilityLatitude": 40.078517,
+                          "FacilityLongitude": -121.558811,
                           "FacilityReservationURL": "",
                           "Reservable": false,
                           "CAMPSITE": [],
+                          "LINK": [
+                            {
+                              "URL": "https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276",
+                              "Title": "Butte Meadows Campground",
+                              "LinkType": "Official Web Site"
+                            }
+                          ],
                           "ORGANIZATION": [{"OrgAbbrevName": "FS"}],
                           "FACILITYADDRESS": [
                             {

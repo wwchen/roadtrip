@@ -87,6 +87,7 @@ class RecGovCampgroundsEtl(
         // Stamps each campground with its actual managing agency (NPS, FS,
         // BLM, USACE, FWS, BOR, TVA, …) without us splitting the dataset.
         val rawObj = raw as? JsonObject
+        val reservable = isReservable(rawObj)
         val agency =
             rawObj
                 ?.get("ORGANIZATION")
@@ -125,15 +126,11 @@ class RecGovCampgroundsEtl(
             country = address?.country ?: "US",
             phone = row.FacilityPhone?.takeIf { it.isNotBlank() },
             address = address,
-            // FacilityReservationURL points at the recgov reservation page
-            // when bookable; otherwise the facility detail page is enough.
-            infoUrl =
-                row.FacilityReservationURL?.takeIf { it.isNotBlank() }
-                    ?: "https://www.recreation.gov/camping/campgrounds/${row.FacilityID}",
+            infoUrl = facilityInfoUrl(row, rawObj, reservable),
             fetchedAt = fetchedAt,
             lastVerified = null,
             providerRef =
-                if (isReservable(rawObj)) {
+                if (reservable) {
                     ProviderRef.RecGov(recgovId = row.FacilityID.toString())
                 } else {
                     null
@@ -151,6 +148,37 @@ class RecGovCampgroundsEtl(
             extras = raw,
         )
     }
+
+    private fun facilityInfoUrl(
+        row: Facility,
+        raw: JsonObject?,
+        reservable: Boolean,
+    ): String? =
+        row.FacilityReservationURL?.takeIf { it.isNotBlank() }
+            ?: if (reservable) {
+                "https://www.recreation.gov/camping/campgrounds/${row.FacilityID}"
+            } else {
+                officialFacilityUrl(raw)
+            }
+
+    private fun officialFacilityUrl(raw: JsonObject?): String? {
+        val links =
+            raw
+                ?.get("LINK")
+                ?.jsonArray
+                ?.mapNotNull { entry -> runCatching { entry.jsonObject }.getOrNull() }
+                ?: return null
+        return links.firstNotNullOfOrNull { link ->
+            val linkType = link["LinkType"]?.jsonPrimitive?.contentOrNull
+            if (linkType.equals("Official Web Site", ignoreCase = true)) link.url() else null
+        } ?: links.firstNotNullOfOrNull { it.url() }
+    }
+
+    private fun JsonObject.url(): String? =
+        get("URL")
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.takeIf { it.isNotBlank() }
 
     private fun isReservable(raw: JsonObject?): Boolean {
         val primitive = raw?.get("Reservable")?.jsonPrimitive ?: return false
