@@ -591,7 +591,7 @@ class SmokeTest {
                             { "rid": "site:matrix:002", "name": "Site 2", "loop": "A", "site_type": "Tent", "reservation_url_template": "https://example.test/2" },
                             { "rid": "site:matrix:003", "name": "Site 3", "loop": "B", "site_type": "RV", "reservation_url_template": "https://example.test/3" },
                             { "rid": "site:matrix:004", "name": "Site 4", "loop": "B", "site_type": "RV", "reservation_url_template": "https://example.test/4" },
-                            { "rid": "site:matrix:005", "name": "Site 5", "loop": "C", "site_type": "Cabin", "reservation_url_template": "https://example.test/5" },
+                            { "rid": "site:matrix:005", "name": "Site 5", "loop": "C", "site_type": "Cabin", "reservation_url_template": "https://reservation.pc.gc.ca/create-booking/results?resourceLocationId=5&startDate={start_date}&endDate={end_date}" },
                             { "rid": "site:matrix:006", "name": "Site 6", "loop": "C", "site_type": "Cabin", "reservation_url_template": "https://example.test/6" }
                           ]
                         }
@@ -628,6 +628,21 @@ class SmokeTest {
                     """.trimIndent(),
                 ) as Boolean,
                 "matrix fixture should require horizontal scrolling",
+            )
+            assertTrue(
+                page.evaluate(
+                    """
+                    () => {
+                      const matrix = document.querySelector('.cg-site-matrix');
+                      const next = matrix?.querySelector('.cg-week-next');
+                      if (!matrix || !next) return false;
+                      const matrixRect = matrix.getBoundingClientRect();
+                      const nextRect = next.getBoundingClientRect();
+                      return nextRect.right <= matrixRect.right + 1 && nextRect.left >= matrixRect.left - 1;
+                    }
+                    """.trimIndent(),
+                ) as Boolean,
+                "next-week arrow should fit inside the mobile matrix header",
             )
 
             val availableCellPaint =
@@ -688,10 +703,196 @@ class SmokeTest {
             // changes to "Book on …"), second click opens the templated URL
             // in a new tab. We verify the armed label + click-through here;
             // the new-tab URL is verified via the popup listener.
+            val touchScrollBeforeArming =
+                page.evaluate(
+                    """
+                    () => {
+                      const matrix = document.querySelector('.cg-site-matrix-scroll');
+                      if (!matrix) return 0;
+                      matrix.scrollLeft = matrix.scrollWidth - matrix.clientWidth;
+                      const matrixRect = matrix.getBoundingClientRect();
+                      const candidates = Array.from(document.querySelectorAll('.cg-site-matrix-cell-button')).map((button) => {
+                        const rect = button.getBoundingClientRect();
+                        return { button, rect };
+                      }).filter(({ rect }) => (
+                        rect.right <= matrixRect.right + 1 &&
+                        rect.left >= matrixRect.left - 1 &&
+                        rect.bottom <= matrixRect.bottom + 1 &&
+                        rect.top >= matrixRect.top - 1
+                      )).sort((a, b) => (a.rect.top - b.rect.top) || (b.rect.right - a.rect.right));
+                      const target = candidates[0];
+                      if (!target) return matrix.scrollLeft;
+                      window.__matrixTouchTapTarget = {
+                        x: target.rect.left + target.rect.width / 2,
+                        y: target.rect.top + target.rect.height / 2,
+                        rid: target.button.getAttribute('data-book-rid'),
+                        date: target.button.getAttribute('data-book-date')
+                      };
+                      return matrix.scrollLeft;
+                    }
+                    """.trimIndent(),
+                ) as Int
+            assertTrue(touchScrollBeforeArming > 0, "touch-tap fixture should start horizontally scrolled")
+            val touchTapX = (page.evaluate("() => window.__matrixTouchTapTarget?.x || 0") as Number).toDouble()
+            val touchTapY = (page.evaluate("() => window.__matrixTouchTapTarget?.y || 0") as Number).toDouble()
+            assertTrue(touchTapX > 0 && touchTapY > 0, "touch-tap target should be visible")
+            page.touchscreen().tap(touchTapX, touchTapY)
+            page.waitForFunction(
+                """
+                () => new Promise((resolve) => {
+                  requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+                })
+                """.trimIndent(),
+                null,
+                Page.WaitForFunctionOptions().setTimeout(1_000.0),
+            )
+            val touchScrollAfterArming =
+                page.evaluate(
+                    """
+                    () => document.querySelector('.cg-site-matrix-scroll')?.scrollLeft || 0
+                    """.trimIndent(),
+                ) as Int
+            assertTrue(
+                touchScrollAfterArming >= touchScrollBeforeArming - 2,
+                "touch first-tap should preserve horizontal scroll: before=$touchScrollBeforeArming after=$touchScrollAfterArming",
+            )
+
+            val scrollBeforePlatformReset =
+                page.evaluate(
+                    """
+                    () => {
+                      const matrix = document.querySelector('.cg-site-matrix-scroll');
+                      const cells = Array.from(document.querySelectorAll('.cg-site-matrix-cell-button[data-book-date="2026-06-22"]'));
+                      const target = cells[cells.length - 1];
+                      if (!matrix || !target) return 0;
+                      target.scrollIntoView({ block: 'nearest', inline: 'center' });
+                      const targetRect = target.getBoundingClientRect();
+                      const before = matrix.scrollLeft;
+                      target.dispatchEvent(new PointerEvent('pointerdown', {
+                        bubbles: true,
+                        cancelable: true,
+                        pointerId: 17,
+                        pointerType: 'touch',
+                        clientX: targetRect.left + targetRect.width / 2,
+                        clientY: targetRect.top + targetRect.height / 2,
+                      }));
+                      matrix.scrollLeft = 0;
+                      target.click();
+                      return before;
+                    }
+                    """.trimIndent(),
+                ) as Int
+            assertTrue(scrollBeforePlatformReset > 0, "platform-reset fixture should start scrolled")
+            page.waitForFunction(
+                """
+                () => new Promise((resolve) => {
+                  requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+                })
+                """.trimIndent(),
+                null,
+                Page.WaitForFunctionOptions().setTimeout(1_000.0),
+            )
+            val scrollAfterPlatformReset =
+                page.evaluate(
+                    """
+                    () => document.querySelector('.cg-site-matrix-scroll')?.scrollLeft || 0
+                    """.trimIndent(),
+                ) as Int
+            assertTrue(
+                scrollAfterPlatformReset >= scrollBeforePlatformReset - 2,
+                "booking tap should restore scroll if the platform resets it before click: before=$scrollBeforePlatformReset after=$scrollAfterPlatformReset",
+            )
+            page.locator(".cg-site-matrix-title").click()
+
+            val rightEdgeCell = page.locator(".cg-site-matrix-cell-button[data-book-date=\"2026-06-22\"]").last()
+            val scrollBeforeArming =
+                page.evaluate(
+                    """
+                    () => {
+                      const matrix = document.querySelector('.cg-site-matrix-scroll');
+                      const cells = Array.from(document.querySelectorAll('.cg-site-matrix-cell-button[data-book-date="2026-06-22"]'));
+                      const target = cells[cells.length - 1];
+                      target?.scrollIntoView({ block: 'nearest', inline: 'center' });
+                      return matrix?.scrollLeft || 0;
+                    }
+                    """.trimIndent(),
+                ) as Int
+            assertTrue(scrollBeforeArming > 0, "right-edge booking cell should require horizontal scroll")
+            page.evaluate(
+                """
+                () => {
+                  const host = document.querySelector('.cg-availability-mount') || document.querySelector('.availability-result') || document.body;
+                  const matrix = document.querySelector('.cg-site-matrix-scroll');
+                  window.__matrixScrollNodeReplaced = false;
+                  window.__matrixScrollNodeObserver?.disconnect();
+                  window.__matrixScrollNodeObserver = new MutationObserver((records) => {
+                    for (const record of records) {
+                      for (const node of record.removedNodes) {
+                        if (node === matrix || node.contains?.(matrix)) {
+                          window.__matrixScrollNodeReplaced = true;
+                        }
+                      }
+                    }
+                  });
+                  if (host && matrix) {
+                    window.__matrixScrollNodeObserver.observe(host, { childList: true, subtree: true });
+                  }
+                }
+                """.trimIndent(),
+            )
+            rightEdgeCell.click()
+            assertThat(rightEdgeCell).hasText("Book")
+            page.waitForFunction(
+                """
+                () => new Promise((resolve) => {
+                  requestAnimationFrame(() => requestAnimationFrame(() => resolve(true)));
+                })
+                """.trimIndent(),
+                null,
+                Page.WaitForFunctionOptions().setTimeout(1_000.0),
+            )
+            assertTrue(
+                page.evaluate(
+                    """
+                    () => {
+                      const button = document.querySelector('.cg-site-matrix-cell-button.is-armed');
+                      const confirm = document.querySelector('.cg-site-matrix-book-confirm');
+                      if (!button) return false;
+                      const buttonRect = button.getBoundingClientRect();
+                      return !confirm &&
+                        button.textContent.trim() === 'Book' &&
+                        button.scrollWidth <= button.clientWidth + 1 &&
+                        buttonRect.width > 0 &&
+                        buttonRect.height > 0;
+                    }
+                    """.trimIndent(),
+                ) as Boolean,
+                "armed booking cell should use a compact in-cell Book label without a floating confirmation",
+            )
+            assertEquals(
+                false,
+                page.evaluate("() => window.__matrixScrollNodeReplaced === true") as Boolean,
+                "first tap on a matrix booking cell should not replace the matrix scroll node",
+            )
+            val scrollAfterArming =
+                page.evaluate(
+                    """
+                    () => document.querySelector('.cg-site-matrix-scroll')?.scrollLeft || 0
+                    """.trimIndent(),
+                ) as Int
+            assertTrue(
+                scrollAfterArming >= scrollBeforeArming - 2,
+                "arming a matrix cell should preserve horizontal scroll: before=$scrollBeforeArming after=$scrollAfterArming",
+            )
+            assertThat(rightEdgeCell).hasClass(Pattern.compile(".*\\bis-armed\\b.*"))
+            val rightEdgePopup = page.waitForPopup { rightEdgeCell.click() }
+            assertTrue(rightEdgePopup.url().isNotBlank(), "second tap on right-edge cell should open a booking popup")
+            rightEdgePopup.close()
+
             val armedCell = page.locator(".cg-site-matrix-cell-available .cg-site-matrix-cell-button").first()
             armedCell.click()
             assertThat(armedCell).hasClass(Pattern.compile(".*\\bis-armed\\b.*"))
-            assertThat(armedCell).containsText("Book on Recreation.gov")
+            assertThat(armedCell).hasText("Book")
             val popup = page.waitForPopup { armedCell.click() }
             assertEquals(
                 "https://www.recreation.gov/camping/campsites/001?startDate=2026-06-16&endDate=2026-06-17",
