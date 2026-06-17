@@ -39,9 +39,10 @@ const STORAGE_KEY_AVAILABILITY_VIEW = 'cg.availabilityView';
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
 const DEFAULT_MIN_NIGHTS = 1;
 const DEFAULT_AVAILABILITY_VIEW = 'table';
-const DEFAULT_SITE_COLUMN_WIDTH = 178;
-const MIN_SITE_COLUMN_WIDTH = 30;
-const MAX_SITE_COLUMN_WIDTH = 320;
+const DEFAULT_SITE_COLUMN_WIDTH = 128;
+const LEGACY_DEFAULT_SITE_COLUMN_WIDTH = 178;
+const MIN_SITE_COLUMN_WIDTH = 88;
+const MAX_SITE_COLUMN_WIDTH = 270;
 const MATRIX_SCROLL_LOAD_THRESHOLD_PX = 140;
 const MIN_NIGHTS_CHIPS = [1, 2, 3, 7];
 const WEEK_DAYS = 7;
@@ -871,7 +872,10 @@ function loadSiteColumnWidth() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY_SITE_COLUMN_WIDTH);
     const width = parseInt(raw, 10);
-    if (Number.isFinite(width)) return clampSiteColumnWidth(width);
+    if (Number.isFinite(width)) {
+      if (width === LEGACY_DEFAULT_SITE_COLUMN_WIDTH) return DEFAULT_SITE_COLUMN_WIDTH;
+      return clampSiteColumnWidth(width);
+    }
   } catch {
     // Non-fatal: default silently.
   }

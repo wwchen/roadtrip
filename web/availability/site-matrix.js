@@ -297,8 +297,8 @@ function rowHtml(row, context) {
 }
 
 function siteLabelHtml(row, siteLabel) {
-  const loop = row.loop ? `<span class="cg-site-matrix-loop">${escapeHtml(row.loop)}</span>` : '';
-  const type = row.site_type ? `<span class="cg-site-matrix-type">${escapeHtml(row.site_type)}</span>` : '';
+  const meta = [row.loop, row.site_type].filter(Boolean).join(' · ');
+  const metaLine = meta ? `<span class="cg-site-matrix-meta-line">${escapeHtml(meta)}</span>` : '';
   return `
     <button
       type="button"
@@ -308,8 +308,7 @@ function siteLabelHtml(row, siteLabel) {
       aria-label="View details for ${escapeHtml(siteLabel)}"
     >
       <span class="cg-site-matrix-name">${escapeHtml(siteLabel)}</span>
-      ${loop}
-      ${type}
+      ${metaLine}
     </button>
   `;
 }
