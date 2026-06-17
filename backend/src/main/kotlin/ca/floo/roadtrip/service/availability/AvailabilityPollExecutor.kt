@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.Reservable
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
@@ -15,13 +16,13 @@ import java.time.OffsetDateTime
 /**
  * Executes one polling job. Wired into [Scheduler] as the handler.
  *
- * Reservable-scope: fetches per-day availability through the booking
- * provider and appends snapshot rows. POI-scope: not yet implemented
- * (fan-out to child reservables is a separate concern).
+ * Reservable-scope fetches one reservable through the booking provider and
+ * appends snapshot rows. POI-scope fans out to linked child reservables using
+ * the watch scope resolver.
  *
  * Per-run audit: every invocation writes one [AvailabilityJobRunRepo]
- * row. Successful runs (including no-op runs for unresolvable scopes
- * and POI-scope) are recorded as 'completed' with `snapshot_count`.
+ * row. Successful runs, including no-op runs for unresolvable scopes, are
+ * recorded as 'completed' with `snapshot_count`.
  * Upstream / unexpected exceptions are recorded as 'failed' with the
  * error message. Runs are never lost — even if `start` succeeds and
  * the work errors, the row gets a terminal status so the operator can
@@ -38,6 +39,7 @@ class AvailabilityPollExecutor(
     private val runs: AvailabilityJobRunRepo,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val scopeResolver = WatchScopeResolver(reservables)
 
     suspend fun handle(job: AvailabilityJobRepo.Job): HandlerResult {
         val startedAt = OffsetDateTime.now()
@@ -48,10 +50,7 @@ class AvailabilityPollExecutor(
             snapshotCount =
                 when (intent) {
                     is AvailabilityJobIntent.Reservable -> runReservable(job.id, runId, intent)
-                    is AvailabilityJobIntent.Poi -> {
-                        log.info("job {} POI scope not yet executed (poi_id={})", job.id, intent.poiId)
-                        0
-                    }
+                    is AvailabilityJobIntent.Poi -> runPoi(job.id, runId, intent)
                 }
             val completedAt = OffsetDateTime.now()
             val durationMs =
@@ -93,6 +92,46 @@ class AvailabilityPollExecutor(
                     log.warn("job {}: reservable {} no longer exists", jobId, intent.reservableId)
                     return 0
                 }
+        return runReservable(
+            jobId = jobId,
+            runId = runId,
+            reservable = reservable,
+            targetDates = intent.targetDates,
+            minNights = intent.minNights,
+        )
+    }
+
+    private suspend fun runPoi(
+        jobId: Long,
+        runId: Long,
+        intent: AvailabilityJobIntent.Poi,
+    ): Int {
+        val children = scopeResolver.resolve(intent)
+        if (children.isEmpty()) {
+            log.warn("job {}: POI {} has no matching child reservables", jobId, intent.poiId)
+            return 0
+        }
+        var snapshots = 0
+        for (reservable in children) {
+            snapshots +=
+                runReservable(
+                    jobId = jobId,
+                    runId = runId,
+                    reservable = reservable,
+                    targetDates = intent.targetDates,
+                    minNights = intent.minNights,
+                )
+        }
+        return snapshots
+    }
+
+    private suspend fun runReservable(
+        jobId: Long,
+        runId: Long,
+        reservable: Reservable,
+        targetDates: List<String>,
+        minNights: Int,
+    ): Int {
         val poiIds = reservables.poiIdsForReservable(reservable.id)
         if (poiIds.isEmpty()) {
             log.warn("job {}: reservable {} has no POI parent", jobId, reservable.id)
@@ -111,10 +150,10 @@ class AvailabilityPollExecutor(
         val provider = bookingProviders.forPoi(parent)!!
         val ref = ProviderRefParser.parse(parent.providerRefJson)!!
 
-        val firstDate = intent.targetDates.firstOrNull() ?: return 0
+        val firstDate = targetDates.firstOrNull() ?: return 0
         val start = LocalDate.parse(firstDate)
         val days =
-            intent.targetDates
+            targetDates
                 .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
                 .maxOrNull()
                 ?.let {
@@ -134,7 +173,7 @@ class AvailabilityPollExecutor(
                     vendorId = reservable.rid.vendorId,
                     start = start,
                     days = days,
-                    minNights = intent.minNights,
+                    minNights = minNights,
                     force = false,
                     runId = runId,
                 ),

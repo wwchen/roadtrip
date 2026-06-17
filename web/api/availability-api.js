@@ -16,7 +16,7 @@ import { jsonPostOk } from './http.js';
  * @param {boolean}       [opts.force]     Bust the per-month cache.
  * @param {AbortSignal}   [opts.signal]
  */
-export function requestCampsiteAvailability(id, { days = 30, start, siteType, minNights, force, signal } = {}) {
+export function requestPoiAvailability(id, { days = 30, start, siteType, minNights, force, signal } = {}) {
   const params = new URLSearchParams({ days: String(days) });
   if (start) params.set('start', start);
   if (siteType) params.set('site_type', siteType);
@@ -26,5 +26,5 @@ export function requestCampsiteAvailability(id, { days = 30, start, siteType, mi
 }
 
 export async function fetchBulkAvailability({ ids, start, nights, signal }) {
-  return jsonPostOk('/api/campsite/availability/bulk', { ids, start, nights }, { signal });
+  return jsonPostOk('/api/availability/bulk', { ids, start, nights }, { signal });
 }

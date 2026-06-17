@@ -5,10 +5,10 @@
 //   day-detail panel (mounted from availability-week.js) → action row
 //   (Directions + View on rec.gov) → "More details" accordion.
 //
-// Alert capture lives in the day-detail panel — there's no top-level
+// Watch capture lives in the day-detail panel — there's no top-level
 // "Watch" CTA. The reserve link is intentionally neutral ("View on
 // rec.gov") because our availability is more permissive than the actual
-// booking flow; routing user intent through alerts avoids implying a
+// booking flow; routing user intent through watches avoids implying a
 // guarantee we can't keep.
 
 import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';

@@ -1,15 +1,15 @@
 # Booking providers
 
-Campsite availability and alerts are dispatched through one abstraction:
+Campsite availability and watches are dispatched through one abstraction:
 `BookingProvider`. Every upstream reservation system (rec.gov, Aspira NextGen,
 Camis, future regional vendors) is an adapter behind this port. Routes,
-the alert poller, and any future endpoint never branch on a sealed
+the watch poller, and any future endpoint never branch on a sealed
 `ProviderRef` — they consume the interface.
 
 ## Why an abstraction
 
 The dispatch logic used to live in three parallel `when` blocks (single-id
-availability, bulk availability, alert poller), each parsing
+availability, bulk availability, watch poller), each parsing
 `provider_ref` JSON inline and importing per-provider helper functions.
 Adding a third provider meant editing three files plus a fourth parser;
 forgetting one was a silent bug. The port collapses that into one
@@ -25,15 +25,15 @@ whether the abstraction is right.
 ```
 service/booking/
 ├── BookingProvider.kt          # availability port (mandatory)
-├── BookingProviderId.kt        # enum, matches booking_provider FK
+├── BookingProviderId.kt        # enum/provider identity
 ├── BookingProviderRegistry.kt  # forPoi(row) → adapter
 ├── ProviderRefParser.kt        # JSONB → models.ProviderRef (single source)
-├── AlertEvaluator.kt           # match logic per provider (mandatory)
+├── WatchEvaluator.kt           # match logic per provider (mandatory)
 ├── AutoBooker.kt               # cart/book port (optional capability)
 └── adapters/
-    ├── recgov/                 # full support: availability + alerts + auto-book
-    ├── aspira/                 # availability + alerts (no auto-book yet)
-    └── camis/                  # availability only (alerts/auto-book unsupported)
+    ├── recgov/                 # availability
+    ├── aspira/                 # availability
+    └── camis/                  # availability stub
 ```
 
 `models.ProviderRef` (sealed class with `RecGov` / `Aspira` / `Camis`
@@ -58,11 +58,8 @@ data class BookingCapabilities(
 )
 ```
 
-`GET /api/campsite/capabilities/{poi_id}` returns this struct for the
-campground behind a POI. The drawer fetches it once on open and hides
-affordances the provider doesn't support (e.g., the auto-cart toggle on
-Camis pins, the entire week grid on a provider that returns
-`supportsAvailability = false`).
+The API can surface this struct for the campground behind a POI so the
+drawer can hide affordances the provider doesn't support.
 
 ## Supported monitoring actions
 
@@ -70,24 +67,24 @@ Camis pins, the entire week grid on a provider that returns
 |---|---|---|
 | Per-day availability for a window | `BookingProvider.availability(ref, start, days, force)` | Drives the drawer's week grid. Per-month cache lives in the adapter. |
 | Capability probe | `BookingProvider.capabilities` | Static per adapter; cheap. |
-| Alert evaluation on poll | `AlertEvaluator.evaluate(alert, fresh)` | Branches on `alert.stay_mode`: `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
+| Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Append history snapshot | poller writes `availability_snapshots` row | Provider-agnostic; uses the standard `AvailabilityResult` shape. |
 | Notify on match | poller dispatches via Slack / push (future) | Channels are not provider-specific. |
 | Auto-add-to-cart | `AutoBooker.addToCart(ref, match, session)` | Optional. Provider implements only if it can. Capability flag gates the FE toggle. |
 | Auto-book / pay | not modeled | Out of scope. |
 
 A provider that only implements `BookingProvider` (not `AutoBooker`) is
-fully functional for browse + alert flows. Auto-book is the genuinely
+fully functional for browse + watch flows. Auto-book is the genuinely
 optional capability and is modeled as a separate interface so adapters
 that don't support it don't have to throw `UnsupportedOperationException`
 stubs.
 
 ## Today's adapter matrix
 
-| Provider | Availability | Alerts | Auto-book | Notes |
+| Provider | Availability | Watches | Auto-book | Notes |
 |---|---|---|---|---|
-| RecGov (rec.gov) | ✓ | ✓ | ✓ | Full support; this is the most complete adapter and the reference for new ones. |
-| Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | ✗ | Availability ships now; alert poller not yet generalized to call through the adapter. Auto-book requires session handling we haven't built. |
+| RecGov (rec.gov) | ✓ | ✓ | ✗ | Availability and generic watch polling. Auto-book was part of the removed legacy `/campsite` app. |
+| Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | ✗ | Availability ships now; watch dispatch still needs work. Auto-book requires session handling we haven't built. |
 | Camis (Alberta Parks) | stub | ✗ | ✗ | Adapter file exists so the registry returns a typed null; throws `Unsupported` on call. POIs render without the week grid until the real adapter lands. |
 
 When a row is added here, it should match a real file in
@@ -95,11 +92,11 @@ When a row is added here, it should match a real file in
 the adapter doesn't implement, that's a doc bug; fix the doc, not the
 adapter.
 
-## Polling is alert-driven
+## Polling is watch-driven
 
 The poller does **not** scrape on a schedule. The unit of work is a
 `(poi_id, target_date)` slot, and a slot is polled if and only if at
-least one active alert covers it. Polling starts on the first alert
+least one active watch covers it. Polling starts on the first watch
 covering a slot, stops when the count hits zero, and stops
 unconditionally when the date elapses.
 
@@ -107,12 +104,11 @@ This shape gives us three properties that hold regardless of UI changes:
 
 - **Bounded upstream load.** No "popular campgrounds" list to maintain;
   no debate over what to scrape proactively. The user expresses interest
-  by setting an alert, and that's the input to the poller.
-- **Free dedup across users.** Two users alerting on the same slot share
-  one poll. Adding more alert-driven features (reminders, cancel-watch,
-  group alerts) doesn't multiply polling cost.
+  by setting a watch, and that's the input to the poller.
+- **Free dedup across users.** Two users watching the same slot share
+  one poll. Adding more watch-driven features doesn't multiply polling cost.
 - **Natural stop conditions.** No janitor process required to garbage-
-  collect stale polls. The slot table mirrors the alert table; both
+  collect stale polls. The slot table mirrors the watch table; both
   shrink together.
 
 Adapters do not own polling cadence — the platform poller does. Adapters
@@ -149,7 +145,7 @@ overrides plug in later without changing call sites.
 
 ## Availability history
 
-History is a side effect of the alert poller, not a separate ETL. Every
+History is a side effect of the watch poller, not a separate ETL. Every
 successful poll appends rows to `availability_snapshots`, keyed by
 `(poi_id, target_date, observed_at)`. Two principles:
 
@@ -175,33 +171,31 @@ transparently based on the requested window.
 ## Lifecycle: how a user's intent becomes a booking
 
 ```
-Drawer (this product)              Poller (background)             Alerts UI (future)
+Drawer (this product)              Poller (background)             Watches UI
 ─────────────────────             ──────────────────               ──────────────────
 browse → pin click
   ↓
 GET /api/pois/{id}
   ↓
-GET /api/campsite/
-  capabilities/{poi_id}            (per active alert, every cycle)
-  ↓
-GET /api/campsite/                 BookingProvider.availability
-  availability/{poi_id}              ↓
-  (week pages)                     AlertEvaluator.evaluate
+GET /api/poi/{poi_id}/availability (per active watch, every cycle)
+  ↓                                BookingProvider.availability
+week pages                           ↓
+  ↓                                watch evaluator
   ↓                                  ↓ (match)
-"Set alert" click                  notify (Slack / push)
+"Set watch" click                  notify (Slack / push)
   ↓                                  ↓ (if capability)
-POST /api/campsite/alerts          AutoBooker.addToCart
+POST /api/availability/watches     AutoBooker.addToCart
                                      ↓
                                    append availability_snapshots
-                                                                   list alerts, pause,
-                                                                   per-alert history,
+                                                                   list watches, pause,
+                                                                   per-watch history,
                                                                    tune notification
                                                                    channel, toggle
                                                                    auto-cart
 ```
 
 The drawer captures **intent only**. The poller is the only thing that
-produces matches, snapshots, and bookings. The alerts UI surfaces
+produces matches, snapshots, and bookings. The watches UI surfaces
 everything the poller has produced.
 
 ## Adding a new booking provider
@@ -214,13 +208,13 @@ everything the poller has produced.
    implementing `BookingProvider`. Capabilities default conservatively
    (`supportsAlerts = false`, `supportsAutoBook = false`); flip them on
    as features land.
-4. (Optional) Add `<Vendor>AlertEvaluator` and `<Vendor>AutoBooker` if
+4. (Optional) Add `<Vendor>WatchEvaluator` and `<Vendor>AutoBooker` if
    the provider supports those capabilities.
 5. Wire the adapter into `BookingProviderRegistry` (one line).
 6. Update the matrix table above.
 
 Steps 1–6 should be the entire diff. If you find yourself editing route
-files or the alert poller core, the abstraction is leaking — fix that
+files or the watch poller core, the abstraction is leaking — fix that
 before merging.
 
 ## Per-vendor API docs
