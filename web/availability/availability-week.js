@@ -111,10 +111,12 @@ function makeContext(host, feature, signal) {
 // ---- render ---------------------------------------------------------------
 
 function rerender(ctx) {
+  const matrixScroll = captureMatrixScroll(ctx);
   ctx.calendar?.dispose();
   ctx.calendar = null;
   ctx.host.innerHTML = renderShell(ctx);
   applyMatrixViewportWidth(ctx);
+  restoreMatrixScroll(ctx, matrixScroll);
 }
 
 function renderShell(ctx) {
@@ -221,16 +223,36 @@ function wireRoot(ctx) {
   ctx.host.addEventListener('input', (e) => onRootInput(ctx, e));
   ctx.host.addEventListener('change', (e) => onRootChange(ctx, e));
   ctx.host.addEventListener('pointerdown', (e) => onRootPointerDown(ctx, e));
+  ctx.host.addEventListener('touchstart', (e) => onRootTouchStart(ctx, e), { passive: true });
   ctx.host.addEventListener('scroll', (e) => onRootScroll(ctx, e), true);
 }
 
 function onRootPointerDown(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
+  const bookBtn = tgt.closest('[data-book-rid]');
+  if (bookBtn) {
+    captureBookTapScroll(ctx, e.pointerType === 'touch');
+  }
   const siteColumnResizer = tgt.closest('[data-site-column-resizer]');
   if (siteColumnResizer) {
     beginSiteColumnResize(ctx, e, siteColumnResizer);
   }
+}
+
+function onRootTouchStart(ctx, e) {
+  const tgt = e.target;
+  if (!(tgt instanceof Element)) return;
+  if (tgt.closest('[data-book-rid]')) {
+    captureBookTapScroll(ctx, true);
+  }
+}
+
+function captureBookTapScroll(ctx, isTouch) {
+  const snapshot = captureMatrixScroll(ctx);
+  if (!snapshot) return;
+  ctx.pendingBookTapScroll = snapshot;
+  ctx.pendingBookTapWasTouch = !!isTouch;
 }
 
 function onRootClick(ctx, e) {
@@ -240,21 +262,31 @@ function onRootClick(ctx, e) {
   const bookBtn = tgt.closest('[data-book-rid]');
   if (bookBtn) {
     e.preventDefault();
+    const tapScroll = ctx.pendingBookTapScroll || captureMatrixScroll(ctx);
+    const tapWasTouch = !!ctx.pendingBookTapWasTouch;
+    ctx.pendingBookTapScroll = null;
+    ctx.pendingBookTapWasTouch = false;
     const rid = bookBtn.getAttribute('data-book-rid');
     const date = bookBtn.getAttribute('data-book-date');
     if (!rid || !date) return;
     const armed = ctx.armedBook && String(ctx.armedBook.rid) === String(rid) && ctx.armedBook.date === date;
+    const site = ctx.sites.find((s) => String(s.rid) === String(rid));
     if (armed) {
-      const site = ctx.sites.find((s) => String(s.rid) === String(rid));
       const url = site
         ? reservationUrlFromTemplate(site, { startDate: date, endDate: stayEndDate(ctx, date) })
         : '';
       if (url) window.open(url, '_blank', 'noreferrer');
       ctx.armedBook = null;
+      updateBookButtonState(bookBtn, site, date, false);
     } else {
+      disarmBookButtonsInPlace(ctx);
       ctx.armedBook = { rid: String(rid), date };
+      updateBookButtonState(bookBtn, site, date, true);
     }
-    rerender(ctx);
+    if (tapWasTouch) {
+      bookBtn.blur?.();
+    }
+    restoreMatrixScrollAfterTap(ctx, tapScroll);
     return;
   }
 
@@ -330,7 +362,7 @@ function onRootClick(ctx, e) {
     return;
   }
 
-  if (wasArmed) rerender(ctx);
+  if (wasArmed) disarmBookButtonsInPlace(ctx);
 }
 
 function onRootInput(ctx, e) {
@@ -388,10 +420,38 @@ function onRootScroll(ctx, e) {
   const scroll = e.target;
   if (!(scroll instanceof HTMLElement)) return;
   if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
-  if (ctx.armedBook) {
-    ctx.armedBook = null;
-    window.requestAnimationFrame?.(() => rerender(ctx));
+  if (ctx.restoringMatrixScroll) return;
+}
+
+function disarmBookButtonsInPlace(ctx) {
+  for (const button of ctx.host.querySelectorAll('.cg-site-matrix-cell-button.is-armed')) {
+    if (!(button instanceof HTMLElement)) continue;
+    const rid = button.getAttribute('data-book-rid');
+    const date = button.getAttribute('data-book-date');
+    const site = ctx.sites.find((s) => String(s.rid) === String(rid));
+    updateBookButtonState(button, site, date, false);
   }
+}
+
+function updateBookButtonState(button, site, date, armed) {
+  if (!(button instanceof HTMLElement) || !date) return;
+  button.classList.toggle('is-armed', armed);
+  button.textContent = armed ? 'Book' : 'Open';
+  const label = siteLabel(site);
+  const aria = `${label} ${date}: open`;
+  button.setAttribute(
+    'aria-label',
+    armed
+      ? `${aria}; Book, click to open booking page`
+      : `${aria}; click to book`,
+  );
+}
+
+function siteLabel(site) {
+  if (!site) return 'Site';
+  if (site.name) return site.name;
+  if (site.vendor_id) return `Site #${site.vendor_id}`;
+  return site.rid || 'Site';
 }
 
 function beginSiteColumnResize(ctx, event, handle) {
@@ -682,6 +742,51 @@ function applyMatrixViewportWidth(ctx) {
   const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
   if (!(scroll instanceof HTMLElement)) return;
   scroll.style.setProperty('--cg-site-matrix-viewport-width', `${scroll.clientWidth}px`);
+}
+
+function captureMatrixScroll(ctx) {
+  const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
+  if (!(scroll instanceof HTMLElement)) return null;
+  return {
+    left: scroll.scrollLeft,
+    top: scroll.scrollTop,
+  };
+}
+
+function restoreMatrixScroll(ctx, snapshot) {
+  if (!snapshot) return;
+  const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
+  if (!(scroll instanceof HTMLElement)) return;
+  const maxLeft = Math.max(0, scroll.scrollWidth - scroll.clientWidth);
+  const maxTop = Math.max(0, scroll.scrollHeight - scroll.clientHeight);
+  const left = Math.min(Math.max(0, snapshot.left || 0), maxLeft);
+  const top = Math.min(Math.max(0, snapshot.top || 0), maxTop);
+  if (scroll.scrollLeft === left && scroll.scrollTop === top) return;
+  ctx.restoringMatrixScroll = true;
+  scroll.scrollLeft = left;
+  scroll.scrollTop = top;
+  const clearRestoring = () => {
+    ctx.restoringMatrixScroll = false;
+  };
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(clearRestoring);
+  } else {
+    window.setTimeout(clearRestoring, 0);
+  }
+}
+
+function restoreMatrixScrollAfterTap(ctx, snapshot) {
+  if (!snapshot) return;
+  restoreMatrixScroll(ctx, snapshot);
+  const restore = () => restoreMatrixScroll(ctx, snapshot);
+  if (typeof window.requestAnimationFrame === 'function') {
+    window.requestAnimationFrame(() => {
+      restore();
+      window.requestAnimationFrame(restore);
+    });
+  } else {
+    window.setTimeout(restore, 0);
+  }
 }
 
 function placeholderMatrixDays(ctx) {

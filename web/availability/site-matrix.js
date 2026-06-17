@@ -5,7 +5,7 @@
 
 import { escapeHtml } from '../core.js';
 import { renderSiteDetail } from './site-detail.js';
-import { bookingLabel, hasReservationUrlTemplate } from './booking-links.js';
+import { hasReservationUrlTemplate } from './booking-links.js';
 import {
   availabilityStatusMeta,
   normalizeAvailabilityStatus,
@@ -219,8 +219,9 @@ function renderWeekNav({ weekStart, visibleDays, showToday }) {
   const todayBtn = showToday
     ? '<button type="button" class="cg-week-today" aria-label="Jump to today">Today</button>'
     : '';
+  const todayClass = showToday ? ' has-today' : ' no-today';
   return `
-    <div class="cg-week-nav" role="group" aria-label="Week navigation">
+    <div class="cg-week-nav${todayClass}" role="group" aria-label="Week navigation">
       ${todayBtn}
       <button type="button" class="cg-week-prev" aria-label="Previous week">‹</button>
       <button type="button" class="cg-week-label" aria-label="Pick a date">${escapeHtml(formatWeekLabel(startIso, endIso))}</button>
@@ -397,7 +398,7 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook }
   if (state.kind !== 'available') {
     return `
       <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}" aria-label="${escapeHtml(aria)}">
-        <span class="cg-site-matrix-cell-label">${escapeHtml(state.label)}</span>
+        <span class="cg-site-matrix-cell-button">${escapeHtml(state.label)}</span>
       </td>
     `;
   }
@@ -405,7 +406,7 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook }
   if (!hasReservationUrlTemplate(row)) {
     return `
       <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}" aria-label="${escapeHtml(aria)}">
-        <span class="cg-site-matrix-cell-label">${escapeHtml(state.label)}</span>
+        <span class="cg-site-matrix-cell-button">${escapeHtml(state.label)}</span>
       </td>
     `;
   }
@@ -413,7 +414,7 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook }
   const armed = !!armedBook
     && String(armedBook.rid) === rowRid(row)
     && armedBook.date === day.date;
-  const label = armed ? bookingLabel(row) : state.label;
+  const label = armed ? 'Book' : state.label;
   const armedClass = armed ? ' is-armed' : '';
   const ariaLabel = armed
     ? `${aria}; ${label}, click to open booking page`
