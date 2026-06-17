@@ -41,6 +41,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.assertAll
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
@@ -436,6 +437,8 @@ class ReservableRoutesTest {
                     name = "Upper Pines Campground",
                     providerRefJson = """{"recgov_id":"232447"}""",
                 )
+            val reservableId = seedReservable(vendorId = "330257", name = "A12")
+            link(reservableId, poiId)
             application {
                 routing {
                     campsiteAvailabilityRoutes(
@@ -446,9 +449,22 @@ class ReservableRoutesTest {
                 }
             }
 
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/availability?days=7").status)
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/availability?min_nights=2").status)
-            assertEquals(HttpStatusCode.BadRequest, client.get("/api/reservable/site:recgov:330257/availability?min_nights=2").status)
+            val poiDaysStatus = client.get("/api/poi/$poiId/availability?days=7").status
+            val poiMinNightsStatus = client.get("/api/poi/$poiId/availability?min_nights=2").status
+            val reservableDaysStatus = client.get("/api/reservable/site:recgov:330257/availability?days=7").status
+            val reservableMinNightsStatus = client.get("/api/reservable/site:recgov:330257/availability?min_nights=2").status
+
+            assertAll(
+                { assertEquals(HttpStatusCode.BadRequest, poiDaysStatus) },
+                { assertEquals(HttpStatusCode.BadRequest, poiMinNightsStatus) },
+                { assertEquals(HttpStatusCode.BadRequest, reservableDaysStatus) },
+                {
+                    assertEquals(
+                        HttpStatusCode.BadRequest,
+                        reservableMinNightsStatus,
+                    )
+                },
+            )
         }
 
     @Test
