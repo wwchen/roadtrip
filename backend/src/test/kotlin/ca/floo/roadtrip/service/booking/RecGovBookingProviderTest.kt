@@ -11,6 +11,61 @@ import kotlin.test.assertEquals
 
 class RecGovBookingProviderTest {
     @Test
+    fun `catalog availability narrows cached campground data to linked reservables`() =
+        runBlocking {
+            val cache =
+                CachedAvailability(
+                    fetchMonth = { campgroundId, _ ->
+                        assertEquals("232447", campgroundId)
+                        mapOf(
+                            "330257" to
+                                Campsite(
+                                    id = "330257",
+                                    site = "A12",
+                                    loop = "A",
+                                    campsiteType = "STANDARD",
+                                    maxNumPeople = 6,
+                                    equipmentTypes = emptyList(),
+                                    availabilities = mapOf("2026-07-01" to "Available"),
+                                ),
+                            "330258" to
+                                Campsite(
+                                    id = "330258",
+                                    site = "B01",
+                                    loop = "B",
+                                    campsiteType = "TENT ONLY",
+                                    maxNumPeople = 6,
+                                    equipmentTypes = emptyList(),
+                                    availabilities = mapOf("2026-07-01" to "Available"),
+                                ),
+                        )
+                    },
+                )
+            val adapter = RecGovBookingProvider(cache)
+
+            val dto =
+                adapter.catalogAvailability(
+                    CatalogAvailabilityRequest(
+                        ref = ProviderRef.RecGov("232447"),
+                        reservables =
+                            listOf(
+                                CatalogReservableRef(
+                                    rid = "site:recgov:330257",
+                                    vendorId = "330257",
+                                ),
+                            ),
+                        start = LocalDate.parse("2026-07-01"),
+                        days = 1,
+                    ),
+                )
+
+            val day = dto.availability.single()
+            assertEquals(1, day.availableCount)
+            assertEquals(1, day.total)
+            assertEquals(listOf("site:recgov:330257"), day.availableReservableIds)
+        }
+
+    @Test
     fun `reservable availability narrows cached campground data to one campsite`() =
         runBlocking {
             val cache =

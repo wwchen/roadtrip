@@ -40,23 +40,3 @@ data class PoiReservablesResponseSchema(
     @SerialName("total_at_poi") val totalAtPoi: Int,
     val reservables: List<ReservableSchema>,
 )
-
-@Serializable
-data class PoiReservablesAvailabilityResponseSchema(
-    @SerialName("poi_id") val poiId: Long,
-    val type: String,
-    val start: String,
-    val days: Int,
-    @SerialName("min_nights") val minNights: Int,
-    @SerialName("site_types") val siteTypes: List<String> = emptyList(),
-    @SerialName("total_at_poi") val totalAtPoi: Int,
-    val dates: List<PoiReservablesAvailabilityDateSchema>,
-)
-
-@Serializable
-data class PoiReservablesAvailabilityDateSchema(
-    val date: String,
-    @SerialName("available_count") val availableCount: Int,
-    val total: Int,
-    @SerialName("available_reservables") val availableReservables: List<ReservableSchema>,
-)

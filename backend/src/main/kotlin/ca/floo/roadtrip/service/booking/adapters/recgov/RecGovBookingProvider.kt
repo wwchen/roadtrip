@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.booking.adapters.recgov
 
 import ca.floo.campsite.recgov.booker.api.availableDatesRecgov
 import ca.floo.campsite.recgov.booker.api.fetchAndClassifyRecgov
+import ca.floo.campsite.recgov.booker.api.fetchAndClassifyRecgovCatalog
 import ca.floo.campsite.recgov.booker.api.fetchAndClassifyRecgovReservable
 import ca.floo.campsite.recgov.booker.api.monthsCovering
 import ca.floo.campsite.recgov.booker.availability.CachedAvailability
@@ -13,6 +14,7 @@ import ca.floo.roadtrip.service.booking.BookingCapabilities
 import ca.floo.roadtrip.service.booking.BookingProvider
 import ca.floo.roadtrip.service.booking.BookingProviderError
 import ca.floo.roadtrip.service.booking.BookingProviderId
+import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 
 /**
@@ -62,6 +64,35 @@ class RecGovBookingProvider(
         val recgovId = recgovIdOrThrow(req.ref)
         return runWithErrorMapping {
             availableDatesRecgov(cache, recgovId, req.start, req.nights)
+        }
+    }
+
+    override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+        if (req.reservables.isEmpty()) {
+            return availability(
+                AvailabilityRequest(
+                    ref = req.ref,
+                    start = req.start,
+                    days = req.days,
+                    minNights = req.minNights,
+                    force = req.force,
+                ),
+            )
+        }
+        val recgovId = recgovIdOrThrow(req.ref)
+        val rollingEnd = req.start.plusDays((req.days + req.minNights - 2).toLong())
+        val months = monthsCovering(req.start, rollingEnd)
+        return runWithErrorMapping {
+            fetchAndClassifyRecgovCatalog(
+                cache = cache,
+                recgovId = recgovId,
+                campsiteIds = req.reservables.map { it.vendorId }.toSet(),
+                today = req.start,
+                days = req.days,
+                months = months,
+                force = req.force,
+                minNights = req.minNights,
+            )
         }
     }
 

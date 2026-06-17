@@ -397,7 +397,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `poi reservables availability returns available reservables grouped by date and site type`() =
+    fun `poi availability filters available reservable ids by site type`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -423,38 +423,19 @@ class ReservableRoutesTest {
 
             val resp =
                 client.get(
-                    "/api/poi/$poiId/reservables/availability?start=2026-07-01&days=2&min_nights=2&site_type=STANDARD",
+                    "/api/poi/$poiId/availability?start=2026-07-01&days=2&min_nights=2&site_type=STANDARD",
                 )
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(poiId.toString(), body["poi_id"]!!.jsonPrimitive.content)
-            assertEquals("site", body["type"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-01", body["start"]!!.jsonPrimitive.content)
-            assertEquals(2, body["days"]!!.jsonPrimitive.int)
-            assertEquals(2, body["min_nights"]!!.jsonPrimitive.int)
-            assertEquals("2", body["total_at_poi"]!!.jsonPrimitive.content)
-            assertEquals(listOf("STANDARD"), body["site_types"]!!.jsonArray.map { it.jsonPrimitive.content })
-
-            val dates = body["dates"]!!.jsonArray
-            assertEquals(2, dates.size)
-            val first = dates.first().jsonObject
+            assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start"]!!.jsonPrimitive.content)
+            val first = body["availability"]!!.jsonArray.first().jsonObject
             assertEquals("2026-07-01", first["date"]!!.jsonPrimitive.content)
             assertEquals(2, first["available_count"]!!.jsonPrimitive.int)
             assertEquals(2, first["total"]!!.jsonPrimitive.int)
-            val rows = first["available_reservables"]!!.jsonArray.map { it.jsonObject }
             assertEquals(
-                setOf("site:recgov:330257", "site:recgov:330259"),
-                rows.map { it["rid"]!!.jsonPrimitive.content }.toSet(),
-            )
-            assertTrue(rows.all { it["site_type"]!!.jsonPrimitive.content == "STANDARD" })
-            val a12Url =
-                rows
-                    .single { it["rid"]!!.jsonPrimitive.content == "site:recgov:330257" }["reservation_url"]!!
-                    .jsonPrimitive
-                    .content
-            assertEquals(
-                "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-03",
-                a12Url,
+                listOf("site:recgov:330257", "site:recgov:330259"),
+                first["available_reservable_ids"]!!.jsonArray.map { it.jsonPrimitive.content },
             )
         }
 
