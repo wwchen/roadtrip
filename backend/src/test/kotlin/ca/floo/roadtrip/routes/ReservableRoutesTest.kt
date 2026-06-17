@@ -449,10 +449,12 @@ class ReservableRoutesTest {
                 }
             }
 
-            val poiDaysStatus = client.get("/api/poi/$poiId/availability?days=7").status
-            val poiMinNightsStatus = client.get("/api/poi/$poiId/availability?min_nights=2").status
-            val reservableDaysStatus = client.get("/api/reservable/site:recgov:330257/availability?days=7").status
-            val reservableMinNightsStatus = client.get("/api/reservable/site:recgov:330257/availability?min_nights=2").status
+            val windowQuery = "start_date=2026-07-01&end_date=2026-07-04"
+            val poiDaysStatus = client.get("/api/poi/$poiId/availability?$windowQuery&days=7").status
+            val poiMinNightsStatus = client.get("/api/poi/$poiId/availability?$windowQuery&min_nights=2").status
+            val reservableDaysStatus = client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&days=7").status
+            val reservableMinNightsStatus =
+                client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&min_nights=2").status
 
             assertAll(
                 { assertEquals(HttpStatusCode.BadRequest, poiDaysStatus) },
