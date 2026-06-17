@@ -1111,7 +1111,7 @@ pre {
   background: rgba(241,160,74,0.14);
 }
 
-.cg-site-matrix-cell-first-come .cg-site-matrix-cell-button {
+.cg-site-matrix-cell-first-come .cg-site-matrix-cell-label {
   background: transparent;
   color: #f1c27d;
 }
@@ -1120,11 +1120,11 @@ pre {
   background: rgba(241,160,74,0.22);
 }
 
-.cg-site-matrix-cell-reserved .cg-site-matrix-cell-button {
+.cg-site-matrix-cell-reserved .cg-site-matrix-cell-label {
   color: var(--cg-faint);
 }
 
-.cg-site-matrix-cell-unknown .cg-site-matrix-cell-button {
+.cg-site-matrix-cell-unknown .cg-site-matrix-cell-label {
   color: var(--cg-faint);
 }
 
@@ -1132,7 +1132,7 @@ pre {
   background: repeating-linear-gradient(45deg, rgba(255,255,255,0.04) 0 4px, transparent 4px 8px);
 }
 
-.cg-site-matrix-cell-closed .cg-site-matrix-cell-button {
+.cg-site-matrix-cell-closed .cg-site-matrix-cell-label {
   background: transparent;
   color: var(--cg-faint);
 }
@@ -1149,8 +1149,10 @@ pre {
   background: var(--cg-accent-bg-hover);
 }
 
-.cg-site-matrix-cell-booked .cg-site-matrix-cell-label,
-.cg-site-matrix-cell-closed .cg-site-matrix-cell-label {
+.cg-site-matrix-cell-first-come .cg-site-matrix-cell-label,
+.cg-site-matrix-cell-reserved .cg-site-matrix-cell-label,
+.cg-site-matrix-cell-closed .cg-site-matrix-cell-label,
+.cg-site-matrix-cell-unknown .cg-site-matrix-cell-label {
   display: flex;
   align-items: center;
   justify-content: center;

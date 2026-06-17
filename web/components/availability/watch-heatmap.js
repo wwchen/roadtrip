@@ -1,15 +1,7 @@
 // Watch detail heatmap: groups of (reservable × date) cells colored
 // by latest snapshot status.
 
-const STATUS_CLASS = {
-  available: 'cell-available',
-  first_come: 'cell-first-come',
-  reserved: 'cell-reserved',
-  closed: 'cell-closed',
-  unknown: 'cell-unknown',
-  booked: 'cell-reserved',
-  partial: 'cell-available',
-};
+import { availabilityStatusHeatmapClass } from '../../utils/availability-status.js';
 
 export function renderWatchHeatmap(rootEl, response) {
   const dates = response.dates || [];
@@ -61,7 +53,7 @@ function renderRow(row) {
 }
 
 function renderCell(cell) {
-  const cls = cell.status ? STATUS_CLASS[cell.status] || 'cell-unknown' : 'cell-empty';
+  const cls = cell.status ? availabilityStatusHeatmapClass(cell.status) : 'cell-empty';
   const title = cell.observed_at
     ? `${cell.status || 'unknown'} as of ${formatTimestamp(cell.observed_at)}`
     : 'no snapshot';

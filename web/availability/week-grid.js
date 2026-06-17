@@ -8,6 +8,11 @@
 // the response shape ever drifts back to camelCase via a wrapper.
 
 import { escapeHtml } from '../core.js';
+import {
+  availabilityStatusAria,
+  availabilityStatusLabel,
+  normalizeAvailabilityStatus,
+} from '../utils/availability-status.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WEEK_DAYS = 7;
@@ -28,8 +33,8 @@ export function renderWeekGrid({ days, todayIso, selectedDate, watchedDates }) {
     const dowLabel = DOW_LABELS[dow];
     const dayNum = parseInt(date.slice(8, 10), 10);
     const availLabel = renderAvailLabel(d);
-    const visualStatus = renderStatus(d);
-    const ariaStatus = statusAria(visualStatus);
+    const visualStatus = normalizeAvailabilityStatus(d.status);
+    const ariaStatus = availabilityStatusAria(visualStatus);
     const watching = watchedDates.has(date);
     const classes = [
       'cg-day',
@@ -63,46 +68,19 @@ export function renderWeekSkeleton() {
 
 /**
  * The label inside each cell. Status-driven rather than count-driven, since
- * the count alone is ambiguous (0 could be 'fully booked' or 'closed').
+ * the count alone is ambiguous (0 could be 'reserved' or 'closed').
  *
  * Reads both snake_case (BE wire) and camelCase (defensive). Pluralizes the
  * unit so "1 site" / "5 sites" reads naturally. Falls back to a status-only
  * label when the count is missing rather than printing 'undefined'.
  */
 function renderAvailLabel(day) {
-  const status = normalizeStatus(day.status);
+  const status = normalizeAvailabilityStatus(day.status);
   const count = availableCount(day);
   if (status === 'available' && count != null) return `${count} ${count === 1 ? 'site' : 'sites'}`;
-  if (status === 'available') return 'A';
-  if (status === 'first_come') return 'FF';
-  if (status === 'reserved') return 'R';
-  if (status === 'closed') return 'C';
-  return '?';
-}
-
-function renderStatus(day) {
-  const status = normalizeStatus(day.status);
-  const count = availableCount(day);
-  if (count != null && count > 0) return 'available';
-  return status;
+  return availabilityStatusLabel(status);
 }
 
 function availableCount(day) {
   return day.available_count ?? day.availableCount;
-}
-
-function normalizeStatus(raw) {
-  const value = String(raw || '').toLowerCase();
-  if (value === 'booked' || value === 'full') return 'reserved';
-  if (value === 'partial' || value === 'open') return 'available';
-  if (['available', 'first_come', 'reserved', 'closed', 'unknown'].includes(value)) return value;
-  return 'unknown';
-}
-
-function statusAria(status) {
-  if (status === 'first_come') return 'first come first served';
-  if (status === 'reserved') return 'reserved';
-  if (status === 'available') return 'available';
-  if (status === 'closed') return 'closed';
-  return 'unknown';
 }

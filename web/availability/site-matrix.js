@@ -6,6 +6,10 @@
 import { escapeHtml } from '../core.js';
 import { renderSiteDetail } from './site-detail.js';
 import { bookingLabel, hasReservationUrlTemplate } from './booking-links.js';
+import {
+  availabilityStatusMeta,
+  normalizeAvailabilityStatus,
+} from '../utils/availability-status.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT_FILTERS = {
@@ -16,24 +20,10 @@ const DEFAULT_FILTERS = {
 };
 const SORT_OPTIONS = [
   ['site', 'Site'],
-  ['open', 'Available first'],
+  ['available', 'Available first'],
   ['loop', 'Loop'],
   ['type', 'Type'],
 ];
-const STATUS_META = {
-  available: { kind: 'available', label: 'A', aria: 'available' },
-  first_come: { kind: 'first-come', label: 'FF', aria: 'first come first served' },
-  reserved: { kind: 'reserved', label: 'R', aria: 'reserved' },
-  closed: { kind: 'closed', label: 'C', aria: 'closed' },
-  unknown: { kind: 'unknown', label: '?', aria: 'unknown' },
-};
-const LEGACY_STATUS = {
-  booked: 'reserved',
-  full: 'reserved',
-  partial: 'available',
-  open: 'available',
-};
-
 export function renderSiteMatrix({
   state,
   reservables,
@@ -452,26 +442,19 @@ function siteTitleText(row, siteLabel) {
 function cellState(row, day, availableIds) {
   const rid = rowRid(row);
   const directStatus = reservableStatus(day, rid);
-  if (directStatus) return STATUS_META[directStatus] || STATUS_META.unknown;
-  if (availableIds?.has(rid)) return STATUS_META.available;
+  if (directStatus) return availabilityStatusMeta(directStatus);
+  if (availableIds?.has(rid)) return availabilityStatusMeta('available');
 
-  const total = numeric(day.total ?? day.totalAtPoi);
-  const status = normalizeStatus(day.status);
-  if (status === 'closed' || total === 0) return STATUS_META.closed;
-  if (status === 'first_come') return STATUS_META.first_come;
-  if (status === 'unknown') return STATUS_META.unknown;
-  return STATUS_META.reserved;
+  const status = normalizeAvailabilityStatus(day.status);
+  if (status === 'available' && availableIds) return availabilityStatusMeta('reserved');
+  return availabilityStatusMeta(status);
 }
 
 function reservableStatus(day, rid) {
   const statuses = day?.reservable_statuses ?? day?.reservableStatuses;
   if (!statuses || typeof statuses !== 'object') return null;
-  return normalizeStatus(statuses[rid]);
-}
-
-function normalizeStatus(raw) {
-  const value = String(raw || '').toLowerCase();
-  return STATUS_META[value] ? value : (LEGACY_STATUS[value] || null);
+  if (!Object.prototype.hasOwnProperty.call(statuses, rid)) return null;
+  return normalizeAvailabilityStatus(statuses[rid]);
 }
 
 function availableReservableIds(day) {
@@ -517,9 +500,9 @@ function filterReservables(rows, filters) {
 
 function sortReservables(rows, sortKey, context) {
   return [...rows].sort((a, b) => {
-    if (sortKey === 'open') {
-      const ao = openDateCount(a, context.availabilityByDate, context.visibleDays);
-      const bo = openDateCount(b, context.availabilityByDate, context.visibleDays);
+    if (sortKey === 'available') {
+      const ao = availableDateCount(a, context.availabilityByDate, context.visibleDays);
+      const bo = availableDateCount(b, context.availabilityByDate, context.visibleDays);
       if (ao !== bo) return bo - ao;
       return compareReservable(a, b);
     }
@@ -530,7 +513,7 @@ function sortReservables(rows, sortKey, context) {
   });
 }
 
-function openDateCount(row, availabilityByDate, days = []) {
+function availableDateCount(row, availabilityByDate, days = []) {
   const rid = rowRid(row);
   let count = 0;
   for (const day of days) {
@@ -574,13 +557,4 @@ function compareByType(a, b) {
   const bt = b.site_type || '\uffff';
   if (at !== bt) return at.localeCompare(bt, undefined, { numeric: true });
   return compareReservable(a, b);
-}
-
-function numeric(value) {
-  if (typeof value === 'number' && Number.isFinite(value)) return value;
-  if (typeof value === 'string' && value.trim()) {
-    const parsed = Number(value);
-    if (Number.isFinite(parsed)) return parsed;
-  }
-  return null;
 }
