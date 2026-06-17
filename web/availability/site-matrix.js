@@ -325,7 +325,13 @@ function cellHtml({ row, day, availableIds, fitIds, selectedDate, siteLabel, min
   const aria = `${siteLabel} ${day.date}: ${state.aria}${fitAria}`;
   return `
     <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}${fitClass}">
-      <button type="button" class="cg-site-matrix-cell-button" data-matrix-date="${escapeHtml(day.date)}" aria-label="${escapeHtml(aria)}">
+      <button
+        type="button"
+        class="cg-site-matrix-cell-button"
+        data-site-detail-rid="${escapeHtml(rowRid(row))}"
+        data-site-detail-date="${escapeHtml(day.date)}"
+        aria-label="${escapeHtml(`${aria}; view site details`)}"
+      >
         ${escapeHtml(label)}
       </button>
     </td>
