@@ -8,6 +8,7 @@ import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.etl.EtlOrchestrator
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.jooq.DSLContext
@@ -87,6 +88,10 @@ class AspiraResourcesEtlTest {
         copyFixtureTo("aspira-resources/park-9001.json", File(invCapture, "park-9001.json"))
         copyFixtureTo("aspira-resources/park-9002.json", File(invCapture, "park-9002.json"))
 
+        val dictionariesDir = File(rawDir, "aspira-dictionaries-pc")
+        dictionariesDir.mkdirs()
+        copyFixtureTo("aspira-resources/dictionaries.json", File(dictionariesDir, "2026-09-12T17-00-00Z.json"))
+
         val yamlPath =
             File(System.getProperty("user.dir"))
                 .resolve("../config/poi-registry.yaml")
@@ -164,6 +169,31 @@ class AspiraResourcesEtlTest {
         // is the flattened (id, value, values) shape.
         assertTrue(raw.containsKey("allowed_equipment"))
         assertTrue(raw.containsKey("defined_attributes"))
+    }
+
+    @Test
+    fun `aspira dictionaries enrich resource category equipment and attributes in memory`() {
+        val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
+        orch.runReservableData("Parks Canada Aspira Resources")
+
+        val reservable = reservables.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
+        assertEquals("Campsite", reservable.siteType)
+
+        val raw = reservable.raw as JsonObject
+        assertEquals("Campsite", (raw["resource_category_name"] as JsonPrimitive).content)
+
+        val equipment = raw["allowed_equipment"] as JsonArray
+        val tent = equipment[0] as JsonObject
+        assertEquals("-32768", (tent["equipment_category_id"] as JsonPrimitive).content)
+        assertEquals("Equipment", (tent["equipment_category_name"] as JsonPrimitive).content)
+        assertEquals("-32768", (tent["sub_equipment_category_id"] as JsonPrimitive).content)
+        assertEquals("1 Tent", (tent["name"] as JsonPrimitive).content)
+
+        val attrs = raw["defined_attributes"] as JsonArray
+        val length = attrs[0] as JsonObject
+        assertEquals("-32715", (length["definition_id"] as JsonPrimitive).content)
+        assertEquals("Max Vehicle Length", (length["name"] as JsonPrimitive).content)
+        assertEquals("60", (length["value"] as JsonPrimitive).content)
     }
 
     @Test

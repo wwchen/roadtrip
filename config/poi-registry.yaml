@@ -146,6 +146,41 @@ data_sources:
       output_dir_prefix: data/raw/aspira-inventory-pc
     depends_on: [aspira-maps-pc]
 
+  # --- Aspira tenant dictionaries ------------------------------------------
+  # One capture per tenant for small lookup tables used as in-memory ETL side
+  # inputs: /api/equipment, /api/resourcecategory, and
+  # /api/attribute/filterable. These are not stored as DB tables; the
+  # resources ETL resolves names into reservables.raw during transform.
+  - slug: aspira-dictionaries-wa
+    name: Aspira dictionaries (Washington State Parks)
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_aspira_dictionaries.py
+      args:
+        slug: aspira-dictionaries-wa
+        host: washington.goingtocamp.com
+      output_dir_prefix: data/raw/aspira-dictionaries-wa
+
+  - slug: aspira-dictionaries-bc
+    name: Aspira dictionaries (BC Parks)
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_aspira_dictionaries.py
+      args:
+        slug: aspira-dictionaries-bc
+        host: camping.bcparks.ca
+      output_dir_prefix: data/raw/aspira-dictionaries-bc
+
+  - slug: aspira-dictionaries-pc
+    name: Aspira dictionaries (Parks Canada)
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_aspira_dictionaries.py
+      args:
+        slug: aspira-dictionaries-pc
+        host: reservation.pc.gc.ca
+      output_dir_prefix: data/raw/aspira-dictionaries-pc
+
   # --- Federal campsites (rec.gov per-facility catalog, RFC 0008) -----------
   # Walks the recgov-campgrounds capture for FacilityIDs and calls rec.gov's
   # /api/camps/availability/campground/{id}/month per facility. The body's
@@ -301,7 +336,10 @@ reservable_data:
   #      /api/resourcelocation/resources. The source of truth for both the
   #      reservable set AND per-site enrichment (name, description,
   #      allowedEquipment, definedAttributes, capacity, mapIds[]).
-  #   2. /api/maps capture — leaf metadata. Each inventory record carries
+  #   2. tenant dictionaries — small lookup tables for resource category,
+  #      allowed equipment, and defined attribute labels. They stay
+  #      in-memory during ETL and enrich each reservable.raw object.
+  #   3. /api/maps capture — leaf metadata. Each inventory record carries
   #      mapIds[] referencing parent leaves; AspiraLeavesWalk turns the
   #      maps tree into a mapId-keyed leaf index for loop labeling.
   # Cross-row etl refs aren't supported, so the maps tree gets walked
@@ -310,19 +348,19 @@ reservable_data:
     etls:
       - slug: aspira-wa-resources
         adapter: AspiraResourcesEtl
-        inputs: [aspira-inventory-wa, aspira-maps-wa]
+        inputs: [aspira-inventory-wa, aspira-dictionaries-wa, aspira-maps-wa]
 
   - name: BC Aspira Resources
     etls:
       - slug: aspira-bc-resources
         adapter: AspiraResourcesEtl
-        inputs: [aspira-inventory-bc, aspira-maps-bc]
+        inputs: [aspira-inventory-bc, aspira-dictionaries-bc, aspira-maps-bc]
 
   - name: Parks Canada Aspira Resources
     etls:
       - slug: aspira-pc-resources
         adapter: AspiraResourcesEtl
-        inputs: [aspira-inventory-pc, aspira-maps-pc]
+        inputs: [aspira-inventory-pc, aspira-dictionaries-pc, aspira-maps-pc]
 
 # ============================================================================
 # poi_reservable_joiner — link rows in the reservable_pois table. Each row

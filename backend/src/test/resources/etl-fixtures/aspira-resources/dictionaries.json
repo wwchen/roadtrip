@@ -1,0 +1,56 @@
+{
+  "fetcher": "fetch_aspira_dictionaries",
+  "fetcher_version": "1",
+  "fetched_at": "2026-09-12T17:00:00Z",
+  "request": {
+    "url": "https://reservation.pc.gc.ca/api/equipment + /api/resourcecategory + /api/attribute/filterable",
+    "method": "GET"
+  },
+  "response": { "status": 200 },
+  "payload": {
+    "equipment": [
+      {
+        "equipmentCategoryId": -32768,
+        "localizedValues": [
+          { "cultureName": "en-US", "name": "Equipment" }
+        ],
+        "subEquipmentCategories": [
+          {
+            "subEquipmentCategoryId": -32768,
+            "localizedValues": [
+              { "cultureName": "en-US", "name": "1 Tent" }
+            ]
+          },
+          {
+            "subEquipmentCategoryId": -32764,
+            "localizedValues": [
+              { "cultureName": "en-US", "name": "1 RV/Trailer up to 20'" }
+            ]
+          }
+        ]
+      }
+    ],
+    "resource_categories": [
+      {
+        "resourceCategoryId": -2147483647,
+        "localizedValues": [
+          { "cultureName": "en-US", "name": "Campsite" }
+        ]
+      }
+    ],
+    "attributes": [
+      {
+        "attributeDefinitionId": -32715,
+        "localizedValues": [
+          { "cultureName": "en-US", "displayName": "Max Vehicle Length" }
+        ]
+      },
+      {
+        "attributeDefinitionId": -32714,
+        "localizedValues": [
+          { "cultureName": "en-US", "displayName": "Driveway Width" }
+        ]
+      }
+    ]
+  }
+}

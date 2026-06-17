@@ -207,10 +207,10 @@ Field mapping to our reservable model:
 | `localizedValues[0].name` | `reservables.name` | **Currently null — fix this** |
 | `localizedValues[0].description` | (extend) `reservables.description` | Not yet a column; or stash in `raw` |
 | `resourceCategoryId` | `reservables.site_type` (resolved) | Resolve via `/api/resourcecategory` |
-| `allowedEquipment[]` | `raw.allowed_equipment` | Stash list; resolve via `/api/equipment` for human labels |
+| `allowedEquipment[]` | `raw.allowed_equipment` | Enrich through `/api/equipment` for human labels |
 | `maxCapacity`, `minCapacity` | `raw.capacity` | Both useful for filters |
 | `maxBoatLength`, `maxBoatDraft`, `slipWidth` | `raw.marina` | Marina/boat-only fields; null for camping |
-| `definedAttributes[]` | `raw.attributes` | Resolve via `/api/attribute/getById` for human meaning |
+| `definedAttributes[]` | `raw.attributes` | Enrich through `/api/attribute/filterable` for human labels |
 | `mapIds[]` | `raw._parent_map_ids` | Already partially in our raw under `_parent_aspira_map_id` |
 
 Used for: `AspiraResourcesEtl` reads this catalog and populates
@@ -304,8 +304,11 @@ GET https://{host}/api/equipment
 ```
 
 Used for: resolving the `allowedEquipment` tuples in
-`/api/resourcelocation/resources`. Capture once per tenant; cache
-indefinitely (changes are rare and ETL re-runs pick them up).
+`/api/resourcelocation/resources`. Captured by
+`scripts/fetch_aspira_dictionaries.py` alongside resource categories
+and attribute definitions; loaded as an in-memory ETL side input.
+Capture once per tenant; cache indefinitely (changes are rare and ETL
+re-runs pick them up).
 
 ## Sentinel and ID conventions
 
@@ -442,7 +445,9 @@ GET https://{host}/api/attribute/filterable
 
 WA returns 62 attribute definitions. Used for: resolving the
 `attributeDefinitionId` keys in the `definedAttributes` block of
-`/api/resourcelocation/resources` into human labels.
+`/api/resourcelocation/resources` into human labels. Captured by
+`scripts/fetch_aspira_dictionaries.py` and loaded as an in-memory ETL
+side input.
 
 ### `GET /api/capacitycategory/capacitycategories`
 

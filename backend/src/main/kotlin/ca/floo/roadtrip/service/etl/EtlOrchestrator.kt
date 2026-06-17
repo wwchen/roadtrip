@@ -467,6 +467,7 @@ class EtlOrchestrator(
                             etlSlug = "aspira-wa-resources",
                             mapsInputSlug = "aspira-maps-wa",
                             inventoryInputSlug = "aspira-inventory-wa",
+                            dictionariesInputSlug = "aspira-dictionaries-wa",
                             vendor = "aspira_wa",
                         ),
                 "aspira-bc-resources" to
@@ -475,6 +476,7 @@ class EtlOrchestrator(
                             etlSlug = "aspira-bc-resources",
                             mapsInputSlug = "aspira-maps-bc",
                             inventoryInputSlug = "aspira-inventory-bc",
+                            dictionariesInputSlug = "aspira-dictionaries-bc",
                             vendor = "aspira_bc",
                         ),
                 "aspira-pc-resources" to
@@ -483,6 +485,7 @@ class EtlOrchestrator(
                             etlSlug = "aspira-pc-resources",
                             mapsInputSlug = "aspira-maps-pc",
                             inventoryInputSlug = "aspira-inventory-pc",
+                            dictionariesInputSlug = "aspira-dictionaries-pc",
                             vendor = "aspira_pc",
                         ),
             )
