@@ -25,6 +25,7 @@ export function renderSiteMatrix({
   state,
   reservables,
   days,
+  sortDays = null,
   error,
   selectedDate,
   siteColumnWidth,
@@ -70,8 +71,11 @@ export function renderSiteMatrix({
   const availabilityByDate = new Map(
     visibleDays.map((day) => [day.date, new Set(availableReservableIds(day))]),
   );
+  const sortAvailabilityByDate = Array.isArray(sortDays) && sortDays.length > 0
+    ? new Map(sortDays.filter((d) => d?.date).map((day) => [day.date, new Set(availableReservableIds(day))]))
+    : availabilityByDate;
   const rows = sortReservables(filterReservables(allRows, activeFilters), activeFilters.sort, {
-    availabilityByDate,
+    availabilityByDate: sortAvailabilityByDate,
     selectedDate,
   });
   const tools = renderTools({

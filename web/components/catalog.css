@@ -998,8 +998,6 @@ pre {
 }
 
 .cg-site-matrix-detail-row .cg-site-detail {
-  position: sticky;
-  left: 0;
   width: var(--cg-site-matrix-viewport-width, 100%);
   margin: 0;
   padding: 12px;

@@ -180,6 +180,7 @@ function renderAvailabilitySurface(ctx) {
     state: ctx.sitesState,
     reservables: ctx.sites,
     days,
+    sortDays: Array.isArray(ctx.days) ? ctx.days : null,
     error: ctx.sitesError,
     selectedDate: null,
     siteColumnWidth: ctx.siteColumnWidth,
