@@ -84,7 +84,7 @@ function makeContext(host, feature, signal) {
       query: '',
       loop: '',
       type: '',
-      sort: 'open',
+      sort: 'site',
     },
     selectedSiteRid: null,
     selectedSiteDate: null,
@@ -280,12 +280,6 @@ function onRootClick(ctx, e) {
     rerender(ctx);
     return;
   }
-  if (tgt.closest('[data-site-detail-close]')) {
-    ctx.selectedSiteRid = null;
-    ctx.selectedSiteDate = null;
-    rerender(ctx);
-    return;
-  }
   if (tgt.closest('.cg-week-prev')) {
     e.preventDefault();
     shiftWeek(ctx, -WEEK_DAYS);
@@ -372,7 +366,7 @@ function updateMatrixFilter(ctx, key, value) {
     query: current.query || '',
     loop: current.loop || '',
     type: current.type || '',
-    sort: current.sort || 'open',
+    sort: current.sort || 'site',
     [key]: nextValue,
   };
   ctx.armedBook = null;

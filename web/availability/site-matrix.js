@@ -12,11 +12,11 @@ const DEFAULT_FILTERS = {
   query: '',
   loop: '',
   type: '',
-  sort: 'open',
+  sort: 'site',
 };
 const SORT_OPTIONS = [
-  ['open', 'Open first'],
   ['site', 'Site'],
+  ['open', 'Open first'],
   ['loop', 'Loop'],
   ['type', 'Type'],
 ];

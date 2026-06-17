@@ -27,7 +27,6 @@ export function renderSiteDetail({ site, selectedDate = null, selectedEndDate = 
           <div class="cg-site-detail-title" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
           ${subtitle ? `<div class="cg-site-detail-subtitle">${escapeHtml(subtitle)}</div>` : ''}
         </div>
-        <button type="button" class="cg-site-detail-close" data-site-detail-close aria-label="Close site details">Close</button>
       </div>
       ${imageUrl ? `<div class="cg-site-detail-media"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}"></div>` : ''}
       ${description ? `<p class="cg-site-detail-description">${escapeHtml(description)}</p>` : ''}
