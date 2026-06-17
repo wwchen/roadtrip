@@ -13,7 +13,7 @@ import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 
-// Shared response shape for the unified /api/campsite/availability endpoint.
+// Shared response shape for the unified availability endpoints.
 // Both rec.gov and Aspira providers feed the same downstream classification
 // + render path so the FE drawer.js doesn't have to learn two contracts.
 //

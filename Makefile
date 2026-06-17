@@ -1,4 +1,4 @@
-.PHONY: help run deploy check-pushed data-fetch data-import clean-db qa install install-hooks companion
+.PHONY: help run deploy check-pushed data-fetch data-import reset-db qa install install-hooks companion
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -17,7 +17,6 @@ DB_PASSWORD ?= $(POSTGRES_PASSWORD)
 DB_JDBC_URL ?= jdbc:postgresql://$(DB_HOST):$(DB_PORT)/$(DB_NAME)
 
 COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
-CLEAN_DB_TABLES := availability_snapshot, availability_job_run, availability_job, availability_watch, reservable_pois, reservables, pois, ingest_runs, import_runs, api_cache
 
 help:
 	@echo "Targets:"
@@ -27,7 +26,7 @@ help:
 	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
 	@echo "  make data-fetch       Fetch upstream data via admin API (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / reservable_data / poi_reservable_joiner)."
-	@echo "  make clean-db         Clear local imported POI/reservable data so make data-import can replay from scratch."
+	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
 	@echo ""
@@ -87,13 +86,12 @@ data-fetch:
 data-import:
 	curl --fail-with-body -sS --max-time 1800 -X POST '$(ADMIN_BASE)/api/admin/data/import$(if $(TARGET),/$(shell python3 -c "import sys,urllib.parse;print(urllib.parse.quote(sys.argv[1],safe=''))" "$(TARGET)"))'
 
-# Clear only local import-derived data while preserving schema/migrations.
-# This lets Flyway stay current and makes `make data-import` immediately
-# repopulate POIs, reservables, joins, ingest audit rows, and API cache.
-clean-db:
+# Hard reset the local dev schema, including flyway_schema_history. Useful
+# when switching worktrees/branches that intentionally changed a migration.
+reset-db:
 	$(COMPOSE) up -d postgres
-	@echo "clearing local tables: $(CLEAN_DB_TABLES)"
-	$(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'TRUNCATE TABLE $(CLEAN_DB_TABLES) RESTART IDENTITY CASCADE;'
+	@echo "dropping and recreating local schema public in database $(DB_NAME)"
+	$(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO "$(DB_USER)"; GRANT ALL ON SCHEMA public TO public;'
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first

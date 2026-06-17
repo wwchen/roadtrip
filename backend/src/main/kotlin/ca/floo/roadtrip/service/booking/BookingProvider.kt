@@ -25,7 +25,7 @@ interface BookingProvider {
     /** Stable identity. Mapped from `pois.source` + `provider_ref` shape by the registry. */
     val id: BookingProviderId
 
-    /** Static per adapter; cheap to read. Surfaced via `/api/campsite/capabilities/{poi_id}`. */
+    /** Static per adapter; cheap to read and safe to surface to API clients. */
     val capabilities: BookingCapabilities
 
     /**

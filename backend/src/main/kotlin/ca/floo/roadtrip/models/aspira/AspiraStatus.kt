@@ -17,7 +17,7 @@ package ca.floo.roadtrip.models.aspira
  *   5     → CLOSED      — explicit closed (winter, end-of-season)
  *   else  → UNKNOWN     — unfamiliar code, surfaced as `partial`
  *
- * The FE contract from /api/campsite/availability/{recgov_id} uses the
+ * The FE contract from the availability endpoints uses the
  * vocabulary `available | partial | booked | closed`. We map onto the same
  * vocabulary for shape compatibility — the drawer's render path is
  * identical regardless of provider.

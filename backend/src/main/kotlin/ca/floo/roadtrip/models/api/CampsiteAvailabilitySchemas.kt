@@ -3,7 +3,7 @@ package ca.floo.roadtrip.models.api
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
-// /api/campsite/availability/bulk — trip-planner endpoint. ids are pois.id
+// /api/availability/bulk — trip-planner endpoint. ids are pois.id
 // (not provider-specific keys); the BE dispatches to the right cache by
 // provider_ref. Per-id failures land as a non-200 `status` on that entry's
 // record; the rest of the call still succeeds.

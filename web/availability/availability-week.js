@@ -1,44 +1,31 @@
-// 7-day availability search component (RFC 0007). Mounts inside the
-// campground drawer and owns:
+// Availability table component. Mounts inside the campground drawer and owns:
 //
 //   - the visible week start (LocalDate),
 //   - stay length for local visualization (default 1, persisted in localStorage),
 //   - the selected day,
 //   - the in-flight controller (skeleton timer, AbortSignal),
-//   - the cached list of the user's existing alerts (for 🔔 badges).
+//   - the cached list of the user's active watches (for badges).
 //
 // Render is split into pure modules:
-//   - week-grid.js          — 7 day cells.
 //   - day-detail.js         — selected-day panel + alert / reserve CTAs.
 //   - site-list.js          — all-site catalog or selected-day availability.
 //   - site-matrix.js        — reservable rows crossed with visible dates.
-//   - calendar-popover.js   — month picker shown when the user clicks the
-//                             week label (jump to any date).
 //
 // The drawer chrome (chrome.js) supplies the AbortSignal and active-feature
 // guard; see openCampgroundDrawer in drawer/campground.js.
 
 import { escapeHtml } from '../core.js';
-import {
-  createCampsiteAlert,
-  deleteCampsiteAlert,
-  listCampsiteAlerts,
-} from '../api/campsite-alert-api.js';
-import { requestCampsiteAvailability } from '../api/availability-api.js';
+import { requestPoiAvailability } from '../api/availability-api.js';
 import { fetchPoiReservables } from '../api/reservable-api.js';
-import { isActiveFeature } from '../drawer/chrome.js';
-import { mountCalendarPopover } from './calendar-popover.js';
+import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
 import { renderDayDetail } from './day-detail.js';
 import { renderSiteDetail } from './site-detail.js';
-import { renderSiteMatrix } from './site-matrix.js';
+import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
-import { renderWeekGrid, renderWeekSkeleton } from './week-grid.js';
 
 const STORAGE_KEY_STAY_LENGTH = 'cg.stayLength';
-const STORAGE_KEY_AVAILABILITY_VIEW = 'cg.availabilityView';
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
 const DEFAULT_STAY_LENGTH = 1;
-const DEFAULT_AVAILABILITY_VIEW = 'table';
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
 const LEGACY_DEFAULT_SITE_COLUMN_WIDTH = 178;
 const MIN_SITE_COLUMN_WIDTH = 88;
@@ -50,17 +37,10 @@ const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
-// Provider-agnostic horizon used by the calendar popover to disable
-// dates beyond what the upstream is likely to expose. The route also
-// enforces this server-side based on the actual provider capabilities;
-// the FE bound is informational. Six months matches rec.gov's window.
-const CALENDAR_MAX_DAYS_OUT = 180;
-
 /**
- * Mount the week grid into the host element. Returns a controller with a
- * `dispose()` method the drawer should call on close (clears any pending
- * skeleton timer, removes calendar listeners; in-flight fetches are killed
- * via the drawer's AbortSignal already).
+ * Mount the availability table into the host element. Returns a controller with a
+ * `dispose()` method the drawer should call on close. In-flight fetches are
+ * killed via the drawer's AbortSignal already.
  *
  * @param {HTMLElement} host
  * @param {object}      feature   POI feature (used for poi id, recgov_id, name).
@@ -73,15 +53,13 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
   rerender(ctx);
   wireRoot(ctx);
   fetchWeek(ctx);
-  fetchAlerts(ctx);
+  fetchWatches(ctx);
   fetchSites(ctx);
 
   return {
     dispose() {
       endSiteColumnResize(ctx);
       clearTimeout(ctx.skeletonTimer);
-      ctx.calendar?.dispose();
-      ctx.calendar = null;
     },
   };
 }
@@ -89,17 +67,13 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
 // ---- context --------------------------------------------------------------
 
 function makeContext(host, feature, signal) {
-  const recgovId =
-    feature.properties?.recgov_id ?? feature.properties?.provider_ref?.recgov_id ?? null;
   return {
     host,
     feature,
     poiId: feature.id,
-    recgovId,
     signal,
     weekStart: startOfTodayUtc(),
     stayLength: loadStayLength(),
-    availabilityView: loadAvailabilityView(),
     siteColumnWidth: loadSiteColumnWidth(),
     selectedDate: null,
     state: 'loading', // 'loading' | 'success' | 'empty' | 'closed_for_season' | 'error'
@@ -122,9 +96,8 @@ function makeContext(host, feature, signal) {
     summary: '',
     season: null,
     error: null,
-    alertsByWindow: new Map(),
+    watchesByWindow: new Map(),
     skeletonTimer: null,
-    calendar: null,
     // Catalog (RFC 0008): the per-POI reservable list the BE serves at
     // /api/poi/{id}/reservables. When a day is selected, the week response's
     // available_reservable_ids filters this list to the sites available for
@@ -150,8 +123,7 @@ function renderShell(ctx) {
   const sitesDay = selectedDay && availableCount(selectedDay) > 0 ? selectedDay : null;
   return `
     <section class="cg-availability">
-      ${renderNightsRow(ctx)}
-      ${ctx.availabilityView === 'week' ? renderWeekNav(ctx) : ''}
+      ${renderStayLengthRow(ctx)}
       ${renderAvailabilitySurface(ctx)}
       <div class="cg-freshness">${renderFreshness(ctx)}</div>
       ${renderSelectedSiteDetail(ctx)}
@@ -168,7 +140,7 @@ function renderShell(ctx) {
   `;
 }
 
-function renderNightsRow(ctx) {
+function renderStayLengthRow(ctx) {
   const chips = STAY_LENGTH_CHIPS.map(
     (n) =>
       `<button type="button" class="cg-chip ${n === ctx.stayLength ? 'cg-chip-active' : ''}" data-stay-length="${n}">${n}</button>`,
@@ -179,54 +151,18 @@ function renderNightsRow(ctx) {
         <span class="cg-nights-label">Stay length</span>
         ${chips}
       </div>
-      <div class="cg-view-toggle" role="group" aria-label="Availability view">
-        ${viewModeButton(ctx, 'table', 'Table')}
-        ${viewModeButton(ctx, 'week', 'Week')}
-      </div>
-    </div>
-  `;
-}
-
-function viewModeButton(ctx, mode, label) {
-  const active = ctx.availabilityView === mode;
-  return `
-    <button type="button" class="cg-view-mode${active ? ' cg-view-mode-active' : ''}" data-view-mode="${mode}" aria-pressed="${active ? 'true' : 'false'}">
-      ${escapeHtml(label)}
-    </button>
-  `;
-}
-
-function renderWeekNav(ctx) {
-  const start = ctx.weekStart;
-  const end = addDays(start, WEEK_DAYS - 1);
-  const sameMonth = start.getUTCMonth() === end.getUTCMonth();
-  const fmt = (d, opts) => d.toLocaleDateString('en-US', { ...opts, timeZone: 'UTC' });
-  const label = sameMonth
-    ? `${fmt(start, { month: 'short', day: 'numeric' })} – ${fmt(end, { day: 'numeric' })}, ${start.getUTCFullYear()}`
-    : `${fmt(start, { month: 'short', day: 'numeric' })} – ${fmt(end, { month: 'short', day: 'numeric' })}, ${start.getUTCFullYear()}`;
-  const today = startOfTodayUtc();
-  const onCurrentWeek = sameDay(start, today);
-  const prevDisabled = isBefore(addDays(start, -WEEK_DAYS), today);
-  // "Today" shortcut sits next to the prev arrow when the user has paged
-  // away from the current week. Hidden otherwise so it doesn't add noise
-  // for the most common case.
-  const todayBtn = onCurrentWeek
-    ? ''
-    : `<button type="button" class="cg-week-today" aria-label="Jump to today">Today</button>`;
-  return `
-    <div class="cg-week-nav">
-      <div class="cg-week-nav-left">
-        <button type="button" class="cg-week-prev" aria-label="Previous week" ${prevDisabled ? 'disabled' : ''}>‹</button>
-        ${todayBtn}
-      </div>
-      <button type="button" class="cg-week-label" aria-label="Pick a date">${escapeHtml(label)}</button>
-      <button type="button" class="cg-week-next" aria-label="Next week">›</button>
     </div>
   `;
 }
 
 function renderBody(ctx) {
-  if (ctx.state === 'loading' || ctx.days == null) return renderWeekSkeleton();
+  if (ctx.state === 'loading') {
+    return renderSiteMatrixSkeleton({
+      days: placeholderMatrixDays(ctx),
+      siteColumnWidth: ctx.siteColumnWidth,
+      showToday: false,
+    });
+  }
   if (ctx.state === 'error') {
     return `<div class="cg-summary"><span class="cg-error">${escapeHtml(ctx.error || "Couldn't load availability")}</span> · <a href="#" class="cg-retry">Retry</a></div>`;
   }
@@ -238,16 +174,22 @@ function renderBody(ctx) {
     const msg = reopens ? `Reopens ${reopens}` : 'Closed for season';
     return `<div class="cg-closed-banner">⛰️ ${escapeHtml(msg)}</div>`;
   }
-  return renderWeekGrid({
+  if (ctx.days == null) {
+    return renderSiteMatrixSkeleton({
+      days: placeholderMatrixDays(ctx),
+      siteColumnWidth: ctx.siteColumnWidth,
+      showToday: false,
+    });
+  }
+  return renderSiteMatrixSkeleton({
     days: ctx.days,
-    todayIso: isoDate(startOfTodayUtc()),
-    selectedDate: ctx.selectedDate,
-    watchedDates: matchingAlertStartDates(ctx),
+    siteColumnWidth: ctx.siteColumnWidth,
+    showToday: false,
   });
 }
 
 function renderAvailabilitySurface(ctx) {
-  if (ctx.state !== 'success' || ctx.availabilityView === 'week') return renderBody(ctx);
+  if (ctx.state !== 'success') return renderBody(ctx);
   const days = matrixAvailabilityDays(ctx);
   return renderSiteMatrix({
     state: ctx.sitesState,
@@ -278,20 +220,17 @@ function renderDetail(ctx) {
   if (!day || availableCount(day) > 0) return '';
   return renderDayDetail({
     day,
-    stayLength: ctx.stayLength,
-    watching: ctx.alertsByWindow.has(alertWindowKey(day.date, stayEndDate(ctx, day.date))),
-    recgovId: ctx.recgovId,
+    watching: ctx.watchesByWindow.has(watchWindowKey(day.date, stayEndDate(ctx, day.date))),
+    canWatch: ctx.poiId != null,
   });
 }
 
 function renderSelectedSiteDetail(ctx) {
-  if (ctx.availabilityView !== 'table') return '';
   const site = selectedMatrixSite(ctx);
   if (!site) return '';
   return renderSiteDetail({
     site,
     selectedDate: ctx.selectedSiteDate,
-    stayLength: ctx.stayLength,
   });
 }
 
@@ -336,9 +275,6 @@ function onRootClick(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
 
-  // Close calendar if the click landed elsewhere; the popover handles its
-  // own outside-click via document listeners but the explicit checks below
-  // win first.
   const chipBtn = tgt.closest('[data-stay-length]');
   if (chipBtn) {
     const n = parseInt(chipBtn.getAttribute('data-stay-length'), 10);
@@ -353,59 +289,7 @@ function onRootClick(ctx, e) {
     }
     return;
   }
-  const viewModeBtn = tgt.closest('[data-view-mode]');
-  if (viewModeBtn) {
-    const mode = viewModeBtn.getAttribute('data-view-mode');
-    if (mode === 'table' || mode === 'week') {
-      ctx.availabilityView = mode;
-      saveAvailabilityView(mode);
-      rerender(ctx);
-    }
-    return;
-  }
-  if (tgt.closest('.cg-week-prev')) {
-    if (tgt.closest('.cg-week-prev').disabled) return;
-    ctx.weekStart = addDays(ctx.weekStart, -WEEK_DAYS);
-    ctx.selectedDate = null;
-    ctx.sitesExpanded = false;
-    fetchWeek(ctx);
-    return;
-  }
-  if (tgt.closest('.cg-week-next')) {
-    ctx.weekStart = addDays(ctx.weekStart, WEEK_DAYS);
-    ctx.selectedDate = null;
-    ctx.sitesExpanded = false;
-    fetchWeek(ctx);
-    return;
-  }
-  if (tgt.closest('.cg-week-today')) {
-    const today = startOfTodayUtc();
-    if (sameDay(ctx.weekStart, today)) return;
-    ctx.weekStart = today;
-    ctx.selectedDate = null;
-    ctx.sitesExpanded = false;
-    fetchWeek(ctx);
-    return;
-  }
-  if (tgt.closest('.cg-week-label')) {
-    e.preventDefault();
-    e.stopPropagation();
-    openCalendar(ctx, tgt.closest('.cg-week-label'));
-    return;
-  }
-  const dayBtn = tgt.closest('.cg-day:not(.cg-day-skeleton)');
-  if (dayBtn) {
-    const date = dayBtn.getAttribute('data-date');
-    const selected = ctx.selectedDate !== date;
-    ctx.selectedDate = selected ? date : null;
-    ctx.sitesExpanded = selected;
-    if (selected) {
-      fetchSites(ctx);
-    } else {
-      rerender(ctx);
-    }
-    return;
-  }
+
   const matrixDateBtn = tgt.closest('[data-matrix-date]');
   if (matrixDateBtn) {
     const date = matrixDateBtn.getAttribute('data-matrix-date');
@@ -453,7 +337,7 @@ function onRootClick(ctx, e) {
   const alertBtn = tgt.closest('.cg-day-alert');
   if (alertBtn) {
     e.preventDefault();
-    toggleAlert(ctx, alertBtn);
+    toggleWatch(ctx, alertBtn);
     return;
   }
   const sitesToggle = tgt.closest('.cg-sites-toggle');
@@ -523,7 +407,6 @@ function onRootScroll(ctx, e) {
   if (!(scroll instanceof HTMLElement)) return;
   if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
   ctx.matrixScrollLeft = scroll.scrollLeft;
-  if (ctx.availabilityView !== 'table') return;
   if (ctx.state !== 'success') return;
   if (ctx.matrixLoading || ctx.matrixEnd) return;
   const remaining = scroll.scrollWidth - scroll.clientWidth - scroll.scrollLeft;
@@ -596,40 +479,6 @@ function jumpMatrixToToday(ctx) {
   rerender(ctx);
 }
 
-function openCalendar(ctx, anchorBtn) {
-  // Close any prior popover (idempotent).
-  ctx.calendar?.dispose();
-  ctx.calendar = null;
-
-  // Mount a sibling div next to the label so absolute positioning can hang
-  // it under the anchor without disturbing layout.
-  const popoverHost = document.createElement('div');
-  popoverHost.className = 'cg-cal-host';
-  anchorBtn.parentElement.appendChild(popoverHost);
-
-  const today = startOfTodayUtc();
-  ctx.calendar = mountCalendarPopover(popoverHost, {
-    viewMonth: ctx.weekStart,
-    today,
-    selectedDate: ctx.weekStart,
-    maxDate: addDays(today, CALENDAR_MAX_DAYS_OUT),
-    onPick: (date) => {
-      ctx.weekStart = date;
-      ctx.selectedDate = null;
-      ctx.sitesExpanded = false;
-      ctx.calendar?.dispose();
-      ctx.calendar = null;
-      fetchWeek(ctx);
-    },
-    onClose: () => {
-      ctx.calendar?.dispose();
-      ctx.calendar = null;
-      // The popover lives in the rendered tree; rerender drops it.
-      rerender(ctx);
-    },
-  });
-}
-
 // ---- data -----------------------------------------------------------------
 
 async function fetchWeek(ctx, { force = false } = {}) {
@@ -640,14 +489,13 @@ async function fetchWeek(ctx, { force = false } = {}) {
   clearTimeout(ctx.skeletonTimer);
   ctx.skeletonTimer = setTimeout(() => rerender(ctx), SKELETON_RENDER_DELAY_MS);
   try {
-    const resp = await requestCampsiteAvailability(ctx.poiId, {
+    const resp = await requestPoiAvailability(ctx.poiId, {
       startDate: isoDate(ctx.weekStart),
       endDate: isoDate(addDays(ctx.weekStart, WEEK_DAYS)),
       force,
       signal: ctx.signal,
     });
     clearTimeout(ctx.skeletonTimer);
-    if (!isActiveFeature(ctx.feature)) return;
     if (!resp.ok) {
       const json = await resp.json().catch(() => null);
       ctx.state = 'error';
@@ -674,7 +522,6 @@ async function fetchWeek(ctx, { force = false } = {}) {
   } catch (e) {
     clearTimeout(ctx.skeletonTimer);
     if (e.name === 'AbortError') return;
-    if (!isActiveFeature(ctx.feature)) return;
     ctx.state = 'error';
     ctx.error = e.message || 'network';
     rerender(ctx);
@@ -691,17 +538,16 @@ async function fetchMoreMatrixDays(ctx) {
   ctx.matrixError = null;
   rerender(ctx);
   try {
-    const resp = await requestCampsiteAvailability(ctx.poiId, {
+    const resp = await requestPoiAvailability(ctx.poiId, {
       startDate: isoDate(nextStart),
       endDate: isoDate(addDays(nextStart, WEEK_DAYS)),
       signal: ctx.signal,
     });
-    if (!isActiveFeature(ctx.feature)) return;
     if (ctx.signal?.aborted) return;
     if (requestSeq !== ctx.matrixRequestSeq) return;
     if (!resp.ok) {
       const json = await resp.json().catch(() => null);
-      if (json?.error === 'bad_start') {
+      if (json?.error === 'bad_date_window') {
         ctx.matrixEnd = true;
       } else {
         ctx.matrixError = json?.error || `HTTP ${resp.status}`;
@@ -716,7 +562,7 @@ async function fetchMoreMatrixDays(ctx) {
     if (json.cache) ctx.cacheBlock = json.cache;
   } catch (e) {
     if (e.name === 'AbortError') return;
-    if (!isActiveFeature(ctx.feature)) return;
+    if (ctx.signal?.aborted) return;
     if (requestSeq !== ctx.matrixRequestSeq) return;
     ctx.matrixError = e.message || 'network';
   } finally {
@@ -746,7 +592,6 @@ async function fetchSites(ctx) {
       signal: ctx.signal,
     });
     if (ctx.signal?.aborted) return;
-    if (!isActiveFeature(ctx.feature)) return;
     if (requestSeq !== ctx.sitesRequestSeq) return;
     ctx.sitesState = 'success';
     ctx.sites = Array.isArray(json?.reservables) ? json.reservables : [];
@@ -754,7 +599,7 @@ async function fetchSites(ctx) {
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
-    if (!isActiveFeature(ctx.feature)) return;
+    if (ctx.signal?.aborted) return;
     if (requestSeq !== ctx.sitesRequestSeq) return;
     ctx.sitesState = 'error';
     ctx.sitesError = e.message || 'network';
@@ -762,96 +607,83 @@ async function fetchSites(ctx) {
   }
 }
 
-async function fetchAlerts(ctx) {
-  if (!ctx.recgovId) return;
+async function fetchWatches(ctx) {
+  if (ctx.poiId == null) return;
   try {
-    const alerts = await listCampsiteAlerts({ signal: ctx.signal });
+    const data = await listWatches({ status: 'active', poiId: ctx.poiId, signal: ctx.signal });
     if (ctx.signal?.aborted) return;
-    ctx.alertsByWindow = indexAlertsByWindow(alerts, ctx.recgovId);
+    ctx.watchesByWindow = indexWatchesByWindow(data?.watches, ctx.poiId);
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
     // Non-fatal: badges just don't render.
-    console.warn('alert list fetch failed', e);
+    console.warn('watch list fetch failed', e);
   }
 }
 
-function indexAlertsByWindow(alerts, campgroundId) {
+function indexWatchesByWindow(watches, poiId) {
   const out = new Map();
-  if (!Array.isArray(alerts)) return out;
-  const cgId = String(campgroundId);
-  for (const a of alerts) {
-    if (!a) continue;
-    if (a.status === 'done') continue;
-    if (String(a.campground_id ?? a.campgroundId) !== cgId) continue;
-    const date = a.start_date ?? a.startDate;
-    const end = a.end_date ?? a.endDate;
-    if (date && end) out.set(alertWindowKey(date, end), a);
+  if (!Array.isArray(watches)) return out;
+  const id = String(poiId);
+  for (const w of watches) {
+    if (!w || w.status === 'done') continue;
+    if (String(w.poi_id ?? '') !== id) continue;
+    const start = w.start_date ?? w.startDate;
+    const end = w.end_date ?? w.endDate;
+    if (start && end) out.set(watchWindowKey(start, end), w);
   }
   return out;
 }
 
-async function toggleAlert(ctx, button) {
+async function toggleWatch(ctx, button) {
   const date = ctx.selectedDate;
   if (!date) return;
   const endDate = stayEndDate(ctx, date);
-  const key = alertWindowKey(date, endDate);
-  const watching = ctx.alertsByWindow.has(key);
+  const key = watchWindowKey(date, endDate);
+  const watching = ctx.watchesByWindow.has(key);
   const previousLabel = button.textContent;
   button.disabled = true;
   try {
     if (watching) {
-      const existing = ctx.alertsByWindow.get(key);
-      button.textContent = 'Removing…';
-      await deleteCampsiteAlert(existing.id, { signal: ctx.signal });
-      ctx.alertsByWindow.delete(key);
+      const existing = ctx.watchesByWindow.get(key);
+      button.textContent = 'Removing...';
+      await deleteWatch(existing.id, { signal: ctx.signal });
+      ctx.watchesByWindow.delete(key);
     } else {
-      button.textContent = 'Setting alert…';
-      const payload = buildAlertPayload(ctx, date, endDate);
-      const created = await createCampsiteAlert(payload, { signal: ctx.signal });
-      ctx.alertsByWindow.set(key, { ...created, ...payload });
+      button.textContent = 'Creating watch...';
+      const payload = buildWatchPayload(ctx, date, endDate);
+      const created = await createWatch(payload, { signal: ctx.signal });
+      ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
     }
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
     button.textContent = previousLabel;
     button.disabled = false;
-    console.warn('alert toggle failed', e);
+    console.warn('watch toggle failed', e);
   }
 }
 
-function buildAlertPayload(ctx, date, endDate) {
+function buildWatchPayload(ctx, date, endDate) {
   return {
-    campground_id: String(ctx.recgovId),
-    campground_name: ctx.feature.properties?.name || `Campground ${ctx.recgovId}`,
-    parent_name: ctx.feature.properties?.parent_name || null,
-    parent_id: ctx.feature.properties?.parent_id || null,
+    poi_id: Number(ctx.poiId),
+    reservable_filters: {},
     start_date: date,
     end_date: endDate,
-    campsite_types: [],
-    equipment_types: [],
-    notify_slack: false,
-    auto_cart: false,
-    stop_after_match: true,
+    cadence_sec: 60,
+    trigger_kinds: ['availability'],
+    trigger_config: {},
+    stop_when_triggered: true,
   };
 }
 
 // ---- helpers --------------------------------------------------------------
 
-function matchingAlertStartDates(ctx) {
-  const out = new Set();
-  for (const key of ctx.alertsByWindow.keys()) {
-    const [start, end] = key.split('|');
-    if (start && end === stayEndDate(ctx, start)) out.add(start);
-  }
-  return out;
-}
-
 function stayEndDate(ctx, startDate) {
   return isoDate(addDays(parseIsoDate(startDate), ctx.stayLength));
 }
 
-function alertWindowKey(startDate, endDate) {
+function watchWindowKey(startDate, endDate) {
   return `${startDate}|${endDate}`;
 }
 
@@ -861,7 +693,7 @@ function loadStayLength() {
     const n = parseInt(raw, 10);
     if (Number.isFinite(n) && n > 0 && n < 32) return n;
   } catch {
-    // localStorage blocked (private mode, etc.) — default silently.
+    // Non-fatal: default silently.
   }
   return DEFAULT_STAY_LENGTH;
 }
@@ -869,24 +701,6 @@ function loadStayLength() {
 function saveStayLength(n) {
   try {
     localStorage.setItem(STORAGE_KEY_STAY_LENGTH, String(n));
-  } catch {
-    // Non-fatal: just won't persist.
-  }
-}
-
-function loadAvailabilityView() {
-  try {
-    const mode = localStorage.getItem(STORAGE_KEY_AVAILABILITY_VIEW);
-    if (mode === 'table' || mode === 'week') return mode;
-  } catch {
-    // Non-fatal: default silently.
-  }
-  return DEFAULT_AVAILABILITY_VIEW;
-}
-
-function saveAvailabilityView(mode) {
-  try {
-    localStorage.setItem(STORAGE_KEY_AVAILABILITY_VIEW, mode);
   } catch {
     // Non-fatal: just won't persist.
   }
@@ -915,7 +729,7 @@ function saveSiteColumnWidth(width) {
 }
 
 function restoreMatrixScroll(ctx) {
-  if (ctx.availabilityView !== 'table' || !ctx.matrixScrollLeft) return;
+  if (!ctx.matrixScrollLeft) return;
   const left = ctx.matrixScrollLeft;
   window.requestAnimationFrame?.(() => {
     const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
@@ -936,6 +750,13 @@ function matrixAvailabilityDays(ctx) {
   return Array.isArray(ctx.matrixDays) ? ctx.matrixDays : (Array.isArray(ctx.days) ? ctx.days : []);
 }
 
+function placeholderMatrixDays(ctx) {
+  return Array.from({ length: WEEK_DAYS }, (_, i) => {
+    const date = addDays(ctx.weekStart, i);
+    return { date: isoDate(date) };
+  });
+}
+
 function shouldShowMatrixToday(ctx) {
   const days = matrixAvailabilityDays(ctx);
   const firstDate = days[0]?.date;
@@ -943,8 +764,7 @@ function shouldShowMatrixToday(ctx) {
 }
 
 function siteListAvailabilityDays(ctx) {
-  if (ctx.availabilityView === 'table') return matrixAvailabilityDays(ctx);
-  return Array.isArray(ctx.days) ? ctx.days : [];
+  return matrixAvailabilityDays(ctx);
 }
 
 function mergeAvailabilityDays(current, next) {
@@ -969,10 +789,6 @@ function startOfTodayUtc() {
 
 function addDays(date, days) {
   return new Date(date.getTime() + days * MS_PER_DAY);
-}
-
-function isBefore(a, b) {
-  return a.getTime() < b.getTime();
 }
 
 function sameDay(a, b) {

@@ -81,11 +81,11 @@ class IngestController(
     /** All targets across both fetch and import maps (de-duplicated). */
     fun knownTargets(): Set<String> = fetchTargets.keys + importTargets.keys
 
-    /** Fan-out targets for [kind]. */
-    fun fanOutTargets(kind: RunKind): Set<String> =
+    /** Fan-out targets for [kind]. Import order is significant: joiners run after data rows. */
+    fun fanOutTargets(kind: RunKind): List<String> =
         when (kind) {
-            RunKind.FETCH -> fetchTargets.keys
-            RunKind.IMPORT -> importTargets.keys
+            RunKind.FETCH -> fetchTargets.keys.sorted()
+            RunKind.IMPORT -> importTargets.keys.toList()
         }
 
     suspend fun startRun(

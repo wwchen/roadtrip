@@ -38,12 +38,10 @@ export function renderSiteMatrix({
   if (visibleDays.length === 0) return '';
 
   if (state === 'loading') {
-    return renderSection({
-      meta: `${visibleDays.length} dates`,
-      loadingMore,
-      loadMoreError,
+    return renderSiteMatrixSkeleton({
+      days: visibleDays,
+      siteColumnWidth,
       showToday,
-      body: '<div class="cg-site-matrix-status" aria-busy="true">Loading sites...</div>',
     });
   }
   if (state === 'error') {
@@ -142,6 +140,57 @@ export function renderSiteMatrix({
   });
 }
 
+export function renderSiteMatrixSkeleton({
+  days,
+  siteColumnWidth,
+  showToday = false,
+  rowCount = 6,
+} = {}) {
+  const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
+  const dateCount = visibleDays.length || 7;
+  const headers = visibleDays.length > 0
+    ? visibleDays.map(dateHeaderHtml).join('')
+    : Array.from({ length: dateCount }, () => '<th scope="col" class="cg-site-matrix-date cg-site-matrix-skeleton-cell"></th>').join('');
+  const bodyRows = Array.from({ length: rowCount }, () => {
+    const cells = Array.from({ length: dateCount }, () => `
+      <td class="cg-site-matrix-cell cg-site-matrix-skeleton-cell">
+        <span class="cg-site-matrix-skeleton-bar cg-site-matrix-skeleton-pill"></span>
+      </td>
+    `).join('');
+    return `
+      <tr>
+        <th scope="row" class="cg-site-matrix-site cg-site-matrix-skeleton-cell">
+          <span class="cg-site-matrix-skeleton-bar cg-site-matrix-skeleton-name"></span>
+          <span class="cg-site-matrix-skeleton-bar cg-site-matrix-skeleton-meta"></span>
+        </th>
+        ${cells}
+      </tr>
+    `;
+  }).join('');
+  const widthStyle = matrixScrollStyle(siteColumnWidth, dateCount);
+
+  return renderSection({
+    meta: `${dateCount} dates`,
+    tools: renderSkeletonTools(),
+    showToday,
+    body: `
+      <div class="cg-site-matrix-scroll cg-site-matrix-skeleton" aria-busy="true"${widthStyle}>
+        <table class="cg-site-matrix-table">
+          <thead>
+            <tr>
+              <th scope="col" class="cg-site-matrix-site cg-site-matrix-site-heading">
+                <span>Site</span>
+              </th>
+              ${headers}
+            </tr>
+          </thead>
+          <tbody>${bodyRows}</tbody>
+        </table>
+      </div>
+    `,
+  });
+}
+
 function renderSection({
   meta,
   body,
@@ -178,6 +227,17 @@ function renderSection({
       ${tools}
       ${body}
     </section>
+  `;
+}
+
+function renderSkeletonTools() {
+  return `
+    <div class="cg-site-matrix-tools cg-site-matrix-skeleton-tools" aria-hidden="true">
+      <span class="cg-site-matrix-filter cg-site-matrix-skeleton-control"></span>
+      <span class="cg-site-matrix-filter cg-site-matrix-skeleton-control"></span>
+      <span class="cg-site-matrix-filter cg-site-matrix-skeleton-control"></span>
+      <span class="cg-site-matrix-filter cg-site-matrix-skeleton-control"></span>
+    </div>
   `;
 }
 
@@ -272,6 +332,7 @@ function dateHeaderHtml(day) {
 
 function rowHtml(row, context) {
   const siteLabel = siteName(row);
+  const siteTitle = siteTitleText(row, siteLabel);
   const rowClass = String(row.rid) === String(context.selectedSiteRid) ? ' class="cg-site-matrix-row-selected"' : '';
   const cells = context.visibleDays
     .map((day) =>
@@ -288,27 +349,26 @@ function rowHtml(row, context) {
     .join('');
   return `
     <tr${rowClass}>
-      <th scope="row" class="cg-site-matrix-site" title="${escapeHtml(siteLabel)}">
-        ${siteLabelHtml(row, siteLabel)}
+      <th scope="row" class="cg-site-matrix-site" title="${escapeHtml(siteTitle)}">
+        ${siteLabelHtml(row, siteLabel, siteTitle)}
       </th>
       ${cells}
     </tr>
   `;
 }
 
-function siteLabelHtml(row, siteLabel) {
-  const meta = [row.loop, row.site_type].filter(Boolean).join(' · ');
-  const metaLine = meta ? `<span class="cg-site-matrix-meta-line">${escapeHtml(meta)}</span>` : '';
+function siteLabelHtml(row, siteLabel, siteTitle) {
+  const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
+  const prefix = loop ? `<span class="cg-site-matrix-loop-prefix">${escapeHtml(loop)} / </span>` : '';
   return `
     <button
       type="button"
       class="cg-site-matrix-site-button"
       data-site-detail-rid="${escapeHtml(row.rid)}"
-      title="${escapeHtml(siteLabel)}"
-      aria-label="View details for ${escapeHtml(siteLabel)}"
+      title="${escapeHtml(siteTitle)}"
+      aria-label="View details for ${escapeHtml(siteTitle)}"
     >
-      <span class="cg-site-matrix-name">${escapeHtml(siteLabel)}</span>
-      ${metaLine}
+      <span class="cg-site-matrix-site-title">${prefix}<span class="cg-site-matrix-name">${escapeHtml(siteLabel)}</span></span>
     </button>
   `;
 }
@@ -335,6 +395,11 @@ function cellHtml({ row, day, availableIds, fitIds, selectedDate, siteLabel, sta
       </button>
     </td>
   `;
+}
+
+function siteTitleText(row, siteLabel) {
+  const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
+  return loop ? `${loop} / ${siteLabel}` : siteLabel;
 }
 
 function cellState(row, day, availableIds) {
@@ -375,6 +440,7 @@ function filterReservables(rows, filters) {
     if (filters.type && row.site_type !== filters.type) return false;
     if (!query) return true;
     const haystack = [
+      siteTitleText(row, siteName(row)),
       siteName(row),
       row.loop,
       row.site_type,

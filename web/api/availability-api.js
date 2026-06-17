@@ -13,7 +13,7 @@ import { jsonPostOk } from './http.js';
  * @param {boolean}       [opts.force]     Bust the per-month cache.
  * @param {AbortSignal}   [opts.signal]
  */
-export function requestCampsiteAvailability(id, { startDate, endDate, siteType, force, signal } = {}) {
+export function requestPoiAvailability(id, { startDate, endDate, siteType, force, signal } = {}) {
   const params = new URLSearchParams();
   if (startDate) params.set('start_date', startDate);
   if (endDate) params.set('end_date', endDate);
@@ -24,5 +24,5 @@ export function requestCampsiteAvailability(id, { startDate, endDate, siteType, 
 }
 
 export async function fetchBulkAvailability({ ids, startDate, endDate, signal }) {
-  return jsonPostOk('/api/campsite/availability/bulk', { ids, start_date: startDate, end_date: endDate }, { signal });
+  return jsonPostOk('/api/availability/bulk', { ids, start_date: startDate, end_date: endDate }, { signal });
 }

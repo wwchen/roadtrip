@@ -404,7 +404,7 @@ class ReservableRoutesTest {
                 )
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -433,7 +433,7 @@ class ReservableRoutesTest {
                 )
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -462,7 +462,7 @@ class ReservableRoutesTest {
             link(reservableId, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -511,7 +511,7 @@ class ReservableRoutesTest {
                 )
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -544,7 +544,7 @@ class ReservableRoutesTest {
             link(c44, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -584,7 +584,7 @@ class ReservableRoutesTest {
             link(reservableId, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -659,7 +659,7 @@ class ReservableRoutesTest {
             link(reservableId, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -688,7 +688,7 @@ class ReservableRoutesTest {
                 )
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -697,7 +697,7 @@ class ReservableRoutesTest {
             }
 
             val resp =
-                client.post("/api/campsite/availability/bulk") {
+                client.post("/api/availability/bulk") {
                     contentType(ContentType.Application.Json)
                     setBody("""{"ids":[$poiId],"start_date":"2026-07-01","end_date":"2026-07-04"}""")
                 }
@@ -753,7 +753,7 @@ class ReservableRoutesTest {
             link(b, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeAspiraBookingProviders(),
                         ReservableRepo(ctx),
@@ -803,7 +803,7 @@ class ReservableRoutesTest {
             link(reservableId, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeAspiraBookingProviders(),
                         ReservableRepo(ctx),

@@ -8,7 +8,7 @@ import ca.floo.roadtrip.repo.CampsiteProviderRefRow
  *
  * Construction is the only place that knows the mapping from `pois.source`
  * (an ETL slug) to a [BookingProvider] instance. Once built, the registry
- * exposes a single lookup — routes and the alert poller never see the
+ * exposes a single lookup — routes and the watch poller never see the
  * source string, and adapters never see the source either.
  *
  * Key shape note: a single [BookingProviderId] value can map to multiple

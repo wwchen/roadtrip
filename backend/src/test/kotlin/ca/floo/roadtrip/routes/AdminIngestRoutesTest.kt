@@ -200,6 +200,30 @@ class AdminIngestRoutesTest {
         }
 
     @Test
+    fun `POST import fan-out preserves controller target order`() =
+        testApplication {
+            val controller =
+                controllerWith(
+                    linkedMapOf(
+                        "Washington State Parks" to Target("Washington State Parks", emptyList(), emptyList()),
+                        "Washington Aspira Resources" to Target("Washington Aspira Resources", emptyList(), emptyList()),
+                        "Aspira Resources → Aspira Pins" to Target("Aspira Resources → Aspira Pins", emptyList(), emptyList()),
+                    ),
+                )
+            application { routing { adminIngestRoutes(controller, ctx) } }
+
+            val resp = client.post("/api/admin/data/import")
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val outcomes = body["outcomes"]!!.jsonArray
+            assertEquals(
+                listOf("Washington State Parks", "Washington Aspira Resources", "Aspira Resources → Aspira Pins"),
+                outcomes.map { it.jsonObject["target"]!!.jsonPrimitive.content },
+            )
+        }
+
+    @Test
     fun `POST import for a fetch-only target is a noop completion`() =
         testApplication {
             // tesla-pricing-shaped target: fetch phases, no import phases.
