@@ -4,6 +4,7 @@
 // from /api/poi/{id}/reservables.
 
 import { escapeHtml } from '../core.js';
+import { renderSiteDetail } from './site-detail.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT_FILTERS = {
@@ -330,7 +331,8 @@ function dateHeaderHtml(day) {
 function rowHtml(row, context) {
   const siteLabel = siteName(row);
   const siteTitle = siteTitleText(row, siteLabel);
-  const rowClass = String(row.rid) === String(context.selectedSiteRid) ? ' class="cg-site-matrix-row-selected"' : '';
+  const isSelected = String(row.rid) === String(context.selectedSiteRid);
+  const rowClass = isSelected ? ' class="cg-site-matrix-row-selected"' : '';
   const cells = context.visibleDays
     .map((day) =>
       cellHtml({
@@ -342,6 +344,15 @@ function rowHtml(row, context) {
       }),
     )
     .join('');
+  const detailRow = isSelected
+    ? `
+      <tr class="cg-site-matrix-detail-row">
+        <td colspan="${1 + context.visibleDays.length}">
+          ${renderSiteDetail({ site: row, selectedDate: null, selectedEndDate: null })}
+        </td>
+      </tr>
+    `
+    : '';
   return `
     <tr${rowClass}>
       <th scope="row" class="cg-site-matrix-site" title="${escapeHtml(siteTitle)}">
@@ -349,6 +360,7 @@ function rowHtml(row, context) {
       </th>
       ${cells}
     </tr>
+    ${detailRow}
   `;
 }
 
@@ -359,7 +371,7 @@ function siteLabelHtml(row, siteLabel, siteTitle) {
     <button
       type="button"
       class="cg-site-matrix-site-button"
-      data-site-detail-rid="${escapeHtml(row.rid)}"
+      data-site-header-rid="${escapeHtml(row.rid)}"
       title="${escapeHtml(siteTitle)}"
       aria-label="View details for ${escapeHtml(siteTitle)}"
     >

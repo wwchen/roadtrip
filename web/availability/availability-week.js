@@ -18,7 +18,6 @@ import { requestPoiAvailability } from '../api/availability-api.js';
 import { fetchPoiReservables } from '../api/reservable-api.js';
 import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
 import { renderDayDetail } from './day-detail.js';
-import { renderSiteDetail } from './site-detail.js';
 import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 
@@ -121,7 +120,6 @@ function renderShell(ctx) {
     <section class="cg-availability">
       ${renderAvailabilitySurface(ctx)}
       <div class="cg-freshness">${renderFreshness(ctx)}</div>
-      ${renderSelectedSiteDetail(ctx)}
       ${renderDetail(ctx)}
       ${renderSiteList({
         state: ctx.sitesState,
@@ -205,21 +203,6 @@ function renderDetail(ctx) {
   });
 }
 
-function renderSelectedSiteDetail(ctx) {
-  const site = selectedMatrixSite(ctx);
-  if (!site) return '';
-  return renderSiteDetail({
-    site,
-    selectedDate: ctx.selectedSiteDate,
-    selectedEndDate: ctx.selectedSiteDate ? stayEndDate(ctx, ctx.selectedSiteDate) : null,
-  });
-}
-
-function selectedMatrixSite(ctx) {
-  if (!ctx.selectedSiteRid) return null;
-  return ctx.sites.find((site) => String(site.rid) === String(ctx.selectedSiteRid)) || null;
-}
-
 function selectedAvailabilityDay(ctx) {
   if (ctx.state === 'loading' || ctx.state === 'error' || ctx.state === 'empty' || ctx.state === 'closed_for_season') {
     return null;
@@ -270,12 +253,12 @@ function onRootClick(ctx, e) {
     }
     return;
   }
-  const siteDetailBtn = tgt.closest('[data-site-detail-rid]');
-  if (siteDetailBtn) {
-    const rid = siteDetailBtn.getAttribute('data-site-detail-rid');
+  const siteHeaderBtn = tgt.closest('[data-site-header-rid]');
+  if (siteHeaderBtn) {
+    const rid = siteHeaderBtn.getAttribute('data-site-header-rid');
     if (!rid) return;
-    ctx.selectedSiteRid = rid;
-    ctx.selectedSiteDate = siteDetailBtn.getAttribute('data-site-detail-date') || null;
+    ctx.selectedSiteRid = String(ctx.selectedSiteRid) === String(rid) ? null : rid;
+    ctx.selectedSiteDate = null;
     rerender(ctx);
     return;
   }

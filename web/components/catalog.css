@@ -952,6 +952,19 @@ pre {
   padding-top: 6px;
 }
 
+.cg-site-matrix-detail-row > td {
+  padding: 12px;
+  background: var(--cg-surface-2, rgba(255,255,255,0.03));
+  border-top: 1px solid var(--cg-border);
+  border-bottom: 1px solid var(--cg-border);
+}
+
+.cg-site-matrix-detail-row .cg-site-detail {
+  margin: 0;
+  padding-top: 0;
+  border-top: 0;
+}
+
 .cg-site-detail {
   padding: 10px 0 0;
   border-top: 1px solid var(--cg-border);
