@@ -293,6 +293,7 @@ class SmokeTest {
         val pageErrors = mutableListOf<String>()
         val poiReservableCalls = AtomicInteger(0)
         val globalReservableCalls = AtomicInteger(0)
+        val reservableDetailsCalls = AtomicInteger(0)
         page.onPageError { pageErrors.add(it) }
 
         context.route("**/api/pois/search?**") { route: Route ->
@@ -383,6 +384,41 @@ class SmokeTest {
                     ),
             )
         }
+        context.route("**/api/reservable/site%3Amatrix%3A001/details") { route: Route ->
+            reservableDetailsCalls.incrementAndGet()
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "reservable": {
+                            "rid": "site:matrix:001",
+                            "type": "site",
+                            "vendor": "matrix",
+                            "vendor_id": "001",
+                            "name": "Site 1",
+                            "loop": "A",
+                            "site_type": "Tent",
+                            "poi_ids": [31337],
+                            "tags": {
+                              "capacity": { "max": 8 },
+                              "equipment": ["Small Tent"],
+                              "attributes": {
+                                "ground_cover": "Soil",
+                                "firepit_on_site": "Yes",
+                                "picnic_table": "Yes"
+                              }
+                            }
+                          },
+                          "poi_ids": [31337]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
         context.route("**/api/reservable/site%3Amatrix%3A001/availability?**") { route: Route ->
             route.fulfill(
                 Route
@@ -432,6 +468,8 @@ class SmokeTest {
             assertThat(page.locator(".cg-site-detail")).containsText("Small Tent")
             assertThat(page.locator(".cg-site-detail")).containsText("Ground Cover: Soil")
             assertThat(page.locator(".cg-site-detail")).containsText("Firepit On Site: Yes")
+            assertThat(page.locator(".cg-site-detail")).containsText("Picnic Table: Yes")
+            assertEquals(1, reservableDetailsCalls.get(), "site details should use /api/reservable/{rid}/details")
 
             page.locator("button[data-action=\"toggle-reservable-detail\"][data-rid=\"site:matrix:001\"]").click()
             page.fill("textarea[name=\"tags\"]", """{"attributes":{"firepit_on_site":"Yes"}}""")
@@ -599,6 +637,40 @@ class SmokeTest {
                     ),
             )
         }
+        context.route("**/api/reservable/site%3Amatrix%3A001/details") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "reservable": {
+                            "rid": "site:matrix:001",
+                            "vendor": "recgov",
+                            "vendor_id": "001",
+                            "name": "Site 1",
+                            "loop": "A",
+                            "site_type": "Tent",
+                            "tags": {
+                              "attributes": {
+                                "detail_marker": "Matrix"
+                              }
+                            },
+                            "raw": {
+                              "defined_attributes": [
+                                { "definition_id": -32751, "values": [1] },
+                                { "definition_id": -32748, "value": null }
+                              ]
+                            }
+                          },
+                          "poi_ids": [31337]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
         context.route("**/api/campsite/alerts") { route: Route ->
             route.fulfill(
                 Route
@@ -683,6 +755,7 @@ class SmokeTest {
                 detailText.contains("Definition Id") || detailText.contains("Values:"),
                 "site detail should hide unresolved provider attribute ids: $detailText",
             )
+            assertThat(page.locator(".cg-site-detail")).containsText("Detail Marker: Matrix")
             assertThat(page.locator(".cg-site-detail-book")).hasCount(0)
             page.locator(".cg-site-matrix-cell-available .cg-site-matrix-cell-button").first().click()
             assertThat(page.locator(".cg-site-detail-subtitle")).containsText("2026-06-16")

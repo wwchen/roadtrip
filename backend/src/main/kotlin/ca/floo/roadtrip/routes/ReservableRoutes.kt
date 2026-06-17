@@ -110,7 +110,31 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 total = reservables.countSearch(filters),
                 limit = limit,
                 offset = offset,
-                reservables = rows.map { it.toSchema(poiIdsByReservable[it.id].orEmpty()) },
+                reservables =
+                    rows.map {
+                        it.toSchema(
+                            poiIds = poiIdsByReservable[it.id].orEmpty(),
+                        )
+                    },
+            ),
+        )
+    }
+
+    suspend fun ApplicationCall.handleReservableDetail(ridParam: String) {
+        val rid =
+            parameters[ridParam]
+                ?.let(ReservableId::parse)
+                ?: return respondReservableError("bad_rid", HttpStatusCode.BadRequest)
+        val row =
+            reservables.findByRid(rid)
+                ?: return respondReservableError("not_found", HttpStatusCode.NotFound)
+
+        val poiIds = reservables.poiIdsForReservable(row.id)
+
+        respondReservableJson(
+            ReservableDetailResponseSchema(
+                reservable = row.toSchema(poiIds),
+                poiIds = poiIds,
             ),
         )
     }
@@ -139,22 +163,34 @@ fun Route.reservableRoutes(ctx: DSLContext) {
             }
         }
     }) {
-        val rid =
-            call.parameters["rid"]
-                ?.let(ReservableId::parse)
-                ?: return@get call.respondReservableError("bad_rid", HttpStatusCode.BadRequest)
-        val row =
-            reservables.findByRid(rid)
-                ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
+        call.handleReservableDetail("rid")
+    }
 
-        val poiIds = reservables.poiIdsForReservable(row.id)
-
-        call.respondReservableJson(
-            ReservableDetailResponseSchema(
-                reservable = row.toSchema(poiIds),
-                poiIds = poiIds,
-            ),
-        )
+    get("/api/reservable/{rid}/details", {
+        tags = listOf("reservable")
+        summary = "Single reservable site detail"
+        description =
+            "Returns one reservable by composite id for site detail rendering. " +
+            "The response includes active POI ids linked through reservable_pois."
+        request {
+            pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
+        }
+        response {
+            code(HttpStatusCode.OK) {
+                description = "Reservable detail plus linked POI ids."
+                body<ReservableDetailResponseSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.BadRequest) {
+                description = "Malformed composite reservable id."
+                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.NotFound) {
+                description = "No reservable with that composite id."
+                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+        }
+    }) {
+        call.handleReservableDetail("rid")
     }
 
     get("/api/poi/{id}/reservables", {

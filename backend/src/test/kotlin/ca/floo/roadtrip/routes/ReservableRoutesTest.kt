@@ -141,6 +141,31 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `reservable details endpoint returns catalog fields and linked poi ids`() =
+        testApplication {
+            val poiId = seedPoi("upper-pines", "Upper Pines Campground")
+            val reservableId =
+                seedReservable(
+                    vendorId = "330257",
+                    name = "A12",
+                    loop = "Loop A",
+                    siteType = "STANDARD",
+                    raw = """{"campsite_id":"330257","reservable":true}""",
+                )
+            link(reservableId, poiId)
+            application { routing { reservableRoutes(ctx) } }
+
+            val resp = client.get("/api/reservable/site:recgov:330257/details")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            val reservable = body["reservable"]!!.jsonObject
+            assertEquals("site:recgov:330257", reservable["rid"]!!.jsonPrimitive.content)
+            assertEquals("330257", reservable["raw"]!!.jsonObject["campsite_id"]!!.jsonPrimitive.content)
+            assertEquals(listOf(poiId.toString()), body["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+            assertEquals(listOf(poiId.toString()), reservable["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
+        }
+
+    @Test
     fun `reservable detail returns 404 for unknown rid`() =
         testApplication {
             application { routing { reservableRoutes(ctx) } }

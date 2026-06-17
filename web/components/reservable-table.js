@@ -1,5 +1,5 @@
 import { availabilityPanelHtml } from './availability-panel.js';
-import { renderSiteDetail } from '../availability/site-detail.js';
+import { mergeSiteDetail, renderSiteDetail } from '../availability/site-detail.js';
 import { dash, escapeHtml, expanderButton, linkChip, links, renderRow, renderTable } from './result-table.js';
 
 export const reservableColumns = [
@@ -259,8 +259,9 @@ function rowPanelMode(state) {
 function reservablePanelRowHtml(row, state, mode) {
   if (!mode) return '';
   const rid = row.rid || '';
+  const detailSite = state?.details ? mergeSiteDetail(row, state.details) : row;
   const body = mode === 'details'
-    ? renderSiteDetail({ site: row })
+    ? renderSiteDetail({ site: detailSite })
     : availabilityPanelHtml(rid, state, { colspan: reservableColumns.length, row });
   if (mode === 'availability') return body;
   return `
