@@ -150,6 +150,44 @@ class AvailabilityWatchRoutesTest {
         }
 
     @Test
+    fun `POST rejects removed date fields`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p-removed-create", name = "Removed Create")
+            val body =
+                """
+                {
+                  "poi_id": $poiId,
+                  "start_date": "2026-07-04",
+                  "end_date": "2026-07-06",
+                  "target_dates": ["2026-07-04", "2026-07-05"],
+                  "min_nights": 2,
+                  "cadence_sec": 60,
+                  "trigger_kinds": ["atc"]
+                }
+                """.trimIndent()
+            val resp =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("removed_fields", obj["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
     fun `POST rejects missing scope`() =
         testApplication {
             application {
@@ -249,6 +287,48 @@ class AvailabilityWatchRoutesTest {
             assertEquals(HttpStatusCode.OK, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
             assertEquals("paused", obj["status"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `PATCH rejects removed date fields`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p-removed-patch", name = "Removed Patch")
+            val body =
+                """
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val resp =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"target_dates": ["2026-07-04"], "min_nights": 1}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("removed_fields", obj["error"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -476,7 +556,10 @@ class AvailabilityWatchRoutesTest {
             val resp = client.get("/api/availability/watches/$watchId/heatmap")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(2, body["target_dates"]!!.jsonArray.size)
+            assertEquals(
+                listOf("2026-07-04", "2026-07-05"),
+                body["target_dates"]!!.jsonArray.map { it.jsonPrimitive.content },
+            )
             val groups = body["groups"]!!.jsonArray
             assertEquals(1, groups.size)
             assertEquals("Loop A", groups[0].jsonObject["loop"]!!.jsonPrimitive.content)

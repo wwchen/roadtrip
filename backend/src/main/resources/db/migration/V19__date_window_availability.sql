@@ -24,6 +24,17 @@ SET
     FROM unnest(target_dates) AS dates(value)
   ) + min_nights;
 
+UPDATE availability_job j
+SET intent_payload =
+  (j.intent_payload - 'target_dates' - 'min_nights') ||
+  jsonb_build_object(
+    'start_date', to_char(w.start_date, 'YYYY-MM-DD'),
+    'end_date', to_char(w.end_date, 'YYYY-MM-DD')
+  )
+FROM availability_watch w
+WHERE j.watch_id = w.id
+  AND (j.intent_payload ? 'target_dates' OR j.intent_payload ? 'min_nights');
+
 ALTER TABLE availability_watch
   ALTER COLUMN start_date SET NOT NULL,
   ALTER COLUMN end_date SET NOT NULL,

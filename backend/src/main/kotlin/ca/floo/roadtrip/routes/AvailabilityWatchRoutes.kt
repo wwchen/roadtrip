@@ -34,6 +34,7 @@ import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonObject
 import org.jooq.DSLContext
 import java.time.LocalDate
 
@@ -122,6 +123,10 @@ fun Route.availabilityWatchRoutes(
         }
     }) {
         val raw = call.receiveText()
+        val removedField = removedWatchField(raw)
+        if (removedField != null) {
+            return@post call.respondError("removed_fields", HttpStatusCode.BadRequest, "$removedField is no longer supported")
+        }
         val req =
             try {
                 watchJson.decodeFromString<AvailabilityWatchCreateRequest>(raw)
@@ -172,6 +177,10 @@ fun Route.availabilityWatchRoutes(
             call.parameters["id"]?.toLongOrNull()
                 ?: return@patch call.respondError("invalid_id", HttpStatusCode.BadRequest)
         val raw = call.receiveText()
+        val removedField = removedWatchField(raw)
+        if (removedField != null) {
+            return@patch call.respondError("removed_fields", HttpStatusCode.BadRequest, "$removedField is no longer supported")
+        }
         val req =
             try {
                 watchJson.decodeFromString<AvailabilityWatchUpdateRequest>(raw)
@@ -352,6 +361,11 @@ private fun validateCreateBody(req: AvailabilityWatchCreateRequest): Pair<String
     if (req.triggerKinds.isEmpty()) return "invalid_triggers" to "trigger_kinds must be non-empty"
     return null
 }
+
+private fun removedWatchField(raw: String): String? =
+    runCatching { watchJson.parseToJsonElement(raw).jsonObject }
+        .getOrNull()
+        ?.let { obj -> listOf("target_dates", "min_nights").firstOrNull { it in obj } }
 
 private fun parseDateWindow(
     startDate: String,
