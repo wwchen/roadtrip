@@ -152,7 +152,7 @@ Aspira:
 | available/limited/partial/mixed/mostly-booked codes with a resource present | `available` |
 | unavailable | `closed` |
 | no-data / missing resource-day | `unknown` |
-| unknown code | `available` |
+| unknown code | `unknown` |
 
 Aspira does not currently expose a first-come signal in the adapter, so it
 never emits `first_come`.
@@ -189,8 +189,8 @@ Backend tests:
 - Legacy `partial` snapshot rows migrate according to `available`.
 - `AvailabilitySnapshotRepo` writes the DB enum value and sets `available`
   only for `AvailabilityStatus.Available`.
-- Aspira adapter maps no-data/missing resource-days to `unknown` and has no
-  `partial`.
+- Aspira adapter maps no-data, missing resource-days, and unfamiliar status
+  codes to `unknown`, and has no `partial`.
 
 Frontend tests:
 
