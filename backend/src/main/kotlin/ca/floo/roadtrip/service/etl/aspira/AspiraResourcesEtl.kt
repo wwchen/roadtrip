@@ -76,6 +76,13 @@ class AspiraResourcesEtl(
      */
     val inventoryInputSlug: String,
     /**
+     * Optional YAML data_source slug for tenant dictionaries captured from
+     * `/api/equipment`, `/api/resourcecategory`, and
+     * `/api/attribute/filterable`. These are ETL side inputs only: loaded
+     * into memory for this transform and copied into reservable.raw labels.
+     */
+    val dictionariesInputSlug: String? = null,
+    /**
      * `aspira_wa` / `aspira_bc` / `aspira_pc`. Stamped into every
      * emitted [ReservableId.vendor]. ReservableId disallows ':' in
      * vendor, so we use underscore-separated tenant codes.
@@ -94,14 +101,24 @@ class AspiraResourcesEtl(
         require(slugs.contains(inventoryInputSlug)) {
             "$etlSlug: missing required input '$inventoryInputSlug' in $slugs"
         }
+        if (dictionariesInputSlug != null) {
+            require(slugs.contains(dictionariesInputSlug)) {
+                "$etlSlug: missing required input '$dictionariesInputSlug' in $slugs"
+            }
+        }
         val inventoryEnvelopes = inputs.envelopes(inventoryInputSlug)
         require(inventoryEnvelopes.isNotEmpty()) {
             "$etlSlug: no envelopes in '$inventoryInputSlug' (run fetch_aspira_inventory.py first)"
         }
         val mapsArray = inputs.envelope(mapsInputSlug).payload.jsonArray
+        val dictionaries =
+            dictionariesInputSlug
+                ?.let { parseDictionaries(inputs.envelope(it).payload as? JsonObject) }
+                ?: AspiraDictionaries.EMPTY
         return Parsed(
             inventory = inventoryEnvelopes,
             maps = mapsArray,
+            dictionaries = dictionaries,
         )
     }
 
@@ -150,12 +167,8 @@ class AspiraResourcesEtl(
                         // Loop is the parent leaf's name from /api/maps
                         // (PC's "AREA WHITE RIVER" analogue).
                         loop = leaf?.name,
-                        // Site-type label requires resolving
-                        // `resourceCategoryId` against /api/resourcecategory.
-                        // Defer that fetch — for now pass through the raw
-                        // id in the JSON blob and leave the column null.
-                        siteType = null,
-                        raw = buildResourceRaw(inv = inv, leaf = leaf),
+                        siteType = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
+                        raw = buildResourceRaw(inv = inv, leaf = leaf, dictionaries = dto.dictionaries),
                         providerRef = buildResourceProviderRef(inv = inv, leaf = leaf),
                     )
             }
@@ -216,6 +229,7 @@ class AspiraResourcesEtl(
     private fun buildResourceRaw(
         inv: ResourceInventory,
         leaf: AspiraLeaf?,
+        dictionaries: AspiraDictionaries,
     ): JsonObject =
         buildJsonObject {
             put("resource_id", inv.resourceId)
@@ -246,6 +260,9 @@ class AspiraResourcesEtl(
             }
             if (inv.resourceCategoryId != null) {
                 put("resource_category_id", inv.resourceCategoryId)
+                dictionaries.resourceCategories[inv.resourceCategoryId]?.let {
+                    put("resource_category_name", it)
+                }
             }
             if (inv.maxCapacity != null) {
                 put("max_capacity", inv.maxCapacity)
@@ -257,14 +274,14 @@ class AspiraResourcesEtl(
                 put("max_boat_length", inv.maxBoatLength)
             }
             if (inv.allowedEquipment != null) {
-                put("allowed_equipment", inv.allowedEquipment)
+                put("allowed_equipment", enrichAllowedEquipment(inv.allowedEquipment, dictionaries))
             }
             if (inv.definedAttributes != null) {
                 // Strip Aspira's outer wrapping (`attributeVisibility`,
                 // duplicate `attributeId`/`attributeDefinitionId`) and
                 // keep just (id, value, values) so downstream consumers
                 // don't have to know Aspira-shaped JSON.
-                put("defined_attributes", flattenAttributes(inv.definedAttributes))
+                put("defined_attributes", flattenAttributes(inv.definedAttributes, dictionaries))
             }
         }
 
@@ -290,14 +307,45 @@ class AspiraResourcesEtl(
         }
     }
 
-    private fun flattenAttributes(attrs: JsonArray): JsonArray =
+    private fun enrichAllowedEquipment(
+        equipment: JsonArray,
+        dictionaries: AspiraDictionaries,
+    ): JsonArray =
+        buildJsonArray {
+            for (raw in equipment) {
+                val item = raw as? JsonObject ?: continue
+                val categoryId = item["equipmentCategoryId"]?.jsonPrimitive?.intOrNull
+                val subCategoryId = item["subEquipmentCategoryId"]?.jsonPrimitive?.intOrNull
+                val label =
+                    if (categoryId != null && subCategoryId != null) {
+                        dictionaries.equipment[EquipmentKey(categoryId, subCategoryId)]
+                    } else {
+                        null
+                    }
+                add(
+                    buildJsonObject {
+                        categoryId?.let { put("equipment_category_id", it) }
+                        subCategoryId?.let { put("sub_equipment_category_id", it) }
+                        label?.categoryName?.let { put("equipment_category_name", it) }
+                        label?.subCategoryName?.let { put("name", it) }
+                    },
+                )
+            }
+        }
+
+    private fun flattenAttributes(
+        attrs: JsonArray,
+        dictionaries: AspiraDictionaries,
+    ): JsonArray =
         buildJsonArray {
             for (raw in attrs) {
                 val a = raw as? JsonObject ?: continue
+                val definitionId = a["attributeDefinitionId"]?.jsonPrimitive?.intOrNull
                 add(
                     buildJsonObject {
-                        a["attributeDefinitionId"]?.jsonPrimitive?.intOrNull?.let {
+                        definitionId?.let {
                             put("definition_id", it)
+                            dictionaries.attributes[it]?.let { name -> put("name", name) }
                         }
                         a["value"]?.let { put("value", it) }
                         a["values"]?.let { put("values", it) }
@@ -306,10 +354,124 @@ class AspiraResourcesEtl(
             }
         }
 
+    private fun parseDictionaries(payload: JsonObject?): AspiraDictionaries {
+        if (payload == null) return AspiraDictionaries.EMPTY
+        val resourceCategories =
+            firstJsonArray(
+                payload,
+                "resource_categories",
+                "resourceCategories",
+                "resourcecategory",
+            )
+        val attributes =
+            firstJsonArray(
+                payload,
+                "attributes",
+                "attribute_filterable",
+                "attributeFilterable",
+            )
+        return AspiraDictionaries(
+            equipment = parseEquipment(payload["equipment"] as? JsonArray),
+            resourceCategories = parseResourceCategories(resourceCategories),
+            attributes = parseAttributes(attributes),
+        )
+    }
+
+    private fun parseEquipment(equipment: JsonArray?): Map<EquipmentKey, EquipmentLabel> {
+        if (equipment == null) return emptyMap()
+        val out = mutableMapOf<EquipmentKey, EquipmentLabel>()
+        for (rawCategory in equipment) {
+            val category = rawCategory as? JsonObject ?: continue
+            val categoryId = category["equipmentCategoryId"]?.jsonPrimitive?.intOrNull ?: continue
+            val categoryName = localizedLabel(category)
+            val subs = category["subEquipmentCategories"] as? JsonArray ?: continue
+            for (rawSub in subs) {
+                val sub = rawSub as? JsonObject ?: continue
+                val subId = sub["subEquipmentCategoryId"]?.jsonPrimitive?.intOrNull ?: continue
+                val subName = localizedLabel(sub)
+                out[EquipmentKey(categoryId, subId)] =
+                    EquipmentLabel(
+                        categoryName = categoryName,
+                        subCategoryName = subName,
+                    )
+            }
+        }
+        return out
+    }
+
+    private fun parseResourceCategories(categories: JsonArray?): Map<Int, String> {
+        if (categories == null) return emptyMap()
+        val out = mutableMapOf<Int, String>()
+        for (raw in categories) {
+            val category = raw as? JsonObject ?: continue
+            val id = category["resourceCategoryId"]?.jsonPrimitive?.intOrNull ?: continue
+            val name = localizedLabel(category) ?: continue
+            out[id] = name
+        }
+        return out
+    }
+
+    private fun parseAttributes(attributes: JsonArray?): Map<Int, String> {
+        if (attributes == null) return emptyMap()
+        val out = mutableMapOf<Int, String>()
+        for (raw in attributes) {
+            val attr = raw as? JsonObject ?: continue
+            val id = attr["attributeDefinitionId"]?.jsonPrimitive?.intOrNull ?: continue
+            val name = localizedLabel(attr) ?: continue
+            out[id] = name
+        }
+        return out
+    }
+
+    private fun firstJsonArray(
+        payload: JsonObject,
+        vararg keys: String,
+    ): JsonArray? {
+        for (key in keys) {
+            val array = payload[key] as? JsonArray
+            if (array != null) return array
+        }
+        return null
+    }
+
+    private fun localizedLabel(obj: JsonObject): String? {
+        val localized = obj["localizedValues"] as? JsonArray
+        val firstLocale = localized?.firstOrNull() as? JsonObject
+        return firstLocale?.get("name")?.jsonPrimitive?.contentOrNull
+            ?: firstLocale?.get("displayName")?.jsonPrimitive?.contentOrNull
+            ?: firstLocale?.get("title")?.jsonPrimitive?.contentOrNull
+    }
+
     /** Parsed shape passed through validate→transform. */
     data class Parsed(
         val inventory: List<Envelope>,
         val maps: JsonArray,
+        val dictionaries: AspiraDictionaries,
+    )
+
+    data class AspiraDictionaries(
+        val equipment: Map<EquipmentKey, EquipmentLabel>,
+        val resourceCategories: Map<Int, String>,
+        val attributes: Map<Int, String>,
+    ) {
+        companion object {
+            val EMPTY =
+                AspiraDictionaries(
+                    equipment = emptyMap(),
+                    resourceCategories = emptyMap(),
+                    attributes = emptyMap(),
+                )
+        }
+    }
+
+    data class EquipmentKey(
+        val categoryId: Int,
+        val subCategoryId: Int,
+    )
+
+    data class EquipmentLabel(
+        val categoryName: String?,
+        val subCategoryName: String?,
     )
 
     /** A single reservable's catalog row, normalized out of Aspira's wrapping. */
