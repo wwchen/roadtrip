@@ -992,16 +992,20 @@ pre {
 }
 
 .cg-site-matrix-detail-row > td {
-  padding: 12px;
+  position: sticky;
+  left: 0;
+  padding: 0;
   background: rgba(255,255,255,0.03);
   border-top: 1px solid var(--cg-border);
   border-bottom: 1px solid var(--cg-border);
 }
 
 .cg-site-matrix-detail-row .cg-site-detail {
+  width: var(--cg-site-matrix-viewport-width, 100%);
   margin: 0;
-  padding-top: 0;
+  padding: 12px;
   border-top: 0;
+  box-sizing: border-box;
 }
 
 .cg-site-detail {

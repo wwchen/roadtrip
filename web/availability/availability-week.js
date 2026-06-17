@@ -48,6 +48,8 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
 
   rerender(ctx);
   wireRoot(ctx);
+  const onResize = () => applyMatrixViewportWidth(ctx);
+  window.addEventListener('resize', onResize);
   fetchWeek(ctx);
   fetchWatches(ctx);
   fetchSites(ctx);
@@ -56,6 +58,7 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
     dispose() {
       endSiteColumnResize(ctx);
       clearTimeout(ctx.skeletonTimer);
+      window.removeEventListener('resize', onResize);
     },
   };
 }
@@ -113,6 +116,7 @@ function makeContext(host, feature, signal) {
 function rerender(ctx) {
   ctx.host.innerHTML = renderShell(ctx);
   restoreMatrixScroll(ctx);
+  applyMatrixViewportWidth(ctx);
 }
 
 function renderShell(ctx) {
@@ -386,6 +390,11 @@ function onRootScroll(ctx, e) {
   const scroll = e.target;
   if (!(scroll instanceof HTMLElement)) return;
   if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
+  if (ctx.suppressNextScroll) {
+    ctx.suppressNextScroll = false;
+    ctx.matrixScrollLeft = scroll.scrollLeft;
+    return;
+  }
   if (ctx.armedBook) {
     ctx.armedBook = null;
     window.requestAnimationFrame?.(() => rerender(ctx));
@@ -690,12 +699,22 @@ function saveSiteColumnWidth(width) {
   }
 }
 
+function applyMatrixViewportWidth(ctx) {
+  window.requestAnimationFrame?.(() => {
+    const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
+    if (!(scroll instanceof HTMLElement)) return;
+    scroll.style.setProperty('--cg-site-matrix-viewport-width', `${scroll.clientWidth}px`);
+  });
+}
+
 function restoreMatrixScroll(ctx) {
   if (!ctx.matrixScrollLeft) return;
   const left = ctx.matrixScrollLeft;
   window.requestAnimationFrame?.(() => {
     const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
-    if (scroll instanceof HTMLElement) scroll.scrollLeft = left;
+    if (!(scroll instanceof HTMLElement)) return;
+    ctx.suppressNextScroll = true;
+    scroll.scrollLeft = left;
   });
 }
 
