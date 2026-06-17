@@ -409,10 +409,16 @@ details[open] .action-icon.inline::before {
   color: #87d99b;
 }
 
-.day-pill.partial {
+.day-pill.first_come {
   border-color: rgba(241,194,125,0.42);
   background: rgba(241,194,125,0.10);
   color: #f1c27d;
+}
+
+.day-pill.reserved,
+.day-pill.closed,
+.day-pill.unknown {
+  color: var(--muted);
 }
 
 details summary {
@@ -591,8 +597,10 @@ pre {
 }
 
 .cg-site-matrix-key-available::before { background: var(--cg-accent); }
-.cg-site-matrix-key-booked::before { background: var(--cg-faint); }
+.cg-site-matrix-key-first-come::before { background: #f1c27d; }
+.cg-site-matrix-key-reserved::before { background: var(--cg-faint); }
 .cg-site-matrix-key-closed::before { background: var(--cg-border-strong); }
+.cg-site-matrix-key-unknown::before { background: var(--cg-muted); }
 
 .cg-site-matrix-tools {
   display: grid;
@@ -933,7 +941,24 @@ pre {
   background: transparent;
 }
 
-.cg-site-matrix-cell-booked .cg-site-matrix-cell-button {
+.cg-site-matrix-cell-first-come {
+  background: rgba(241,160,74,0.14);
+}
+
+.cg-site-matrix-cell-first-come .cg-site-matrix-cell-button {
+  background: transparent;
+  color: #f1c27d;
+}
+
+.cg-site-matrix-cell-first-come:hover {
+  background: rgba(241,160,74,0.22);
+}
+
+.cg-site-matrix-cell-reserved .cg-site-matrix-cell-button {
+  color: var(--cg-faint);
+}
+
+.cg-site-matrix-cell-unknown .cg-site-matrix-cell-button {
   color: var(--cg-faint);
 }
 

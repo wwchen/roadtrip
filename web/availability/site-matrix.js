@@ -13,11 +13,24 @@ const DEFAULT_FILTERS = {
   sort: 'open',
 };
 const SORT_OPTIONS = [
-  ['open', 'Open first'],
+  ['open', 'Available first'],
   ['site', 'Site'],
   ['loop', 'Loop'],
   ['type', 'Type'],
 ];
+const STATUS_META = {
+  available: { kind: 'available', label: 'A', aria: 'available' },
+  first_come: { kind: 'first-come', label: 'FF', aria: 'first come first served' },
+  reserved: { kind: 'reserved', label: 'R', aria: 'reserved' },
+  closed: { kind: 'closed', label: 'C', aria: 'closed' },
+  unknown: { kind: 'unknown', label: '?', aria: 'unknown' },
+};
+const LEGACY_STATUS = {
+  booked: 'reserved',
+  full: 'reserved',
+  partial: 'available',
+  open: 'available',
+};
 
 export function renderSiteMatrix({
   state,
@@ -70,6 +83,7 @@ export function renderSiteMatrix({
   const rows = sortReservables(filterReservables(allRows, activeFilters), activeFilters.sort, {
     availabilityByDate,
     selectedDate,
+    visibleDays,
   });
   const tools = renderTools({
     filters: activeFilters,
@@ -205,9 +219,11 @@ function renderSection({
         <div>
           <div class="cg-site-matrix-title">Sites by date</div>
           <div class="cg-site-matrix-legend">
-            <span class="cg-site-matrix-key cg-site-matrix-key-available">Open</span>
-            <span class="cg-site-matrix-key cg-site-matrix-key-booked">Full</span>
-            <span class="cg-site-matrix-key cg-site-matrix-key-closed">Closed</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-available" title="Available">A</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-first-come" title="First come first served">FF</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-reserved" title="Reserved">R</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-closed" title="Closed">C</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-unknown" title="Unknown">?</span>
           </div>
         </div>
         <div class="cg-site-matrix-actions">
@@ -390,15 +406,28 @@ function siteTitleText(row, siteLabel) {
 }
 
 function cellState(row, day, availableIds) {
-  if (availableIds?.has(rowRid(row))) {
-    return { kind: 'available', label: 'Open', aria: 'open' };
-  }
+  const rid = rowRid(row);
+  const directStatus = reservableStatus(day, rid);
+  if (directStatus) return STATUS_META[directStatus] || STATUS_META.unknown;
+  if (availableIds?.has(rid)) return STATUS_META.available;
+
   const total = numeric(day.total ?? day.totalAtPoi);
-  const status = String(day.status || '').toLowerCase();
-  if (status === 'closed' || total === 0) {
-    return { kind: 'closed', label: 'Closed', aria: 'closed' };
-  }
-  return { kind: 'booked', label: 'Full', aria: 'full' };
+  const status = normalizeStatus(day.status);
+  if (status === 'closed' || total === 0) return STATUS_META.closed;
+  if (status === 'first_come') return STATUS_META.first_come;
+  if (status === 'unknown') return STATUS_META.unknown;
+  return STATUS_META.reserved;
+}
+
+function reservableStatus(day, rid) {
+  const statuses = day?.reservable_statuses ?? day?.reservableStatuses;
+  if (!statuses || typeof statuses !== 'object') return null;
+  return normalizeStatus(statuses[rid]);
+}
+
+function normalizeStatus(raw) {
+  const value = String(raw || '').toLowerCase();
+  return STATUS_META[value] ? value : (LEGACY_STATUS[value] || null);
 }
 
 function availableReservableIds(day) {
@@ -445,8 +474,8 @@ function filterReservables(rows, filters) {
 function sortReservables(rows, sortKey, context) {
   return [...rows].sort((a, b) => {
     if (sortKey === 'open') {
-      const ao = openDateCount(a, context.availabilityByDate);
-      const bo = openDateCount(b, context.availabilityByDate);
+      const ao = openDateCount(a, context.availabilityByDate, context.visibleDays);
+      const bo = openDateCount(b, context.availabilityByDate, context.visibleDays);
       if (ao !== bo) return bo - ao;
       return compareReservable(a, b);
     }
@@ -457,11 +486,13 @@ function sortReservables(rows, sortKey, context) {
   });
 }
 
-function openDateCount(row, availabilityByDate) {
+function openDateCount(row, availabilityByDate, days = []) {
   const rid = rowRid(row);
   let count = 0;
-  for (const ids of availabilityByDate.values()) {
-    if (ids.has(rid)) count += 1;
+  for (const day of days) {
+    const status = reservableStatus(day, rid);
+    if (status === 'available') count += 1;
+    else if (!status && availabilityByDate.get(day.date)?.has(rid)) count += 1;
   }
   return count;
 }

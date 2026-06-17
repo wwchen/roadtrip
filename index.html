@@ -612,14 +612,17 @@
     border-color: rgba(76,185,106,0.40);
   }
   .cg-day.cg-day-available .cg-day-avail { color: var(--cg-accent); font-weight: 600; }
-  .cg-day.cg-day-partial {
+  .cg-day.cg-day-first_come {
     background: rgba(241,160,74,0.14);
     border-color: rgba(241,160,74,0.35);
   }
-  .cg-day.cg-day-partial .cg-day-avail { color: var(--cg-warn); font-weight: 600; }
-  .cg-day.cg-day-booked { background: rgba(255,255,255,0.03); }
-  .cg-day.cg-day-booked .cg-day-num { color: var(--cg-faint); }
-  .cg-day.cg-day-booked .cg-day-avail { color: var(--cg-faint); }
+  .cg-day.cg-day-first_come .cg-day-avail { color: var(--cg-warn); font-weight: 600; }
+  .cg-day.cg-day-reserved { background: rgba(255,255,255,0.03); }
+  .cg-day.cg-day-reserved .cg-day-num { color: var(--cg-faint); }
+  .cg-day.cg-day-reserved .cg-day-avail { color: var(--cg-faint); }
+  .cg-day.cg-day-unknown { background: rgba(255,255,255,0.025); }
+  .cg-day.cg-day-unknown .cg-day-num,
+  .cg-day.cg-day-unknown .cg-day-avail { color: var(--cg-faint); }
   .cg-day.cg-day-closed {
     background: repeating-linear-gradient(45deg, rgba(255,255,255,0.06) 0 4px, transparent 4px 8px);
   }
@@ -669,7 +672,8 @@
     font-size: 12px; color: var(--cg-muted);
   }
   .cg-day-detail-meta .cg-status-ok      { color: var(--cg-accent); font-weight: 600; }
-  .cg-day-detail-meta .cg-status-partial { color: var(--cg-warn);   font-weight: 600; }
+  .cg-day-detail-meta .cg-status-first-come { color: var(--cg-warn); font-weight: 600; }
+  .cg-day-detail-meta .cg-status-unknown { color: var(--cg-faint); font-weight: 600; }
   .cg-day-detail-meta .cg-status-full    { color: var(--cg-faint);  font-weight: 600; }
   .cg-day-detail-actions {
     display: flex; gap: 8px; flex-wrap: wrap;
@@ -861,8 +865,10 @@
     background: var(--cg-faint);
   }
   .cg-site-matrix-key-available::before { background: var(--cg-accent); }
-  .cg-site-matrix-key-booked::before { background: var(--cg-faint); }
+  .cg-site-matrix-key-first-come::before { background: var(--cg-warn); }
+  .cg-site-matrix-key-reserved::before { background: var(--cg-faint); }
   .cg-site-matrix-key-closed::before { background: var(--cg-border-strong); }
+  .cg-site-matrix-key-unknown::before { background: var(--cg-muted); }
   .cg-site-matrix-tools {
     display: grid;
     grid-template-columns: minmax(116px, 1fr) minmax(82px, auto) minmax(82px, auto) minmax(88px, auto);
@@ -1159,7 +1165,20 @@
   .cg-site-matrix-cell-available .cg-site-matrix-cell-button:hover {
     background: transparent;
   }
-  .cg-site-matrix-cell-booked .cg-site-matrix-cell-button {
+  .cg-site-matrix-cell-first-come {
+    background: rgba(241,160,74,0.14);
+  }
+  .cg-site-matrix-cell-first-come .cg-site-matrix-cell-button {
+    background: transparent;
+    color: var(--cg-warn);
+  }
+  .cg-site-matrix-cell-first-come:hover {
+    background: rgba(241,160,74,0.22);
+  }
+  .cg-site-matrix-cell-reserved .cg-site-matrix-cell-button {
+    color: var(--cg-faint);
+  }
+  .cg-site-matrix-cell-unknown .cg-site-matrix-cell-button {
     color: var(--cg-faint);
   }
   .cg-site-matrix-cell-closed {

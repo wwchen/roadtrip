@@ -3,9 +3,12 @@
 
 const STATUS_CLASS = {
   available: 'cell-available',
-  partial: 'cell-partial',
-  booked: 'cell-booked',
+  first_come: 'cell-first-come',
+  reserved: 'cell-reserved',
   closed: 'cell-closed',
+  unknown: 'cell-unknown',
+  booked: 'cell-reserved',
+  partial: 'cell-available',
 };
 
 export function renderWatchHeatmap(rootEl, response) {
@@ -19,9 +22,11 @@ export function renderWatchHeatmap(rootEl, response) {
   const groupsHtml = response.groups.map((g) => renderGroup(g, headerRow)).join('');
   rootEl.innerHTML = `
     <div class="heatmap-legend">
-      <span class="legend-swatch cell-available"></span> available
-      <span class="legend-swatch cell-booked"></span> booked
-      <span class="legend-swatch cell-closed"></span> closed
+      <span class="legend-swatch cell-available"></span> A
+      <span class="legend-swatch cell-first-come"></span> FF
+      <span class="legend-swatch cell-reserved"></span> R
+      <span class="legend-swatch cell-closed"></span> C
+      <span class="legend-swatch cell-unknown"></span> ?
       <span class="legend-swatch cell-empty"></span> no snapshot
     </div>
     ${groupsHtml}

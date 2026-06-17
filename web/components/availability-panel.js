@@ -117,8 +117,7 @@ function normalizeReservableDays(rid, days) {
 }
 
 function reservableDayOpen(day) {
-  const status = String(day.status || '').toLowerCase();
-  return ['available', 'partial', 'open'].includes(status) || Number(day.available_count ?? day.availableCount ?? 0) > 0;
+  return normalizeStatus(day.status) === 'available' || Number(day.available_count ?? day.availableCount ?? 0) > 0;
 }
 
 export function availabilityQueryFromForm(formEl) {
@@ -141,16 +140,32 @@ export function defaultAvailabilityQuery() {
 }
 
 function dayPillHtml(day) {
-  const status = String(day.status || '').toLowerCase();
-  const cls = ['available', 'partial'].includes(status) ? status : '';
+  const status = normalizeStatus(day.status);
+  const cls = status;
   const count = `${Number(day.available_count || 0)} of ${Number(day.total || 0)}`;
   return `
     <span class="day-pill ${cls}">
       <span>${escapeHtml(day.date || '')}</span>
-      <span>${escapeHtml(status || 'unknown')}</span>
+      <span>${escapeHtml(statusLabel(status))}</span>
       <span>${escapeHtml(count)}</span>
     </span>
   `;
+}
+
+function normalizeStatus(raw) {
+  const value = String(raw || '').toLowerCase();
+  if (value === 'booked' || value === 'full') return 'reserved';
+  if (value === 'partial' || value === 'open') return 'available';
+  if (['available', 'first_come', 'reserved', 'closed', 'unknown'].includes(value)) return value;
+  return 'unknown';
+}
+
+function statusLabel(status) {
+  if (status === 'available') return 'A';
+  if (status === 'first_come') return 'FF';
+  if (status === 'reserved') return 'R';
+  if (status === 'closed') return 'C';
+  return '?';
 }
 
 function utcYmd(date) {
