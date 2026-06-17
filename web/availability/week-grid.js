@@ -29,6 +29,7 @@ export function renderWeekGrid({ days, todayIso, selectedDate, watchedDates }) {
     const dayNum = parseInt(date.slice(8, 10), 10);
     const availLabel = renderAvailLabel(d);
     const visualStatus = renderStatus(d);
+    const ariaStatus = statusAria(visualStatus);
     const watching = watchedDates.has(date);
     const classes = [
       'cg-day',
@@ -40,7 +41,7 @@ export function renderWeekGrid({ days, todayIso, selectedDate, watchedDates }) {
       .filter(Boolean)
       .join(' ');
     return `
-      <button type="button" class="${classes}" data-date="${date}" aria-label="${escapeHtml(`${date} — ${visualStatus}`)}">
+      <button type="button" class="${classes}" data-date="${date}" aria-label="${escapeHtml(`${date} - ${ariaStatus}`)}">
         <div class="cg-day-dow">${dowLabel}</div>
         <div class="cg-day-num">${dayNum}</div>
         <div class="cg-day-avail">${escapeHtml(availLabel)}</div>
@@ -95,5 +96,13 @@ function normalizeStatus(raw) {
   if (value === 'booked' || value === 'full') return 'reserved';
   if (value === 'partial' || value === 'open') return 'available';
   if (['available', 'first_come', 'reserved', 'closed', 'unknown'].includes(value)) return value;
+  return 'unknown';
+}
+
+function statusAria(status) {
+  if (status === 'first_come') return 'first come first served';
+  if (status === 'reserved') return 'reserved';
+  if (status === 'available') return 'available';
+  if (status === 'closed') return 'closed';
   return 'unknown';
 }
