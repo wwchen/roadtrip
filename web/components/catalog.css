@@ -954,7 +954,7 @@ pre {
 
 .cg-site-matrix-detail-row > td {
   padding: 12px;
-  background: var(--cg-surface-2, rgba(255,255,255,0.03));
+  background: rgba(255,255,255,0.03);
   border-top: 1px solid var(--cg-border);
   border-bottom: 1px solid var(--cg-border);
 }
