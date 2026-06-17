@@ -186,10 +186,11 @@ export function seasonVerdictHTML(seasonStr, reservable) {
 export function reserveButtonHTML(p, btnClass = 'btn') {
   let url = '';
   let label = 'Reserve';
-  // Aspira NextGen deeplink takes priority — when we have the per-park IDs,
-  // drop the user straight onto the booking flow instead of the host home.
-  // FE-owned (vs p.cta) because the deeplink encodes today/tomorrow in the
-  // user's local TZ, which the backend can't compute.
+  // Aspira NextGen deeplink: when we have the per-park IDs, swap the
+  // backend's host-homepage URL for a dated booking-flow URL. The deeplink
+  // encodes today/tomorrow in the user's local TZ, which the backend can't
+  // compute — but the label still comes from p.cta so the host→tenant
+  // mapping isn't duplicated client-side.
   if (p.aspira?.transactionLocationId != null && p.aspira?.mapId != null) {
     url = buildAspiraDeeplink({
       host: p.aspira.host || 'reservation.pc.gc.ca',
@@ -197,7 +198,7 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
       mapId: p.aspira.mapId,
       resourceLocationId: p.aspira.resourceLocationId,
     });
-    label = labelForAspiraHost(p.aspira.host);
+    label = p.cta?.label || 'Reserve';
   } else if (p.cta?.url) {
     url = p.cta.url;
     label = p.cta.label;
@@ -246,8 +247,3 @@ function regionalParkSearch(p) {
   }
 }
 
-function labelForAspiraHost(host) {
-  if (host === 'camping.bcparks.ca') return 'Book on BC Parks';
-  if (host === 'washington.goingtocamp.com') return 'Book WA State Park';
-  return 'Reserve on parks.canada.ca';
-}

@@ -10,8 +10,10 @@ import ca.floo.roadtrip.service.booking.ProviderRefParser
 //
 // Precedence (first match wins):
 //   1. provider_ref.RecGov  → recreation.gov campground page (kind=reserve)
-//   2. provider_ref.Aspira  → null (FE owns the dated deeplink; date math
-//      happens in the browser's local TZ. The label still comes from here).
+//   2. provider_ref.Aspira  → host homepage URL + tenant-aware label
+//      (kind=reserve). The FE swaps in a dated deeplink URL when the per-park
+//      IDs are present (date math needs the user's local TZ), but reads the
+//      label from here so the host→tenant mapping isn't duplicated.
 //   3. info_url             → upstream info page (kind=info, label by host)
 //   4. null                 → no usable URL; FE falls back to name search
 internal object PoiCta {
@@ -19,6 +21,7 @@ internal object PoiCta {
 
     fun computeCta(row: PoiDetailRow): PoiCtaSchema? {
         val providerRef = row.providerRefJson?.let { ProviderRefParser.parse(it) }
+        val infoUrl = row.infoUrl?.takeIf { it.isNotBlank() }
 
         when (providerRef) {
             is ProviderRef.RecGov -> {
@@ -29,21 +32,38 @@ internal object PoiCta {
                 )
             }
             is ProviderRef.Aspira -> {
-                // Deeplink construction needs today/tomorrow in the user's
-                // timezone — keep it on the FE. Backend just supplies the
-                // label so the FE doesn't repeat the host→tenant mapping.
-                return null
+                // Aspira ETL writes the booking host into info_url
+                // (https://$host/). Use that as the homepage fallback URL +
+                // to derive the tenant label.
+                if (infoUrl == null) return null
+                val host = extractHost(infoUrl) ?: return null
+                return PoiCtaSchema(
+                    url = infoUrl,
+                    label = aspiraLabelForHost(host),
+                    kind = "reserve",
+                )
             }
             else -> Unit
         }
 
-        val infoUrl = row.infoUrl?.takeIf { it.isNotBlank() } ?: return null
+        if (infoUrl == null) return null
         return PoiCtaSchema(
             url = infoUrl,
             label = labelForInfoUrl(infoUrl),
             kind = "info",
         )
     }
+
+    private fun aspiraLabelForHost(host: String): String =
+        when {
+            host.endsWith("camping.bcparks.ca") -> "Book on BC Parks"
+            host.endsWith("washington.goingtocamp.com") -> "Book WA State Park"
+            host.endsWith("reservation.pc.gc.ca") || host.endsWith("pc.gc.ca") ->
+                "Reserve on parks.canada.ca"
+            // Unknown Aspira tenant — better than a generic "Reserve" because
+            // the user still sees where the click lands.
+            else -> "Reserve on $host"
+        }
 
     // Host-aware label. Picks a recognizable phrase for the upstream the URL
     // points at; falls back to the bare host so the user always sees where
