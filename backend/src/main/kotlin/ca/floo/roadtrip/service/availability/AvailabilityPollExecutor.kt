@@ -111,14 +111,8 @@ class AvailabilityPollExecutor(
         val provider = bookingProviders.forPoi(parent)!!
         val ref = ProviderRefParser.parse(parent.providerRefJson)!!
 
-        val firstDate = intent.targetDates.firstOrNull() ?: return 0
-        val start = LocalDate.parse(firstDate)
-        val end =
-            intent.targetDates
-                .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
-                .maxOrNull()
-                ?.plusDays(1)
-                ?: start.plusDays(1)
+        val start = LocalDate.parse(intent.startDate)
+        val end = LocalDate.parse(intent.endDate)
 
         val response =
             fetches.fetch(

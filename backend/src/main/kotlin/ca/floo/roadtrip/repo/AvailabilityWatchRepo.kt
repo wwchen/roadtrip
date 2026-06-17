@@ -26,8 +26,8 @@ class AvailabilityWatchRepo(
         val poiId: Long?,
         val reservableId: Long?,
         val reservableFilters: JsonObject,
-        val targetDates: List<LocalDate>,
-        val minNights: Int,
+        val startDate: LocalDate,
+        val endDate: LocalDate,
         val cadenceSec: Int,
         val triggerKinds: List<String>,
         val triggerConfig: JsonObject,
@@ -36,8 +36,8 @@ class AvailabilityWatchRepo(
 
     data class UpdateInput(
         val reservableFilters: JsonObject? = null,
-        val targetDates: List<LocalDate>? = null,
-        val minNights: Int? = null,
+        val startDate: LocalDate? = null,
+        val endDate: LocalDate? = null,
         val cadenceSec: Int? = null,
         val triggerKinds: List<String>? = null,
         val triggerConfig: JsonObject? = null,
@@ -51,8 +51,8 @@ class AvailabilityWatchRepo(
         val reservableId: Long?,
         val reservable: Reservable?,
         val reservableFilters: JsonObject,
-        val targetDates: List<LocalDate>,
-        val minNights: Int,
+        val startDate: LocalDate,
+        val endDate: LocalDate,
         val cadenceSec: Int,
         val triggerKinds: List<String>,
         val triggerConfig: JsonObject,
@@ -74,8 +74,8 @@ class AvailabilityWatchRepo(
                 .set(
                     AVAILABILITY_WATCH.RESERVABLE_FILTERS,
                     JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)),
-                ).set(AVAILABILITY_WATCH.TARGET_DATES, input.targetDates.toTypedArray())
-                .set(AVAILABILITY_WATCH.MIN_NIGHTS, input.minNights)
+                ).set(AVAILABILITY_WATCH.START_DATE, input.startDate)
+                .set(AVAILABILITY_WATCH.END_DATE, input.endDate)
                 .set(AVAILABILITY_WATCH.CADENCE_SEC, input.cadenceSec)
                 .set(AVAILABILITY_WATCH.TRIGGER_KINDS, input.triggerKinds.toTypedArray())
                 .set(AVAILABILITY_WATCH.TRIGGER_CONFIG, JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.triggerConfig)))
@@ -136,8 +136,8 @@ class AvailabilityWatchRepo(
                     JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)),
                 )
         }
-        if (input.targetDates != null) query = query.set(AVAILABILITY_WATCH.TARGET_DATES, input.targetDates.toTypedArray())
-        if (input.minNights != null) query = query.set(AVAILABILITY_WATCH.MIN_NIGHTS, input.minNights)
+        if (input.startDate != null) query = query.set(AVAILABILITY_WATCH.START_DATE, input.startDate)
+        if (input.endDate != null) query = query.set(AVAILABILITY_WATCH.END_DATE, input.endDate)
         if (input.cadenceSec != null) query = query.set(AVAILABILITY_WATCH.CADENCE_SEC, input.cadenceSec)
         if (input.triggerKinds != null) query = query.set(AVAILABILITY_WATCH.TRIGGER_KINDS, input.triggerKinds.toTypedArray())
         if (input.triggerConfig != null) {
@@ -174,8 +174,8 @@ class AvailabilityWatchRepo(
             reservableId = reservableId,
             reservable = if (reservableId != null) reservables.fromRecord(r) else null,
             reservableFilters = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.RESERVABLE_FILTERS)!!.data()).jsonObject,
-            targetDates = r.get(AVAILABILITY_WATCH.TARGET_DATES)!!.filterNotNull(),
-            minNights = r.get(AVAILABILITY_WATCH.MIN_NIGHTS)!!,
+            startDate = r.get(AVAILABILITY_WATCH.START_DATE)!!,
+            endDate = r.get(AVAILABILITY_WATCH.END_DATE)!!,
             cadenceSec = r.get(AVAILABILITY_WATCH.CADENCE_SEC)!!,
             triggerKinds = r.get(AVAILABILITY_WATCH.TRIGGER_KINDS)!!.filterNotNull(),
             triggerConfig = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.TRIGGER_CONFIG)!!.data()).jsonObject,

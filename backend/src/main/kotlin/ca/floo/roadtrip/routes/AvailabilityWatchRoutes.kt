@@ -135,14 +135,17 @@ fun Route.availabilityWatchRoutes(
             }
         val err = validateCreateBody(req)
         if (err != null) return@post call.respondError(err.first, HttpStatusCode.BadRequest, err.second)
+        val dateWindow =
+            parseDateWindow(req.startDate, req.endDate)
+                ?: return@post call.respondError("invalid_date_window", HttpStatusCode.BadRequest, "end_date must be after start_date")
         val watch =
             watchService.create(
                 AvailabilityWatchRepo.CreateInput(
                     poiId = resolved.poiId,
                     reservableId = resolved.reservableId,
                     reservableFilters = req.reservableFilters,
-                    targetDates = req.targetDates.map(LocalDate::parse),
-                    minNights = req.minNights,
+                    startDate = dateWindow.first,
+                    endDate = dateWindow.second,
                     cadenceSec = req.cadenceSec,
                     triggerKinds = req.triggerKinds,
                     triggerConfig = req.triggerConfig,
@@ -175,11 +178,22 @@ fun Route.availabilityWatchRoutes(
             } catch (e: Exception) {
                 return@patch call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
             }
-        val targetDates =
-            try {
-                req.targetDates?.map(LocalDate::parse)
-            } catch (e: Exception) {
-                return@patch call.respondError("invalid_target_dates", HttpStatusCode.BadRequest, e.message)
+        val dateWindow =
+            when {
+                (req.startDate == null) xor (req.endDate == null) ->
+                    return@patch call.respondError(
+                        "invalid_date_window",
+                        HttpStatusCode.BadRequest,
+                        "start_date and end_date must be updated together",
+                    )
+                req.startDate != null && req.endDate != null ->
+                    parseDateWindow(req.startDate, req.endDate)
+                        ?: return@patch call.respondError(
+                            "invalid_date_window",
+                            HttpStatusCode.BadRequest,
+                            "end_date must be after start_date",
+                        )
+                else -> null
             }
         val updated =
             try {
@@ -187,8 +201,8 @@ fun Route.availabilityWatchRoutes(
                     id,
                     AvailabilityWatchRepo.UpdateInput(
                         reservableFilters = req.reservableFilters,
-                        targetDates = targetDates,
-                        minNights = req.minNights,
+                        startDate = dateWindow?.first,
+                        endDate = dateWindow?.second,
                         cadenceSec = req.cadenceSec,
                         triggerKinds = req.triggerKinds,
                         triggerConfig = req.triggerConfig,
@@ -246,10 +260,11 @@ fun Route.availabilityWatchRoutes(
                 ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
 
         val children = resolveChildren(watch, reservables)
-        val cells = heatmaps.loadHeatmap(children.map { it.id }, watch.targetDates)
+        val targetDates = datesInWindow(watch.startDate, watch.endDate)
+        val cells = heatmaps.loadHeatmap(children.map { it.id }, targetDates)
         val cellsByPair = cells.associateBy { it.reservableId to it.targetDate }
 
-        val targetDateStrings = watch.targetDates.map { it.toString() }
+        val targetDateStrings = targetDates.map { it.toString() }
         val rowsByLoop = LinkedHashMap<String?, MutableList<AvailabilityWatchHeatmapRow>>()
         for (r in children.sortedWith(
             compareBy<Reservable, String?>(nullsLast()) {
@@ -257,7 +272,7 @@ fun Route.availabilityWatchRoutes(
             }.thenBy { it.name ?: "" }.thenBy { it.rid.vendorId },
         )) {
             val rowCells =
-                watch.targetDates.map { d ->
+                targetDates.map { d ->
                     val cell = cellsByPair[r.id to d]
                     AvailabilityWatchHeatmapCell(
                         targetDate = d.toString(),
@@ -333,14 +348,26 @@ private fun resolveCreateScope(
 }
 
 private fun validateCreateBody(req: AvailabilityWatchCreateRequest): Pair<String, String?>? {
-    if (req.targetDates.isEmpty()) return "invalid_target_dates" to "target_dates must be non-empty"
-    runCatching { req.targetDates.forEach(LocalDate::parse) }
-        .onFailure { return "invalid_target_dates" to it.message }
-    if (req.minNights < 1) return "invalid_min_nights" to "min_nights must be >= 1"
     if (req.cadenceSec < 5) return "invalid_cadence" to "cadence_sec must be >= 5"
     if (req.triggerKinds.isEmpty()) return "invalid_triggers" to "trigger_kinds must be non-empty"
     return null
 }
+
+private fun parseDateWindow(
+    startDate: String,
+    endDate: String,
+): Pair<LocalDate, LocalDate>? =
+    runCatching {
+        val start = LocalDate.parse(startDate)
+        val end = LocalDate.parse(endDate)
+        if (!end.isAfter(start)) return null
+        start to end
+    }.getOrNull()
+
+private fun datesInWindow(
+    startDate: LocalDate,
+    endDate: LocalDate,
+): List<LocalDate> = generateSequence(startDate) { d -> d.plusDays(1).takeIf { it.isBefore(endDate) } }.toList()
 
 private fun Watch.toSchema(): AvailabilityWatchSchema =
     AvailabilityWatchSchema(
@@ -362,8 +389,8 @@ private fun Watch.toSchema(): AvailabilityWatchSchema =
                 )
             },
         reservableFilters = reservableFilters,
-        targetDates = targetDates.map { it.toString() },
-        minNights = minNights,
+        startDate = startDate.toString(),
+        endDate = endDate.toString(),
         cadenceSec = cadenceSec,
         triggerKinds = triggerKinds,
         triggerConfig = triggerConfig,

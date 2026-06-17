@@ -98,8 +98,8 @@ class AvailabilityWatchRoutesTest {
                 {
                   "poi_id": $poiId,
                   "reservable_filters": {"loop": ["A"]},
-                  "target_dates": ["2026-07-04", "2026-07-05"],
-                  "min_nights": 2,
+                  "start_date": "2026-07-04",
+                  "end_date": "2026-07-06",
                   "cadence_sec": 60,
                   "trigger_kinds": ["atc"]
                 }
@@ -112,8 +112,41 @@ class AvailabilityWatchRoutesTest {
             assertEquals(HttpStatusCode.Created, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
             assertEquals(poiId, obj["poi_id"]!!.jsonPrimitive.long)
-            assertEquals(2, obj["target_dates"]!!.jsonArray.size)
+            assertEquals("2026-07-04", obj["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-06", obj["end_date"]!!.jsonPrimitive.content)
+            assertEquals(false, obj.containsKey("target_dates"))
+            assertEquals(false, obj.containsKey("min_nights"))
             assertEquals("active", obj["status"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `POST rejects invalid date window`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p-invalid-window", name = "Invalid Window")
+            val body =
+                """
+                {"poi_id": $poiId, "start_date": "2026-07-06", "end_date": "2026-07-04", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val resp =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("invalid_date_window", obj["error"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -133,7 +166,7 @@ class AvailabilityWatchRoutesTest {
             }
             val body =
                 """
-                {"target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
                 client.post("/api/availability/watches") {
@@ -163,7 +196,7 @@ class AvailabilityWatchRoutesTest {
             val poiId = seedPoi(sourceId = "p2", name = "Glacier")
             val body =
                 """
-                {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             repeat(3) {
                 client.post("/api/availability/watches") {
@@ -195,7 +228,7 @@ class AvailabilityWatchRoutesTest {
             val poiId = seedPoi(sourceId = "p3", name = "Yosemite")
             val body =
                 """
-                {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {
@@ -236,7 +269,7 @@ class AvailabilityWatchRoutesTest {
             val poiId = seedPoi(sourceId = "p4", name = "Tunnel")
             val body =
                 """
-                {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {
@@ -273,7 +306,7 @@ class AvailabilityWatchRoutesTest {
             val poiId = seedPoi(sourceId = "p99", name = "Atomic")
             val createBody =
                 """
-                {"poi_id": $poiId, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {
@@ -423,7 +456,7 @@ class AvailabilityWatchRoutesTest {
 
             val createBody =
                 """
-                {"reservable_rid": "site:recgov:100", "target_dates": ["2026-07-04", "2026-07-05"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"reservable_rid": "site:recgov:100", "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {
@@ -479,7 +512,7 @@ class AvailabilityWatchRoutesTest {
 
             val createBody =
                 """
-                {"poi_id": $poiId, "reservable_filters": {"loop": ["Loop A"]}, "target_dates": ["2026-07-04"], "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"poi_id": $poiId, "reservable_filters": {"loop": ["Loop A"]}, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {

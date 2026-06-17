@@ -22,16 +22,16 @@ import kotlinx.serialization.json.jsonObject
  */
 @Serializable
 sealed class AvailabilityJobIntent {
-    abstract val targetDates: List<String>
-    abstract val minNights: Int
+    abstract val startDate: String
+    abstract val endDate: String
 
     @Serializable
     @SerialName("reservable")
     data class Reservable(
         @SerialName("reservable_id") val reservableId: Long,
         @SerialName("reservable_rid") val reservableRid: String,
-        @SerialName("target_dates") override val targetDates: List<String>,
-        @SerialName("min_nights") override val minNights: Int,
+        @SerialName("start_date") override val startDate: String,
+        @SerialName("end_date") override val endDate: String,
     ) : AvailabilityJobIntent()
 
     @Serializable
@@ -39,8 +39,8 @@ sealed class AvailabilityJobIntent {
     data class Poi(
         @SerialName("poi_id") val poiId: Long,
         @SerialName("reservable_filters") val reservableFilters: JsonObject = JsonObject(emptyMap()),
-        @SerialName("target_dates") override val targetDates: List<String>,
-        @SerialName("min_nights") override val minNights: Int,
+        @SerialName("start_date") override val startDate: String,
+        @SerialName("end_date") override val endDate: String,
     ) : AvailabilityJobIntent()
 
     fun toJsonObject(): JsonObject = JSON.encodeToJsonElement(serializer(), this).jsonObject

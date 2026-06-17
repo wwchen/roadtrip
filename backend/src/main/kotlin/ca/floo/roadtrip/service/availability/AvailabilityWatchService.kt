@@ -6,7 +6,6 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.ReservableRepo
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
-import java.time.LocalDate
 import java.time.OffsetDateTime
 
 /**
@@ -84,25 +83,23 @@ class AvailabilityWatchService(
             watchRepo.delete(id)
         }
 
-    private fun buildIntent(watch: Watch): AvailabilityJobIntent {
-        val dates = watch.targetDates.map(LocalDate::toString)
-        return if (watch.reservableId != null) {
+    private fun buildIntent(watch: Watch): AvailabilityJobIntent =
+        if (watch.reservableId != null) {
             val r =
                 reservables.findById(watch.reservableId)
                     ?: error("watch ${watch.id} references missing reservable ${watch.reservableId}")
             AvailabilityJobIntent.Reservable(
                 reservableId = r.id,
                 reservableRid = r.rid.encode(),
-                targetDates = dates,
-                minNights = watch.minNights,
+                startDate = watch.startDate.toString(),
+                endDate = watch.endDate.toString(),
             )
         } else {
             AvailabilityJobIntent.Poi(
                 poiId = watch.poiId!!,
                 reservableFilters = watch.reservableFilters,
-                targetDates = dates,
-                minNights = watch.minNights,
+                startDate = watch.startDate.toString(),
+                endDate = watch.endDate.toString(),
             )
         }
-    }
 }
