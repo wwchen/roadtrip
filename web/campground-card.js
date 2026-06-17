@@ -12,7 +12,6 @@
 // (e.g. drawer uses a different button style) and stay with the caller.
 
 import { escapeHtml } from './core.js';
-import { buildAspiraDeeplink } from './aspira.js';
 
 /** Parse properties.amenities (JSON-encoded array) → string[]; safe on bad input. */
 export function parseAmenities(p) {
@@ -87,27 +86,14 @@ export function lastVerifiedFooterHTML(p) {
 /**
  * Footnote naming the booking system the pin reserves through. Helps users
  * recognize the upstream booking flow + identifies why some pins have a heat
- * strip (we have a public API for that vendor) and others don't.
+ * strip (we have a public API for that vendor) and others don't. The label
+ * is computed by the backend (see PoiCta.bookingSystem) and shipped on
+ * /api/pois/{id}.
  */
 export function bookingSystemFooterHTML(p) {
-  const sys = bookingSystemLabel(p);
+  const sys = p.booking_system;
   if (!sys) return '';
-  return `<div class="footer cg-booking-sys">Booking via ${sys}</div>`;
-}
-
-function bookingSystemLabel(p) {
-  if (p.aspira?.host) {
-    if (p.aspira.host === 'reservation.pc.gc.ca') return 'Aspira NextGen (Parks Canada)';
-    if (p.aspira.host === 'camping.bcparks.ca') return 'Aspira NextGen (BC Parks)';
-    if (p.aspira.host === 'washington.goingtocamp.com') return 'Aspira NextGen (WA State Parks)';
-    return 'Aspira NextGen';
-  }
-  if (p.recgov_id) return 'Recreation.gov';
-  if (p.parks_alberta_url) return 'Camis (Alberta Parks)';
-  // bcparks_url without aspira: BC Parks site, but no booking system flagged.
-  if (p.bcparks_url) return 'BC Parks';
-  if (p.parks_canada_url) return 'Parks Canada';
-  return null;
+  return `<div class="footer cg-booking-sys">Booking via ${escapeHtml(sys)}</div>`;
 }
 
 const MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, sept:8, oct:9, nov:10, dec:11 };
@@ -174,10 +160,10 @@ export function seasonVerdictHTML(seasonStr, reservable) {
 
 /**
  * Reserve / info button. The backend computes a {url, label, kind} CTA for
- * every campground pin (provider_ref → recgov page; info_url → host-aware
- * label) and ships it as p.cta — render it verbatim. Two cases stay on the
- * FE: Aspira deeplinks (need today/tomorrow in the browser's TZ) and the
- * name-search fallback for pins with no upstream link at all.
+ * every campground pin — provider_ref + info_url → vendor-specific URL and
+ * label, including dated Aspira NextGen deeplinks. The FE renders it
+ * verbatim; the only fallback is a name search for pins with no upstream
+ * link at all.
  *
  * `btnClass` is the CSS class prefix the caller wants (popup uses "btn",
  * drawer uses "cg-btn"). Returns full <a> HTML or a disabled span for
@@ -186,24 +172,11 @@ export function seasonVerdictHTML(seasonStr, reservable) {
 export function reserveButtonHTML(p, btnClass = 'btn') {
   let url = '';
   let label = 'Reserve';
-  // Aspira NextGen deeplink: when we have the per-park IDs, swap the
-  // backend's host-homepage URL for a dated booking-flow URL. The deeplink
-  // encodes today/tomorrow in the user's local TZ, which the backend can't
-  // compute — but the label still comes from p.cta so the host→tenant
-  // mapping isn't duplicated client-side.
-  if (p.aspira?.transactionLocationId != null && p.aspira?.mapId != null) {
-    url = buildAspiraDeeplink({
-      host: p.aspira.host || 'reservation.pc.gc.ca',
-      transactionLocationId: p.aspira.transactionLocationId,
-      mapId: p.aspira.mapId,
-      resourceLocationId: p.aspira.resourceLocationId,
-    });
-    label = p.cta?.label || 'Reserve';
-  } else if (p.cta?.url) {
+  if (p.cta?.url) {
     url = p.cta.url;
     label = p.cta.label;
   } else if (p.reservable === false) {
-    // No CTA, no aspira, marked FCFS — there's nothing to link to.
+    // No CTA, marked FCFS — there's nothing to link to.
     return `<span class="${btnClass} ${btnClass}-disabled">First-come, first-served</span>`;
   } else {
     // No backend CTA and no booking provider — best-effort name search.

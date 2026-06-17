@@ -352,7 +352,8 @@ internal fun poiDetailFeature(r: PoiDetailRow): PoiDetailFeatureSchema =
                 infoUrl = r.infoUrl,
                 address = r.addressJson?.let { Json.parseToJsonElement(it) },
                 providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
-                cta = PoiCta.computeCta(r),
+                cta = PoiCta.Default.computeCta(r),
+                bookingSystem = PoiCta.Default.bookingSystem(r),
                 raw = Json.parseToJsonElement(r.propertiesJson),
             ),
     )

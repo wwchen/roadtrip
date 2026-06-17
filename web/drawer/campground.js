@@ -39,7 +39,6 @@ import {
   directionsButtonHTML,
   updatePoiAddressUrl,
   reviveJsonProp,
-  normalizeAspira,
   upstreamHTML,
 } from './shared.js';
 import { requestPoiDetail } from '../api/poi-api.js';
@@ -62,10 +61,7 @@ export function openCampgroundDrawer(f) {
 
   // MapLibre's GeoJSON source serializes nested-object properties to JSON
   // strings when features round-trip through queryRenderedFeatures. Parse
-  // the nested ones we actually read here. The legacy flat `aspira` field
-  // is still used by campground-card.js (booking-system label, reserve URL)
-  // — it's not the availability dispatch path.
-  f = normalizeAspira(f);
+  // the nested ones we actually read here.
   reviveJsonProp(f.properties, 'upstream');
   reviveJsonProp(f.properties, 'provider_ref');
 

@@ -1,7 +1,7 @@
 // Cross-view drawer helpers shared by every category renderer:
 //   - drawerHeader / directionsButtonHTML — slot-shared chrome HTML
 //   - upstreamHTML / reviveJsonProp — JSON-property plumbing for MapLibre
-//   - buildSubline / distanceTo / normalizeAspira — small composers
+//   - buildSubline / distanceTo — small composers
 //   - hydratePoi / loadingDrawerHtml — per-id GET + skeleton state
 
 import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';
@@ -66,20 +66,6 @@ export function reviveJsonProp(p, key) {
   const v = p?.[key];
   if (typeof v !== 'string') return;
   try { p[key] = JSON.parse(v); } catch { p[key] = null; }
-}
-
-/**
- * MapLibre wraps features so geometry/id are accessor properties — `{...f}`
- * would silently drop them. Mutate the properties bag in place; the
- * feature is per-click ephemeral, so this won't leak state into the source.
- */
-export function normalizeAspira(f) {
-  const a = f.properties?.aspira;
-  if (typeof a !== 'string') return f;
-  let parsed = null;
-  try { parsed = JSON.parse(a); } catch {}
-  f.properties.aspira = parsed;
-  return f;
 }
 
 /**
