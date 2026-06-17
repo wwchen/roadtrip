@@ -37,8 +37,7 @@ async function loadMeta(id) {
       <dt>scope</dt><dd>${escapeHtml(scope)}</dd>
       <dt>status</dt><dd>${escapeHtml(w.status)}</dd>
       <dt>cadence</dt><dd>${escapeHtml(w.cadence_sec)}s</dd>
-      <dt>target dates</dt><dd>${w.target_dates.map(escapeHtml).join(', ')}</dd>
-      <dt>min nights</dt><dd>${escapeHtml(w.min_nights)}</dd>
+      <dt>date window</dt><dd>${escapeHtml(w.start_date)} to ${escapeHtml(w.end_date)}</dd>
       <dt>triggers</dt><dd>${w.trigger_kinds.map(escapeHtml).join(', ')}</dd>
       <dt>filters</dt><dd>${escapeHtml(JSON.stringify(w.reservable_filters))}</dd>
       <dt>created</dt><dd>${escapeHtml(formatTimestamp(w.created_at))}</dd>
@@ -58,7 +57,8 @@ async function loadHeatmap(id) {
       return;
     }
     const rowCount = data.groups.reduce((acc, g) => acc + g.rows.length, 0);
-    heatmapStatus.textContent = `${rowCount} site${rowCount === 1 ? '' : 's'} × ${data.target_dates.length} date${data.target_dates.length === 1 ? '' : 's'}.`;
+    const dates = data.dates || [];
+    heatmapStatus.textContent = `${rowCount} site${rowCount === 1 ? '' : 's'} × ${dates.length} date${dates.length === 1 ? '' : 's'}.`;
     renderWatchHeatmap(heatmapEl, data);
   } catch (err) {
     heatmapStatus.textContent = `Heatmap error: ${err.message}`;

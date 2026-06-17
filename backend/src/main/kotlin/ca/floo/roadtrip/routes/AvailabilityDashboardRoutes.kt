@@ -213,10 +213,10 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
 
     get("/api/availability/snapshots/summary", {
         tags = listOf("availability")
-        summary = "Per-target-date stats for one reservable's snapshot history"
+        summary = "Per-date stats for one reservable's snapshot history"
         request {
             queryParameter<String>("reservable_rid") { description = "Reservable composite id (e.g. site:recgov:330257)." }
-            queryParameter<String>("target_dates") {
+            queryParameter<String>("dates") {
                 description = "Comma-separated YYYY-MM-DD list. If omitted, every date with snapshots in the window is returned."
             }
             queryParameter<Int>("window_hours") { description = "Snapshot window in hours, default 168 (7 days)." }
@@ -256,15 +256,15 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                 ?.toIntOrNull()
                 ?.coerceIn(1, 24 * 30) ?: (24 * 7)
         val explicitDates =
-            call.request.queryParameters["target_dates"]
+            call.request.queryParameters["dates"]
                 ?.split(",")
                 ?.map { it.trim() }
                 ?.filter { it.isNotEmpty() }
                 ?.mapNotNull { runCatching { java.time.LocalDate.parse(it) }.getOrNull() }
                 .orEmpty()
-        val targetDates =
+        val dates =
             explicitDates.ifEmpty {
-                // Discover distinct target_dates that have any snapshot in the window.
+                // Discover distinct dates that have any snapshot in the window.
                 val windowStart =
                     java.time.OffsetDateTime
                         .now()
@@ -283,7 +283,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                             .asc(),
                     ).fetch { it.value1() }
             }
-        val stats = snapshots.summarize(reservable.id, targetDates, windowHours = windowHours)
+        val stats = snapshots.summarize(reservable.id, dates, windowHours = windowHours)
         call.respondJson(
             AvailabilitySnapshotsSummaryResponse(
                 reservableRid = rid,

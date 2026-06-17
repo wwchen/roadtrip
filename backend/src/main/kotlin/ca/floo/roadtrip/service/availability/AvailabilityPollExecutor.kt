@@ -96,8 +96,8 @@ class AvailabilityPollExecutor(
             jobId = jobId,
             runId = runId,
             reservable = reservable,
-            targetDates = intent.targetDates,
-            minNights = intent.minNights,
+            startDate = intent.startDate,
+            endDate = intent.endDate,
         )
     }
 
@@ -118,8 +118,8 @@ class AvailabilityPollExecutor(
                     jobId = jobId,
                     runId = runId,
                     reservable = reservable,
-                    targetDates = intent.targetDates,
-                    minNights = intent.minNights,
+                    startDate = intent.startDate,
+                    endDate = intent.endDate,
                 )
         }
         return snapshots
@@ -129,8 +129,8 @@ class AvailabilityPollExecutor(
         jobId: Long,
         runId: Long,
         reservable: Reservable,
-        targetDates: List<String>,
-        minNights: Int,
+        startDate: String,
+        endDate: String,
     ): Int {
         val poiIds = reservables.poiIdsForReservable(reservable.id)
         if (poiIds.isEmpty()) {
@@ -150,18 +150,8 @@ class AvailabilityPollExecutor(
         val provider = bookingProviders.forPoi(parent)!!
         val ref = ProviderRefParser.parse(parent.providerRefJson)!!
 
-        val firstDate = targetDates.firstOrNull() ?: return 0
-        val start = LocalDate.parse(firstDate)
-        val days =
-            targetDates
-                .mapNotNull { runCatching { LocalDate.parse(it) }.getOrNull() }
-                .maxOrNull()
-                ?.let {
-                    java.time.temporal.ChronoUnit.DAYS
-                        .between(start, it)
-                        .toInt() + 1
-                }
-                ?: 1
+        val start = LocalDate.parse(startDate)
+        val end = LocalDate.parse(endDate)
 
         val response =
             fetches.fetch(
@@ -171,9 +161,8 @@ class AvailabilityPollExecutor(
                     provider = provider,
                     ref = ref,
                     vendorId = reservable.rid.vendorId,
-                    start = start,
-                    days = days,
-                    minNights = minNights,
+                    startDate = start,
+                    endDate = end,
                     force = false,
                     runId = runId,
                 ),

@@ -7,24 +7,22 @@ import { jsonPostOk } from './http.js';
  *
  * @param {number|string} id  pois.id
  * @param {object}        opts
- * @param {number}        [opts.days=30]   Inclusive window length, max 60.
- * @param {string}        [opts.start]     ISO date "YYYY-MM-DD". Default: today (server-side).
+ * @param {string}        [opts.startDate] ISO date "YYYY-MM-DD". Default: today (server-side).
+ * @param {string}        [opts.endDate]   Exclusive ISO date. Default: startDate + 7 days (server-side).
  * @param {string}        [opts.siteType]  Exact reservable site_type filter.
- * @param {number}        [opts.minNights] Min consecutive nights. BE may use it for stay-mode
- *                                         scoring (RFC 0007); included in the URL so the cache
- *                                         keys correctly even if today's BE ignores it.
  * @param {boolean}       [opts.force]     Bust the per-month cache.
  * @param {AbortSignal}   [opts.signal]
  */
-export function requestPoiAvailability(id, { days = 30, start, siteType, minNights, force, signal } = {}) {
-  const params = new URLSearchParams({ days: String(days) });
-  if (start) params.set('start', start);
+export function requestPoiAvailability(id, { startDate, endDate, siteType, force, signal } = {}) {
+  const params = new URLSearchParams();
+  if (startDate) params.set('start_date', startDate);
+  if (endDate) params.set('end_date', endDate);
   if (siteType) params.set('site_type', siteType);
-  if (minNights != null) params.set('min_nights', String(minNights));
   if (force) params.set('force', '1');
-  return fetch(`/api/poi/${encodeURIComponent(id)}/availability?${params}`, { signal });
+  const qs = params.toString();
+  return fetch(`/api/poi/${encodeURIComponent(id)}/availability${qs ? `?${qs}` : ''}`, { signal });
 }
 
-export async function fetchBulkAvailability({ ids, start, nights, signal }) {
-  return jsonPostOk('/api/availability/bulk', { ids, start, nights }, { signal });
+export async function fetchBulkAvailability({ ids, startDate, endDate, signal }) {
+  return jsonPostOk('/api/availability/bulk', { ids, start_date: startDate, end_date: endDate }, { signal });
 }

@@ -25,8 +25,8 @@ class AvailabilityResponseTest {
             encodeAvailabilityJson(
                 availabilityResponseDto(
                     provider = "recgov",
-                    today = LocalDate.parse("2026-06-10"),
-                    days = 1,
+                    startDate = LocalDate.parse("2026-06-10"),
+                    endDate = LocalDate.parse("2026-06-11"),
                     perDay =
                         listOf(
                             DayClassification(
@@ -38,7 +38,7 @@ class AvailabilityResponseTest {
                             ),
                         ),
                     state = "success",
-                    summary = "1 night available",
+                    summary = "1 date available",
                     seasonBlock = null,
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
                     campgroundId = "232447",
@@ -50,7 +50,8 @@ class AvailabilityResponseTest {
         assertEquals("recgov", json["provider"]!!.jsonPrimitive.content)
         assertEquals("232447", json["campground_id"]!!.jsonPrimitive.content)
         assertEquals(JsonNull, json["season"])
-        assertEquals(1, json["window"]!!.jsonObject["days"]!!.jsonPrimitive.int)
+        assertEquals("2026-06-10", json["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+        assertEquals("2026-06-11", json["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
         assertEquals(3, availabilityDay["available_count"]!!.jsonPrimitive.int)
         assertEquals(3, availabilityDay["available_reservable_ids"]!!.jsonArray.size)
         assertEquals(false, json["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
@@ -99,15 +100,14 @@ class AvailabilityResponseTest {
                     mapId = -2147483516,
                     resourceId = "-2147478966",
                     reservableVendor = "aspira_bc",
-                    today = LocalDate.parse("2026-07-01"),
-                    days = 2,
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
                     force = false,
-                    minNights = 2,
                 )
 
             assertEquals("site:aspira_bc:-2147478966", dto.reservableId)
             assertEquals("available", dto.availability[0].status)
-            assertEquals("partial", dto.availability[1].status)
+            assertEquals("available", dto.availability[1].status)
         }
 
     @Test
@@ -134,17 +134,16 @@ class AvailabilityResponseTest {
                     cache = cache,
                     host = "camping.bcparks.ca",
                     mapId = -2147483516,
-                    today = LocalDate.parse("2026-07-01"),
-                    days = 1,
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
                     force = false,
-                    minNights = 2,
                     reservableVendor = "aspira_bc",
                 )
 
-            assertEquals(1, dto.availability.single().availableCount)
+            assertEquals(2, dto.availability.single().availableCount)
             assertEquals("available", dto.availability.single().status)
             assertEquals(
-                listOf("site:aspira_bc:-2147478966"),
+                listOf("site:aspira_bc:-2147478966", "site:aspira_bc:-2147478967"),
                 dto.availability.single().availableReservableIds,
             )
         }
@@ -197,10 +196,9 @@ class AvailabilityResponseTest {
                             AspiraCatalogReservable("site:aspira_wa:c", "c", -202),
                             AspiraCatalogReservable("site:aspira_wa:missing", "missing", -202),
                         ),
-                    today = LocalDate.parse("2026-07-01"),
-                    days = 2,
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
                     force = false,
-                    minNights = 1,
                 )
 
             assertEquals((-999).toString(), dto.mapId)
@@ -257,7 +255,6 @@ class AvailabilityResponseTest {
                     today = LocalDate.parse("2026-06-17"),
                     days = 2,
                     force = false,
-                    minNights = 7,
                 )
 
             assertEquals(1, dto.availability[0].availableCount)

@@ -14,15 +14,12 @@ import java.time.OffsetDateTime
 import java.time.ZoneOffset
 
 /**
- * Append-only per-day single-night availability snapshots. Replaces the
+ * Append-only per-day availability snapshots. Replaces the
  * earlier reservable_availability_log table.
  *
- * One snapshot per (reservable_id, target_date, observed_at). Multi-
- * night availability is derived by combining consecutive target_date
- * rows from the same observed_at batch — the executor stores
- * single-night data even when the request was multi-night, so the
- * snapshot timeline shows real per-day state regardless of the original
- * query's min_nights.
+ * One snapshot per (reservable_id, target_date, observed_at). Window-level
+ * availability is derived by combining consecutive target_date rows from the
+ * same observed_at batch, so the snapshot timeline shows real per-day state.
  */
 class AvailabilitySnapshotRepo(
     private val ctx: DSLContext,
@@ -114,25 +111,25 @@ class AvailabilitySnapshotRepo(
      */
     fun summarize(
         reservableId: Long,
-        targetDates: List<LocalDate>,
+        dates: List<LocalDate>,
         now: OffsetDateTime = OffsetDateTime.now(),
         windowHours: Int = 24 * 7,
     ): List<TargetDateStats> {
-        if (targetDates.isEmpty()) return emptyList()
+        if (dates.isEmpty()) return emptyList()
         val windowStart = now.minusHours(windowHours.toLong())
         val flipWindowStart = now.minusHours(24)
         val rows =
             ctx
                 .selectFrom(AVAILABILITY_SNAPSHOT)
                 .where(AVAILABILITY_SNAPSHOT.RESERVABLE_ID.eq(reservableId))
-                .and(AVAILABILITY_SNAPSHOT.TARGET_DATE.`in`(targetDates))
+                .and(AVAILABILITY_SNAPSHOT.TARGET_DATE.`in`(dates))
                 .and(AVAILABILITY_SNAPSHOT.OBSERVED_AT.ge(windowStart))
                 .orderBy(
                     AVAILABILITY_SNAPSHOT.TARGET_DATE.asc(),
                     AVAILABILITY_SNAPSHOT.OBSERVED_AT.asc(),
                 ).fetch { fromRecord(it) }
         val grouped = rows.groupBy { it.targetDate }
-        return targetDates.map { date ->
+        return dates.map { date ->
             val group = grouped[date].orEmpty()
             statsFor(date, group, flipWindowStart)
         }

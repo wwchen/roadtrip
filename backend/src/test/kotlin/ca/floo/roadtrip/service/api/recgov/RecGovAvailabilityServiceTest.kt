@@ -64,15 +64,10 @@ class RecGovAvailabilityServiceTest {
         recgovId: String = "232447",
         days: Int = 7,
         force: Boolean = false,
-        minNights: Int = 1,
     ): JsonObject {
-        // Match the route's rolling-window logic so multi-night classification
-        // doesn't truncate at the visible window's edge.
-        val end = today.plusDays((days + minNights - 2).toLong())
-        val months = monthsCovering(today, end)
         val body =
             encodeAvailabilityJson(
-                runBlocking { fetchAndClassifyRecgov(cache, recgovId, today, days, months, force, minNights) },
+                runBlocking { fetchAndClassifyRecgov(cache, recgovId, today, today.plusDays(days.toLong()), force) },
             )
         return parseJson(body)
     }
@@ -94,15 +89,10 @@ class RecGovAvailabilityServiceTest {
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
         assertEquals("recgov", body["provider"]!!.jsonPrimitive.content)
         assertEquals("232447", body["campground_id"]!!.jsonPrimitive.content)
-        assertEquals(
-            7,
-            body["window"]!!
-                .jsonObject["days"]!!
-                .jsonPrimitive.content
-                .toInt(),
-        )
+        assertEquals(today.toString(), body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+        assertEquals(today.plusDays(7).toString(), body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
         assertEquals(7, body["availability"]!!.jsonArray.size)
-        assertTrue(body["summary"]!!.jsonPrimitive.content.contains("nights available"))
+        assertTrue(body["summary"]!!.jsonPrimitive.content.contains("dates available"))
         assertEquals(false, body["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
     }
 
@@ -188,13 +178,8 @@ class RecGovAvailabilityServiceTest {
         assertEquals(2, calls.get())
     }
 
-    /**
-     * minNights=1 should match the legacy single-night classification: a day
-     * is "available" iff at least one site has Available status that day,
-     * regardless of what the next day looks like.
-     */
     @Test
-    fun `minNights of 1 collapses to single-night classification`() {
+    fun `per-day classification ignores following date status`() {
         val map =
             mapOf(
                 "100" to
@@ -205,18 +190,13 @@ class RecGovAvailabilityServiceTest {
                         ),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 2, minNights = 1)
+        val body = classify(cacheReturning(map), days = 2)
         val avail = body["availability"]!!.jsonArray
         assertEquals("available", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
     }
 
-    /**
-     * Same data, minNights=2: the same site is open Fri but booked Sat, so it
-     * does NOT qualify for a 2-night stay. Day 0 should classify as 'partial'
-     * (open arrival, no matching stay), not 'available'.
-     */
     @Test
-    fun `minNights of 2 marks day partial when trailing night is reserved`() {
+    fun `available day remains available when trailing night is reserved`() {
         val map =
             mapOf(
                 "100" to
@@ -227,11 +207,11 @@ class RecGovAvailabilityServiceTest {
                         ),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 1, minNights = 2)
+        val body = classify(cacheReturning(map), days = 1)
         val avail = body["availability"]!!.jsonArray
-        assertEquals("partial", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
+        assertEquals("available", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
         assertEquals(
-            0,
+            1,
             avail[0]
                 .jsonObject["available_count"]!!
                 .jsonPrimitive.content
@@ -239,13 +219,8 @@ class RecGovAvailabilityServiceTest {
         )
     }
 
-    /**
-     * Multi-site park: site A is open Fri+Sat, site B is open Fri but booked
-     * Sat. For a 2-night stay starting Fri, A qualifies, so the day is
-     * bookable/green even though not every site qualifies.
-     */
     @Test
-    fun `minNights of 2 is available when at least one site qualifies`() {
+    fun `per-day availability counts all sites open on that date`() {
         val map =
             mapOf(
                 "100" to
@@ -263,15 +238,15 @@ class RecGovAvailabilityServiceTest {
                         ),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 1, minNights = 2)
+        val body = classify(cacheReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray[0].jsonObject
         assertEquals("available", day["status"]!!.jsonPrimitive.content)
-        assertEquals(1, day["available_count"]!!.jsonPrimitive.content.toInt())
+        assertEquals(2, day["available_count"]!!.jsonPrimitive.content.toInt())
         assertEquals(2, day["total"]!!.jsonPrimitive.content.toInt())
     }
 
     @Test
-    fun `available reservable ids include only sites that qualify for min nights`() {
+    fun `available reservable ids include all sites available on that date`() {
         val map =
             mapOf(
                 "100" to
@@ -289,23 +264,18 @@ class RecGovAvailabilityServiceTest {
                         ),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 1, minNights = 2)
+        val body = classify(cacheReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray[0].jsonObject
         val ids =
             day["available_reservable_ids"]!!
                 .jsonArray
                 .map { it.jsonPrimitive.content }
 
-        assertEquals(listOf("site:recgov:100"), ids)
+        assertEquals(listOf("site:recgov:100", "site:recgov:200"), ids)
     }
 
-    /**
-     * 7-night window: a site needs to be open for an entire week. Common case
-     * given that weekends fill up first — the site is open Mon-Fri but
-     * booked Sat-Sun. No 7-night stay starting Monday is possible.
-     */
     @Test
-    fun `minNights of 7 rejects sites with weekend gaps`() {
+    fun `per-day classification does not reject available day for later weekend gaps`() {
         val byDay =
             (0..6).associate { i ->
                 // Booked Sat (day 5) and Sun (day 6); open the rest.
@@ -313,8 +283,8 @@ class RecGovAvailabilityServiceTest {
                 futureKey(i.toLong()) to s
             }
         val map = mapOf("100" to campsiteWith(byDay))
-        val body = classify(cacheReturning(map), days = 1, minNights = 7)
+        val body = classify(cacheReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray[0].jsonObject
-        assertEquals("partial", day["status"]!!.jsonPrimitive.content)
+        assertEquals("available", day["status"]!!.jsonPrimitive.content)
     }
 }

@@ -31,6 +31,7 @@ import org.jooq.DSLContext
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 @OptIn(ExperimentalSerializationApi::class)
 private val reservableRoutesJson =
@@ -159,8 +160,8 @@ fun Route.reservableRoutes(ctx: DSLContext) {
             pathParameter<Long>("id") { description = "pois.id primary key" }
             queryParameter<String>("type") { description = "Reservable type, defaults to site." }
             queryParameter<String>("site_type") { description = "Optional exact site type filter. Repeat or comma-separate for OR." }
-            queryParameter<String>("start") { description = "Optional arrival date for per-site reservation_url links." }
-            queryParameter<Int>("min_nights") { description = "Optional stay length for per-site reservation_url links." }
+            queryParameter<String>("start_date") { description = "Optional arrival date for per-site reservation_url links." }
+            queryParameter<String>("end_date") { description = "Optional exclusive departure date for per-site reservation_url links." }
         }
         response {
             code(HttpStatusCode.OK) {
@@ -269,28 +270,32 @@ private fun ApplicationCall.intQuery(
 }
 
 internal data class ReservationUrlOptions(
-    val start: LocalDate?,
-    val minNights: Int,
+    val startDate: LocalDate?,
+    val endDate: LocalDate?,
 )
 
 private fun ApplicationCall.reservationUrlOptions(): ReservationUrlOptions {
-    val start =
-        request.queryParameters["start"]
-            ?.takeIf { it.isNotBlank() }
-            ?.let { raw ->
-                runCatching { LocalDate.parse(raw) }
-                    .getOrElse { throw BadReservableQuery("bad_start", "start must be YYYY-MM-DD") }
-            }
-    val minNightsRaw = request.queryParameters["min_nights"] ?: request.queryParameters["minNights"]
-    val minNights =
-        minNightsRaw
-            ?.takeIf { it.isNotBlank() }
-            ?.toIntOrNull()
-            ?: 1
-    if (minNights !in 1..31) {
-        throw BadReservableQuery("bad_min_nights", "min_nights must be between 1 and 31")
+    if (listOf("start", "min_nights", "minNights").any { request.queryParameters[it] != null }) {
+        throw BadReservableQuery("bad_date_window", "use start_date and end_date")
     }
-    return ReservationUrlOptions(start = start, minNights = minNights)
+    val startDate = request.queryParameters["start_date"]?.takeIf { it.isNotBlank() }
+    val endDate = request.queryParameters["end_date"]?.takeIf { it.isNotBlank() }
+    if ((startDate == null) != (endDate == null)) {
+        throw BadReservableQuery("bad_date_window", "use start_date and end_date")
+    }
+    if (startDate == null || endDate == null) {
+        return ReservationUrlOptions(startDate = null, endDate = null)
+    }
+    val parsedStart =
+        runCatching { LocalDate.parse(startDate) }
+            .getOrElse { throw BadReservableQuery("bad_date_window", "use start_date and end_date") }
+    val parsedEnd =
+        runCatching { LocalDate.parse(endDate) }
+            .getOrElse { throw BadReservableQuery("bad_date_window", "use start_date and end_date") }
+    if (!parsedEnd.isAfter(parsedStart)) {
+        throw BadReservableQuery("bad_date_window", "use start_date and end_date")
+    }
+    return ReservationUrlOptions(startDate = parsedStart, endDate = parsedEnd)
 }
 
 private fun ApplicationCall.queryValues(vararg names: String): List<String> =
@@ -331,16 +336,17 @@ internal fun Reservable.reservationUrl(
 
 private fun Reservable.recgovReservationUrl(options: ReservationUrlOptions): String {
     val base = "https://www.recreation.gov/camping/campsites/${urlEncode(rid.vendorId)}"
-    val start = options.start ?: return base
-    val end = start.plusDays(options.minNights.toLong())
-    return "$base?${queryString("startDate" to start.toString(), "endDate" to end.toString())}"
+    val startDate = options.startDate ?: return base
+    val endDate = options.endDate ?: return base
+    return "$base?${queryString("startDate" to startDate.toString(), "endDate" to endDate.toString())}"
 }
 
 private fun Reservable.aspiraReservationUrl(
     providerRef: ProviderRef?,
     options: ReservationUrlOptions,
 ): String? {
-    val start = options.start ?: return null
+    val startDate = options.startDate ?: return null
+    val endDate = options.endDate ?: return null
     val parentRef = providerRef as? ProviderRef.Aspira
     val host = aspiraHostForVendor(rid.vendor) ?: return null
     val transactionLocationId =
@@ -359,8 +365,8 @@ private fun Reservable.aspiraReservationUrl(
         transactionLocationId = transactionLocationId,
         mapId = mapId,
         resourceLocationId = resourceLocationId,
-        start = start,
-        minNights = options.minNights,
+        startDate = startDate,
+        endDate = endDate,
     )
 }
 
@@ -386,25 +392,25 @@ private fun aspiraReservationUrl(
     transactionLocationId: Long,
     mapId: Long,
     resourceLocationId: Long?,
-    start: LocalDate,
-    minNights: Int,
+    startDate: LocalDate,
+    endDate: LocalDate,
 ): String {
-    val end = start.plusDays(minNights.toLong())
+    val nights = ChronoUnit.DAYS.between(startDate, endDate).toInt()
     val params =
         mutableListOf(
             "transactionLocationId" to transactionLocationId.toString(),
             "mapId" to mapId.toString(),
             "searchTabGroupId" to AspiraSearchDefaults.SEARCH_TAB_GROUP_ID.toString(),
             "bookingCategoryId" to AspiraSearchDefaults.BOOKING_CATEGORY_ID.toString(),
-            "startDate" to start.toString(),
-            "endDate" to end.toString(),
-            "nights" to minNights.toString(),
+            "startDate" to startDate.toString(),
+            "endDate" to endDate.toString(),
+            "nights" to nights.toString(),
             "isReserving" to "true",
             "equipmentId" to AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID.toString(),
             "subEquipmentId" to AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID.toString(),
             "peopleCapacityCategoryCounts" to AspiraSearchDefaults.deeplinkPeopleCapacityCategoryCounts(),
-            "searchTime" to "${start}T00:00:00.000",
-            "flexibleSearch" to AspiraSearchDefaults.flexibleSearch(start),
+            "searchTime" to "${startDate}T00:00:00.000",
+            "flexibleSearch" to AspiraSearchDefaults.flexibleSearch(startDate),
             "view" to "list",
         )
     if (resourceLocationId != null) {

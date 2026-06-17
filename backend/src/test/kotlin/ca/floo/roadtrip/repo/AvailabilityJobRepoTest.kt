@@ -88,9 +88,9 @@ class AvailabilityJobRepoTest {
             .fetchOne(
                 """
                 INSERT INTO availability_watch (
-                    poi_id, target_dates, cadence_sec, trigger_kinds
+                    poi_id, start_date, end_date, cadence_sec, trigger_kinds
                 ) VALUES (
-                    ?, ARRAY['2026-07-04'::date], 60, ARRAY['atc']
+                    ?, '2026-07-04'::date, '2026-07-05'::date, 60, ARRAY['atc']
                 ) RETURNING id
                 """.trimIndent(),
                 poiId,
@@ -148,9 +148,9 @@ class AvailabilityJobRepoTest {
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        poi_id, target_dates, cadence_sec, trigger_kinds, status
+                        poi_id, start_date, end_date, cadence_sec, trigger_kinds, status
                     ) VALUES (
-                        ?, ARRAY['2026-07-04'::date], 60, ARRAY['atc'], 'paused'
+                        ?, '2026-07-04'::date, '2026-07-05'::date, 60, ARRAY['atc'], 'paused'
                     ) RETURNING id
                     """.trimIndent(),
                     poiId,
@@ -164,9 +164,9 @@ class AvailabilityJobRepoTest {
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        poi_id, target_dates, cadence_sec, trigger_kinds
+                        poi_id, start_date, end_date, cadence_sec, trigger_kinds
                     ) VALUES (
-                        ?, ARRAY['2026-07-04'::date], 60, ARRAY['atc']
+                        ?, '2026-07-04'::date, '2026-07-05'::date, 60, ARRAY['atc']
                     ) RETURNING id
                     """.trimIndent(),
                     poiId,

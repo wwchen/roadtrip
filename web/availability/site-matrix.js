@@ -10,9 +10,10 @@ const DEFAULT_FILTERS = {
   query: '',
   loop: '',
   type: '',
-  sort: 'open',
+  sort: 'fit',
 };
 const SORT_OPTIONS = [
+  ['fit', 'Fit first'],
   ['open', 'Open first'],
   ['site', 'Site'],
   ['loop', 'Loop'],
@@ -26,6 +27,7 @@ export function renderSiteMatrix({
   error,
   selectedDate,
   siteColumnWidth,
+  stayLength = 1,
   filters = DEFAULT_FILTERS,
   selectedSiteRid = null,
   loadingMore = false,
@@ -67,8 +69,11 @@ export function renderSiteMatrix({
   const availabilityByDate = new Map(
     visibleDays.map((day) => [day.date, new Set(availableReservableIds(day))]),
   );
+  const fitStartsByDate = fitStartIndex(visibleDays, availabilityByDate, stayLength);
   const rows = sortReservables(filterReservables(allRows, activeFilters), activeFilters.sort, {
     availabilityByDate,
+    fitStartsByDate,
+    stayLength,
     selectedDate,
     visibleDays,
   });
@@ -94,6 +99,8 @@ export function renderSiteMatrix({
     .map((row) =>
       rowHtml(row, {
         availabilityByDate,
+        fitStartsByDate,
+        stayLength,
         selectedDate,
         selectedSiteRid,
         visibleDays,
@@ -207,6 +214,7 @@ function renderSection({
           <div class="cg-site-matrix-title">Sites by date</div>
           <div class="cg-site-matrix-legend">
             <span class="cg-site-matrix-key cg-site-matrix-key-available">Open</span>
+            <span class="cg-site-matrix-key cg-site-matrix-key-fit">Fits stay</span>
             <span class="cg-site-matrix-key cg-site-matrix-key-booked">Full</span>
             <span class="cg-site-matrix-key cg-site-matrix-key-closed">Closed</span>
           </div>
@@ -331,6 +339,8 @@ function rowHtml(row, context) {
       cellHtml({
         availableIds: context.availabilityByDate.get(day.date),
         day,
+        fitIds: context.fitStartsByDate.get(day.date),
+        stayLength: context.stayLength,
         row,
         selectedDate: context.selectedDate,
         siteLabel,
@@ -363,18 +373,17 @@ function siteLabelHtml(row, siteLabel, siteTitle) {
   `;
 }
 
-function siteTitleText(row, siteLabel) {
-  const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
-  return loop ? `${loop} / ${siteLabel}` : siteLabel;
-}
-
-function cellHtml({ row, day, availableIds, selectedDate, siteLabel }) {
+function cellHtml({ row, day, availableIds, fitIds, selectedDate, siteLabel, stayLength }) {
   const state = cellState(row, day, availableIds);
   const isSelected = selectedDate === day.date;
+  const isFit = stayLength > 1 && state.kind === 'available' && fitIds?.has(rowRid(row));
   const selectedClass = isSelected ? ' is-selected' : '';
-  const aria = `${siteLabel} ${day.date}: ${state.aria}`;
+  const fitClass = isFit ? ' cg-site-matrix-cell-fit' : '';
+  const label = isFit ? 'Fits' : state.label;
+  const fitAria = isFit ? `; fits ${stayLength} nights` : '';
+  const aria = `${siteLabel} ${day.date}: ${state.aria}${fitAria}`;
   return `
-    <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}">
+    <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}${fitClass}">
       <button
         type="button"
         class="cg-site-matrix-cell-button"
@@ -382,10 +391,15 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel }) {
         data-site-detail-date="${escapeHtml(day.date)}"
         aria-label="${escapeHtml(`${aria}; view site details`)}"
       >
-        ${escapeHtml(state.label)}
+        ${escapeHtml(label)}
       </button>
     </td>
   `;
+}
+
+function siteTitleText(row, siteLabel) {
+  const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
+  return loop ? `${loop} / ${siteLabel}` : siteLabel;
 }
 
 function cellState(row, day, availableIds) {
@@ -443,6 +457,12 @@ function filterReservables(rows, filters) {
 
 function sortReservables(rows, sortKey, context) {
   return [...rows].sort((a, b) => {
+    if (sortKey === 'fit') {
+      const af = fitSortScore(a, context);
+      const bf = fitSortScore(b, context);
+      if (af !== bf) return bf - af;
+      return compareReservable(a, b);
+    }
     if (sortKey === 'open') {
       const ao = openDateCount(a, context.availabilityByDate);
       const bo = openDateCount(b, context.availabilityByDate);
@@ -454,6 +474,19 @@ function sortReservables(rows, sortKey, context) {
     if (sortKey === 'type') return compareByType(a, b);
     return compareReservable(a, b);
   });
+}
+
+function fitSortScore(row, { availabilityByDate, fitStartsByDate, stayLength, selectedDate, visibleDays }) {
+  const rid = rowRid(row);
+  if (stayLength <= 1) {
+    const selectedOpen = selectedDate && availabilityByDate.get(selectedDate)?.has(rid) ? 1000 : 0;
+    return selectedOpen + openDateCount(row, availabilityByDate);
+  }
+  const selectedFit = selectedDate && fitStartsByDate.get(selectedDate)?.has(rid) ? 1000 : 0;
+  return (
+    selectedFit +
+    visibleDays.reduce((count, day) => count + (fitStartsByDate.get(day.date)?.has(rid) ? 1 : 0), 0)
+  );
 }
 
 function openDateCount(row, availabilityByDate) {
@@ -468,6 +501,38 @@ function openDateCount(row, availabilityByDate) {
 function filterOptions(rows, key) {
   return [...new Set(rows.map((row) => row[key]).filter((value) => typeof value === 'string' && value.trim()))]
     .sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
+}
+
+function fitStartIndex(days, availabilityByDate, stayLength) {
+  const nights = Math.max(1, Math.floor(numeric(stayLength) || 1));
+  const out = new Map();
+  for (const day of days) {
+    const startDate = day.date;
+    const startIds = availabilityByDate.get(startDate) || new Set();
+    if (nights <= 1) {
+      out.set(startDate, new Set(startIds));
+      continue;
+    }
+    const dates = stayDates(startDate, nights);
+    if (!dates.every((date) => availabilityByDate.has(date))) {
+      out.set(startDate, new Set());
+      continue;
+    }
+    out.set(
+      startDate,
+      new Set([...startIds].filter((rid) => dates.every((date) => availabilityByDate.get(date)?.has(rid)))),
+    );
+  }
+  return out;
+}
+
+function stayDates(startDate, nights) {
+  const start = new Date(`${startDate}T00:00:00Z`);
+  return Array.from({ length: nights }, (_, i) => {
+    const d = new Date(start);
+    d.setUTCDate(start.getUTCDate() + i);
+    return d.toISOString().slice(0, 10);
+  });
 }
 
 function siteName(row) {

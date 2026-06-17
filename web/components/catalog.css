@@ -345,7 +345,7 @@ details[open] .action-icon.inline::before {
 
 .availability-controls {
   display: grid;
-  grid-template-columns: minmax(160px, 220px) auto auto;
+  grid-template-columns: minmax(160px, 220px) minmax(160px, 220px) auto 1fr;
   gap: 10px;
   align-items: end;
 }

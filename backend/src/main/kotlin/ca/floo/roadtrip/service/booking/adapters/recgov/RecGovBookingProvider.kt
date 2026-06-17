@@ -7,7 +7,6 @@ import ca.floo.roadtrip.service.api.recgov.availableDatesRecgov
 import ca.floo.roadtrip.service.api.recgov.fetchAndClassifyRecgov
 import ca.floo.roadtrip.service.api.recgov.fetchAndClassifyRecgovCatalog
 import ca.floo.roadtrip.service.api.recgov.fetchAndClassifyRecgovReservable
-import ca.floo.roadtrip.service.api.recgov.monthsCovering
 import ca.floo.roadtrip.service.booking.AvailabilityRequest
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
 import ca.floo.roadtrip.service.booking.BookingCapabilities
@@ -36,21 +35,13 @@ class RecGovBookingProvider(
 
     override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
         val recgovId = recgovIdOrThrow(req.ref)
-        // The classifier looks up to (minNights - 1) days past the visible
-        // window's last day to determine whether the last day is bookable for
-        // a stay. Pull months that cover the rolling window so the lookup
-        // doesn't truncate at the edge.
-        val rollingEnd = req.start.plusDays((req.days + req.minNights - 2).toLong())
-        val months = monthsCovering(req.start, rollingEnd)
         return runWithErrorMapping {
             fetchAndClassifyRecgov(
                 cache = cache,
                 recgovId = recgovId,
-                today = req.start,
-                days = req.days,
-                months = months,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 force = req.force,
-                minNights = req.minNights,
             )
         }
     }
@@ -58,7 +49,7 @@ class RecGovBookingProvider(
     override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
         val recgovId = recgovIdOrThrow(req.ref)
         return runWithErrorMapping {
-            availableDatesRecgov(cache, recgovId, req.start, req.nights)
+            availableDatesRecgov(cache, recgovId, req.startDate, req.endDate)
         }
     }
 
@@ -67,44 +58,35 @@ class RecGovBookingProvider(
             return availability(
                 AvailabilityRequest(
                     ref = req.ref,
-                    start = req.start,
-                    days = req.days,
-                    minNights = req.minNights,
+                    startDate = req.startDate,
+                    endDate = req.endDate,
                     force = req.force,
                 ),
             )
         }
         val recgovId = recgovIdOrThrow(req.ref)
-        val rollingEnd = req.start.plusDays((req.days + req.minNights - 2).toLong())
-        val months = monthsCovering(req.start, rollingEnd)
         return runWithErrorMapping {
             fetchAndClassifyRecgovCatalog(
                 cache = cache,
                 recgovId = recgovId,
                 campsiteIds = req.reservables.map { it.vendorId }.toSet(),
-                today = req.start,
-                days = req.days,
-                months = months,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 force = req.force,
-                minNights = req.minNights,
             )
         }
     }
 
     override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
         val recgovId = recgovIdOrThrow(req.ref)
-        val rollingEnd = req.start.plusDays((req.days + req.minNights - 2).toLong())
-        val months = monthsCovering(req.start, rollingEnd)
         return runWithErrorMapping {
             fetchAndClassifyRecgovReservable(
                 cache = cache,
                 recgovId = recgovId,
                 campsiteId = req.vendorId,
-                today = req.start,
-                days = req.days,
-                months = months,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 force = req.force,
-                minNights = req.minNights,
             )
         }
     }

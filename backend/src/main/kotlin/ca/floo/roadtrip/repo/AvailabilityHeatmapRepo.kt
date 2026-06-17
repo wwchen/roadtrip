@@ -26,11 +26,11 @@ class AvailabilityHeatmapRepo(
      */
     fun loadHeatmap(
         reservableIds: List<Long>,
-        targetDates: List<LocalDate>,
+        dates: List<LocalDate>,
     ): List<LatestCell> {
-        if (reservableIds.isEmpty() || targetDates.isEmpty()) return emptyList()
+        if (reservableIds.isEmpty() || dates.isEmpty()) return emptyList()
         val reservableIdsArg = reservableIds.toTypedArray()
-        val targetDatesArg = targetDates.toTypedArray()
+        val datesArg = dates.toTypedArray()
         return ctx
             .resultQuery(
                 """
@@ -42,7 +42,7 @@ class AvailabilityHeatmapRepo(
                 ORDER BY reservable_id, target_date, observed_at DESC
                 """.trimIndent(),
                 reservableIdsArg,
-                targetDatesArg,
+                datesArg,
             ).fetch { r ->
                 LatestCell(
                     reservableId = r.get("reservable_id", Long::class.java),

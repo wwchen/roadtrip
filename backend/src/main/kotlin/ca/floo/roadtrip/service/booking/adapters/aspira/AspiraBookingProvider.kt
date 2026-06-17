@@ -52,10 +52,9 @@ class AspiraBookingProvider(
                 cache = cache,
                 host = tenant.host,
                 mapId = mapId,
-                today = req.start,
-                days = req.days,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 force = req.force,
-                minNights = req.minNights,
                 reservableVendor = tenant.vendorCode,
             )
         }
@@ -64,7 +63,7 @@ class AspiraBookingProvider(
     override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
         val mapId = mapIdOrThrow(req.ref)
         return runWithErrorMapping {
-            availableDatesAspira(cache, tenant.host, mapId, req.start, req.nights)
+            availableDatesAspira(cache, tenant.host, mapId, req.startDate, req.endDate)
         }
     }
 
@@ -86,10 +85,9 @@ class AspiraBookingProvider(
                 host = tenant.host,
                 parentMapId = parentMapId,
                 reservables = targets,
-                today = req.start,
-                days = req.days,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 force = req.force,
-                minNights = req.minNights,
             )
         }
     }
@@ -103,10 +101,9 @@ class AspiraBookingProvider(
                 mapId = mapId,
                 resourceId = req.vendorId,
                 reservableVendor = tenant.vendorCode,
-                today = req.start,
-                days = req.days,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 force = req.force,
-                minNights = req.minNights,
             )
         }
     }

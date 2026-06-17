@@ -1,7 +1,7 @@
 // Availability table component. Mounts inside the campground drawer and owns:
 //
 //   - the visible week start (LocalDate),
-//   - min_nights (fixed at 1 in this drawer),
+//   - stay length for local visualization (default 1, persisted in localStorage),
 //   - the selected day,
 //   - the in-flight controller (skeleton timer, AbortSignal),
 //   - the cached list of the user's active watches (for badges).
@@ -23,13 +23,15 @@ import { renderSiteDetail } from './site-detail.js';
 import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 
+const STORAGE_KEY_STAY_LENGTH = 'cg.stayLength';
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
-const DEFAULT_MIN_NIGHTS = 1;
+const DEFAULT_STAY_LENGTH = 1;
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
 const LEGACY_DEFAULT_SITE_COLUMN_WIDTH = 178;
 const MIN_SITE_COLUMN_WIDTH = 88;
 const MAX_SITE_COLUMN_WIDTH = 270;
 const MATRIX_SCROLL_LOAD_THRESHOLD_PX = 140;
+const STAY_LENGTH_CHIPS = [1, 2, 3, 7];
 const WEEK_DAYS = 7;
 const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
@@ -71,7 +73,7 @@ function makeContext(host, feature, signal) {
     poiId: feature.id,
     signal,
     weekStart: startOfTodayUtc(),
-    minNights: DEFAULT_MIN_NIGHTS,
+    stayLength: loadStayLength(),
     siteColumnWidth: loadSiteColumnWidth(),
     selectedDate: null,
     state: 'loading', // 'loading' | 'success' | 'empty' | 'closed_for_season' | 'error'
@@ -86,7 +88,7 @@ function makeContext(host, feature, signal) {
       query: '',
       loop: '',
       type: '',
-      sort: 'open',
+      sort: 'fit',
     },
     selectedSiteRid: null,
     selectedSiteDate: null,
@@ -94,7 +96,7 @@ function makeContext(host, feature, signal) {
     summary: '',
     season: null,
     error: null,
-    watchesByDate: new Map(),
+    watchesByWindow: new Map(),
     skeletonTimer: null,
     // Catalog (RFC 0008): the per-POI reservable list the BE serves at
     // /api/poi/{id}/reservables. When a day is selected, the week response's
@@ -121,6 +123,7 @@ function renderShell(ctx) {
   const sitesDay = selectedDay && availableCount(selectedDay) > 0 ? selectedDay : null;
   return `
     <section class="cg-availability">
+      ${renderStayLengthRow(ctx)}
       ${renderAvailabilitySurface(ctx)}
       <div class="cg-freshness">${renderFreshness(ctx)}</div>
       ${renderSelectedSiteDetail(ctx)}
@@ -134,6 +137,21 @@ function renderShell(ctx) {
         selectedDay: sitesDay,
       })}
     </section>
+  `;
+}
+
+function renderStayLengthRow(ctx) {
+  const chips = STAY_LENGTH_CHIPS.map(
+    (n) =>
+      `<button type="button" class="cg-chip ${n === ctx.stayLength ? 'cg-chip-active' : ''}" data-stay-length="${n}">${n}</button>`,
+  ).join('');
+  return `
+    <div class="cg-nights-row">
+      <div class="cg-nights-group">
+        <span class="cg-nights-label">Stay length</span>
+        ${chips}
+      </div>
+    </div>
   `;
 }
 
@@ -180,6 +198,7 @@ function renderAvailabilitySurface(ctx) {
     error: ctx.sitesError,
     selectedDate: null,
     siteColumnWidth: ctx.siteColumnWidth,
+    stayLength: ctx.stayLength,
     filters: ctx.matrixFilters,
     selectedSiteRid: ctx.selectedSiteRid,
     loadingMore: ctx.matrixLoading,
@@ -201,7 +220,7 @@ function renderDetail(ctx) {
   if (!day || availableCount(day) > 0) return '';
   return renderDayDetail({
     day,
-    watching: ctx.watchesByDate.has(day.date),
+    watching: ctx.watchesByWindow.has(watchWindowKey(day.date, stayEndDate(ctx, day.date))),
     canWatch: ctx.poiId != null,
   });
 }
@@ -255,6 +274,21 @@ function onRootPointerDown(ctx, e) {
 function onRootClick(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
+
+  const chipBtn = tgt.closest('[data-stay-length]');
+  if (chipBtn) {
+    const n = parseInt(chipBtn.getAttribute('data-stay-length'), 10);
+    if (Number.isFinite(n) && n !== ctx.stayLength) {
+      ctx.stayLength = n;
+      saveStayLength(n);
+      if (ctx.selectedDate) {
+        fetchSites(ctx);
+      } else {
+        rerender(ctx);
+      }
+    }
+    return;
+  }
 
   const matrixDateBtn = tgt.closest('[data-matrix-date]');
   if (matrixDateBtn) {
@@ -351,7 +385,7 @@ function updateMatrixFilter(ctx, key, value) {
     query: current.query || '',
     loop: current.loop || '',
     type: current.type || '',
-    sort: current.sort || 'open',
+    sort: current.sort || 'fit',
     [key]: nextValue,
   };
   return true;
@@ -456,9 +490,8 @@ async function fetchWeek(ctx, { force = false } = {}) {
   ctx.skeletonTimer = setTimeout(() => rerender(ctx), SKELETON_RENDER_DELAY_MS);
   try {
     const resp = await requestPoiAvailability(ctx.poiId, {
-      days: WEEK_DAYS,
-      start: isoDate(ctx.weekStart),
-      minNights: ctx.minNights,
+      startDate: isoDate(ctx.weekStart),
+      endDate: isoDate(addDays(ctx.weekStart, WEEK_DAYS)),
       force,
       signal: ctx.signal,
     });
@@ -506,16 +539,15 @@ async function fetchMoreMatrixDays(ctx) {
   rerender(ctx);
   try {
     const resp = await requestPoiAvailability(ctx.poiId, {
-      days: WEEK_DAYS,
-      start: isoDate(nextStart),
-      minNights: 1,
+      startDate: isoDate(nextStart),
+      endDate: isoDate(addDays(nextStart, WEEK_DAYS)),
       signal: ctx.signal,
     });
     if (ctx.signal?.aborted) return;
     if (requestSeq !== ctx.matrixRequestSeq) return;
     if (!resp.ok) {
       const json = await resp.json().catch(() => null);
-      if (json?.error === 'bad_start') {
+      if (json?.error === 'bad_date_window') {
         ctx.matrixEnd = true;
       } else {
         ctx.matrixError = json?.error || `HTTP ${resp.status}`;
@@ -549,9 +581,14 @@ async function fetchSites(ctx) {
   ctx.sitesError = null;
   rerender(ctx);
   try {
+    const dateWindow = start
+      ? {
+          startDate: start,
+          endDate: stayEndDate(ctx, start),
+        }
+      : {};
     const json = await fetchPoiReservables(ctx.poiId, {
-      start,
-      minNights: start ? ctx.minNights : null,
+      ...dateWindow,
       signal: ctx.signal,
     });
     if (ctx.signal?.aborted) return;
@@ -575,7 +612,7 @@ async function fetchWatches(ctx) {
   try {
     const data = await listWatches({ status: 'active', poiId: ctx.poiId, signal: ctx.signal });
     if (ctx.signal?.aborted) return;
-    ctx.watchesByDate = indexWatchesByDate(data?.watches, ctx.poiId, ctx.minNights);
+    ctx.watchesByWindow = indexWatchesByWindow(data?.watches, ctx.poiId);
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -584,19 +621,16 @@ async function fetchWatches(ctx) {
   }
 }
 
-function indexWatchesByDate(watches, poiId, minNights) {
+function indexWatchesByWindow(watches, poiId) {
   const out = new Map();
   if (!Array.isArray(watches)) return out;
   const id = String(poiId);
-  const nights = Number(minNights || 1);
   for (const w of watches) {
     if (!w || w.status === 'done') continue;
     if (String(w.poi_id ?? '') !== id) continue;
-    if (Number(w.min_nights ?? w.minNights ?? 1) !== nights) continue;
-    const dates = Array.isArray(w.target_dates) ? w.target_dates : [];
-    for (const date of dates) {
-      if (date) out.set(date, w);
-    }
+    const start = w.start_date ?? w.startDate;
+    const end = w.end_date ?? w.endDate;
+    if (start && end) out.set(watchWindowKey(start, end), w);
   }
   return out;
 }
@@ -604,20 +638,22 @@ function indexWatchesByDate(watches, poiId, minNights) {
 async function toggleWatch(ctx, button) {
   const date = ctx.selectedDate;
   if (!date) return;
-  const watching = ctx.watchesByDate.has(date);
+  const endDate = stayEndDate(ctx, date);
+  const key = watchWindowKey(date, endDate);
+  const watching = ctx.watchesByWindow.has(key);
   const previousLabel = button.textContent;
   button.disabled = true;
   try {
     if (watching) {
-      const existing = ctx.watchesByDate.get(date);
+      const existing = ctx.watchesByWindow.get(key);
       button.textContent = 'Removing...';
       await deleteWatch(existing.id, { signal: ctx.signal });
-      ctx.watchesByDate.delete(date);
+      ctx.watchesByWindow.delete(key);
     } else {
       button.textContent = 'Creating watch...';
-      const payload = buildWatchPayload(ctx, date);
+      const payload = buildWatchPayload(ctx, date, endDate);
       const created = await createWatch(payload, { signal: ctx.signal });
-      ctx.watchesByDate.set(date, created.watch || { ...payload, id: created.id });
+      ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
     }
     rerender(ctx);
   } catch (e) {
@@ -628,12 +664,12 @@ async function toggleWatch(ctx, button) {
   }
 }
 
-function buildWatchPayload(ctx, date) {
+function buildWatchPayload(ctx, date, endDate) {
   return {
     poi_id: Number(ctx.poiId),
     reservable_filters: {},
-    target_dates: [date],
-    min_nights: ctx.minNights,
+    start_date: date,
+    end_date: endDate,
     cadence_sec: 60,
     trigger_kinds: ['availability'],
     trigger_config: {},
@@ -642,6 +678,33 @@ function buildWatchPayload(ctx, date) {
 }
 
 // ---- helpers --------------------------------------------------------------
+
+function stayEndDate(ctx, startDate) {
+  return isoDate(addDays(parseIsoDate(startDate), ctx.stayLength));
+}
+
+function watchWindowKey(startDate, endDate) {
+  return `${startDate}|${endDate}`;
+}
+
+function loadStayLength() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY_STAY_LENGTH);
+    const n = parseInt(raw, 10);
+    if (Number.isFinite(n) && n > 0 && n < 32) return n;
+  } catch {
+    // Non-fatal: default silently.
+  }
+  return DEFAULT_STAY_LENGTH;
+}
+
+function saveStayLength(n) {
+  try {
+    localStorage.setItem(STORAGE_KEY_STAY_LENGTH, String(n));
+  } catch {
+    // Non-fatal: just won't persist.
+  }
+}
 
 function loadSiteColumnWidth() {
   try {
@@ -726,6 +789,10 @@ function startOfTodayUtc() {
 
 function addDays(date, days) {
   return new Date(date.getTime() + days * MS_PER_DAY);
+}
+
+function sameDay(a, b) {
+  return isoDate(a) === isoDate(b);
 }
 
 function isoDate(date) {

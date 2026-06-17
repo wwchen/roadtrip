@@ -676,6 +676,37 @@
   }
   .cg-day-detail-actions .cg-btn { flex: 1 1 auto; min-width: 140px; }
 
+  .cg-nights-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 10px; flex-wrap: wrap;
+    margin: 0 0 8px;
+  }
+  .cg-nights-group {
+    display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+    min-width: 0;
+  }
+  .cg-nights-row .cg-nights-label {
+    font-size: 11px; font-weight: 600; color: var(--cg-muted);
+    text-transform: uppercase; letter-spacing: 0.06em;
+    margin-right: 4px;
+  }
+  .cg-chip {
+    height: 26px; padding: 0 10px;
+    border-radius: 999px;
+    background: var(--cg-bg-subtle);
+    border: 1px solid var(--cg-border);
+    color: var(--cg-muted);
+    font: inherit;
+    font-size: 12px; cursor: pointer;
+    display: inline-flex; align-items: center;
+  }
+  .cg-chip:hover { background: var(--cg-bg-hover); }
+  .cg-chip.cg-chip-active {
+    background: rgba(76,185,106,0.15);
+    border-color: var(--cg-accent);
+    color: var(--cg-accent);
+  }
+
   .cg-closed-banner {
     margin-top: 12px; padding: 28px 16px;
     background: var(--cg-bg-subtle); border-radius: 10px;
@@ -861,6 +892,7 @@
     background: var(--cg-faint);
   }
   .cg-site-matrix-key-available::before { background: var(--cg-accent); }
+  .cg-site-matrix-key-fit::before { background: var(--cg-warn); }
   .cg-site-matrix-key-booked::before { background: var(--cg-faint); }
   .cg-site-matrix-key-closed::before { background: var(--cg-border-strong); }
   .cg-site-matrix-tools {
@@ -1143,6 +1175,20 @@
     background: rgba(76,185,106,0.24);
   }
   .cg-site-matrix-cell-available .cg-site-matrix-cell-button:hover {
+    background: transparent;
+  }
+  .cg-site-matrix-cell-fit {
+    background: rgba(241,160,74,0.22);
+    box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--cg-warn) 55%, transparent);
+  }
+  .cg-site-matrix-cell-fit .cg-site-matrix-cell-button {
+    background: transparent;
+    color: var(--cg-warn);
+  }
+  .cg-site-matrix-cell-fit:hover {
+    background: rgba(241,160,74,0.3);
+  }
+  .cg-site-matrix-cell-fit .cg-site-matrix-cell-button:hover {
     background: transparent;
   }
   .cg-site-matrix-cell-booked .cg-site-matrix-cell-button {

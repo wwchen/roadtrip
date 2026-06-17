@@ -29,7 +29,7 @@ interface BookingProvider {
     val capabilities: BookingCapabilities
 
     /**
-     * Per-day availability for the inclusive window `[start, start + days - 1]`.
+     * Per-day availability for the half-open window `[startDate, endDate)`.
      *
      * @throws BookingProviderError on upstream failure (rate limit, WAF block,
      *   5xx, parse error, or unsupported capability).
@@ -46,9 +46,8 @@ interface BookingProvider {
         availability(
             AvailabilityRequest(
                 ref = req.ref,
-                start = req.start,
-                days = req.days,
-                minNights = req.minNights,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 force = req.force,
             ),
         )
@@ -80,26 +79,20 @@ interface BookingProvider {
 /**
  * Single-id availability request.
  *
- * `minNights` controls same-site multi-night classification: a day D in the
- * response is "available" iff at least one site is open for all N nights
- * starting D. Default 1 collapses to single-night classification.
- *
  * `force=true` busts the adapter's cache.
  */
 data class AvailabilityRequest(
     val ref: ProviderRef,
-    val start: LocalDate,
-    val days: Int,
-    val minNights: Int = 1,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
     val force: Boolean = false,
 )
 
 data class CatalogAvailabilityRequest(
     val ref: ProviderRef,
     val reservables: List<CatalogReservableRef>,
-    val start: LocalDate,
-    val days: Int,
-    val minNights: Int = 1,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
     val force: Boolean = false,
 )
 
@@ -118,15 +111,14 @@ data class CatalogReservableRef(
 data class ReservableAvailabilityRequest(
     val ref: ProviderRef,
     val vendorId: String,
-    val start: LocalDate,
-    val days: Int,
-    val minNights: Int = 1,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
     val force: Boolean = false,
 )
 
 /** Bulk-score request. Same window semantics as [AvailabilityRequest], no force. */
 data class AvailableDatesRequest(
     val ref: ProviderRef,
-    val start: LocalDate,
-    val nights: Int,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
 )

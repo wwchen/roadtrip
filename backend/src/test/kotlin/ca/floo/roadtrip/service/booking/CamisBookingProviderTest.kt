@@ -25,7 +25,11 @@ class CamisBookingProviderTest {
         assertFailsWith<BookingProviderError.Unsupported> {
             runBlocking {
                 adapter.availability(
-                    AvailabilityRequest(ref = ref, start = LocalDate.of(2026, 7, 14), days = 7),
+                    AvailabilityRequest(
+                        ref = ref,
+                        startDate = LocalDate.of(2026, 7, 14),
+                        endDate = LocalDate.of(2026, 7, 21),
+                    ),
                 )
             }
         }
@@ -37,7 +41,11 @@ class CamisBookingProviderTest {
         assertFailsWith<BookingProviderError.Unsupported> {
             runBlocking {
                 adapter.availableDates(
-                    AvailableDatesRequest(ref = ref, start = LocalDate.of(2026, 7, 14), nights = 2),
+                    AvailableDatesRequest(
+                        ref = ref,
+                        startDate = LocalDate.of(2026, 7, 14),
+                        endDate = LocalDate.of(2026, 7, 16),
+                    ),
                 )
             }
         }

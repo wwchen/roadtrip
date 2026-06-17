@@ -20,8 +20,12 @@ import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
+import io.ktor.client.request.post
+import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
+import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
+import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
@@ -37,8 +41,10 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.junit.jupiter.api.assertAll
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -223,7 +229,7 @@ class ReservableRoutesTest {
             link(m01, otherPoiId)
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/poi/$poiId/reservables?type=site&start=2026-07-01&min_nights=2")
+            val resp = client.get("/api/poi/$poiId/reservables?type=site&start_date=2026-07-01&end_date=2026-07-03")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(poiId.toString(), body["poi_id"]!!.jsonPrimitive.content)
@@ -283,7 +289,7 @@ class ReservableRoutesTest {
             link(reservableId, poiId)
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/poi/$poiId/reservables?start=2026-07-01&min_nights=2")
+            val resp = client.get("/api/poi/$poiId/reservables?start_date=2026-07-01&end_date=2026-07-03")
             assertEquals(HttpStatusCode.OK, resp.status)
             val row =
                 Json
@@ -361,6 +367,24 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `poi reservables rejects removed booking link params`() =
+        testApplication {
+            val poiId = seedPoi("upper-pines", "Upper Pines Campground")
+            application { routing { reservableRoutes(ctx) } }
+
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?start=2026-07-01").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?min_nights=2").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?minNights=2").status)
+            assertEquals(HttpStatusCode.BadRequest, client.get("/api/poi/$poiId/reservables?start_date=2026-07-01").status)
+            assertEquals(
+                HttpStatusCode.BadRequest,
+                client
+                    .get("/api/poi/$poiId/reservables?start_date=2026-07-03&end_date=2026-07-01")
+                    .status,
+            )
+        }
+
+    @Test
     fun `poi reservables returns 404 for unknown poi`() =
         testApplication {
             application { routing { reservableRoutes(ctx) } }
@@ -388,12 +412,119 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/poi/$poiId/availability?start=2026-07-01&days=1")
+            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
             assertEquals("232447", body["campground_id"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-01", body["window"]!!.jsonObject["start"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-02", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+            assertEquals(1, body["availability"]!!.jsonArray.size)
+        }
+
+    @Test
+    fun `poi availability uses exclusive start and end date window`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-window",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-04")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-04", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+            assertEquals(3, body["availability"]!!.jsonArray.size)
+        }
+
+    @Test
+    fun `availability routes reject removed days and min nights params`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-removed-params",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            val reservableId = seedReservable(vendorId = "330257", name = "A12")
+            link(reservableId, poiId)
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val windowQuery = "start_date=2026-07-01&end_date=2026-07-04"
+            val poiStartStatus = client.get("/api/poi/$poiId/availability?start=2026-07-01").status
+            val poiDaysStatus = client.get("/api/poi/$poiId/availability?$windowQuery&days=7").status
+            val poiMinNightsStatus = client.get("/api/poi/$poiId/availability?$windowQuery&min_nights=2").status
+            val poiMinNightsCamelStatus = client.get("/api/poi/$poiId/availability?$windowQuery&minNights=2").status
+            val reservableStartStatus =
+                client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01").status
+            val reservableDaysStatus = client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&days=7").status
+            val reservableMinNightsStatus =
+                client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&min_nights=2").status
+            val reservableMinNightsCamelStatus =
+                client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&minNights=2").status
+
+            assertAll(
+                { assertEquals(HttpStatusCode.BadRequest, poiStartStatus) },
+                { assertEquals(HttpStatusCode.BadRequest, poiDaysStatus) },
+                { assertEquals(HttpStatusCode.BadRequest, poiMinNightsStatus) },
+                { assertEquals(HttpStatusCode.BadRequest, poiMinNightsCamelStatus) },
+                { assertEquals(HttpStatusCode.BadRequest, reservableStartStatus) },
+                { assertEquals(HttpStatusCode.BadRequest, reservableDaysStatus) },
+                {
+                    assertEquals(
+                        HttpStatusCode.BadRequest,
+                        reservableMinNightsStatus,
+                    )
+                },
+                { assertEquals(HttpStatusCode.BadRequest, reservableMinNightsCamelStatus) },
+            )
+        }
+
+    @Test
+    fun `poi availability defaults missing end date to seven day window`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-default-end",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-08", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+            assertEquals(7, body["availability"]!!.jsonArray.size)
         }
 
     @Test
@@ -423,12 +554,13 @@ class ReservableRoutesTest {
 
             val resp =
                 client.get(
-                    "/api/poi/$poiId/availability?start=2026-07-01&days=2&min_nights=2&site_type=STANDARD",
+                    "/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-03&site_type=STANDARD",
                 )
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-01", body["window"]!!.jsonObject["start"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-03", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
             val first = body["availability"]!!.jsonArray.first().jsonObject
             assertEquals("2026-07-01", first["date"]!!.jsonPrimitive.content)
             assertEquals(2, first["available_count"]!!.jsonPrimitive.int)
@@ -461,7 +593,7 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01&days=2")
+            val resp = client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-03")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
@@ -504,13 +636,82 @@ class ReservableRoutesTest {
                     .content,
             )
 
-            val multiNight = client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01&days=2&min_nights=2")
-            assertEquals(HttpStatusCode.OK, multiNight.status)
+            val removedMinNights =
+                client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-03&min_nights=2")
+            assertEquals(HttpStatusCode.BadRequest, removedMinNights.status)
             val rowCountAfterMultiNight =
                 ctx
                     .fetchOne("SELECT count(*) FROM availability_snapshot")!!
                     .get(0, Long::class.java)
-            assertEquals(5L, rowCountAfterMultiNight)
+            assertEquals(2L, rowCountAfterMultiNight)
+        }
+
+    @Test
+    fun `reservable availability uses exclusive start and end date window`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-reservable-window",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            val reservableId = seedReservable(vendorId = "330257", name = "A12")
+            link(reservableId, poiId)
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-04")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-04", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+            assertEquals(3, body["availability"]!!.jsonArray.size)
+            assertEquals(3L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
+        }
+
+    @Test
+    fun `bulk availability accepts start and end date window`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "bulk-window",
+                    name = "Bulk Window Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp =
+                client.post("/api/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"ids":[$poiId],"start_date":"2026-07-01","end_date":"2026-07-04"}""")
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-04", body["end_date"]!!.jsonPrimitive.content)
+            val result = body["results"]!!.jsonArray.single().jsonObject
+            assertEquals(
+                listOf("2026-07-01", "2026-07-02", "2026-07-03"),
+                result["available_dates"]!!
+                    .jsonArray
+                    .map { it.jsonPrimitive.content },
+            )
         }
 
     @Test
@@ -560,7 +761,7 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/poi/$poiId/availability?start=2026-07-01&days=1")
+            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val day = body["availability"]!!.jsonArray.single().jsonObject
@@ -610,7 +811,7 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/reservable/site:aspira_wa:-100/availability?start=2026-07-01&days=1")
+            val resp = client.get("/api/reservable/site:aspira_wa:-100/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("-2147483615", body["map_id"]!!.jsonPrimitive.content)
@@ -713,8 +914,8 @@ class ReservableRoutesTest {
         override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
             val ref = req.ref as ProviderRef.RecGov
             return fakeResponse(
-                start = req.start,
-                days = req.days,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 campgroundId = ref.recgovId,
                 reservableId = null,
             )
@@ -723,8 +924,8 @@ class ReservableRoutesTest {
         override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
             val ref = req.ref as ProviderRef.RecGov
             return fakeResponse(
-                start = req.start,
-                days = req.days,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 campgroundId = ref.recgovId,
                 reservableId = null,
                 availableIds = req.reservables.map { it.rid },
@@ -733,26 +934,33 @@ class ReservableRoutesTest {
 
         override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto =
             fakeResponse(
-                start = req.start,
-                days = req.days,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 campgroundId = null,
                 reservableId = "site:recgov:${req.vendorId}",
             )
 
-        override suspend fun availableDates(req: AvailableDatesRequest): List<String> = listOf(req.start.toString())
+        override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
+            val days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt()
+            return (0 until days).map { req.startDate.plusDays(it.toLong()).toString() }
+        }
 
         private fun fakeResponse(
-            start: java.time.LocalDate,
-            days: Int,
+            startDate: java.time.LocalDate,
+            endDate: java.time.LocalDate,
             campgroundId: String?,
             reservableId: String?,
             availableIds: List<String>? = null,
         ): AvailabilityResponseDto {
+            val days =
+                java.time.temporal.ChronoUnit.DAYS
+                    .between(startDate, endDate)
+                    .toInt()
             val perDay =
                 (0 until days).map { offset ->
                     val availableCount = availableIds?.size ?: 1
                     DayClassification(
-                        date = start.plusDays(offset.toLong()).toString(),
+                        date = startDate.plusDays(offset.toLong()).toString(),
                         status = if (availableIds?.isEmpty() == true) "booked" else "available",
                         availableCount = availableCount,
                         total = availableIds?.size ?: 1,
@@ -761,11 +969,11 @@ class ReservableRoutesTest {
                 }
             return availabilityResponseDto(
                 provider = "fake",
-                today = start,
-                days = days,
+                startDate = startDate,
+                endDate = endDate,
                 perDay = perDay,
                 state = "success",
-                summary = "$days nights available",
+                summary = "$days dates available",
                 seasonBlock = null,
                 cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 0, ttlSeconds = 60),
                 campgroundId = campgroundId,
@@ -787,8 +995,8 @@ class ReservableRoutesTest {
         override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
             val ref = req.ref as ProviderRef.Aspira
             return fakeResponse(
-                start = req.start,
-                days = req.days,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 mapId = ref.mapId.toString(),
                 reservableId = null,
                 availableIds = emptyList(),
@@ -798,8 +1006,8 @@ class ReservableRoutesTest {
         override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
             val ref = req.ref as ProviderRef.Aspira
             return fakeResponse(
-                start = req.start,
-                days = req.days,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 mapId = ref.mapId.toString(),
                 reservableId = null,
                 availableIds = req.reservables.map { it.rid },
@@ -809,27 +1017,34 @@ class ReservableRoutesTest {
         override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
             val ref = req.ref as ProviderRef.Aspira
             return fakeResponse(
-                start = req.start,
-                days = req.days,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 mapId = ref.mapId.toString(),
                 reservableId = "site:aspira_wa:${req.vendorId}",
                 availableIds = listOf("site:aspira_wa:${req.vendorId}"),
             )
         }
 
-        override suspend fun availableDates(req: AvailableDatesRequest): List<String> = listOf(req.start.toString())
+        override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
+            val days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt()
+            return (0 until days).map { req.startDate.plusDays(it.toLong()).toString() }
+        }
 
         private fun fakeResponse(
-            start: java.time.LocalDate,
-            days: Int,
+            startDate: java.time.LocalDate,
+            endDate: java.time.LocalDate,
             mapId: String,
             reservableId: String?,
             availableIds: List<String>,
         ): AvailabilityResponseDto {
+            val days =
+                java.time.temporal.ChronoUnit.DAYS
+                    .between(startDate, endDate)
+                    .toInt()
             val perDay =
                 (0 until days).map { offset ->
                     DayClassification(
-                        date = start.plusDays(offset.toLong()).toString(),
+                        date = startDate.plusDays(offset.toLong()).toString(),
                         status = if (availableIds.isEmpty()) "booked" else "available",
                         availableCount = availableIds.size,
                         total = availableIds.size,
@@ -838,8 +1053,8 @@ class ReservableRoutesTest {
                 }
             return availabilityResponseDto(
                 provider = "aspira",
-                today = start,
-                days = days,
+                startDate = startDate,
+                endDate = endDate,
                 perDay = perDay,
                 state = if (availableIds.isEmpty()) "zero_available" else "success",
                 summary = "${availableIds.size} available",

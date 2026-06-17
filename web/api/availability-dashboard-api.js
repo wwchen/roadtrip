@@ -46,7 +46,8 @@ export function listSnapshotsForRun(runId, { limit, signal } = {}) {
   return jsonGetOk(`/api/availability/snapshots?${qs}`, { signal });
 }
 
-export function getSnapshotsSummary(reservableRid, { signal } = {}) {
+export function getSnapshotsSummary(reservableRid, { dates, signal } = {}) {
   const qs = new URLSearchParams({ reservable_rid: String(reservableRid) });
+  if (Array.isArray(dates) && dates.length > 0) qs.set('dates', dates.join(','));
   return jsonGetOk(`/api/availability/snapshots/summary?${qs}`, { signal });
 }

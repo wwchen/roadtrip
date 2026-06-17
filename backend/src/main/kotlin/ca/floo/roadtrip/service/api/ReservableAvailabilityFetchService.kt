@@ -18,9 +18,8 @@ class ReservableAvailabilityFetchService(
         val provider: BookingProvider,
         val ref: ProviderRef,
         val vendorId: String,
-        val start: LocalDate,
-        val days: Int,
-        val minNights: Int,
+        val startDate: LocalDate,
+        val endDate: LocalDate,
         val force: Boolean,
         val runId: Long? = null,
     )
@@ -31,9 +30,8 @@ class ReservableAvailabilityFetchService(
                 ReservableAvailabilityRequest(
                     ref = request.ref,
                     vendorId = request.vendorId,
-                    start = request.start,
-                    days = request.days,
-                    minNights = request.minNights,
+                    startDate = request.startDate,
+                    endDate = request.endDate,
                     force = request.force,
                 ),
             )
@@ -47,29 +45,11 @@ class ReservableAvailabilityFetchService(
     ) {
         val sink = snapshots ?: return
         try {
-            // For multi-night requests we re-fetch with min_nights=1 so the
-            // snapshot timeline records real per-day state, not the
-            // collapsed multi-night view.
-            val snapshotResponse =
-                if (request.minNights == 1) {
-                    response
-                } else {
-                    request.provider.reservableAvailability(
-                        ReservableAvailabilityRequest(
-                            ref = request.ref,
-                            vendorId = request.vendorId,
-                            start = request.start,
-                            days = request.days + request.minNights - 1,
-                            minNights = 1,
-                            force = false,
-                        ),
-                    )
-                }
             sink.appendBatch(
                 AvailabilitySnapshotRepo.SnapshotBatch(
                     reservableId = request.reservableId,
                     runId = request.runId,
-                    response = snapshotResponse,
+                    response = response,
                 ),
             )
         } catch (e: Exception) {

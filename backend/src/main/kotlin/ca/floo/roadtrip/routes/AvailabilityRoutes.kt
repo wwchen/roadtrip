@@ -45,22 +45,19 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
+import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 
 private val log = LoggerFactory.getLogger("AvailabilityRoutes")
 
 // Bulk endpoint guardrails. The single-id endpoint already serves the drawer;
 // bulk is for the route-planner card list which scores N campgrounds against
-// "are there sites for me on Jul 4 for 3 nights?" Cap nights at 14 (any
-// realistic trip leg) and ids at 50 (one per visible card row).
+// "which dates in this window have bookable sites?" Cap window length at 14
+// (any realistic trip leg) and ids at 50 (one per visible card row).
 private const val MAX_BULK_IDS = 50
-private const val MAX_NIGHTS = 14
-private const val DEFAULT_AVAILABILITY_DAYS: Int = 30
+private const val MAX_BULK_WINDOW_DAYS = 14
 private const val MAX_AVAILABILITY_DAYS: Int = 60
-
-// Multi-night classifier upper bound. 31 covers any realistic stay; longer
-// windows would need a sliding-window optimization in the per-day classifier.
-private const val MAX_MIN_NIGHTS = 31
 
 // Per-IP rate-limit budget. Cross-provider: one bucket regardless of which
 // adapter ends up answering.
@@ -93,14 +90,6 @@ fun Route.availabilityRoutes(
             parameters[poiIdParam]?.toLongOrNull()
                 ?: return respondAvailabilityError("bad_poi_id", HttpStatusCode.BadRequest)
 
-        val days =
-            request.queryParameters["days"]?.toIntOrNull()
-                ?: DEFAULT_AVAILABILITY_DAYS
-        if (days !in 1..MAX_AVAILABILITY_DAYS) {
-            respondAvailabilityError("bad_days", HttpStatusCode.BadRequest)
-            return
-        }
-
         val ip = request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
             respondAvailabilityError(
@@ -130,9 +119,9 @@ fun Route.availabilityRoutes(
             return
         }
 
-        val query = parseAvailabilityQuery(provider.capabilities.bookingHorizonDays)
+        val query = parseAvailabilityWindow(provider.capabilities.bookingHorizonDays)
         if (query == null) {
-            respondAvailabilityError("bad_start", HttpStatusCode.BadRequest)
+            respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
             return
         }
 
@@ -143,7 +132,7 @@ fun Route.availabilityRoutes(
                     .findByPoi(poiId, ReservableType.SITE)
                     .filterBySiteTypes(siteTypes)
             if (siteTypes.isNotEmpty() && catalogRows.isEmpty()) {
-                respondAvailabilityJson(emptyPoiAvailability(ref, query.start, days))
+                respondAvailabilityJson(emptyPoiAvailability(ref, query.startDate, query.endDate))
                 return
             }
             val catalogRefs =
@@ -154,9 +143,8 @@ fun Route.availabilityRoutes(
                     CatalogAvailabilityRequest(
                         ref = ref,
                         reservables = catalogRefs,
-                        start = query.start,
-                        days = days,
-                        minNights = query.minNights,
+                        startDate = query.startDate,
+                        endDate = query.endDate,
                         force = query.force,
                     ),
                 )
@@ -173,6 +161,45 @@ fun Route.availabilityRoutes(
         }
     }
 
+    get("/api/campsite/availability/{poi_id}", {
+        tags = listOf("campsite-availability")
+        summary = "Deprecated: per-day availability for one campground"
+        description =
+            "Deprecated legacy path; prefer `/api/poi/{poi_id}/availability` " +
+            "for POI-scoped availability or `/api/reservable/{rid}/availability` " +
+            "for reservable-scoped availability. Path key is `pois.id`. " +
+            "Backend dispatches to the booking-provider " +
+            "adapter registered for that POI's source (rec.gov, Aspira PC/BC/WA, " +
+            "Camis stub). Response shape is provider-stable; provider-specific " +
+            "extras (`campground_id` for rec.gov; `host`/`map_id` for Aspira) " +
+            "are additive. Optional `start_date`/`end_date` define an exclusive " +
+            "date window. Missing start_date defaults to today UTC; missing " +
+            "end_date defaults to start_date + 7 days. The window is capped at " +
+            "`capabilities.bookingHorizonDays` ahead of today, per provider."
+        request {
+            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today UTC." }
+            queryParameter<String>("end_date") { description = "Exclusive YYYY-MM-DD; default is start_date + 7 days." }
+            queryParameter<String>("force") { description = "Set to 1 to bypass provider cache." }
+            queryParameter<String>("site_type") { description = "Exact site type filter. Repeat or comma-separate for OR." }
+        }
+        response {
+            code(HttpStatusCode.BadRequest) {
+                description = "Bad POI id or invalid date window."
+                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.NotFound) {
+                description = "No campground/provider row exists for that POI id."
+                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.ServiceUnavailable) {
+                description = "Rate limited or upstream availability service unavailable."
+                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+            }
+        }
+    }) {
+        call.handlePoiAvailability("poi_id")
+    }
+
     get("/api/poi/{poi_id}/availability", {
         tags = listOf("availability")
         summary = "Per-day availability for one campground POI (cached, provider-dispatched)"
@@ -182,11 +209,14 @@ fun Route.availabilityRoutes(
             "classification, so `available_reservable_ids` and counts reflect only " +
             "matching site rows."
         request {
+            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today UTC." }
+            queryParameter<String>("end_date") { description = "Exclusive YYYY-MM-DD; default is start_date + 7 days." }
+            queryParameter<String>("force") { description = "Set to 1 to bypass provider cache." }
             queryParameter<String>("site_type") { description = "Exact site type filter. Repeat or comma-separate for OR." }
         }
         response {
             code(HttpStatusCode.BadRequest) {
-                description = "Bad POI id, invalid days, or start out of range."
+                description = "Bad POI id or invalid date window."
                 body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.NotFound) {
@@ -212,9 +242,8 @@ fun Route.availabilityRoutes(
             "the same availability response shape narrowed to that one site."
         request {
             pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
-            queryParameter<Int>("days") { description = "Window length, default 30, max 60." }
-            queryParameter<String>("start") { description = "YYYY-MM-DD; default is today." }
-            queryParameter<Int>("min_nights") { description = "Same-site stay length, 1..31." }
+            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today UTC." }
+            queryParameter<String>("end_date") { description = "Exclusive YYYY-MM-DD; default is start_date + 7 days." }
             queryParameter<String>("force") { description = "Set to 1 to bypass provider cache." }
         }
         response {
@@ -222,7 +251,7 @@ fun Route.availabilityRoutes(
                 description = "Availability for one reservable."
             }
             code(HttpStatusCode.BadRequest) {
-                description = "Malformed reservable id, invalid days, or start out of range."
+                description = "Malformed reservable id or invalid date window."
                 body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.NotFound) {
@@ -247,14 +276,6 @@ fun Route.availabilityRoutes(
             reservables.findByRid(rid)
                 ?: return@get call.respondAvailabilityError("not_found", HttpStatusCode.NotFound)
 
-        val days =
-            call.request.queryParameters["days"]?.toIntOrNull()
-                ?: DEFAULT_AVAILABILITY_DAYS
-        if (days !in 1..MAX_AVAILABILITY_DAYS) {
-            call.respondAvailabilityError("bad_days", HttpStatusCode.BadRequest)
-            return@get
-        }
-
         val ip = call.request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
             call.respondAvailabilityError(
@@ -277,9 +298,9 @@ fun Route.availabilityRoutes(
         val parentRef = ProviderRefParser.parse(parent.providerRefJson)!!
         val ref = row.providerRefForReservable(parentRef)
 
-        val query = call.parseAvailabilityQuery(provider.capabilities.bookingHorizonDays)
+        val query = call.parseAvailabilityWindow(provider.capabilities.bookingHorizonDays)
         if (query == null) {
-            call.respondAvailabilityError("bad_start", HttpStatusCode.BadRequest)
+            call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
             return@get
         }
 
@@ -292,9 +313,8 @@ fun Route.availabilityRoutes(
                         provider = provider,
                         ref = ref,
                         vendorId = rid.vendorId,
-                        start = query.start,
-                        days = days,
-                        minNights = query.minNights,
+                        startDate = query.startDate,
+                        endDate = query.endDate,
                         force = query.force,
                     ),
                 )
@@ -316,16 +336,16 @@ fun Route.availabilityRoutes(
     //
     // Trip-planner endpoint. The FE has a list of campgrounds along the
     // active corridor and wants to know "for these N campgrounds, which
-    // dates between [start, start+nights-1] have at least one bookable
-    // site?" Mixed providers in one call are fine — each id is dispatched
+    // dates in [start_date, end_date) have at least one bookable site?"
+    // Mixed providers in one call are fine — each id is dispatched
     // by the registry independently.
     post("/api/availability/bulk", {
         tags = listOf("availability")
         summary = "Bulk per-day availability for many campgrounds in a date window (poi-id keyed)"
         description =
-            "Body: { ids: number[], start: 'YYYY-MM-DD', nights: 1..$MAX_NIGHTS }. " +
+            "Body: { ids: number[], start_date: 'YYYY-MM-DD', end_date: 'YYYY-MM-DD' }. " +
             "Returns one entry per id with an HTTP-style `status` and the dates inside " +
-            "the window where at least one site is bookable. Mixed providers OK."
+            "the window where at least one site is available on each date. Mixed providers OK."
         request {
             body<BulkAvailRequestSchema> {
                 mediaTypes(ContentType.Application.Json)
@@ -333,8 +353,8 @@ fun Route.availabilityRoutes(
                     value =
                         BulkAvailRequestSchema(
                             ids = listOf(12345L, 67890L),
-                            start = "2026-07-04",
-                            nights = 3,
+                            startDate = "2026-07-04",
+                            endDate = "2026-07-07",
                         )
                 }
             }
@@ -347,8 +367,8 @@ fun Route.availabilityRoutes(
                     example("mixed") {
                         value =
                             BulkAvailResponseSchema(
-                                start = "2026-07-04",
-                                nights = 3,
+                                startDate = "2026-07-04",
+                                endDate = "2026-07-07",
                                 results =
                                     listOf(
                                         BulkAvailEntrySchema(12345L, 200, listOf("2026-07-04", "2026-07-06")),
@@ -385,21 +405,32 @@ fun Route.availabilityRoutes(
             )
             return@post
         }
-        if (req.nights !in 1..MAX_NIGHTS) {
+        val start =
+            try {
+                LocalDate.parse(req.startDate)
+            } catch (e: Exception) {
+                call.respondApiError("bad_start_date", HttpStatusCode.BadRequest, detail = "start_date must be YYYY-MM-DD")
+                return@post
+            }
+        val end =
+            try {
+                LocalDate.parse(req.endDate)
+            } catch (e: Exception) {
+                call.respondApiError("bad_end_date", HttpStatusCode.BadRequest, detail = "end_date must be YYYY-MM-DD")
+                return@post
+            }
+        val days =
+            ChronoUnit.DAYS
+                .between(start, end)
+                .toInt()
+        if (days !in 1..MAX_BULK_WINDOW_DAYS) {
             call.respondApiError(
-                "bad_nights",
+                "bad_date_window",
                 HttpStatusCode.BadRequest,
-                detail = "nights must be in 1..$MAX_NIGHTS",
+                detail = "date window must be 1..$MAX_BULK_WINDOW_DAYS days",
             )
             return@post
         }
-        val start =
-            try {
-                LocalDate.parse(req.start)
-            } catch (e: Exception) {
-                call.respondApiError("bad_start", HttpStatusCode.BadRequest, detail = "start must be YYYY-MM-DD")
-                return@post
-            }
 
         val ip = call.request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
@@ -417,14 +448,14 @@ fun Route.availabilityRoutes(
             coroutineScope {
                 req.ids
                     .map { id ->
-                        async { fetchOneBulk(id, rowsById[id], bookingProviders, start, req.nights) }
+                        async { fetchOneBulk(id, rowsById[id], bookingProviders, start, end) }
                     }.awaitAll()
             }
 
         call.respondAvailabilityJson(
             BulkAvailResponseSchema(
-                start = req.start,
-                nights = req.nights,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 results = results,
             ),
         )
@@ -494,8 +525,8 @@ private fun Reservable.aspiraProviderRefLong(key: String): Long? =
 
 private fun emptyPoiAvailability(
     ref: ProviderRef,
-    start: LocalDate,
-    days: Int,
+    startDate: LocalDate,
+    endDate: LocalDate,
 ) = availabilityResponseDto(
     provider =
         when (ref) {
@@ -503,12 +534,12 @@ private fun emptyPoiAvailability(
             is ProviderRef.Aspira -> "aspira"
             is ProviderRef.Camis -> "camis"
         },
-    today = start,
-    days = days,
+    startDate = startDate,
+    endDate = endDate,
     perDay =
-        (0 until days).map { offset ->
+        (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt()).map { offset ->
             DayClassification(
-                date = start.plusDays(offset.toLong()).toString(),
+                date = startDate.plusDays(offset.toLong()).toString(),
                 status = "closed",
                 availableCount = 0,
                 total = 0,
@@ -526,8 +557,8 @@ private suspend fun fetchOneBulk(
     poiId: Long,
     row: CampsiteProviderRefRow?,
     bookingProviders: BookingProviderRegistry,
-    start: LocalDate,
-    nights: Int,
+    startDate: LocalDate,
+    endDate: LocalDate,
 ): BulkAvailEntrySchema {
     if (row == null) {
         return BulkAvailEntrySchema(id = poiId, status = 404, available_dates = emptyList())
@@ -542,7 +573,7 @@ private suspend fun fetchOneBulk(
     return try {
         val dates =
             provider.availableDates(
-                AvailableDatesRequest(ref = ref, start = start, nights = nights),
+                AvailableDatesRequest(ref = ref, startDate = startDate, endDate = endDate),
             )
         BulkAvailEntrySchema(id = poiId, status = 200, available_dates = dates)
     } catch (e: BookingProviderError) {
@@ -552,7 +583,7 @@ private suspend fun fetchOneBulk(
 }
 
 /**
- * Result of parsing the `?start=YYYY-MM-DD` query param against the provider's
+ * Result of parsing the `?start_date=YYYY-MM-DD` query param against the provider's
  * booking horizon. Sealed so the route can branch on it without re-checking
  * any null state.
  */
@@ -566,7 +597,7 @@ internal sealed class StartParam {
 }
 
 /**
- * Parse `?start=` into a [StartParam]. Null/missing means "default to today."
+ * Parse `?start_date=` into a [StartParam]. Null/missing means "default to today."
  * Anything outside `[today, today + horizonDays]` is [StartParam.Invalid] —
  * the upstream wouldn't have data for it either way.
  */
@@ -582,26 +613,35 @@ internal fun parseStartParam(
     return StartParam.Ok(parsed)
 }
 
-private data class AvailabilityQuery(
-    val start: LocalDate,
-    val minNights: Int,
+private data class AvailabilityWindowQuery(
+    val startDate: LocalDate,
+    val endDate: LocalDate,
     val force: Boolean,
-)
+) {
+    val days: Int = ChronoUnit.DAYS.between(startDate, endDate).toInt()
+}
 
-private fun ApplicationCall.parseAvailabilityQuery(bookingHorizonDays: Int): AvailabilityQuery? {
-    val today = LocalDate.now(java.time.ZoneOffset.UTC)
+private fun ApplicationCall.parseAvailabilityWindow(
+    bookingHorizonDays: Int,
+    defaultDays: Int = 7,
+): AvailabilityWindowQuery? {
+    if (listOf("start", "days", "min_nights", "minNights").any { request.queryParameters[it] != null }) return null
+    val today = LocalDate.now(ZoneOffset.UTC)
     val start =
-        when (val parsed = parseStartParam(request.queryParameters["start"], today, bookingHorizonDays)) {
+        when (val parsed = parseStartParam(request.queryParameters["start_date"], today, bookingHorizonDays)) {
             is StartParam.Ok -> parsed.value
             StartParam.Invalid -> return null
         }
-    val minNights =
-        request.queryParameters["min_nights"]
-            ?.toIntOrNull()
-            ?.coerceIn(1, MAX_MIN_NIGHTS)
-            ?: 1
+    val end =
+        request.queryParameters["end_date"]
+            ?.let { raw -> runCatching { LocalDate.parse(raw) }.getOrNull() ?: return null }
+            ?: start.plusDays(defaultDays.toLong())
+    if (!end.isAfter(start)) return null
+    if (end.isAfter(today.plusDays(bookingHorizonDays.toLong()))) return null
+    val days = ChronoUnit.DAYS.between(start, end).toInt()
+    if (days !in 1..MAX_AVAILABILITY_DAYS) return null
     val force = request.queryParameters["force"] == "1"
-    return AvailabilityQuery(start = start, minNights = minNights, force = force)
+    return AvailabilityWindowQuery(startDate = start, endDate = end, force = force)
 }
 
 private fun ApplicationCall.queryValues(vararg names: String): List<String> =

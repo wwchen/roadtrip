@@ -2025,6 +2025,12 @@ function nightsBetween(startStr, endStr) {
   return n > 0 ? n : 0;
 }
 
+function addDaysYmd(startStr, days) {
+  const d = new Date(startStr + 'T00:00:00Z');
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
 function scheduleAvailabilityRefresh() {
   clearTimeout(tripResults.availabilityDebounce);
   tripResults.availabilityDebounce = setTimeout(refreshAvailability, AVAIL_DEBOUNCE_MS);
@@ -2074,8 +2080,8 @@ async function refreshAvailability() {
       const slice = ids.slice(i, i + BULK_AVAILABILITY_PAGE);
       const j = await fetchBulkAvailability({
         ids: slice,
-        start,
-        nights,
+        startDate: start,
+        endDate: addDaysYmd(start, nights),
         signal,
       });
       for (const entry of j.results || []) {

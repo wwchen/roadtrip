@@ -191,11 +191,11 @@ export function reservableJsonUrl(rid) {
   return `/api/reservable/${encodeURIComponent(rid)}`;
 }
 
-export function reservableAvailabilityJsonUrl(rid, { days = 7, start = utcYmd(new Date()), minNights = 1 } = {}) {
+export function reservableAvailabilityJsonUrl(rid, { startDate = utcYmd(new Date()), endDate } = {}) {
+  const resolvedEndDate = endDate || utcYmd(addUtcDays(parseUtcYmd(startDate), 7));
   const params = new URLSearchParams({
-    days: String(days),
-    start,
-    min_nights: String(minNights),
+    start_date: startDate,
+    end_date: resolvedEndDate,
   });
   return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
 }
@@ -223,4 +223,14 @@ function utcYmd(date) {
   const m = String(date.getUTCMonth() + 1).padStart(2, '0');
   const d = String(date.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${d}`;
+}
+
+function parseUtcYmd(value) {
+  return new Date(`${value}T00:00:00Z`);
+}
+
+function addUtcDays(date, days) {
+  const next = new Date(date);
+  next.setUTCDate(date.getUTCDate() + days);
+  return next;
 }
