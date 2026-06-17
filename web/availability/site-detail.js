@@ -3,7 +3,7 @@
 // and does not fetch extra provider data.
 
 import { escapeHtml } from '../core.js';
-import { reservationUrlFromTemplate } from './booking-links.js';
+import { reservationUrlFromTemplate, bookingLabel as sharedBookingLabel } from './booking-links.js';
 
 const MAX_FEATURES = 12;
 
@@ -55,39 +55,8 @@ function detailFacts(site, raw, tags) {
   return facts;
 }
 
-function bookingLabel(site, url) {
-  const agency = agencyLabel(site, url);
-  return agency ? `Book on ${agency}` : 'Book';
-}
-
-function agencyLabel(site, url) {
-  const host = hostFromUrl(site.reservation_url_template || url);
-  if (host === 'recreation.gov' || host === 'www.recreation.gov') return 'Recreation.gov';
-  if (host === 'reservation.pc.gc.ca') return 'Parks Canada';
-  if (host === 'camping.bcparks.ca' || host === 'discovercamping.ca') return 'BC Parks';
-  if (host === 'washington.goingtocamp.com') return 'Washington State Parks';
-
-  const vendor = String(site.vendor || '').toLowerCase();
-  if (vendor === 'recgov') return 'Recreation.gov';
-  if (vendor === 'aspira_pc') return 'Parks Canada';
-  if (vendor === 'aspira_bc') return 'BC Parks';
-  if (vendor === 'aspira_wa') return 'Washington State Parks';
-  if (vendor.startsWith('aspira_')) return 'Aspira';
-  return labelFromHost(host) || humanize(vendor);
-}
-
-function hostFromUrl(url) {
-  if (!url || typeof url !== 'string') return '';
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-function labelFromHost(host) {
-  const base = String(host || '').replace(/^www\./, '').split('.')[0];
-  return base ? humanize(base) : '';
+function bookingLabel(site, _url) {
+  return sharedBookingLabel(site);
 }
 
 function addFact(facts, label, value) {
