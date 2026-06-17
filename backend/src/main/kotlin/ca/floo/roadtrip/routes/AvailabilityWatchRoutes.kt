@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.Reservable
-import ca.floo.roadtrip.models.ReservableType
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapCell
@@ -17,6 +16,7 @@ import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import io.github.smiley4.ktorswaggerui.dsl.routing.delete
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.patch
@@ -32,8 +32,6 @@ import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonPrimitive
 import org.jooq.DSLContext
 import java.time.LocalDate
 
@@ -55,6 +53,7 @@ fun Route.availabilityWatchRoutes(
     val watches = AvailabilityWatchRepo(ctx)
     val reservables = ReservableRepo(ctx)
     val heatmaps = AvailabilityHeatmapRepo(ctx)
+    val scopeResolver = WatchScopeResolver(reservables)
 
     get("/api/availability/watches", {
         tags = listOf("availability")
@@ -245,7 +244,7 @@ fun Route.availabilityWatchRoutes(
             watches.findById(id)
                 ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
 
-        val children = resolveChildren(watch, reservables)
+        val children = scopeResolver.resolve(watch)
         val cells = heatmaps.loadHeatmap(children.map { it.id }, watch.targetDates)
         val cellsByPair = cells.associateBy { it.reservableId to it.targetDate }
 
@@ -385,37 +384,4 @@ private suspend fun ApplicationCall.respondError(
 ) {
     val payload = ApiErrorSchema(error = error, detail = detail)
     respondText(watchJson.encodeToString(payload), ContentType.Application.Json, status)
-}
-
-private fun resolveChildren(
-    watch: AvailabilityWatchRepo.Watch,
-    reservables: ReservableRepo,
-): List<Reservable> {
-    if (watch.reservableId != null) {
-        val r = reservables.findById(watch.reservableId) ?: return emptyList()
-        return listOf(r)
-    }
-    val poiId = watch.poiId ?: return emptyList()
-    val all = reservables.findByPoi(poiId, type = ReservableType.parse("site"))
-    val loops = collectStringFilter(watch.reservableFilters, "loop")
-    val siteTypes = collectStringFilter(watch.reservableFilters, "site_type")
-    return all.filter { r ->
-        (loops.isEmpty() || (r.loop != null && loops.contains(r.loop))) &&
-            (siteTypes.isEmpty() || (r.siteType != null && siteTypes.contains(r.siteType)))
-    }
-}
-
-private fun collectStringFilter(
-    filters: kotlinx.serialization.json.JsonObject,
-    key: String,
-): Set<String> {
-    val value = filters[key] ?: return emptySet()
-    return when (value) {
-        is JsonPrimitive -> if (value.isString) setOf(value.content) else emptySet()
-        is JsonArray ->
-            value
-                .mapNotNull { (it as? JsonPrimitive)?.takeIf { p -> p.isString }?.content }
-                .toSet()
-        else -> emptySet()
-    }
 }

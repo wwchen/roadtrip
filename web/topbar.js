@@ -1814,7 +1814,7 @@ const tripResults = {
   dateBound: false,
 };
 
-// Bulk endpoint cap — keep in sync with MAX_BULK_IDS in CampsiteAvailabilityRoutes.kt.
+// Bulk endpoint cap — keep in sync with MAX_BULK_IDS in AvailabilityRoutes.kt.
 const BULK_AVAILABILITY_PAGE = 50;
 const AVAIL_DEBOUNCE_MS = 500;
 // Backend rejects nights > 14. Long road trips just clamp the window to the
@@ -2031,7 +2031,7 @@ function scheduleAvailabilityRefresh() {
 }
 
 /**
- * Hit POST /api/campsite/availability/bulk for every visible card id and
+ * Hit POST /api/availability/bulk for every visible card id and
  * paint the per-card badges + dot strips. Aborts the previous in-flight
  * request when called again, so a rapid date-flick or pan settles on the
  * latest input.

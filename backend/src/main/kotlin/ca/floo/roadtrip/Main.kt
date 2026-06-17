@@ -1,7 +1,5 @@
 package ca.floo.roadtrip
 
-import ca.floo.campsite.recgov.booker.campsiteModule
-import ca.floo.campsite.recgov.booker.campsiteRoutes
 import ca.floo.roadtrip.client.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.client.MapboxGeocoder
@@ -23,8 +21,8 @@ import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.routes.adminIngestRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
+import ca.floo.roadtrip.routes.availabilityRoutes
 import ca.floo.roadtrip.routes.availabilityWatchRoutes
-import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
 import ca.floo.roadtrip.routes.geocodeRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
@@ -32,6 +30,8 @@ import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
+import ca.floo.roadtrip.service.api.recgov.AvailabilityClient
+import ca.floo.roadtrip.service.api.recgov.CachedAvailability
 import ca.floo.roadtrip.service.availability.AvailabilityPollExecutor
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.booking.BookingProviderRegistryFactory
@@ -50,7 +50,6 @@ import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
 import io.ktor.server.engine.embeddedServer
 import io.ktor.server.http.content.staticFiles
-import io.ktor.server.http.content.staticResources
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.cachingheaders.CachingHeaders
 import io.ktor.server.plugins.compression.Compression
@@ -77,18 +76,17 @@ fun main() {
 fun Application.module() {
     val appConfig = AppConfig.fromEnv()
     val ds = dataSourceFor(DbConfig.fromEnv())
-    // Run Flyway in-process so the campsite tables (V2__campsite.sql) exist
-    // before campsiteModule reads them. Roadtrip's V1__pois.sql is normally
-    // run by the importer's psql migrate, but baselineOnMigrate keeps this
-    // safe whether the DB was hand-bootstrapped or fresh.
+    // Run Flyway in-process so the app can boot against either a hand-
+    // bootstrapped DB or a fresh database.
     migrate(ds)
     val ctx = dsl(ds)
     val persistentCache = ApiCacheRepo(ctx)
-    val campsite =
-        campsiteModule(
-            ctx,
-            persistentCache,
-            cachedAvailabilityTtl = appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY),
+    val recgovAvailabilityClient = AvailabilityClient()
+    val recgovAvailabilityCache =
+        CachedAvailability(
+            recgovAvailabilityClient,
+            ttl = appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY),
+            persistentCache = persistentCache,
         )
 
     // ROADTRIP_STATIC_DIR points at the repo checkout when running locally
@@ -189,7 +187,7 @@ fun Application.module() {
     val bookingProviderRegistry =
         BookingProviderRegistryFactory.build(
             registry = poiRegistry,
-            recgovCache = campsite.cachedAvailability,
+            recgovCache = recgovAvailabilityCache,
             aspiraCache = aspiraCache,
         )
 
@@ -223,6 +221,7 @@ fun Application.module() {
     availabilityScheduler.start(schedulerScope)
     environment.monitor.subscribe(ApplicationStopping) {
         schedulerScope.cancel()
+        recgovAvailabilityClient.close()
     }
 
     routing {
@@ -244,14 +243,13 @@ fun Application.module() {
         routeRoutes(routeCache, ctx)
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
-        campsiteAvailabilityRoutes(
+        availabilityRoutes(
             CampsiteProviderRepo(ctx),
             bookingProviderRegistry,
             ReservableRepo(ctx),
             AvailabilitySnapshotRepo(ctx),
         )
         adminIngestRoutes(ingestController, ctx)
-        campsiteRoutes(campsite)
         // Static site. /web/* and /data/* serve directly from the repo
         // checkout. Root path serves index.html. data/raw/ stays
         // server-private — it's the upstream capture cache, never served.
@@ -288,13 +286,6 @@ fun Application.module() {
         }
         get("/availability/") {
             call.respondFile(File(staticDir, "availability.html"))
-        }
-        // Campsite UI served from the JAR's classpath
-        // (backend/src/main/resources/static/campsite/), separate from
-        // roadtrip's repo-checkout static files. index.html serves at
-        // /campsite/.
-        staticResources("/campsite", "static/campsite") {
-            default("index.html")
         }
         staticFiles("/", staticDir) {
             default("index.html")

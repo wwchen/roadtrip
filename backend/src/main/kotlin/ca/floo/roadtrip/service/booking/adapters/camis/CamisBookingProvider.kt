@@ -16,7 +16,7 @@ import ca.floo.roadtrip.service.booking.BookingProviderId
  *
  * Routes treat this the same way as a missing adapter: respond
  * `state: "empty"` so the FE drawer shows a benign "no availability data"
- * rather than a 503. The capability probe (`/api/campsite/capabilities`)
+ * rather than a 503. The capability probe
  * lets the FE skip rendering the week grid entirely for these pins.
  *
  * Replace this class with a real adapter when Camis lands. Nothing outside

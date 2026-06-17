@@ -12,7 +12,7 @@ import java.time.LocalDate
 
 // Provider-specific helpers for Aspira NextGen availability (Parks Canada,
 // BC Provincial, WA State). The HTTP surface lives in
-// CampsiteAvailabilityRoutes.kt; this file just translates the cached
+// AvailabilityRoutes.kt; this file just translates the cached
 // AspiraAvailability payload into the shared response shape.
 
 // Whitelist hosts to prevent SSRF. Anyone hitting the dispatch route can't

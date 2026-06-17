@@ -5,7 +5,7 @@
 //   - min_nights (default 1, persisted in localStorage),
 //   - the selected day,
 //   - the in-flight controller (skeleton timer, AbortSignal),
-//   - the cached list of the user's existing alerts (for 🔔 badges).
+//   - the cached list of the user's active watches (for badges).
 //
 // Render is split into pure modules:
 //   - week-grid.js          — 7 day cells.
@@ -19,13 +19,9 @@
 // guard; see openCampgroundDrawer in drawer/campground.js.
 
 import { escapeHtml } from '../core.js';
-import {
-  createCampsiteAlert,
-  deleteCampsiteAlert,
-  listCampsiteAlerts,
-} from '../api/campsite-alert-api.js';
-import { requestCampsiteAvailability } from '../api/availability-api.js';
+import { requestPoiAvailability } from '../api/availability-api.js';
 import { fetchPoiReservables } from '../api/reservable-api.js';
+import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
 import { isActiveFeature } from '../drawer/chrome.js';
 import { mountCalendarPopover } from './calendar-popover.js';
 import { renderDayDetail } from './day-detail.js';
@@ -73,7 +69,7 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
   rerender(ctx);
   wireRoot(ctx);
   fetchWeek(ctx);
-  fetchAlerts(ctx);
+    fetchWatches(ctx);
   fetchSites(ctx);
 
   return {
@@ -89,13 +85,10 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
 // ---- context --------------------------------------------------------------
 
 function makeContext(host, feature, signal) {
-  const recgovId =
-    feature.properties?.recgov_id ?? feature.properties?.provider_ref?.recgov_id ?? null;
   return {
     host,
     feature,
     poiId: feature.id,
-    recgovId,
     signal,
     weekStart: startOfTodayUtc(),
     minNights: loadMinNights(),
@@ -122,7 +115,7 @@ function makeContext(host, feature, signal) {
     summary: '',
     season: null,
     error: null,
-    alertsByDate: new Map(),
+    watchesByDate: new Map(),
     skeletonTimer: null,
     calendar: null,
     // Catalog (RFC 0008): the per-POI reservable list the BE serves at
@@ -241,8 +234,8 @@ function renderBody(ctx) {
   return renderWeekGrid({
     days: ctx.days,
     todayIso: isoDate(startOfTodayUtc()),
-    selectedDate: ctx.selectedDate,
-    watchedDates: new Set(ctx.alertsByDate.keys()),
+      selectedDate: ctx.selectedDate,
+      watchedDates: new Set(ctx.watchesByDate.keys()),
   });
 }
 
@@ -279,8 +272,8 @@ function renderDetail(ctx) {
   return renderDayDetail({
     day,
     minNights: ctx.minNights,
-    watching: ctx.alertsByDate.has(day.date),
-    recgovId: ctx.recgovId,
+    watching: ctx.watchesByDate.has(day.date),
+    canWatch: ctx.poiId != null,
   });
 }
 
@@ -349,6 +342,7 @@ function onRootClick(ctx, e) {
       // The URL changes, the cache key changes, and the day-detail picks
       // up the new "N-night stay" label after the response lands.
       fetchWeek(ctx);
+      fetchWatches(ctx);
       if (ctx.selectedDate) fetchSites(ctx);
     }
     return;
@@ -453,7 +447,7 @@ function onRootClick(ctx, e) {
   const alertBtn = tgt.closest('.cg-day-alert');
   if (alertBtn) {
     e.preventDefault();
-    toggleAlert(ctx, alertBtn);
+    toggleWatch(ctx, alertBtn);
     return;
   }
   const sitesToggle = tgt.closest('.cg-sites-toggle');
@@ -640,7 +634,7 @@ async function fetchWeek(ctx, { force = false } = {}) {
   clearTimeout(ctx.skeletonTimer);
   ctx.skeletonTimer = setTimeout(() => rerender(ctx), SKELETON_RENDER_DELAY_MS);
   try {
-    const resp = await requestCampsiteAvailability(ctx.poiId, {
+    const resp = await requestPoiAvailability(ctx.poiId, {
       days: WEEK_DAYS,
       start: isoDate(ctx.weekStart),
       minNights: ctx.minNights,
@@ -692,7 +686,7 @@ async function fetchMoreMatrixDays(ctx) {
   ctx.matrixError = null;
   rerender(ctx);
   try {
-    const resp = await requestCampsiteAvailability(ctx.poiId, {
+    const resp = await requestPoiAvailability(ctx.poiId, {
       days: WEEK_DAYS,
       start: isoDate(nextStart),
       minNights: 1,
@@ -759,76 +753,74 @@ async function fetchSites(ctx) {
   }
 }
 
-async function fetchAlerts(ctx) {
-  if (!ctx.recgovId) return;
+async function fetchWatches(ctx) {
+  if (ctx.poiId == null) return;
   try {
-    const alerts = await listCampsiteAlerts({ signal: ctx.signal });
+    const data = await listWatches({ status: 'active', poiId: ctx.poiId, signal: ctx.signal });
     if (ctx.signal?.aborted) return;
-    ctx.alertsByDate = indexAlertsByDate(alerts, ctx.recgovId);
+    ctx.watchesByDate = indexWatchesByDate(data?.watches, ctx.poiId, ctx.minNights);
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
     // Non-fatal: badges just don't render.
-    console.warn('alert list fetch failed', e);
+    console.warn('watch list fetch failed', e);
   }
 }
 
-function indexAlertsByDate(alerts, campgroundId) {
+function indexWatchesByDate(watches, poiId, minNights) {
   const out = new Map();
-  if (!Array.isArray(alerts)) return out;
-  const cgId = String(campgroundId);
-  for (const a of alerts) {
-    if (!a) continue;
-    if (a.status === 'done') continue;
-    if (String(a.campground_id ?? a.campgroundId) !== cgId) continue;
-    const date = a.start_date ?? a.startDate;
-    if (date) out.set(date, a);
+  if (!Array.isArray(watches)) return out;
+  const id = String(poiId);
+  const nights = Number(minNights || 1);
+  for (const w of watches) {
+    if (!w || w.status === 'done') continue;
+    if (String(w.poi_id ?? '') !== id) continue;
+    if (Number(w.min_nights ?? w.minNights ?? 1) !== nights) continue;
+    const dates = Array.isArray(w.target_dates) ? w.target_dates : [];
+    for (const date of dates) {
+      if (date) out.set(date, w);
+    }
   }
   return out;
 }
 
-async function toggleAlert(ctx, button) {
+async function toggleWatch(ctx, button) {
   const date = ctx.selectedDate;
   if (!date) return;
-  const watching = ctx.alertsByDate.has(date);
+  const watching = ctx.watchesByDate.has(date);
   const previousLabel = button.textContent;
   button.disabled = true;
   try {
     if (watching) {
-      const existing = ctx.alertsByDate.get(date);
-      button.textContent = 'Removing…';
-      await deleteCampsiteAlert(existing.id, { signal: ctx.signal });
-      ctx.alertsByDate.delete(date);
+      const existing = ctx.watchesByDate.get(date);
+      button.textContent = 'Removing...';
+      await deleteWatch(existing.id, { signal: ctx.signal });
+      ctx.watchesByDate.delete(date);
     } else {
-      button.textContent = 'Setting alert…';
-      const payload = buildAlertPayload(ctx, date);
-      const created = await createCampsiteAlert(payload, { signal: ctx.signal });
-      ctx.alertsByDate.set(date, { ...created, ...payload });
+      button.textContent = 'Creating watch...';
+      const payload = buildWatchPayload(ctx, date);
+      const created = await createWatch(payload, { signal: ctx.signal });
+      ctx.watchesByDate.set(date, created.watch || { ...payload, id: created.id });
     }
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
     button.textContent = previousLabel;
     button.disabled = false;
-    console.warn('alert toggle failed', e);
+    console.warn('watch toggle failed', e);
   }
 }
 
-function buildAlertPayload(ctx, date) {
-  const endDate = addDays(parseIsoDate(date), ctx.minNights);
+function buildWatchPayload(ctx, date) {
   return {
-    campground_id: String(ctx.recgovId),
-    campground_name: ctx.feature.properties?.name || `Campground ${ctx.recgovId}`,
-    parent_name: ctx.feature.properties?.parent_name || null,
-    parent_id: ctx.feature.properties?.parent_id || null,
-    start_date: date,
-    end_date: isoDate(endDate),
+    poi_id: Number(ctx.poiId),
+    reservable_filters: {},
+    target_dates: [date],
     min_nights: ctx.minNights,
-    campsite_types: [],
-    equipment_types: [],
-    notify_slack: false,
-    auto_cart: false,
-    stop_after_match: true,
+    cadence_sec: 60,
+    trigger_kinds: ['availability'],
+    trigger_config: {},
+    stop_when_triggered: true,
   };
 }
 

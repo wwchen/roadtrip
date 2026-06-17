@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.booking
 
-import ca.floo.campsite.recgov.booker.availability.CachedAvailability
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.service.api.recgov.CachedAvailability
 import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraBookingProvider
 import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraTenants
 import ca.floo.roadtrip.service.booking.adapters.camis.CamisBookingProvider

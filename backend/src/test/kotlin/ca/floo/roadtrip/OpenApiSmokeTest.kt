@@ -1,12 +1,5 @@
 package ca.floo.roadtrip
 
-import ca.floo.campsite.recgov.booker.api.campsiteDebugRoutes
-import ca.floo.campsite.recgov.booker.api.eventsRoutes
-import ca.floo.campsite.recgov.booker.availability.CachedAvailability
-import ca.floo.campsite.recgov.booker.db.AlertRepo
-import ca.floo.campsite.recgov.booker.db.MatchRepo
-import ca.floo.campsite.recgov.booker.events.EventBus
-import ca.floo.campsite.recgov.booker.poller.AvailabilityClient
 import ca.floo.roadtrip.client.AspiraAvailabilityClient
 import ca.floo.roadtrip.client.MapboxDirections
 import ca.floo.roadtrip.models.registry.PoiRegistry
@@ -14,10 +7,12 @@ import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.RouteCache
-import ca.floo.roadtrip.routes.campsiteAvailabilityRoutes
+import ca.floo.roadtrip.routes.availabilityRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
+import ca.floo.roadtrip.service.api.recgov.AvailabilityClient
+import ca.floo.roadtrip.service.api.recgov.CachedAvailability
 import ca.floo.roadtrip.service.booking.BookingProviderRegistryFactory
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
@@ -30,10 +25,8 @@ import io.ktor.server.application.install
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.route
 import io.ktor.server.routing.routing
-import io.ktor.server.sse.SSE
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.SQLDialect
@@ -41,6 +34,7 @@ import org.jooq.impl.DSL
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -53,7 +47,7 @@ import kotlin.test.assertTrue
 //     the documented paths and their summaries.
 //
 // We don't boot the full Application.module() here because that would pull
-// in Postgres, Flyway, the campsite event bus, etc. — overkill when we
+// in Postgres, Flyway, provider caches, etc. — overkill when we
 // just want to verify the plugin wires correctly.
 class OpenApiSmokeTest {
     @Test
@@ -82,10 +76,8 @@ class OpenApiSmokeTest {
         testApplication {
             application {
                 install(SwaggerUI)
-                install(SSE)
                 val ctx = DSL.using(SQLDialect.POSTGRES)
                 val registry = PoiRegistry.load(File("../config/poi-registry.yaml"))
-                val bus = EventBus()
                 routing {
                     route("/api/docs/openapi.json") { openApiSpec() }
                     healthRoutes()
@@ -98,9 +90,7 @@ class OpenApiSmokeTest {
                             recgovCache = CachedAvailability(AvailabilityClient()),
                             aspiraCache = CachedAspiraAvailability(aspiraClient),
                         )
-                    campsiteAvailabilityRoutes(CampsiteProviderRepo(ctx), bookingProviders, ReservableRepo(ctx))
-                    eventsRoutes(bus)
-                    campsiteDebugRoutes(AlertRepo(ctx), MatchRepo(ctx), bus)
+                    availabilityRoutes(CampsiteProviderRepo(ctx), bookingProviders, ReservableRepo(ctx))
                 }
             }
 
@@ -138,41 +128,14 @@ class OpenApiSmokeTest {
             )
 
             val bulkPost =
-                paths["/api/campsite/availability/bulk"]!!.jsonObject["post"]!!.jsonObject
+                paths["/api/availability/bulk"]!!.jsonObject["post"]!!.jsonObject
             assertEquals(
                 "Bulk per-day availability for many campgrounds in a date window (poi-id keyed)",
                 bulkPost["summary"]!!.jsonPrimitive.content,
             )
 
-            val campsiteEventsGet =
-                paths["/api/campsite/events"]!!.jsonObject["get"]!!.jsonObject
-            assertEquals(
-                "Live campsite event stream (SSE)",
-                campsiteEventsGet["summary"]!!.jsonPrimitive.content,
-            )
-            assertEquals(
-                "campsite-events",
-                campsiteEventsGet["tags"]!!
-                    .jsonArray
-                    .single()
-                    .jsonPrimitive
-                    .content,
-            )
-
-            val campsiteAdminPost =
-                paths["/api/admin/campsite/debug/synth-match"]!!.jsonObject["post"]!!.jsonObject
-            assertEquals(
-                "Debug-only: create an alert + match in one shot for protocol harness tests",
-                campsiteAdminPost["summary"]!!.jsonPrimitive.content,
-            )
-            assertEquals(
-                "campsite-admin",
-                campsiteAdminPost["tags"]!!
-                    .jsonArray
-                    .single()
-                    .jsonPrimitive
-                    .content,
-            )
+            assertFalse(paths.containsKey("/api/campsite/events"))
+            assertFalse(paths.containsKey("/api/admin/campsite/debug/synth-match"))
         }
 
     @Test

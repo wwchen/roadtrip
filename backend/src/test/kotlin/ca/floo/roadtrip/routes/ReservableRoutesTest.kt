@@ -380,7 +380,7 @@ class ReservableRoutesTest {
                 )
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -413,7 +413,7 @@ class ReservableRoutesTest {
             link(c44, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -452,7 +452,7 @@ class ReservableRoutesTest {
             link(reservableId, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeBookingProviders(),
                         ReservableRepo(ctx),
@@ -552,7 +552,7 @@ class ReservableRoutesTest {
             link(b, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeAspiraBookingProviders(),
                         ReservableRepo(ctx),
@@ -602,7 +602,7 @@ class ReservableRoutesTest {
             link(reservableId, poiId)
             application {
                 routing {
-                    campsiteAvailabilityRoutes(
+                    availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeAspiraBookingProviders(),
                         ReservableRepo(ctx),

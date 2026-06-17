@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.booking
 
-import ca.floo.campsite.recgov.booker.availability.CachedAvailability
-import ca.floo.campsite.recgov.booker.poller.Campsite
 import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.service.api.recgov.CachedAvailability
+import ca.floo.roadtrip.service.api.recgov.Campsite
 import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovBookingProvider
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
