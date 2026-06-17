@@ -161,12 +161,11 @@ function rowHtml(row, days, availabilityByDate, selectedDate) {
 }
 
 function siteLabelHtml(row, siteLabel) {
-  const loop = row.loop ? `<span class="cg-site-matrix-loop">${escapeHtml(row.loop)}</span>` : '';
-  const type = row.site_type ? `<span class="cg-site-matrix-type">${escapeHtml(row.site_type)}</span>` : '';
+  const meta = [row.loop, row.site_type].filter(Boolean).join(' · ');
+  const metaLine = meta ? `<span class="cg-site-matrix-meta-line">${escapeHtml(meta)}</span>` : '';
   const text = `
     <span class="cg-site-matrix-name">${escapeHtml(siteLabel)}</span>
-    ${loop}
-    ${type}
+    ${metaLine}
   `;
   const url = row.reservation_url || row.reservationUrl || '';
   if (!url) return text;
