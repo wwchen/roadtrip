@@ -91,7 +91,6 @@ def main() -> int:
 
     payload = {}
     endpoint_status = {}
-    endpoint_headers = {}
     last_call_at = 0.0
     for name, path in ENDPOINTS.items():
         gap = time.monotonic() - last_call_at
@@ -106,7 +105,6 @@ def main() -> int:
             return 1
         status, resp_headers, body = result
         endpoint_status[name] = status
-        endpoint_headers[name] = resp_headers
         if status != 200:
             return 1
         payload[name] = parse_payload(resp_headers.get("content-type", ""), body)
@@ -120,8 +118,8 @@ def main() -> int:
         request_headers=headers,
         response_status=200,
         response_headers={
-            "endpoint_status": endpoint_status,
-            "endpoint_headers": endpoint_headers,
+            f"x-roadtrip-{name.replace('_', '-')}-status": str(status)
+            for name, status in endpoint_status.items()
         },
         payload=payload,
     )
