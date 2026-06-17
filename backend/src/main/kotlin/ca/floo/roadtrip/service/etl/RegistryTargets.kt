@@ -13,10 +13,9 @@ import java.io.File
 //   - fetchTargets: one Target per data_sources row. Target.name is the
 //     data_source slug. Used by POST /api/admin/data/fetch/<slug> and the
 //     fan-out endpoint POST /api/admin/data/fetch.
-//   - importTargets: one Target per poi_data row. Target.name is the
-//     poi_data display name. Each Target's importPhases is a single
-//     phase whose sourceName is the row's terminal etl slug; the
-//     orchestrator walks the row's full etls chain when that phase runs.
+//   - importTargets: one Target per poi_data, reservable_data, and
+//     poi_reservable_joiner row. Map insertion order is the fan-out order:
+//     POIs first, reservables second, joiners last.
 //
 // Adding a new vendor: append a `data_sources:` row + a `poi_data:` row
 // to YAML + register the ETL adapter(s) in EtlOrchestrator.registry.
