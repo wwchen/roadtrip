@@ -31,9 +31,8 @@ class ReservableAvailabilityFetchService(
                 ReservableAvailabilityRequest(
                     ref = request.ref,
                     vendorId = request.vendorId,
-                    start = request.start,
-                    days = request.days,
-                    minNights = request.minNights,
+                    startDate = request.start,
+                    endDate = request.start.plusDays(request.days.toLong()),
                     force = request.force,
                 ),
             )
@@ -58,9 +57,8 @@ class ReservableAvailabilityFetchService(
                         ReservableAvailabilityRequest(
                             ref = request.ref,
                             vendorId = request.vendorId,
-                            start = request.start,
-                            days = request.days + request.minNights - 1,
-                            minNights = 1,
+                            startDate = request.start,
+                            endDate = request.start.plusDays((request.days + request.minNights - 1).toLong()),
                             force = false,
                         ),
                     )

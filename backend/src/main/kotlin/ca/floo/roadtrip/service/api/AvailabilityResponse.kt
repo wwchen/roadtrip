@@ -62,9 +62,8 @@ fun summarizeWindow(
 ): String {
     if (state == "empty") return "No availability data"
     if (state == "closed_for_season") return "Closed for season"
-    val nightsAvailable = perDay.count { it.availableCount > 0 }
-    if (nightsAvailable == 0 && perDay.any { it.status == "partial" }) return "Openings need a shorter stay"
     if (state == "zero_available") return "Fully booked next $days days"
+    val availableDates = perDay.count { it.availableCount > 0 }
     val weekendsBooked =
         perDay.any { d ->
             val dow = LocalDate.parse(d.date).dayOfWeek
@@ -72,8 +71,8 @@ fun summarizeWindow(
                 (d.status == "booked" || d.status == "closed")
         }
     val tail = if (weekendsBooked) " · weekends full" else ""
-    val noun = if (nightsAvailable == 1) "night" else "nights"
-    return "$nightsAvailable $noun available$tail"
+    val noun = if (availableDates == 1) "date" else "dates"
+    return "$availableDates $noun available$tail"
 }
 
 /**
@@ -86,8 +85,8 @@ fun summarizeWindow(
  */
 fun availabilityResponseDto(
     provider: String,
-    today: LocalDate,
-    days: Int,
+    startDate: LocalDate,
+    endDate: LocalDate,
     perDay: List<DayClassification>,
     state: String,
     summary: String,
@@ -105,7 +104,7 @@ fun availabilityResponseDto(
         mapId = mapId,
         reservableId = reservableId,
         checkedAt = Instant.now().toString(),
-        window = AvailabilityWindowDto(start = today.toString(), days = days),
+        window = AvailabilityWindowDto(startDate = startDate.toString(), endDate = endDate.toString()),
         summary = summary,
         state = state,
         season = seasonBlock?.let { availabilityResponseJson.encodeToJsonElement(it) } ?: JsonNull,
@@ -140,8 +139,8 @@ data class AvailabilityResponseDto(
 
 @Serializable
 data class AvailabilityWindowDto(
-    val start: String,
-    val days: Int,
+    @SerialName("start_date") val startDate: String,
+    @SerialName("end_date") val endDate: String,
 )
 
 @Serializable

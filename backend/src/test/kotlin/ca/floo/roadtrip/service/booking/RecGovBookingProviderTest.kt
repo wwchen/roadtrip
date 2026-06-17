@@ -54,8 +54,8 @@ class RecGovBookingProviderTest {
                                     vendorId = "330257",
                                 ),
                             ),
-                        start = LocalDate.parse("2026-07-01"),
-                        days = 1,
+                        startDate = LocalDate.parse("2026-07-01"),
+                        endDate = LocalDate.parse("2026-07-02"),
                     ),
                 )
 
@@ -107,14 +107,13 @@ class RecGovBookingProviderTest {
                     ReservableAvailabilityRequest(
                         ref = ProviderRef.RecGov("232447"),
                         vendorId = "330257",
-                        start = LocalDate.parse("2026-07-01"),
-                        days = 1,
-                        minNights = 2,
+                        startDate = LocalDate.parse("2026-07-01"),
+                        endDate = LocalDate.parse("2026-07-02"),
                     ),
                 )
 
             assertEquals("site:recgov:330257", dto.reservableId)
-            assertEquals("booked", dto.availability.single().status)
-            assertEquals(0, dto.availability.single().availableCount)
+            assertEquals("available", dto.availability.single().status)
+            assertEquals(1, dto.availability.single().availableCount)
         }
 }

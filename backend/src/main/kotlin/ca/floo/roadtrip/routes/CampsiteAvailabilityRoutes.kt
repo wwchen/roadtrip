@@ -154,9 +154,8 @@ fun Route.campsiteAvailabilityRoutes(
                     CatalogAvailabilityRequest(
                         ref = ref,
                         reservables = catalogRefs,
-                        start = query.start,
-                        days = days,
-                        minNights = query.minNights,
+                        startDate = query.start,
+                        endDate = query.start.plusDays(days.toLong()),
                         force = query.force,
                     ),
                 )
@@ -369,8 +368,8 @@ fun Route.campsiteAvailabilityRoutes(
                     value =
                         BulkAvailRequestSchema(
                             ids = listOf(12345L, 67890L),
-                            start = "2026-07-04",
-                            nights = 3,
+                            startDate = "2026-07-04",
+                            endDate = "2026-07-07",
                         )
                 }
             }
@@ -383,8 +382,8 @@ fun Route.campsiteAvailabilityRoutes(
                     example("mixed") {
                         value =
                             BulkAvailResponseSchema(
-                                start = "2026-07-04",
-                                nights = 3,
+                                startDate = "2026-07-04",
+                                endDate = "2026-07-07",
                                 results =
                                     listOf(
                                         BulkAvailEntrySchema(12345L, 200, listOf("2026-07-04", "2026-07-06")),
@@ -421,21 +420,32 @@ fun Route.campsiteAvailabilityRoutes(
             )
             return@post
         }
-        if (req.nights !in 1..MAX_NIGHTS) {
+        val start =
+            try {
+                LocalDate.parse(req.startDate)
+            } catch (e: Exception) {
+                call.respondApiError("bad_start", HttpStatusCode.BadRequest, detail = "start_date must be YYYY-MM-DD")
+                return@post
+            }
+        val end =
+            try {
+                LocalDate.parse(req.endDate)
+            } catch (e: Exception) {
+                call.respondApiError("bad_end", HttpStatusCode.BadRequest, detail = "end_date must be YYYY-MM-DD")
+                return@post
+            }
+        val days =
+            java.time.temporal.ChronoUnit.DAYS
+                .between(start, end)
+                .toInt()
+        if (days !in 1..MAX_NIGHTS) {
             call.respondApiError(
-                "bad_nights",
+                "bad_window",
                 HttpStatusCode.BadRequest,
-                detail = "nights must be in 1..$MAX_NIGHTS",
+                detail = "date window must be 1..$MAX_NIGHTS days",
             )
             return@post
         }
-        val start =
-            try {
-                LocalDate.parse(req.start)
-            } catch (e: Exception) {
-                call.respondApiError("bad_start", HttpStatusCode.BadRequest, detail = "start must be YYYY-MM-DD")
-                return@post
-            }
 
         val ip = call.request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
@@ -453,14 +463,14 @@ fun Route.campsiteAvailabilityRoutes(
             coroutineScope {
                 req.ids
                     .map { id ->
-                        async { fetchOneBulk(id, rowsById[id], bookingProviders, start, req.nights) }
+                        async { fetchOneBulk(id, rowsById[id], bookingProviders, start, end) }
                     }.awaitAll()
             }
 
         call.respondAvailabilityJson(
             BulkAvailResponseSchema(
-                start = req.start,
-                nights = req.nights,
+                startDate = req.startDate,
+                endDate = req.endDate,
                 results = results,
             ),
         )
@@ -502,8 +512,8 @@ private fun emptyPoiAvailability(
             is ProviderRef.Aspira -> "aspira"
             is ProviderRef.Camis -> "camis"
         },
-    today = start,
-    days = days,
+    startDate = start,
+    endDate = start.plusDays(days.toLong()),
     perDay =
         (0 until days).map { offset ->
             DayClassification(
@@ -525,8 +535,8 @@ private suspend fun fetchOneBulk(
     poiId: Long,
     row: CampsiteProviderRefRow?,
     bookingProviders: BookingProviderRegistry,
-    start: LocalDate,
-    nights: Int,
+    startDate: LocalDate,
+    endDate: LocalDate,
 ): BulkAvailEntrySchema {
     if (row == null) {
         return BulkAvailEntrySchema(id = poiId, status = 404, available_dates = emptyList())
@@ -541,7 +551,7 @@ private suspend fun fetchOneBulk(
     return try {
         val dates =
             provider.availableDates(
-                AvailableDatesRequest(ref = ref, start = start, nights = nights),
+                AvailableDatesRequest(ref = ref, startDate = startDate, endDate = endDate),
             )
         BulkAvailEntrySchema(id = poiId, status = 200, available_dates = dates)
     } catch (e: BookingProviderError) {

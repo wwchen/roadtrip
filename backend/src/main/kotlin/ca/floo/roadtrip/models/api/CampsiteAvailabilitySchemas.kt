@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.models.api
 
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 // /api/campsite/availability/bulk — trip-planner endpoint. ids are pois.id
@@ -9,8 +10,8 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class BulkAvailRequestSchema(
     val ids: List<Long>,
-    val start: String,
-    val nights: Int,
+    @SerialName("start_date") val startDate: String,
+    @SerialName("end_date") val endDate: String,
 )
 
 @Serializable
@@ -22,8 +23,8 @@ data class BulkAvailEntrySchema(
 
 @Serializable
 data class BulkAvailResponseSchema(
-    val start: String,
-    val nights: Int,
+    @SerialName("start_date") val startDate: String,
+    @SerialName("end_date") val endDate: String,
     val results: List<BulkAvailEntrySchema>,
 )
 

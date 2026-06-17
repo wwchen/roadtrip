@@ -25,8 +25,8 @@ class AvailabilityResponseTest {
             encodeAvailabilityJson(
                 availabilityResponseDto(
                     provider = "recgov",
-                    today = LocalDate.parse("2026-06-10"),
-                    days = 1,
+                    startDate = LocalDate.parse("2026-06-10"),
+                    endDate = LocalDate.parse("2026-06-11"),
                     perDay =
                         listOf(
                             DayClassification(
@@ -38,7 +38,7 @@ class AvailabilityResponseTest {
                             ),
                         ),
                     state = "success",
-                    summary = "1 night available",
+                    summary = "1 date available",
                     seasonBlock = null,
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
                     campgroundId = "232447",
@@ -50,7 +50,8 @@ class AvailabilityResponseTest {
         assertEquals("recgov", json["provider"]!!.jsonPrimitive.content)
         assertEquals("232447", json["campground_id"]!!.jsonPrimitive.content)
         assertEquals(JsonNull, json["season"])
-        assertEquals(1, json["window"]!!.jsonObject["days"]!!.jsonPrimitive.int)
+        assertEquals("2026-06-10", json["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
+        assertEquals("2026-06-11", json["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
         assertEquals(3, availabilityDay["available_count"]!!.jsonPrimitive.int)
         assertEquals(3, availabilityDay["available_reservable_ids"]!!.jsonArray.size)
         assertEquals(false, json["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)

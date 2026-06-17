@@ -57,9 +57,8 @@ class AspiraBookingProviderTest {
                                     resourceLocationId = -2147483624,
                                 ),
                             ),
-                        start = LocalDate.parse("2026-06-17"),
-                        days = 1,
-                        minNights = 7,
+                        startDate = LocalDate.parse("2026-06-17"),
+                        endDate = LocalDate.parse("2026-06-18"),
                     ),
                 )
 
@@ -106,8 +105,8 @@ class AspiraBookingProviderTest {
                                     resourceLocationId = -2147483515,
                                 ),
                             vendorId = "-2147478966",
-                            start = LocalDate.parse("2026-07-01"),
-                            days = 1,
+                            startDate = LocalDate.parse("2026-07-01"),
+                            endDate = LocalDate.parse("2026-07-02"),
                         ),
                     )
 

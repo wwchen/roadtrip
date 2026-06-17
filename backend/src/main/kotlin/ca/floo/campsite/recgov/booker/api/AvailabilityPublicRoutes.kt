@@ -92,8 +92,8 @@ internal suspend fun fetchAndClassifyRecgov(
 
         availabilityResponseDto(
             provider = "recgov",
-            today = today,
-            days = days,
+            startDate = today,
+            endDate = today.plusDays(days.toLong()),
             perDay = perDay,
             state = state,
             summary = summary,
@@ -137,8 +137,8 @@ internal suspend fun fetchAndClassifyRecgovCatalog(
 
         availabilityResponseDto(
             provider = "recgov",
-            today = today,
-            days = days,
+            startDate = today,
+            endDate = today.plusDays(days.toLong()),
             perDay = perDay,
             state = state,
             summary = summary,
@@ -189,8 +189,8 @@ internal suspend fun fetchAndClassifyRecgovReservable(
 
         availabilityResponseDto(
             provider = "recgov",
-            today = today,
-            days = days,
+            startDate = today,
+            endDate = today.plusDays(days.toLong()),
             perDay = perDay,
             state = state,
             summary = summary,

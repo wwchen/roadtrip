@@ -17,6 +17,7 @@ import ca.floo.roadtrip.service.booking.BookingProviderError
 import ca.floo.roadtrip.service.booking.BookingProviderId
 import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
+import java.time.LocalDate
 
 /**
  * Aspira NextGen adapter. One adapter *class* for the whole vendor; one
@@ -47,15 +48,16 @@ class AspiraBookingProvider(
 
     override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
         val mapId = mapIdOrThrow(req.ref)
+        val days = daysBetween(req.startDate, req.endDate)
         return runWithErrorMapping {
             fetchAndClassifyAspira(
                 cache = cache,
                 host = tenant.host,
                 mapId = mapId,
-                today = req.start,
-                days = req.days,
+                today = req.startDate,
+                days = days,
                 force = req.force,
-                minNights = req.minNights,
+                minNights = 1,
                 reservableVendor = tenant.vendorCode,
             )
         }
@@ -63,8 +65,9 @@ class AspiraBookingProvider(
 
     override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
         val mapId = mapIdOrThrow(req.ref)
+        val days = daysBetween(req.startDate, req.endDate)
         return runWithErrorMapping {
-            availableDatesAspira(cache, tenant.host, mapId, req.start, req.nights)
+            availableDatesAspira(cache, tenant.host, mapId, req.startDate, days)
         }
     }
 
@@ -86,16 +89,17 @@ class AspiraBookingProvider(
                 host = tenant.host,
                 parentMapId = parentMapId,
                 reservables = targets,
-                today = req.start,
-                days = req.days,
+                today = req.startDate,
+                days = daysBetween(req.startDate, req.endDate),
                 force = req.force,
-                minNights = req.minNights,
+                minNights = 1,
             )
         }
     }
 
     override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
         val mapId = mapIdOrThrow(req.ref)
+        val days = daysBetween(req.startDate, req.endDate)
         return runWithErrorMapping {
             fetchAndClassifyAspiraResource(
                 cache = cache,
@@ -103,13 +107,21 @@ class AspiraBookingProvider(
                 mapId = mapId,
                 resourceId = req.vendorId,
                 reservableVendor = tenant.vendorCode,
-                today = req.start,
-                days = req.days,
+                today = req.startDate,
+                days = days,
                 force = req.force,
-                minNights = req.minNights,
+                minNights = 1,
             )
         }
     }
+
+    private fun daysBetween(
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): Int =
+        java.time.temporal.ChronoUnit.DAYS
+            .between(startDate, endDate)
+            .toInt()
 
     /**
      * Pull the map id and narrow Long → Int. Real Aspira ids fit comfortably

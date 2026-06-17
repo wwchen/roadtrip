@@ -61,8 +61,8 @@ internal suspend fun fetchAndClassifyAspira(
         )
     return availabilityResponseDto(
         provider = "aspira",
-        today = today,
-        days = days,
+        startDate = today,
+        endDate = today.plusDays(days.toLong()),
         perDay = perDay,
         state = state,
         summary = summary,
@@ -131,8 +131,8 @@ internal suspend fun fetchAndClassifyAspiraCatalog(
         )
     return availabilityResponseDto(
         provider = "aspira",
-        today = today,
-        days = days,
+        startDate = today,
+        endDate = today.plusDays(days.toLong()),
         perDay = perDay,
         state = state,
         summary = summary,
@@ -167,8 +167,8 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
     if (targets.isEmpty()) {
         return availabilityResponseDto(
             provider = "aspira",
-            today = today,
-            days = days,
+            startDate = today,
+            endDate = today.plusDays(days.toLong()),
             perDay = emptyList(),
             state = "success",
             summary = "No availability",
@@ -199,8 +199,8 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
         )
     return availabilityResponseDto(
         provider = "aspira",
-        today = today,
-        days = days,
+        startDate = today,
+        endDate = today.plusDays(days.toLong()),
         perDay = perDay,
         state = state,
         summary = summary,
@@ -242,8 +242,8 @@ internal suspend fun fetchAndClassifyAspiraResource(
         )
     return availabilityResponseDto(
         provider = "aspira",
-        today = today,
-        days = days,
+        startDate = today,
+        endDate = today.plusDays(days.toLong()),
         perDay = perDay,
         state = state,
         summary = summary,
