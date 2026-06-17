@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.models.api
 
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
@@ -57,7 +58,7 @@ data class AvailabilitySnapshotSchema(
     @SerialName("run_id") val runId: Long? = null,
     @SerialName("target_date") val targetDate: String,
     @SerialName("observed_at") val observedAt: String,
-    val status: String,
+    val status: AvailabilityStatus,
     val available: Boolean,
 )
 

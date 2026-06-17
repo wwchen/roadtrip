@@ -34,23 +34,73 @@ inline fun <reified T> encodeAvailabilityJson(value: T): String = availabilityRe
 
 data class DayClassification(
     val date: String,
-    val status: String, // "available" | "partial" | "booked" | "closed"
+    val status: AvailabilityStatus,
     val availableCount: Int,
     val total: Int,
     val availableReservableIds: List<String>? = null,
+    val reservableStatuses: Map<String, AvailabilityStatus>? = null,
 )
+
+fun dayClassificationFromReservableStatuses(
+    date: String,
+    statuses: Map<String, AvailabilityStatus>,
+): DayClassification {
+    val sorted = statuses.toSortedMap()
+    val availableIds =
+        sorted
+            .filterValues { it == AvailabilityStatus.AVAILABLE }
+            .keys
+            .toList()
+    return DayClassification(
+        date = date,
+        status = rollupStatus(sorted.values),
+        availableCount = availableIds.size,
+        total = sorted.size,
+        availableReservableIds = availableIds,
+        reservableStatuses = sorted,
+    )
+}
+
+fun dayClassificationFromStatuses(
+    date: String,
+    statuses: List<AvailabilityStatus>,
+): DayClassification =
+    DayClassification(
+        date = date,
+        status = rollupStatus(statuses),
+        availableCount = statuses.count { it == AvailabilityStatus.AVAILABLE },
+        total = statuses.size,
+    )
+
+fun rollupStatus(statuses: Iterable<AvailabilityStatus>): AvailabilityStatus {
+    val values = statuses.toList()
+    if (values.isEmpty()) return AvailabilityStatus.UNKNOWN
+    return when {
+        values.any { it == AvailabilityStatus.AVAILABLE } -> AvailabilityStatus.AVAILABLE
+        values.any { it == AvailabilityStatus.FIRST_COME } -> AvailabilityStatus.FIRST_COME
+        values.any { it == AvailabilityStatus.RESERVED } -> AvailabilityStatus.RESERVED
+        values.all { it == AvailabilityStatus.CLOSED } -> AvailabilityStatus.CLOSED
+        else -> AvailabilityStatus.UNKNOWN
+    }
+}
 
 /** Roll up per-day classifications into a single window-level state. */
 fun classifyWindowState(days: List<DayClassification>): String {
     val total = days.sumOf { it.total }
     if (total == 0) return "empty"
-    val anyBookable = days.any { it.availableCount > 0 }
-    val anyStayMismatch = days.any { it.status == "partial" }
-    val allClosed = days.all { it.status == "closed" || it.total == 0 }
+    val allClosed = days.all { it.total > 0 && it.status == AvailabilityStatus.CLOSED }
+    val anySuccess =
+        days.any {
+            it.status == AvailabilityStatus.AVAILABLE ||
+                it.status == AvailabilityStatus.FIRST_COME ||
+                it.status == AvailabilityStatus.UNKNOWN
+        }
+    val allReserved = days.all { it.total > 0 && it.status == AvailabilityStatus.RESERVED }
     return when {
         allClosed -> "closed_for_season"
-        anyBookable || anyStayMismatch -> "success"
-        else -> "zero_available"
+        anySuccess -> "success"
+        allReserved -> "zero_available"
+        else -> "success"
     }
 }
 
@@ -62,17 +112,29 @@ fun summarizeWindow(
 ): String {
     if (state == "empty") return "No availability data"
     if (state == "closed_for_season") return "Closed for season"
-    if (state == "zero_available") return "Fully booked next $days days"
-    val availableDates = perDay.count { it.availableCount > 0 }
-    val weekendsBooked =
+    if (state == "zero_available") return "Reserved next $days days"
+    val availableDates = perDay.count { it.status == AvailabilityStatus.AVAILABLE }
+    val firstComeDates = perDay.count { it.status == AvailabilityStatus.FIRST_COME }
+    val unknownDates = perDay.count { it.status == AvailabilityStatus.UNKNOWN }
+    if (availableDates == 0 && firstComeDates == 0 && unknownDates > 0) return "Availability unknown"
+    val weekendsUnavailable =
         perDay.any { d ->
             val dow = LocalDate.parse(d.date).dayOfWeek
             (dow == DayOfWeek.FRIDAY || dow == DayOfWeek.SATURDAY) &&
-                (d.status == "booked" || d.status == "closed")
+                (d.status == AvailabilityStatus.RESERVED || d.status == AvailabilityStatus.CLOSED)
         }
-    val tail = if (weekendsBooked) " · weekends full" else ""
-    val noun = if (availableDates == 1) "date" else "dates"
-    return "$availableDates $noun available$tail"
+    val tail = if (weekendsUnavailable) " · weekends unavailable" else ""
+    val parts = mutableListOf<String>()
+    if (availableDates > 0) {
+        val noun = if (availableDates == 1) "date" else "dates"
+        parts += "$availableDates $noun available"
+    }
+    if (firstComeDates > 0) {
+        val noun = if (firstComeDates == 1) "date" else "dates"
+        parts += "$firstComeDates $noun first-come"
+    }
+    if (parts.isEmpty()) return "Reserved next $days days"
+    return parts.joinToString(" · ") + tail
 }
 
 /**
@@ -116,6 +178,7 @@ fun availabilityResponseDto(
                     availableCount = day.availableCount,
                     total = day.total,
                     availableReservableIds = day.availableReservableIds,
+                    reservableStatuses = day.reservableStatuses,
                 )
             },
         cache = cacheBlock,
@@ -146,10 +209,11 @@ data class AvailabilityWindowDto(
 @Serializable
 data class AvailabilityDayDto(
     val date: String,
-    val status: String,
+    val status: AvailabilityStatus,
     @SerialName("available_count") val availableCount: Int,
     val total: Int,
     @SerialName("available_reservable_ids") val availableReservableIds: List<String>? = null,
+    @SerialName("reservable_statuses") val reservableStatuses: Map<String, AvailabilityStatus>? = null,
 )
 
 @Serializable

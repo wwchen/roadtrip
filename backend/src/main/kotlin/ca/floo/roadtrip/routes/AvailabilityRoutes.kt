@@ -15,6 +15,7 @@ import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.DayClassification
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -540,7 +541,7 @@ private fun emptyPoiAvailability(
         (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt()).map { offset ->
             DayClassification(
                 date = startDate.plusDays(offset.toLong()).toString(),
-                status = "closed",
+                status = AvailabilityStatus.UNKNOWN,
                 availableCount = 0,
                 total = 0,
             )

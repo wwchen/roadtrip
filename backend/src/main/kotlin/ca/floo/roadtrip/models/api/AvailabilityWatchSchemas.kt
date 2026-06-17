@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.models.api
 
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject
@@ -64,7 +65,7 @@ data class AvailabilityWatchListResponse(
 @Serializable
 data class AvailabilityWatchHeatmapCell(
     @SerialName("target_date") val targetDate: String,
-    val status: String? = null,
+    val status: AvailabilityStatus? = null,
     val available: Boolean? = null,
     @SerialName("observed_at") val observedAt: String? = null,
 )

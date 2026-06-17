@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.booking
 
 import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.recgov.CachedAvailability
 import ca.floo.roadtrip.service.api.recgov.Campsite
 import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovBookingProvider
@@ -60,6 +61,7 @@ class RecGovBookingProviderTest {
                 )
 
             val day = dto.availability.single()
+            assertEquals(AvailabilityStatus.AVAILABLE, day.status)
             assertEquals(1, day.availableCount)
             assertEquals(1, day.total)
             assertEquals(listOf("site:recgov:330257"), day.availableReservableIds)
@@ -113,7 +115,7 @@ class RecGovBookingProviderTest {
                 )
 
             assertEquals("site:recgov:330257", dto.reservableId)
-            assertEquals("available", dto.availability.single().status)
+            assertEquals(AvailabilityStatus.AVAILABLE, dto.availability.single().status)
             assertEquals(1, dto.availability.single().availableCount)
         }
 
