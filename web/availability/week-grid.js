@@ -8,6 +8,11 @@
 // the response shape ever drifts back to camelCase via a wrapper.
 
 import { escapeHtml } from '../core.js';
+import {
+  availabilityStatusAria,
+  availabilityStatusLabel,
+  normalizeAvailabilityStatus,
+} from '../utils/availability-status.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const WEEK_DAYS = 7;
@@ -28,7 +33,8 @@ export function renderWeekGrid({ days, todayIso, selectedDate, watchedDates }) {
     const dowLabel = DOW_LABELS[dow];
     const dayNum = parseInt(date.slice(8, 10), 10);
     const availLabel = renderAvailLabel(d);
-    const visualStatus = renderStatus(d);
+    const visualStatus = normalizeAvailabilityStatus(d.status);
+    const ariaStatus = availabilityStatusAria(visualStatus);
     const watching = watchedDates.has(date);
     const classes = [
       'cg-day',
@@ -40,7 +46,7 @@ export function renderWeekGrid({ days, todayIso, selectedDate, watchedDates }) {
       .filter(Boolean)
       .join(' ');
     return `
-      <button type="button" class="${classes}" data-date="${date}" aria-label="${escapeHtml(`${date} — ${visualStatus}`)}">
+      <button type="button" class="${classes}" data-date="${date}" aria-label="${escapeHtml(`${date} - ${ariaStatus}`)}">
         <div class="cg-day-dow">${dowLabel}</div>
         <div class="cg-day-num">${dayNum}</div>
         <div class="cg-day-avail">${escapeHtml(availLabel)}</div>
@@ -62,35 +68,17 @@ export function renderWeekSkeleton() {
 
 /**
  * The label inside each cell. Status-driven rather than count-driven, since
- * the count alone is ambiguous (0 could be 'fully booked' or 'closed').
+ * the count alone is ambiguous (0 could be 'reserved' or 'closed').
  *
  * Reads both snake_case (BE wire) and camelCase (defensive). Pluralizes the
  * unit so "1 site" / "5 sites" reads naturally. Falls back to a status-only
  * label when the count is missing rather than printing 'undefined'.
  */
 function renderAvailLabel(day) {
-  const status = day.status || 'closed';
-  if (status === 'closed') return 'closed';
-  if (status === 'booked') return 'full';
+  const status = normalizeAvailabilityStatus(day.status);
   const count = availableCount(day);
-  if (status === 'partial' && count === 0) return 'no stays';
-  if (count === 0) return 'full';
-  if (count == null) {
-    // We know status is available/partial but the BE didn't ship a count —
-    // tell the user what we do know rather than printing nothing.
-    return status === 'partial' ? 'some open' : 'open';
-  }
-  return `${count} ${count === 1 ? 'site' : 'sites'}`;
-}
-
-function renderStatus(day) {
-  const status = day.status || 'closed';
-  const count = availableCount(day);
-  if (count != null) {
-    if (count > 0) return 'available';
-    if (status === 'available') return 'booked';
-  }
-  return status;
+  if (status === 'available' && count != null) return `${count} ${count === 1 ? 'site' : 'sites'}`;
+  return availabilityStatusLabel(status);
 }
 
 function availableCount(day) {

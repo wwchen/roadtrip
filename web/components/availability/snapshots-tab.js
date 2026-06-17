@@ -6,6 +6,7 @@ import {
   listSnapshotsForReservable,
   listSnapshotsForRun,
 } from '/web/api/availability-dashboard-api.js';
+import { availabilityStatusLabel } from '/web/utils/availability-status.js';
 
 export async function mount(rootEl, { urlParams }) {
   rootEl.innerHTML = `
@@ -103,7 +104,7 @@ export async function mount(rootEl, { urlParams }) {
         <td>${s.run_id != null ? `#${escapeHtml(s.run_id)}` : '—'}</td>
         <td>${escapeHtml(s.target_date)}</td>
         <td>${escapeHtml(formatTimestamp(s.observed_at))}</td>
-        <td>${escapeHtml(s.status)}</td>
+        <td title="${escapeHtml(s.status)}">${escapeHtml(availabilityStatusLabel(s.status))}</td>
         <td>${s.available ? '✓' : '✗'}</td>
       </tr>
     `;
@@ -120,7 +121,7 @@ export async function mount(rootEl, { urlParams }) {
       statsEl.innerHTML = `
         <table class="data-table">
           <thead><tr>
-            <th>target date</th><th>last open</th><th>open window</th>
+            <th>target date</th><th>last available</th><th>available window</th>
             <th>median 24h</th><th>flips 24h</th><th>snapshots</th>
           </tr></thead>
           <tbody>
@@ -139,10 +140,10 @@ export async function mount(rootEl, { urlParams }) {
   }
 
   function renderStatsRow(s) {
-    const lastOpen =
-      s.is_currently_open ? '<strong>open NOW</strong>' :
+    const lastAvailable =
+      s.is_currently_open ? '<strong>available NOW</strong>' :
       s.last_open_at ? `${escapeHtml(formatTimestamp(s.last_open_at))}` :
-      '<span class="muted">never seen open</span>';
+      '<span class="muted">never seen available</span>';
     const window =
       s.current_or_last_open_window_sec != null
         ? formatDuration(s.current_or_last_open_window_sec)
@@ -152,7 +153,7 @@ export async function mount(rootEl, { urlParams }) {
     return `
       <tr>
         <td>${escapeHtml(s.target_date)}</td>
-        <td>${lastOpen}</td>
+        <td>${lastAvailable}</td>
         <td>${escapeHtml(window)}</td>
         <td>${escapeHtml(median)}</td>
         <td>${escapeHtml(s.flips_last_24h)}</td>

@@ -1,5 +1,9 @@
 import { renderSiteMatrix } from '../availability/site-matrix.js';
 import { escapeHtml } from './result-table.js';
+import {
+  availabilityStatusLabel,
+  normalizeAvailabilityStatus,
+} from '../utils/availability-status.js';
 
 export function availabilityPanelHtml(rid, state, { colspan = 5, row = null } = {}) {
   const expanded = !!state && (state.mode === 'availability' || state.expanded);
@@ -106,19 +110,18 @@ function normalizeReservableDays(rid, days) {
     .map((day) => {
       const ids = day.available_reservable_ids ?? day.availableReservableIds;
       if (Array.isArray(ids)) return day;
-      const open = reservableDayOpen(day);
+      const available = reservableDayAvailable(day);
       return {
         ...day,
-        available_count: open ? 1 : 0,
+        available_count: available ? 1 : 0,
         total: day.total ?? 1,
-        available_reservable_ids: open ? [rid] : [],
+        available_reservable_ids: available ? [rid] : [],
       };
     });
 }
 
-function reservableDayOpen(day) {
-  const status = String(day.status || '').toLowerCase();
-  return ['available', 'partial', 'open'].includes(status) || Number(day.available_count ?? day.availableCount ?? 0) > 0;
+function reservableDayAvailable(day) {
+  return normalizeAvailabilityStatus(day.status) === 'available';
 }
 
 export function availabilityQueryFromForm(formEl) {
@@ -141,13 +144,13 @@ export function defaultAvailabilityQuery() {
 }
 
 function dayPillHtml(day) {
-  const status = String(day.status || '').toLowerCase();
-  const cls = ['available', 'partial'].includes(status) ? status : '';
+  const status = normalizeAvailabilityStatus(day.status);
+  const cls = status;
   const count = `${Number(day.available_count || 0)} of ${Number(day.total || 0)}`;
   return `
     <span class="day-pill ${cls}">
       <span>${escapeHtml(day.date || '')}</span>
-      <span>${escapeHtml(status || 'unknown')}</span>
+      <span>${escapeHtml(availabilityStatusLabel(status))}</span>
       <span>${escapeHtml(count)}</span>
     </span>
   `;

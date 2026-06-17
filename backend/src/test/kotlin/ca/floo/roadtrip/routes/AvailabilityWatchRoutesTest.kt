@@ -547,12 +547,12 @@ class AvailabilityWatchRoutesTest {
             """
             INSERT INTO availability_snapshot (
                 reservable_id, observed_at, target_date, status, available, day_payload
-            ) VALUES (?::bigint, ?::timestamptz, ?::date, ?, ?::boolean, '{}'::jsonb)
+            ) VALUES (?::bigint, ?::timestamptz, ?::date, ?::availability_status, ?::boolean, '{}'::jsonb)
             """.trimIndent(),
             reservableId,
             observedAt.toString(),
             targetDate,
-            if (available) "available" else "booked",
+            if (available) "available" else "reserved",
             available,
         )
     }

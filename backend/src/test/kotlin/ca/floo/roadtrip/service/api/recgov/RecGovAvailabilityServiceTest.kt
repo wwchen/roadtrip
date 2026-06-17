@@ -101,7 +101,7 @@ class RecGovAvailabilityServiceTest {
         val booked = (0..6L).associate { futureKey(it) to "Reserved" }
         val body = classify(cacheReturning(mapOf("100" to campsiteWith(booked))), days = 7)
         assertEquals("zero_available", body["state"]!!.jsonPrimitive.content)
-        assertTrue(body["summary"]!!.jsonPrimitive.content.contains("Fully booked"))
+        assertEquals("Reserved next 7 days", body["summary"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -116,6 +116,129 @@ class RecGovAvailabilityServiceTest {
     fun `empty state when no campsites returned`() {
         val body = classify(cacheReturning(emptyMap()), days = 7)
         assertEquals("empty", body["state"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `not reservable maps to first come with reservable statuses`() {
+        val map =
+            mapOf(
+                "100" to
+                    campsiteWith(
+                        mapOf(futureKey(0) to "Not Reservable"),
+                    ),
+            )
+        val body = classify(cacheReturning(map), days = 1)
+        val day = body["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals("success", body["state"]!!.jsonPrimitive.content)
+        assertEquals("first_come", day["status"]!!.jsonPrimitive.content)
+        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
+        assertEquals(1, day["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(0, day["available_reservable_ids"]!!.jsonArray.size)
+        assertEquals(
+            "first_come",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:100"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `missing date row maps to unknown rather than closed`() {
+        val map = mapOf("100" to campsiteWith(emptyMap()))
+        val body = classify(cacheReturning(map), days = 1)
+        val day = body["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals("success", body["state"]!!.jsonPrimitive.content)
+        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
+        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
+        assertEquals(1, day["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(
+            "unknown",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:100"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `null availability artifact maps to unknown rather than reserved`() {
+        val map = mapOf("100" to campsiteWith(mapOf(futureKey(0) to "null")))
+        val body = classify(cacheReturning(map), days = 1)
+        val day = body["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals("success", body["state"]!!.jsonPrimitive.content)
+        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
+        assertEquals(
+            "unknown",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:100"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `catalog availability keeps requested sites omitted by upstream as unknown`() {
+        val body =
+            encodeAvailabilityJson(
+                runBlocking {
+                    fetchAndClassifyRecgovCatalog(
+                        cache = cacheReturning(emptyMap()),
+                        recgovId = "232447",
+                        campsiteIds = setOf("100", "200"),
+                        startDate = today,
+                        endDate = today.plusDays(1),
+                        force = false,
+                    )
+                },
+            )
+        val day = parseJson(body)["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
+        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
+        assertEquals(2, day["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(
+            "unknown",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:100"]!!
+                .jsonPrimitive.content,
+        )
+        assertEquals(
+            "unknown",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:200"]!!
+                .jsonPrimitive.content,
+        )
+    }
+
+    @Test
+    fun `reservable availability keeps requested site omitted by upstream as unknown`() {
+        val body =
+            encodeAvailabilityJson(
+                runBlocking {
+                    fetchAndClassifyRecgovReservable(
+                        cache = cacheReturning(emptyMap()),
+                        recgovId = "232447",
+                        campsiteId = "100",
+                        startDate = today,
+                        endDate = today.plusDays(1),
+                        force = false,
+                    )
+                },
+            )
+        val json = parseJson(body)
+        val day = json["availability"]!!.jsonArray.single().jsonObject
+
+        assertEquals("site:recgov:100", json["reservable_id"]!!.jsonPrimitive.content)
+        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
+        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
+        assertEquals(1, day["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(
+            "unknown",
+            day["reservable_statuses"]!!
+                .jsonObject["site:recgov:100"]!!
+                .jsonPrimitive.content,
+        )
     }
 
     @Test
