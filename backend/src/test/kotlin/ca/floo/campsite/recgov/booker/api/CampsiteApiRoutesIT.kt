@@ -227,6 +227,27 @@ class CampsiteApiRoutesIT {
                 json(badCreate.bodyAsText())["error"]!!.jsonPrimitive.content,
             )
 
+            val removedCreate =
+                client.post("/api/campsite/alerts") {
+                    contentType(ContentType.Application.Json)
+                    setBody(
+                        """
+                        {
+                          "campground_id":"232447",
+                          "campground_name":"Upper Pines",
+                          "start_date":"2026-07-01",
+                          "end_date":"2026-07-04",
+                          "min_nights":2
+                        }
+                        """.trimIndent(),
+                    )
+                }
+            assertEquals(HttpStatusCode.BadRequest, removedCreate.status)
+            assertEquals(
+                "min_nights is no longer supported",
+                json(removedCreate.bodyAsText())["error"]!!.jsonPrimitive.content,
+            )
+
             val created =
                 client.post("/api/campsite/alerts") {
                     contentType(ContentType.Application.Json)
@@ -285,6 +306,17 @@ class CampsiteApiRoutesIT {
             assertEquals(true, item["stop_after_match"]!!.jsonPrimitive.boolean)
             assertEquals("active", item["status"]!!.jsonPrimitive.content)
             assertEquals("main map", item["notes"]!!.jsonPrimitive.content)
+
+            val removedPatch =
+                client.patch("/api/campsite/alerts/$alertId") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"minNights":2}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, removedPatch.status)
+            assertEquals(
+                "minNights is no longer supported",
+                json(removedPatch.bodyAsText())["error"]!!.jsonPrimitive.content,
+            )
 
             val invalidPatch =
                 client.patch("/api/campsite/alerts/$alertId") {

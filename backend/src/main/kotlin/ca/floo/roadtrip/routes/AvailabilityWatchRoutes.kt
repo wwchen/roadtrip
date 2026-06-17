@@ -187,6 +187,8 @@ fun Route.availabilityWatchRoutes(
             } catch (e: Exception) {
                 return@patch call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
             }
+        val err = validateUpdateBody(req)
+        if (err != null) return@patch call.respondError(err.first, HttpStatusCode.BadRequest, err.second)
         val dateWindow =
             when {
                 (req.startDate == null) xor (req.endDate == null) ->
@@ -362,10 +364,16 @@ private fun validateCreateBody(req: AvailabilityWatchCreateRequest): Pair<String
     return null
 }
 
+private fun validateUpdateBody(req: AvailabilityWatchUpdateRequest): Pair<String, String?>? {
+    if (req.cadenceSec != null && req.cadenceSec < 5) return "invalid_cadence" to "cadence_sec must be >= 5"
+    if (req.triggerKinds != null && req.triggerKinds.isEmpty()) return "invalid_triggers" to "trigger_kinds must be non-empty"
+    return null
+}
+
 private fun removedWatchField(raw: String): String? =
     runCatching { watchJson.parseToJsonElement(raw).jsonObject }
         .getOrNull()
-        ?.let { obj -> listOf("target_dates", "min_nights").firstOrNull { it in obj } }
+        ?.let { obj -> listOf("target_dates", "targetDates", "min_nights", "minNights").firstOrNull { it in obj } }
 
 private fun parseDateWindow(
     startDate: String,

@@ -13,6 +13,8 @@ ALTER TABLE availability_watch
   ADD COLUMN start_date DATE,
   ADD COLUMN end_date DATE;
 
+-- Sparse target_dates are intentionally broadened to one continuous window.
+-- The new watch model polls [start_date, end_date), not arbitrary date sets.
 UPDATE availability_watch
 SET
   start_date = (

@@ -171,8 +171,8 @@ class AvailabilityWatchRoutesTest {
                   "poi_id": $poiId,
                   "start_date": "2026-07-04",
                   "end_date": "2026-07-06",
-                  "target_dates": ["2026-07-04", "2026-07-05"],
-                  "min_nights": 2,
+                  "targetDates": ["2026-07-04", "2026-07-05"],
+                  "minNights": 2,
                   "cadence_sec": 60,
                   "trigger_kinds": ["atc"]
                 }
@@ -287,6 +287,67 @@ class AvailabilityWatchRoutesTest {
             assertEquals(HttpStatusCode.OK, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
             assertEquals("paused", obj["status"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `PATCH rejects invalid cadence and triggers`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
+                            ctx,
+                            ca.floo.roadtrip.repo
+                                .ReservableRepo(ctx),
+                        ),
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p-invalid-patch", name = "Invalid Patch")
+            val body =
+                """
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val badCadence =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"cadence_sec": 1}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, badCadence.status)
+            assertEquals(
+                "invalid_cadence",
+                Json
+                    .parseToJsonElement(badCadence.bodyAsText())
+                    .jsonObject["error"]!!
+                    .jsonPrimitive.content,
+            )
+
+            val badTriggers =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"trigger_kinds": []}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, badTriggers.status)
+            assertEquals(
+                "invalid_triggers",
+                Json
+                    .parseToJsonElement(badTriggers.bodyAsText())
+                    .jsonObject["error"]!!
+                    .jsonPrimitive.content,
+            )
         }
 
     @Test

@@ -117,7 +117,7 @@ function reservableAvailabilityUrl(rid, query) {
     start_date: query.startDate || utcYmd(new Date()),
     end_date: query.endDate || utcYmd(addUtcDays(parseUtcYmd(query.startDate || utcYmd(new Date())), 7)),
   });
-  if (query.force) params.set('force', 'true');
+  if (query.force) params.set('force', '1');
   return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
 }
 

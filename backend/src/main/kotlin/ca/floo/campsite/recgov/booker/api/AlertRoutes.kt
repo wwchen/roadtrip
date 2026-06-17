@@ -10,7 +10,10 @@ import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.patch
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.HttpStatusCode
+import io.ktor.server.request.receiveText
 import io.ktor.server.routing.Route
+import kotlinx.serialization.decodeFromString
+import kotlinx.serialization.json.jsonObject
 
 fun Route.alertRoutes(
     alerts: AlertRepo,
@@ -32,7 +35,15 @@ fun Route.alertRoutes(
         summary = "Deprecated: create a recreation.gov alert"
         description = "Deprecated rec.gov-only alert path; prefer POST /api/reservable/{rid}/availability/monitor."
     }) {
-        val body = call.receiveCampsiteJson<AlertCreateRequestDto>()
+        val raw = call.receiveText().ifBlank { "{}" }
+        val removedField = removedAlertField(raw)
+        if (removedField != null) {
+            return@post call.respondJson(
+                ErrorDto("$removedField is no longer supported"),
+                HttpStatusCode.BadRequest,
+            )
+        }
+        val body = campsiteApiJson.decodeFromString<AlertCreateRequestDto>(raw)
         val campgroundId = body.campgroundId
         val campgroundName = body.campgroundName
         val startDate = body.startDate
@@ -79,7 +90,15 @@ fun Route.alertRoutes(
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@patch call.respondJson(ErrorDto("bad id"), HttpStatusCode.BadRequest)
-        val body = call.receiveCampsiteJson<AlertPatchRequestDto>()
+        val raw = call.receiveText().ifBlank { "{}" }
+        val removedField = removedAlertField(raw)
+        if (removedField != null) {
+            return@patch call.respondJson(
+                ErrorDto("$removedField is no longer supported"),
+                HttpStatusCode.BadRequest,
+            )
+        }
+        val body = campsiteApiJson.decodeFromString<AlertPatchRequestDto>(raw)
         val updates = mutableMapOf<String, Any?>()
         body.status?.let {
             if (it !in setOf("active", "paused", "done")) {
@@ -119,3 +138,8 @@ fun Route.alertRoutes(
         call.respondJson(OkDto())
     }
 }
+
+private fun removedAlertField(raw: String): String? =
+    runCatching { campsiteApiJson.parseToJsonElement(raw).jsonObject }
+        .getOrNull()
+        ?.let { obj -> listOf("min_nights", "minNights").firstOrNull { it in obj } }
