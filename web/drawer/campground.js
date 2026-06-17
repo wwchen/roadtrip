@@ -211,21 +211,12 @@ function renderShell(f, signal) {
     : '';
 
   const dirBtn = directionsButtonHTML({ name: p.name, lng, lat, kind: 'CG' });
-  // recgov_id is the flat key set by flattenHydratedPoi / flattenPoi.
-  // /api/pois/{id} doesn't ship it; provider_ref.recgov_id does. Read both
-  // so the upstream "View" link works whether the feature was flattened or
-  // came straight from the detail endpoint.
-  const recgovId = p.recgov_id || pr?.recgov_id || null;
-  // Top-level reserve link is intentionally neutral — it's a "go look at
-  // the source" affordance, not an availability claim. Alert capture lives
-  // inside the week component's day-detail panel.
-  const actions = recgovId
-    ? `
-      <div class="cg-actions">
-        ${dirBtn}
-        <a class="cg-btn cg-btn-secondary" href="https://www.recreation.gov/camping/campgrounds/${encodeURIComponent(recgovId)}" target="_blank" rel="noreferrer" data-cta="view-upstream">View on rec.gov</a>
-      </div>`
-    : `
+  // reserveButtonHTML reads p.cta (backend-computed) plus the FE-only
+  // Aspira-deeplink path; per-vendor URL precedence lives on the server.
+  // Alert capture for any availability provider lives inside the week
+  // component's day-detail panel — this top-level button is just the
+  // "go look at the source" affordance.
+  const actions = `
       <div class="cg-actions">
         ${dirBtn}
         ${reserveButtonHTML(p, 'cg-btn')}

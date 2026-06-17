@@ -59,7 +59,22 @@ data class PoiDetailPropertiesSchema(
     @SerialName("info_url") val infoUrl: String? = null,
     val address: JsonElement? = null,
     @SerialName("provider_ref") val providerRef: JsonElement? = null,
+    // Backend-computed CTA for the pin's primary action button. Picks the
+    // best upstream URL + label from provider_ref / info_url so the FE can
+    // render blindly without owning per-vendor precedence rules. null when
+    // the row has no usable upstream link (FE falls back to name search).
+    val cta: PoiCtaSchema? = null,
     val raw: JsonElement,
+)
+
+// "kind" tells the FE which visual treatment to use:
+//   - "reserve" — booking flow (rec.gov campground page, Aspira homepage, …)
+//   - "info"    — informational page (FS recarea, BC Parks, planet fitness)
+@Serializable
+data class PoiCtaSchema(
+    val url: String,
+    val label: String,
+    val kind: String,
 )
 
 // /api/pois/on-route request body. Same {waypoints, radius_miles}
