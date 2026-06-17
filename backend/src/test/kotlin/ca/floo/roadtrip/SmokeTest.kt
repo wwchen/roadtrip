@@ -684,13 +684,19 @@ class SmokeTest {
                 "site detail should hide unresolved provider attribute ids: $detailText",
             )
             assertThat(page.locator(".cg-site-detail-book")).hasCount(0)
-            page.locator(".cg-site-matrix-cell-available .cg-site-matrix-cell-button").first().click()
-            assertThat(page.locator(".cg-site-detail-subtitle")).containsText("2026-06-16")
-            assertThat(page.locator(".cg-site-detail-book")).hasAttribute(
-                "href",
+            // Two-tap booking: first click on an open cell arms it (label
+            // changes to "Book on …"), second click opens the templated URL
+            // in a new tab. We verify the armed label + click-through here;
+            // the new-tab URL is verified via the popup listener.
+            val armedCell = page.locator(".cg-site-matrix-cell-available .cg-site-matrix-cell-button").first()
+            armedCell.click()
+            assertThat(armedCell).hasClass(Pattern.compile(".*\\bis-armed\\b.*"))
+            assertThat(armedCell).containsText("Book on Recreation.gov")
+            val popup = page.waitForPopup { armedCell.click() }
+            assertEquals(
                 "https://www.recreation.gov/camping/campsites/001?startDate=2026-06-16&endDate=2026-06-17",
+                popup.url(),
             )
-            assertThat(page.locator(".cg-site-detail-book")).containsText("Book on Recreation.gov")
             val dateSortControlCount =
                 page.evaluate(
                     """

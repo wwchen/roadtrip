@@ -3,7 +3,7 @@
 // and does not fetch extra provider data.
 
 import { escapeHtml } from '../core.js';
-import { reservationUrlFromTemplate } from './booking-links.js';
+import { reservationUrlFromTemplate, bookingLabel } from './booking-links.js';
 
 const MAX_FEATURES = 12;
 
@@ -17,7 +17,7 @@ export function renderSiteDetail({ site, selectedDate = null, selectedEndDate = 
   const facts = detailFacts(site, raw, tags);
   const features = featureLabels(raw, tags);
   const url = reservationUrlFromTemplate(site, { startDate: selectedDate, endDate: selectedEndDate });
-  const bookLabel = bookingLabel(site, url);
+  const bookLabel = bookingLabel(site);
   const subtitle = selectedDate || '';
 
   return `
@@ -27,7 +27,6 @@ export function renderSiteDetail({ site, selectedDate = null, selectedEndDate = 
           <div class="cg-site-detail-title" title="${escapeHtml(name)}">${escapeHtml(name)}</div>
           ${subtitle ? `<div class="cg-site-detail-subtitle">${escapeHtml(subtitle)}</div>` : ''}
         </div>
-        <button type="button" class="cg-site-detail-close" data-site-detail-close aria-label="Close site details">Close</button>
       </div>
       ${imageUrl ? `<div class="cg-site-detail-media"><img src="${escapeHtml(imageUrl)}" alt="${escapeHtml(name)}"></div>` : ''}
       ${description ? `<p class="cg-site-detail-description">${escapeHtml(description)}</p>` : ''}
@@ -53,41 +52,6 @@ function detailFacts(site, raw, tags) {
   addFact(facts, 'Provider', site.vendor);
   addFact(facts, 'Provider ID', site.vendor_id || site.vendorId);
   return facts;
-}
-
-function bookingLabel(site, url) {
-  const agency = agencyLabel(site, url);
-  return agency ? `Book on ${agency}` : 'Book';
-}
-
-function agencyLabel(site, url) {
-  const host = hostFromUrl(site.reservation_url_template || url);
-  if (host === 'recreation.gov' || host === 'www.recreation.gov') return 'Recreation.gov';
-  if (host === 'reservation.pc.gc.ca') return 'Parks Canada';
-  if (host === 'camping.bcparks.ca' || host === 'discovercamping.ca') return 'BC Parks';
-  if (host === 'washington.goingtocamp.com') return 'Washington State Parks';
-
-  const vendor = String(site.vendor || '').toLowerCase();
-  if (vendor === 'recgov') return 'Recreation.gov';
-  if (vendor === 'aspira_pc') return 'Parks Canada';
-  if (vendor === 'aspira_bc') return 'BC Parks';
-  if (vendor === 'aspira_wa') return 'Washington State Parks';
-  if (vendor.startsWith('aspira_')) return 'Aspira';
-  return labelFromHost(host) || humanize(vendor);
-}
-
-function hostFromUrl(url) {
-  if (!url || typeof url !== 'string') return '';
-  try {
-    return new URL(url).hostname.toLowerCase();
-  } catch {
-    return '';
-  }
-}
-
-function labelFromHost(host) {
-  const base = String(host || '').replace(/^www\./, '').split('.')[0];
-  return base ? humanize(base) : '';
 }
 
 function addFact(facts, label, value) {

@@ -4,17 +4,19 @@
 // from /api/poi/{id}/reservables.
 
 import { escapeHtml } from '../core.js';
+import { renderSiteDetail } from './site-detail.js';
+import { bookingLabel, hasReservationUrlTemplate } from './booking-links.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const DEFAULT_FILTERS = {
   query: '',
   loop: '',
   type: '',
-  sort: 'open',
+  sort: 'site',
 };
 const SORT_OPTIONS = [
-  ['open', 'Open first'],
   ['site', 'Site'],
+  ['open', 'Open first'],
   ['loop', 'Loop'],
   ['type', 'Type'],
 ];
@@ -28,26 +30,26 @@ export function renderSiteMatrix({
   siteColumnWidth,
   filters = DEFAULT_FILTERS,
   selectedSiteRid = null,
-  loadingMore = false,
-  loadMoreError = null,
+  weekStart = null,
   showToday = true,
+  armedBook = null,
 }) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
   if (visibleDays.length === 0) return '';
+
+  const nav = renderWeekNav({ weekStart, visibleDays, showToday });
 
   if (state === 'loading') {
     return renderSiteMatrixSkeleton({
       days: visibleDays,
       siteColumnWidth,
-      showToday,
+      nav,
     });
   }
   if (state === 'error') {
     return renderSection({
-      meta: `${visibleDays.length} dates`,
-      loadingMore,
-      loadMoreError,
-      showToday,
+      title: 'Sites by date',
+      nav,
       body: `<div class="cg-site-matrix-status cg-site-matrix-error">${escapeHtml(error || "Couldn't load sites")} <a href="#" class="cg-sites-retry">Retry</a></div>`,
     });
   }
@@ -55,10 +57,8 @@ export function renderSiteMatrix({
   const allRows = sortedReservables(reservables);
   if (allRows.length === 0) {
     return renderSection({
-      meta: `${visibleDays.length} dates`,
-      loadingMore,
-      loadMoreError,
-      showToday,
+      title: 'Sites by date',
+      nav,
       body: '<div class="cg-site-matrix-status">No reservable sites found for this campground.</div>',
     });
   }
@@ -79,11 +79,9 @@ export function renderSiteMatrix({
 
   if (rows.length === 0) {
     return renderSection({
-      meta: `0 of ${allRows.length} sites / ${visibleDays.length} dates`,
+      title: `0 of ${allRows.length} Sites by date`,
       tools,
-      loadingMore,
-      loadMoreError,
-      showToday,
+      nav,
       body: '<div class="cg-site-matrix-status">No sites match these filters.</div>',
     });
   }
@@ -96,22 +94,20 @@ export function renderSiteMatrix({
         selectedDate,
         selectedSiteRid,
         visibleDays,
+        armedBook,
       }),
     )
     .join('');
-  const siteLabel = rows.length === 1 ? 'site' : 'sites';
-  const meta =
+  const title =
     rows.length === allRows.length
-      ? `${rows.length} ${siteLabel} / ${visibleDays.length} dates`
-      : `${rows.length} of ${allRows.length} sites / ${visibleDays.length} dates`;
+      ? `${rows.length} Sites by date`
+      : `${rows.length} of ${allRows.length} Sites by date`;
   const widthStyle = matrixScrollStyle(siteColumnWidth, visibleDays.length);
 
   return renderSection({
-    meta,
+    title,
     tools,
-    loadingMore,
-    loadMoreError,
-    showToday,
+    nav,
     body: `
       <div class="cg-site-matrix-scroll"${widthStyle}>
         <table class="cg-site-matrix-table">
@@ -127,7 +123,6 @@ export function renderSiteMatrix({
           <tbody>${bodyRows}</tbody>
         </table>
       </div>
-      ${renderLoadMoreStatus({ loadingMore, loadMoreError })}
     `,
   });
 }
@@ -135,11 +130,13 @@ export function renderSiteMatrix({
 export function renderSiteMatrixSkeleton({
   days,
   siteColumnWidth,
+  weekStart = null,
   showToday = false,
   rowCount = 6,
 } = {}) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
   const dateCount = visibleDays.length || 7;
+  const nav = renderWeekNav({ weekStart, visibleDays, showToday });
   const headers = visibleDays.length > 0
     ? visibleDays.map(dateHeaderHtml).join('')
     : Array.from({ length: dateCount }, () => '<th scope="col" class="cg-site-matrix-date cg-site-matrix-skeleton-cell"></th>').join('');
@@ -162,9 +159,9 @@ export function renderSiteMatrixSkeleton({
   const widthStyle = matrixScrollStyle(siteColumnWidth, dateCount);
 
   return renderSection({
-    meta: `${dateCount} dates`,
+    title: 'Sites by date',
     tools: renderSkeletonTools(),
-    showToday,
+    nav,
     body: `
       <div class="cg-site-matrix-scroll cg-site-matrix-skeleton" aria-busy="true"${widthStyle}>
         <table class="cg-site-matrix-table">
@@ -184,26 +181,16 @@ export function renderSiteMatrixSkeleton({
 }
 
 function renderSection({
-  meta,
+  title,
   body,
   tools = '',
-  loadingMore = false,
-  loadMoreError = null,
-  showToday = true,
+  nav = '',
 }) {
-  const status = loadingMore
-    ? '<span class="cg-site-matrix-meta-status">Loading...</span>'
-    : loadMoreError
-      ? '<span class="cg-site-matrix-meta-status cg-site-matrix-meta-error">Load failed</span>'
-      : '';
-  const todayButton = showToday
-    ? '<button type="button" class="cg-site-matrix-today" data-matrix-today>Today</button>'
-    : '';
   return `
     <section class="cg-site-matrix" aria-label="Sites by date">
       <div class="cg-site-matrix-head">
         <div>
-          <div class="cg-site-matrix-title">Sites by date</div>
+          <div class="cg-site-matrix-title">${escapeHtml(title)}</div>
           <div class="cg-site-matrix-legend">
             <span class="cg-site-matrix-key cg-site-matrix-key-available">Open</span>
             <span class="cg-site-matrix-key cg-site-matrix-key-booked">Full</span>
@@ -211,14 +198,42 @@ function renderSection({
           </div>
         </div>
         <div class="cg-site-matrix-actions">
-          ${todayButton}
-          <div class="cg-site-matrix-meta">${escapeHtml(meta)}${status ? ` ${status}` : ''}</div>
+          ${nav}
         </div>
       </div>
       ${tools}
       ${body}
     </section>
   `;
+}
+
+function renderWeekNav({ weekStart, visibleDays, showToday }) {
+  const startIso = typeof weekStart === 'string' && weekStart ? weekStart : visibleDays[0]?.date || '';
+  const endIso = visibleDays[visibleDays.length - 1]?.date || startIso;
+  const todayBtn = showToday
+    ? '<button type="button" class="cg-week-today" aria-label="Jump to today">Today</button>'
+    : '';
+  return `
+    <div class="cg-week-nav" role="group" aria-label="Week navigation">
+      ${todayBtn}
+      <button type="button" class="cg-week-prev" aria-label="Previous week">‹</button>
+      <button type="button" class="cg-week-label" aria-label="Pick a date">${escapeHtml(formatWeekLabel(startIso, endIso))}</button>
+      <button type="button" class="cg-week-next" aria-label="Next week">›</button>
+    </div>
+  `;
+}
+
+function formatWeekLabel(startIso, endIso) {
+  if (!startIso) return '';
+  const start = new Date(`${startIso}T00:00:00Z`);
+  const end = new Date(`${endIso || startIso}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) return startIso;
+  const fmt = (d, opts) => d.toLocaleDateString('en-US', { ...opts, timeZone: 'UTC' });
+  const sameMonth = start.getUTCMonth() === end.getUTCMonth() && start.getUTCFullYear() === end.getUTCFullYear();
+  if (sameMonth) {
+    return `${fmt(start, { month: 'short', day: 'numeric' })} – ${fmt(end, { day: 'numeric' })}, ${start.getUTCFullYear()}`;
+  }
+  return `${fmt(start, { month: 'short', day: 'numeric' })} – ${fmt(end, { month: 'short', day: 'numeric' })}, ${start.getUTCFullYear()}`;
 }
 
 function renderSkeletonTools() {
@@ -298,16 +313,6 @@ function matrixScrollStyle(siteColumnWidth, dateCount) {
   return ` style="${props.join(' ')}"`;
 }
 
-function renderLoadMoreStatus({ loadingMore, loadMoreError }) {
-  if (loadingMore) {
-    return '<div class="cg-site-matrix-load-status" aria-live="polite">Loading next week...</div>';
-  }
-  if (loadMoreError) {
-    return `<div class="cg-site-matrix-load-status cg-site-matrix-error">${escapeHtml(loadMoreError)}</div>`;
-  }
-  return '';
-}
-
 function dateHeaderHtml(day) {
   const date = day.date;
   const parsed = new Date(`${date}T00:00:00Z`);
@@ -326,7 +331,8 @@ function dateHeaderHtml(day) {
 function rowHtml(row, context) {
   const siteLabel = siteName(row);
   const siteTitle = siteTitleText(row, siteLabel);
-  const rowClass = String(row.rid) === String(context.selectedSiteRid) ? ' class="cg-site-matrix-row-selected"' : '';
+  const isSelected = String(row.rid) === String(context.selectedSiteRid);
+  const rowClass = isSelected ? ' class="cg-site-matrix-row-selected"' : '';
   const cells = context.visibleDays
     .map((day) =>
       cellHtml({
@@ -335,50 +341,88 @@ function rowHtml(row, context) {
         row,
         selectedDate: context.selectedDate,
         siteLabel,
+        armedBook: context.armedBook,
       }),
     )
     .join('');
+  const detailRow = isSelected
+    ? `
+      <tr class="cg-site-matrix-detail-row">
+        <td colspan="${1 + context.visibleDays.length}">
+          ${renderSiteDetail({ site: row, selectedDate: null, selectedEndDate: null })}
+        </td>
+      </tr>
+    `
+    : '';
   return `
     <tr${rowClass}>
       <th scope="row" class="cg-site-matrix-site" title="${escapeHtml(siteTitle)}">
-        ${siteLabelHtml(row, siteLabel, siteTitle)}
+        ${siteLabelHtml(row, siteLabel, siteTitle, isSelected)}
       </th>
       ${cells}
     </tr>
+    ${detailRow}
   `;
 }
 
-function siteLabelHtml(row, siteLabel, siteTitle) {
+function siteLabelHtml(row, siteLabel, siteTitle, isSelected) {
   const loop = typeof row.loop === 'string' ? row.loop.trim() : '';
   const prefix = loop ? `<span class="cg-site-matrix-loop-prefix">${escapeHtml(loop)} / </span>` : '';
   return `
     <button
       type="button"
       class="cg-site-matrix-site-button"
-      data-site-detail-rid="${escapeHtml(row.rid)}"
+      data-site-header-rid="${escapeHtml(row.rid)}"
       title="${escapeHtml(siteTitle)}"
       aria-label="View details for ${escapeHtml(siteTitle)}"
+      aria-expanded="${isSelected ? 'true' : 'false'}"
     >
       <span class="cg-site-matrix-site-title">${prefix}<span class="cg-site-matrix-name">${escapeHtml(siteLabel)}</span></span>
     </button>
   `;
 }
 
-function cellHtml({ row, day, availableIds, selectedDate, siteLabel }) {
+function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook }) {
   const state = cellState(row, day, availableIds);
   const isSelected = selectedDate === day.date;
   const selectedClass = isSelected ? ' is-selected' : '';
   const aria = `${siteLabel} ${day.date}: ${state.aria}`;
+
+  if (state.kind !== 'available') {
+    return `
+      <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}" aria-label="${escapeHtml(aria)}">
+        <span class="cg-site-matrix-cell-label">${escapeHtml(state.label)}</span>
+      </td>
+    `;
+  }
+
+  if (!hasReservationUrlTemplate(row)) {
+    return `
+      <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}" aria-label="${escapeHtml(aria)}">
+        <span class="cg-site-matrix-cell-label">${escapeHtml(state.label)}</span>
+      </td>
+    `;
+  }
+
+  const armed = !!armedBook
+    && String(armedBook.rid) === rowRid(row)
+    && armedBook.date === day.date;
+  const label = armed ? bookingLabel(row) : state.label;
+  const armedClass = armed ? ' is-armed' : '';
+  const ariaLabel = armed
+    ? `${aria}; ${label}, click to open booking page`
+    : `${aria}; click to book`;
+
   return `
     <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}">
       <button
         type="button"
-        class="cg-site-matrix-cell-button"
-        data-site-detail-rid="${escapeHtml(rowRid(row))}"
-        data-site-detail-date="${escapeHtml(day.date)}"
-        aria-label="${escapeHtml(`${aria}; view site details`)}"
+        class="cg-site-matrix-cell-button${armedClass}"
+        data-book-rid="${escapeHtml(rowRid(row))}"
+        data-book-date="${escapeHtml(day.date)}"
+        aria-label="${escapeHtml(ariaLabel)}"
       >
-        ${escapeHtml(state.label)}
+        ${escapeHtml(label)}
       </button>
     </td>
   `;

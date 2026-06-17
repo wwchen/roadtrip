@@ -424,40 +424,35 @@
   .cg-freshness .cg-stale { color: var(--cg-warn); }
   .cg-freshness .cg-refresh { color: var(--cg-warn); text-decoration: underline; }
 
-  /* ---- Week-grid availability (RFC 0007) ----
-     7 day cards in a row, paged by ‹ › nav. Tap a card to expand a day-
-     detail panel below with the alert CTA. Replaces the legacy 30-day
-     heat strip — same color tokens, denser per-cell info. */
+  /* Week-nav and month-calendar popover. Mirrors catalog.css (used by the
+     dashboard pages); kept inline because index.html doesn't link catalog.css. */
   .cg-week-nav {
     position: relative;
-    display: flex; align-items: center; justify-content: space-between;
-    margin: 12px 0 8px;
+    display: grid;
+    grid-template-columns: 72px 32px 180px 32px;
+    align-items: center;
     gap: 8px;
+    margin: 12px 0 8px;
   }
-  .cg-week-nav-left {
-    display: flex; align-items: center; gap: 6px;
-    flex: 0 0 auto;
-  }
-  /* Center label is a button (clickable to open the calendar popover).
-     It expands to fill the available middle space and centers its text. */
+  .cg-week-nav .cg-week-today  { grid-column: 1 / 2; }
+  .cg-week-nav .cg-week-prev   { grid-column: 2 / 3; }
+  .cg-week-nav .cg-week-label  { grid-column: 3 / 4; }
+  .cg-week-nav .cg-week-next   { grid-column: 4 / 5; }
+
   .cg-week-nav .cg-week-label {
-    flex: 1 1 auto;
+    width: 100%;
     height: 32px; padding: 0 12px;
     border-radius: 8px;
-    border: 1px solid transparent;
-    background: transparent; color: var(--cg-text);
+    border: 1px solid var(--cg-border-strong);
+    background: var(--cg-bg-subtle); color: var(--cg-text);
     font: inherit;
     font-size: 13px; font-weight: 600;
     font-variant-numeric: tabular-nums; letter-spacing: -0.005em;
     cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
   }
-  .cg-week-nav .cg-week-label:hover {
-    background: var(--cg-bg-subtle);
-    border-color: var(--cg-border);
-  }
-  /* Arrow buttons + Today shortcut — uniform 32px square, except Today
-     which is a pill since it's text-bearing. */
+  .cg-week-nav .cg-week-label:hover { background: var(--cg-bg-hover); }
+
   .cg-week-nav .cg-week-prev,
   .cg-week-nav .cg-week-next {
     width: 32px; height: 32px;
@@ -467,33 +462,30 @@
     font-size: 16px; cursor: pointer;
     display: inline-flex; align-items: center; justify-content: center;
     line-height: 1;
-    flex: 0 0 auto;
+    padding: 0;
   }
   .cg-week-nav .cg-week-prev:hover,
   .cg-week-nav .cg-week-next:hover { background: var(--cg-bg-hover); }
   .cg-week-nav .cg-week-prev:disabled,
   .cg-week-nav .cg-week-next:disabled { opacity: 0.35; cursor: not-allowed; }
+
   .cg-week-nav .cg-week-today {
-    height: 32px; padding: 0 10px;
-    border-radius: 999px;
-    border: 1px solid var(--cg-accent);
-    background: rgba(76,185,106,0.10);
-    color: var(--cg-accent);
+    height: 32px; padding: 0 12px;
+    border-radius: 8px;
+    border: 1px solid var(--cg-border-strong);
+    background: var(--cg-bg-subtle); color: var(--cg-text);
     font: inherit;
     font-size: 12px; font-weight: 600;
     cursor: pointer;
     display: inline-flex; align-items: center;
   }
-  .cg-week-nav .cg-week-today:hover { background: rgba(76,185,106,0.18); }
+  .cg-week-nav .cg-week-today:hover { background: var(--cg-bg-hover); }
 
-  /* Month-calendar popover. Anchored to the week label, centered under it.
-     The popover sits on top of any below-the-grid content via z-index. */
   .cg-cal-host {
     position: absolute;
     top: 100%; left: 50%;
     transform: translate(-50%, 6px);
-    z-index: 10;
-    /* The host has no visual; the popover inside owns the chrome. */
+    z-index: 50;
   }
   .cg-cal-popover {
     width: 280px;
@@ -553,10 +545,10 @@
     color: var(--cg-accent); font-weight: 600;
   }
   .cg-cal-day.cg-cal-selected {
-    background: var(--cg-accent);
+    background: var(--cg-accent-bg);
     color: #fff;
   }
-  .cg-cal-day.cg-cal-selected:hover { background: var(--cg-accent); }
+  .cg-cal-day.cg-cal-selected:hover { background: var(--cg-accent-bg-hover); }
 
   .cg-week {
     display: grid;
@@ -1174,6 +1166,20 @@
     font-size: 11px;
     padding-top: 6px;
   }
+  .cg-site-matrix-detail-row > td {
+    padding: 0;
+    background: transparent;
+    border-bottom: 0;
+  }
+  .cg-site-matrix-detail-row .cg-site-detail {
+    width: var(--cg-site-matrix-viewport-width, 100%);
+    margin: 0;
+    padding: 18px 20px;
+    background: rgba(255,255,255,0.03);
+    border-top: 1px solid var(--cg-border);
+    border-bottom: 1px solid var(--cg-border);
+    box-sizing: border-box;
+  }
   .cg-site-detail {
     margin-top: 10px;
     padding-top: 10px;
@@ -1181,9 +1187,8 @@
   }
   .cg-site-detail-head {
     display: flex;
-    align-items: flex-start;
-    justify-content: space-between;
-    gap: 10px;
+    flex-direction: column;
+    gap: 2px;
   }
   .cg-site-detail-title-wrap {
     min-width: 0;
@@ -1201,24 +1206,8 @@
     color: var(--cg-muted);
     font-size: 11px;
   }
-  .cg-site-detail-close {
-    height: 26px;
-    padding: 0 8px;
-    border: 1px solid var(--cg-border);
-    border-radius: 6px;
-    background: transparent;
-    color: var(--cg-muted);
-    font: inherit;
-    font-size: 11px;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .cg-site-detail-close:hover {
-    background: var(--cg-bg-hover);
-    color: var(--cg-text);
-  }
   .cg-site-detail-media {
-    margin-top: 8px;
+    margin-top: 12px;
   }
   .cg-site-detail-media img {
     display: block;
@@ -1299,7 +1288,7 @@
   .cg-site-detail-book:hover {
     background: var(--cg-accent-bg-hover);
   }
-  @media (max-width: 420px) {
+  @media (max-width: 480px) {
     .cg-site-matrix-tools {
       grid-template-columns: 1fr 1fr;
     }
@@ -1308,6 +1297,9 @@
     }
     .cg-site-detail-facts {
       grid-template-columns: 1fr;
+    }
+    .cg-site-matrix-detail-row .cg-site-detail {
+      padding: 14px;
     }
   }
 
