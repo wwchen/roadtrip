@@ -14,7 +14,6 @@ import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
-import ca.floo.roadtrip.repo.CachedAspiraOccupancy
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.ReservableRepo
@@ -184,13 +183,6 @@ fun Application.module() {
             ttl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY),
             persistentCache = persistentCache,
         )
-    val aspiraOccupancyCache =
-        CachedAspiraOccupancy(
-            aspiraClient,
-            ttl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY),
-            persistentCache = persistentCache,
-        )
-
     // Booking-provider port registry: one adapter per upstream reservation
     // system, dispatched by `pois.source`. Routes consume the registry; they
     // never see vendor types. See docs/booking-providers.md.
@@ -199,7 +191,6 @@ fun Application.module() {
             registry = poiRegistry,
             recgovCache = campsite.cachedAvailability,
             aspiraCache = aspiraCache,
-            aspiraOccupancyCache = aspiraOccupancyCache,
         )
 
     val availabilityWatchService = AvailabilityWatchService(ctx, ReservableRepo(ctx))

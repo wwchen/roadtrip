@@ -104,6 +104,51 @@ internal suspend fun fetchAndClassifyRecgov(
     }
 
 /**
+ * Same cached upstream fetch as [fetchAndClassifyRecgov], narrowed to a linked
+ * reservable catalog. This lets `/api/poi/{id}/availability?site_type=...`
+ * classify only the matching POI sites without a per-site upstream loop.
+ */
+internal suspend fun fetchAndClassifyRecgovCatalog(
+    cache: CachedAvailability,
+    recgovId: String,
+    campsiteIds: Set<String>,
+    today: LocalDate,
+    days: Int,
+    months: List<String>,
+    force: Boolean,
+    minNights: Int = 1,
+): AvailabilityResponseDto =
+    coroutineScope {
+        val results: List<CachedResult> =
+            months
+                .map { month -> async { cache.get("recgov", recgovId, month, force) } }
+                .awaitAll()
+
+        val merged = mergeCampsites(results.map { it.data })
+        val catalogSites = merged.filterKeys { it in campsiteIds }
+
+        val dates = (0 until days).map { today.plusDays(it.toLong()).toString() }
+        val perDay = dates.map { date -> classifyDay(catalogSites, date, minNights.coerceAtLeast(1)) }
+
+        val state = classifyWindowState(perDay)
+        val summary = summarizeWindow(days, perDay, state)
+        val cacheBlock = aggregateCacheBlock(results)
+        val seasonBlock = if (state == "closed_for_season") inferReopenDate(catalogSites, today) else null
+
+        availabilityResponseDto(
+            provider = "recgov",
+            today = today,
+            days = days,
+            perDay = perDay,
+            state = state,
+            summary = summary,
+            seasonBlock = seasonBlock,
+            cacheBlock = cacheBlock,
+            campgroundId = recgovId,
+        )
+    }
+
+/**
  * Same cached upstream fetch as [fetchAndClassifyRecgov], narrowed to one
  * rec.gov campsite id. This powers `/api/reservable/{rid}/availability`.
  */

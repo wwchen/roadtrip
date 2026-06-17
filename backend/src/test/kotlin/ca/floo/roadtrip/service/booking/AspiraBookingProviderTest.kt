@@ -1,11 +1,8 @@
 package ca.floo.roadtrip.service.booking
 
 import ca.floo.roadtrip.client.AspiraAvailability
-import ca.floo.roadtrip.client.AspiraOccupancy
-import ca.floo.roadtrip.client.AspiraResourceOccupancy
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
-import ca.floo.roadtrip.repo.CachedAspiraOccupancy
 import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraBookingProvider
 import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraTenant
 import kotlinx.coroutines.runBlocking
@@ -15,20 +12,18 @@ import kotlin.test.assertEquals
 
 class AspiraBookingProviderTest {
     @Test
-    fun `aspira catalog availability uses occupancy when resource location is known`() =
+    fun `aspira catalog availability uses map resource status when resource location is known`() =
         runBlocking {
             val mapCache =
                 CachedAspiraAvailability(
-                    fetcher = { _, _, _, _ -> error("raw map availability should not be used for Aspira catalog") },
-                )
-            val occupancyCache =
-                CachedAspiraOccupancy(
-                    fetcher = { _, resourceLocationId, _, _ ->
-                        AspiraOccupancy(
-                            resourceLocationId = resourceLocationId,
-                            resourceOccupancy =
-                                listOf(
-                                    AspiraResourceOccupancy(resourceId = 100, availability = 0),
+                    fetcher = { _, mapId, _, _ ->
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink = emptyMap(),
+                            byResource =
+                                mapOf(
+                                    "100" to List(7) { 1 },
                                 ),
                         )
                     },
@@ -42,7 +37,6 @@ class AspiraBookingProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     cache = mapCache,
-                    occupancyCache = occupancyCache,
                 )
 
             val dto =

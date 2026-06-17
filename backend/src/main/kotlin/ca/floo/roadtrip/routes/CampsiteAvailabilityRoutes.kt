@@ -17,8 +17,11 @@ import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
+import ca.floo.roadtrip.service.api.DayClassification
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.api.availabilityErrorDto
+import ca.floo.roadtrip.service.api.availabilityResponseDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.booking.AvailableDatesRequest
 import ca.floo.roadtrip.service.booking.BookingProviderError
@@ -134,9 +137,17 @@ fun Route.campsiteAvailabilityRoutes(
         }
 
         try {
-            val catalogRefs =
+            val siteTypes = queryValues("site_type", "siteType")
+            val catalogRows =
                 reservables
                     .findByPoi(poiId, ReservableType.SITE)
+                    .filterBySiteTypes(siteTypes)
+            if (siteTypes.isNotEmpty() && catalogRows.isEmpty()) {
+                respondAvailabilityJson(emptyPoiAvailability(ref, query.start, days))
+                return
+            }
+            val catalogRefs =
+                catalogRows
                     .map { it.toCatalogReservableRef() }
             val response =
                 provider.catalogAvailability(
@@ -202,7 +213,13 @@ fun Route.campsiteAvailabilityRoutes(
         summary = "Per-day availability for one campground POI (cached, provider-dispatched)"
         description =
             "Path key is `pois.id`. This is the RFC 0008 POI-scoped alias for " +
-            "`/api/campsite/availability/{poi_id}` and returns the same response shape."
+            "`/api/campsite/availability/{poi_id}` and returns the same response shape. " +
+            "Optional `site_type` filters the linked reservable catalog before " +
+            "classification, so `available_reservable_ids` and counts reflect only " +
+            "matching site rows."
+        request {
+            queryParameter<String>("site_type") { description = "Exact site type filter. Repeat or comma-separate for OR." }
+        }
         response {
             code(HttpStatusCode.BadRequest) {
                 description = "Bad POI id, invalid days, or start out of range."
@@ -474,6 +491,36 @@ private fun Reservable.aspiraProviderRefLong(key: String): Long? =
         ?.jsonPrimitive
         ?.longOrNull
 
+private fun emptyPoiAvailability(
+    ref: ProviderRef,
+    start: LocalDate,
+    days: Int,
+) = availabilityResponseDto(
+    provider =
+        when (ref) {
+            is ProviderRef.RecGov -> "recgov"
+            is ProviderRef.Aspira -> "aspira"
+            is ProviderRef.Camis -> "camis"
+        },
+    today = start,
+    days = days,
+    perDay =
+        (0 until days).map { offset ->
+            DayClassification(
+                date = start.plusDays(offset.toLong()).toString(),
+                status = "closed",
+                availableCount = 0,
+                total = 0,
+            )
+        },
+    state = "empty",
+    summary = "No availability data",
+    seasonBlock = null,
+    cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 0, ttlSeconds = 0),
+    campgroundId = (ref as? ProviderRef.RecGov)?.recgovId,
+    mapId = (ref as? ProviderRef.Aspira)?.mapId?.toString(),
+)
+
 private suspend fun fetchOneBulk(
     poiId: Long,
     row: CampsiteProviderRefRow?,
@@ -555,6 +602,14 @@ private fun ApplicationCall.parseAvailabilityQuery(bookingHorizonDays: Int): Ava
     val force = request.queryParameters["force"] == "1"
     return AvailabilityQuery(start = start, minNights = minNights, force = force)
 }
+
+private fun ApplicationCall.queryValues(vararg names: String): List<String> =
+    names
+        .flatMap { name -> request.queryParameters.getAll(name).orEmpty() }
+        .flatMap { value -> value.split(",") }
+        .map { it.trim() }
+        .filter { it.isNotEmpty() }
+        .distinct()
 
 /** Map the typed provider error to (HTTP status, AvailabilityErrorSchema). */
 private fun mapProviderError(e: BookingProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> =

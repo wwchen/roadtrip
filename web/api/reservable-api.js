@@ -45,13 +45,15 @@ export function searchReservables(params = {}) {
  * @param {number|string} poiId  pois.id
  * @param {object}        [opts]
  * @param {string}        [opts.type='site']  Reservable type filter.
+ * @param {string}        [opts.siteType]     Exact site type filter.
  * @param {string}        [opts.start]        Optional arrival date for BE-generated booking links.
  * @param {number}        [opts.minNights]    Optional stay length for BE-generated booking links.
  * @param {AbortSignal}   [opts.signal]
  */
-export function fetchPoiReservables(poiId, { type, start, minNights, signal } = {}) {
+export function fetchPoiReservables(poiId, { type, siteType, start, minNights, signal } = {}) {
   const params = new URLSearchParams();
   if (type) params.set('type', type);
+  if (siteType) params.set('site_type', siteType);
   if (start) params.set('start', start);
   if (minNights != null) params.set('min_nights', String(minNights));
   const qs = params.toString();
