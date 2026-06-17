@@ -21,6 +21,7 @@ import { renderDayDetail } from './day-detail.js';
 import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 import { reservationUrlFromTemplate } from './booking-links.js';
+import { mountCalendarPopover } from './calendar-popover.js';
 
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
@@ -31,6 +32,7 @@ const WEEK_DAYS = 7;
 const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
+const CALENDAR_MAX_DAYS_OUT = 365;
 
 /**
  * Mount the availability table into the host element. Returns a controller with a
@@ -57,6 +59,8 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
     dispose() {
       endSiteColumnResize(ctx);
       clearTimeout(ctx.skeletonTimer);
+      ctx.calendar?.dispose();
+      ctx.calendar = null;
       window.removeEventListener('resize', onResize);
     },
   };
@@ -280,19 +284,28 @@ function onRootClick(ctx, e) {
     rerender(ctx);
     return;
   }
-  if (tgt.closest('[data-week-nav="prev"]')) {
+  const prevBtn = tgt.closest('.cg-week-prev');
+  if (prevBtn) {
     e.preventDefault();
+    if (prevBtn.disabled) return;
     shiftWeek(ctx, -WEEK_DAYS);
     return;
   }
-  if (tgt.closest('[data-week-nav="next"]')) {
+  if (tgt.closest('.cg-week-next')) {
     e.preventDefault();
     shiftWeek(ctx, WEEK_DAYS);
     return;
   }
-  if (tgt.closest('[data-matrix-today]')) {
+  if (tgt.closest('.cg-week-today')) {
     e.preventDefault();
     jumpMatrixToToday(ctx);
+    return;
+  }
+  const weekLabel = tgt.closest('.cg-week-label');
+  if (weekLabel) {
+    e.preventDefault();
+    e.stopPropagation();
+    openCalendar(ctx, weekLabel);
     return;
   }
   if (tgt.closest('.cg-refresh')) {
@@ -341,12 +354,6 @@ function onRootInput(ctx, e) {
 function onRootChange(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
-  const datePicker = tgt.closest('[data-week-date-picker]');
-  if (datePicker && 'value' in datePicker) {
-    const value = String(datePicker.value || '').trim();
-    if (value) jumpToWeekStart(ctx, value);
-    return;
-  }
   const control = tgt.closest('[data-matrix-filter]');
   if (!control || !('value' in control)) return;
   const key = control.getAttribute('data-matrix-filter');
@@ -447,12 +454,33 @@ function shiftWeek(ctx, days) {
   fetchWeek(ctx);
 }
 
-function jumpToWeekStart(ctx, isoDateStr) {
-  const next = parseIsoDate(isoDateStr);
-  if (!Number.isFinite(next.getTime())) return;
-  resetWeekViewState(ctx);
-  ctx.weekStart = next;
-  fetchWeek(ctx);
+function openCalendar(ctx, anchorBtn) {
+  ctx.calendar?.dispose();
+  ctx.calendar = null;
+
+  const popoverHost = document.createElement('div');
+  popoverHost.className = 'cg-cal-host';
+  anchorBtn.parentElement.appendChild(popoverHost);
+
+  const today = startOfTodayUtc();
+  ctx.calendar = mountCalendarPopover(popoverHost, {
+    viewMonth: ctx.weekStart,
+    today,
+    selectedDate: ctx.weekStart,
+    maxDate: addDays(today, CALENDAR_MAX_DAYS_OUT),
+    onPick: (date) => {
+      ctx.calendar?.dispose();
+      ctx.calendar = null;
+      resetWeekViewState(ctx);
+      ctx.weekStart = date;
+      fetchWeek(ctx);
+    },
+    onClose: () => {
+      ctx.calendar?.dispose();
+      ctx.calendar = null;
+      rerender(ctx);
+    },
+  });
 }
 
 function jumpMatrixToToday(ctx) {

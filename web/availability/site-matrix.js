@@ -208,42 +208,34 @@ function renderSection({
 }
 
 function renderWeekNav({ weekStart, visibleDays, showToday }) {
-  const start = typeof weekStart === 'string' && weekStart ? weekStart : visibleDays[0]?.date || '';
+  const startIso = typeof weekStart === 'string' && weekStart ? weekStart : visibleDays[0]?.date || '';
+  const endIso = visibleDays[visibleDays.length - 1]?.date || startIso;
   const todayBtn = showToday
-    ? '<button type="button" class="cg-site-matrix-today" data-matrix-today>Today</button>'
+    ? '<button type="button" class="cg-week-today" aria-label="Jump to today">Today</button>'
     : '';
   return `
     <div class="cg-week-nav" role="group" aria-label="Week navigation">
-      <button type="button" class="cg-week-nav-arrow" data-week-nav="prev" aria-label="Previous week">‹</button>
-      <label class="cg-week-nav-label">
-        <span>${escapeHtml(formatWeekRange(visibleDays, start))}</span>
-        <input
-          type="date"
-          class="cg-week-nav-date"
-          data-week-date-picker
-          value="${escapeHtml(start)}"
-          aria-label="Jump to week starting"
-        >
-      </label>
-      <button type="button" class="cg-week-nav-arrow" data-week-nav="next" aria-label="Next week">›</button>
-      ${todayBtn}
+      <div class="cg-week-nav-left">
+        <button type="button" class="cg-week-prev" aria-label="Previous week">‹</button>
+        ${todayBtn}
+      </div>
+      <button type="button" class="cg-week-label" aria-label="Pick a date">${escapeHtml(formatWeekLabel(startIso, endIso))}</button>
+      <button type="button" class="cg-week-next" aria-label="Next week">›</button>
     </div>
   `;
 }
 
-function formatWeekRange(visibleDays, fallbackStart) {
-  const start = visibleDays[0]?.date || fallbackStart;
-  const end = visibleDays[visibleDays.length - 1]?.date || fallbackStart;
-  if (!start) return '';
-  return `${formatShortDate(start)} – ${formatShortDate(end)}`;
-}
-
-function formatShortDate(iso) {
-  if (!iso) return '';
-  const parsed = new Date(`${iso}T00:00:00Z`);
-  if (Number.isNaN(parsed.getTime())) return iso;
-  const month = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][parsed.getUTCMonth()];
-  return `${month} ${parsed.getUTCDate()}`;
+function formatWeekLabel(startIso, endIso) {
+  if (!startIso) return '';
+  const start = new Date(`${startIso}T00:00:00Z`);
+  const end = new Date(`${endIso || startIso}T00:00:00Z`);
+  if (Number.isNaN(start.getTime())) return startIso;
+  const fmt = (d, opts) => d.toLocaleDateString('en-US', { ...opts, timeZone: 'UTC' });
+  const sameMonth = start.getUTCMonth() === end.getUTCMonth() && start.getUTCFullYear() === end.getUTCFullYear();
+  if (sameMonth) {
+    return `${fmt(start, { month: 'short', day: 'numeric' })} – ${fmt(end, { day: 'numeric' })}, ${start.getUTCFullYear()}`;
+  }
+  return `${fmt(start, { month: 'short', day: 'numeric' })} – ${fmt(end, { month: 'short', day: 'numeric' })}, ${start.getUTCFullYear()}`;
 }
 
 function renderSkeletonTools() {
