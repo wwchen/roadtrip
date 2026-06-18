@@ -1,16 +1,16 @@
-package ca.floo.roadtrip.service.booking
+package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.recgov.CachedAvailability
 import ca.floo.roadtrip.service.api.recgov.Campsite
-import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovBookingProvider
+import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class RecGovBookingProviderTest {
+class RecGovReservationProviderTest {
     @Test
     fun `catalog availability narrows cached campground data to linked reservables`() =
         runBlocking {
@@ -42,7 +42,7 @@ class RecGovBookingProviderTest {
                         )
                     },
                 )
-            val adapter = RecGovBookingProvider(cache)
+            val adapter = RecGovReservationProvider(cache)
 
             val dto =
                 adapter.catalogAvailability(
@@ -102,7 +102,7 @@ class RecGovBookingProviderTest {
                         )
                     },
                 )
-            val adapter = RecGovBookingProvider(cache)
+            val adapter = RecGovReservationProvider(cache)
 
             val dto =
                 adapter.reservableAvailability(
@@ -158,7 +158,7 @@ class RecGovBookingProviderTest {
                         )
                     },
                 )
-            val adapter = RecGovBookingProvider(cache)
+            val adapter = RecGovReservationProvider(cache)
 
             val dates =
                 adapter.availableDates(

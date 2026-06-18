@@ -10,14 +10,14 @@ import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.DayClassification
 import ca.floo.roadtrip.service.api.availabilityResponseDto
-import ca.floo.roadtrip.service.booking.AvailabilityRequest
-import ca.floo.roadtrip.service.booking.AvailableDatesRequest
-import ca.floo.roadtrip.service.booking.BookingCapabilities
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderId
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.AvailabilityRequest
+import ca.floo.roadtrip.service.reservation.AvailableDatesRequest
+import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservationProvider
+import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
@@ -481,7 +481,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `poi availability alias dispatches through booking provider`() =
+    fun `poi availability alias dispatches through reservation provider`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -493,7 +493,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -522,7 +522,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -545,7 +545,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -574,7 +574,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -618,7 +618,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -651,7 +651,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -691,7 +691,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
                     )
@@ -766,7 +766,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
                     )
@@ -795,7 +795,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -860,7 +860,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeAspiraBookingProviders(),
+                        fakeAspiraReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -910,7 +910,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeAspiraBookingProviders(),
+                        fakeAspiraReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -998,23 +998,22 @@ class ReservableRoutesTest {
         )
     }
 
-    private fun fakeBookingProviders(): BookingProviderRegistry =
-        BookingProviderRegistry(
-            adaptersBySource = mapOf("test" to FakeBookingProvider),
+    private fun fakeReservationProviders(): ReservationProviderRegistry =
+        ReservationProviderRegistry(
+            adaptersBySource = mapOf("test" to FakeReservationProvider),
         )
 
-    private fun fakeAspiraBookingProviders(): BookingProviderRegistry =
-        BookingProviderRegistry(
-            adaptersBySource = mapOf("aspira-wa-pins" to FakeAspiraBookingProvider),
+    private fun fakeAspiraReservationProviders(): ReservationProviderRegistry =
+        ReservationProviderRegistry(
+            adaptersBySource = mapOf("aspira-wa-pins" to FakeAspiraReservationProvider),
         )
 
-    private object FakeBookingProvider : BookingProvider {
-        override val id: BookingProviderId = BookingProviderId.RECGOV
-        override val capabilities: BookingCapabilities =
-            BookingCapabilities(
+    private object FakeReservationProvider : ReservationProvider {
+        override val id: ReservationProviderId = ReservationProviderId.RECGOV
+        override val capabilities: ReservationProviderCapabilities =
+            ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = false,
-                supportsAutoBook = false,
                 bookingHorizonDays = 365,
             )
 
@@ -1089,13 +1088,12 @@ class ReservableRoutesTest {
         }
     }
 
-    private object FakeAspiraBookingProvider : BookingProvider {
-        override val id: BookingProviderId = BookingProviderId.ASPIRA
-        override val capabilities: BookingCapabilities =
-            BookingCapabilities(
+    private object FakeAspiraReservationProvider : ReservationProvider {
+        override val id: ReservationProviderId = ReservationProviderId.ASPIRA
+        override val capabilities: ReservationProviderCapabilities =
+            ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = false,
-                supportsAutoBook = false,
                 bookingHorizonDays = 365,
             )
 

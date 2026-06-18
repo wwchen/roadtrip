@@ -1,17 +1,17 @@
-package ca.floo.roadtrip.service.booking
+package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.client.AspiraAvailability
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.service.api.AvailabilityStatus
-import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraBookingProvider
-import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraTenant
+import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
+import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenant
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-class AspiraBookingProviderTest {
+class AspiraReservationProviderTest {
     @Test
     fun `aspira catalog availability uses map resource status when resource location is known`() =
         runBlocking {
@@ -30,7 +30,7 @@ class AspiraBookingProviderTest {
                     },
                 )
             val adapter =
-                AspiraBookingProvider(
+                AspiraReservationProvider(
                     tenant =
                         AspiraTenant(
                             host = "reservation.pc.gc.ca",
@@ -96,7 +96,7 @@ class AspiraBookingProviderTest {
                         vendorCode = vendor,
                         bookingHorizonDays = 365,
                     )
-                val adapter = AspiraBookingProvider(tenant = tenant, cache = cache)
+                val adapter = AspiraReservationProvider(tenant = tenant, cache = cache)
                 val dto =
                     adapter.reservableAvailability(
                         ReservableAvailabilityRequest(
@@ -136,7 +136,7 @@ class AspiraBookingProviderTest {
                     },
                 )
             val adapter =
-                AspiraBookingProvider(
+                AspiraReservationProvider(
                     tenant =
                         AspiraTenant(
                             host = "reservation.pc.gc.ca",

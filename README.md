@@ -129,11 +129,10 @@ SOURCE=--list` for the current set; abridged:
 | `tesla-index`         | tesla.com get-locations (curl-impersonate) | `data/raw/tesla-index/<ts>.json` |
 | `tesla-locations`     | tesla.com per-slug, cache-aware (~30d)  | `data/raw/tesla-locations/<slug>/<ts>.json` |
 
-`config/poi-registry.yaml` is the source of truth for both governing
-bodies (NPS, USFS, BC Parks, Alberta Parks, …) and booking providers
-(rec.gov, Aspira × 3 hosts, ReserveAmerica). Backend boot UPSERTs the
-two dimension tables from YAML and refuses to start if a deletion would
-orphan an existing POI's FK.
+`config/poi-registry.yaml` is the source of truth for governing bodies
+(NPS, USFS, BC Parks, Alberta Parks, …), POI data sources, and tenant
+args. Reservation-provider dispatch uses `pois.source` plus `provider_ref`
+JSON rather than a provider FK.
 
 **Raw cache.** `data/raw/` is gitignored — captures are append-only on
 the host running the poller. Crawling Aspira/Tesla is expensive (Azure

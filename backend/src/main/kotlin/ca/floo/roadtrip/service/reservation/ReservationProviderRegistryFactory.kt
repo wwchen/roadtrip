@@ -1,16 +1,16 @@
-package ca.floo.roadtrip.service.booking
+package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.service.api.recgov.CachedAvailability
-import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraBookingProvider
-import ca.floo.roadtrip.service.booking.adapters.aspira.AspiraTenants
-import ca.floo.roadtrip.service.booking.adapters.camis.CamisBookingProvider
-import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovBookingProvider
+import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
+import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
+import ca.floo.roadtrip.service.reservation.adapters.camis.CamisReservationProvider
+import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
 
 /**
- * Builds a [BookingProviderRegistry] from boot-time config + caches. One
- * place that knows the mapping from `pois.source` to [BookingProvider];
+ * Builds a [ReservationProviderRegistry] from boot-time config + caches. One
+ * place that knows the mapping from `pois.source` to [ReservationProvider];
  * keeps that knowledge out of [Main] (which would otherwise have to wire
  * each adapter manually) and out of routes.
  *
@@ -20,16 +20,16 @@ import ca.floo.roadtrip.service.booking.adapters.recgov.RecGovBookingProvider
  * Adding a tenant is one row in [AspiraTenants] plus a YAML row; no
  * change here.
  */
-object BookingProviderRegistryFactory {
+object ReservationProviderRegistryFactory {
     fun build(
         registry: PoiRegistry,
         recgovCache: CachedAvailability,
         aspiraCache: CachedAspiraAvailability,
-    ): BookingProviderRegistry {
-        val adaptersBySource = mutableMapOf<String, BookingProvider>()
+    ): ReservationProviderRegistry {
+        val adaptersBySource = mutableMapOf<String, ReservationProvider>()
 
         // RecGov — single adapter instance shared across every recgov source.
-        val recgov = RecGovBookingProvider(cache = recgovCache)
+        val recgov = RecGovReservationProvider(cache = recgovCache)
         for (source in registry.recgovSources()) {
             adaptersBySource[source] = recgov
         }
@@ -38,7 +38,7 @@ object BookingProviderRegistryFactory {
         // a host share an instance.
         val hostBySource = registry.aspiraHostBySource()
         validateAspiraHosts(hostBySource)
-        val aspiraByHost = mutableMapOf<String, AspiraBookingProvider>()
+        val aspiraByHost = mutableMapOf<String, AspiraReservationProvider>()
         for ((source, host) in hostBySource) {
             val adapter =
                 aspiraByHost.getOrPut(host) {
@@ -48,7 +48,7 @@ object BookingProviderRegistryFactory {
                                 "Aspira host '$host' has no AspiraTenant config row; " +
                                     "add it to AspiraTenants.kt.",
                             )
-                    AspiraBookingProvider(
+                    AspiraReservationProvider(
                         tenant = tenant,
                         cache = aspiraCache,
                     )
@@ -58,13 +58,13 @@ object BookingProviderRegistryFactory {
 
         // Camis — capability stub. Wired so registry dispatch is exhaustive
         // and so the adapter matrix is honest about what we don't yet
-        // support; calls throw BookingProviderError.Unsupported.
-        val camis = CamisBookingProvider()
+        // support; calls throw ReservationProviderError.Unsupported.
+        val camis = CamisReservationProvider()
         for (source in registry.camisSources()) {
             adaptersBySource[source] = camis
         }
 
-        return BookingProviderRegistry(adaptersBySource = adaptersBySource.toMap())
+        return ReservationProviderRegistry(adaptersBySource = adaptersBySource.toMap())
     }
 
     /**

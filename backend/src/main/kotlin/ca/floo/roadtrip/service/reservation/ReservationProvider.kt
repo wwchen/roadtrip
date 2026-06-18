@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.booking
+package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
@@ -9,11 +9,11 @@ import java.time.LocalDate
  * upstream reservation system (rec.gov, Aspira NextGen instance, Camis, …).
  *
  * Routes consume this interface; they never branch on `ProviderRef` variant
- * directly. See `docs/booking-providers.md` for the architecture rules.
+ * directly. See `docs/reservation-providers.md` for the architecture rules.
  *
  * Adapters own:
  *   - their own caching (per-month, per-host, however the upstream wants)
- *   - vendor-specific error translation into [BookingProviderError]
+ *   - vendor-specific error translation into [ReservationProviderError]
  *   - the host / API root they talk to (set at construction time)
  *
  * Adapters do NOT own:
@@ -21,17 +21,17 @@ import java.time.LocalDate
  *   - rate-limit accounting (cross-adapter; lives above the port)
  *   - HTTP response shaping (routes do — adapter returns a typed DTO)
  */
-interface BookingProvider {
+interface ReservationProvider {
     /** Stable identity. Mapped from `pois.source` + `provider_ref` shape by the registry. */
-    val id: BookingProviderId
+    val id: ReservationProviderId
 
     /** Static per adapter; cheap to read and safe to surface to API clients. */
-    val capabilities: BookingCapabilities
+    val capabilities: ReservationProviderCapabilities
 
     /**
      * Per-day availability for the half-open window `[startDate, endDate)`.
      *
-     * @throws BookingProviderError on upstream failure (rate limit, WAF block,
+     * @throws ReservationProviderError on upstream failure (rate limit, WAF block,
      *   5xx, parse error, or unsupported capability).
      */
     suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto
@@ -61,17 +61,17 @@ interface BookingProvider {
      * Default is unsupported so adapters can opt in as their upstream exposes
      * stable per-resource status.
      *
-     * @throws BookingProviderError on upstream failure or unsupported provider.
+     * @throws ReservationProviderError on upstream failure or unsupported provider.
      */
     suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto =
-        throw BookingProviderError.Unsupported("reservableAvailability", id)
+        throw ReservationProviderError.Unsupported("reservableAvailability", id)
 
     /**
      * Just the dates inside the requested window where at least one site is
      * bookable. Cheaper variant for the bulk "score N campgrounds" endpoint;
      * adapters typically share the cache with [availability].
      *
-     * @throws BookingProviderError on upstream failure.
+     * @throws ReservationProviderError on upstream failure.
      */
     suspend fun availableDates(req: AvailableDatesRequest): List<String>
 }

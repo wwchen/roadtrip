@@ -248,13 +248,13 @@ because every ETL is `f(inputs) → output`.
   hexagonal. We don't have a separate "ports" layer; interfaces sit
   inside `service` next to their callers. Promote to ports if a layer
   ever gains multiple implementations worth swapping at runtime. The
-  one place we do this today is `service/booking/`, where multiple
+  one place we do this today is `service/reservation/`, where multiple
   reservation upstreams (rec.gov, Aspira, Camis) each need an adapter
-  with the same contract — see [booking-providers.md](booking-providers.md).
+  with the same contract — see [reservation-providers.md](reservation-providers.md).
 
 ## See also
 
-- [booking-providers.md](booking-providers.md) — `BookingProvider` port
+- [reservation-providers.md](reservation-providers.md) — `ReservationProvider` port
   and the supported monitoring actions (availability, alerts,
   auto-book) per upstream reservation system.
 - [adding-a-data-source.md](adding-a-data-source.md) — ETL pipeline

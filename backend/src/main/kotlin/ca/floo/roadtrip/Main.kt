@@ -34,12 +34,12 @@ import ca.floo.roadtrip.service.api.recgov.AvailabilityClient
 import ca.floo.roadtrip.service.api.recgov.CachedAvailability
 import ca.floo.roadtrip.service.availability.AvailabilityPollExecutor
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
-import ca.floo.roadtrip.service.booking.BookingProviderRegistryFactory
 import ca.floo.roadtrip.service.etl.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.IngestController
 import ca.floo.roadtrip.service.etl.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
 import ca.floo.roadtrip.service.scheduler.Scheduler
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
@@ -181,11 +181,11 @@ fun Application.module() {
             ttl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY),
             persistentCache = persistentCache,
         )
-    // Booking-provider port registry: one adapter per upstream reservation
+    // Reservation-provider port registry: one adapter per upstream reservation
     // system, dispatched by `pois.source`. Routes consume the registry; they
-    // never see vendor types. See docs/booking-providers.md.
-    val bookingProviderRegistry =
-        BookingProviderRegistryFactory.build(
+    // never see vendor types. See docs/reservation-providers.md.
+    val reservationProviderRegistry =
+        ReservationProviderRegistryFactory.build(
             registry = poiRegistry,
             recgovCache = recgovAvailabilityCache,
             aspiraCache = aspiraCache,
@@ -208,7 +208,7 @@ fun Application.module() {
                 ca.floo.roadtrip.repo
                     .ReservableRepo(ctx),
             campsiteProviders = CampsiteProviderRepo(ctx),
-            bookingProviders = bookingProviderRegistry,
+            reservationProviders = reservationProviderRegistry,
             fetches = availabilityFetches,
             runs = AvailabilityJobRunRepo(ctx),
         )
@@ -245,7 +245,7 @@ fun Application.module() {
         healthRoutes()
         availabilityRoutes(
             CampsiteProviderRepo(ctx),
-            bookingProviderRegistry,
+            reservationProviderRegistry,
             ReservableRepo(ctx),
             AvailabilitySnapshotRepo(ctx),
         )

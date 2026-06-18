@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservationProvider
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -15,7 +15,7 @@ class ReservableAvailabilityFetchService(
     data class Request(
         val reservableId: Long,
         val reservableRid: String,
-        val provider: BookingProvider,
+        val provider: ReservationProvider,
         val ref: ProviderRef,
         val vendorId: String,
         val startDate: LocalDate,

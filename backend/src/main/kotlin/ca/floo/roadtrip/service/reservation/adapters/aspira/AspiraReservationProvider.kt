@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.booking.adapters.aspira
+package ca.floo.roadtrip.service.reservation.adapters.aspira
 
 import ca.floo.roadtrip.client.AspiraException
 import ca.floo.roadtrip.models.ProviderRef
@@ -9,14 +9,14 @@ import ca.floo.roadtrip.service.api.availableDatesAspira
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspira
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraCatalog
 import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraResource
-import ca.floo.roadtrip.service.booking.AvailabilityRequest
-import ca.floo.roadtrip.service.booking.AvailableDatesRequest
-import ca.floo.roadtrip.service.booking.BookingCapabilities
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderError
-import ca.floo.roadtrip.service.booking.BookingProviderId
-import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.AvailabilityRequest
+import ca.floo.roadtrip.service.reservation.AvailableDatesRequest
+import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservationProvider
+import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
+import ca.floo.roadtrip.service.reservation.ReservationProviderError
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
 
 /**
  * Aspira NextGen adapter. One adapter *class* for the whole vendor; one
@@ -29,19 +29,18 @@ import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
  * out-of-range values to surface the truncation rather than silently
  * dropping the high bits.
  */
-class AspiraBookingProvider(
+class AspiraReservationProvider(
     private val tenant: AspiraTenant,
     private val cache: CachedAspiraAvailability,
-) : BookingProvider {
-    override val id: BookingProviderId = BookingProviderId.ASPIRA
+) : ReservationProvider {
+    override val id: ReservationProviderId = ReservationProviderId.ASPIRA
 
-    override val capabilities: BookingCapabilities =
-        BookingCapabilities(
+    override val capabilities: ReservationProviderCapabilities =
+        ReservationProviderCapabilities(
             supportsAvailability = true,
             // Alert poller is rec.gov-only today; Aspira polling is planned
             // (see RFC 0007). Keep this honest until the poller adapter lands.
             supportsAlerts = false,
-            supportsAutoBook = false,
             bookingHorizonDays = tenant.bookingHorizonDays,
         )
 
@@ -122,14 +121,14 @@ class AspiraBookingProvider(
 
     private fun aspiraRefOrThrow(ref: ProviderRef): ProviderRef.Aspira =
         (ref as? ProviderRef.Aspira)
-            ?: throw BookingProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
+            ?: throw ReservationProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
 
     private fun intOrThrow(
         label: String,
         value: Long,
     ): Int {
         if (value !in Int.MIN_VALUE.toLong()..Int.MAX_VALUE.toLong()) {
-            throw BookingProviderError.UpstreamUnavailable(
+            throw ReservationProviderError.UpstreamUnavailable(
                 IllegalStateException("aspira $label $value does not fit in Int"),
             )
         }
@@ -139,16 +138,16 @@ class AspiraBookingProvider(
     private inline fun <T> runWithErrorMapping(block: () -> T): T =
         try {
             block()
-        } catch (e: BookingProviderError) {
+        } catch (e: ReservationProviderError) {
             throw e
         } catch (e: AspiraException) {
             when {
-                e.httpStatus == 429 -> throw BookingProviderError.RateLimited(e)
+                e.httpStatus == 429 -> throw ReservationProviderError.RateLimited(e)
                 e.httpStatus == 503 || e.message?.contains("WAF") == true ->
-                    throw BookingProviderError.UpstreamBlocked(e)
-                else -> throw BookingProviderError.UpstreamUnavailable(e)
+                    throw ReservationProviderError.UpstreamBlocked(e)
+                else -> throw ReservationProviderError.UpstreamUnavailable(e)
             }
         } catch (e: Exception) {
-            throw BookingProviderError.UpstreamUnavailable(e)
+            throw ReservationProviderError.UpstreamUnavailable(e)
         }
 }

@@ -5,7 +5,7 @@ import kotlinx.serialization.json.JsonElement
 /**
  * A reservable as we store it. Catalog data — names, loop, type, the raw
  * upstream blob — refreshed by ETL, not request-time. Per-day availability
- * is computed live by the BookingProvider; not stored here.
+ * is computed live by the ReservationProvider; not stored here.
  *
  * `id` is the internal Postgres pk for joins (`reservables.id`). The
  * stable, externally-meaningful identity is the [ReservableId] composite.

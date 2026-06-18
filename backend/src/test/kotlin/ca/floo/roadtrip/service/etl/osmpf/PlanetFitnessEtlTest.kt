@@ -18,7 +18,7 @@ import kotlin.test.assertTrue
 // 5-element slice of a real OSM Overpass capture; if the pipeline drifts
 // against this fixture, that's the canary.
 //
-// No live DB needed anymore (booking_provider was dropped in V8). The
+// No live DB needed anymore (the legacy provider FK was dropped in V8). The
 // real test container in EtlOrchestratorTest exercises Postgres; this
 // test is pure Kotlin.
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)

@@ -2,17 +2,17 @@
 
 Aspira NextGen (camis.com) is the booking platform behind:
 
-| Tenant | Host | `BookingProviderId` today | `pois.source` |
+| Tenant | Host | `ReservationProviderId` today | `pois.source` |
 |---|---|---|---|
-| Parks Canada | `reservation.pc.gc.ca` | `ASPIRA_PC` | `aspira-pc-pins` |
-| BC Provincial Parks | `camping.bcparks.ca` | `ASPIRA_BC` | `aspira-bc-pins` |
-| Washington State Parks | `washington.goingtocamp.com` | `ASPIRA_WA` | `aspira-wa-pins` |
+| Parks Canada | `reservation.pc.gc.ca` | `ASPIRA` | `aspira-pc-pins` |
+| BC Provincial Parks | `camping.bcparks.ca` | `ASPIRA` | `aspira-bc-pins` |
+| Washington State Parks | `washington.goingtocamp.com` | `ASPIRA` | `aspira-wa-pins` |
 
 All tenants share the same SPA build and (so far as we've observed)
-identical `/api/*` shapes; only the data and the tenant-specific
-sentinel ID ranges differ. **Three tenants, one API surface.** This is
-why the per-tenant `BookingProviderId` split is config noise —
-see the architecture doc's open issue.
+identical `/api/*` shapes; only the data, host, and tenant-specific
+sentinel ID ranges differ. **Three tenants, one API surface.** The
+provider id is vendor-shaped (`ASPIRA`); `pois.source` and `AspiraTenants`
+select the concrete host/tenant.
 
 ## Wire shape overview
 
@@ -683,9 +683,9 @@ a tenant.
 
 ## See also
 
-- [booking-providers.md](../booking-providers.md) — architecture
+- [reservation-providers.md](../reservation-providers.md) — architecture
   contract: ports, capabilities, registry shape.
-- `service/booking/adapters/aspira/AspiraBookingProvider.kt` — the
+- `service/reservation/adapters/aspira/AspiraReservationProvider.kt` — the
   current adapter (availability only).
 - `service/etl/aspira/AspiraResourcesEtl.kt` — emits reservable rows
   emits one reservable per inventory record; reads the `/api/maps`

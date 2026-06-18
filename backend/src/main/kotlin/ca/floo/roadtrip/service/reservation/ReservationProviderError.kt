@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.booking
+package ca.floo.roadtrip.service.reservation
 
 /**
  * Provider-agnostic error surface. Adapters translate vendor-specific
@@ -9,37 +9,37 @@ package ca.floo.roadtrip.service.booking
  * Anything that doesn't map to a known case gets `Unknown` — the route
  * still produces a 503 with the original cause logged.
  */
-sealed class BookingProviderError(
+sealed class ReservationProviderError(
     message: String? = null,
     cause: Throwable? = null,
 ) : Exception(message, cause) {
     /** Upstream told us we're sending too many requests. */
     class RateLimited(
         cause: Throwable? = null,
-    ) : BookingProviderError("rate_limited", cause)
+    ) : ReservationProviderError("rate_limited", cause)
 
     /** Upstream is up but blocking us (WAF, captcha, anti-bot). */
     class UpstreamBlocked(
         cause: Throwable? = null,
-    ) : BookingProviderError("upstream_blocked", cause)
+    ) : ReservationProviderError("upstream_blocked", cause)
 
     /** Upstream returned 5xx, network error, parse failure. */
     class UpstreamUnavailable(
         cause: Throwable,
-    ) : BookingProviderError("upstream_5xx", cause)
+    ) : ReservationProviderError("upstream_5xx", cause)
 
     /** Adapter doesn't yet support the requested operation (capability stub). */
     class Unsupported(
         operation: String,
-        providerId: BookingProviderId,
-    ) : BookingProviderError("$providerId does not support $operation")
+        providerId: ReservationProviderId,
+    ) : ReservationProviderError("$providerId does not support $operation")
 
     /**
      * Registry handed an adapter a `ProviderRef` of the wrong shape.
      * Programmer error — registry construction is wrong, not the request.
      */
     class WrongRefType(
-        providerId: BookingProviderId,
+        providerId: ReservationProviderId,
         gotType: String,
-    ) : BookingProviderError("$providerId received ProviderRef of type $gotType")
+    ) : ReservationProviderError("$providerId received ProviderRef of type $gotType")
 }

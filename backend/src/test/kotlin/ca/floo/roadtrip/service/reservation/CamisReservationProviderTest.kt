@@ -1,28 +1,27 @@
-package ca.floo.roadtrip.service.booking
+package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.ProviderRef
-import ca.floo.roadtrip.service.booking.adapters.camis.CamisBookingProvider
+import ca.floo.roadtrip.service.reservation.adapters.camis.CamisReservationProvider
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
-class CamisBookingProviderTest {
-    private val adapter = CamisBookingProvider()
+class CamisReservationProviderTest {
+    private val adapter = CamisReservationProvider()
 
     @Test
     fun `id and capabilities are honest about being unsupported`() {
-        assertEquals(BookingProviderId.CAMIS, adapter.id)
+        assertEquals(ReservationProviderId.CAMIS, adapter.id)
         assertEquals(false, adapter.capabilities.supportsAvailability)
         assertEquals(false, adapter.capabilities.supportsAlerts)
-        assertEquals(false, adapter.capabilities.supportsAutoBook)
     }
 
     @Test
     fun `availability throws Unsupported`() {
         val ref = ProviderRef.Camis(facilityId = "AB-1")
-        assertFailsWith<BookingProviderError.Unsupported> {
+        assertFailsWith<ReservationProviderError.Unsupported> {
             runBlocking {
                 adapter.availability(
                     AvailabilityRequest(
@@ -38,7 +37,7 @@ class CamisBookingProviderTest {
     @Test
     fun `availableDates throws Unsupported`() {
         val ref = ProviderRef.Camis(facilityId = "AB-1")
-        assertFailsWith<BookingProviderError.Unsupported> {
+        assertFailsWith<ReservationProviderError.Unsupported> {
             runBlocking {
                 adapter.availableDates(
                     AvailableDatesRequest(

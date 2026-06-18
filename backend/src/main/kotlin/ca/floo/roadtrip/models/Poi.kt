@@ -167,18 +167,16 @@ enum class ParkType {
     PROVINCIAL,
 }
 
-// Sealed ProviderRef per RFC decision #22. Stored as JSONB on the row
-// (payload only — booking_provider_id FK is the discriminator per
-// decision #24); deserialized into one of these variants by the
-// matching adapter.
+// Sealed ProviderRef per RFC decision #22. Stored as JSONB on the row;
+// the sealed type tag plus pois.source drives reservation-provider dispatch.
 sealed class ProviderRef {
     data class RecGov(
         val recgovId: String,
     ) : ProviderRef()
 
-    // Aspira NextGen: same adapter, different host per booking_provider row
-    // (PC/BC/WA). Host comes from booking_provider, not duplicated here
-    // (RFC decision #23).
+    // Aspira NextGen: same adapter, different host per terminal ETL source
+    // (PC/BC/WA). Host comes from the YAML registry/AspiraTenants, not the
+    // POI row (RFC decision #23).
     data class Aspira(
         val transactionLocationId: Long,
         val mapId: Long,

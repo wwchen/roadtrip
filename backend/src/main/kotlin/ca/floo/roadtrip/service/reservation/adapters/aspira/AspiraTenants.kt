@@ -1,10 +1,10 @@
-package ca.floo.roadtrip.service.booking.adapters.aspira
+package ca.floo.roadtrip.service.reservation.adapters.aspira
 
 /**
  * Per-tenant Aspira NextGen configuration. One row per upstream host.
  *
  * Aspira runs the same SPA build behind every tenant — see
- * `docs/booking-providers/aspira.md`. The wire shape is identical;
+ * `docs/reservation-providers/aspira.md`. The wire shape is identical;
  * only the host, the data, and a few presentation details differ. So
  * adding a new tenant (Ontario, Quebec, etc.) is one row here, not a
  * new enum value, adapter, or registry branch.
@@ -33,7 +33,7 @@ object AspiraTenants {
      * The tenant table. Order does not matter; lookup is by host.
      *
      * Adding a tenant: append a row. Validation at boot
-     * ([BookingProviderRegistryFactory]) ensures every host the YAML
+     * ([ReservationProviderRegistryFactory]) ensures every host the YAML
      * registry declares has a row here, so a forgotten entry fails
      * loudly instead of silently routing to a missing adapter.
      */

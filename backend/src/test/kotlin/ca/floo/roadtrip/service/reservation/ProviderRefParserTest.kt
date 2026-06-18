@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.booking
+package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.ProviderRef
 import kotlin.test.Test

@@ -6,9 +6,9 @@ import java.io.File
 // Read-only context handed to ETL transformers. Today: just the raw-capture
 // directory + a per-terminal-etl subcategory lookup sourced from the YAML.
 //
-// Booking provider info is no longer here — the booking_provider table
-// (and its FK column) was dropped (V8) because the dispatch path the FK
-// was meant to power never landed; the FE reads pois.provider_ref (JSONB)
+// Reservation provider info is no longer here — the legacy provider FK
+// path was dropped (V8) because the dispatch path the FK was meant to
+// power never landed; the FE reads pois.provider_ref (JSONB)
 // directly. ETLs that need a ProviderRef just construct the sealed variant
 // directly with values from their args:.
 class TransformCtx private constructor(

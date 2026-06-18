@@ -6,8 +6,8 @@ import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.booking.ProviderRefParser
+import ca.floo.roadtrip.service.reservation.ProviderRefParser
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import ca.floo.roadtrip.service.scheduler.HandlerResult
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
@@ -16,7 +16,7 @@ import java.time.OffsetDateTime
 /**
  * Executes one polling job. Wired into [Scheduler] as the handler.
  *
- * Reservable-scope fetches one reservable through the booking provider and
+ * Reservable-scope fetches one reservable through the reservation provider and
  * appends snapshot rows. POI-scope fans out to linked child reservables using
  * the watch scope resolver.
  *
@@ -34,7 +34,7 @@ import java.time.OffsetDateTime
 class AvailabilityPollExecutor(
     private val reservables: ReservableRepo,
     private val campsiteProviders: CampsiteProviderRepo,
-    private val bookingProviders: BookingProviderRegistry,
+    private val reservationProviders: ReservationProviderRegistry,
     private val fetches: ReservableAvailabilityFetchService,
     private val runs: AvailabilityJobRunRepo,
 ) {
@@ -78,7 +78,7 @@ class AvailabilityPollExecutor(
      * Runs a Reservable-scope intent. Returns the number of snapshot
      * rows the fetch produced (sized by the upstream's per-day window).
      * Returns 0 when the intent can't be executed (missing reservable,
-     * no resolvable booking provider) — these are recorded as
+     * no resolvable reservation provider) — these are recorded as
      * successful no-op runs, not failures.
      */
     private suspend fun runReservable(
@@ -142,12 +142,12 @@ class AvailabilityPollExecutor(
             poiIds
                 .asSequence()
                 .mapNotNull { refRowsById[it] }
-                .firstOrNull { bookingProviders.forPoi(it) != null && ProviderRefParser.parse(it.providerRefJson) != null }
+                .firstOrNull { reservationProviders.forPoi(it) != null && ProviderRefParser.parse(it.providerRefJson) != null }
         if (parent == null) {
-            log.warn("job {}: reservable {} has no resolvable booking provider", jobId, reservable.id)
+            log.warn("job {}: reservable {} has no resolvable reservation provider", jobId, reservable.id)
             return 0
         }
-        val provider = bookingProviders.forPoi(parent)!!
+        val provider = reservationProviders.forPoi(parent)!!
         val ref = ProviderRefParser.parse(parent.providerRefJson)!!
 
         val start = LocalDate.parse(startDate)

@@ -21,7 +21,7 @@ import java.time.format.DateTimeFormatter
 
 // Provider-specific helpers for rec.gov campground availability. The HTTP
 // surface lives in AvailabilityRoutes.kt; this file holds rec.gov
-// classification + fetch helpers so upstream details stay below BookingProvider.
+// classification + fetch helpers so upstream details stay below ReservationProvider.
 
 private fun daysBetween(
     startDate: LocalDate,

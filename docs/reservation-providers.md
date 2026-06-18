@@ -1,7 +1,7 @@
-# Booking providers
+# Reservation providers
 
 Campsite availability and watches are dispatched through one abstraction:
-`BookingProvider`. Every upstream reservation system (rec.gov, Aspira NextGen,
+`ReservationProvider`. Every upstream reservation system (rec.gov, Aspira NextGen,
 Camis, future regional vendors) is an adapter behind this port. Routes,
 the watch poller, and any future endpoint never branch on a sealed
 `ProviderRef` — they consume the interface.
@@ -15,21 +15,20 @@ Adding a third provider meant editing three files plus a fourth parser;
 forgetting one was a silent bug. The port collapses that into one
 registry lookup.
 
-This doc is the contract. **A new booking provider is a new file under
-`service/booking/adapters/<vendor>/` and one row in the registry — nothing
+This doc is the contract. **A new reservation provider is a new file under
+`service/reservation/adapters/<vendor>/` and one row in the registry — nothing
 else outside that directory should change.** That rule is the test of
 whether the abstraction is right.
 
 ## Layout
 
 ```
-service/booking/
-├── BookingProvider.kt          # availability port (mandatory)
-├── BookingProviderId.kt        # enum/provider identity
-├── BookingProviderRegistry.kt  # forPoi(row) → adapter
-├── ProviderRefParser.kt        # JSONB → models.ProviderRef (single source)
-├── WatchEvaluator.kt           # match logic per provider (mandatory)
-├── AutoBooker.kt               # cart/book port (optional capability)
+service/reservation/
+├── ReservationProvider.kt          # availability port (mandatory)
+├── ReservationProviderId.kt        # enum/provider identity
+├── ReservationProviderRegistry.kt  # forPoi(row) → adapter
+├── ReservationProviderCapabilities.kt
+├── ProviderRefParser.kt            # JSONB → models.ProviderRef (single source)
 └── adapters/
     ├── recgov/                 # availability
     ├── aspira/                 # availability
@@ -46,13 +45,11 @@ Not every provider supports every monitoring action. The capability flags
 on each provider drive what the FE shows.
 
 ```kotlin
-data class BookingCapabilities(
+data class ReservationProviderCapabilities(
     /** Can we serve per-day availability for a window? */
     val supportsAvailability: Boolean,
     /** Can we poll for openings and notify on match? */
     val supportsAlerts: Boolean,
-    /** Can we add to cart / book on the user's behalf? */
-    val supportsAutoBook: Boolean,
     /** Max days into the future the upstream exposes. */
     val bookingHorizonDays: Int,
 )
@@ -65,30 +62,26 @@ drawer can hide affordances the provider doesn't support.
 
 | Action | Required interface | Notes |
 |---|---|---|
-| Per-day availability for a window | `BookingProvider.availability(ref, start, days, force)` | Drives the drawer's week grid. Per-month cache lives in the adapter. |
-| Capability probe | `BookingProvider.capabilities` | Static per adapter; cheap. |
+| Per-day availability for a window | `ReservationProvider.availability(ref, start, days, force)` | Drives the drawer's week grid. Per-month cache lives in the adapter. |
+| Capability probe | `ReservationProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Append history snapshot | poller writes `availability_snapshots` row | Provider-agnostic; uses the standard `AvailabilityResult` shape. |
 | Notify on match | poller dispatches via Slack / push (future) | Channels are not provider-specific. |
-| Auto-add-to-cart | `AutoBooker.addToCart(ref, match, session)` | Optional. Provider implements only if it can. Capability flag gates the FE toggle. |
-| Auto-book / pay | not modeled | Out of scope. |
 
-A provider that only implements `BookingProvider` (not `AutoBooker`) is
-fully functional for browse + watch flows. Auto-book is the genuinely
-optional capability and is modeled as a separate interface so adapters
-that don't support it don't have to throw `UnsupportedOperationException`
-stubs.
+Reservation providers do not model cart automation, payment, or booking on
+the user's behalf. Watch flows produce matches, notifications, and
+availability history only.
 
 ## Today's adapter matrix
 
-| Provider | Availability | Watches | Auto-book | Notes |
-|---|---|---|---|---|
-| RecGov (rec.gov) | ✓ | ✓ | ✗ | Availability and generic watch polling. Auto-book was part of the removed legacy `/campsite` app. |
-| Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | ✗ | Availability ships now; watch dispatch still needs work. Auto-book requires session handling we haven't built. |
-| Camis (Alberta Parks) | stub | ✗ | ✗ | Adapter file exists so the registry returns a typed null; throws `Unsupported` on call. POIs render without the week grid until the real adapter lands. |
+| Provider | Availability | Watches | Notes |
+|---|---|---|---|
+| RecGov (rec.gov) | ✓ | ✓ | Availability and generic watch polling. |
+| Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | Availability ships now; watch dispatch still needs work. |
+| Camis (Alberta Parks) | stub | ✗ | Adapter file exists so dispatch is explicit; throws `Unsupported` on call. POIs render without the week grid until the real adapter lands. |
 
 When a row is added here, it should match a real file in
-`service/booking/adapters/<vendor>/`. If the table promises a capability
+`service/reservation/adapters/<vendor>/`. If the table promises a capability
 the adapter doesn't implement, that's a doc bug; fix the doc, not the
 adapter.
 
@@ -172,7 +165,7 @@ Retention is tiered: raw rows for 90 days, daily aggregates beyond,
 discard raw past 1 year. The query layer reads raw or aggregates
 transparently based on the requested window.
 
-## Lifecycle: how a user's intent becomes a booking
+## Lifecycle: how a user's intent becomes a watch
 
 ```
 Drawer (this product)              Poller (background)             Watches UI
@@ -182,58 +175,53 @@ browse → pin click
 GET /api/pois/{id}
   ↓
 GET /api/poi/{poi_id}/availability (per active watch, every cycle)
-  ↓                                BookingProvider.availability
+  ↓                                ReservationProvider.availability
 week pages                           ↓
   ↓                                watch evaluator
   ↓                                  ↓ (match)
 "Set watch" click                  notify (Slack / push)
-  ↓                                  ↓ (if capability)
-POST /api/availability/watches     AutoBooker.addToCart
-                                     ↓
-                                   append availability_snapshots
+  ↓                                  ↓
+POST /api/availability/watches     append availability_snapshots
                                                                    list watches, pause,
                                                                    per-watch history,
                                                                    tune notification
-                                                                   channel, toggle
-                                                                   auto-cart
+                                                                   channel
 ```
 
 The drawer captures **intent only**. The poller is the only thing that
-produces matches, snapshots, and bookings. The watches UI surfaces
-everything the poller has produced.
+produces matches and snapshots. The watches UI surfaces everything the
+poller has produced.
 
-## Adding a new booking provider
+## Adding a new reservation provider
 
-1. Add a row to `BookingProviderId` (enum) and to `booking_provider` table
-   (Flyway migration if the FK target needs it).
+1. Add a row to `ReservationProviderId` (enum) if this is a new upstream
+   platform.
 2. Add a `ProviderRef.<Vendor>` variant if the wire shape isn't already
    covered.
-3. Create `service/booking/adapters/<vendor>/<Vendor>BookingProvider.kt`
-   implementing `BookingProvider`. Capabilities default conservatively
-   (`supportsAlerts = false`, `supportsAutoBook = false`); flip them on
-   as features land.
-4. (Optional) Add `<Vendor>WatchEvaluator` and `<Vendor>AutoBooker` if
-   the provider supports those capabilities.
-5. Wire the adapter into `BookingProviderRegistry` (one line).
-6. Update the matrix table above.
+3. Create `service/reservation/adapters/<vendor>/<Vendor>ReservationProvider.kt`
+   implementing `ReservationProvider`. Capabilities default conservatively
+   (`supportsAlerts = false`); flip them on as features land.
+4. Ensure the terminal ETL emits the right `provider_ref` JSON and that its
+   `pois.source` maps to the adapter in `ReservationProviderRegistryFactory`.
+5. Update the matrix table above.
 
-Steps 1–6 should be the entire diff. If you find yourself editing route
+Steps 1–5 should be the entire diff. If you find yourself editing route
 files or the watch poller core, the abstraction is leaking — fix that
 before merging.
 
 ## Per-vendor API docs
 
 Each adapter's upstream API is documented separately under
-`docs/booking-providers/`:
+`docs/reservation-providers/`:
 
-- [aspira.md](booking-providers/aspira.md) — Aspira NextGen
+- [aspira.md](reservation-providers/aspira.md) — Aspira NextGen
   (`reservation.pc.gc.ca`, `camping.bcparks.ca`,
   `washington.goingtocamp.com`).
 - _recgov.md, camis.md — to be written._
 
 When adding a new vendor, follow the
 [probe-vendor-api skill](../.claude/skills/probe-vendor-api/SKILL.md)
-to capture the wire shape, then write `booking-providers/<vendor>.md`
+to capture the wire shape, then write `reservation-providers/<vendor>.md`
 using `aspira.md` as the template. **Do not inline vendor wire
 shapes in this doc** — this doc owns the architecture contract;
 per-vendor docs own the wire details.
@@ -246,4 +234,4 @@ per-vendor docs own the wire details.
 - `rfcs/0007-availability-search-and-alerts.md` — the RFC that introduced
   this abstraction and the monitoring lifecycle it enables.
 - [.claude/skills/probe-vendor-api/SKILL.md](../.claude/skills/probe-vendor-api/SKILL.md)
-  — methodology for reverse-engineering a new booking vendor's API.
+  — methodology for reverse-engineering a new reservation vendor's API.

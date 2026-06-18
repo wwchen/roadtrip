@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.booking.adapters.recgov
+package ca.floo.roadtrip.service.reservation.adapters.recgov
 
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
@@ -7,29 +7,28 @@ import ca.floo.roadtrip.service.api.recgov.availableDatesRecgov
 import ca.floo.roadtrip.service.api.recgov.fetchAndClassifyRecgov
 import ca.floo.roadtrip.service.api.recgov.fetchAndClassifyRecgovCatalog
 import ca.floo.roadtrip.service.api.recgov.fetchAndClassifyRecgovReservable
-import ca.floo.roadtrip.service.booking.AvailabilityRequest
-import ca.floo.roadtrip.service.booking.AvailableDatesRequest
-import ca.floo.roadtrip.service.booking.BookingCapabilities
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderError
-import ca.floo.roadtrip.service.booking.BookingProviderId
-import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.AvailabilityRequest
+import ca.floo.roadtrip.service.reservation.AvailableDatesRequest
+import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservationProvider
+import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
+import ca.floo.roadtrip.service.reservation.ReservationProviderError
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
 
 /**
  * rec.gov adapter. Wraps the per-month cache + classify pipeline. Vendor-
- * specific error translation lives here; routes only see [BookingProviderError].
+ * specific error translation lives here; routes only see [ReservationProviderError].
  */
-class RecGovBookingProvider(
+class RecGovReservationProvider(
     private val cache: CachedAvailability,
-) : BookingProvider {
-    override val id: BookingProviderId = BookingProviderId.RECGOV
+) : ReservationProvider {
+    override val id: ReservationProviderId = ReservationProviderId.RECGOV
 
-    override val capabilities: BookingCapabilities =
-        BookingCapabilities(
+    override val capabilities: ReservationProviderCapabilities =
+        ReservationProviderCapabilities(
             supportsAvailability = true,
             supportsAlerts = true,
-            supportsAutoBook = false,
             bookingHorizonDays = RECGOV_BOOKING_HORIZON_DAYS,
         )
 
@@ -94,24 +93,24 @@ class RecGovBookingProvider(
     private fun recgovIdOrThrow(ref: ProviderRef): String =
         when (ref) {
             is ProviderRef.RecGov -> ref.recgovId
-            else -> throw BookingProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
+            else -> throw ReservationProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
         }
 
     private inline fun <T> runWithErrorMapping(block: () -> T): T =
         try {
             block()
-        } catch (e: BookingProviderError) {
+        } catch (e: ReservationProviderError) {
             throw e
         } catch (e: Exception) {
             // The recgov client's exception types aren't a single hierarchy
             // (some throw plain Exception with rate-limit text). Pattern-
             // match on message text the same way the legacy mapper did, but
-            // produce typed BookingProviderError so the route doesn't need
+            // produce typed ReservationProviderError so the route doesn't need
             // to know the upstream's quirks.
             val msg = e.message.orEmpty()
             when {
-                msg.contains("429") || msg.contains("rate") -> throw BookingProviderError.RateLimited(e)
-                else -> throw BookingProviderError.UpstreamUnavailable(e)
+                msg.contains("429") || msg.contains("rate") -> throw ReservationProviderError.RateLimited(e)
+                else -> throw ReservationProviderError.UpstreamUnavailable(e)
             }
         }
 

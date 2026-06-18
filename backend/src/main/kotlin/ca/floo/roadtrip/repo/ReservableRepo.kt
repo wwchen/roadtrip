@@ -24,7 +24,7 @@ import java.time.ZoneOffset
  * reads them via `findByPoi` (listing endpoint) or `findByRid`
  * (per-reservable detail). Per-day availability is NOT stored here — that
  * lives in the per-vendor availability cache, recomputed live by the
- * BookingProvider.
+ * ReservationProvider.
  *
  * RFC 0008 §"Data model".
  */

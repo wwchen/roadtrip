@@ -21,12 +21,12 @@ import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.availabilityResponseDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.booking.AvailableDatesRequest
-import ca.floo.roadtrip.service.booking.BookingProviderError
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.booking.CatalogReservableRef
-import ca.floo.roadtrip.service.booking.ProviderRefParser
+import ca.floo.roadtrip.service.reservation.AvailableDatesRequest
+import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
+import ca.floo.roadtrip.service.reservation.ProviderRefParser
+import ca.floo.roadtrip.service.reservation.ReservationProviderError
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -70,16 +70,16 @@ private const val UPSTREAM_5XX_RETRY_AFTER_S = 30
 
 /**
  * Unified availability endpoints. Dispatch to the upstream is the registry's
- * job; this route parses inputs, looks up the right [BookingProvider], and
+ * job; this route parses inputs, looks up the right [ReservationProvider], and
  * serializes the result.
  *
- * See [BookingProviderRegistry] / `docs/booking-providers.md` for the
+ * See [ReservationProviderRegistry] / `docs/reservation-providers.md` for the
  * provider-port architecture. Adding a new upstream is one new adapter file
  * + one registry wiring line; this file does not change.
  */
 fun Route.availabilityRoutes(
     providerRefs: CampsiteProviderRepo,
-    bookingProviders: BookingProviderRegistry,
+    reservationProviders: ReservationProviderRegistry,
     reservables: ReservableRepo,
     snapshots: AvailabilitySnapshotRepo? = null,
 ) {
@@ -106,7 +106,7 @@ fun Route.availabilityRoutes(
             respondAvailabilityError("unknown_campground", HttpStatusCode.NotFound)
             return
         }
-        val provider = bookingProviders.forPoi(row)
+        val provider = reservationProviders.forPoi(row)
         if (provider == null) {
             // Source has no adapter wired (e.g. legacy rows pre-registry). The
             // drawer's hasAvailability gate should prevent this from being
@@ -150,7 +150,7 @@ fun Route.availabilityRoutes(
                     ),
                 )
             respondAvailabilityJson(response)
-        } catch (e: BookingProviderError) {
+        } catch (e: ReservationProviderError) {
             val (status, error) = mapProviderError(e)
             log.info(
                 "availability poi={} provider={} failed: {}",
@@ -200,7 +200,7 @@ fun Route.availabilityRoutes(
         description =
             "Path key is RFC 0008 composite id `{type}:{vendor}:{vendor_id}`, " +
             "for example `site:recgov:330257`. The route finds the linked " +
-            "campground POI, dispatches to its BookingProvider, and returns " +
+            "campground POI, dispatches to its ReservationProvider, and returns " +
             "the same availability response shape narrowed to that one site."
         request {
             pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
@@ -254,9 +254,9 @@ fun Route.availabilityRoutes(
             poiIds
                 .asSequence()
                 .mapNotNull { rowsById[it] }
-                .firstOrNull { bookingProviders.forPoi(it) != null && ProviderRefParser.parse(it.providerRefJson) != null }
+                .firstOrNull { reservationProviders.forPoi(it) != null && ProviderRefParser.parse(it.providerRefJson) != null }
                 ?: return@get call.respondAvailabilityError("unknown_campground", HttpStatusCode.NotFound)
-        val provider = bookingProviders.forPoi(parent)!!
+        val provider = reservationProviders.forPoi(parent)!!
         val parentRef = ProviderRefParser.parse(parent.providerRefJson)!!
         val ref = row.providerRefForReservable(parentRef)
 
@@ -281,7 +281,7 @@ fun Route.availabilityRoutes(
                     ),
                 )
             call.respondAvailabilityJson(response)
-        } catch (e: BookingProviderError) {
+        } catch (e: ReservationProviderError) {
             val (status, error) = mapProviderError(e)
             log.info(
                 "reservable availability rid={} parent_poi={} provider={} failed: {}",
@@ -410,7 +410,7 @@ fun Route.availabilityRoutes(
             coroutineScope {
                 req.ids
                     .map { id ->
-                        async { fetchOneBulk(id, rowsById[id], bookingProviders, start, end) }
+                        async { fetchOneBulk(id, rowsById[id], reservationProviders, start, end) }
                     }.awaitAll()
             }
 
@@ -518,7 +518,7 @@ private fun emptyPoiAvailability(
 private suspend fun fetchOneBulk(
     poiId: Long,
     row: CampsiteProviderRefRow?,
-    bookingProviders: BookingProviderRegistry,
+    reservationProviders: ReservationProviderRegistry,
     startDate: LocalDate,
     endDate: LocalDate,
 ): BulkAvailEntrySchema {
@@ -526,7 +526,7 @@ private suspend fun fetchOneBulk(
         return BulkAvailEntrySchema(id = poiId, status = 404, available_dates = emptyList())
     }
     val provider =
-        bookingProviders.forPoi(row)
+        reservationProviders.forPoi(row)
             ?: return BulkAvailEntrySchema(id = poiId, status = 422, available_dates = emptyList())
     val ref =
         ProviderRefParser.parse(row.providerRefJson)
@@ -538,7 +538,7 @@ private suspend fun fetchOneBulk(
                 AvailableDatesRequest(ref = ref, startDate = startDate, endDate = endDate),
             )
         BulkAvailEntrySchema(id = poiId, status = 200, available_dates = dates)
-    } catch (e: BookingProviderError) {
+    } catch (e: ReservationProviderError) {
         log.info("bulk availability poi={} provider={} failed: {}", poiId, provider.id, e.message)
         BulkAvailEntrySchema(id = poiId, status = httpStatusFor(e), available_dates = emptyList())
     }
@@ -614,30 +614,30 @@ private fun ApplicationCall.queryValues(vararg names: String): List<String> =
         .distinct()
 
 /** Map the typed provider error to (HTTP status, AvailabilityErrorSchema). */
-private fun mapProviderError(e: BookingProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> =
+private fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> =
     when (e) {
-        is BookingProviderError.RateLimited ->
+        is ReservationProviderError.RateLimited ->
             HttpStatusCode.ServiceUnavailable to
                 availabilityErrorDto("rate_limited", retryAfterS = UPSTREAM_RATE_LIMITED_RETRY_AFTER_S)
-        is BookingProviderError.UpstreamBlocked ->
+        is ReservationProviderError.UpstreamBlocked ->
             HttpStatusCode.ServiceUnavailable to
                 availabilityErrorDto("upstream_blocked", retryAfterS = UPSTREAM_BLOCKED_RETRY_AFTER_S)
-        is BookingProviderError.UpstreamUnavailable ->
+        is ReservationProviderError.UpstreamUnavailable ->
             HttpStatusCode.ServiceUnavailable to
                 availabilityErrorDto("upstream_5xx", retryAfterS = UPSTREAM_5XX_RETRY_AFTER_S)
-        is BookingProviderError.Unsupported ->
+        is ReservationProviderError.Unsupported ->
             HttpStatusCode.NotImplemented to availabilityErrorDto("unsupported")
-        is BookingProviderError.WrongRefType ->
+        is ReservationProviderError.WrongRefType ->
             // Programmer error, not a user error. Surface as 500 so it shows up in metrics.
             HttpStatusCode.InternalServerError to availabilityErrorDto("provider_misconfigured")
     }
 
 /** Numeric status for the bulk endpoint's per-id `status` field. */
-private fun httpStatusFor(e: BookingProviderError): Int =
+private fun httpStatusFor(e: ReservationProviderError): Int =
     when (e) {
-        is BookingProviderError.RateLimited -> 429
-        is BookingProviderError.Unsupported -> 422
-        is BookingProviderError.WrongRefType -> 500
+        is ReservationProviderError.RateLimited -> 429
+        is ReservationProviderError.Unsupported -> 422
+        is ReservationProviderError.WrongRefType -> 500
         else -> 503
     }
 

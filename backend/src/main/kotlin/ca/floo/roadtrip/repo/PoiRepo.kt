@@ -29,7 +29,7 @@ private val poiRepoOmitNullJson =
 
 // Mark-and-sweep upsert into the v2 `pois` table. Same shape as the
 // legacy Importer.kt, generalized over the new sealed Poi types and
-// the v2 columns (provider_ref JSONB; booking_provider_id was dropped
+// the v2 columns (provider_ref JSONB; the legacy provider FK was dropped
 // in V8 since the dispatch path it was meant to power never landed).
 //
 // Sweep is scoped to the union of source names this run wrote — a
