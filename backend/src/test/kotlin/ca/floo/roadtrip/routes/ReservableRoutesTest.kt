@@ -90,6 +90,8 @@ class ReservableRoutesTest {
         ctx.execute("DELETE FROM reservables")
         ctx.execute("DELETE FROM pois")
         ctx.execute("DELETE FROM import_runs")
+        FakeReservationProvider.reset()
+        FakeAspiraReservationProvider.reset()
     }
 
     @Test
@@ -494,6 +496,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
                     )
                 }
             }
@@ -523,6 +526,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
                     )
                 }
             }
@@ -652,6 +656,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
                     )
                 }
             }
@@ -673,6 +678,7 @@ class ReservableRoutesTest {
                 listOf("site:recgov:330257", "site:recgov:330259"),
                 first["available_reservable_ids"]!!.jsonArray.map { it.jsonPrimitive.content },
             )
+            assertEquals(4L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
         }
 
     @Test
@@ -747,7 +753,8 @@ class ReservableRoutesTest {
                 ctx
                     .fetchOne("SELECT count(*) FROM availability_snapshot")!!
                     .get(0, Long::class.java)
-            assertEquals(4L, rowCountAfterMultiNight)
+            assertEquals(2L, rowCountAfterMultiNight)
+            assertEquals(1, FakeReservationProvider.reservableAvailabilityCalls)
         }
 
     @Test
@@ -790,12 +797,15 @@ class ReservableRoutesTest {
                     name = "Bulk Window Campground",
                     providerRefJson = """{"recgov_id":"232447"}""",
                 )
+            val reservableId = seedReservable(vendorId = "330257", name = "A12")
+            link(reservableId, poiId)
             application {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
                     )
                 }
             }
@@ -816,6 +826,7 @@ class ReservableRoutesTest {
                     .jsonArray
                     .map { it.jsonPrimitive.content },
             )
+            assertEquals(3L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
         }
 
     @Test
@@ -1008,6 +1019,19 @@ class ReservableRoutesTest {
         )
 
     private object FakeReservationProvider : ReservationProvider {
+        var availabilityCalls: Int = 0
+            private set
+        var catalogAvailabilityCalls: Int = 0
+            private set
+        var reservableAvailabilityCalls: Int = 0
+            private set
+
+        fun reset() {
+            availabilityCalls = 0
+            catalogAvailabilityCalls = 0
+            reservableAvailabilityCalls = 0
+        }
+
         override val id: ReservationProviderId = ReservationProviderId.RECGOV
         override val capabilities: ReservationProviderCapabilities =
             ReservationProviderCapabilities(
@@ -1017,6 +1041,7 @@ class ReservableRoutesTest {
             )
 
         override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
+            availabilityCalls++
             val ref = req.ref as ProviderRef.RecGov
             return fakeResponse(
                 startDate = req.startDate,
@@ -1027,6 +1052,7 @@ class ReservableRoutesTest {
         }
 
         override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
+            catalogAvailabilityCalls++
             val ref = req.ref as ProviderRef.RecGov
             return fakeResponse(
                 startDate = req.startDate,
@@ -1037,13 +1063,15 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
-            fakeResponse(
+        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
+            reservableAvailabilityCalls++
+            return fakeResponse(
                 startDate = req.startDate,
                 endDate = req.endDate,
                 campgroundId = null,
                 reservableId = "site:recgov:${req.vendorId}",
             )
+        }
 
         private fun fakeResponse(
             startDate: java.time.LocalDate,
@@ -1052,7 +1080,7 @@ class ReservableRoutesTest {
             reservableId: String?,
             availableIds: List<String>? = null,
         ): AvailabilityObservationBatch {
-            val observedAt = Instant.parse("2026-06-01T00:00:00Z")
+            val observedAt = Instant.now()
             val days =
                 java.time.temporal.ChronoUnit.DAYS
                     .between(startDate, endDate)
@@ -1082,6 +1110,8 @@ class ReservableRoutesTest {
     }
 
     private object FakeAspiraReservationProvider : ReservationProvider {
+        fun reset() = Unit
+
         override val id: ReservationProviderId = ReservationProviderId.ASPIRA
         override val capabilities: ReservationProviderCapabilities =
             ReservationProviderCapabilities(
@@ -1130,7 +1160,7 @@ class ReservableRoutesTest {
             reservableId: String?,
             availableIds: List<String>,
         ): AvailabilityObservationBatch {
-            val observedAt = Instant.parse("2026-06-01T00:00:00Z")
+            val observedAt = Instant.now()
             val days =
                 java.time.temporal.ChronoUnit.DAYS
                     .between(startDate, endDate)

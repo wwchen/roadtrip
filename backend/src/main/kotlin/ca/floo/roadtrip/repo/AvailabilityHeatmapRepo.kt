@@ -22,8 +22,8 @@ class AvailabilityHeatmapRepo(
      * are not present in the result; the route layer fills them as null.
      *
      * Uses Postgres DISTINCT ON so the database returns one row per pair
-     * directly, ordered by observed_at DESC. Cheaper than fetching all rows
-     * and reducing in Kotlin once histories grow.
+     * directly, ordered by observed_at DESC, id DESC. Cheaper than fetching
+     * all rows and reducing in Kotlin once histories grow.
      */
     fun loadHeatmap(
         reservableIds: List<Long>,
@@ -40,7 +40,7 @@ class AvailabilityHeatmapRepo(
                 FROM availability_snapshot
                 WHERE reservable_id = ANY(?)
                   AND target_date = ANY(?)
-                ORDER BY reservable_id, target_date, observed_at DESC
+                ORDER BY reservable_id, target_date, observed_at DESC, id DESC
                 """.trimIndent(),
                 reservableIdsArg,
                 datesArg,

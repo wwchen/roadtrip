@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.Reservable
 import ca.floo.roadtrip.models.ReservableId
@@ -17,17 +18,18 @@ import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
 import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.DayClassification
-import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
+import ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.availabilityResponseDto
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
+import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
@@ -47,6 +49,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import org.slf4j.LoggerFactory
+import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
@@ -84,9 +87,10 @@ fun Route.availabilityRoutes(
     reservationProviders: ReservationProviderRegistry,
     reservables: ReservableRepo,
     snapshots: AvailabilitySnapshotRepo? = null,
+    snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
 ) {
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
-    val reservableAvailabilityFetches = ReservableAvailabilityFetchService(snapshots)
+    val snapshotAvailability = SnapshotBackedAvailabilityService(snapshots)
 
     suspend fun ApplicationCall.handlePoiAvailability(poiIdParam: String) {
         val poiId =
@@ -142,15 +146,26 @@ fun Route.availabilityRoutes(
                 catalogRows
                     .map { it.toCatalogReservableRef() }
             val batch =
-                provider.catalogAvailability(
-                    CatalogAvailabilityRequest(
-                        ref = ref,
-                        reservables = catalogRefs,
+                snapshotAvailability.loadOrFetch(
+                    SnapshotBackedAvailabilityService.Request(
+                        metadata = availabilityMetadata(provider.id, ref),
+                        targets = catalogRows.map { it.toAvailabilityTarget() },
                         startDate = query.startDate,
                         endDate = query.endDate,
+                        ttl = snapshotFreshnessTtl(provider.id),
                         force = query.force,
                     ),
-                )
+                ) {
+                    provider.catalogAvailability(
+                        CatalogAvailabilityRequest(
+                            ref = ref,
+                            reservables = catalogRefs,
+                            startDate = query.startDate,
+                            endDate = query.endDate,
+                            force = query.force,
+                        ),
+                    )
+                }
             val response = availabilityResponseFromObservations(batch)
             respondAvailabilityJson(response)
         } catch (e: ReservationProviderError) {
@@ -270,19 +285,28 @@ fun Route.availabilityRoutes(
         }
 
         try {
-            val response =
-                reservableAvailabilityFetches.fetch(
-                    ReservableAvailabilityFetchService.Request(
-                        reservableId = row.id,
-                        reservableRid = rid.encode(),
-                        provider = provider,
-                        ref = ref,
-                        vendorId = rid.vendorId,
+            val batch =
+                snapshotAvailability.loadOrFetch(
+                    SnapshotBackedAvailabilityService.Request(
+                        metadata = availabilityMetadata(provider.id, ref, reservableId = rid.encode()),
+                        targets = listOf(row.toAvailabilityTarget()),
                         startDate = query.startDate,
                         endDate = query.endDate,
+                        ttl = snapshotFreshnessTtl(provider.id),
                         force = query.force,
                     ),
-                )
+                ) {
+                    provider.reservableAvailability(
+                        ReservableAvailabilityRequest(
+                            ref = ref,
+                            vendorId = rid.vendorId,
+                            startDate = query.startDate,
+                            endDate = query.endDate,
+                            force = query.force,
+                        ),
+                    )
+                }
+            val response = availabilityResponseFromObservations(batch)
             call.respondAvailabilityJson(response)
         } catch (e: ReservationProviderError) {
             val (status, error) = mapProviderError(e)
@@ -413,7 +437,18 @@ fun Route.availabilityRoutes(
             coroutineScope {
                 req.ids
                     .map { id ->
-                        async { fetchOneBulk(id, rowsById[id], reservationProviders, start, end) }
+                        async {
+                            fetchOneBulk(
+                                poiId = id,
+                                row = rowsById[id],
+                                reservationProviders = reservationProviders,
+                                reservables = reservables,
+                                snapshotAvailability = snapshotAvailability,
+                                snapshotFreshnessTtl = snapshotFreshnessTtl,
+                                startDate = start,
+                                endDate = end,
+                            )
+                        }
                     }.awaitAll()
             }
 
@@ -472,6 +507,31 @@ private fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
         resourceLocationId = aspiraProviderRefLong("resourceLocationId"),
     )
 
+private fun Reservable.toAvailabilityTarget(): SnapshotBackedAvailabilityService.TargetReservable =
+    SnapshotBackedAvailabilityService.TargetReservable(
+        dbId = id,
+        rid = rid.encode(),
+    )
+
+private fun availabilityMetadata(
+    providerId: ReservationProviderId,
+    ref: ProviderRef,
+    reservableId: String? = null,
+): SnapshotBackedAvailabilityService.Metadata =
+    SnapshotBackedAvailabilityService.Metadata(
+        provider = providerId.name.lowercase(),
+        campgroundId = (ref as? ProviderRef.RecGov)?.recgovId,
+        mapId = (ref as? ProviderRef.Aspira)?.mapId?.toString(),
+        reservableId = reservableId,
+    )
+
+private fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =
+    when (providerId) {
+        ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
+        ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
+        ReservationProviderId.CAMIS -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
+    }
+
 private fun Reservable.providerRefForReservable(parentRef: ProviderRef): ProviderRef =
     when (parentRef) {
         is ProviderRef.Aspira ->
@@ -522,6 +582,9 @@ private suspend fun fetchOneBulk(
     poiId: Long,
     row: CampsiteProviderRefRow?,
     reservationProviders: ReservationProviderRegistry,
+    reservables: ReservableRepo,
+    snapshotAvailability: SnapshotBackedAvailabilityService,
+    snapshotFreshnessTtl: (ReservationProviderId) -> Duration,
     startDate: LocalDate,
     endDate: LocalDate,
 ): BulkAvailEntrySchema {
@@ -536,10 +599,29 @@ private suspend fun fetchOneBulk(
             ?: return BulkAvailEntrySchema(id = poiId, status = 422, available_dates = emptyList())
 
     return try {
+        val catalogRows = reservables.findByPoi(poiId, ReservableType.SITE)
+        val catalogRefs = catalogRows.map { it.toCatalogReservableRef() }
         val batch =
-            provider.availability(
-                AvailabilityRequest(ref = ref, startDate = startDate, endDate = endDate),
-            )
+            snapshotAvailability.loadOrFetch(
+                SnapshotBackedAvailabilityService.Request(
+                    metadata = availabilityMetadata(provider.id, ref),
+                    targets = catalogRows.map { it.toAvailabilityTarget() },
+                    startDate = startDate,
+                    endDate = endDate,
+                    ttl = snapshotFreshnessTtl(provider.id),
+                    force = false,
+                ),
+            ) {
+                provider.catalogAvailability(
+                    CatalogAvailabilityRequest(
+                        ref = ref,
+                        reservables = catalogRefs,
+                        startDate = startDate,
+                        endDate = endDate,
+                        force = false,
+                    ),
+                )
+            }
         val dates = availabilityDatesFromObservations(batch)
         BulkAvailEntrySchema(id = poiId, status = 200, available_dates = dates)
     } catch (e: ReservationProviderError) {

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.service.api.AvailabilityStatus
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.jooq.DSLContext
@@ -213,5 +214,20 @@ class AvailabilitySnapshotStatsTest {
         assertEquals(d2, stats[1].targetDate)
         assertEquals(true, stats[0].isCurrentlyOpen)
         assertEquals(false, stats[1].isCurrentlyOpen)
+    }
+
+    @Test
+    fun `latest observations use id as tie breaker for identical observed_at`() {
+        val reservableId = seedReservable()
+        val observedAt = now()
+        insertSnapshot(reservableId, date, observedAt, available = false)
+        insertSnapshot(reservableId, date, observedAt, available = true)
+
+        val repo = AvailabilitySnapshotRepo(ctx)
+        val latest = repo.loadLatestObservations(listOf(reservableId), listOf(date)).single()
+
+        assertEquals(date, latest.targetDate)
+        assertEquals(true, latest.available)
+        assertEquals(AvailabilityStatus.AVAILABLE, latest.status)
     }
 }

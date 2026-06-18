@@ -133,6 +133,22 @@ class AvailabilityHeatmapRepoTest {
     }
 
     @Test
+    fun `latest snapshot uses id tie breaker for identical observed_at`() {
+        val rid = seedReservable("100")
+        val date = LocalDate.parse("2026-07-04")
+        val observedAt = now()
+        insertSnapshot(rid, date, observedAt, available = false)
+        insertSnapshot(rid, date, observedAt, available = true)
+
+        val repo = AvailabilityHeatmapRepo(ctx)
+        val cells = repo.loadHeatmap(listOf(rid), listOf(date))
+
+        assertEquals(1, cells.size)
+        assertEquals(true, cells[0].available)
+        assertEquals(AvailabilityStatus.AVAILABLE, cells[0].status)
+    }
+
+    @Test
     fun `cross product returns one cell per pair, missing pairs absent`() {
         val r1 = seedReservable("100")
         val r2 = seedReservable("200")

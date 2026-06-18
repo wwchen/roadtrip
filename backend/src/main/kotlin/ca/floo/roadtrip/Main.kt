@@ -39,6 +39,7 @@ import ca.floo.roadtrip.service.etl.IngestController
 import ca.floo.roadtrip.service.etl.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
 import ca.floo.roadtrip.service.scheduler.Scheduler
 import io.github.smiley4.ktorswaggerui.SwaggerUI
@@ -248,6 +249,13 @@ fun Application.module() {
             reservationProviderRegistry,
             ReservableRepo(ctx),
             AvailabilitySnapshotRepo(ctx),
+            snapshotFreshnessTtl = { providerId ->
+                when (providerId) {
+                    ReservationProviderId.RECGOV -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
+                    ReservationProviderId.ASPIRA -> appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY)
+                    ReservationProviderId.CAMIS -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
+                }
+            },
         )
         adminIngestRoutes(ingestController, ctx)
         // Static site. /web/* and /data/* serve directly from the repo

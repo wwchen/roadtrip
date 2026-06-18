@@ -2,13 +2,11 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.Companion.AVAILABILITY_SNAPSHOT
 import ca.floo.roadtrip.service.api.AvailabilityDayDto
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.availabilityResponseJson
 import kotlinx.serialization.encodeToString
 import org.jooq.DSLContext
 import org.jooq.JSONB
-import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -25,35 +23,86 @@ import ca.floo.roadtrip.db.generated.enums.AvailabilityStatus as DbAvailabilityS
  */
 class AvailabilitySnapshotRepo(
     private val ctx: DSLContext,
-    private val clock: Clock = Clock.systemUTC(),
 ) {
-    data class SnapshotBatch(
-        val reservableId: Long,
-        val runId: Long?,
-        val response: AvailabilityResponseDto,
+    data class SnapshotObservationBatch(
+        val runId: Long? = null,
+        val observations: List<SnapshotObservation>,
     )
 
-    fun appendBatch(input: SnapshotBatch): Int {
-        if (input.response.availability.isEmpty()) return 0
+    data class SnapshotObservation(
+        val reservableId: Long,
+        val reservableRid: String?,
+        val targetDate: LocalDate,
+        val observedAt: Instant,
+        val status: AvailabilityStatus,
+    )
 
-        val observedAt = OffsetDateTime.ofInstant(Instant.now(clock), ZoneOffset.UTC)
+    data class LatestObservation(
+        val reservableId: Long,
+        val targetDate: LocalDate,
+        val observedAt: OffsetDateTime,
+        val status: AvailabilityStatus,
+        val available: Boolean,
+    )
+
+    fun appendObservations(input: SnapshotObservationBatch): Int {
+        if (input.observations.isEmpty()) return 0
         val inserts =
-            input.response.availability.map { day ->
+            input.observations.map { observation ->
+                val observedAt = OffsetDateTime.ofInstant(observation.observedAt, ZoneOffset.UTC)
                 ctx
                     .insertInto(AVAILABILITY_SNAPSHOT)
-                    .set(AVAILABILITY_SNAPSHOT.RESERVABLE_ID, input.reservableId)
+                    .set(AVAILABILITY_SNAPSHOT.RESERVABLE_ID, observation.reservableId)
                     .set(AVAILABILITY_SNAPSHOT.RUN_ID, input.runId)
                     .set(AVAILABILITY_SNAPSHOT.OBSERVED_AT, observedAt)
-                    .set(AVAILABILITY_SNAPSHOT.TARGET_DATE, LocalDate.parse(day.date))
-                    .set(AVAILABILITY_SNAPSHOT.STATUS, day.status.toDb())
-                    .set(AVAILABILITY_SNAPSHOT.AVAILABLE, day.status.isOnlineBookable)
-                    .set(AVAILABILITY_SNAPSHOT.DAY_PAYLOAD, JSONB.valueOf(day.toJson()))
+                    .set(AVAILABILITY_SNAPSHOT.TARGET_DATE, observation.targetDate)
+                    .set(AVAILABILITY_SNAPSHOT.STATUS, observation.status.toDb())
+                    .set(AVAILABILITY_SNAPSHOT.AVAILABLE, observation.status.isOnlineBookable)
+                    .set(AVAILABILITY_SNAPSHOT.DAY_PAYLOAD, JSONB.valueOf(observation.toDayDto().toJson()))
             }
         ctx.batch(inserts).execute()
         return inserts.size
     }
 
+    fun loadLatestObservations(
+        reservableIds: List<Long>,
+        dates: List<LocalDate>,
+    ): List<LatestObservation> {
+        if (reservableIds.isEmpty() || dates.isEmpty()) return emptyList()
+        return ctx
+            .resultQuery(
+                """
+                SELECT DISTINCT ON (reservable_id, target_date)
+                    id, reservable_id, target_date, status, available, observed_at
+                FROM availability_snapshot
+                WHERE reservable_id = ANY(?)
+                  AND target_date = ANY(?)
+                ORDER BY reservable_id, target_date, observed_at DESC, id DESC
+                """.trimIndent(),
+                reservableIds.toTypedArray(),
+                dates.toTypedArray(),
+            ).fetch { r ->
+                LatestObservation(
+                    reservableId = r.get("reservable_id", Long::class.java),
+                    targetDate = r.get("target_date", LocalDate::class.java),
+                    observedAt = r.get("observed_at", OffsetDateTime::class.java),
+                    status = AvailabilityStatus.parse(r.get("status", String::class.java)),
+                    available = r.get("available", Boolean::class.java),
+                )
+            }
+    }
+
     private fun AvailabilityDayDto.toJson(): String = availabilityResponseJson.encodeToString(AvailabilityDayDto.serializer(), this)
+
+    private fun SnapshotObservation.toDayDto(): AvailabilityDayDto =
+        AvailabilityDayDto(
+            date = targetDate.toString(),
+            status = status,
+            availableCount = if (status.isOnlineBookable) 1 else 0,
+            total = 1,
+            availableReservableIds = if (status.isOnlineBookable && reservableRid != null) listOf(reservableRid) else emptyList(),
+            reservableStatuses = reservableRid?.let { mapOf(it to status) },
+        )
 
     data class Snapshot(
         val id: Long,

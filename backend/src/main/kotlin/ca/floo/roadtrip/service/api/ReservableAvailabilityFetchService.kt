@@ -36,21 +36,32 @@ class ReservableAvailabilityFetchService(
                 ),
             )
         val response = availabilityResponseFromObservations(batch)
-        appendBaseAvailabilitySnapshot(request, response)
+        appendBaseAvailabilitySnapshot(request, batch)
         return response
     }
 
     private suspend fun appendBaseAvailabilitySnapshot(
         request: Request,
-        response: AvailabilityResponseDto,
+        batch: AvailabilityObservationBatch,
     ) {
         val sink = snapshots ?: return
+        val observations =
+            batch.observations
+                .filter { it.reservableId == request.reservableRid }
+                .map { observation ->
+                    AvailabilitySnapshotRepo.SnapshotObservation(
+                        reservableId = request.reservableId,
+                        reservableRid = request.reservableRid,
+                        targetDate = observation.date,
+                        observedAt = observation.observedAt,
+                        status = observation.status,
+                    )
+                }
         try {
-            sink.appendBatch(
-                AvailabilitySnapshotRepo.SnapshotBatch(
-                    reservableId = request.reservableId,
+            sink.appendObservations(
+                AvailabilitySnapshotRepo.SnapshotObservationBatch(
                     runId = request.runId,
-                    response = response,
+                    observations = observations,
                 ),
             )
         } catch (e: Exception) {
