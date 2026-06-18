@@ -6,9 +6,8 @@ set -euo pipefail
 staged=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '^backend/.*\.kts?$' || true)
 [ -z "$staged" ] && exit 0
 
-cd backend
-if ! ./gradlew --quiet ktlintCheck -x generateJooq; then
+if ! ./gradlew --quiet :backend:ktlintCheck -x :backend:generateJooq; then
   echo
-  echo "ktlint failed. Auto-fix with: (cd backend && ./gradlew ktlintFormat -x generateJooq)"
+  echo "ktlint failed. Auto-fix with: ./gradlew :backend:ktlintFormat -x :backend:generateJooq"
   exit 1
 fi

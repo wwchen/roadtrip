@@ -4,8 +4,8 @@
 
 ## Test plan
 
-- [ ] `cd backend && ./gradlew test` passes locally
-- [ ] `cd backend && ./gradlew ktlintCheck` clean
+- [ ] `./gradlew :backend:test` passes locally
+- [ ] `./gradlew :backend:ktlintCheck` clean
 - [ ] If touching the request path: `make qa` smoke passes against local stack
 - [ ] If touching data shape: ran `make data-import` and spot-checked
 - [ ] If touching `/api/campsite/*` or the `/campsite` UI: smoked the campsite tool too

@@ -26,8 +26,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: ktlint
-        run: ./gradlew ktlintCheck -x generateJooq
-        working-directory: backend
+        run: ./gradlew :backend:ktlintCheck -x :backend:generateJooq
 
   backend-tests:
     # gradle test runs Testcontainers (Postgis-flavored Postgres in Docker).
@@ -43,8 +42,7 @@ jobs:
         with:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
       - name: Run backend tests + coverage
-        run: ./gradlew test koverXmlReport koverVerify
-        working-directory: backend
+        run: ./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify
 
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v4
@@ -97,8 +95,7 @@ jobs:
           cache-read-only: ${{ github.ref != 'refs/heads/master' }}
 
       - name: Build backend fat-jar
-        run: ./gradlew shadowJar
-        working-directory: backend
+        run: ./gradlew :backend:shadowJar
 
       - name: Start backend
         run: |
@@ -139,12 +136,10 @@ jobs:
           SQL
 
       - name: Install Playwright Chromium
-        run: ./gradlew installPlaywrightBrowsers
-        working-directory: backend
+        run: ./gradlew :backend:installPlaywrightBrowsers
 
       - name: Run smoke
-        run: QA_BASE_URL=http://127.0.0.1:8765 ./gradlew test --tests ca.floo.roadtrip.SmokeTest --tests ca.floo.campsite.CampsiteSmokeTest --rerun -x generateJooq
-        working-directory: backend
+        run: QA_BASE_URL=http://127.0.0.1:8765 ./gradlew :backend:test --tests ca.floo.roadtrip.SmokeTest --tests ca.floo.campsite.CampsiteSmokeTest --rerun -x :backend:generateJooq
 
       - name: Upload test reports on failure
         if: failure()

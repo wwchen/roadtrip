@@ -39,10 +39,10 @@ help:
 # four /api/* routes.
 run:
 	$(COMPOSE) up -d postgres
-	cd backend && PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
+	PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
 	  ROADTRIP_DB_URL=$(DB_JDBC_URL) \
 	  ROADTRIP_DB_USER=$(DB_USER) ROADTRIP_DB_PASSWORD=$(DB_PASSWORD) \
-	  ./gradlew run
+	  ./gradlew :backend:run
 
 companion:
 	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) node --experimental-eventsource src/index.js
@@ -63,7 +63,7 @@ check-pushed:
 	 if [ -n "$$dirty" ]; then echo "refusing: working tree has uncommitted changes"; git status --short; exit 1; fi
 
 deploy: check-pushed
-	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && (cd backend && ./gradlew shadowJar) && docker compose --profile tunnel --profile pois up -d --build'
+	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && ./gradlew :backend:shadowJar && docker compose --profile tunnel --profile pois up -d --build'
 
 # Two-step refresh through the backend's admin API (RFC 0004 / issue #44):
 #   make data-fetch                       # all targets
@@ -99,8 +99,8 @@ reset-db:
 # QA_BASE_URL gates the SmokeTest so `gradle test` alone stays fast and
 # doesn't pull Chromium.
 qa:
-	cd backend && ./gradlew installPlaywrightBrowsers
-	cd backend && QA_BASE_URL=http://127.0.0.1:$(PORT) ./gradlew test --tests ca.floo.roadtrip.SmokeTest --tests ca.floo.campsite.CampsiteSmokeTest --rerun -x generateJooq
+	./gradlew :backend:installPlaywrightBrowsers
+	QA_BASE_URL=http://127.0.0.1:$(PORT) ./gradlew :backend:test --tests ca.floo.roadtrip.SmokeTest --tests ca.floo.campsite.CampsiteSmokeTest --rerun -x :backend:generateJooq
 
 # Point this clone's git at .githooks/ so .githooks/pre-commit runs ktlint on
 # staged backend Kotlin files. Per-clone (core.hooksPath isn't tracked in the

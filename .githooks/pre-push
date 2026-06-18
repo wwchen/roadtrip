@@ -39,8 +39,7 @@ if ! echo "$changed" | grep -qE '^backend/'; then
 fi
 
 echo "pre-push: running backend tests…"
-cd backend
-if ! ./gradlew --quiet test -x generateJooq; then
+if ! ./gradlew --quiet :backend:test -x :backend:generateJooq; then
   echo
   echo "Backend tests failed. Override (use sparingly) with: SKIP_PREPUSH=1 git push"
   exit 1
