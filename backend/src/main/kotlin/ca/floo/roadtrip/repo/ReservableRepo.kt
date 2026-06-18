@@ -4,9 +4,9 @@ import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.db.generated.tables.ReservablePois.Companion.RESERVABLE_POIS
 import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
-import ca.floo.roadtrip.models.Reservable
-import ca.floo.roadtrip.models.ReservableId
-import ca.floo.roadtrip.models.ReservableType
+import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.models.domain.ReservableType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.Condition
@@ -24,7 +24,7 @@ import java.time.ZoneOffset
  * reads them via `findByPoi` (listing endpoint) or `findByRid`
  * (per-reservable detail). Per-day availability is NOT stored here — that
  * lives in the per-vendor availability cache, recomputed live by the
- * BookingProvider.
+ * ReservationProvider.
  *
  * RFC 0008 §"Data model".
  */

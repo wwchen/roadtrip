@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.Envelope
+import ca.floo.roadtrip.models.metadata.Envelope
 import kotlinx.serialization.json.Json
 import java.io.File
 

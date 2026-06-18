@@ -1,21 +1,23 @@
 package ca.floo.roadtrip
 
-import ca.floo.roadtrip.client.AspiraAvailabilityClient
-import ca.floo.roadtrip.client.MapboxDirections
-import ca.floo.roadtrip.client.MapboxGeocoder
+import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
+import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.cache.RouteCache
+import ca.floo.roadtrip.clients.mapbox.MapboxDirections
+import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
+import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
-import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.dataSourceFor
 import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
@@ -30,17 +32,16 @@ import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
-import ca.floo.roadtrip.service.api.recgov.AvailabilityClient
-import ca.floo.roadtrip.service.api.recgov.CachedAvailability
-import ca.floo.roadtrip.service.availability.AvailabilityPollExecutor
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
-import ca.floo.roadtrip.service.booking.BookingProviderRegistryFactory
-import ca.floo.roadtrip.service.etl.EtlOrchestrator
-import ca.floo.roadtrip.service.etl.IngestController
-import ca.floo.roadtrip.service.etl.fetchTargetsFromRegistry
-import ca.floo.roadtrip.service.etl.importTargetsFromRegistry
-import ca.floo.roadtrip.service.etl.sweepStaleIngestRuns
-import ca.floo.roadtrip.service.scheduler.Scheduler
+import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
+import ca.floo.roadtrip.service.etl.framework.IngestController
+import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
+import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
+import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
+import ca.floo.roadtrip.service.scheduler.framework.Scheduler
+import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
@@ -83,7 +84,7 @@ fun Application.module() {
     val persistentCache = ApiCacheRepo(ctx)
     val recgovAvailabilityClient = AvailabilityClient()
     val recgovAvailabilityCache =
-        CachedAvailability(
+        CachedRecGovAvailability(
             recgovAvailabilityClient,
             ttl = appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY),
             persistentCache = persistentCache,
@@ -171,7 +172,7 @@ fun Application.module() {
     }
 
     // Aspira NextGen availability (Parks Canada / WA State / BC Discover Camping).
-    // Same pattern as rec.gov's CachedAvailability — process-wide singleton
+    // Same pattern as rec.gov's CachedRecGovAvailability — process-wide singleton
     // with config-driven TTL and a 1.5s mutex against Aspira's Azure WAF.
     // See ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
     val aspiraClient = AspiraAvailabilityClient()
@@ -181,11 +182,11 @@ fun Application.module() {
             ttl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY),
             persistentCache = persistentCache,
         )
-    // Booking-provider port registry: one adapter per upstream reservation
+    // Reservation-provider port registry: one adapter per upstream reservation
     // system, dispatched by `pois.source`. Routes consume the registry; they
-    // never see vendor types. See docs/booking-providers.md.
-    val bookingProviderRegistry =
-        BookingProviderRegistryFactory.build(
+    // never see vendor types. See docs/reservation-providers.md.
+    val reservationProviderRegistry =
+        ReservationProviderRegistryFactory.build(
             registry = poiRegistry,
             recgovCache = recgovAvailabilityCache,
             aspiraCache = aspiraCache,
@@ -208,7 +209,7 @@ fun Application.module() {
                 ca.floo.roadtrip.repo
                     .ReservableRepo(ctx),
             campsiteProviders = CampsiteProviderRepo(ctx),
-            bookingProviders = bookingProviderRegistry,
+            reservationProviders = reservationProviderRegistry,
             fetches = availabilityFetches,
             runs = AvailabilityJobRunRepo(ctx),
         )
@@ -245,9 +246,16 @@ fun Application.module() {
         healthRoutes()
         availabilityRoutes(
             CampsiteProviderRepo(ctx),
-            bookingProviderRegistry,
+            reservationProviderRegistry,
             ReservableRepo(ctx),
             AvailabilitySnapshotRepo(ctx),
+            snapshotFreshnessTtl = { providerId ->
+                when (providerId) {
+                    ReservationProviderId.RECGOV -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
+                    ReservationProviderId.ASPIRA -> appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY)
+                    ReservationProviderId.CAMIS -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
+                }
+            },
         )
         adminIngestRoutes(ingestController, ctx)
         // Static site. /web/* and /data/* serve directly from the repo

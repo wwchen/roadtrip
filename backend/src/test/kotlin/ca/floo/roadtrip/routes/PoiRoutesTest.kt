@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource

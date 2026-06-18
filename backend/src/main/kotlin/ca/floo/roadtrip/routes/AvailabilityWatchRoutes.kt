@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.models.Reservable
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapCell
@@ -12,6 +11,7 @@ import ca.floo.roadtrip.models.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.models.api.ReservableSchema
+import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
@@ -32,7 +32,6 @@ import io.ktor.server.routing.Route
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.jsonObject
 import org.jooq.DSLContext
 import java.time.LocalDate
 
@@ -122,10 +121,6 @@ fun Route.availabilityWatchRoutes(
         }
     }) {
         val raw = call.receiveText()
-        val removedField = removedWatchField(raw)
-        if (removedField != null) {
-            return@post call.respondError("removed_fields", HttpStatusCode.BadRequest, "$removedField is no longer supported")
-        }
         val req =
             try {
                 watchJson.decodeFromString<AvailabilityWatchCreateRequest>(raw)
@@ -176,10 +171,6 @@ fun Route.availabilityWatchRoutes(
             call.parameters["id"]?.toLongOrNull()
                 ?: return@patch call.respondError("invalid_id", HttpStatusCode.BadRequest)
         val raw = call.receiveText()
-        val removedField = removedWatchField(raw)
-        if (removedField != null) {
-            return@patch call.respondError("removed_fields", HttpStatusCode.BadRequest, "$removedField is no longer supported")
-        }
         val req =
             try {
                 watchJson.decodeFromString<AvailabilityWatchUpdateRequest>(raw)
@@ -340,7 +331,7 @@ private fun resolveCreateScope(
     }
     if (req.reservableRid != null) {
         val parsed =
-            ca.floo.roadtrip.models.ReservableId
+            ca.floo.roadtrip.models.domain.ReservableId
                 .parse(req.reservableRid)
                 ?: return ResolveResult.Err(
                     "invalid_reservable_rid",
@@ -368,11 +359,6 @@ private fun validateUpdateBody(req: AvailabilityWatchUpdateRequest): Pair<String
     if (req.triggerKinds != null && req.triggerKinds.isEmpty()) return "invalid_triggers" to "trigger_kinds must be non-empty"
     return null
 }
-
-private fun removedWatchField(raw: String): String? =
-    runCatching { watchJson.parseToJsonElement(raw).jsonObject }
-        .getOrNull()
-        ?.let { obj -> listOf("target_dates", "targetDates", "min_nights", "minNights").firstOrNull { it in obj } }
 
 private fun parseDateWindow(
     startDate: String,

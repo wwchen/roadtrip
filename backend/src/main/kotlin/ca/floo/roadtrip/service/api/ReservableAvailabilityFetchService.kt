@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservationProvider
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
@@ -15,7 +15,7 @@ class ReservableAvailabilityFetchService(
     data class Request(
         val reservableId: Long,
         val reservableRid: String,
-        val provider: BookingProvider,
+        val provider: ReservationProvider,
         val ref: ProviderRef,
         val vendorId: String,
         val startDate: LocalDate,
@@ -25,7 +25,7 @@ class ReservableAvailabilityFetchService(
     )
 
     suspend fun fetch(request: Request): AvailabilityResponseDto {
-        val response =
+        val batch =
             request.provider.reservableAvailability(
                 ReservableAvailabilityRequest(
                     ref = request.ref,
@@ -35,21 +35,33 @@ class ReservableAvailabilityFetchService(
                     force = request.force,
                 ),
             )
-        appendBaseAvailabilitySnapshot(request, response)
+        val response = availabilityResponseFromObservations(batch)
+        appendBaseAvailabilitySnapshot(request, batch)
         return response
     }
 
     private suspend fun appendBaseAvailabilitySnapshot(
         request: Request,
-        response: AvailabilityResponseDto,
+        batch: AvailabilityObservationBatch,
     ) {
         val sink = snapshots ?: return
+        val observations =
+            batch.observations
+                .filter { it.reservableId == request.reservableRid }
+                .map { observation ->
+                    AvailabilitySnapshotRepo.SnapshotObservation(
+                        reservableId = request.reservableId,
+                        reservableRid = request.reservableRid,
+                        targetDate = observation.date,
+                        observedAt = observation.observedAt,
+                        status = observation.status,
+                    )
+                }
         try {
-            sink.appendBatch(
-                AvailabilitySnapshotRepo.SnapshotBatch(
-                    reservableId = request.reservableId,
+            sink.appendObservations(
+                AvailabilitySnapshotRepo.SnapshotObservationBatch(
                     runId = request.runId,
-                    response = response,
+                    observations = observations,
                 ),
             )
         } catch (e: Exception) {

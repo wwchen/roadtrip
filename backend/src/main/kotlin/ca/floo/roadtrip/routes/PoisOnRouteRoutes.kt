@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.client.RoutingException
+import ca.floo.roadtrip.clients.cache.RouteCache
+import ca.floo.roadtrip.clients.mapbox.RoutingException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PointGeometrySchema
 import ca.floo.roadtrip.models.api.PoisOnRouteFeaturePropertiesSchema
@@ -8,10 +9,9 @@ import ca.floo.roadtrip.models.api.PoisOnRouteFeatureSchema
 import ca.floo.roadtrip.models.api.PoisOnRouteRequestSchema
 import ca.floo.roadtrip.models.api.PoisOnRouteResponseSchema
 import ca.floo.roadtrip.models.api.WaypointSchema
-import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.OnRoutePoiRepo
 import ca.floo.roadtrip.repo.OnRouteRow
-import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType

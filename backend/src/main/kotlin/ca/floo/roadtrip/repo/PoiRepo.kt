@@ -2,11 +2,11 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.models.Address
-import ca.floo.roadtrip.models.Poi
-import ca.floo.roadtrip.models.ProviderRef
-import ca.floo.roadtrip.models.categorySql
-import ca.floo.roadtrip.models.propertiesJson
+import ca.floo.roadtrip.models.domain.Address
+import ca.floo.roadtrip.models.domain.Poi
+import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.categorySql
+import ca.floo.roadtrip.models.domain.propertiesJson
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -29,7 +29,7 @@ private val poiRepoOmitNullJson =
 
 // Mark-and-sweep upsert into the v2 `pois` table. Same shape as the
 // legacy Importer.kt, generalized over the new sealed Poi types and
-// the v2 columns (provider_ref JSONB; booking_provider_id was dropped
+// the v2 columns (provider_ref JSONB; the legacy provider FK was dropped
 // in V8 since the dispatch path it was meant to power never landed).
 //
 // Sweep is scoped to the union of source names this run wrote — a

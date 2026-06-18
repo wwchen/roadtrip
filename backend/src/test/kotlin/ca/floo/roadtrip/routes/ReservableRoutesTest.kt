@@ -1,23 +1,21 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import ca.floo.roadtrip.service.api.AvailabilityStatus
-import ca.floo.roadtrip.service.api.DayClassification
-import ca.floo.roadtrip.service.api.availabilityResponseDto
-import ca.floo.roadtrip.service.booking.AvailabilityRequest
-import ca.floo.roadtrip.service.booking.AvailableDatesRequest
-import ca.floo.roadtrip.service.booking.BookingCapabilities
-import ca.floo.roadtrip.service.booking.BookingProvider
-import ca.floo.roadtrip.service.booking.BookingProviderId
-import ca.floo.roadtrip.service.booking.BookingProviderRegistry
-import ca.floo.roadtrip.service.booking.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.booking.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.api.ReservableDayObservation
+import ca.floo.roadtrip.service.reservation.AvailabilityRequest
+import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservationProvider
+import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
@@ -45,6 +43,7 @@ import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.assertAll
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -91,6 +90,8 @@ class ReservableRoutesTest {
         ctx.execute("DELETE FROM reservables")
         ctx.execute("DELETE FROM pois")
         ctx.execute("DELETE FROM import_runs")
+        FakeReservationProvider.reset()
+        FakeAspiraReservationProvider.reset()
     }
 
     @Test
@@ -481,7 +482,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `poi availability alias dispatches through booking provider`() =
+    fun `poi availability alias dispatches through reservation provider`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -493,8 +494,9 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
                     )
                 }
             }
@@ -510,6 +512,30 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `deprecated campsite availability path is not registered`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-deprecated-path",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeReservationProviders(),
+                        ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/campsite/availability/$poiId?start_date=2026-07-01&end_date=2026-07-02")
+            assertEquals(HttpStatusCode.NotFound, resp.status)
+        }
+
+    @Test
     fun `poi availability uses exclusive start and end date window`() =
         testApplication {
             val poiId =
@@ -522,7 +548,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -537,7 +563,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `availability routes reject removed days and min nights params`() =
+    fun `availability routes ignore legacy days and min nights params`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -551,7 +577,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -571,19 +597,14 @@ class ReservableRoutesTest {
                 client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&minNights=2").status
 
             assertAll(
-                { assertEquals(HttpStatusCode.BadRequest, poiStartStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, poiDaysStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, poiMinNightsStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, poiMinNightsCamelStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, reservableStartStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, reservableDaysStatus) },
-                {
-                    assertEquals(
-                        HttpStatusCode.BadRequest,
-                        reservableMinNightsStatus,
-                    )
-                },
-                { assertEquals(HttpStatusCode.BadRequest, reservableMinNightsCamelStatus) },
+                { assertEquals(HttpStatusCode.OK, poiStartStatus) },
+                { assertEquals(HttpStatusCode.OK, poiDaysStatus) },
+                { assertEquals(HttpStatusCode.OK, poiMinNightsStatus) },
+                { assertEquals(HttpStatusCode.OK, poiMinNightsCamelStatus) },
+                { assertEquals(HttpStatusCode.OK, reservableStartStatus) },
+                { assertEquals(HttpStatusCode.OK, reservableDaysStatus) },
+                { assertEquals(HttpStatusCode.OK, reservableMinNightsStatus) },
+                { assertEquals(HttpStatusCode.OK, reservableMinNightsCamelStatus) },
             )
         }
 
@@ -600,7 +621,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -633,8 +654,9 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
                     )
                 }
             }
@@ -656,6 +678,7 @@ class ReservableRoutesTest {
                 listOf("site:recgov:330257", "site:recgov:330259"),
                 first["available_reservable_ids"]!!.jsonArray.map { it.jsonPrimitive.content },
             )
+            assertEquals(4L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
         }
 
     @Test
@@ -673,7 +696,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
                     )
@@ -725,12 +748,13 @@ class ReservableRoutesTest {
 
             val removedMinNights =
                 client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-03&min_nights=2")
-            assertEquals(HttpStatusCode.BadRequest, removedMinNights.status)
+            assertEquals(HttpStatusCode.OK, removedMinNights.status)
             val rowCountAfterMultiNight =
                 ctx
                     .fetchOne("SELECT count(*) FROM availability_snapshot")!!
                     .get(0, Long::class.java)
             assertEquals(2L, rowCountAfterMultiNight)
+            assertEquals(1, FakeReservationProvider.reservableAvailabilityCalls)
         }
 
     @Test
@@ -748,7 +772,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
                     )
@@ -773,12 +797,15 @@ class ReservableRoutesTest {
                     name = "Bulk Window Campground",
                     providerRefJson = """{"recgov_id":"232447"}""",
                 )
+            val reservableId = seedReservable(vendorId = "330257", name = "A12")
+            link(reservableId, poiId)
             application {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeBookingProviders(),
+                        fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
                     )
                 }
             }
@@ -799,6 +826,7 @@ class ReservableRoutesTest {
                     .jsonArray
                     .map { it.jsonPrimitive.content },
             )
+            assertEquals(3L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
         }
 
     @Test
@@ -842,7 +870,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeAspiraBookingProviders(),
+                        fakeAspiraReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -892,7 +920,7 @@ class ReservableRoutesTest {
                 routing {
                     availabilityRoutes(
                         CampsiteProviderRepo(ctx),
-                        fakeAspiraBookingProviders(),
+                        fakeAspiraReservationProviders(),
                         ReservableRepo(ctx),
                     )
                 }
@@ -980,27 +1008,40 @@ class ReservableRoutesTest {
         )
     }
 
-    private fun fakeBookingProviders(): BookingProviderRegistry =
-        BookingProviderRegistry(
-            adaptersBySource = mapOf("test" to FakeBookingProvider),
+    private fun fakeReservationProviders(): ReservationProviderRegistry =
+        ReservationProviderRegistry(
+            adaptersBySource = mapOf("test" to FakeReservationProvider),
         )
 
-    private fun fakeAspiraBookingProviders(): BookingProviderRegistry =
-        BookingProviderRegistry(
-            adaptersBySource = mapOf("aspira-wa-pins" to FakeAspiraBookingProvider),
+    private fun fakeAspiraReservationProviders(): ReservationProviderRegistry =
+        ReservationProviderRegistry(
+            adaptersBySource = mapOf("aspira-wa-pins" to FakeAspiraReservationProvider),
         )
 
-    private object FakeBookingProvider : BookingProvider {
-        override val id: BookingProviderId = BookingProviderId.RECGOV
-        override val capabilities: BookingCapabilities =
-            BookingCapabilities(
+    private object FakeReservationProvider : ReservationProvider {
+        var availabilityCalls: Int = 0
+            private set
+        var catalogAvailabilityCalls: Int = 0
+            private set
+        var reservableAvailabilityCalls: Int = 0
+            private set
+
+        fun reset() {
+            availabilityCalls = 0
+            catalogAvailabilityCalls = 0
+            reservableAvailabilityCalls = 0
+        }
+
+        override val id: ReservationProviderId = ReservationProviderId.RECGOV
+        override val capabilities: ReservationProviderCapabilities =
+            ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = false,
-                supportsAutoBook = false,
                 bookingHorizonDays = 365,
             )
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
+            availabilityCalls++
             val ref = req.ref as ProviderRef.RecGov
             return fakeResponse(
                 startDate = req.startDate,
@@ -1010,7 +1051,8 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
+            catalogAvailabilityCalls++
             val ref = req.ref as ProviderRef.RecGov
             return fakeResponse(
                 startDate = req.startDate,
@@ -1021,17 +1063,14 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto =
-            fakeResponse(
+        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
+            reservableAvailabilityCalls++
+            return fakeResponse(
                 startDate = req.startDate,
                 endDate = req.endDate,
                 campgroundId = null,
                 reservableId = "site:recgov:${req.vendorId}",
             )
-
-        override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
-            val days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt()
-            return (0 until days).map { req.startDate.plusDays(it.toLong()).toString() }
         }
 
         private fun fakeResponse(
@@ -1040,30 +1079,29 @@ class ReservableRoutesTest {
             campgroundId: String?,
             reservableId: String?,
             availableIds: List<String>? = null,
-        ): AvailabilityResponseDto {
+        ): AvailabilityObservationBatch {
+            val observedAt = Instant.now()
             val days =
                 java.time.temporal.ChronoUnit.DAYS
                     .between(startDate, endDate)
                     .toInt()
-            val perDay =
-                (0 until days).map { offset ->
-                    val availableCount = availableIds?.size ?: 1
-                    DayClassification(
-                        date = startDate.plusDays(offset.toLong()).toString(),
-                        status = if (availableIds?.isEmpty() == true) AvailabilityStatus.RESERVED else AvailabilityStatus.AVAILABLE,
-                        availableCount = availableCount,
-                        total = availableIds?.size ?: 1,
-                        availableReservableIds = availableIds,
-                    )
+            val ids = availableIds ?: listOf(reservableId ?: "site:recgov:fake")
+            val observations =
+                ids.flatMap { id ->
+                    (0 until days).map { offset ->
+                        ReservableDayObservation(
+                            reservableId = id,
+                            date = startDate.plusDays(offset.toLong()),
+                            observedAt = observedAt,
+                            status = AvailabilityStatus.AVAILABLE,
+                        )
+                    }
                 }
-            return availabilityResponseDto(
+            return AvailabilityObservationBatch(
                 provider = "fake",
                 startDate = startDate,
                 endDate = endDate,
-                perDay = perDay,
-                state = "success",
-                summary = "$days dates available",
-                seasonBlock = null,
+                observations = observations,
                 cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 0, ttlSeconds = 60),
                 campgroundId = campgroundId,
                 reservableId = reservableId,
@@ -1071,17 +1109,18 @@ class ReservableRoutesTest {
         }
     }
 
-    private object FakeAspiraBookingProvider : BookingProvider {
-        override val id: BookingProviderId = BookingProviderId.ASPIRA
-        override val capabilities: BookingCapabilities =
-            BookingCapabilities(
+    private object FakeAspiraReservationProvider : ReservationProvider {
+        fun reset() = Unit
+
+        override val id: ReservationProviderId = ReservationProviderId.ASPIRA
+        override val capabilities: ReservationProviderCapabilities =
+            ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = false,
-                supportsAutoBook = false,
                 bookingHorizonDays = 365,
             )
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
             val ref = req.ref as ProviderRef.Aspira
             return fakeResponse(
                 startDate = req.startDate,
@@ -1092,7 +1131,7 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
             val ref = req.ref as ProviderRef.Aspira
             return fakeResponse(
                 startDate = req.startDate,
@@ -1103,7 +1142,7 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
             val ref = req.ref as ProviderRef.Aspira
             return fakeResponse(
                 startDate = req.startDate,
@@ -1114,40 +1153,34 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
-            val days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt()
-            return (0 until days).map { req.startDate.plusDays(it.toLong()).toString() }
-        }
-
         private fun fakeResponse(
             startDate: java.time.LocalDate,
             endDate: java.time.LocalDate,
             mapId: String,
             reservableId: String?,
             availableIds: List<String>,
-        ): AvailabilityResponseDto {
+        ): AvailabilityObservationBatch {
+            val observedAt = Instant.now()
             val days =
                 java.time.temporal.ChronoUnit.DAYS
                     .between(startDate, endDate)
                     .toInt()
-            val perDay =
-                (0 until days).map { offset ->
-                    DayClassification(
-                        date = startDate.plusDays(offset.toLong()).toString(),
-                        status = if (availableIds.isEmpty()) AvailabilityStatus.RESERVED else AvailabilityStatus.AVAILABLE,
-                        availableCount = availableIds.size,
-                        total = availableIds.size,
-                        availableReservableIds = availableIds,
-                    )
+            val observations =
+                availableIds.flatMap { id ->
+                    (0 until days).map { offset ->
+                        ReservableDayObservation(
+                            reservableId = id,
+                            date = startDate.plusDays(offset.toLong()),
+                            observedAt = observedAt,
+                            status = AvailabilityStatus.AVAILABLE,
+                        )
+                    }
                 }
-            return availabilityResponseDto(
+            return AvailabilityObservationBatch(
                 provider = "aspira",
                 startDate = startDate,
                 endDate = endDate,
-                perDay = perDay,
-                state = if (availableIds.isEmpty()) "zero_available" else "success",
-                summary = "${availableIds.size} available",
-                seasonBlock = null,
+                observations = observations,
                 cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 0, ttlSeconds = 60),
                 host = "washington.goingtocamp.com",
                 mapId = mapId,

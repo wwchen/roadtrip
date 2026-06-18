@@ -192,7 +192,11 @@ For each `etls:` entry in your `poi_data:` row, create what its `adapter:` field
 - `validate(inputs) → ValidationResult` for required-field/well-formedness checks.
 - `transform(inputs, ctx) → OUT`. For an intermediate, `OUT` is whatever `@Serializable` payload you want to hand to the next stage (the orchestrator passes it through `kotlinx.serialization` so siblings can read it as a `JsonElement`); nothing persists to disk. For the terminal (last) `etls:` entry, `OUT` is `List<Poi.*>`.
 
-For terminal ETLs that need booking-provider context (Aspira, RecGov, etc.), use `ctx.bookingProviderId(vendor, host)` to resolve the FK and construct your `ProviderRef.<Vendor>(...)` payload directly. Booking provider is **not** in `poi-registry.yaml`; it's seeded once into the `booking_provider` table and the ETL hard-codes its `ProviderRef` variant.
+For terminal ETLs that need reservation-provider context (Aspira, RecGov,
+etc.), construct the right `ProviderRef.<Vendor>(...)` payload directly from
+the upstream row and YAML args. Use `ctx.argFor(etlSlug, "host")` or similar
+for per-tenant values. Reservation provider identity is not a table FK; runtime
+dispatch uses `pois.source` plus the `provider_ref` JSON payload.
 
 For terminal ETLs that need the FE bucket, use `ctx.subcategoryFor(etlSlug)` to read the value the YAML declared on the owning `poi_data:` row.
 
@@ -310,7 +314,7 @@ No new fetcher script. No new Kotlin class. No DB migration.
 
 1. **Make the fetcher take a CLI flag** for whatever varies. Surface it via `args:` in the YAML; the value participates in `output_dir_prefix:` so each tenant lands in its own raw dir.
 2. **Make the ETL class take the slug as a constructor arg.** Don't hard-code the slug as a constant — the same class will be instantiated multiple times with different slugs.
-3. **Use `TransformCtx` helpers** for any per-tenant metadata. `subcategoryFor(etlSlug)` reads the YAML; `bookingProviderId(vendor, host)` resolves the FK from `args.host`.
+3. **Use `TransformCtx` helpers** for any per-tenant metadata. `subcategoryFor(etlSlug)` reads the YAML; `argFor(etlSlug, key)` reads values such as `args.host`.
 4. **First `poi_data:` row** verifies the wiring works for one tenant. Adding the second tenant should require zero new code — only YAML + one `EtlOrchestrator.registry` line.
 
 ### Verify

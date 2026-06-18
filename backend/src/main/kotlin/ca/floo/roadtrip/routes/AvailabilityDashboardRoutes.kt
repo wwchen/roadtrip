@@ -190,7 +190,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         val rows =
             if (rid != null) {
                 val parsed =
-                    ca.floo.roadtrip.models.ReservableId
+                    ca.floo.roadtrip.models.domain.ReservableId
                         .parse(rid)
                         ?: return@get call.respondError(
                             "invalid_reservable_rid",
@@ -237,7 +237,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                     "reservable_rid is required",
                 )
         val parsed =
-            ca.floo.roadtrip.models.ReservableId
+            ca.floo.roadtrip.models.domain.ReservableId
                 .parse(rid)
                 ?: return@get call.respondError(
                     "invalid_reservable_rid",

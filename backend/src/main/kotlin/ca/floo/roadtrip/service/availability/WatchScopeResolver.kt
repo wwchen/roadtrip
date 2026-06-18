@@ -1,9 +1,10 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.Reservable
-import ca.floo.roadtrip.models.ReservableType
+import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityJobIntent
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive

@@ -10,7 +10,7 @@ import ca.floo.roadtrip.models.api.PointGeometrySchema
 import ca.floo.roadtrip.models.api.PoisRequestSchema
 import ca.floo.roadtrip.models.api.SlimPoiFeatureSchema
 import ca.floo.roadtrip.models.api.SlimPoiPropertiesSchema
-import ca.floo.roadtrip.models.registry.PoiRegistry
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.Bbox
 import ca.floo.roadtrip.repo.PoiDetailRow
 import ca.floo.roadtrip.repo.PoiRow

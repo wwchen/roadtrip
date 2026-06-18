@@ -16,11 +16,9 @@
 #    `enabled: false` skips the row in fan-out import; per-name imports still
 #    run it on request.
 #
-# Booking provider info is NOT in this file. ETLs that need it hard-code
-# their ProviderRef variant and resolve the booking_provider FK at transform
-# time via TransformCtx.bookingProviderId(vendor, host); the value of `host`
-# comes from the etl's args. Seeding of booking_provider rows happens
-# separately (see backend/src/main/resources/db/migration/).
+# Reservation provider info is NOT in this file. ETLs that need it construct
+# their ProviderRef variant directly from upstream rows and per-tenant args
+# such as `host`. Runtime dispatch uses pois.source plus provider_ref JSON.
 
 # ============================================================================
 # data_sources — fetchers

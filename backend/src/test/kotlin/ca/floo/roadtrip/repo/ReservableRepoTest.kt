@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.ReservableId
-import ca.floo.roadtrip.models.ReservableType
+import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.models.domain.ReservableType
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.Json

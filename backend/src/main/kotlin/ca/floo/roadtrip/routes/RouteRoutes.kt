@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.client.RouteResponse
-import ca.floo.roadtrip.client.RoutingException
-import ca.floo.roadtrip.repo.RouteCache
+import ca.floo.roadtrip.clients.cache.RouteCache
+import ca.floo.roadtrip.clients.mapbox.RouteResponse
+import ca.floo.roadtrip.clients.mapbox.RoutingException
 import ca.floo.roadtrip.repo.RouteCorridorRepo
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
