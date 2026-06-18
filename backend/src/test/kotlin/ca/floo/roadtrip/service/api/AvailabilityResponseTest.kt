@@ -235,6 +235,7 @@ class AvailabilityResponseTest {
         assertEquals("error", json["state"]!!.jsonPrimitive.content)
         assertEquals("upstream_blocked", json["error"]!!.jsonPrimitive.content)
         assertEquals(300, json["retry_after_s"]!!.jsonPrimitive.int)
+        assertEquals(503, json["upstream_status"]!!.jsonPrimitive.int)
     }
 
     @Test

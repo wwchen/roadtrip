@@ -1107,9 +1107,11 @@ pre {
 .cg-site-matrix-cell {
   height: 40px;
   text-align: center;
+  overflow: hidden;
 }
 
 .cg-site-matrix-cell-button {
+  box-sizing: border-box;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1125,6 +1127,7 @@ pre {
   font: inherit;
   font-size: 11px;
   font-weight: 600;
+  line-height: 1;
   cursor: pointer;
   overflow: hidden;
   text-overflow: ellipsis;

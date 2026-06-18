@@ -22,6 +22,7 @@ import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 import { reservationUrlFromTemplate } from './booking-links.js';
 import { mountCalendarPopover } from './calendar-popover.js';
+import { availabilityStatusLabel } from '../utils/availability-status.js';
 
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
@@ -141,7 +142,7 @@ function renderShell(ctx) {
 }
 
 function renderBody(ctx) {
-  if (ctx.state === 'loading' || ctx.days == null) {
+  if (ctx.state === 'loading') {
     return renderSiteMatrixSkeleton({
       days: placeholderMatrixDays(ctx),
       siteColumnWidth: ctx.siteColumnWidth,
@@ -436,9 +437,9 @@ function disarmBookButtonsInPlace(ctx) {
 function updateBookButtonState(button, site, date, armed) {
   if (!(button instanceof HTMLElement) || !date) return;
   button.classList.toggle('is-armed', armed);
-  button.textContent = armed ? 'Book' : 'Open';
+  button.textContent = armed ? 'Book' : availabilityStatusLabel('available');
   const label = siteLabel(site);
-  const aria = `${label} ${date}: open`;
+  const aria = `${label} ${date}: available`;
   button.setAttribute(
     'aria-label',
     armed
@@ -452,6 +453,24 @@ function siteLabel(site) {
   if (site.name) return site.name;
   if (site.vendor_id) return `Site #${site.vendor_id}`;
   return site.rid || 'Site';
+}
+
+const AVAIL_ERROR_LABELS = {
+  rate_limited: 'Upstream rate-limited',
+  upstream_blocked: 'Upstream blocked the request',
+  upstream_5xx: 'Upstream unavailable',
+  unsupported: 'Provider not supported',
+  provider_misconfigured: 'Provider misconfigured',
+  ip_throttled: 'Too many requests',
+};
+
+function formatAvailabilityError(json, httpStatus) {
+  const code = typeof json?.error === 'string' ? json.error : null;
+  const base = code ? AVAIL_ERROR_LABELS[code] || code : `HTTP ${httpStatus}`;
+  if (typeof json?.upstream_status === 'number') {
+    return `${base} (upstream HTTP ${json.upstream_status})`;
+  }
+  return base;
 }
 
 function beginSiteColumnResize(ctx, event, handle) {
@@ -580,7 +599,7 @@ async function fetchWeek(ctx, { force = false } = {}) {
     if (!resp.ok) {
       const json = await resp.json().catch(() => null);
       ctx.state = 'error';
-      ctx.error = json?.error || `HTTP ${resp.status}`;
+      ctx.error = formatAvailabilityError(json, resp.status);
       rerender(ctx);
       return;
     }
