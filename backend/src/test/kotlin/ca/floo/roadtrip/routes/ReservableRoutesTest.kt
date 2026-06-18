@@ -510,6 +510,29 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `deprecated campsite availability path is not registered`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "upper-pines-deprecated-path",
+                    name = "Upper Pines Campground",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                )
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeBookingProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/campsite/availability/$poiId?start_date=2026-07-01&end_date=2026-07-02")
+            assertEquals(HttpStatusCode.NotFound, resp.status)
+        }
+
+    @Test
     fun `poi availability uses exclusive start and end date window`() =
         testApplication {
             val poiId =
@@ -537,7 +560,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `availability routes reject removed days and min nights params`() =
+    fun `availability routes ignore legacy days and min nights params`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -571,19 +594,14 @@ class ReservableRoutesTest {
                 client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&minNights=2").status
 
             assertAll(
-                { assertEquals(HttpStatusCode.BadRequest, poiStartStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, poiDaysStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, poiMinNightsStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, poiMinNightsCamelStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, reservableStartStatus) },
-                { assertEquals(HttpStatusCode.BadRequest, reservableDaysStatus) },
-                {
-                    assertEquals(
-                        HttpStatusCode.BadRequest,
-                        reservableMinNightsStatus,
-                    )
-                },
-                { assertEquals(HttpStatusCode.BadRequest, reservableMinNightsCamelStatus) },
+                { assertEquals(HttpStatusCode.OK, poiStartStatus) },
+                { assertEquals(HttpStatusCode.OK, poiDaysStatus) },
+                { assertEquals(HttpStatusCode.OK, poiMinNightsStatus) },
+                { assertEquals(HttpStatusCode.OK, poiMinNightsCamelStatus) },
+                { assertEquals(HttpStatusCode.OK, reservableStartStatus) },
+                { assertEquals(HttpStatusCode.OK, reservableDaysStatus) },
+                { assertEquals(HttpStatusCode.OK, reservableMinNightsStatus) },
+                { assertEquals(HttpStatusCode.OK, reservableMinNightsCamelStatus) },
             )
         }
 
@@ -725,12 +743,12 @@ class ReservableRoutesTest {
 
             val removedMinNights =
                 client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-03&min_nights=2")
-            assertEquals(HttpStatusCode.BadRequest, removedMinNights.status)
+            assertEquals(HttpStatusCode.OK, removedMinNights.status)
             val rowCountAfterMultiNight =
                 ctx
                     .fetchOne("SELECT count(*) FROM availability_snapshot")!!
                     .get(0, Long::class.java)
-            assertEquals(2L, rowCountAfterMultiNight)
+            assertEquals(4L, rowCountAfterMultiNight)
         }
 
     @Test

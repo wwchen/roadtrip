@@ -162,45 +162,6 @@ fun Route.availabilityRoutes(
         }
     }
 
-    get("/api/campsite/availability/{poi_id}", {
-        tags = listOf("campsite-availability")
-        summary = "Deprecated: per-day availability for one campground"
-        description =
-            "Deprecated legacy path; prefer `/api/poi/{poi_id}/availability` " +
-            "for POI-scoped availability or `/api/reservable/{rid}/availability` " +
-            "for reservable-scoped availability. Path key is `pois.id`. " +
-            "Backend dispatches to the booking-provider " +
-            "adapter registered for that POI's source (rec.gov, Aspira PC/BC/WA, " +
-            "Camis stub). Response shape is provider-stable; provider-specific " +
-            "extras (`campground_id` for rec.gov; `host`/`map_id` for Aspira) " +
-            "are additive. Optional `start_date`/`end_date` define an exclusive " +
-            "date window. Missing start_date defaults to today UTC; missing " +
-            "end_date defaults to start_date + 7 days. The window is capped at " +
-            "`capabilities.bookingHorizonDays` ahead of today, per provider."
-        request {
-            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today UTC." }
-            queryParameter<String>("end_date") { description = "Exclusive YYYY-MM-DD; default is start_date + 7 days." }
-            queryParameter<String>("force") { description = "Set to 1 to bypass provider cache." }
-            queryParameter<String>("site_type") { description = "Exact site type filter. Repeat or comma-separate for OR." }
-        }
-        response {
-            code(HttpStatusCode.BadRequest) {
-                description = "Bad POI id or invalid date window."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.NotFound) {
-                description = "No campground/provider row exists for that POI id."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.ServiceUnavailable) {
-                description = "Rate limited or upstream availability service unavailable."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
-    }) {
-        call.handlePoiAvailability("poi_id")
-    }
-
     get("/api/poi/{poi_id}/availability", {
         tags = listOf("availability")
         summary = "Per-day availability for one campground POI (cached, provider-dispatched)"
@@ -626,7 +587,6 @@ private fun ApplicationCall.parseAvailabilityWindow(
     bookingHorizonDays: Int,
     defaultDays: Int = 7,
 ): AvailabilityWindowQuery? {
-    if (listOf("start", "days", "min_nights", "minNights").any { request.queryParameters[it] != null }) return null
     val today = LocalDate.now(ZoneOffset.UTC)
     val start =
         when (val parsed = parseStartParam(request.queryParameters["start_date"], today, bookingHorizonDays)) {

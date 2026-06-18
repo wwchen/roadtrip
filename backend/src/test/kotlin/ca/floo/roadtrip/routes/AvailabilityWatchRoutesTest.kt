@@ -150,7 +150,7 @@ class AvailabilityWatchRoutesTest {
         }
 
     @Test
-    fun `POST rejects removed date fields`() =
+    fun `POST ignores removed date fields`() =
         testApplication {
             application {
                 routing {
@@ -182,9 +182,11 @@ class AvailabilityWatchRoutesTest {
                     contentType(ContentType.Application.Json)
                     setBody(body)
                 }
-            assertEquals(HttpStatusCode.BadRequest, resp.status)
-            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("removed_fields", obj["error"]!!.jsonPrimitive.content)
+            assertEquals(HttpStatusCode.Created, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals(poiId, obj["poi_id"]!!.jsonPrimitive.long)
+            assertEquals(false, obj.containsKey("targetDates"))
+            assertEquals(false, obj.containsKey("minNights"))
         }
 
     @Test
@@ -351,7 +353,7 @@ class AvailabilityWatchRoutesTest {
         }
 
     @Test
-    fun `PATCH rejects removed date fields`() =
+    fun `PATCH ignores removed date fields`() =
         testApplication {
             application {
                 routing {
@@ -387,9 +389,11 @@ class AvailabilityWatchRoutesTest {
                     contentType(ContentType.Application.Json)
                     setBody("""{"target_dates": ["2026-07-04"], "min_nights": 1}""")
                 }
-            assertEquals(HttpStatusCode.BadRequest, resp.status)
-            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("removed_fields", obj["error"]!!.jsonPrimitive.content)
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            assertEquals(id, obj["id"]!!.jsonPrimitive.long)
+            assertEquals(false, obj.containsKey("target_dates"))
+            assertEquals(false, obj.containsKey("min_nights"))
         }
 
     @Test

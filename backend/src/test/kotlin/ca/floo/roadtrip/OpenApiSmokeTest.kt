@@ -135,6 +135,7 @@ class OpenApiSmokeTest {
             )
 
             assertFalse(paths.containsKey("/api/campsite/events"))
+            assertFalse(paths.containsKey("/api/campsite/availability/{poi_id}"))
             assertFalse(paths.containsKey("/api/admin/campsite/debug/synth-match"))
         }
 
