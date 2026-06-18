@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityEmptySchema
@@ -700,23 +701,46 @@ private fun ApplicationCall.queryValues(vararg names: String): List<String> =
         .distinct()
 
 /** Map the typed provider error to (HTTP status, AvailabilityErrorSchema). */
-private fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> =
-    when (e) {
+private fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> {
+    val upstream = upstreamHttpStatus(e)
+    return when (e) {
         is ReservationProviderError.RateLimited ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("rate_limited", retryAfterS = UPSTREAM_RATE_LIMITED_RETRY_AFTER_S)
+                availabilityErrorDto(
+                    "rate_limited",
+                    retryAfterS = UPSTREAM_RATE_LIMITED_RETRY_AFTER_S,
+                    upstreamStatus = upstream,
+                )
         is ReservationProviderError.UpstreamBlocked ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_blocked", retryAfterS = UPSTREAM_BLOCKED_RETRY_AFTER_S)
+                availabilityErrorDto(
+                    "upstream_blocked",
+                    retryAfterS = UPSTREAM_BLOCKED_RETRY_AFTER_S,
+                    upstreamStatus = upstream,
+                )
         is ReservationProviderError.UpstreamUnavailable ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_5xx", retryAfterS = UPSTREAM_5XX_RETRY_AFTER_S)
+                availabilityErrorDto(
+                    "upstream_5xx",
+                    retryAfterS = UPSTREAM_5XX_RETRY_AFTER_S,
+                    upstreamStatus = upstream,
+                )
         is ReservationProviderError.Unsupported ->
             HttpStatusCode.NotImplemented to availabilityErrorDto("unsupported")
         is ReservationProviderError.WrongRefType ->
             // Programmer error, not a user error. Surface as 500 so it shows up in metrics.
             HttpStatusCode.InternalServerError to availabilityErrorDto("provider_misconfigured")
     }
+}
+
+private fun upstreamHttpStatus(e: ReservationProviderError): Int? {
+    var t: Throwable? = e.cause
+    while (t != null) {
+        if (t is AspiraException) return t.httpStatus
+        t = t.cause
+    }
+    return null
+}
 
 /** Numeric status for the bulk endpoint's per-id `status` field. */
 private fun httpStatusFor(e: ReservationProviderError): Int =

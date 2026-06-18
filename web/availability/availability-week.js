@@ -22,6 +22,7 @@ import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 import { reservationUrlFromTemplate } from './booking-links.js';
 import { mountCalendarPopover } from './calendar-popover.js';
+import { availabilityStatusLabel } from '../utils/availability-status.js';
 
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
@@ -436,9 +437,9 @@ function disarmBookButtonsInPlace(ctx) {
 function updateBookButtonState(button, site, date, armed) {
   if (!(button instanceof HTMLElement) || !date) return;
   button.classList.toggle('is-armed', armed);
-  button.textContent = armed ? 'Book' : 'Open';
+  button.textContent = armed ? 'Book' : availabilityStatusLabel('available');
   const label = siteLabel(site);
-  const aria = `${label} ${date}: open`;
+  const aria = `${label} ${date}: available`;
   button.setAttribute(
     'aria-label',
     armed
@@ -452,6 +453,36 @@ function siteLabel(site) {
   if (site.name) return site.name;
   if (site.vendor_id) return `Site #${site.vendor_id}`;
   return site.rid || 'Site';
+}
+
+const AVAIL_ERROR_LABELS = {
+  rate_limited: 'Upstream rate-limited',
+  upstream_blocked: 'Upstream blocked the request',
+  upstream_5xx: 'Upstream unavailable',
+  unsupported: 'Provider not supported',
+  provider_misconfigured: 'Provider misconfigured',
+  ip_throttled: 'Too many requests',
+};
+
+function formatAvailabilityError(json, httpStatus) {
+  const code = typeof json?.error === 'string' ? json.error : null;
+  const base = code ? AVAIL_ERROR_LABELS[code] || code : `HTTP ${httpStatus}`;
+  const parts = [base];
+  if (typeof json?.upstream_status === 'number') {
+    parts.push(`(upstream HTTP ${json.upstream_status})`);
+  }
+  if (typeof json?.retry_after_s === 'number' && json.retry_after_s > 0) {
+    parts.push(`— retry in ${formatRetryAfter(json.retry_after_s)}`);
+  }
+  return parts.join(' ');
+}
+
+function formatRetryAfter(sec) {
+  if (sec >= 60) {
+    const min = Math.round(sec / 60);
+    return `${min}m`;
+  }
+  return `${sec}s`;
 }
 
 function beginSiteColumnResize(ctx, event, handle) {
@@ -580,7 +611,7 @@ async function fetchWeek(ctx, { force = false } = {}) {
     if (!resp.ok) {
       const json = await resp.json().catch(() => null);
       ctx.state = 'error';
-      ctx.error = json?.error || `HTTP ${resp.status}`;
+      ctx.error = formatAvailabilityError(json, resp.status);
       rerender(ctx);
       return;
     }
