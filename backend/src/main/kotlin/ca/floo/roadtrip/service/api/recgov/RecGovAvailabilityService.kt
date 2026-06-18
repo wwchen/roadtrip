@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.service.api.recgov
 
+import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.cache.CachedRecGovResult
+import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
 import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
@@ -53,7 +56,7 @@ internal fun monthsCovering(
  * not public/provider availability.
  */
 internal suspend fun fetchRecgovAvailabilityObservations(
-    cache: CachedAvailability,
+    cache: CachedRecGovAvailability,
     recgovId: String,
     startDate: LocalDate,
     endDate: LocalDate,
@@ -62,7 +65,7 @@ internal suspend fun fetchRecgovAvailabilityObservations(
     coroutineScope {
         val dates = datesInWindow(startDate, endDate)
         val months = monthsCovering(startDate, endDate.minusDays(1))
-        val results: List<CachedResult> =
+        val results: List<CachedRecGovResult> =
             months
                 .map { month -> async { cache.get("recgov", recgovId, month, force) } }
                 .awaitAll()
@@ -89,7 +92,7 @@ internal suspend fun fetchRecgovAvailabilityObservations(
  * classify only the matching POI sites without a per-site upstream loop.
  */
 internal suspend fun fetchRecgovCatalogObservations(
-    cache: CachedAvailability,
+    cache: CachedRecGovAvailability,
     recgovId: String,
     campsiteIds: Set<String>,
     startDate: LocalDate,
@@ -99,7 +102,7 @@ internal suspend fun fetchRecgovCatalogObservations(
     coroutineScope {
         val dates = datesInWindow(startDate, endDate)
         val months = monthsCovering(startDate, endDate.minusDays(1))
-        val results: List<CachedResult> =
+        val results: List<CachedRecGovResult> =
             months
                 .map { month -> async { cache.get("recgov", recgovId, month, force) } }
                 .awaitAll()
@@ -125,7 +128,7 @@ internal suspend fun fetchRecgovCatalogObservations(
  * rec.gov campsite id. This powers `/api/reservable/{rid}/availability`.
  */
 internal suspend fun fetchRecgovReservableObservations(
-    cache: CachedAvailability,
+    cache: CachedRecGovAvailability,
     recgovId: String,
     campsiteId: String,
     startDate: LocalDate,
@@ -135,7 +138,7 @@ internal suspend fun fetchRecgovReservableObservations(
     coroutineScope {
         val dates = datesInWindow(startDate, endDate)
         val months = monthsCovering(startDate, endDate.minusDays(1))
-        val results: List<CachedResult> =
+        val results: List<CachedRecGovResult> =
             months
                 .map { month -> async { cache.get("recgov", recgovId, month, force) } }
                 .awaitAll()
@@ -200,7 +203,7 @@ private fun recgovReservableId(siteId: String): String = "site:recgov:$siteId"
 
 private fun observedAtByDate(
     months: List<String>,
-    results: List<CachedResult>,
+    results: List<CachedRecGovResult>,
     dates: List<LocalDate>,
 ): Map<LocalDate, Instant> {
     val byMonth = months.zip(results).toMap()
@@ -241,7 +244,7 @@ private fun inferReopenDate(
     return AvailabilitySeasonBlock(reopensOn = earliest.toString())
 }
 
-private fun aggregateCacheBlock(results: List<CachedResult>): AvailabilityCacheBlock =
+private fun aggregateCacheBlock(results: List<CachedRecGovResult>): AvailabilityCacheBlock =
     AvailabilityCacheBlock(
         hit = results.all { it.hit },
         ageSeconds = results.maxOfOrNull { it.ageSeconds } ?: 0L,

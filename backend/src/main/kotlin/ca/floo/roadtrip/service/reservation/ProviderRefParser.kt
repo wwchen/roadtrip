@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.models.domain.ProviderRef
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject

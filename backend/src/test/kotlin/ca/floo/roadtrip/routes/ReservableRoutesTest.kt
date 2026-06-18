@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo

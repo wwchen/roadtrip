@@ -1,18 +1,18 @@
 package ca.floo.roadtrip
 
-import ca.floo.roadtrip.client.AspiraAvailabilityClient
-import ca.floo.roadtrip.client.MapboxDirections
-import ca.floo.roadtrip.models.registry.PoiRegistry
-import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
+import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.cache.RouteCache
+import ca.floo.roadtrip.clients.mapbox.MapboxDirections
+import ca.floo.roadtrip.clients.recgov.AvailabilityClient
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.repo.RouteCache
 import ca.floo.roadtrip.routes.availabilityRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
-import ca.floo.roadtrip.service.api.recgov.AvailabilityClient
-import ca.floo.roadtrip.service.api.recgov.CachedAvailability
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
@@ -87,7 +87,7 @@ class OpenApiSmokeTest {
                     val reservationProviders =
                         ReservationProviderRegistryFactory.build(
                             registry = registry,
-                            recgovCache = CachedAvailability(AvailabilityClient()),
+                            recgovCache = CachedRecGovAvailability(AvailabilityClient()),
                             aspiraCache = CachedAspiraAvailability(aspiraClient),
                         )
                     availabilityRoutes(CampsiteProviderRepo(ctx), reservationProviders, ReservableRepo(ctx))

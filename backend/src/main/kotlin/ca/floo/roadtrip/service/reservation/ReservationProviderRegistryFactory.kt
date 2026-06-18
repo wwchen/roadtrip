@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.models.registry.PoiRegistry
-import ca.floo.roadtrip.repo.CachedAspiraAvailability
-import ca.floo.roadtrip.service.api.recgov.CachedAvailability
+import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
 import ca.floo.roadtrip.service.reservation.adapters.camis.CamisReservationProvider
@@ -23,7 +23,7 @@ import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationPro
 object ReservationProviderRegistryFactory {
     fun build(
         registry: PoiRegistry,
-        recgovCache: CachedAvailability,
+        recgovCache: CachedRecGovAvailability,
         aspiraCache: CachedAspiraAvailability,
     ): ReservationProviderRegistry {
         val adaptersBySource = mutableMapOf<String, ReservationProvider>()

@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.recgov.Campsite
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
-import ca.floo.roadtrip.service.api.recgov.CachedAvailability
-import ca.floo.roadtrip.service.api.recgov.Campsite
 import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
@@ -16,7 +16,7 @@ class RecGovReservationProviderTest {
     fun `catalog availability narrows cached campground data to linked reservables`() =
         runBlocking {
             val cache =
-                CachedAvailability(
+                CachedRecGovAvailability(
                     fetchMonth = { campgroundId, _ ->
                         assertEquals("232447", campgroundId)
                         mapOf(
@@ -71,7 +71,7 @@ class RecGovReservationProviderTest {
     fun `reservable availability narrows cached campground data to one campsite`() =
         runBlocking {
             val cache =
-                CachedAvailability(
+                CachedRecGovAvailability(
                     fetchMonth = { campgroundId, _ ->
                         assertEquals("232447", campgroundId)
                         mapOf(
@@ -123,7 +123,7 @@ class RecGovReservationProviderTest {
     fun `available dates returns per-day facts without requiring a same-site stay`() =
         runBlocking {
             val cache =
-                CachedAvailability(
+                CachedRecGovAvailability(
                     fetchMonth = { campgroundId, _ ->
                         assertEquals("232447", campgroundId)
                         mapOf(

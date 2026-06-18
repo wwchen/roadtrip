@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.reservation.adapters.camis.CamisReservationProvider
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate

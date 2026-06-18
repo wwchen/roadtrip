@@ -1,11 +1,11 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.client.AspiraAvailability
-import ca.floo.roadtrip.client.AspiraException
-import ca.floo.roadtrip.client.AspiraOccupancy
-import ca.floo.roadtrip.client.AspiraResourceOccupancy
-import ca.floo.roadtrip.repo.CachedAspiraAvailability
-import ca.floo.roadtrip.repo.CachedAspiraOccupancy
+import ca.floo.roadtrip.clients.aspira.AspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraException
+import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
+import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
+import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull

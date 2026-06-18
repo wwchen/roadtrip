@@ -2,12 +2,12 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.db.generated.tables.IngestRuns.Companion.INGEST_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.models.ingest.Phase
-import ca.floo.roadtrip.models.ingest.Target
+import ca.floo.roadtrip.models.metadata.ingest.Phase
+import ca.floo.roadtrip.models.metadata.ingest.Target
 import ca.floo.roadtrip.repo.migrate
-import ca.floo.roadtrip.service.etl.IngestController
-import ca.floo.roadtrip.service.etl.ProcessFactory
-import ca.floo.roadtrip.service.etl.RunningProcess
+import ca.floo.roadtrip.service.etl.framework.IngestController
+import ca.floo.roadtrip.service.etl.framework.ProcessFactory
+import ca.floo.roadtrip.service.etl.framework.RunningProcess
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
@@ -311,10 +311,10 @@ class AdminIngestRoutesTest {
         IngestController(
             ctx = ctx,
             etl =
-                ca.floo.roadtrip.service.etl.EtlOrchestrator(
+                ca.floo.roadtrip.service.etl.framework.EtlOrchestrator(
                     ctx,
                     File("/tmp"),
-                    ca.floo.roadtrip.models.registry
+                    ca.floo.roadtrip.models.metadata.registry
                         .PoiRegistry(emptyList(), emptyList()),
                 ),
             fetchTargets = targets,

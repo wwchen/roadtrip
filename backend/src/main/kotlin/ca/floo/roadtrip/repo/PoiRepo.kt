@@ -2,11 +2,11 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.models.Address
-import ca.floo.roadtrip.models.Poi
-import ca.floo.roadtrip.models.ProviderRef
-import ca.floo.roadtrip.models.categorySql
-import ca.floo.roadtrip.models.propertiesJson
+import ca.floo.roadtrip.models.domain.Address
+import ca.floo.roadtrip.models.domain.Poi
+import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.categorySql
+import ca.floo.roadtrip.models.domain.propertiesJson
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

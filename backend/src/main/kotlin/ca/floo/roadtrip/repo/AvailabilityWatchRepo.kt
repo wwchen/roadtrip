@@ -2,7 +2,7 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
 import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
-import ca.floo.roadtrip.models.Reservable
+import ca.floo.roadtrip.models.domain.Reservable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject

@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.client.MapboxDirections
-import ca.floo.roadtrip.client.RouteResponse
-import ca.floo.roadtrip.models.registry.PoiRegistry
-import ca.floo.roadtrip.repo.RouteCache
+import ca.floo.roadtrip.clients.cache.RouteCache
+import ca.floo.roadtrip.clients.mapbox.MapboxDirections
+import ca.floo.roadtrip.clients.mapbox.RouteResponse
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.migrate
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource

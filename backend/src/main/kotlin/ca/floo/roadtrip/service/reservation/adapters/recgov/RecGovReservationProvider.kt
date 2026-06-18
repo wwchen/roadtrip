@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.reservation.adapters.recgov
 
-import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
-import ca.floo.roadtrip.service.api.recgov.CachedAvailability
 import ca.floo.roadtrip.service.api.recgov.fetchRecgovAvailabilityObservations
 import ca.floo.roadtrip.service.api.recgov.fetchRecgovCatalogObservations
 import ca.floo.roadtrip.service.api.recgov.fetchRecgovReservableObservations
@@ -19,7 +19,7 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderId
  * specific error translation lives here; routes only see [ReservationProviderError].
  */
 class RecGovReservationProvider(
-    private val cache: CachedAvailability,
+    private val cache: CachedRecGovAvailability,
 ) : ReservationProvider {
     override val id: ReservationProviderId = ReservationProviderId.RECGOV
 

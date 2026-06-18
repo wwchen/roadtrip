@@ -1,15 +1,15 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.client.AspiraSearchDefaults
-import ca.floo.roadtrip.models.ProviderRef
-import ca.floo.roadtrip.models.Reservable
-import ca.floo.roadtrip.models.ReservableId
-import ca.floo.roadtrip.models.ReservableType
+import ca.floo.roadtrip.clients.aspira.AspiraSearchDefaults
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PoiReservablesResponseSchema
 import ca.floo.roadtrip.models.api.ReservableDetailResponseSchema
 import ca.floo.roadtrip.models.api.ReservableSchema
 import ca.floo.roadtrip.models.api.ReservablesResponseSchema
+import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.reservation.ProviderRefParser

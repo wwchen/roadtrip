@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.client.AspiraAvailability
-import ca.floo.roadtrip.models.ProviderRef
-import ca.floo.roadtrip.repo.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraAvailability
+import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider

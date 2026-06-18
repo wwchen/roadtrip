@@ -4,9 +4,9 @@ import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.db.generated.tables.ReservablePois.Companion.RESERVABLE_POIS
 import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
-import ca.floo.roadtrip.models.Reservable
-import ca.floo.roadtrip.models.ReservableId
-import ca.floo.roadtrip.models.ReservableType
+import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.models.domain.ReservableType
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.Condition

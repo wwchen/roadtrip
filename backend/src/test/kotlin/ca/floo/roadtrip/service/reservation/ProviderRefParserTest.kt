@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.models.ProviderRef
+import ca.floo.roadtrip.models.domain.ProviderRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull

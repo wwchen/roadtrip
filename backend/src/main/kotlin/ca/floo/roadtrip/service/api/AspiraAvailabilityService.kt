@@ -1,12 +1,12 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.client.AspiraAvailability
-import ca.floo.roadtrip.client.AspiraException
+import ca.floo.roadtrip.clients.aspira.AspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraException
+import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
+import ca.floo.roadtrip.clients.cache.CachedResult
 import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
-import ca.floo.roadtrip.models.aspira.AspiraStatus
-import ca.floo.roadtrip.repo.CachedAspiraAvailability
-import ca.floo.roadtrip.repo.CachedAspiraOccupancy
-import ca.floo.roadtrip.repo.CachedResult
+import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
 import io.ktor.http.HttpStatusCode
 import java.time.Instant
 import java.time.LocalDate
@@ -309,7 +309,7 @@ private fun observationsFromLinkedResourceCatalog(
 
 private fun observationsFromOccupancyCatalogArrivalDay(
     resources: List<AspiraCatalogReservable>,
-    occupancyRows: List<ca.floo.roadtrip.client.AspiraResourceOccupancy>,
+    occupancyRows: List<ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy>,
     arrival: LocalDate,
     observedAt: Instant,
 ): List<ReservableDayObservation> {

@@ -1,16 +1,16 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.config.ApiCacheEntity
-import ca.floo.roadtrip.models.ProviderRef
-import ca.floo.roadtrip.models.Reservable
-import ca.floo.roadtrip.models.ReservableId
-import ca.floo.roadtrip.models.ReservableType
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityEmptySchema
 import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.models.api.BulkAvailEntrySchema
 import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
 import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
+import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo

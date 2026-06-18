@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.models.Reservable
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchCreateRequest
 import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapCell
@@ -12,6 +11,7 @@ import ca.floo.roadtrip.models.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.models.api.ReservableSchema
+import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
@@ -331,7 +331,7 @@ private fun resolveCreateScope(
     }
     if (req.reservableRid != null) {
         val parsed =
-            ca.floo.roadtrip.models.ReservableId
+            ca.floo.roadtrip.models.domain.ReservableId
                 .parse(req.reservableRid)
                 ?: return ResolveResult.Err(
                     "invalid_reservable_rid",

@@ -9,7 +9,7 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderId
 
 /**
  * Camis (Alberta Parks) adapter — capability stub. The variant exists in
- * [ca.floo.roadtrip.models.ProviderRef] so the type system is exhaustive,
+ * [ca.floo.roadtrip.models.domain.ProviderRef] so the type system is exhaustive,
  * but no upstream client has been built. Capabilities all `false`; calls
  * throw [ReservationProviderError.Unsupported].
  *

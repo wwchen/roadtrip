@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.AvailabilityJob.Companion.AVAILABILITY_JOB
-import ca.floo.roadtrip.service.scheduler.Schedulable
-import ca.floo.roadtrip.service.scheduler.SchedulableRepo
+import ca.floo.roadtrip.service.scheduler.framework.Schedulable
+import ca.floo.roadtrip.service.scheduler.framework.SchedulableRepo
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject

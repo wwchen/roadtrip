@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.models.api.PoiCtaSchema
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.PoiDetailRow
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import java.net.URLEncoder
