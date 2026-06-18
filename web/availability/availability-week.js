@@ -14,7 +14,7 @@
 // guard; see openCampgroundDrawer in drawer/campground.js.
 
 import { escapeHtml } from '../core.js';
-import { requestPoiAvailability } from '../api/availability-api.js';
+import { requestPoiReservablesAvailability } from '../api/availability-api.js';
 import { fetchPoiReservables } from '../api/reservable-api.js';
 import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
 import { renderDayDetail } from './day-detail.js';
@@ -587,10 +587,12 @@ async function fetchWeek(ctx, { force = false } = {}) {
   ctx.skeletonTimer = setTimeout(() => {
     if (requestSeq === ctx.weekRequestSeq) rerender(ctx);
   }, SKELETON_RENDER_DELAY_MS);
+  const startDate = isoDate(ctx.weekStart);
+  const endDate = isoDate(addDays(ctx.weekStart, WEEK_DAYS));
   try {
-    const resp = await requestPoiAvailability(ctx.poiId, {
-      startDate: isoDate(ctx.weekStart),
-      endDate: isoDate(addDays(ctx.weekStart, WEEK_DAYS)),
+    const resp = await requestPoiReservablesAvailability(ctx.poiId, {
+      startDate,
+      endDate,
       force,
       signal: ctx.signal,
     });
@@ -605,18 +607,19 @@ async function fetchWeek(ctx, { force = false } = {}) {
     }
     const json = await resp.json();
     if (requestSeq !== ctx.weekRequestSeq) return;
-    ctx.cacheBlock = json.cache || null;
-    if (json.state === 'empty') {
+    const fused = fusePoiReservablesAvailability(json, startDate, endDate);
+    ctx.cacheBlock = fused.cacheBlock;
+    if (fused.state === 'empty') {
       ctx.state = 'empty';
       ctx.days = [];
-      ctx.summary = json.summary || 'No availability data for this campground.';
-    } else if (json.state === 'closed_for_season') {
+      ctx.summary = fused.summary;
+    } else if (fused.state === 'closed_for_season') {
       ctx.state = 'closed_for_season';
       ctx.days = [];
-      ctx.season = json.season || null;
+      ctx.season = fused.season;
     } else {
       ctx.state = 'success';
-      ctx.days = json.availability || [];
+      ctx.days = fused.days;
     }
     rerender(ctx);
   } catch (e) {
@@ -627,6 +630,112 @@ async function fetchWeek(ctx, { force = false } = {}) {
     ctx.error = e.message || 'network';
     rerender(ctx);
   }
+}
+
+// Fuse the BE response (one envelope per reservable) into the per-day
+// classifications the matrix renders. Server-side classification ran a single
+// rollup over all reservables; the new endpoint hands us the streams and lets
+// the FE decide how to combine them. Same rollup rules:
+//   - status: available > first_come > unknown > reserved > closed > unknown
+//   - available_count: reservables with status === 'available' on that day
+//   - reservable_statuses: { rid → status } for the matrix tooltip
+//   - available_reservable_ids: rids that are bookable that day
+//
+// state shortcut:
+//   - reservables: []          → 'empty' (POI has no online-bookable sites)
+//   - every reservable closed_for_season → 'closed_for_season' (carry a
+//     season block from the first reservable that has one)
+//   - else                     → 'success'
+function fusePoiReservablesAvailability(json, startDate, endDate) {
+  const reservables = Array.isArray(json?.reservables) ? json.reservables : [];
+  if (reservables.length === 0) {
+    return {
+      state: 'empty',
+      days: [],
+      summary: 'No availability data for this campground.',
+      season: null,
+      cacheBlock: null,
+    };
+  }
+  const closedForSeason = reservables.every((r) => r?.state === 'closed_for_season');
+  if (closedForSeason) {
+    const seasonHint = reservables.find((r) => r?.season && r.season.reopens_on)?.season ?? null;
+    return {
+      state: 'closed_for_season',
+      days: [],
+      summary: '',
+      season: seasonHint,
+      cacheBlock: oldestCacheBlock(reservables),
+    };
+  }
+
+  const dates = enumerateDates(startDate, endDate);
+  const days = dates.map((date) => fuseDay(date, reservables));
+  return {
+    state: 'success',
+    days,
+    summary: '',
+    season: null,
+    cacheBlock: oldestCacheBlock(reservables),
+  };
+}
+
+function fuseDay(date, reservables) {
+  // reservable_statuses: { rid → status } across all reservables for that date.
+  const statuses = {};
+  for (const r of reservables) {
+    const rid = r?.reservable_id;
+    if (!rid) continue;
+    const day = (Array.isArray(r.availability) ? r.availability : []).find((d) => d?.date === date);
+    statuses[rid] = day?.status || 'unknown';
+  }
+  const ridsSorted = Object.keys(statuses).sort();
+  const orderedStatuses = {};
+  for (const rid of ridsSorted) orderedStatuses[rid] = statuses[rid];
+
+  const availableIds = ridsSorted.filter((rid) => statuses[rid] === 'available');
+  const total = ridsSorted.length;
+  const status = rollupStatus(ridsSorted.map((rid) => statuses[rid]));
+  return {
+    date,
+    status,
+    available_count: availableIds.length,
+    total,
+    available_reservable_ids: availableIds,
+    reservable_statuses: orderedStatuses,
+  };
+}
+
+function rollupStatus(values) {
+  if (values.length === 0) return 'unknown';
+  if (values.includes('available')) return 'available';
+  if (values.includes('first_come')) return 'first_come';
+  if (values.includes('unknown')) return 'unknown';
+  if (values.includes('reserved')) return 'reserved';
+  if (values.every((v) => v === 'closed')) return 'closed';
+  return 'unknown';
+}
+
+function oldestCacheBlock(reservables) {
+  // The matrix shows one freshness pill. Pick the staleest age — that's the
+  // honest answer when streams have different cache hit times.
+  let chosen = null;
+  for (const r of reservables) {
+    const cb = r?.cache;
+    if (!cb) continue;
+    if (!chosen || (cb.age_seconds ?? 0) > (chosen.age_seconds ?? 0)) chosen = cb;
+  }
+  return chosen;
+}
+
+function enumerateDates(startDate, endDate) {
+  const out = [];
+  const start = parseIsoDate(startDate);
+  const end = parseIsoDate(endDate);
+  for (let cur = start; cur < end; cur = new Date(cur.getTime() + MS_PER_DAY)) {
+    out.push(isoDate(cur));
+  }
+  return out;
 }
 
 async function fetchSites(ctx) {
