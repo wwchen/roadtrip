@@ -3,11 +3,12 @@ package ca.floo.roadtrip.service.reservation.adapters.aspira
 import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.api.AspiraCatalogReservable
 import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
-import ca.floo.roadtrip.service.api.fetchAspiraAvailabilityObservations
-import ca.floo.roadtrip.service.api.fetchAspiraCatalogObservations
-import ca.floo.roadtrip.service.api.fetchAspiraResourceObservations
+import ca.floo.roadtrip.service.api.aspira.AspiraCatalogReservable
+import ca.floo.roadtrip.service.api.aspira.fetchAspiraAvailabilityObservations
+import ca.floo.roadtrip.service.api.aspira.fetchAspiraCatalogObservations
+import ca.floo.roadtrip.service.api.aspira.fetchAspiraResourceObservations
+import ca.floo.roadtrip.service.api.aspira.requireAspiraAllowedHost
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -31,6 +32,8 @@ class AspiraReservationProvider(
     private val tenant: AspiraTenant,
     private val cache: CachedAspiraAvailability,
 ) : ReservationProvider {
+    private val host = requireAspiraAllowedHost(tenant.host)
+
     override val id: ReservationProviderId = ReservationProviderId.ASPIRA
 
     override val capabilities: ReservationProviderCapabilities =
@@ -47,7 +50,7 @@ class AspiraReservationProvider(
         return runWithErrorMapping {
             fetchAspiraAvailabilityObservations(
                 cache = cache,
-                host = tenant.host,
+                host = host,
                 mapId = mapId,
                 startDate = req.startDate,
                 endDate = req.endDate,
@@ -72,7 +75,7 @@ class AspiraReservationProvider(
         return runWithErrorMapping {
             fetchAspiraCatalogObservations(
                 cache = cache,
-                host = tenant.host,
+                host = host,
                 parentMapId = parentMapId,
                 reservables = targets,
                 startDate = req.startDate,
@@ -87,7 +90,7 @@ class AspiraReservationProvider(
         return runWithErrorMapping {
             fetchAspiraResourceObservations(
                 cache = cache,
-                host = tenant.host,
+                host = host,
                 mapId = mapId,
                 resourceId = req.vendorId,
                 reservableVendor = tenant.vendorCode,
@@ -133,10 +136,10 @@ class AspiraReservationProvider(
             throw e
         } catch (e: AspiraException) {
             when {
-                e.httpStatus == 429 -> throw ReservationProviderError.RateLimited(e)
-                e.httpStatus == 503 || e.message?.contains("WAF") == true ->
-                    throw ReservationProviderError.UpstreamBlocked(e)
-                else -> throw ReservationProviderError.UpstreamUnavailable(e)
+                e.httpStatus == 429 -> throw ReservationProviderError.RateLimited(e, upstreamStatus = e.httpStatus)
+                e.httpStatus == 403 || e.httpStatus == 503 || e.message?.contains("WAF") == true ->
+                    throw ReservationProviderError.UpstreamBlocked(e, upstreamStatus = e.httpStatus)
+                else -> throw ReservationProviderError.UpstreamUnavailable(e, upstreamStatus = e.httpStatus)
             }
         } catch (e: Exception) {
             throw ReservationProviderError.UpstreamUnavailable(e)

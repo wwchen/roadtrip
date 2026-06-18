@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.api
+package ca.floo.roadtrip.service.api.aspira
 
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
 import ca.floo.roadtrip.clients.aspira.AspiraException
@@ -7,6 +7,13 @@ import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.clients.cache.CachedResult
 import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
+import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
+import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
+import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.AvailabilityStatus
+import ca.floo.roadtrip.service.api.ReservableDayObservation
+import ca.floo.roadtrip.service.api.availabilityErrorDto
+import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import io.ktor.http.HttpStatusCode
 import java.time.Instant
 import java.time.LocalDate
@@ -27,6 +34,14 @@ val ASPIRA_ALLOWED_HOSTS: Set<String> =
         "washington.goingtocamp.com", // WA State Parks
     )
 
+internal fun requireAspiraAllowedHost(host: String): String {
+    val normalized = host.trim().lowercase()
+    require(normalized in ASPIRA_ALLOWED_HOSTS) {
+        "aspira host '$host' is not in ASPIRA_ALLOWED_HOSTS"
+    }
+    return normalized
+}
+
 /**
  * Fetch + classify + render the unified response for an Aspira-backed
  * campground. Throws on upstream failure — caller maps to a 503.
@@ -44,8 +59,9 @@ internal suspend fun fetchAspiraAvailabilityObservations(
     force: Boolean,
     reservableVendor: String? = null,
 ): AvailabilityObservationBatch {
+    val allowedHost = requireAspiraAllowedHost(host)
     val days = daysBetween(startDate, endDate)
-    val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
+    val cached = cache.get(allowedHost, mapId, startDate, endDate.minusDays(1), force)
     val cacheBlock =
         AvailabilityCacheBlock(
             hit = cached.hit,
@@ -58,7 +74,7 @@ internal suspend fun fetchAspiraAvailabilityObservations(
         endDate = endDate,
         observations = observationsFromAspiraAvailability(cached.data, startDate, days, cached.observedAt, reservableVendor),
         cacheBlock = cacheBlock,
-        host = host,
+        host = allowedHost,
         mapId = mapId.toString(),
     )
 }
@@ -78,6 +94,7 @@ internal suspend fun fetchAspiraCatalogObservations(
     endDate: LocalDate,
     force: Boolean,
 ): AvailabilityObservationBatch {
+    val allowedHost = requireAspiraAllowedHost(host)
     val days = daysBetween(startDate, endDate)
     val targets =
         reservables
@@ -86,7 +103,7 @@ internal suspend fun fetchAspiraCatalogObservations(
     if (targets.isEmpty()) {
         return fetchAspiraAvailabilityObservations(
             cache = cache,
-            host = host,
+            host = allowedHost,
             mapId = parentMapId,
             startDate = startDate,
             endDate = endDate,
@@ -96,7 +113,7 @@ internal suspend fun fetchAspiraCatalogObservations(
 
     val cachedByMap = mutableMapOf<Int, CachedResult>()
     for (mapId in targets.map { it.mapId!! }.distinct()) {
-        cachedByMap[mapId] = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
+        cachedByMap[mapId] = cache.get(allowedHost, mapId, startDate, endDate.minusDays(1), force)
     }
 
     val resourceRows =
@@ -120,7 +137,7 @@ internal suspend fun fetchAspiraCatalogObservations(
         endDate = endDate,
         observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
         cacheBlock = cacheBlock,
-        host = host,
+        host = allowedHost,
         mapId = parentMapId.toString(),
     )
 }
@@ -140,6 +157,7 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
     days: Int,
     force: Boolean,
 ): AvailabilityResponseDto {
+    val allowedHost = requireAspiraAllowedHost(host)
     val targets =
         reservables
             .distinctBy { it.rid }
@@ -152,7 +170,7 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
                 endDate = today.plusDays(days.toLong()),
                 observations = emptyList(),
                 cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
-                host = host,
+                host = allowedHost,
                 mapId = parentMapId.toString(),
             ),
         )
@@ -163,7 +181,7 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
         (0 until days).flatMap { offset ->
             val arrival = today.plusDays(offset.toLong())
             val checkout = arrival.plusDays(1)
-            val cached = cache.get(host, resourceLocationId, arrival, checkout, force)
+            val cached = cache.get(allowedHost, resourceLocationId, arrival, checkout, force)
             cachedByDate += CachedOccupancyDay(cached.hit, cached.ageSeconds, cached.ttlSeconds)
             observationsFromOccupancyCatalogArrivalDay(targets, cached.data.resourceOccupancy, arrival, cached.observedAt)
         }
@@ -180,7 +198,7 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
             endDate = today.plusDays(days.toLong()),
             observations = observations,
             cacheBlock = cacheBlock,
-            host = host,
+            host = allowedHost,
             mapId = parentMapId.toString(),
         ),
     )
@@ -200,8 +218,9 @@ internal suspend fun fetchAspiraResourceObservations(
     endDate: LocalDate,
     force: Boolean,
 ): AvailabilityObservationBatch {
+    val allowedHost = requireAspiraAllowedHost(host)
     val days = daysBetween(startDate, endDate)
-    val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
+    val cached = cache.get(allowedHost, mapId, startDate, endDate.minusDays(1), force)
     val resourceDays = cached.data.byResource[resourceId].orEmpty()
     val reservableId = "site:$reservableVendor:$resourceId"
     val cacheBlock =
@@ -216,7 +235,7 @@ internal suspend fun fetchAspiraResourceObservations(
         endDate = endDate,
         observations = observationsFromResourceDays(resourceDays, startDate, days, reservableId, cached.observedAt),
         cacheBlock = cacheBlock,
-        host = host,
+        host = allowedHost,
         mapId = mapId.toString(),
         reservableId = reservableId,
     )
@@ -391,12 +410,12 @@ internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, Av
     return when {
         status == 429 ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("rate_limited", retryAfterS = 60)
-        status == 503 || (e.message?.contains("WAF") == true) ->
+                availabilityErrorDto("rate_limited", retryAfterS = 60, upstreamStatus = status)
+        status == 403 || status == 503 || (e.message?.contains("WAF") == true) ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_blocked", retryAfterS = 300)
+                availabilityErrorDto("upstream_blocked", retryAfterS = 60, upstreamStatus = status)
         else ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_5xx", retryAfterS = 30)
+                availabilityErrorDto("upstream_5xx", retryAfterS = 30, upstreamStatus = status)
     }
 }

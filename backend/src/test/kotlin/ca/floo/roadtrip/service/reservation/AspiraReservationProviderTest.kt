@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.AvailabilityStatus
@@ -11,6 +12,7 @@ import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class AspiraReservationProviderTest {
     @Test
@@ -164,5 +166,53 @@ class AspiraReservationProviderTest {
 
             val dates = availabilityDatesFromObservations(batch)
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
+        }
+
+    @Test
+    fun `aspira 403 maps to upstream blocked`() =
+        runBlocking {
+            val cache =
+                CachedAspiraAvailability(
+                    fetcher = { _, _, _, _ ->
+                        throw AspiraException("aspira HTTP 403", httpStatus = 403)
+                    },
+                )
+            val adapter =
+                AspiraReservationProvider(
+                    tenant =
+                        AspiraTenant(
+                            host = "washington.goingtocamp.com",
+                            vendorCode = "aspira_wa",
+                            bookingHorizonDays = 365,
+                        ),
+                    cache = cache,
+                )
+
+            val error =
+                assertFailsWith<ReservationProviderError.UpstreamBlocked> {
+                    adapter.catalogAvailability(
+                        CatalogAvailabilityRequest(
+                            ref =
+                                ProviderRef.Aspira(
+                                    transactionLocationId = -2147483630,
+                                    mapId = -2147483388,
+                                    resourceLocationId = -2147483624,
+                                ),
+                            reservables =
+                                listOf(
+                                    CatalogReservableRef(
+                                        rid = "site:aspira_wa:-2147481335",
+                                        vendorId = "-2147481335",
+                                        mapId = -2147483452,
+                                        resourceLocationId = -2147483624,
+                                    ),
+                                ),
+                            startDate = LocalDate.parse("2026-06-18"),
+                            endDate = LocalDate.parse("2026-06-25"),
+                        ),
+                    )
+                }
+
+            assertEquals(403, error.upstreamStatus)
         }
 }

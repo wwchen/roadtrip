@@ -860,6 +860,7 @@ pre {
 
 .cg-site-matrix-scroll {
   --cg-site-column-width: 128px;
+  --cg-site-date-column-width: 66px;
   max-height: min(430px, 52dvh);
   overflow: auto;
   overscroll-behavior: contain;
@@ -870,12 +871,21 @@ pre {
 }
 
 .cg-site-matrix-table {
-  width: 100%;
+  width: calc(var(--cg-site-column-width) + var(--cg-site-dates-width, 462px));
   min-width: calc(var(--cg-site-column-width) + var(--cg-site-dates-width, 462px));
+  max-width: calc(var(--cg-site-column-width) + var(--cg-site-dates-width, 462px));
   border-collapse: separate;
   border-spacing: 0;
   table-layout: fixed;
   font-size: 12px;
+}
+
+.cg-site-matrix-site-col {
+  width: var(--cg-site-column-width);
+}
+
+.cg-site-matrix-date-col {
+  width: var(--cg-site-date-column-width);
 }
 
 .cg-site-matrix-table th,
@@ -1019,7 +1029,9 @@ pre {
 }
 
 .cg-site-matrix-date {
-  width: 66px;
+  width: var(--cg-site-date-column-width);
+  min-width: var(--cg-site-date-column-width);
+  max-width: var(--cg-site-date-column-width);
   height: 46px;
   text-align: center;
   color: var(--cg-muted);
@@ -1105,14 +1117,19 @@ pre {
 }
 
 .cg-site-matrix-cell {
+  width: var(--cg-site-date-column-width);
+  min-width: var(--cg-site-date-column-width);
+  max-width: var(--cg-site-date-column-width);
   height: 40px;
   text-align: center;
+  overflow: hidden;
 }
 
 .cg-site-matrix-cell-button {
   display: flex;
   align-items: center;
   justify-content: center;
+  box-sizing: border-box;
   width: 100%;
   min-width: 0;
   height: 100%;

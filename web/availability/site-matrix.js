@@ -12,6 +12,7 @@ import {
 } from '../utils/availability-status.js';
 
 const DOW_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DATE_COLUMN_WIDTH_PX = 66;
 const DEFAULT_FILTERS = {
   query: '',
   loop: '',
@@ -115,6 +116,7 @@ export function renderSiteMatrix({
     body: `
       <div class="cg-site-matrix-scroll"${widthStyle}>
         <table class="cg-site-matrix-table">
+          ${colgroupHtml(visibleDays.length)}
           <thead>
             <tr>
               <th scope="col" class="cg-site-matrix-site cg-site-matrix-site-heading">
@@ -169,6 +171,7 @@ export function renderSiteMatrixSkeleton({
     body: `
       <div class="cg-site-matrix-scroll cg-site-matrix-skeleton" aria-busy="true"${widthStyle}>
         <table class="cg-site-matrix-table">
+          ${colgroupHtml(dateCount)}
           <thead>
             <tr>
               <th scope="col" class="cg-site-matrix-site cg-site-matrix-site-heading">
@@ -312,12 +315,20 @@ function selectAriaLabel(key) {
 }
 
 function matrixScrollStyle(siteColumnWidth, dateCount) {
-  const datesWidth = Math.max(1, dateCount) * 66;
+  const datesWidth = Math.max(1, dateCount) * DATE_COLUMN_WIDTH_PX;
   const props = [`--cg-site-dates-width: ${datesWidth}px;`];
   if (typeof siteColumnWidth === 'number' && Number.isFinite(siteColumnWidth)) {
     props.push(`--cg-site-column-width: ${Math.round(siteColumnWidth)}px;`);
   }
   return ` style="${props.join(' ')}"`;
+}
+
+function colgroupHtml(dateCount) {
+  const dates = Array.from(
+    { length: Math.max(1, dateCount) },
+    () => '<col class="cg-site-matrix-date-col">',
+  ).join('');
+  return `<colgroup><col class="cg-site-matrix-site-col">${dates}</colgroup>`;
 }
 
 function dateHeaderHtml(day) {

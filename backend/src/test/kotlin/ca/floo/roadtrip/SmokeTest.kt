@@ -488,6 +488,100 @@ class SmokeTest {
     }
 
     @Test
+    fun `poi availability http error renders drawer error instead of skeleton`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        context.route("**/api/pois") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"type":"FeatureCollection","features":[],"truncated":false}"""),
+            )
+        }
+        context.route("**/api/pois/31338") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "Feature",
+                          "id": 31338,
+                          "geometry": { "type": "Point", "coordinates": [-115.55, 51.18] },
+                          "properties": {
+                            "category": "campground",
+                            "subcategory": "federal",
+                            "name": "Error Campground",
+                            "state": "AB",
+                            "provider_ref": { "recgov_id": "31338" }
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/poi/31338/availability?**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(503)
+                    .setContentType("application/json")
+                    .setBody("""{"state":"error","error":"upstream_blocked","retry_after_s":60,"upstream_status":403}"""),
+            )
+        }
+        context.route("**/api/poi/31338/reservables**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"poi_id":31338,"total_at_poi":0,"reservables":[]}"""),
+            )
+        }
+        context.route("**/api/availability/watches?**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"watches":[]}"""),
+            )
+        }
+
+        try {
+            page.navigate("/?poi=31338")
+            assertThat(page.locator(".cg-error")).containsText(
+                "HTTP 403",
+                com.microsoft.playwright.assertions.LocatorAssertions
+                    .ContainsTextOptions()
+                    .setTimeout(15_000.0),
+            )
+            assertThat(page.locator(".cg-error")).containsText("Retry suggested after 1m")
+            assertThat(page.locator(".cg-site-matrix-skeleton")).hasCount(0)
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during availability error smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    @Test
     fun `horizontal matrix swipe does not drag mobile drawer`() {
         val context =
             browser.newContext(

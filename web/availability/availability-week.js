@@ -33,6 +33,13 @@ const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CALENDAR_MAX_DAYS_OUT = 365;
+const AVAILABILITY_ERROR_LABELS = {
+  ip_throttled: 'Too many requests',
+  rate_limited: 'Provider rate limit',
+  upstream_blocked: 'Provider blocked the request',
+  upstream_5xx: 'Provider unavailable',
+  unsupported: 'Availability not supported',
+};
 
 /**
  * Mount the availability table into the host element. Returns a controller with a
@@ -93,6 +100,9 @@ function makeContext(host, feature, signal) {
     summary: '',
     season: null,
     error: null,
+    errorHttpStatus: null,
+    errorUpstreamStatus: null,
+    errorRetryAfterS: null,
     watchesByWindow: new Map(),
     skeletonTimer: null,
     // Catalog (RFC 0008): the per-POI reservable list the BE serves at
@@ -141,16 +151,8 @@ function renderShell(ctx) {
 }
 
 function renderBody(ctx) {
-  if (ctx.state === 'loading' || ctx.days == null) {
-    return renderSiteMatrixSkeleton({
-      days: placeholderMatrixDays(ctx),
-      siteColumnWidth: ctx.siteColumnWidth,
-      weekStart: isoDate(ctx.weekStart),
-      showToday: !sameDay(ctx.weekStart, startOfTodayUtc()),
-    });
-  }
   if (ctx.state === 'error') {
-    return `<div class="cg-summary"><span class="cg-error">${escapeHtml(ctx.error || "Couldn't load availability")}</span> · <a href="#" class="cg-retry">Retry</a></div>`;
+    return `<div class="cg-summary"><span class="cg-error">${escapeHtml(formatAvailabilityError(ctx))}</span> · <a href="#" class="cg-retry">Retry</a></div>`;
   }
   if (ctx.state === 'empty') {
     return `<div class="cg-closed-banner">${escapeHtml(ctx.summary || 'No availability data for this campground.')}</div>`;
@@ -159,6 +161,14 @@ function renderBody(ctx) {
     const reopens = ctx.season?.reopens_on;
     const msg = reopens ? `Reopens ${reopens}` : 'Closed for season';
     return `<div class="cg-closed-banner">⛰️ ${escapeHtml(msg)}</div>`;
+  }
+  if (ctx.state === 'loading' || ctx.days == null) {
+    return renderSiteMatrixSkeleton({
+      days: placeholderMatrixDays(ctx),
+      siteColumnWidth: ctx.siteColumnWidth,
+      weekStart: isoDate(ctx.weekStart),
+      showToday: !sameDay(ctx.weekStart, startOfTodayUtc()),
+    });
   }
   return renderSiteMatrixSkeleton({
     days: ctx.days,
@@ -562,6 +572,9 @@ async function fetchWeek(ctx, { force = false } = {}) {
   const requestSeq = ++ctx.weekRequestSeq;
   ctx.state = 'loading';
   ctx.error = null;
+  ctx.errorHttpStatus = null;
+  ctx.errorUpstreamStatus = null;
+  ctx.errorRetryAfterS = null;
   ctx.days = null;
   // Skeleton only flashes for slow fetches; cache hits feel instant.
   clearTimeout(ctx.skeletonTimer);
@@ -581,6 +594,9 @@ async function fetchWeek(ctx, { force = false } = {}) {
       const json = await resp.json().catch(() => null);
       ctx.state = 'error';
       ctx.error = json?.error || `HTTP ${resp.status}`;
+      ctx.errorHttpStatus = resp.status;
+      ctx.errorUpstreamStatus = normalizeHttpStatus(json?.upstream_status ?? json?.upstreamStatus);
+      ctx.errorRetryAfterS = normalizeRetryAfter(json?.retry_after_s ?? json?.retryAfterS);
       rerender(ctx);
       return;
     }
@@ -606,6 +622,9 @@ async function fetchWeek(ctx, { force = false } = {}) {
     clearTimeout(ctx.skeletonTimer);
     ctx.state = 'error';
     ctx.error = e.message || 'network';
+    ctx.errorHttpStatus = null;
+    ctx.errorUpstreamStatus = null;
+    ctx.errorRetryAfterS = null;
     rerender(ctx);
   }
 }
@@ -714,6 +733,34 @@ function stayEndDate(ctx, startDate) {
 
 function watchWindowKey(startDate, endDate) {
   return `${startDate}|${endDate}`;
+}
+
+function formatAvailabilityError(ctx) {
+  const raw = ctx.error || "Couldn't load availability";
+  const label = AVAILABILITY_ERROR_LABELS[raw] || raw;
+  const status = ctx.errorUpstreamStatus || ctx.errorHttpStatus;
+  const parts = [label];
+  if (status) parts.push(`HTTP ${status}`);
+  const retry = formatRetryAfter(ctx.errorRetryAfterS);
+  if (retry) parts.push(retry);
+  return parts.join(' · ');
+}
+
+function normalizeHttpStatus(value) {
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 100 && parsed <= 599 ? parsed : null;
+}
+
+function normalizeRetryAfter(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed > 0 ? Math.round(parsed) : null;
+}
+
+function formatRetryAfter(seconds) {
+  if (!seconds) return '';
+  if (seconds < 60) return `Retry suggested after ${seconds}s`;
+  const minutes = Math.round(seconds / 60);
+  return `Retry suggested after ${minutes}m`;
 }
 
 function loadSiteColumnWidth() {

@@ -70,7 +70,7 @@ private const val MAX_AVAILABILITY_DAYS: Int = 60
 private const val IP_RATE_LIMIT_PER_MINUTE = 30
 private const val IP_THROTTLE_RETRY_AFTER_S = 30
 private const val UPSTREAM_RATE_LIMITED_RETRY_AFTER_S = 60
-private const val UPSTREAM_BLOCKED_RETRY_AFTER_S = 300
+private const val UPSTREAM_BLOCKED_RETRY_AFTER_S = 60
 private const val UPSTREAM_5XX_RETRY_AFTER_S = 30
 
 /**
@@ -170,11 +170,18 @@ fun Route.availabilityRoutes(
             respondAvailabilityJson(response)
         } catch (e: ReservationProviderError) {
             val (status, error) = mapProviderError(e)
-            log.info(
-                "availability poi={} provider={} failed: {}",
+            log.warn(
+                "availability provider failed scope=poi poi={} provider={} source={} ref={} start={} end={} force={} http_status={} error={} cause={}",
                 poiId,
                 provider.id,
-                e.message,
+                row.source,
+                ref.logSummary(),
+                query.startDate,
+                query.endDate,
+                query.force,
+                status.value,
+                error.error,
+                e.causeSummary(),
             )
             respondAvailabilityJson(error, status)
         }
@@ -310,12 +317,19 @@ fun Route.availabilityRoutes(
             call.respondAvailabilityJson(response)
         } catch (e: ReservationProviderError) {
             val (status, error) = mapProviderError(e)
-            log.info(
-                "reservable availability rid={} parent_poi={} provider={} failed: {}",
+            log.warn(
+                "availability provider failed scope=reservable rid={} parent_poi={} provider={} source={} ref={} start={} end={} force={} http_status={} error={} cause={}",
                 rid.encode(),
                 parent.poiId,
                 provider.id,
-                e.message,
+                parent.source,
+                ref.logSummary(),
+                query.startDate,
+                query.endDate,
+                query.force,
+                status.value,
+                error.error,
+                e.causeSummary(),
             )
             call.respondAvailabilityJson(error, status)
         }
@@ -625,9 +639,36 @@ private suspend fun fetchOneBulk(
         val dates = availabilityDatesFromObservations(batch)
         BulkAvailEntrySchema(id = poiId, status = 200, available_dates = dates)
     } catch (e: ReservationProviderError) {
-        log.info("bulk availability poi={} provider={} failed: {}", poiId, provider.id, e.message)
-        BulkAvailEntrySchema(id = poiId, status = httpStatusFor(e), available_dates = emptyList())
+        val status = httpStatusFor(e)
+        log.warn(
+            "availability provider failed scope=bulk poi={} provider={} source={} ref={} start={} end={} force=false http_status={} error={} cause={}",
+            poiId,
+            provider.id,
+            row.source,
+            ref.logSummary(),
+            startDate,
+            endDate,
+            status,
+            e.message,
+            e.causeSummary(),
+        )
+        BulkAvailEntrySchema(id = poiId, status = status, available_dates = emptyList())
     }
+}
+
+private fun ProviderRef.logSummary(): String =
+    when (this) {
+        is ProviderRef.RecGov -> "recgov_id=$recgovId"
+        is ProviderRef.Aspira ->
+            "transaction_location_id=$transactionLocationId map_id=$mapId resource_location_id=${resourceLocationId ?: "none"}"
+        is ProviderRef.Camis -> "facility_id=$facilityId"
+    }
+
+private fun ReservationProviderError.causeSummary(): String {
+    val root = cause ?: return "none"
+    val type = root::class.simpleName ?: root::class.java.simpleName
+    val message = root.message?.takeIf { it.isNotBlank() } ?: "no message"
+    return "$type: $message"
 }
 
 /**
@@ -704,13 +745,25 @@ private fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, 
     when (e) {
         is ReservationProviderError.RateLimited ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("rate_limited", retryAfterS = UPSTREAM_RATE_LIMITED_RETRY_AFTER_S)
+                availabilityErrorDto(
+                    "rate_limited",
+                    retryAfterS = UPSTREAM_RATE_LIMITED_RETRY_AFTER_S,
+                    upstreamStatus = e.upstreamStatus,
+                )
         is ReservationProviderError.UpstreamBlocked ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_blocked", retryAfterS = UPSTREAM_BLOCKED_RETRY_AFTER_S)
+                availabilityErrorDto(
+                    "upstream_blocked",
+                    retryAfterS = UPSTREAM_BLOCKED_RETRY_AFTER_S,
+                    upstreamStatus = e.upstreamStatus,
+                )
         is ReservationProviderError.UpstreamUnavailable ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_5xx", retryAfterS = UPSTREAM_5XX_RETRY_AFTER_S)
+                availabilityErrorDto(
+                    "upstream_5xx",
+                    retryAfterS = UPSTREAM_5XX_RETRY_AFTER_S,
+                    upstreamStatus = e.upstreamStatus,
+                )
         is ReservationProviderError.Unsupported ->
             HttpStatusCode.NotImplemented to availabilityErrorDto("unsupported")
         is ReservationProviderError.WrongRefType ->

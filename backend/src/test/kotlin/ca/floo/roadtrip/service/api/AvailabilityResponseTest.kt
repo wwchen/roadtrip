@@ -6,6 +6,13 @@ import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
 import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
+import ca.floo.roadtrip.service.api.aspira.AspiraCatalogReservable
+import ca.floo.roadtrip.service.api.aspira.fetchAndClassifyAspiraCatalogOccupancy
+import ca.floo.roadtrip.service.api.aspira.fetchAspiraAvailabilityObservations
+import ca.floo.roadtrip.service.api.aspira.fetchAspiraCatalogObservations
+import ca.floo.roadtrip.service.api.aspira.fetchAspiraResourceObservations
+import ca.floo.roadtrip.service.api.aspira.mapAspiraUpstreamError
+import ca.floo.roadtrip.service.api.aspira.requireAspiraAllowedHost
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
@@ -18,6 +25,7 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class AvailabilityResponseTest {
     @Test
@@ -234,7 +242,25 @@ class AvailabilityResponseTest {
         assertEquals(503, status.value)
         assertEquals("error", json["state"]!!.jsonPrimitive.content)
         assertEquals("upstream_blocked", json["error"]!!.jsonPrimitive.content)
-        assertEquals(300, json["retry_after_s"]!!.jsonPrimitive.int)
+        assertEquals(60, json["retry_after_s"]!!.jsonPrimitive.int)
+        assertEquals(503, json["upstream_status"]!!.jsonPrimitive.int)
+    }
+
+    @Test
+    fun `aspira upstream mapper treats 403 as upstream blocked`() {
+        val (status, error) = mapAspiraUpstreamError(AspiraException("Forbidden", httpStatus = 403))
+
+        assertEquals(503, status.value)
+        assertEquals("upstream_blocked", error.error)
+        assertEquals(403, error.upstream_status)
+    }
+
+    @Test
+    fun `aspira host allowlist rejects unknown hosts`() {
+        assertEquals("reservation.pc.gc.ca", requireAspiraAllowedHost(" RESERVATION.PC.GC.CA "))
+        assertFailsWith<IllegalArgumentException> {
+            requireAspiraAllowedHost("example.test")
+        }
     }
 
     @Test

@@ -12,21 +12,25 @@ package ca.floo.roadtrip.service.reservation
 sealed class ReservationProviderError(
     message: String? = null,
     cause: Throwable? = null,
+    val upstreamStatus: Int? = null,
 ) : Exception(message, cause) {
     /** Upstream told us we're sending too many requests. */
     class RateLimited(
         cause: Throwable? = null,
-    ) : ReservationProviderError("rate_limited", cause)
+        upstreamStatus: Int? = null,
+    ) : ReservationProviderError("rate_limited", cause, upstreamStatus)
 
     /** Upstream is up but blocking us (WAF, captcha, anti-bot). */
     class UpstreamBlocked(
         cause: Throwable? = null,
-    ) : ReservationProviderError("upstream_blocked", cause)
+        upstreamStatus: Int? = null,
+    ) : ReservationProviderError("upstream_blocked", cause, upstreamStatus)
 
     /** Upstream returned 5xx, network error, parse failure. */
     class UpstreamUnavailable(
         cause: Throwable,
-    ) : ReservationProviderError("upstream_5xx", cause)
+        upstreamStatus: Int? = null,
+    ) : ReservationProviderError("upstream_5xx", cause, upstreamStatus)
 
     /** Adapter doesn't yet support the requested operation (capability stub). */
     class Unsupported(
