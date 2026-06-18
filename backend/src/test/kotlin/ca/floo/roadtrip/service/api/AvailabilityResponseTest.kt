@@ -218,12 +218,11 @@ class AvailabilityResponseTest {
 
     @Test
     fun `availability error renderer returns state error dto shape`() {
-        val body = encodeAvailabilityJson(availabilityErrorDto("rate_limited", retryAfterS = 60))
+        val body = encodeAvailabilityJson(availabilityErrorDto("rate_limited"))
         val json = Json.parseToJsonElement(body).jsonObject
 
         assertEquals("error", json["state"]!!.jsonPrimitive.content)
         assertEquals("rate_limited", json["error"]!!.jsonPrimitive.content)
-        assertEquals(60, json["retry_after_s"]!!.jsonPrimitive.int)
     }
 
     @Test
@@ -234,7 +233,6 @@ class AvailabilityResponseTest {
         assertEquals(503, status.value)
         assertEquals("error", json["state"]!!.jsonPrimitive.content)
         assertEquals("upstream_blocked", json["error"]!!.jsonPrimitive.content)
-        assertEquals(300, json["retry_after_s"]!!.jsonPrimitive.int)
         assertEquals(503, json["upstream_status"]!!.jsonPrimitive.int)
     }
 

@@ -535,44 +535,13 @@ class SmokeTest {
                     ),
             )
         }
-        context.route("**/api/poi/31337/availability?**") { route: Route ->
+        context.route("**/api/poi/31337/reservables/availability?**") { route: Route ->
             route.fulfill(
                 Route
                     .FulfillOptions()
                     .setStatus(200)
                     .setContentType("application/json")
-                    .setBody(
-                        """
-                        {
-                          "state": "success",
-                          "summary": "7 dates",
-                          "cache": { "age_seconds": 60 },
-                          "availability": [
-                            { "date": "2026-06-16", "status": "available", "available_count": 3, "total": 6, "available_reservable_ids": ["site:matrix:001", "site:matrix:002", "site:matrix:003"] },
-                            { "date": "2026-06-17", "status": "available", "available_count": 2, "total": 6, "available_reservable_ids": ["site:matrix:002", "site:matrix:004"] },
-                            { "date": "2026-06-18", "status": "available", "available_count": 1, "total": 6, "available_reservable_ids": ["site:matrix:005"] },
-                            {
-                              "date": "2026-06-19",
-                              "status": "first_come",
-                              "available_count": 0,
-                              "total": 6,
-                              "available_reservable_ids": [],
-                              "reservable_statuses": {
-                                "site:matrix:001": "first_come",
-                                "site:matrix:002": "reserved",
-                                "site:matrix:003": "closed",
-                                "site:matrix:004": "unknown",
-                                "site:matrix:005": "reserved",
-                                "site:matrix:006": "first_come"
-                              }
-                            },
-                            { "date": "2026-06-20", "status": "available", "available_count": 2, "total": 6, "available_reservable_ids": ["site:matrix:001", "site:matrix:006"] },
-                            { "date": "2026-06-21", "available_count": 0, "total": 0, "status": "closed", "available_reservable_ids": [] },
-                            { "date": "2026-06-22", "status": "available", "available_count": 3, "total": 6, "available_reservable_ids": ["site:matrix:003", "site:matrix:004", "site:matrix:005"] }
-                          ]
-                        }
-                        """.trimIndent(),
-                    ),
+                    .setBody(matrixReservablesAvailabilityFixture()),
             )
         }
         context.route("**/api/poi/31337/reservables**") { route: Route ->
@@ -1263,4 +1232,68 @@ class SmokeTest {
             context.close()
         }
     }
+}
+
+// Per-reservable availability fixture that, when fused by the FE, mirrors the
+// per-day rollup the old `/api/poi/{id}/availability` route used to serve.
+//
+// Shape per the new endpoint: { poi_id, start_date, end_date, reservables: [
+//   { reservable_id, provider, window, availability: [DayClassification...], cache, ... }
+// ] }
+//
+// Daily statuses, reconstructed from the legacy fused fixture:
+//   2026-06-16: 1,2,3 available; 4,5,6 reserved
+//   2026-06-17: 2,4 available; 1,3,5,6 reserved
+//   2026-06-18: 5 available; 1,2,3,4,6 reserved
+//   2026-06-19: 1=first_come, 2=reserved, 3=closed, 4=unknown, 5=reserved, 6=first_come
+//   2026-06-20: 1,6 available; 2,3,4,5 reserved
+//   2026-06-21: every site closed (closed_for_season day)
+//   2026-06-22: 3,4,5 available; 1,2,6 reserved
+private fun matrixReservablesAvailabilityFixture(): String {
+    val rids = (1..6).map { "site:matrix:%03d".format(it) }
+    // Map of date → per-rid status. Order: 1..6.
+    val perDay =
+        linkedMapOf(
+            "2026-06-16" to listOf("available", "available", "available", "reserved", "reserved", "reserved"),
+            "2026-06-17" to listOf("reserved", "available", "reserved", "available", "reserved", "reserved"),
+            "2026-06-18" to listOf("reserved", "reserved", "reserved", "reserved", "available", "reserved"),
+            "2026-06-19" to listOf("first_come", "reserved", "closed", "unknown", "reserved", "first_come"),
+            "2026-06-20" to listOf("available", "reserved", "reserved", "reserved", "reserved", "available"),
+            "2026-06-21" to listOf("closed", "closed", "closed", "closed", "closed", "closed"),
+            "2026-06-22" to listOf("reserved", "reserved", "available", "available", "available", "reserved"),
+        )
+
+    val envelopes =
+        rids.mapIndexed { i, rid ->
+            val days =
+                perDay.entries.joinToString(",") { (date, statuses) ->
+                    val s = statuses[i]
+                    val availCount = if (s == "available") 1 else 0
+                    """{"date":"$date","status":"$s","available_count":$availCount,"total":1}"""
+                }
+            """
+            {
+              "provider": "recgov",
+              "reservable_id": "$rid",
+              "checked_at": "2026-06-15T00:00:00Z",
+              "window": {"start_date":"2026-06-16","end_date":"2026-06-23"},
+              "summary": "fixture",
+              "state": "success",
+              "season": null,
+              "availability": [$days],
+              "cache": {"hit": true, "age_seconds": 60, "ttl_seconds": 600}
+            }
+            """.trimIndent()
+        }
+
+    return (
+        """
+        {
+          "poi_id": 31337,
+          "start_date": "2026-06-16",
+          "end_date": "2026-06-23",
+          "reservables": [${envelopes.joinToString(",")}]
+        }
+        """
+    ).trimIndent()
 }

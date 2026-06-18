@@ -33,6 +33,25 @@ class CampsiteProviderRepo(
         )
     }
 
+    /**
+     * Existence-only check for an active campground POI. Use when you need
+     * to distinguish "POI doesn't exist" (404) from "POI exists but has no
+     * provider_ref" (no online reservations) — [findProviderRef] returns null
+     * in both cases.
+     */
+    fun campgroundExists(poiId: Long): Boolean =
+        ctx
+            .fetchOne(
+                """
+                SELECT 1
+                FROM pois
+                WHERE id = ?
+                  AND deleted_at IS NULL
+                  AND category = 'campground'
+                """.trimIndent(),
+                poiId,
+            ) != null
+
     /** Same as [findProviderRef] but for a batch — one DB round-trip. */
     fun findProviderRefs(poiIds: List<Long>): Map<Long, CampsiteProviderRefRow> {
         if (poiIds.isEmpty()) return emptyMap()

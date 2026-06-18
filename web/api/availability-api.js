@@ -1,9 +1,13 @@
 import { jsonPostOk } from './http.js';
 
 /**
- * Fetch per-day availability for a campground POI. Backend dispatches by
- * `provider_ref` to the right BookingProvider adapter — see
- * docs/booking-providers.md.
+ * Fetch per-reservable availability for a POI's reservables. The BE returns one
+ * envelope per linked reservable; the FE fuses them into per-day classifications
+ * for the week grid. An empty `reservables` array means the POI has no online-
+ * bookable reservables (walk-up / non-reservable) and the matrix should be hidden.
+ *
+ * Provider dispatch happens server-side via the registry — see
+ * docs/reservation-providers.md.
  *
  * @param {number|string} id  pois.id
  * @param {object}        opts
@@ -13,14 +17,14 @@ import { jsonPostOk } from './http.js';
  * @param {boolean}       [opts.force]     Bust the per-month cache.
  * @param {AbortSignal}   [opts.signal]
  */
-export function requestPoiAvailability(id, { startDate, endDate, siteType, force, signal } = {}) {
+export function requestPoiReservablesAvailability(id, { startDate, endDate, siteType, force, signal } = {}) {
   const params = new URLSearchParams();
   if (startDate) params.set('start_date', startDate);
   if (endDate) params.set('end_date', endDate);
   if (siteType) params.set('site_type', siteType);
   if (force) params.set('force', '1');
   const qs = params.toString();
-  return fetch(`/api/poi/${encodeURIComponent(id)}/availability${qs ? `?${qs}` : ''}`, { signal });
+  return fetch(`/api/poi/${encodeURIComponent(id)}/reservables/availability${qs ? `?${qs}` : ''}`, { signal });
 }
 
 export async function fetchBulkAvailability({ ids, startDate, endDate, signal }) {

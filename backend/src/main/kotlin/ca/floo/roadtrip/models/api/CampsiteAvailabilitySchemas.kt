@@ -32,7 +32,6 @@ data class BulkAvailResponseSchema(
 data class AvailabilityErrorSchema(
     val state: String = "error",
     val error: String,
-    val retry_after_s: Int? = null,
     val upstream_status: Int? = null,
 )
 

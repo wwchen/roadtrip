@@ -301,8 +301,21 @@ data class AvailabilityCacheBlock(
     @SerialName("ttl_seconds") val ttlSeconds: Long,
 )
 
+// /api/poi/{poi_id}/reservables/availability — bulk per-reservable availability
+// for one POI. Each entry in `reservables` is the same envelope the single-
+// reservable endpoint returns; the FE fuses them into the week grid.
+//
+// `reservables` is empty when the POI has no linked reservables (walk-up /
+// non-bookable). The drawer should hide the matrix in that case.
+@Serializable
+data class PoiReservablesAvailabilityResponseDto(
+    @SerialName("poi_id") val poiId: Long,
+    @SerialName("start_date") val startDate: String,
+    @SerialName("end_date") val endDate: String,
+    val reservables: List<AvailabilityResponseDto>,
+)
+
 fun availabilityErrorDto(
     error: String,
-    retryAfterS: Int? = null,
     upstreamStatus: Int? = null,
-): AvailabilityErrorSchema = AvailabilityErrorSchema(error = error, retry_after_s = retryAfterS, upstream_status = upstreamStatus)
+): AvailabilityErrorSchema = AvailabilityErrorSchema(error = error, upstream_status = upstreamStatus)

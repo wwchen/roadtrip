@@ -28,7 +28,6 @@ import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -482,7 +481,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `poi availability alias dispatches through reservation provider`() =
+    fun `poi reservables availability returns one envelope per linked reservable`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -490,6 +489,10 @@ class ReservableRoutesTest {
                     name = "Upper Pines Campground",
                     providerRefJson = """{"recgov_id":"232447"}""",
                 )
+            val a12 = seedReservable(vendorId = "330257", name = "A12")
+            val b03 = seedReservable(vendorId = "330258", name = "B03")
+            link(a12, poiId)
+            link(b03, poiId)
             application {
                 routing {
                     availabilityRoutes(
@@ -501,23 +504,28 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-02")
+            val resp = client.get("/api/poi/$poiId/reservables/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
-            assertEquals("232447", body["campground_id"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-02", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
-            assertEquals(1, body["availability"]!!.jsonArray.size)
+            assertEquals(poiId, body["poi_id"]!!.jsonPrimitive.content.toLong())
+            assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-02", body["end_date"]!!.jsonPrimitive.content)
+            val rids =
+                body["reservables"]!!
+                    .jsonArray
+                    .map { it.jsonObject["reservable_id"]!!.jsonPrimitive.content }
+                    .sorted()
+            assertEquals(listOf("site:recgov:330257", "site:recgov:330258"), rids)
+            assertEquals(2, FakeReservationProvider.reservableAvailabilityCalls)
         }
 
     @Test
-    fun `deprecated campsite availability path is not registered`() =
+    fun `poi reservables availability returns empty array when poi has no reservables`() =
         testApplication {
             val poiId =
                 seedPoi(
-                    sourceId = "upper-pines-deprecated-path",
-                    name = "Upper Pines Campground",
+                    sourceId = "lonely-creek",
+                    name = "Lonely Creek",
                     providerRefJson = """{"recgov_id":"232447"}""",
                 )
             application {
@@ -531,12 +539,31 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/campsite/availability/$poiId?start_date=2026-07-01&end_date=2026-07-02")
+            val resp = client.get("/api/poi/$poiId/reservables/availability?start_date=2026-07-01&end_date=2026-07-02")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(0, body["reservables"]!!.jsonArray.size)
+            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
+        }
+
+    @Test
+    fun `poi reservables availability returns 404 for unknown poi`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeReservationProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+            val resp = client.get("/api/poi/999999/reservables/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.NotFound, resp.status)
         }
 
     @Test
-    fun `poi availability uses exclusive start and end date window`() =
+    fun `poi reservables availability uses exclusive start and end date window`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -544,6 +571,8 @@ class ReservableRoutesTest {
                     name = "Upper Pines Campground",
                     providerRefJson = """{"recgov_id":"232447"}""",
                 )
+            val a12 = seedReservable(vendorId = "330257", name = "A12")
+            link(a12, poiId)
             application {
                 routing {
                     availabilityRoutes(
@@ -554,12 +583,13 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-04")
+            val resp = client.get("/api/poi/$poiId/reservables/availability?start_date=2026-07-01&end_date=2026-07-04")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-04", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
-            assertEquals(3, body["availability"]!!.jsonArray.size)
+            assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-04", body["end_date"]!!.jsonPrimitive.content)
+            val first = body["reservables"]!!.jsonArray.single().jsonObject
+            assertEquals(3, first["availability"]!!.jsonArray.size)
         }
 
     @Test
@@ -584,10 +614,10 @@ class ReservableRoutesTest {
             }
 
             val windowQuery = "start_date=2026-07-01&end_date=2026-07-04"
-            val poiStartStatus = client.get("/api/poi/$poiId/availability?start=2026-07-01").status
-            val poiDaysStatus = client.get("/api/poi/$poiId/availability?$windowQuery&days=7").status
-            val poiMinNightsStatus = client.get("/api/poi/$poiId/availability?$windowQuery&min_nights=2").status
-            val poiMinNightsCamelStatus = client.get("/api/poi/$poiId/availability?$windowQuery&minNights=2").status
+            val poiStartStatus = client.get("/api/poi/$poiId/reservables/availability?start=2026-07-01").status
+            val poiDaysStatus = client.get("/api/poi/$poiId/reservables/availability?$windowQuery&days=7").status
+            val poiMinNightsStatus = client.get("/api/poi/$poiId/reservables/availability?$windowQuery&min_nights=2").status
+            val poiMinNightsCamelStatus = client.get("/api/poi/$poiId/reservables/availability?$windowQuery&minNights=2").status
             val reservableStartStatus =
                 client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01").status
             val reservableDaysStatus = client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&days=7").status
@@ -609,7 +639,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `poi availability defaults missing end date to seven day window`() =
+    fun `poi reservables availability defaults missing end date to seven day window`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -617,6 +647,8 @@ class ReservableRoutesTest {
                     name = "Upper Pines Campground",
                     providerRefJson = """{"recgov_id":"232447"}""",
                 )
+            val a12 = seedReservable(vendorId = "330257", name = "A12")
+            link(a12, poiId)
             application {
                 routing {
                     availabilityRoutes(
@@ -627,16 +659,17 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01")
+            val resp = client.get("/api/poi/$poiId/reservables/availability?start_date=2026-07-01")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-08", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
-            assertEquals(7, body["availability"]!!.jsonArray.size)
+            assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-08", body["end_date"]!!.jsonPrimitive.content)
+            val first = body["reservables"]!!.jsonArray.single().jsonObject
+            assertEquals(7, first["availability"]!!.jsonArray.size)
         }
 
     @Test
-    fun `poi availability filters available reservable ids by site type`() =
+    fun `poi reservables availability filters by site type`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -663,22 +696,17 @@ class ReservableRoutesTest {
 
             val resp =
                 client.get(
-                    "/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-03&site_type=STANDARD",
+                    "/api/poi/$poiId/reservables/availability?start_date=2026-07-01&end_date=2026-07-03&site_type=STANDARD",
                 )
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-03", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
-            val first = body["availability"]!!.jsonArray.first().jsonObject
-            assertEquals("2026-07-01", first["date"]!!.jsonPrimitive.content)
-            assertEquals(2, first["available_count"]!!.jsonPrimitive.int)
-            assertEquals(2, first["total"]!!.jsonPrimitive.int)
-            assertEquals(
-                listOf("site:recgov:330257", "site:recgov:330259"),
-                first["available_reservable_ids"]!!.jsonArray.map { it.jsonPrimitive.content },
-            )
-            assertEquals(4L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
+            val rids =
+                body["reservables"]!!
+                    .jsonArray
+                    .map { it.jsonObject["reservable_id"]!!.jsonPrimitive.content }
+                    .sorted()
+            assertEquals(listOf("site:recgov:330257", "site:recgov:330259"), rids)
+            assertEquals(2, FakeReservationProvider.reservableAvailabilityCalls)
         }
 
     @Test
@@ -830,7 +858,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `poi availability passes linked aspira child-map catalog to provider`() =
+    fun `poi reservables availability passes linked aspira child-map ref to provider`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -876,16 +904,26 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp = client.get("/api/poi/$poiId/availability?start_date=2026-07-01&end_date=2026-07-02")
+            val resp = client.get("/api/poi/$poiId/reservables/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            val day = body["availability"]!!.jsonArray.single().jsonObject
-            assertEquals("-2147483388", body["map_id"]!!.jsonPrimitive.content)
-            assertEquals(2, day["available_count"]!!.jsonPrimitive.int)
-            assertEquals(2, day["total"]!!.jsonPrimitive.int)
+            val byRid =
+                body["reservables"]!!.jsonArray.associateBy {
+                    it.jsonObject["reservable_id"]!!.jsonPrimitive.content
+                }
             assertEquals(
-                listOf("site:aspira_wa:-100", "site:aspira_wa:-200"),
-                day["available_reservable_ids"]!!.jsonArray.map { it.jsonPrimitive.content },
+                listOf("site:aspira_wa:-100", "site:aspira_wa:-200").sorted(),
+                byRid.keys.sorted(),
+            )
+            // Each per-reservable response carries the child-map id (the
+            // reservable's own mapId, not the POI's parent mapId).
+            assertEquals(
+                "-2147483615",
+                byRid["site:aspira_wa:-100"]!!.jsonObject["map_id"]!!.jsonPrimitive.content,
+            )
+            assertEquals(
+                "-2147483613",
+                byRid["site:aspira_wa:-200"]!!.jsonObject["map_id"]!!.jsonPrimitive.content,
             )
         }
 
@@ -931,6 +969,31 @@ class ReservableRoutesTest {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("-2147483615", body["map_id"]!!.jsonPrimitive.content)
             assertEquals("site:aspira_wa:-100", body["reservable_id"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `poi reservables availability returns empty for walk-up poi with null provider ref`() =
+        testApplication {
+            // Mirrors POI 4931 in prod: a real campground POI from the recgov
+            // ETL whose upstream `Reservable: false` left provider_ref null.
+            // We must NOT 404 (the POI exists) — the FE just hides the matrix.
+            val poiId = seedPoi(sourceId = "hull-creek", name = "Hull Creek", providerRefJson = null)
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeReservationProviders(),
+                        ReservableRepo(ctx),
+                    )
+                }
+            }
+
+            val resp = client.get("/api/poi/$poiId/reservables/availability?start_date=2026-07-01&end_date=2026-07-02")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(poiId, body["poi_id"]!!.jsonPrimitive.content.toLong())
+            assertEquals(0, body["reservables"]!!.jsonArray.size)
+            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
         }
 
     private fun seedPoi(
