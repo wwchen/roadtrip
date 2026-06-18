@@ -12,9 +12,8 @@ WORKDIR /app
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
 
 # If this COPY fails with "no source files were specified", the fat-jar
-# wasn't built — run `make backend-build` (or `cd backend && gradle shadowJar`)
-# before `docker compose up`. Makefile's `docker-run` / `deploy-local`
-# handle this automatically.
+# wasn't built — run `./gradlew :backend:shadowJar` from the repo root before
+# `docker compose up`. `make deploy` handles this automatically.
 COPY build/libs/roadtrip-backend-*-all.jar /app/app.jar
 
 EXPOSE 8080
