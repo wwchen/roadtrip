@@ -701,7 +701,7 @@ private fun ApplicationCall.queryValues(vararg names: String): List<String> =
         .distinct()
 
 /** Map the typed provider error to (HTTP status, AvailabilityErrorSchema). */
-private fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> {
+internal fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> {
     val upstream = upstreamHttpStatus(e)
     return when (e) {
         is ReservationProviderError.RateLimited ->
@@ -733,7 +733,7 @@ private fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, 
     }
 }
 
-private fun upstreamHttpStatus(e: ReservationProviderError): Int? {
+internal fun upstreamHttpStatus(e: ReservationProviderError): Int? {
     var t: Throwable? = e.cause
     while (t != null) {
         if (t is AspiraException) return t.httpStatus

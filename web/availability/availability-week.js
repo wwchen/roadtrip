@@ -142,7 +142,7 @@ function renderShell(ctx) {
 }
 
 function renderBody(ctx) {
-  if (ctx.state === 'loading' || ctx.days == null) {
+  if (ctx.state === 'loading') {
     return renderSiteMatrixSkeleton({
       days: placeholderMatrixDays(ctx),
       siteColumnWidth: ctx.siteColumnWidth,
