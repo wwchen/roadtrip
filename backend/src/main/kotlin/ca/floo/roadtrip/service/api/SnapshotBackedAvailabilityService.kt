@@ -73,9 +73,21 @@ class SnapshotBackedAvailabilityService(
         batch: AvailabilityObservationBatch,
     ) {
         val targetByRid = request.targets.associateBy { it.rid }
-        val rows =
+        val dates = datesInWindow(request.startDate, request.endDate)
+        val observedAtByDate =
+            batch.observations
+                .groupBy { it.date }
+                .mapValues { (_, observations) ->
+                    observations.maxOf { it.observedAt }
+                }
+        val fallbackObservedAt = batch.observations.maxOfOrNull { it.observedAt } ?: Instant.now(clock)
+        val covered = mutableSetOf<Pair<Long, LocalDate>>()
+        val rows = mutableListOf<AvailabilitySnapshotRepo.SnapshotObservation>()
+
+        rows +=
             batch.observations.mapNotNull { observation ->
                 val target = targetByRid[observation.reservableId] ?: return@mapNotNull null
+                covered += target.dbId to observation.date
                 AvailabilitySnapshotRepo.SnapshotObservation(
                     reservableId = target.dbId,
                     reservableRid = target.rid,
@@ -84,6 +96,19 @@ class SnapshotBackedAvailabilityService(
                     status = observation.status,
                 )
             }
+        for (target in request.targets) {
+            for (date in dates) {
+                if (target.dbId to date in covered) continue
+                rows +=
+                    AvailabilitySnapshotRepo.SnapshotObservation(
+                        reservableId = target.dbId,
+                        reservableRid = target.rid,
+                        targetDate = date,
+                        observedAt = observedAtByDate[date] ?: fallbackObservedAt,
+                        status = AvailabilityStatus.UNKNOWN,
+                    )
+            }
+        }
         sink.appendObservations(
             AvailabilitySnapshotRepo.SnapshotObservationBatch(
                 runId = request.runId,

@@ -242,6 +242,7 @@ flyway {
 }
 
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
+    archiveBaseName.set("roadtrip-backend")
     // Flyway and other ServiceLoader-based libraries register implementations
     // via META-INF/services/. Without merging, the last copy wins and Flyway
     // loses its CoreMigrationTypeResolver, rejecting V_*.sql migrations with
