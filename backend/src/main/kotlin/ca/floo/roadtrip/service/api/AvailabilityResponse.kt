@@ -305,5 +305,4 @@ fun availabilityErrorDto(
     error: String,
     retryAfterS: Int? = null,
     upstreamStatus: Int? = null,
-): AvailabilityErrorSchema =
-    AvailabilityErrorSchema(error = error, retry_after_s = retryAfterS, upstream_status = upstreamStatus)
+): AvailabilityErrorSchema = AvailabilityErrorSchema(error = error, retry_after_s = retryAfterS, upstream_status = upstreamStatus)
