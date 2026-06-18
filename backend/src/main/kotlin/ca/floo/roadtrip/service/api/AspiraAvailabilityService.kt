@@ -8,7 +8,9 @@ import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.repo.CachedAspiraOccupancy
 import ca.floo.roadtrip.repo.CachedResult
 import io.ktor.http.HttpStatusCode
+import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 // Provider-specific helpers for Aspira NextGen availability (Parks Canada,
 // BC Provincial, WA State). The HTTP surface lives in
@@ -33,7 +35,7 @@ val ASPIRA_ALLOWED_HOSTS: Set<String> =
  * calendar days. Same-sub-area stay-length matching belongs to alert
  * execution, not public/provider availability.
  */
-internal suspend fun fetchAndClassifyAspira(
+internal suspend fun fetchAspiraAvailabilityObservations(
     cache: CachedAspiraAvailability,
     host: String,
     mapId: Int,
@@ -41,29 +43,20 @@ internal suspend fun fetchAndClassifyAspira(
     endDate: LocalDate,
     force: Boolean,
     reservableVendor: String? = null,
-): AvailabilityResponseDto {
-    val days =
-        java.time.temporal.ChronoUnit.DAYS
-            .between(startDate, endDate)
-            .toInt()
+): AvailabilityObservationBatch {
+    val days = daysBetween(startDate, endDate)
     val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
-    val perDay = classifyDays(cached.data, startDate, days, reservableVendor)
-    val state = classifyWindowState(perDay)
-    val summary = summarizeWindow(days, perDay, state)
     val cacheBlock =
         AvailabilityCacheBlock(
             hit = cached.hit,
             ageSeconds = cached.ageSeconds,
             ttlSeconds = cached.ttlSeconds,
         )
-    return availabilityResponseDto(
+    return AvailabilityObservationBatch(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
-        perDay = perDay,
-        state = state,
-        summary = summary,
-        seasonBlock = null, // Aspira doesn't expose reopen-date hints
+        observations = observationsFromAspiraAvailability(cached.data, startDate, days, cached.observedAt, reservableVendor),
         cacheBlock = cacheBlock,
         host = host,
         mapId = mapId.toString(),
@@ -76,7 +69,7 @@ internal suspend fun fetchAndClassifyAspira(
  * map whose linked sites live under several child maps; this groups by the
  * per-reservable child map and classifies the actual resource ids.
  */
-internal suspend fun fetchAndClassifyAspiraCatalog(
+internal suspend fun fetchAspiraCatalogObservations(
     cache: CachedAspiraAvailability,
     host: String,
     parentMapId: Int,
@@ -84,17 +77,14 @@ internal suspend fun fetchAndClassifyAspiraCatalog(
     startDate: LocalDate,
     endDate: LocalDate,
     force: Boolean,
-): AvailabilityResponseDto {
-    val days =
-        java.time.temporal.ChronoUnit.DAYS
-            .between(startDate, endDate)
-            .toInt()
+): AvailabilityObservationBatch {
+    val days = daysBetween(startDate, endDate)
     val targets =
         reservables
             .distinctBy { it.rid }
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
-        return fetchAndClassifyAspira(
+        return fetchAspiraAvailabilityObservations(
             cache = cache,
             host = host,
             mapId = parentMapId,
@@ -114,11 +104,9 @@ internal suspend fun fetchAndClassifyAspiraCatalog(
             CatalogResourceDays(
                 rid = target.rid,
                 days = cachedByMap[target.mapId]?.data?.byResource?.get(target.resourceId),
+                observedAt = cachedByMap[target.mapId]?.observedAt ?: Instant.EPOCH,
             )
         }
-    val perDay = classifyLinkedResourceCatalogDays(resourceRows, startDate, days)
-    val state = classifyWindowState(perDay)
-    val summary = summarizeWindow(days, perDay, state)
     val cacheResults = cachedByMap.values
     val cacheBlock =
         AvailabilityCacheBlock(
@@ -126,14 +114,11 @@ internal suspend fun fetchAndClassifyAspiraCatalog(
             ageSeconds = cacheResults.maxOfOrNull { it.ageSeconds } ?: 0,
             ttlSeconds = cacheResults.minOfOrNull { it.ttlSeconds } ?: 0,
         )
-    return availabilityResponseDto(
+    return AvailabilityObservationBatch(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
-        perDay = perDay,
-        state = state,
-        summary = summary,
-        seasonBlock = null,
+        observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
         cacheBlock = cacheBlock,
         host = host,
         mapId = parentMapId.toString(),
@@ -160,48 +145,44 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
             .distinctBy { it.rid }
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
-        return availabilityResponseDto(
-            provider = "aspira",
-            startDate = today,
-            endDate = today.plusDays(days.toLong()),
-            perDay = emptyList(),
-            state = "success",
-            summary = "No availability",
-            seasonBlock = null,
-            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
-            host = host,
-            mapId = parentMapId.toString(),
+        return availabilityResponseFromObservations(
+            AvailabilityObservationBatch(
+                provider = "aspira",
+                startDate = today,
+                endDate = today.plusDays(days.toLong()),
+                observations = emptyList(),
+                cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
+                host = host,
+                mapId = parentMapId.toString(),
+            ),
         )
     }
 
     val cachedByDate = mutableListOf<CachedOccupancyDay>()
-    val perDay =
-        (0 until days).map { offset ->
+    val observations =
+        (0 until days).flatMap { offset ->
             val arrival = today.plusDays(offset.toLong())
             val checkout = arrival.plusDays(1)
             val cached = cache.get(host, resourceLocationId, arrival, checkout, force)
             cachedByDate += CachedOccupancyDay(cached.hit, cached.ageSeconds, cached.ttlSeconds)
-            classifyOccupancyCatalogArrivalDay(targets, cached.data.resourceOccupancy, arrival)
+            observationsFromOccupancyCatalogArrivalDay(targets, cached.data.resourceOccupancy, arrival, cached.observedAt)
         }
-    val state = classifyWindowState(perDay)
-    val summary = summarizeWindow(days, perDay, state)
     val cacheBlock =
         AvailabilityCacheBlock(
             hit = cachedByDate.all { it.hit },
             ageSeconds = cachedByDate.maxOfOrNull { it.ageSeconds } ?: 0,
             ttlSeconds = cachedByDate.minOfOrNull { it.ttlSeconds } ?: 0,
         )
-    return availabilityResponseDto(
-        provider = "aspira",
-        startDate = today,
-        endDate = today.plusDays(days.toLong()),
-        perDay = perDay,
-        state = state,
-        summary = summary,
-        seasonBlock = null,
-        cacheBlock = cacheBlock,
-        host = host,
-        mapId = parentMapId.toString(),
+    return availabilityResponseFromObservations(
+        AvailabilityObservationBatch(
+            provider = "aspira",
+            startDate = today,
+            endDate = today.plusDays(days.toLong()),
+            observations = observations,
+            cacheBlock = cacheBlock,
+            host = host,
+            mapId = parentMapId.toString(),
+        ),
     )
 }
 
@@ -209,7 +190,7 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
  * Same cached Aspira `/api/availability/map` response as the campground
  * rollup, narrowed to one `resourceAvailabilities` key.
  */
-internal suspend fun fetchAndClassifyAspiraResource(
+internal suspend fun fetchAspiraResourceObservations(
     cache: CachedAspiraAvailability,
     host: String,
     mapId: Int,
@@ -218,58 +199,27 @@ internal suspend fun fetchAndClassifyAspiraResource(
     startDate: LocalDate,
     endDate: LocalDate,
     force: Boolean,
-): AvailabilityResponseDto {
-    val days =
-        java.time.temporal.ChronoUnit.DAYS
-            .between(startDate, endDate)
-            .toInt()
+): AvailabilityObservationBatch {
+    val days = daysBetween(startDate, endDate)
     val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
     val resourceDays = cached.data.byResource[resourceId].orEmpty()
     val reservableId = "site:$reservableVendor:$resourceId"
-    val perDay = classifyResourceDays(resourceDays, startDate, days, reservableId)
-    val state = classifyWindowState(perDay)
-    val summary = summarizeWindow(days, perDay, state)
     val cacheBlock =
         AvailabilityCacheBlock(
             hit = cached.hit,
             ageSeconds = cached.ageSeconds,
             ttlSeconds = cached.ttlSeconds,
         )
-    return availabilityResponseDto(
+    return AvailabilityObservationBatch(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
-        perDay = perDay,
-        state = state,
-        summary = summary,
-        seasonBlock = null,
+        observations = observationsFromResourceDays(resourceDays, startDate, days, reservableId, cached.observedAt),
         cacheBlock = cacheBlock,
         host = host,
         mapId = mapId.toString(),
         reservableId = reservableId,
     )
-}
-
-/**
- * Bulk variant: dates in `[startDate, endDate)` where at least one sub-area
- * is available that day.
- */
-suspend fun availableDatesAspira(
-    cache: CachedAspiraAvailability,
-    host: String,
-    mapId: Int,
-    startDate: LocalDate,
-    endDate: LocalDate,
-): List<String> {
-    val days =
-        java.time.temporal.ChronoUnit.DAYS
-            .between(startDate, endDate)
-            .toInt()
-    val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force = false)
-    val perDay = classifyDays(cached.data, startDate, days)
-    return perDay
-        .filter { it.availableCount > 0 }
-        .map { it.date }
 }
 
 /**
@@ -281,139 +231,103 @@ suspend fun availableDatesAspira(
  * When the park has no sub-areas (rare, but possible for a single-loop
  * park), fall back to the `mapAvailabilities` rollup as one virtual sub-area.
  */
-private fun classifyDays(
+private fun observationsFromAspiraAvailability(
     avail: AspiraAvailability,
     start: LocalDate,
     days: Int,
+    observedAt: Instant,
     reservableVendor: String? = null,
-): List<DayClassification> {
+): List<ReservableDayObservation> {
     if (reservableVendor != null && avail.byResource.isNotEmpty()) {
-        return classifyResourceCatalogDays(avail.byResource, start, days, reservableVendor)
+        return observationsFromResourceCatalog(avail.byResource, start, days, reservableVendor, observedAt)
     }
     val sub = avail.byMapLink.values.toList()
     val rollup = avail.parkRollup
-    return (0 until days).map { d ->
-        val date = start.plusDays(d.toLong()).toString()
-        if (sub.isNotEmpty()) {
-            classifyArrivalDay(sub, d, date)
-        } else {
-            val status =
-                if (d < rollup.size) {
-                    AspiraStatus.classify(rollup[d])
-                } else {
-                    AvailabilityStatus.UNKNOWN
-                }
-            dayClassificationFromStatuses(date, listOf(status))
+    return if (sub.isNotEmpty()) {
+        observationsFromIndexedStatusRows(sub, start, days, reservableVendor ?: "aspira", "__map_link", observedAt)
+    } else {
+        val id = "site:${reservableVendor ?: "aspira"}:__park__"
+        (0 until days).map { d ->
+            ReservableDayObservation(
+                reservableId = id,
+                date = start.plusDays(d.toLong()),
+                observedAt = observedAt,
+                status = statusAt(rollup, d),
+            )
         }
     }
 }
 
-private fun classifyResourceDays(
+private fun observationsFromResourceDays(
     resourceDays: List<Int>,
     start: LocalDate,
     days: Int,
-    reservableId: String? = null,
-): List<DayClassification> =
+    reservableId: String,
+    observedAt: Instant,
+): List<ReservableDayObservation> =
     (0 until days).map { d ->
-        val date = start.plusDays(d.toLong()).toString()
-        classifyResourceArrivalDay(resourceDays, d, date, reservableId)
+        ReservableDayObservation(
+            reservableId = reservableId,
+            date = start.plusDays(d.toLong()),
+            observedAt = observedAt,
+            status = statusAt(resourceDays, d),
+        )
     }
 
-private fun classifyResourceCatalogDays(
+private fun observationsFromResourceCatalog(
     byResource: Map<String, List<Int>>,
     start: LocalDate,
     days: Int,
     reservableVendor: String,
-): List<DayClassification> =
-    (0 until days).map { d ->
-        val date = start.plusDays(d.toLong()).toString()
-        classifyResourceCatalogArrivalDay(byResource, d, date, reservableVendor)
+    observedAt: Instant,
+): List<ReservableDayObservation> =
+    byResource.flatMap { (resourceId, resourceDays) ->
+        observationsFromResourceDays(
+            resourceDays = resourceDays,
+            start = start,
+            days = days,
+            reservableId = "site:$reservableVendor:$resourceId",
+            observedAt = observedAt,
+        )
     }
 
-private fun classifyLinkedResourceCatalogDays(
+private fun observationsFromLinkedResourceCatalog(
     resources: List<CatalogResourceDays>,
     start: LocalDate,
     days: Int,
-): List<DayClassification> =
-    (0 until days).map { d ->
-        val date = start.plusDays(d.toLong()).toString()
-        classifyLinkedResourceCatalogArrivalDay(resources, d, date)
-    }
-
-private fun classifyResourceCatalogArrivalDay(
-    byResource: Map<String, List<Int>>,
-    d: Int,
-    date: String,
-    reservableVendor: String,
-): DayClassification {
-    val statuses =
-        byResource
-            .mapKeys { (resourceId, _) -> "site:$reservableVendor:$resourceId" }
-            .mapValues { (_, resourceDays) ->
-                if (d < resourceDays.size) {
-                    AspiraStatus.classify(resourceDays[d])
-                } else {
-                    AvailabilityStatus.UNKNOWN
-                }
-            }
-    return dayClassificationFromReservableStatuses(date, statuses)
-}
-
-private fun classifyLinkedResourceCatalogArrivalDay(
-    resources: List<CatalogResourceDays>,
-    d: Int,
-    date: String,
-): DayClassification {
-    val statuses =
-        resources.associate { resource ->
-            val days = resource.days
-            val status =
-                if (days == null || d >= days.size) {
-                    AvailabilityStatus.UNKNOWN
-                } else {
-                    AspiraStatus.classify(days[d])
-                }
-            resource.rid to status
+): List<ReservableDayObservation> =
+    resources.flatMap { resource ->
+        (0 until days).map { d ->
+            ReservableDayObservation(
+                reservableId = resource.rid,
+                date = start.plusDays(d.toLong()),
+                observedAt = resource.observedAt,
+                status = resource.days?.let { statusAt(it, d) } ?: AvailabilityStatus.UNKNOWN,
+            )
         }
-    return dayClassificationFromReservableStatuses(date, statuses)
-}
+    }
 
-private fun classifyOccupancyCatalogArrivalDay(
+private fun observationsFromOccupancyCatalogArrivalDay(
     resources: List<AspiraCatalogReservable>,
     occupancyRows: List<ca.floo.roadtrip.client.AspiraResourceOccupancy>,
     arrival: LocalDate,
-): DayClassification {
+    observedAt: Instant,
+): List<ReservableDayObservation> {
     val occupancyByResourceId = occupancyRows.associateBy { it.resourceId.toString() }
-    val statuses =
-        resources.associate { resource ->
-            val occupancy = occupancyByResourceId[resource.resourceId]
-            val status =
-                when {
-                    occupancy == null -> AvailabilityStatus.UNKNOWN
-                    occupancy.availability == ASPIRA_OCCUPANCY_AVAILABLE && !occupancy.filtered -> AvailabilityStatus.AVAILABLE
-                    else -> AvailabilityStatus.RESERVED
-                }
-            resource.rid to status
-        }
-    return dayClassificationFromReservableStatuses(arrival.toString(), statuses)
-}
-
-private fun classifyResourceArrivalDay(
-    resourceDays: List<Int>,
-    d: Int,
-    date: String,
-    reservableId: String? = null,
-): DayClassification {
-    val arrivalStatus =
-        if (d < resourceDays.size) {
-            AspiraStatus.classify(resourceDays[d])
-        } else {
-            AvailabilityStatus.UNKNOWN
-        }
-    return if (reservableId == null) {
-        dayClassificationFromStatuses(date, listOf(arrivalStatus))
-    } else {
-        dayClassificationFromReservableStatuses(date, mapOf(reservableId to arrivalStatus))
+    return resources.map { resource ->
+        val occupancy = occupancyByResourceId[resource.resourceId]
+        val status =
+            when {
+                occupancy == null -> AvailabilityStatus.UNKNOWN
+                occupancy.availability == ASPIRA_OCCUPANCY_AVAILABLE && !occupancy.filtered -> AvailabilityStatus.AVAILABLE
+                else -> AvailabilityStatus.RESERVED
+            }
+        ReservableDayObservation(
+            reservableId = resource.rid,
+            date = arrival,
+            observedAt = observedAt,
+            status = status,
+        )
     }
 }
 
@@ -427,6 +341,7 @@ internal data class AspiraCatalogReservable(
 private data class CatalogResourceDays(
     val rid: String,
     val days: List<Int>?,
+    val observedAt: Instant,
 )
 
 private data class CachedOccupancyDay(
@@ -437,25 +352,39 @@ private data class CachedOccupancyDay(
 
 private const val ASPIRA_OCCUPANCY_AVAILABLE = 0
 
-/**
- * Classify one date across every sub-area. Sub-areas missing a status on the
- * date are explicit unknown provider data.
- */
-private fun classifyArrivalDay(
-    subAreas: List<List<Int>>,
-    d: Int,
-    date: String,
-): DayClassification {
-    val statuses =
-        subAreas.map { subDays ->
-            if (d < subDays.size) {
-                AspiraStatus.classify(subDays[d])
-            } else {
-                AvailabilityStatus.UNKNOWN
-            }
+private fun observationsFromIndexedStatusRows(
+    rows: List<List<Int>>,
+    start: LocalDate,
+    days: Int,
+    reservableVendor: String,
+    idPrefix: String,
+    observedAt: Instant,
+): List<ReservableDayObservation> =
+    rows.flatMapIndexed { index, statuses ->
+        (0 until days).map { d ->
+            ReservableDayObservation(
+                reservableId = "site:$reservableVendor:$idPrefix:$index",
+                date = start.plusDays(d.toLong()),
+                observedAt = observedAt,
+                status = statusAt(statuses, d),
+            )
         }
-    return dayClassificationFromStatuses(date, statuses)
-}
+    }
+
+private fun statusAt(
+    statuses: List<Int>,
+    offset: Int,
+): AvailabilityStatus =
+    if (offset < statuses.size) {
+        AspiraStatus.classify(statuses[offset])
+    } else {
+        AvailabilityStatus.UNKNOWN
+    }
+
+private fun daysBetween(
+    startDate: LocalDate,
+    endDate: LocalDate,
+): Int = ChronoUnit.DAYS.between(startDate, endDate).toInt()
 
 internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorSchema> {
     val status = e.httpStatus

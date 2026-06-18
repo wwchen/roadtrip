@@ -95,7 +95,13 @@ class CachedAvailability(
             if (age < ttl) {
                 return try {
                     val data = existing.deferred.await()
-                    CachedResult(data, hit = true, ageSeconds = age.seconds, ttlSeconds = ttl.seconds)
+                    CachedResult(
+                        data = data,
+                        hit = true,
+                        ageSeconds = age.seconds,
+                        ttlSeconds = ttl.seconds,
+                        observedAt = existing.storedAt,
+                    )
                 } catch (t: Throwable) {
                     cache.remove(key, existing)
                     throw t
@@ -116,6 +122,7 @@ class CachedAvailability(
                         hit = true,
                         ageSeconds = persisted.ageSeconds(clock),
                         ttlSeconds = persisted.ttlSeconds(),
+                        observedAt = persisted.createdAt,
                     )
                 } catch (e: Exception) {
                     log.warn("rec.gov availability persistent cache decode failed key={}", persistentKey)
@@ -139,6 +146,7 @@ class CachedAvailability(
 
         return try {
             val data = entry.deferred.await()
+            val ageSeconds = Duration.between(entry.storedAt, Instant.now(clock)).seconds.coerceAtLeast(0)
             if (createdFresh) {
                 persistentCache.put(
                     NAMESPACE,
@@ -147,7 +155,13 @@ class CachedAvailability(
                     ttl,
                 )
             }
-            CachedResult(data, hit = !createdFresh, ageSeconds = 0, ttlSeconds = ttl.seconds)
+            CachedResult(
+                data = data,
+                hit = !createdFresh,
+                ageSeconds = ageSeconds,
+                ttlSeconds = ttl.seconds,
+                observedAt = entry.storedAt,
+            )
         } catch (t: Throwable) {
             cache.remove(key, entry)
             throw t
@@ -171,4 +185,5 @@ data class CachedResult(
     val hit: Boolean,
     val ageSeconds: Long,
     val ttlSeconds: Long,
+    val observedAt: Instant,
 )

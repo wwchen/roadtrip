@@ -6,12 +6,10 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import ca.floo.roadtrip.service.api.AvailabilityStatus
-import ca.floo.roadtrip.service.api.DayClassification
-import ca.floo.roadtrip.service.api.availabilityResponseDto
+import ca.floo.roadtrip.service.api.ReservableDayObservation
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.AvailableDatesRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
@@ -45,6 +43,7 @@ import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.assertAll
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.time.Instant
 import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -1017,7 +1016,7 @@ class ReservableRoutesTest {
                 bookingHorizonDays = 365,
             )
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
             val ref = req.ref as ProviderRef.RecGov
             return fakeResponse(
                 startDate = req.startDate,
@@ -1027,7 +1026,7 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
             val ref = req.ref as ProviderRef.RecGov
             return fakeResponse(
                 startDate = req.startDate,
@@ -1038,7 +1037,7 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto =
+        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
             fakeResponse(
                 startDate = req.startDate,
                 endDate = req.endDate,
@@ -1046,41 +1045,35 @@ class ReservableRoutesTest {
                 reservableId = "site:recgov:${req.vendorId}",
             )
 
-        override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
-            val days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt()
-            return (0 until days).map { req.startDate.plusDays(it.toLong()).toString() }
-        }
-
         private fun fakeResponse(
             startDate: java.time.LocalDate,
             endDate: java.time.LocalDate,
             campgroundId: String?,
             reservableId: String?,
             availableIds: List<String>? = null,
-        ): AvailabilityResponseDto {
+        ): AvailabilityObservationBatch {
+            val observedAt = Instant.parse("2026-06-01T00:00:00Z")
             val days =
                 java.time.temporal.ChronoUnit.DAYS
                     .between(startDate, endDate)
                     .toInt()
-            val perDay =
-                (0 until days).map { offset ->
-                    val availableCount = availableIds?.size ?: 1
-                    DayClassification(
-                        date = startDate.plusDays(offset.toLong()).toString(),
-                        status = if (availableIds?.isEmpty() == true) AvailabilityStatus.RESERVED else AvailabilityStatus.AVAILABLE,
-                        availableCount = availableCount,
-                        total = availableIds?.size ?: 1,
-                        availableReservableIds = availableIds,
-                    )
+            val ids = availableIds ?: listOf(reservableId ?: "site:recgov:fake")
+            val observations =
+                ids.flatMap { id ->
+                    (0 until days).map { offset ->
+                        ReservableDayObservation(
+                            reservableId = id,
+                            date = startDate.plusDays(offset.toLong()),
+                            observedAt = observedAt,
+                            status = AvailabilityStatus.AVAILABLE,
+                        )
+                    }
                 }
-            return availabilityResponseDto(
+            return AvailabilityObservationBatch(
                 provider = "fake",
                 startDate = startDate,
                 endDate = endDate,
-                perDay = perDay,
-                state = "success",
-                summary = "$days dates available",
-                seasonBlock = null,
+                observations = observations,
                 cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 0, ttlSeconds = 60),
                 campgroundId = campgroundId,
                 reservableId = reservableId,
@@ -1097,7 +1090,7 @@ class ReservableRoutesTest {
                 bookingHorizonDays = 365,
             )
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
             val ref = req.ref as ProviderRef.Aspira
             return fakeResponse(
                 startDate = req.startDate,
@@ -1108,7 +1101,7 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
             val ref = req.ref as ProviderRef.Aspira
             return fakeResponse(
                 startDate = req.startDate,
@@ -1119,7 +1112,7 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
+        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
             val ref = req.ref as ProviderRef.Aspira
             return fakeResponse(
                 startDate = req.startDate,
@@ -1130,40 +1123,34 @@ class ReservableRoutesTest {
             )
         }
 
-        override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
-            val days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt()
-            return (0 until days).map { req.startDate.plusDays(it.toLong()).toString() }
-        }
-
         private fun fakeResponse(
             startDate: java.time.LocalDate,
             endDate: java.time.LocalDate,
             mapId: String,
             reservableId: String?,
             availableIds: List<String>,
-        ): AvailabilityResponseDto {
+        ): AvailabilityObservationBatch {
+            val observedAt = Instant.parse("2026-06-01T00:00:00Z")
             val days =
                 java.time.temporal.ChronoUnit.DAYS
                     .between(startDate, endDate)
                     .toInt()
-            val perDay =
-                (0 until days).map { offset ->
-                    DayClassification(
-                        date = startDate.plusDays(offset.toLong()).toString(),
-                        status = if (availableIds.isEmpty()) AvailabilityStatus.RESERVED else AvailabilityStatus.AVAILABLE,
-                        availableCount = availableIds.size,
-                        total = availableIds.size,
-                        availableReservableIds = availableIds,
-                    )
+            val observations =
+                availableIds.flatMap { id ->
+                    (0 until days).map { offset ->
+                        ReservableDayObservation(
+                            reservableId = id,
+                            date = startDate.plusDays(offset.toLong()),
+                            observedAt = observedAt,
+                            status = AvailabilityStatus.AVAILABLE,
+                        )
+                    }
                 }
-            return availabilityResponseDto(
+            return AvailabilityObservationBatch(
                 provider = "aspira",
                 startDate = startDate,
                 endDate = endDate,
-                perDay = perDay,
-                state = if (availableIds.isEmpty()) "zero_available" else "success",
-                summary = "${availableIds.size} available",
-                seasonBlock = null,
+                observations = observations,
                 cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 0, ttlSeconds = 60),
                 host = "washington.goingtocamp.com",
                 mapId = mapId,

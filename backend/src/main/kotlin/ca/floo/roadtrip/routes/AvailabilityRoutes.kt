@@ -18,10 +18,12 @@ import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
 import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.DayClassification
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
+import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.availabilityResponseDto
+import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.reservation.AvailableDatesRequest
+import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
@@ -139,7 +141,7 @@ fun Route.availabilityRoutes(
             val catalogRefs =
                 catalogRows
                     .map { it.toCatalogReservableRef() }
-            val response =
+            val batch =
                 provider.catalogAvailability(
                     CatalogAvailabilityRequest(
                         ref = ref,
@@ -149,6 +151,7 @@ fun Route.availabilityRoutes(
                         force = query.force,
                     ),
                 )
+            val response = availabilityResponseFromObservations(batch)
             respondAvailabilityJson(response)
         } catch (e: ReservationProviderError) {
             val (status, error) = mapProviderError(e)
@@ -533,10 +536,11 @@ private suspend fun fetchOneBulk(
             ?: return BulkAvailEntrySchema(id = poiId, status = 422, available_dates = emptyList())
 
     return try {
-        val dates =
-            provider.availableDates(
-                AvailableDatesRequest(ref = ref, startDate = startDate, endDate = endDate),
+        val batch =
+            provider.availability(
+                AvailabilityRequest(ref = ref, startDate = startDate, endDate = endDate),
             )
+        val dates = availabilityDatesFromObservations(batch)
         BulkAvailEntrySchema(id = poiId, status = 200, available_dates = dates)
     } catch (e: ReservationProviderError) {
         log.info("bulk availability poi={} provider={} failed: {}", poiId, provider.id, e.message)

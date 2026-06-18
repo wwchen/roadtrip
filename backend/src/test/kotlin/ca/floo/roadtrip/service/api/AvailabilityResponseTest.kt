@@ -14,6 +14,7 @@ import kotlinx.serialization.json.int
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -70,6 +71,101 @@ class AvailabilityResponseTest {
                 .jsonPrimitive.content,
         )
         assertEquals(false, json["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
+    }
+
+    @Test
+    fun `atomic reservable day observations roll up to stable dto shape`() {
+        val olderObservedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val observedAt = Instant.parse("2026-06-01T00:05:00Z")
+        val dto =
+            availabilityResponseFromObservations(
+                AvailabilityObservationBatch(
+                    provider = "recgov",
+                    startDate = LocalDate.parse("2026-06-10"),
+                    endDate = LocalDate.parse("2026-06-12"),
+                    observations =
+                        listOf(
+                            ReservableDayObservation(
+                                reservableId = "site:recgov:100",
+                                date = LocalDate.parse("2026-06-10"),
+                                observedAt = olderObservedAt,
+                                status = AvailabilityStatus.RESERVED,
+                            ),
+                            ReservableDayObservation(
+                                reservableId = "site:recgov:100",
+                                date = LocalDate.parse("2026-06-10"),
+                                observedAt = observedAt,
+                                status = AvailabilityStatus.AVAILABLE,
+                            ),
+                            ReservableDayObservation(
+                                reservableId = "site:recgov:200",
+                                date = LocalDate.parse("2026-06-10"),
+                                observedAt = observedAt,
+                                status = AvailabilityStatus.RESERVED,
+                            ),
+                            ReservableDayObservation(
+                                reservableId = "site:recgov:100",
+                                date = LocalDate.parse("2026-06-11"),
+                                observedAt = observedAt,
+                                status = AvailabilityStatus.RESERVED,
+                            ),
+                            ReservableDayObservation(
+                                reservableId = "site:recgov:200",
+                                date = LocalDate.parse("2026-06-11"),
+                                observedAt = observedAt,
+                                status = AvailabilityStatus.UNKNOWN,
+                            ),
+                        ),
+                    cacheBlock = AvailabilityCacheBlock(hit = true, ageSeconds = 3, ttlSeconds = 60),
+                    campgroundId = "232447",
+                ),
+            )
+
+        assertEquals("recgov", dto.provider)
+        assertEquals("232447", dto.campgroundId)
+        assertEquals("2026-06-10", dto.window.startDate)
+        assertEquals("2026-06-12", dto.window.endDate)
+        assertEquals("1 date available", dto.summary)
+        assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
+        assertEquals(1, dto.availability[0].availableCount)
+        assertEquals(2, dto.availability[0].total)
+        assertEquals(listOf("site:recgov:100"), dto.availability[0].availableReservableIds)
+        assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
+        assertEquals(0, dto.availability[1].availableCount)
+        assertEquals(2, dto.availability[1].total)
+    }
+
+    @Test
+    fun `atomic rollup preserves empty days in the requested window`() {
+        val observedAt = Instant.parse("2026-06-01T00:00:00Z")
+        val dto =
+            availabilityResponseFromObservations(
+                AvailabilityObservationBatch(
+                    provider = "aspira",
+                    startDate = LocalDate.parse("2026-06-10"),
+                    endDate = LocalDate.parse("2026-06-12"),
+                    observations =
+                        listOf(
+                            ReservableDayObservation(
+                                reservableId = "site:aspira_pc:100",
+                                date = LocalDate.parse("2026-06-10"),
+                                observedAt = observedAt,
+                                status = AvailabilityStatus.AVAILABLE,
+                            ),
+                        ),
+                    cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
+                    host = "reservation.pc.gc.ca",
+                    mapId = "-2147483388",
+                ),
+            )
+
+        assertEquals(2, dto.availability.size)
+        assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
+        assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
+        assertEquals(0, dto.availability[1].availableCount)
+        assertEquals(0, dto.availability[1].total)
+        assertEquals(emptyList(), dto.availability[1].availableReservableIds)
+        assertEquals(emptyMap(), dto.availability[1].reservableStatuses)
     }
 
     @Test
@@ -157,15 +253,17 @@ class AvailabilityResponseTest {
                 )
 
             val dto =
-                fetchAndClassifyAspiraResource(
-                    cache = cache,
-                    host = "camping.bcparks.ca",
-                    mapId = -2147483516,
-                    resourceId = "-2147478966",
-                    reservableVendor = "aspira_bc",
-                    startDate = LocalDate.parse("2026-07-01"),
-                    endDate = LocalDate.parse("2026-07-03"),
-                    force = false,
+                availabilityResponseFromObservations(
+                    fetchAspiraResourceObservations(
+                        cache = cache,
+                        host = "camping.bcparks.ca",
+                        mapId = -2147483516,
+                        resourceId = "-2147478966",
+                        reservableVendor = "aspira_bc",
+                        startDate = LocalDate.parse("2026-07-01"),
+                        endDate = LocalDate.parse("2026-07-03"),
+                        force = false,
+                    ),
                 )
 
             assertEquals("site:aspira_bc:-2147478966", dto.reservableId)
@@ -193,14 +291,16 @@ class AvailabilityResponseTest {
                 )
 
             val dto =
-                fetchAndClassifyAspira(
-                    cache = cache,
-                    host = "camping.bcparks.ca",
-                    mapId = -2147483516,
-                    startDate = LocalDate.parse("2026-07-01"),
-                    endDate = LocalDate.parse("2026-07-02"),
-                    force = false,
-                    reservableVendor = "aspira_bc",
+                availabilityResponseFromObservations(
+                    fetchAspiraAvailabilityObservations(
+                        cache = cache,
+                        host = "camping.bcparks.ca",
+                        mapId = -2147483516,
+                        startDate = LocalDate.parse("2026-07-01"),
+                        endDate = LocalDate.parse("2026-07-02"),
+                        force = false,
+                        reservableVendor = "aspira_bc",
+                    ),
                 )
 
             assertEquals(2, dto.availability.single().availableCount)
@@ -248,20 +348,22 @@ class AvailabilityResponseTest {
                 )
 
             val dto =
-                fetchAndClassifyAspiraCatalog(
-                    cache = cache,
-                    host = "washington.goingtocamp.com",
-                    parentMapId = -999,
-                    reservables =
-                        listOf(
-                            AspiraCatalogReservable("site:aspira_wa:a", "a", -101),
-                            AspiraCatalogReservable("site:aspira_wa:b", "b", -101),
-                            AspiraCatalogReservable("site:aspira_wa:c", "c", -202),
-                            AspiraCatalogReservable("site:aspira_wa:missing", "missing", -202),
-                        ),
-                    startDate = LocalDate.parse("2026-07-01"),
-                    endDate = LocalDate.parse("2026-07-03"),
-                    force = false,
+                availabilityResponseFromObservations(
+                    fetchAspiraCatalogObservations(
+                        cache = cache,
+                        host = "washington.goingtocamp.com",
+                        parentMapId = -999,
+                        reservables =
+                            listOf(
+                                AspiraCatalogReservable("site:aspira_wa:a", "a", -101),
+                                AspiraCatalogReservable("site:aspira_wa:b", "b", -101),
+                                AspiraCatalogReservable("site:aspira_wa:c", "c", -202),
+                                AspiraCatalogReservable("site:aspira_wa:missing", "missing", -202),
+                            ),
+                        startDate = LocalDate.parse("2026-07-01"),
+                        endDate = LocalDate.parse("2026-07-03"),
+                        force = false,
+                    ),
                 )
 
             assertEquals((-999).toString(), dto.mapId)
@@ -291,17 +393,19 @@ class AvailabilityResponseTest {
                 )
 
             val dto =
-                fetchAndClassifyAspiraCatalog(
-                    cache = cache,
-                    host = "reservation.pc.gc.ca",
-                    parentMapId = -999,
-                    reservables =
-                        listOf(
-                            AspiraCatalogReservable("site:aspira_pc:100", "100", -101),
-                        ),
-                    startDate = LocalDate.parse("2026-07-01"),
-                    endDate = LocalDate.parse("2026-07-02"),
-                    force = false,
+                availabilityResponseFromObservations(
+                    fetchAspiraCatalogObservations(
+                        cache = cache,
+                        host = "reservation.pc.gc.ca",
+                        parentMapId = -999,
+                        reservables =
+                            listOf(
+                                AspiraCatalogReservable("site:aspira_pc:100", "100", -101),
+                            ),
+                        startDate = LocalDate.parse("2026-07-01"),
+                        endDate = LocalDate.parse("2026-07-02"),
+                        force = false,
+                    ),
                 )
 
             assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)

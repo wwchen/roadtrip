@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.api.recgov
 
+import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -67,7 +68,9 @@ class RecGovAvailabilityServiceTest {
     ): JsonObject {
         val body =
             encodeAvailabilityJson(
-                runBlocking { fetchAndClassifyRecgov(cache, recgovId, today, today.plusDays(days.toLong()), force) },
+                availabilityResponseFromObservations(
+                    runBlocking { fetchRecgovAvailabilityObservations(cache, recgovId, today, today.plusDays(days.toLong()), force) },
+                ),
             )
         return parseJson(body)
     }
@@ -181,16 +184,18 @@ class RecGovAvailabilityServiceTest {
     fun `catalog availability keeps requested sites omitted by upstream as unknown`() {
         val body =
             encodeAvailabilityJson(
-                runBlocking {
-                    fetchAndClassifyRecgovCatalog(
-                        cache = cacheReturning(emptyMap()),
-                        recgovId = "232447",
-                        campsiteIds = setOf("100", "200"),
-                        startDate = today,
-                        endDate = today.plusDays(1),
-                        force = false,
-                    )
-                },
+                availabilityResponseFromObservations(
+                    runBlocking {
+                        fetchRecgovCatalogObservations(
+                            cache = cacheReturning(emptyMap()),
+                            recgovId = "232447",
+                            campsiteIds = setOf("100", "200"),
+                            startDate = today,
+                            endDate = today.plusDays(1),
+                            force = false,
+                        )
+                    },
+                ),
             )
         val day = parseJson(body)["availability"]!!.jsonArray.single().jsonObject
 
@@ -215,16 +220,18 @@ class RecGovAvailabilityServiceTest {
     fun `reservable availability keeps requested site omitted by upstream as unknown`() {
         val body =
             encodeAvailabilityJson(
-                runBlocking {
-                    fetchAndClassifyRecgovReservable(
-                        cache = cacheReturning(emptyMap()),
-                        recgovId = "232447",
-                        campsiteId = "100",
-                        startDate = today,
-                        endDate = today.plusDays(1),
-                        force = false,
-                    )
-                },
+                availabilityResponseFromObservations(
+                    runBlocking {
+                        fetchRecgovReservableObservations(
+                            cache = cacheReturning(emptyMap()),
+                            recgovId = "232447",
+                            campsiteId = "100",
+                            startDate = today,
+                            endDate = today.plusDays(1),
+                            force = false,
+                        )
+                    },
+                ),
             )
         val json = parseJson(body)
         val day = json["availability"]!!.jsonArray.single().jsonObject

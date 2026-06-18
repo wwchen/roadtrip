@@ -1,14 +1,12 @@
 package ca.floo.roadtrip.service.reservation.adapters.recgov
 
 import ca.floo.roadtrip.models.ProviderRef
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import ca.floo.roadtrip.service.api.recgov.CachedAvailability
-import ca.floo.roadtrip.service.api.recgov.availableDatesRecgov
-import ca.floo.roadtrip.service.api.recgov.fetchAndClassifyRecgov
-import ca.floo.roadtrip.service.api.recgov.fetchAndClassifyRecgovCatalog
-import ca.floo.roadtrip.service.api.recgov.fetchAndClassifyRecgovReservable
+import ca.floo.roadtrip.service.api.recgov.fetchRecgovAvailabilityObservations
+import ca.floo.roadtrip.service.api.recgov.fetchRecgovCatalogObservations
+import ca.floo.roadtrip.service.api.recgov.fetchRecgovReservableObservations
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.AvailableDatesRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
@@ -32,10 +30,10 @@ class RecGovReservationProvider(
             bookingHorizonDays = RECGOV_BOOKING_HORIZON_DAYS,
         )
 
-    override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
+    override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
         val recgovId = recgovIdOrThrow(req.ref)
         return runWithErrorMapping {
-            fetchAndClassifyRecgov(
+            fetchRecgovAvailabilityObservations(
                 cache = cache,
                 recgovId = recgovId,
                 startDate = req.startDate,
@@ -45,14 +43,7 @@ class RecGovReservationProvider(
         }
     }
 
-    override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
-        val recgovId = recgovIdOrThrow(req.ref)
-        return runWithErrorMapping {
-            availableDatesRecgov(cache, recgovId, req.startDate, req.endDate)
-        }
-    }
-
-    override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+    override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
         if (req.reservables.isEmpty()) {
             return availability(
                 AvailabilityRequest(
@@ -65,7 +56,7 @@ class RecGovReservationProvider(
         }
         val recgovId = recgovIdOrThrow(req.ref)
         return runWithErrorMapping {
-            fetchAndClassifyRecgovCatalog(
+            fetchRecgovCatalogObservations(
                 cache = cache,
                 recgovId = recgovId,
                 campsiteIds = req.reservables.map { it.vendorId }.toSet(),
@@ -76,10 +67,10 @@ class RecGovReservationProvider(
         }
     }
 
-    override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
+    override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
         val recgovId = recgovIdOrThrow(req.ref)
         return runWithErrorMapping {
-            fetchAndClassifyRecgovReservable(
+            fetchRecgovReservableObservations(
                 cache = cache,
                 recgovId = recgovId,
                 campsiteId = req.vendorId,

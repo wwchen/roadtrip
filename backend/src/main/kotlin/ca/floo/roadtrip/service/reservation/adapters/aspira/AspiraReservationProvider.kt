@@ -4,13 +4,11 @@ import ca.floo.roadtrip.client.AspiraException
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.service.api.AspiraCatalogReservable
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
-import ca.floo.roadtrip.service.api.availableDatesAspira
-import ca.floo.roadtrip.service.api.fetchAndClassifyAspira
-import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraCatalog
-import ca.floo.roadtrip.service.api.fetchAndClassifyAspiraResource
+import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
+import ca.floo.roadtrip.service.api.fetchAspiraAvailabilityObservations
+import ca.floo.roadtrip.service.api.fetchAspiraCatalogObservations
+import ca.floo.roadtrip.service.api.fetchAspiraResourceObservations
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.AvailableDatesRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
@@ -24,7 +22,7 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderId
  * Parks). Tenant-shaped data — host, vendor code, booking horizon —
  * lives in [AspiraTenant], not in code branches.
  *
- * The downstream classifier (`fetchAndClassifyAspira`) takes `mapId: Int`;
+ * The downstream classifier (`fetchAspiraAvailabilityObservations`) takes `mapId: Int`;
  * the column type is `Long`. We narrow at the boundary and reject
  * out-of-range values to surface the truncation rather than silently
  * dropping the high bits.
@@ -44,10 +42,10 @@ class AspiraReservationProvider(
             bookingHorizonDays = tenant.bookingHorizonDays,
         )
 
-    override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto {
+    override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
         val mapId = mapIdOrThrow(req.ref)
         return runWithErrorMapping {
-            fetchAndClassifyAspira(
+            fetchAspiraAvailabilityObservations(
                 cache = cache,
                 host = tenant.host,
                 mapId = mapId,
@@ -59,14 +57,7 @@ class AspiraReservationProvider(
         }
     }
 
-    override suspend fun availableDates(req: AvailableDatesRequest): List<String> {
-        val mapId = mapIdOrThrow(req.ref)
-        return runWithErrorMapping {
-            availableDatesAspira(cache, tenant.host, mapId, req.startDate, req.endDate)
-        }
-    }
-
-    override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto {
+    override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
         val ref = aspiraRefOrThrow(req.ref)
         val parentMapId = mapIdOrThrow(ref.mapId)
         val targets =
@@ -79,7 +70,7 @@ class AspiraReservationProvider(
                 )
             }
         return runWithErrorMapping {
-            fetchAndClassifyAspiraCatalog(
+            fetchAspiraCatalogObservations(
                 cache = cache,
                 host = tenant.host,
                 parentMapId = parentMapId,
@@ -91,10 +82,10 @@ class AspiraReservationProvider(
         }
     }
 
-    override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto {
+    override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
         val mapId = mapIdOrThrow(req.ref)
         return runWithErrorMapping {
-            fetchAndClassifyAspiraResource(
+            fetchAspiraResourceObservations(
                 cache = cache,
                 host = tenant.host,
                 mapId = mapId,

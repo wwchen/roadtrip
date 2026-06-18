@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.ProviderRef
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import java.time.LocalDate
 
 /**
@@ -19,7 +19,7 @@ import java.time.LocalDate
  * Adapters do NOT own:
  *   - poll cadence (the platform poller does — see RFC 0007)
  *   - rate-limit accounting (cross-adapter; lives above the port)
- *   - HTTP response shaping (routes do — adapter returns a typed DTO)
+ *   - HTTP response shaping (service/API layer rolls observations into DTOs)
  */
 interface ReservationProvider {
     /** Stable identity. Mapped from `pois.source` + `provider_ref` shape by the registry. */
@@ -34,7 +34,7 @@ interface ReservationProvider {
      * @throws ReservationProviderError on upstream failure (rate limit, WAF block,
      *   5xx, parse error, or unsupported capability).
      */
-    suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto
+    suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch
 
     /**
      * POI-scoped availability narrowed to the catalog rows linked to the POI.
@@ -42,7 +42,7 @@ interface ReservationProvider {
      * default delegates to [availability]. Providers with a parent/child map
      * split can override this to classify the actual linked resources.
      */
-    suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityResponseDto =
+    suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch =
         availability(
             AvailabilityRequest(
                 ref = req.ref,
@@ -63,17 +63,8 @@ interface ReservationProvider {
      *
      * @throws ReservationProviderError on upstream failure or unsupported provider.
      */
-    suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityResponseDto =
+    suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
         throw ReservationProviderError.Unsupported("reservableAvailability", id)
-
-    /**
-     * Just the dates inside the requested window where at least one site is
-     * bookable. Cheaper variant for the bulk "score N campgrounds" endpoint;
-     * adapters typically share the cache with [availability].
-     *
-     * @throws ReservationProviderError on upstream failure.
-     */
-    suspend fun availableDates(req: AvailableDatesRequest): List<String>
 }
 
 /**
@@ -114,11 +105,4 @@ data class ReservableAvailabilityRequest(
     val startDate: LocalDate,
     val endDate: LocalDate,
     val force: Boolean = false,
-)
-
-/** Bulk-score request. Same window semantics as [AvailabilityRequest], no force. */
-data class AvailableDatesRequest(
-    val ref: ProviderRef,
-    val startDate: LocalDate,
-    val endDate: LocalDate,
 )

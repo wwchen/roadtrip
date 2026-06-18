@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.service.api.AvailabilityStatus
+import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.api.recgov.CachedAvailability
 import ca.floo.roadtrip.service.api.recgov.Campsite
 import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
@@ -44,7 +45,7 @@ class RecGovReservationProviderTest {
                 )
             val adapter = RecGovReservationProvider(cache)
 
-            val dto =
+            val batch =
                 adapter.catalogAvailability(
                     CatalogAvailabilityRequest(
                         ref = ProviderRef.RecGov("232447"),
@@ -60,11 +61,10 @@ class RecGovReservationProviderTest {
                     ),
                 )
 
-            val day = dto.availability.single()
-            assertEquals(AvailabilityStatus.AVAILABLE, day.status)
-            assertEquals(1, day.availableCount)
-            assertEquals(1, day.total)
-            assertEquals(listOf("site:recgov:330257"), day.availableReservableIds)
+            val observation = batch.observations.single()
+            assertEquals("site:recgov:330257", observation.reservableId)
+            assertEquals(LocalDate.parse("2026-07-01"), observation.date)
+            assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
         }
 
     @Test
@@ -104,7 +104,7 @@ class RecGovReservationProviderTest {
                 )
             val adapter = RecGovReservationProvider(cache)
 
-            val dto =
+            val batch =
                 adapter.reservableAvailability(
                     ReservableAvailabilityRequest(
                         ref = ProviderRef.RecGov("232447"),
@@ -114,9 +114,9 @@ class RecGovReservationProviderTest {
                     ),
                 )
 
-            assertEquals("site:recgov:330257", dto.reservableId)
-            assertEquals(AvailabilityStatus.AVAILABLE, dto.availability.single().status)
-            assertEquals(1, dto.availability.single().availableCount)
+            assertEquals("site:recgov:330257", batch.reservableId)
+            assertEquals("site:recgov:330257", batch.observations.single().reservableId)
+            assertEquals(AvailabilityStatus.AVAILABLE, batch.observations.single().status)
         }
 
     @Test
@@ -160,15 +160,16 @@ class RecGovReservationProviderTest {
                 )
             val adapter = RecGovReservationProvider(cache)
 
-            val dates =
-                adapter.availableDates(
-                    AvailableDatesRequest(
+            val batch =
+                adapter.availability(
+                    AvailabilityRequest(
                         ref = ProviderRef.RecGov("232447"),
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-03"),
                     ),
                 )
 
+            val dates = availabilityDatesFromObservations(batch)
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }
 }

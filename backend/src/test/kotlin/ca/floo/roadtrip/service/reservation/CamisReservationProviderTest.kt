@@ -35,13 +35,14 @@ class CamisReservationProviderTest {
     }
 
     @Test
-    fun `availableDates throws Unsupported`() {
+    fun `reservable availability throws Unsupported`() {
         val ref = ProviderRef.Camis(facilityId = "AB-1")
         assertFailsWith<ReservationProviderError.Unsupported> {
             runBlocking {
-                adapter.availableDates(
-                    AvailableDatesRequest(
+                adapter.reservableAvailability(
+                    ReservableAvailabilityRequest(
                         ref = ref,
+                        vendorId = "AB-1",
                         startDate = LocalDate.of(2026, 7, 14),
                         endDate = LocalDate.of(2026, 7, 16),
                     ),

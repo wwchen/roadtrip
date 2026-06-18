@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -14,9 +14,7 @@ class ReservationProviderRegistryTest {
     ) : ReservationProvider {
         override val capabilities: ReservationProviderCapabilities = ReservationProviderCapabilities.UNSUPPORTED
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto = error("not used in this test")
-
-        override suspend fun availableDates(req: AvailableDatesRequest): List<String> = emptyList()
+        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch = error("not used in this test")
     }
 
     @Test

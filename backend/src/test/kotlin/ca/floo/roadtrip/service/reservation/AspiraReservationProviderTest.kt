@@ -4,6 +4,7 @@ import ca.floo.roadtrip.client.AspiraAvailability
 import ca.floo.roadtrip.models.ProviderRef
 import ca.floo.roadtrip.repo.CachedAspiraAvailability
 import ca.floo.roadtrip.service.api.AvailabilityStatus
+import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenant
 import kotlinx.coroutines.runBlocking
@@ -40,7 +41,7 @@ class AspiraReservationProviderTest {
                     cache = mapCache,
                 )
 
-            val dto =
+            val batch =
                 adapter.catalogAvailability(
                     CatalogAvailabilityRequest(
                         ref =
@@ -63,9 +64,9 @@ class AspiraReservationProviderTest {
                     ),
                 )
 
-            assertEquals(1, dto.availability.single().availableCount)
-            assertEquals(AvailabilityStatus.AVAILABLE, dto.availability.single().status)
-            assertEquals(listOf("site:aspira_pc:100"), dto.availability.single().availableReservableIds)
+            val observation = batch.observations.single()
+            assertEquals("site:aspira_pc:100", observation.reservableId)
+            assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
         }
 
     @Test
@@ -97,7 +98,7 @@ class AspiraReservationProviderTest {
                         bookingHorizonDays = 365,
                     )
                 val adapter = AspiraReservationProvider(tenant = tenant, cache = cache)
-                val dto =
+                val batch =
                     adapter.reservableAvailability(
                         ReservableAvailabilityRequest(
                             ref =
@@ -112,8 +113,9 @@ class AspiraReservationProviderTest {
                         ),
                     )
 
-                assertEquals("site:$vendor:-2147478966", dto.reservableId)
-                assertEquals(AvailabilityStatus.AVAILABLE, dto.availability.single().status)
+                assertEquals("site:$vendor:-2147478966", batch.reservableId)
+                assertEquals("site:$vendor:-2147478966", batch.observations.single().reservableId)
+                assertEquals(AvailabilityStatus.AVAILABLE, batch.observations.single().status)
             }
         }
 
@@ -146,9 +148,9 @@ class AspiraReservationProviderTest {
                     cache = cache,
                 )
 
-            val dates =
-                adapter.availableDates(
-                    AvailableDatesRequest(
+            val batch =
+                adapter.availability(
+                    AvailabilityRequest(
                         ref =
                             ProviderRef.Aspira(
                                 transactionLocationId = -2147483630,
@@ -160,6 +162,7 @@ class AspiraReservationProviderTest {
                     ),
                 )
 
+            val dates = availabilityDatesFromObservations(batch)
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }
 }

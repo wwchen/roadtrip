@@ -25,7 +25,7 @@ class ReservableAvailabilityFetchService(
     )
 
     suspend fun fetch(request: Request): AvailabilityResponseDto {
-        val response =
+        val batch =
             request.provider.reservableAvailability(
                 ReservableAvailabilityRequest(
                     ref = request.ref,
@@ -35,6 +35,7 @@ class ReservableAvailabilityFetchService(
                     force = request.force,
                 ),
             )
+        val response = availabilityResponseFromObservations(batch)
         appendBaseAvailabilitySnapshot(request, response)
         return response
     }

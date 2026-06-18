@@ -12,6 +12,7 @@ import kotlinx.serialization.json.encodeToJsonElement
 import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 // Shared response shape for the unified availability endpoints.
 // Both rec.gov and Aspira providers feed the same downstream classification
@@ -40,6 +41,77 @@ data class DayClassification(
     val availableReservableIds: List<String>? = null,
     val reservableStatuses: Map<String, AvailabilityStatus>? = null,
 )
+
+data class ReservableDayObservation(
+    val reservableId: String,
+    val date: LocalDate,
+    val observedAt: Instant,
+    val status: AvailabilityStatus,
+)
+
+data class AvailabilityObservationBatch(
+    val provider: String,
+    val startDate: LocalDate,
+    val endDate: LocalDate,
+    val observations: List<ReservableDayObservation>,
+    val cacheBlock: AvailabilityCacheBlock,
+    val seasonBlock: AvailabilitySeasonBlock? = null,
+    val campgroundId: String? = null,
+    val host: String? = null,
+    val mapId: String? = null,
+    val reservableId: String? = null,
+)
+
+fun dayClassificationsFromObservations(
+    startDate: LocalDate,
+    endDate: LocalDate,
+    observations: List<ReservableDayObservation>,
+): List<DayClassification> {
+    val byDate =
+        observations
+            .asSequence()
+            .filter { !it.date.isBefore(startDate) && it.date.isBefore(endDate) }
+            .groupBy { it.date }
+    val days = ChronoUnit.DAYS.between(startDate, endDate).toInt()
+    return (0 until days).map { offset ->
+        val date = startDate.plusDays(offset.toLong())
+        val latestByReservable = linkedMapOf<String, ReservableDayObservation>()
+        for (observation in byDate[date].orEmpty()) {
+            val current = latestByReservable[observation.reservableId]
+            if (current == null || !observation.observedAt.isBefore(current.observedAt)) {
+                latestByReservable[observation.reservableId] = observation
+            }
+        }
+        val statuses = latestByReservable.mapValues { (_, observation) -> observation.status }
+        dayClassificationFromReservableStatuses(date.toString(), statuses)
+    }
+}
+
+fun availabilityDatesFromObservations(batch: AvailabilityObservationBatch): List<String> =
+    dayClassificationsFromObservations(batch.startDate, batch.endDate, batch.observations)
+        .filter { it.availableCount > 0 }
+        .map { it.date }
+
+fun availabilityResponseFromObservations(batch: AvailabilityObservationBatch): AvailabilityResponseDto {
+    val perDay = dayClassificationsFromObservations(batch.startDate, batch.endDate, batch.observations)
+    val days = ChronoUnit.DAYS.between(batch.startDate, batch.endDate).toInt()
+    val state = classifyWindowState(perDay)
+    val summary = summarizeWindow(days, perDay, state)
+    return availabilityResponseDto(
+        provider = batch.provider,
+        startDate = batch.startDate,
+        endDate = batch.endDate,
+        perDay = perDay,
+        state = state,
+        summary = summary,
+        seasonBlock = batch.seasonBlock.takeIf { state == "closed_for_season" },
+        cacheBlock = batch.cacheBlock,
+        campgroundId = batch.campgroundId,
+        host = batch.host,
+        mapId = batch.mapId,
+        reservableId = batch.reservableId,
+    )
+}
 
 fun dayClassificationFromReservableStatuses(
     date: String,

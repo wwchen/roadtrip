@@ -1,8 +1,7 @@
 package ca.floo.roadtrip.service.reservation.adapters.camis
 
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
+import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.AvailableDatesRequest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
@@ -27,9 +26,6 @@ class CamisReservationProvider : ReservationProvider {
 
     override val capabilities: ReservationProviderCapabilities = ReservationProviderCapabilities.UNSUPPORTED
 
-    override suspend fun availability(req: AvailabilityRequest): AvailabilityResponseDto =
+    override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =
         throw ReservationProviderError.Unsupported(operation = "availability", providerId = id)
-
-    override suspend fun availableDates(req: AvailableDatesRequest): List<String> =
-        throw ReservationProviderError.Unsupported(operation = "availableDates", providerId = id)
 }

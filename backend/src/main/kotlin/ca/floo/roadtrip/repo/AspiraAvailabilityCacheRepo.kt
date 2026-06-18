@@ -90,6 +90,7 @@ class CachedAspiraAvailability(
                         hit = true,
                         ageSeconds = ageS,
                         ttlSeconds = ttl.seconds,
+                        observedAt = existing.fetchedAt,
                     )
                 }
                 entries.remove(key, existing)
@@ -107,6 +108,7 @@ class CachedAspiraAvailability(
                         hit = true,
                         ageSeconds = persisted.ageSeconds(clock),
                         ttlSeconds = persisted.ttlSeconds(),
+                        observedAt = persisted.createdAt,
                     )
                 } catch (e: Exception) {
                     log.warn("aspira availability persistent cache decode failed key={}", persistentKey)
@@ -140,6 +142,7 @@ class CachedAspiraAvailability(
             hit = !createdFresh,
             ageSeconds = ageSeconds,
             ttlSeconds = ttl.seconds,
+            observedAt = entry.fetchedAt,
         )
     }
 
@@ -156,6 +159,7 @@ data class CachedResult(
     val hit: Boolean,
     val ageSeconds: Long,
     val ttlSeconds: Long,
+    val observedAt: Instant,
 )
 
 class CachedAspiraOccupancy(
@@ -216,6 +220,7 @@ class CachedAspiraOccupancy(
                         hit = true,
                         ageSeconds = ageS,
                         ttlSeconds = ttl.seconds,
+                        observedAt = existing.fetchedAt,
                     )
                 }
                 entries.remove(key, existing)
@@ -233,6 +238,7 @@ class CachedAspiraOccupancy(
                         hit = true,
                         ageSeconds = persisted.ageSeconds(clock),
                         ttlSeconds = persisted.ttlSeconds(),
+                        observedAt = persisted.createdAt,
                     )
                 } catch (e: Exception) {
                     log.warn("aspira occupancy persistent cache decode failed key={}", persistentKey)
@@ -266,6 +272,7 @@ class CachedAspiraOccupancy(
             hit = !createdFresh,
             ageSeconds = ageSeconds,
             ttlSeconds = ttl.seconds,
+            observedAt = entry.fetchedAt,
         )
     }
 
@@ -282,4 +289,5 @@ data class CachedOccupancyResult(
     val hit: Boolean,
     val ageSeconds: Long,
     val ttlSeconds: Long,
+    val observedAt: Instant,
 )
