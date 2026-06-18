@@ -75,17 +75,17 @@ local_resource(
 )
 
 # --- backend (host JVM) ------------------------------------------------------
-# `./gradlew run` keeps the daemon alive and recompiles on src change. We
+# `./gradlew :backend:run` keeps the daemon alive and recompiles on src change. We
 # point ROADTRIP_STATIC_DIR at the repo root so static/data files get served
 # from the working tree (no copy step). Health check uses /api/health, which
 # returns 200 once Flyway has finished migrating.
 
 local_resource(
     'backend',
-    serve_cmd='cd backend && PORT=' + PORT + ' ROADTRIP_STATIC_DIR=$PWD/.. ' +
+    serve_cmd='PORT=' + PORT + ' ROADTRIP_STATIC_DIR=$PWD ' +
               'ROADTRIP_DB_URL=jdbc:postgresql://127.0.0.1:5432/roadtrip ' +
               'ROADTRIP_DB_USER=roadtrip ROADTRIP_DB_PASSWORD=roadtrip ' +
-              './gradlew --console=plain run',
+              './gradlew --console=plain :backend:run',
     serve_env={
         'JAVA_TOOL_OPTIONS': '-Dorg.gradle.daemon=true',
         # MAPBOX_TOKEN is read by /api/route. Empty when .env is missing —
@@ -99,9 +99,12 @@ local_resource(
     deps=[
         'backend/src/main',
         'backend/build.gradle.kts',
-        'backend/settings.gradle.kts',
+        'settings.gradle.kts',
+        'gradle.properties',
+        'gradle/wrapper/gradle-wrapper.properties',
     ],
     ignore=[
+        '.gradle',
         'backend/build',
         'backend/.gradle',
         'backend/src/main/resources/static',

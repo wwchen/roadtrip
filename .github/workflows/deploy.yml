@@ -13,6 +13,11 @@ on:
     branches: [master]
     paths:
       - 'backend/**'
+      - 'gradle/**'
+      - 'gradle.properties'
+      - 'gradlew'
+      - 'gradlew.bat'
+      - 'settings.gradle.kts'
       - 'data/**'
       - 'docker-compose*.yml'
       - 'index.html'
@@ -77,7 +82,7 @@ jobs:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '~/workspace/roadtrip' }}
         run: |
           ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd $DEPLOY_DIR && git pull --ff-only && (cd backend && ./gradlew shadowJar) && docker compose --profile tunnel --profile pois up -d --build"
+            "cd $DEPLOY_DIR && git pull --ff-only && ./gradlew :backend:shadowJar && docker compose --profile tunnel --profile pois up -d --build"
 
       - name: Health check
         run: |

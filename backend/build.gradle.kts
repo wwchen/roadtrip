@@ -35,7 +35,7 @@ plugins {
     // eclipse-temurin:21-jre + one .jar.
     id("com.gradleup.shadow") version "8.3.5"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
-    // Line/branch coverage. `./gradlew koverXmlReport` produces the XML the
+    // Line/branch coverage. `./gradlew :backend:koverXmlReport` produces the XML the
     // CI job uploads to Codecov.
     id("org.jetbrains.kotlinx.kover") version "0.8.3"
 }
@@ -56,7 +56,7 @@ application {
 }
 
 // Legacy data.json → Postgres migration tool (campsite). Invoke with:
-//   ./gradlew campsiteMigrate --args="/path/to/data.json"
+//   ./gradlew :backend:campsiteMigrate --args="/path/to/data.json"
 tasks.register<JavaExec>("campsiteMigrate") {
     group = "application"
     description = "Migrate legacy campsite data.json into Postgres."
@@ -189,9 +189,11 @@ jooq {
 // Ephemeral Postgres + Flyway migrate before codegen reads the schema.
 // doFirst mutates jdbc once Testcontainers has a real port; doLast tears it down.
 val jooqContainerKey = "jooqPgContainer"
+val migrationDir = layout.projectDirectory.dir("src/main/resources/db/migration")
+val migrationDirPath = migrationDir.asFile.absolutePath
 
 tasks.named<JooqGenerate>("generateJooq") {
-    inputs.files(fileTree("src/main/resources/db/migration"))
+    inputs.files(fileTree(migrationDir.asFile))
 
     doFirst {
         // Docker Desktop 29+ requires API version >=1.44; older docker-java defaults
@@ -214,7 +216,7 @@ tasks.named<JooqGenerate>("generateJooq") {
         Flyway
             .configure()
             .dataSource(container.jdbcUrl, container.username, container.password)
-            .locations("filesystem:src/main/resources/db/migration")
+            .locations("filesystem:$migrationDirPath")
             .load()
             .migrate()
 
@@ -236,7 +238,7 @@ flyway {
         ?: "jdbc:postgresql://localhost:5432/roadtrip"
     user = (project.findProperty("flyway.user") as String?) ?: "roadtrip"
     password = (project.findProperty("flyway.password") as String?) ?: "roadtrip"
-    locations = arrayOf("filesystem:src/main/resources/db/migration")
+    locations = arrayOf("filesystem:$migrationDirPath")
 }
 
 tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJar") {
@@ -271,7 +273,7 @@ kover {
 }
 
 // koverVerify is invoked explicitly by the backend-tests CI step
-// (`./gradlew test koverXmlReport koverVerify`). It is NOT a finalizer of
+// (`./gradlew :backend:test :backend:koverXmlReport :backend:koverVerify`). It is NOT a finalizer of
 // `test` because the smoke CI job runs only Playwright suites with no
 // instrumented coverage, which would (correctly) report 0% and fail the
 // floor — but that's a meaningless signal there.

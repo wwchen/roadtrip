@@ -203,8 +203,8 @@ Test fixtures live at `backend/src/test/resources/etl-fixtures/<slug>/`. Add a p
 **Verify** the adapter compiles and tests pass:
 
 ```bash
-cd backend && ./gradlew compileKotlin compileTestKotlin
-./gradlew test --tests "ca.floo.roadtrip.etl.<vendor>.*"
+./gradlew :backend:compileKotlin :backend:compileTestKotlin
+./gradlew :backend:test --tests "ca.floo.roadtrip.etl.<vendor>.*"
 ```
 
 ## Step 4 — Register the adapter(s)
@@ -230,7 +230,7 @@ For ETL classes that take a slug as a constructor arg (one class instantiated pe
 **Verify** the registry compiles and the backend boots clean:
 
 ```bash
-cd backend && ./gradlew compileKotlin
+./gradlew :backend:compileKotlin
 docker compose restart backend
 docker compose logs --tail=50 backend | grep -i "registry\|warn"
 ```
