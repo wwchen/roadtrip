@@ -467,22 +467,10 @@ const AVAIL_ERROR_LABELS = {
 function formatAvailabilityError(json, httpStatus) {
   const code = typeof json?.error === 'string' ? json.error : null;
   const base = code ? AVAIL_ERROR_LABELS[code] || code : `HTTP ${httpStatus}`;
-  const parts = [base];
   if (typeof json?.upstream_status === 'number') {
-    parts.push(`(upstream HTTP ${json.upstream_status})`);
+    return `${base} (upstream HTTP ${json.upstream_status})`;
   }
-  if (typeof json?.retry_after_s === 'number' && json.retry_after_s > 0) {
-    parts.push(`— retry in ${formatRetryAfter(json.retry_after_s)}`);
-  }
-  return parts.join(' ');
-}
-
-function formatRetryAfter(sec) {
-  if (sec >= 60) {
-    const min = Math.round(sec / 60);
-    return `${min}m`;
-  }
-  return `${sec}s`;
+  return base;
 }
 
 function beginSiteColumnResize(ctx, event, handle) {
