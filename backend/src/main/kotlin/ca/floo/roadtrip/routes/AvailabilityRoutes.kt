@@ -67,10 +67,6 @@ private const val MAX_AVAILABILITY_DAYS: Int = 60
 // Per-IP rate-limit budget. Cross-provider: one bucket regardless of which
 // adapter ends up answering.
 private const val IP_RATE_LIMIT_PER_MINUTE = 30
-private const val IP_THROTTLE_RETRY_AFTER_S = 30
-private const val UPSTREAM_RATE_LIMITED_RETRY_AFTER_S = 60
-private const val UPSTREAM_BLOCKED_RETRY_AFTER_S = 300
-private const val UPSTREAM_5XX_RETRY_AFTER_S = 30
 
 /**
  * Unified availability endpoints. Dispatch to the upstream is the registry's
@@ -137,7 +133,6 @@ fun Route.availabilityRoutes(
             call.respondAvailabilityError(
                 "ip_throttled",
                 HttpStatusCode.ServiceUnavailable,
-                retryAfterS = IP_THROTTLE_RETRY_AFTER_S,
             )
             return@get
         }
@@ -271,7 +266,6 @@ fun Route.availabilityRoutes(
             call.respondAvailabilityError(
                 "ip_throttled",
                 HttpStatusCode.ServiceUnavailable,
-                retryAfterS = IP_THROTTLE_RETRY_AFTER_S,
             )
             return@get
         }
@@ -424,7 +418,6 @@ fun Route.availabilityRoutes(
             call.respondApiError(
                 "ip_throttled",
                 HttpStatusCode.ServiceUnavailable,
-                retryAfterS = IP_THROTTLE_RETRY_AFTER_S,
             )
             return@post
         }
@@ -728,25 +721,13 @@ internal fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode,
     return when (e) {
         is ReservationProviderError.RateLimited ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto(
-                    "rate_limited",
-                    retryAfterS = UPSTREAM_RATE_LIMITED_RETRY_AFTER_S,
-                    upstreamStatus = upstream,
-                )
+                availabilityErrorDto("rate_limited", upstreamStatus = upstream)
         is ReservationProviderError.UpstreamBlocked ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto(
-                    "upstream_blocked",
-                    retryAfterS = UPSTREAM_BLOCKED_RETRY_AFTER_S,
-                    upstreamStatus = upstream,
-                )
+                availabilityErrorDto("upstream_blocked", upstreamStatus = upstream)
         is ReservationProviderError.UpstreamUnavailable ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto(
-                    "upstream_5xx",
-                    retryAfterS = UPSTREAM_5XX_RETRY_AFTER_S,
-                    upstreamStatus = upstream,
-                )
+                availabilityErrorDto("upstream_5xx", upstreamStatus = upstream)
         is ReservationProviderError.Unsupported ->
             HttpStatusCode.NotImplemented to availabilityErrorDto("unsupported")
         is ReservationProviderError.WrongRefType ->
@@ -776,18 +757,16 @@ private fun httpStatusFor(e: ReservationProviderError): Int =
 private suspend fun ApplicationCall.respondAvailabilityError(
     error: String,
     status: HttpStatusCode,
-    retryAfterS: Int? = null,
 ) {
-    respondAvailabilityJson(availabilityErrorDto(error, retryAfterS), status)
+    respondAvailabilityJson(availabilityErrorDto(error), status)
 }
 
 private suspend fun ApplicationCall.respondApiError(
     error: String,
     status: HttpStatusCode,
     detail: String? = null,
-    retryAfterS: Int? = null,
 ) {
-    respondAvailabilityJson(ApiErrorSchema(error = error, detail = detail, retry_after_s = retryAfterS), status)
+    respondAvailabilityJson(ApiErrorSchema(error = error, detail = detail), status)
 }
 
 private suspend inline fun <reified T> ApplicationCall.respondAvailabilityJson(

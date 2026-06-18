@@ -255,10 +255,8 @@ internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, Availabi
     val msg = e.message.orEmpty()
     return when {
         msg.contains("429") ->
-            HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("rate_limited", retryAfterS = 60)
+            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("rate_limited")
         else ->
-            HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_5xx", retryAfterS = 30)
+            HttpStatusCode.ServiceUnavailable to availabilityErrorDto("upstream_5xx")
     }
 }

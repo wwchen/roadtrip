@@ -381,12 +381,12 @@ internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, Av
     return when {
         status == 429 ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("rate_limited", retryAfterS = 60, upstreamStatus = status)
+                availabilityErrorDto("rate_limited", upstreamStatus = status)
         status == 503 || (e.message?.contains("WAF") == true) ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_blocked", retryAfterS = 300, upstreamStatus = status)
+                availabilityErrorDto("upstream_blocked", upstreamStatus = status)
         else ->
             HttpStatusCode.ServiceUnavailable to
-                availabilityErrorDto("upstream_5xx", retryAfterS = 30, upstreamStatus = status)
+                availabilityErrorDto("upstream_5xx", upstreamStatus = status)
     }
 }

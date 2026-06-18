@@ -65,7 +65,7 @@ fun Route.geocodeRoutes(geocoder: MapboxGeocoder) {
             try {
                 geocoder.forward(q, autocomplete = autocomplete, proximity = proximity, limit = limit)
             } catch (e: GeocodeException) {
-                call.respondGeocodeError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable, retryAfterS = 30)
+                call.respondGeocodeError("geocoding_unavailable", HttpStatusCode.ServiceUnavailable)
                 return@get
             }
 
@@ -107,9 +107,8 @@ private suspend fun ApplicationCall.respondGeocodeError(
     error: String,
     status: HttpStatusCode,
     detail: String? = null,
-    retryAfterS: Int? = null,
 ) {
-    respondGeocodeJson(ApiErrorSchema(error = error, detail = detail, retry_after_s = retryAfterS), status)
+    respondGeocodeJson(ApiErrorSchema(error = error, detail = detail), status)
 }
 
 private suspend inline fun <reified T> ApplicationCall.respondGeocodeJson(
