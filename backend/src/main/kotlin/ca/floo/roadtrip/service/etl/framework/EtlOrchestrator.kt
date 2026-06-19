@@ -51,7 +51,7 @@ class EtlOrchestrator(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val upsert = Upsert(ctx)
-    private val reservables = ReservableRepo(ctx)
+    private val reservablesRepo = ReservableRepo(ctx)
 
     /**
      * Per-row run summary for `poi_data` rows. Mirrors the shape that
@@ -211,11 +211,11 @@ class EtlOrchestrator(
         log.info("joiner '{}' adapter={} starting", name, row.adapter)
 
         refreshJoinerPlannerStats(name)
-        val joinerCtx = JoinerCtx(ctx = ctx, reservables = reservables, args = row.args)
+        val joinerCtx = JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo, args = row.args)
         val links = joiner.discoverLinks(joinerCtx)
 
         val inserted =
-            reservables.linkToPois(
+            reservablesRepo.linkToPois(
                 links.map { ReservableRepo.LinkInput(reservableId = it.reservableId, poiId = it.poiId) },
             )
         val staleDeleted = joiner.sweepStaleLinks(joinerCtx)
@@ -318,7 +318,7 @@ class EtlOrchestrator(
                 }
             }
         val output = concrete.transform(validated, transformCtx)
-        val importResult = reservables.runImport(concrete.etlSlug, output.reservables)
+        val importResult = reservablesRepo.runImport(concrete.etlSlug, output.reservables)
         log.info(
             "reservable_data '{}' terminal slug={} parsed={} upserted={} swept={}",
             row.name,

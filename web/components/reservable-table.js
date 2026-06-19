@@ -1,6 +1,7 @@
 import { availabilityPanelHtml } from './availability-panel.js';
 import { renderSiteDetail } from '../availability/site-detail.js';
 import { dash, escapeHtml, expanderButton, linkChip, links, renderRow, renderTable } from './result-table.js';
+import { addLocalDays, localToday, localYmd, parseLocalYmd } from '../utils/local-date.js';
 
 export const reservableColumns = [
   {
@@ -282,8 +283,8 @@ export function reservableJsonUrl(rid) {
   return `/api/reservable/${encodeURIComponent(rid)}`;
 }
 
-export function reservableAvailabilityJsonUrl(rid, { startDate = utcYmd(new Date()), endDate } = {}) {
-  const resolvedEndDate = endDate || utcYmd(addUtcDays(parseUtcYmd(startDate), 7));
+export function reservableAvailabilityJsonUrl(rid, { startDate = localYmd(localToday()), endDate } = {}) {
+  const resolvedEndDate = endDate || localYmd(addLocalDays(parseLocalYmd(startDate), 7));
   const params = new URLSearchParams({
     start_date: startDate,
     end_date: resolvedEndDate,
@@ -307,21 +308,4 @@ function columnsWithLinks(linksForRow) {
     if (column.label !== 'Links') return column;
     return { ...column, render: linksForRow };
   });
-}
-
-function utcYmd(date) {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(date.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function parseUtcYmd(value) {
-  return new Date(`${value}T00:00:00Z`);
-}
-
-function addUtcDays(date, days) {
-  const next = new Date(date);
-  next.setUTCDate(date.getUTCDate() + days);
-  return next;
 }

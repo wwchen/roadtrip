@@ -19,7 +19,7 @@ import java.time.OffsetDateTime
  */
 class AvailabilityWatchService(
     private val ctx: DSLContext,
-    private val reservables: ReservableRepo,
+    private val reservablesRepo: ReservableRepo,
 ) {
     private val parkedFar: OffsetDateTime = OffsetDateTime.parse("9999-01-01T00:00:00Z")
 
@@ -87,7 +87,7 @@ class AvailabilityWatchService(
     private fun buildIntent(watch: Watch): AvailabilityJobIntent =
         if (watch.reservableId != null) {
             val r =
-                reservables.findById(watch.reservableId)
+                reservablesRepo.findById(watch.reservableId)
                     ?: error("watch ${watch.id} references missing reservable ${watch.reservableId}")
             AvailabilityJobIntent.Reservable(
                 reservableId = r.id,

@@ -19,7 +19,7 @@ private const val MAX_LIST_LIMIT = 500
 class AvailabilityWatchRepo(
     private val ctx: DSLContext,
 ) {
-    private val reservables = ReservableRepo(ctx)
+    private val reservablesRepo = ReservableRepo(ctx)
     private val json = Json
 
     data class CreateInput(
@@ -172,7 +172,7 @@ class AvailabilityWatchRepo(
             id = r.get(AVAILABILITY_WATCH.ID)!!,
             poiId = r.get(AVAILABILITY_WATCH.POI_ID),
             reservableId = reservableId,
-            reservable = if (reservableId != null) reservables.fromRecord(r) else null,
+            reservable = if (reservableId != null) reservablesRepo.fromRecord(r) else null,
             reservableFilters = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.RESERVABLE_FILTERS)!!.data()).jsonObject,
             startDate = r.get(AVAILABILITY_WATCH.START_DATE)!!,
             endDate = r.get(AVAILABILITY_WATCH.END_DATE)!!,

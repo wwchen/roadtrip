@@ -34,7 +34,7 @@ class AspiraPoiReservableJoinerTest {
     private lateinit var pg: PostgreSQLContainer<*>
     private lateinit var ds: HikariDataSource
     private lateinit var ctx: DSLContext
-    private lateinit var reservables: ReservableRepo
+    private lateinit var reservablesRepo: ReservableRepo
     private lateinit var joiner: AspiraPoiReservableJoiner
 
     @BeforeAll
@@ -54,7 +54,7 @@ class AspiraPoiReservableJoinerTest {
         ds = HikariDataSource(cfg)
         migrate(ds)
         ctx = DSL.using(ds, SQLDialect.POSTGRES)
-        reservables = ReservableRepo(ctx)
+        reservablesRepo = ReservableRepo(ctx)
         joiner = AspiraPoiReservableJoiner()
     }
 
@@ -74,7 +74,7 @@ class AspiraPoiReservableJoinerTest {
         val poiId = insertAspiraPoi("aspira-pc-pins", txnLoc = "1001", mapId = "-2147483640")
         val resId = upsertResource(vendorId = "501", txnLoc = "1001", mapId = "-2147483640", vendor = "aspira_pc")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(1, links.size)
         assertEquals(resId, links[0].reservableId)
@@ -90,7 +90,7 @@ class AspiraPoiReservableJoinerTest {
         val bcRes = upsertResource("601", "2001", "-2147483700", vendor = "aspira_bc")
         val waRes = upsertResource("701", "3001", "-2147483800", vendor = "aspira_wa")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
         val byReservable = links.associate { it.reservableId to it.poiId }
 
         assertEquals(3, links.size)
@@ -106,7 +106,7 @@ class AspiraPoiReservableJoinerTest {
         val pcRes = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
         val bcRes = upsertResource("601", "1001", "-2147483640", vendor = "aspira_bc")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
         val byReservable = links.associate { it.reservableId to it.poiId }
 
         assertEquals(2, links.size)
@@ -136,7 +136,7 @@ class AspiraPoiReservableJoinerTest {
                 vendor = "aspira_wa",
             )
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(1, links.size)
         assertEquals(resId, links[0].reservableId)
@@ -168,7 +168,7 @@ class AspiraPoiReservableJoinerTest {
                 vendor = "aspira_wa",
             )
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(1, links.size)
         assertEquals(waRes, links[0].reservableId)
@@ -184,7 +184,7 @@ class AspiraPoiReservableJoinerTest {
         upsertResource(vendorId = "501", txnLoc = "9999", mapId = "-2147483640", vendor = "aspira_pc")
         upsertResource(vendorId = "502", txnLoc = "1001", mapId = "-9999999999", vendor = "aspira_pc")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -196,7 +196,7 @@ class AspiraPoiReservableJoinerTest {
         insertAspiraPoi("aspira-pc-pins", txnLoc = "1001", mapId = "-2147483640")
         upsertResource(vendorId = "fake", txnLoc = "1001", mapId = "-2147483640", vendor = "recgov")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -214,7 +214,7 @@ class AspiraPoiReservableJoinerTest {
         )
         upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -225,7 +225,7 @@ class AspiraPoiReservableJoinerTest {
         ctx.execute("UPDATE pois SET deleted_at = now() WHERE id = ?", poiId)
         upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -236,7 +236,7 @@ class AspiraPoiReservableJoinerTest {
         val resId = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
         ctx.execute("UPDATE reservables SET deleted_at = now() WHERE id = ?", resId)
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -245,10 +245,10 @@ class AspiraPoiReservableJoinerTest {
     fun `sweepStaleLinks deletes links whose reservable is no longer active`() {
         val poiId = insertAspiraPoi("aspira-pc-pins", txnLoc = "1001", mapId = "-2147483640")
         val resId = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
-        reservables.linkToPoi(resId, poiId)
+        reservablesRepo.linkToPoi(resId, poiId)
         ctx.execute("UPDATE reservables SET deleted_at = now() WHERE id = ?", resId)
 
-        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(1, deleted)
         assertEquals(0, linkCount())
@@ -258,14 +258,14 @@ class AspiraPoiReservableJoinerTest {
     fun `sweepStaleLinks deletes links whose parent key changed`() {
         val poiId = insertAspiraPoi("aspira-pc-pins", txnLoc = "1001", mapId = "-2147483640")
         val resId = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
-        reservables.linkToPoi(resId, poiId)
+        reservablesRepo.linkToPoi(resId, poiId)
         ctx.execute(
             "UPDATE reservables SET provider_ref = ?::jsonb WHERE id = ?",
             """{"transactionLocationId":9999,"mapId":-2147483640}""",
             resId,
         )
 
-        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(1, deleted)
         assertEquals(0, linkCount())
@@ -275,9 +275,9 @@ class AspiraPoiReservableJoinerTest {
     fun `sweepStaleLinks deletes cross-tenant links even when parent key matches`() {
         val bcPoi = insertAspiraPoi("aspira-bc-pins", txnLoc = "1001", mapId = "-2147483640")
         val pcRes = upsertResource("501", "1001", "-2147483640", vendor = "aspira_pc")
-        reservables.linkToPoi(pcRes, bcPoi)
+        reservablesRepo.linkToPoi(pcRes, bcPoi)
 
-        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(1, deleted)
         assertEquals(0, linkCount())
@@ -299,7 +299,7 @@ class AspiraPoiReservableJoinerTest {
                 }
                 """.trimIndent(),
             )
-        return reservables.upsert(
+        return reservablesRepo.upsert(
             ReservableRepo.Input(
                 rid = ReservableId(ReservableType.SITE, vendor, vendorId),
                 name = null,
@@ -378,7 +378,7 @@ class AspiraPoiReservableJoinerTest {
                 }
                 """.trimIndent(),
             )
-        return reservables.upsert(
+        return reservablesRepo.upsert(
             ReservableRepo.Input(
                 rid = ReservableId(ReservableType.SITE, vendor, vendorId),
                 name = null,

@@ -33,14 +33,14 @@ import java.time.OffsetDateTime
  * because losing the row would mean the watch silently stops polling.
  */
 class AvailabilityPollExecutor(
-    private val reservables: ReservableRepo,
+    private val reservablesRepo: ReservableRepo,
     private val campsiteProviders: CampsiteProviderRepo,
     private val reservationProviders: ReservationProviderRegistry,
     private val fetches: ReservableAvailabilityFetchService,
     private val runs: AvailabilityJobRunRepo,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val scopeResolver = WatchScopeResolver(reservables)
+    private val scopeResolver = WatchScopeResolver(reservablesRepo)
 
     suspend fun handle(job: AvailabilityJobRepo.Job): HandlerResult {
         val startedAt = OffsetDateTime.now()
@@ -88,7 +88,7 @@ class AvailabilityPollExecutor(
         intent: AvailabilityJobIntent.Reservable,
     ): Int {
         val reservable =
-            reservables.findById(intent.reservableId)
+            reservablesRepo.findById(intent.reservableId)
                 ?: run {
                     log.warn("job {}: reservable {} no longer exists", jobId, intent.reservableId)
                     return 0
@@ -133,7 +133,7 @@ class AvailabilityPollExecutor(
         startDate: String,
         endDate: String,
     ): Int {
-        val poiIds = reservables.poiIdsForReservable(reservable.id)
+        val poiIds = reservablesRepo.poiIdsForReservable(reservable.id)
         if (poiIds.isEmpty()) {
             log.warn("job {}: reservable {} has no POI parent", jobId, reservable.id)
             return 0

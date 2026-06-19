@@ -75,8 +75,8 @@ class AvailabilitySnapshotRepo(
                 SELECT DISTINCT ON (reservable_id, target_date)
                     id, reservable_id, target_date, status, available, observed_at
                 FROM availability_snapshot
-                WHERE reservable_id = ANY(?)
-                  AND target_date = ANY(?)
+                WHERE reservable_id = ANY(?::bigint[])
+                  AND target_date = ANY(?::date[])
                 ORDER BY reservable_id, target_date, observed_at DESC, id DESC
                 """.trimIndent(),
                 reservableIds.toTypedArray(),
@@ -98,8 +98,6 @@ class AvailabilitySnapshotRepo(
         AvailabilityDayDto(
             date = targetDate.toString(),
             status = status,
-            availableCount = if (status.isOnlineBookable) 1 else 0,
-            total = 1,
             availableReservableIds = if (status.isOnlineBookable && reservableRid != null) listOf(reservableRid) else emptyList(),
             reservableStatuses = reservableRid?.let { mapOf(it to status) },
         )

@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
@@ -25,6 +26,7 @@ object ReservationProviderRegistryFactory {
         registry: PoiRegistry,
         recgovCache: CachedRecGovAvailability,
         aspiraCache: CachedAspiraAvailability,
+        aspiraOccupancyCache: CachedAspiraOccupancy? = null,
     ): ReservationProviderRegistry {
         val adaptersBySource = mutableMapOf<String, ReservationProvider>()
 
@@ -51,6 +53,7 @@ object ReservationProviderRegistryFactory {
                     AspiraReservationProvider(
                         tenant = tenant,
                         cache = aspiraCache,
+                        occupancyCache = aspiraOccupancyCache,
                     )
                 }
             adaptersBySource[source] = adapter

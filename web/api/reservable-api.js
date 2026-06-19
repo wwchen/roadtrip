@@ -1,7 +1,7 @@
 // Reservable catalog API client (RFC 0008). Two endpoints:
 //
 //   GET /api/poi/{id}/reservables[?type=site]
-//     → { poi_id, type, total_at_poi, reservables:
+//     → { poi_id, type, reservables:
 //         [{rid, reservation_url_template, poi_ids, name, …}, …] }
 //
 //   GET /api/reservable/{rid}
@@ -17,6 +17,7 @@
 // fetched per reservable and remains throttled/rate-limited.
 
 import { jsonGetOk } from './http.js';
+import { addLocalDays, localToday, localYmd, parseLocalYmd } from '../utils/local-date.js';
 
 /**
  * Search active reservables across supported catalog fields.
@@ -90,29 +91,12 @@ export function fetchReservableAvailability(
   return jsonGetOk(reservableAvailabilityUrl(rid, { startDate, endDate, force }), { signal });
 }
 
-export function reservableAvailabilityUrl(rid, { startDate = utcYmd(new Date()), endDate, force } = {}) {
-  const resolvedEndDate = endDate || utcYmd(addUtcDays(parseUtcYmd(startDate), 7));
+export function reservableAvailabilityUrl(rid, { startDate = localYmd(localToday()), endDate, force } = {}) {
+  const resolvedEndDate = endDate || localYmd(addLocalDays(parseLocalYmd(startDate), 7));
   const params = new URLSearchParams({
     start_date: startDate,
     end_date: resolvedEndDate,
   });
   if (force) params.set('force', '1');
   return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
-}
-
-function parseUtcYmd(value) {
-  return new Date(`${value}T00:00:00Z`);
-}
-
-function addUtcDays(date, days) {
-  const next = new Date(date);
-  next.setUTCDate(date.getUTCDate() + days);
-  return next;
-}
-
-function utcYmd(date) {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(date.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
 }

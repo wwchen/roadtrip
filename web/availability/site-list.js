@@ -3,6 +3,7 @@
 // available_reservable_ids so the visible rows match that day's count.
 
 import { escapeHtml } from '../core.js';
+import { availableCount, availableReservableIds } from './day-fields.js';
 import { hasReservationUrlTemplate, reservationUrlFromTemplate } from './booking-links.js';
 
 /**
@@ -30,9 +31,9 @@ export function renderSiteList({
   selectedEndDate = null,
 }) {
   const availableIds = availableReservableIds(selectedDay);
-  if (availableIds == null || availableIds.length === 0) return '';
-  const count = availableCount(selectedDay) ?? availableIds.length;
-  const total = selectedDay.total ?? selectedDay.totalAtPoi ?? null;
+  if (availableIds.length === 0) return '';
+  const count = availableCount(selectedDay);
+  const total = Array.isArray(reservables) ? reservables.length : null;
 
   if (state === 'loading') {
     return renderSection({
@@ -93,17 +94,6 @@ function renderRows(reservables, dateWindow) {
   const sorted = [...reservables].sort(compareReservable);
   const rows = sorted.map((r) => renderRow(r, dateWindow)).join('');
   return `<ol class="cg-sites-rows">${rows}</ol>`;
-}
-
-function availableReservableIds(day) {
-  if (!day) return null;
-  const ids = day.available_reservable_ids ?? day.availableReservableIds;
-  return Array.isArray(ids) ? ids : null;
-}
-
-function availableCount(day) {
-  const count = day?.available_count ?? day?.availableCount;
-  return typeof count === 'number' ? count : null;
 }
 
 function reservablesForIds(reservables, ids) {

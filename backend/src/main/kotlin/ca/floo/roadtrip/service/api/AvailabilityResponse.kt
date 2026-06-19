@@ -9,7 +9,6 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.encodeToJsonElement
-import java.time.DayOfWeek
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -36,8 +35,6 @@ inline fun <reified T> encodeAvailabilityJson(value: T): String = availabilityRe
 data class DayClassification(
     val date: String,
     val status: AvailabilityStatus,
-    val availableCount: Int,
-    val total: Int,
     val availableReservableIds: List<String>? = null,
     val reservableStatuses: Map<String, AvailabilityStatus>? = null,
 )
@@ -89,21 +86,18 @@ fun dayClassificationsFromObservations(
 
 fun availabilityDatesFromObservations(batch: AvailabilityObservationBatch): List<String> =
     dayClassificationsFromObservations(batch.startDate, batch.endDate, batch.observations)
-        .filter { it.availableCount > 0 }
+        .filter { it.availableReservableIds.orEmpty().isNotEmpty() }
         .map { it.date }
 
 fun availabilityResponseFromObservations(batch: AvailabilityObservationBatch): AvailabilityResponseDto {
     val perDay = dayClassificationsFromObservations(batch.startDate, batch.endDate, batch.observations)
-    val days = ChronoUnit.DAYS.between(batch.startDate, batch.endDate).toInt()
     val state = classifyWindowState(perDay)
-    val summary = summarizeWindow(days, perDay, state)
     return availabilityResponseDto(
         provider = batch.provider,
         startDate = batch.startDate,
         endDate = batch.endDate,
         perDay = perDay,
         state = state,
-        summary = summary,
         seasonBlock = batch.seasonBlock.takeIf { state == "closed_for_season" },
         cacheBlock = batch.cacheBlock,
         campgroundId = batch.campgroundId,
@@ -126,8 +120,6 @@ fun dayClassificationFromReservableStatuses(
     return DayClassification(
         date = date,
         status = rollupStatus(sorted.values),
-        availableCount = availableIds.size,
-        total = sorted.size,
         availableReservableIds = availableIds,
         reservableStatuses = sorted,
     )
@@ -136,13 +128,16 @@ fun dayClassificationFromReservableStatuses(
 fun dayClassificationFromStatuses(
     date: String,
     statuses: List<AvailabilityStatus>,
-): DayClassification =
-    DayClassification(
+): DayClassification {
+    val keyedStatuses =
+        statuses
+            .mapIndexed { index, status -> index.toString() to status }
+            .toMap()
+    return dayClassificationFromReservableStatuses(
         date = date,
-        status = rollupStatus(statuses),
-        availableCount = statuses.count { it == AvailabilityStatus.AVAILABLE },
-        total = statuses.size,
+        statuses = keyedStatuses,
     )
+}
 
 fun rollupStatus(statuses: Iterable<AvailabilityStatus>): AvailabilityStatus {
     val values = statuses.toList()
@@ -159,55 +154,21 @@ fun rollupStatus(statuses: Iterable<AvailabilityStatus>): AvailabilityStatus {
 
 /** Roll up per-day classifications into a single window-level state. */
 fun classifyWindowState(days: List<DayClassification>): String {
-    val total = days.sumOf { it.total }
-    if (total == 0) return "empty"
-    val allClosed = days.all { it.total > 0 && it.status == AvailabilityStatus.CLOSED }
+    if (days.none { it.reservableStatuses.orEmpty().isNotEmpty() }) return "empty"
+    val allClosed = days.all { it.reservableStatuses.orEmpty().isNotEmpty() && it.status == AvailabilityStatus.CLOSED }
     val anySuccess =
         days.any {
             it.status == AvailabilityStatus.AVAILABLE ||
                 it.status == AvailabilityStatus.FIRST_COME ||
                 it.status == AvailabilityStatus.UNKNOWN
         }
-    val allReserved = days.all { it.total > 0 && it.status == AvailabilityStatus.RESERVED }
+    val allReserved = days.all { it.reservableStatuses.orEmpty().isNotEmpty() && it.status == AvailabilityStatus.RESERVED }
     return when {
         allClosed -> "closed_for_season"
         anySuccess -> "success"
         allReserved -> "zero_available"
         else -> "success"
     }
-}
-
-/** One-line human summary for the drawer header. */
-fun summarizeWindow(
-    days: Int,
-    perDay: List<DayClassification>,
-    state: String,
-): String {
-    if (state == "empty") return "No availability data"
-    if (state == "closed_for_season") return "Closed for season"
-    if (state == "zero_available") return "Reserved next $days days"
-    val availableDates = perDay.count { it.status == AvailabilityStatus.AVAILABLE }
-    val firstComeDates = perDay.count { it.status == AvailabilityStatus.FIRST_COME }
-    val unknownDates = perDay.count { it.status == AvailabilityStatus.UNKNOWN }
-    if (availableDates == 0 && firstComeDates == 0 && unknownDates > 0) return "Availability unknown"
-    val weekendsUnavailable =
-        perDay.any { d ->
-            val dow = LocalDate.parse(d.date).dayOfWeek
-            (dow == DayOfWeek.FRIDAY || dow == DayOfWeek.SATURDAY) &&
-                (d.status == AvailabilityStatus.RESERVED || d.status == AvailabilityStatus.CLOSED)
-        }
-    val tail = if (weekendsUnavailable) " · weekends unavailable" else ""
-    val parts = mutableListOf<String>()
-    if (availableDates > 0) {
-        val noun = if (availableDates == 1) "date" else "dates"
-        parts += "$availableDates $noun available"
-    }
-    if (firstComeDates > 0) {
-        val noun = if (firstComeDates == 1) "date" else "dates"
-        parts += "$firstComeDates $noun first-come"
-    }
-    if (parts.isEmpty()) return "Reserved next $days days"
-    return parts.joinToString(" · ") + tail
 }
 
 /**
@@ -224,7 +185,6 @@ fun availabilityResponseDto(
     endDate: LocalDate,
     perDay: List<DayClassification>,
     state: String,
-    summary: String,
     seasonBlock: AvailabilitySeasonBlock?,
     cacheBlock: AvailabilityCacheBlock,
     campgroundId: String? = null,
@@ -239,8 +199,8 @@ fun availabilityResponseDto(
         mapId = mapId,
         reservableId = reservableId,
         checkedAt = Instant.now().toString(),
-        window = AvailabilityWindowDto(startDate = startDate.toString(), endDate = endDate.toString()),
-        summary = summary,
+        startDate = startDate.toString(),
+        endDate = endDate.toString(),
         state = state,
         season = seasonBlock?.let { availabilityResponseJson.encodeToJsonElement(it) } ?: JsonNull,
         availability =
@@ -248,8 +208,6 @@ fun availabilityResponseDto(
                 AvailabilityDayDto(
                     date = day.date,
                     status = day.status,
-                    availableCount = day.availableCount,
-                    total = day.total,
                     availableReservableIds = day.availableReservableIds,
                     reservableStatuses = day.reservableStatuses,
                 )
@@ -265,8 +223,8 @@ data class AvailabilityResponseDto(
     @SerialName("map_id") val mapId: String? = null,
     @SerialName("reservable_id") val reservableId: String? = null,
     @SerialName("checked_at") val checkedAt: String,
-    val window: AvailabilityWindowDto,
-    val summary: String,
+    @SerialName("start_date") val startDate: String,
+    @SerialName("end_date") val endDate: String,
     val state: String,
     val season: JsonElement,
     val availability: List<AvailabilityDayDto>,
@@ -274,17 +232,9 @@ data class AvailabilityResponseDto(
 )
 
 @Serializable
-data class AvailabilityWindowDto(
-    @SerialName("start_date") val startDate: String,
-    @SerialName("end_date") val endDate: String,
-)
-
-@Serializable
 data class AvailabilityDayDto(
     val date: String,
     val status: AvailabilityStatus,
-    @SerialName("available_count") val availableCount: Int,
-    val total: Int,
     @SerialName("available_reservable_ids") val availableReservableIds: List<String>? = null,
     @SerialName("reservable_statuses") val reservableStatuses: Map<String, AvailabilityStatus>? = null,
 )

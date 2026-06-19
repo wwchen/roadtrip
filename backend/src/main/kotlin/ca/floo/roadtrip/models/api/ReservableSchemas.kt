@@ -38,6 +38,5 @@ data class ReservableDetailResponseSchema(
 data class PoiReservablesResponseSchema(
     @SerialName("poi_id") val poiId: Long,
     val type: String,
-    @SerialName("total_at_poi") val totalAtPoi: Int,
     val reservables: List<ReservableSchema>,
 )

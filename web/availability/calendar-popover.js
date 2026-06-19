@@ -8,9 +8,15 @@
 // owns "selected day" — the popover just emits onPick(date).
 
 import { escapeHtml } from '../core.js';
+import {
+  addLocalDays,
+  addLocalMonths,
+  localYmd,
+  parseLocalYmd,
+  startOfLocalMonth,
+} from '../utils/local-date.js';
 
 const DOW_HEADERS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 /**
  * Render the popover into `host`. Returns a controller with `dispose()`.
@@ -25,7 +31,7 @@ const MS_PER_DAY = 24 * 60 * 60 * 1000;
  * @param {() => void}  args.onClose    User dismissed (outside click / esc).
  */
 export function mountCalendarPopover(host, args) {
-  let viewMonth = startOfMonth(args.viewMonth);
+  let viewMonth = startOfLocalMonth(args.viewMonth);
   const { today, selectedDate, maxDate, onPick, onClose } = args;
 
   function rerender() {
@@ -37,19 +43,19 @@ export function mountCalendarPopover(host, args) {
     if (!(tgt instanceof Element)) return;
 
     if (tgt.closest('.cg-cal-prev')) {
-      viewMonth = addMonths(viewMonth, -1);
+      viewMonth = addLocalMonths(viewMonth, -1);
       rerender();
       return;
     }
     if (tgt.closest('.cg-cal-next')) {
-      viewMonth = addMonths(viewMonth, 1);
+      viewMonth = addLocalMonths(viewMonth, 1);
       rerender();
       return;
     }
     const dayBtn = tgt.closest('.cg-cal-day:not([disabled])');
     if (dayBtn) {
       const iso = dayBtn.getAttribute('data-date');
-      onPick(new Date(iso + 'T00:00:00Z'));
+      onPick(parseLocalYmd(iso));
     }
   }
 
@@ -81,19 +87,19 @@ export function mountCalendarPopover(host, args) {
 }
 
 function renderPopover({ viewMonth, today, selectedDate, maxDate }) {
-  const title = viewMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric', timeZone: 'UTC' });
+  const title = viewMonth.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
   const cells = monthCells(viewMonth);
-  const todayIso = isoDate(today);
-  const selectedIso = selectedDate ? isoDate(selectedDate) : null;
-  const maxIso = isoDate(maxDate);
-  const minIso = isoDate(today);
+  const todayIso = localYmd(today);
+  const selectedIso = selectedDate ? localYmd(selectedDate) : null;
+  const maxIso = localYmd(maxDate);
+  const minIso = localYmd(today);
 
   const headers = DOW_HEADERS.map((d) => `<div class="cg-cal-head">${d}</div>`).join('');
   const dayCells = cells
     .map((d) => {
       if (!d) return `<div class="cg-cal-cell cg-cal-empty"></div>`;
-      const iso = isoDate(d);
-      const inMonth = d.getUTCMonth() === viewMonth.getUTCMonth();
+      const iso = localYmd(d);
+      const inMonth = d.getMonth() === viewMonth.getMonth();
       const disabled = iso < minIso || iso > maxIso;
       const classes = [
         'cg-cal-cell',
@@ -104,7 +110,7 @@ function renderPopover({ viewMonth, today, selectedDate, maxDate }) {
       ]
         .filter(Boolean)
         .join(' ');
-      return `<button type="button" class="${classes}" data-date="${iso}" ${disabled ? 'disabled' : ''}>${d.getUTCDate()}</button>`;
+      return `<button type="button" class="${classes}" data-date="${iso}" ${disabled ? 'disabled' : ''}>${d.getDate()}</button>`;
     })
     .join('');
 
@@ -121,30 +127,14 @@ function renderPopover({ viewMonth, today, selectedDate, maxDate }) {
 }
 
 /**
- * 6 rows × 7 cols of UTC dates covering the month, padded with the
+ * 6 rows x 7 cols of local dates covering the month, padded with the
  * surrounding days so the calendar reads like a normal monthly grid.
  */
 function monthCells(viewMonth) {
-  const first = startOfMonth(viewMonth);
-  const startDow = first.getUTCDay();
-  const gridStart = addDays(first, -startDow);
+  const first = startOfLocalMonth(viewMonth);
+  const startDow = first.getDay();
+  const gridStart = addLocalDays(first, -startDow);
   const out = [];
-  for (let i = 0; i < 42; i++) out.push(addDays(gridStart, i));
+  for (let i = 0; i < 42; i++) out.push(addLocalDays(gridStart, i));
   return out;
-}
-
-function startOfMonth(d) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
-}
-
-function addMonths(d, n) {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + n, 1));
-}
-
-function addDays(d, n) {
-  return new Date(d.getTime() + n * MS_PER_DAY);
-}
-
-function isoDate(d) {
-  return d.toISOString().slice(0, 10);
 }

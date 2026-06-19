@@ -1,7 +1,10 @@
 package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
+import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
@@ -13,6 +16,80 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class AspiraReservationProviderTest {
+    @Test
+    fun `aspira catalog availability uses occupancy search when resource location is known`() =
+        runBlocking {
+            var mapFetches = 0
+            val mapCache =
+                CachedAspiraAvailability(
+                    fetcher = { _, _, _, _ ->
+                        mapFetches++
+                        error("map availability should not be fetched when occupancy is available")
+                    },
+                )
+            val occupancyCache =
+                CachedAspiraOccupancy(
+                    fetcher = { _, resourceLocationId, start, end ->
+                        assertEquals(-2147483624, resourceLocationId)
+                        assertEquals(LocalDate.parse("2026-06-17"), start)
+                        assertEquals(LocalDate.parse("2026-06-18"), end)
+                        AspiraOccupancy(
+                            resourceLocationId = resourceLocationId,
+                            resourceOccupancy =
+                                listOf(
+                                    AspiraResourceOccupancy(resourceId = 100, availability = 0),
+                                    AspiraResourceOccupancy(resourceId = 200, availability = 2),
+                                ),
+                        )
+                    },
+                )
+            val adapter =
+                AspiraReservationProvider(
+                    tenant =
+                        AspiraTenant(
+                            host = "reservation.pc.gc.ca",
+                            vendorCode = "aspira_pc",
+                            bookingHorizonDays = 365,
+                        ),
+                    cache = mapCache,
+                    occupancyCache = occupancyCache,
+                )
+
+            val batch =
+                adapter.catalogAvailability(
+                    CatalogAvailabilityRequest(
+                        ref =
+                            ProviderRef.Aspira(
+                                transactionLocationId = -2147483630,
+                                mapId = -2147483388,
+                                resourceLocationId = -2147483624,
+                            ),
+                        reservables =
+                            listOf(
+                                CatalogReservableRef(
+                                    rid = "site:aspira_pc:100",
+                                    vendorId = "100",
+                                    mapId = -2147483615,
+                                    resourceLocationId = -2147483624,
+                                ),
+                                CatalogReservableRef(
+                                    rid = "site:aspira_pc:200",
+                                    vendorId = "200",
+                                    mapId = -2147483615,
+                                    resourceLocationId = -2147483624,
+                                ),
+                            ),
+                        startDate = LocalDate.parse("2026-06-17"),
+                        endDate = LocalDate.parse("2026-06-18"),
+                    ),
+                )
+
+            val byRid = batch.observations.associateBy { it.reservableId }
+            assertEquals(0, mapFetches)
+            assertEquals(AvailabilityStatus.AVAILABLE, byRid["site:aspira_pc:100"]!!.status)
+            assertEquals(AvailabilityStatus.RESERVED, byRid["site:aspira_pc:200"]!!.status)
+        }
+
     @Test
     fun `aspira catalog availability uses map resource status when resource location is known`() =
         runBlocking {

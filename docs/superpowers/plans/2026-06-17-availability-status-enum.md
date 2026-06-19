@@ -1054,7 +1054,7 @@ function cellState(row, day, availableIds) {
   if (directStatus) return STATUS_META[directStatus] || STATUS_META.unknown;
   if (availableIds?.has(rid)) return STATUS_META.available;
 
-  const total = numeric(day.total ?? day.totalAtPoi);
+  const total = numeric(day.total);
   const status = normalizeStatus(day.status);
   if (status === 'closed' || total === 0) return STATUS_META.closed;
   if (status === 'first_come') return STATUS_META.first_come;

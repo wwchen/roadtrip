@@ -1,9 +1,11 @@
 import { renderSiteMatrix } from '../availability/site-matrix.js';
+import { availableCount, availableReservableIds, reservableCount, reservableStatuses } from '../availability/day-fields.js';
 import { escapeHtml } from './result-table.js';
 import {
   availabilityStatusLabel,
   normalizeAvailabilityStatus,
 } from '../utils/availability-status.js';
+import { addLocalDays, localToday, localYmd, parseLocalYmd } from '../utils/local-date.js';
 
 export function availabilityPanelHtml(rid, state, { colspan = 5, row = null } = {}) {
   const expanded = !!state && (state.mode === 'availability' || state.expanded);
@@ -95,7 +97,7 @@ function availabilityMatrixHtml(row, rid, days) {
       query: '',
       loop: '',
       type: '',
-      sort: 'site',
+      sort: 'available',
     },
     selectedSiteRid: null,
     loadingMore: false,
@@ -108,14 +110,14 @@ function normalizeReservableDays(rid, days) {
   return (Array.isArray(days) ? days : [])
     .filter((day) => day?.date)
     .map((day) => {
-      const ids = day.available_reservable_ids ?? day.availableReservableIds;
-      if (Array.isArray(ids)) return day;
+      const ids = availableReservableIds(day);
+      const statuses = reservableStatuses(day);
+      if (ids.length > 0 || Object.keys(statuses).length > 0) return day;
       const available = reservableDayAvailable(day);
       return {
         ...day,
-        available_count: available ? 1 : 0,
-        total: day.total ?? 1,
         available_reservable_ids: available ? [rid] : [],
+        reservable_statuses: { [rid]: normalizeAvailabilityStatus(day.status) },
       };
     });
 }
@@ -126,19 +128,19 @@ function reservableDayAvailable(day) {
 
 export function availabilityQueryFromForm(formEl) {
   const data = new FormData(formEl);
-  const startDate = String(data.get('start_date') || '').trim() || utcYmd(new Date());
+  const startDate = String(data.get('start_date') || '').trim() || localYmd(localToday());
   return {
     startDate,
-    endDate: String(data.get('end_date') || '').trim() || utcYmd(addUtcDays(parseUtcYmd(startDate), 7)),
+    endDate: String(data.get('end_date') || '').trim() || localYmd(addLocalDays(parseLocalYmd(startDate), 7)),
     force: data.get('force') === 'on',
   };
 }
 
 export function defaultAvailabilityQuery() {
-  const startDate = utcYmd(new Date());
+  const startDate = localYmd(localToday());
   return {
     startDate,
-    endDate: utcYmd(addUtcDays(parseUtcYmd(startDate), 7)),
+    endDate: localYmd(addLocalDays(parseLocalYmd(startDate), 7)),
     force: false,
   };
 }
@@ -146,7 +148,7 @@ export function defaultAvailabilityQuery() {
 function dayPillHtml(day) {
   const status = normalizeAvailabilityStatus(day.status);
   const cls = status;
-  const count = `${Number(day.available_count || 0)} of ${Number(day.total || 0)}`;
+  const count = `${availableCount(day)} of ${reservableCount(day)}`;
   return `
     <span class="day-pill ${cls}">
       <span>${escapeHtml(day.date || '')}</span>
@@ -154,21 +156,4 @@ function dayPillHtml(day) {
       <span>${escapeHtml(count)}</span>
     </span>
   `;
-}
-
-function utcYmd(date) {
-  const y = date.getUTCFullYear();
-  const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(date.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function parseUtcYmd(value) {
-  return new Date(`${value}T00:00:00Z`);
-}
-
-function addUtcDays(date, days) {
-  const next = new Date(date);
-  next.setUTCDate(date.getUTCDate() + days);
-  return next;
 }

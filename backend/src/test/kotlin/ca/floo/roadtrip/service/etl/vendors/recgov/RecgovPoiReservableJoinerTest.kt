@@ -35,7 +35,7 @@ class RecgovPoiReservableJoinerTest {
     private lateinit var pg: PostgreSQLContainer<*>
     private lateinit var ds: HikariDataSource
     private lateinit var ctx: DSLContext
-    private lateinit var reservables: ReservableRepo
+    private lateinit var reservablesRepo: ReservableRepo
     private lateinit var joiner: RecgovPoiReservableJoiner
 
     @BeforeAll
@@ -55,7 +55,7 @@ class RecgovPoiReservableJoinerTest {
         ds = HikariDataSource(cfg)
         migrate(ds)
         ctx = DSL.using(ds, SQLDialect.POSTGRES)
-        reservables = ReservableRepo(ctx)
+        reservablesRepo = ReservableRepo(ctx)
         joiner = RecgovPoiReservableJoiner()
     }
 
@@ -75,7 +75,7 @@ class RecgovPoiReservableJoinerTest {
         val poiId = insertFederalCampgroundPoi("Upper Pines", facilityId = "232447")
         val resId = upsertCampsite(vendorId = "330257", parentFacilityId = "232447")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(1, links.size)
         assertEquals(resId, links[0].reservableId)
@@ -89,7 +89,7 @@ class RecgovPoiReservableJoinerTest {
         val r2 = upsertCampsite(vendorId = "330258", parentFacilityId = "232447")
         val r3 = upsertCampsite(vendorId = "330259", parentFacilityId = "232447")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(3, links.size)
         assertEquals(setOf(r1, r2, r3), links.map { it.reservableId }.toSet())
@@ -103,7 +103,7 @@ class RecgovPoiReservableJoinerTest {
         val a = upsertCampsite(vendorId = "330257", parentFacilityId = "232447")
         val b = upsertCampsite(vendorId = "440001", parentFacilityId = "232450")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
         val byReservable = links.associate { it.reservableId to it.poiId }
 
         assertEquals(upperPines, byReservable[a])
@@ -114,7 +114,7 @@ class RecgovPoiReservableJoinerTest {
     fun `orphan reservable with no matching POI yields no link`() {
         upsertCampsite(vendorId = "999999", parentFacilityId = "lost-facility")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -127,7 +127,7 @@ class RecgovPoiReservableJoinerTest {
         insertFederalCampgroundPoi("Upper Pines", facilityId = "232447")
         upsertCampsite(vendorId = "fake-1", parentFacilityId = "232447", vendor = "aspira_pc")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -140,7 +140,7 @@ class RecgovPoiReservableJoinerTest {
         ctx.execute("UPDATE pois SET deleted_at = now() WHERE id = ?", poiId)
         upsertCampsite(vendorId = "330257", parentFacilityId = "232447")
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -151,7 +151,7 @@ class RecgovPoiReservableJoinerTest {
         val resId = upsertCampsite(vendorId = "330257", parentFacilityId = "232447")
         ctx.execute("UPDATE reservables SET deleted_at = now() WHERE id = ?", resId)
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -160,10 +160,10 @@ class RecgovPoiReservableJoinerTest {
     fun `sweepStaleLinks deletes links whose reservable is no longer active`() {
         val poiId = insertFederalCampgroundPoi("Upper Pines", facilityId = "232447")
         val resId = upsertCampsite(vendorId = "330257", parentFacilityId = "232447")
-        reservables.linkToPoi(resId, poiId)
+        reservablesRepo.linkToPoi(resId, poiId)
         ctx.execute("UPDATE reservables SET deleted_at = now() WHERE id = ?", resId)
 
-        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(1, deleted)
         assertEquals(0, linkCount())
@@ -173,14 +173,14 @@ class RecgovPoiReservableJoinerTest {
     fun `sweepStaleLinks deletes links whose parent key changed`() {
         val poiId = insertFederalCampgroundPoi("Upper Pines", facilityId = "232447")
         val resId = upsertCampsite(vendorId = "330257", parentFacilityId = "232447")
-        reservables.linkToPoi(resId, poiId)
+        reservablesRepo.linkToPoi(resId, poiId)
         ctx.execute(
             "UPDATE reservables SET raw = ?::jsonb WHERE id = ?",
             """{"_parent_facility_id":"999999"}""",
             resId,
         )
 
-        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val deleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(1, deleted)
         assertEquals(0, linkCount())
@@ -190,7 +190,7 @@ class RecgovPoiReservableJoinerTest {
     fun `reservable missing _parent_facility_id is not matched`() {
         insertFederalCampgroundPoi("Upper Pines", facilityId = "232447")
         // Upsert with raw=null — no synthetic parent key to match on.
-        reservables.upsert(
+        reservablesRepo.upsert(
             ReservableRepo.Input(
                 rid = ReservableId(ReservableType.SITE, "recgov", "330257"),
                 name = "FS1-20",
@@ -200,7 +200,7 @@ class RecgovPoiReservableJoinerTest {
             ),
         )
 
-        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservables = reservables))
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo))
 
         assertEquals(0, links.size)
     }
@@ -211,7 +211,7 @@ class RecgovPoiReservableJoinerTest {
         vendor: String = "recgov",
     ): Long {
         val raw = Json.parseToJsonElement("""{"_parent_facility_id":"$parentFacilityId"}""")
-        return reservables.upsert(
+        return reservablesRepo.upsert(
             ReservableRepo.Input(
                 rid = ReservableId(ReservableType.SITE, vendor, vendorId),
                 name = null,

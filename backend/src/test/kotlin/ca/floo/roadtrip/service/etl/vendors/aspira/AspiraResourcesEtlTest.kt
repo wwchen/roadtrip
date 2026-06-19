@@ -53,7 +53,7 @@ class AspiraResourcesEtlTest {
     private lateinit var pg: PostgreSQLContainer<*>
     private lateinit var ds: HikariDataSource
     private lateinit var ctx: DSLContext
-    private lateinit var reservables: ReservableRepo
+    private lateinit var reservablesRepo: ReservableRepo
     private lateinit var rawDir: File
     private lateinit var poiRegistry: PoiRegistry
 
@@ -74,7 +74,7 @@ class AspiraResourcesEtlTest {
         ds = HikariDataSource(cfg)
         migrate(ds)
         ctx = DSL.using(ds, SQLDialect.POSTGRES)
-        reservables = ReservableRepo(ctx)
+        reservablesRepo = ReservableRepo(ctx)
 
         rawDir = Files.createTempDirectory("etl-aspira-resources-").toFile()
 
@@ -133,7 +133,7 @@ class AspiraResourcesEtlTest {
 
         // ReservableId disallows ':' in vendor, so per-tenant vendors use
         // underscore separators.
-        val r = reservables.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
+        val r = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
         assertEquals("aspira_pc", r.rid.vendor)
         assertEquals("501", r.rid.vendorId)
     }
@@ -146,11 +146,11 @@ class AspiraResourcesEtlTest {
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runReservableData("Parks Canada Aspira Resources")
 
-        val tunnel = reservables.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
+        val tunnel = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
         assertEquals("TMV1-A1", tunnel.name)
         assertEquals("Tunnel Mountain Village I", tunnel.loop)
 
-        val twoJack = reservables.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "601"))!!
+        val twoJack = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "601"))!!
         assertEquals("TJL-1", twoJack.name)
         assertEquals("Two Jack Lakeside", twoJack.loop)
     }
@@ -161,7 +161,7 @@ class AspiraResourcesEtlTest {
         orch.runReservableData("Parks Canada Aspira Resources")
 
         val raw =
-            reservables
+            reservablesRepo
                 .findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
                 .raw as JsonObject
         assertEquals(
@@ -181,7 +181,7 @@ class AspiraResourcesEtlTest {
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runReservableData("Parks Canada Aspira Resources")
 
-        val reservable = reservables.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
+        val reservable = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
         assertEquals("Campsite", reservable.siteType)
 
         val raw = reservable.raw as JsonObject
@@ -237,7 +237,7 @@ class AspiraResourcesEtlTest {
         orch.runReservableData("Parks Canada Aspira Resources")
 
         fun reservable(vendorId: String) =
-            reservables
+            reservablesRepo
                 .findByRid(ReservableId(ReservableType.SITE, "aspira_pc", vendorId))!!
 
         fun rawOf(vendorId: String): JsonObject =
@@ -313,7 +313,7 @@ class AspiraResourcesEtlTest {
         // 503 is the third resource at park 9001; if the maps walk
         // hadn't run, we'd have no leaf metadata and the loop would
         // be null.
-        val r = reservables.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "503"))!!
+        val r = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "503"))!!
         assertEquals("Tunnel Mountain Village I", r.loop)
     }
 

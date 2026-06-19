@@ -16,7 +16,7 @@ const DEFAULT_FILTERS = {
   query: '',
   loop: '',
   type: '',
-  sort: 'site',
+  sort: 'available',
 };
 const SORT_OPTIONS = [
   ['site', 'Site'],

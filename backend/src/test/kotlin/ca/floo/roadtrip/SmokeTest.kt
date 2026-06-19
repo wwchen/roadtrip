@@ -339,7 +339,6 @@ class SmokeTest {
                         {
                           "poi_id": 31337,
                           "type": "site",
-                          "total_at_poi": 2,
                           "reservables": [
                             {
                               "rid": "site:matrix:001",
@@ -393,12 +392,26 @@ class SmokeTest {
                         """
                         {
                           "state": "success",
-                          "summary": "No availability data",
                           "provider": "aspira",
+                          "checked_at": "2026-06-15T00:00:00Z",
+                          "start_date": "2026-06-16",
+                          "end_date": "2026-06-18",
+                          "season": null,
                           "availability": [
-                            { "date": "2026-06-16", "status": "available", "available_count": 1, "total": 1, "available_reservable_ids": ["site:matrix:001"] },
-                            { "date": "2026-06-17", "status": "reserved", "available_count": 0, "total": 1, "available_reservable_ids": [] }
-                          ]
+                            {
+                              "date": "2026-06-16",
+                              "status": "available",
+                              "available_reservable_ids": ["site:matrix:001"],
+                              "reservable_statuses": { "site:matrix:001": "available" }
+                            },
+                            {
+                              "date": "2026-06-17",
+                              "status": "reserved",
+                              "available_reservable_ids": [],
+                              "reservable_statuses": { "site:matrix:001": "reserved" }
+                            }
+                          ],
+                          "cache": { "hit": false, "age_seconds": 0, "ttl_seconds": 600 }
                         }
                         """.trimIndent(),
                     ),
@@ -554,7 +567,6 @@ class SmokeTest {
                         """
                         {
                           "poi_id": 31337,
-                          "total_at_poi": 6,
                           "reservables": [
                             {
                               "rid": "site:matrix:001",
@@ -1238,7 +1250,7 @@ class SmokeTest {
 // per-day rollup the old `/api/poi/{id}/availability` route used to serve.
 //
 // Shape per the new endpoint: { poi_id, start_date, end_date, reservables: [
-//   { reservable_id, provider, window, availability: [DayClassification...], cache, ... }
+//   { reservable_id, provider, start_date, end_date, availability: [DayClassification...], cache, ... }
 // ] }
 //
 // Daily statuses, reconstructed from the legacy fused fixture:
@@ -1268,16 +1280,16 @@ private fun matrixReservablesAvailabilityFixture(): String {
             val days =
                 perDay.entries.joinToString(",") { (date, statuses) ->
                     val s = statuses[i]
-                    val availCount = if (s == "available") 1 else 0
-                    """{"date":"$date","status":"$s","available_count":$availCount,"total":1}"""
+                    val availableIds = if (s == "available") """"available_reservable_ids":["$rid"],""" else """"available_reservable_ids":[],"""
+                    """{"date":"$date","status":"$s",$availableIds"reservable_statuses":{"$rid":"$s"}}"""
                 }
             """
             {
               "provider": "recgov",
               "reservable_id": "$rid",
               "checked_at": "2026-06-15T00:00:00Z",
-              "window": {"start_date":"2026-06-16","end_date":"2026-06-23"},
-              "summary": "fixture",
+              "start_date": "2026-06-16",
+              "end_date": "2026-06-23",
               "state": "success",
               "season": null,
               "availability": [$days],

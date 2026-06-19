@@ -3,11 +3,8 @@
 // HTML for the cells. Click handling lives in availability-week.js, which
 // owns the AbortController and rerender loop.
 //
-// The BE wire shape is `available_count` (snake_case). We accept both
-// `available_count` and `availableCount` so the renderer stays robust if
-// the response shape ever drifts back to camelCase via a wrapper.
-
 import { escapeHtml } from '../core.js';
+import { availableCount } from './day-fields.js';
 import {
   availabilityStatusAria,
   availabilityStatusLabel,
@@ -22,7 +19,7 @@ const WEEK_DAYS = 7;
  *
  * @param {object} args
  * @param {Array}  args.days           Per-day classifications fused from /api/poi/{id}/reservables/availability.
- * @param {string} args.todayIso       Today as YYYY-MM-DD (UTC).
+ * @param {string} args.todayIso       Today as local YYYY-MM-DD.
  * @param {string|null} args.selectedDate
  * @param {Set<string>} args.watchedDates  Dates the user has watches on.
  */
@@ -77,10 +74,6 @@ export function renderWeekSkeleton() {
 function renderAvailLabel(day) {
   const status = normalizeAvailabilityStatus(day.status);
   const count = availableCount(day);
-  if (status === 'available' && count != null) return `${count} ${count === 1 ? 'site' : 'sites'}`;
+  if (status === 'available') return `${count} ${count === 1 ? 'site' : 'sites'}`;
   return availabilityStatusLabel(status);
-}
-
-function availableCount(day) {
-  return day.available_count ?? day.availableCount;
 }

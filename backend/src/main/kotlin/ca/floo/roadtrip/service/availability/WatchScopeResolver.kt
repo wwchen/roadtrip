@@ -10,19 +10,19 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 class WatchScopeResolver(
-    private val reservables: ReservableRepo,
+    private val reservablesRepo: ReservableRepo,
 ) {
     fun resolve(intent: AvailabilityJobIntent): List<Reservable> =
         when (intent) {
             is AvailabilityJobIntent.Reservable ->
-                reservables.findById(intent.reservableId)?.let(::listOf) ?: emptyList()
+                reservablesRepo.findById(intent.reservableId)?.let(::listOf) ?: emptyList()
             is AvailabilityJobIntent.Poi ->
                 resolvePoi(intent.poiId, intent.reservableFilters)
         }
 
     fun resolve(watch: AvailabilityWatchRepo.Watch): List<Reservable> {
         watch.reservableId?.let { id ->
-            return reservables.findById(id)?.let(::listOf) ?: emptyList()
+            return reservablesRepo.findById(id)?.let(::listOf) ?: emptyList()
         }
         return resolvePoi(watch.poiId ?: return emptyList(), watch.reservableFilters)
     }
@@ -31,7 +31,7 @@ class WatchScopeResolver(
         poiId: Long,
         filters: JsonObject,
     ): List<Reservable> {
-        val all = reservables.findByPoi(poiId, type = ReservableType.SITE)
+        val all = reservablesRepo.findByPoi(poiId, type = ReservableType.SITE)
         val loops = collectStringFilter(filters, "loop")
         val siteTypes = collectStringFilter(filters, "site_type")
         return all.filter { r ->

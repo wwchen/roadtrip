@@ -22,7 +22,9 @@ import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 import { reservationUrlFromTemplate } from './booking-links.js';
 import { mountCalendarPopover } from './calendar-popover.js';
+import { availableCount } from './day-fields.js';
 import { availabilityStatusLabel } from '../utils/availability-status.js';
+import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '../utils/local-date.js';
 
 const STORAGE_KEY_SITE_COLUMN_WIDTH = 'cg.siteMatrix.siteColumnWidth';
 const DEFAULT_SITE_COLUMN_WIDTH = 128;
@@ -32,7 +34,6 @@ const MAX_SITE_COLUMN_WIDTH = 270;
 const WEEK_DAYS = 7;
 const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
-const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const CALENDAR_MAX_DAYS_OUT = 365;
 
 /**
@@ -75,7 +76,7 @@ function makeContext(host, feature, signal) {
     feature,
     poiId: feature.id,
     signal,
-    weekStart: startOfTodayUtc(),
+    weekStart: localToday(),
     siteColumnWidth: loadSiteColumnWidth(),
     selectedDate: null,
     state: 'loading', // 'loading' | 'success' | 'empty' | 'closed_for_season' | 'error'
@@ -85,13 +86,12 @@ function makeContext(host, feature, signal) {
       query: '',
       loop: '',
       type: '',
-      sort: 'site',
+      sort: 'available',
     },
     selectedSiteRid: null,
     selectedSiteDate: null,
     armedBook: null,
     cacheBlock: null,
-    summary: '',
     season: null,
     error: null,
     watchesByWindow: new Map(),
@@ -102,7 +102,6 @@ function makeContext(host, feature, signal) {
     // that date. The two fetches run in parallel.
     sitesState: 'loading',
     sites: [],
-    sitesTotal: null,
     sitesError: null,
     sitesExpanded: false,
     sitesRequestSeq: 0,
@@ -131,7 +130,6 @@ function renderShell(ctx) {
       ${renderSiteList({
         state: ctx.sitesState,
         reservables: ctx.sites,
-        totalAtPoi: ctx.sitesTotal,
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
         selectedDay: sitesDay,
@@ -146,15 +144,15 @@ function renderBody(ctx) {
     return renderSiteMatrixSkeleton({
       days: placeholderMatrixDays(ctx),
       siteColumnWidth: ctx.siteColumnWidth,
-      weekStart: isoDate(ctx.weekStart),
-      showToday: !sameDay(ctx.weekStart, startOfTodayUtc()),
+      weekStart: localYmd(ctx.weekStart),
+      showToday: !sameLocalDay(ctx.weekStart, localToday()),
     });
   }
   if (ctx.state === 'error') {
     return `<div class="cg-summary"><span class="cg-error">${escapeHtml(ctx.error || "Couldn't load availability")}</span> · <a href="#" class="cg-retry">Retry</a></div>`;
   }
   if (ctx.state === 'empty') {
-    return `<div class="cg-closed-banner">${escapeHtml(ctx.summary || 'No availability data for this campground.')}</div>`;
+    return '<div class="cg-closed-banner">No availability data for this campground.</div>';
   }
   if (ctx.state === 'closed_for_season') {
     const reopens = ctx.season?.reopens_on;
@@ -164,8 +162,8 @@ function renderBody(ctx) {
   return renderSiteMatrixSkeleton({
     days: ctx.days,
     siteColumnWidth: ctx.siteColumnWidth,
-    weekStart: isoDate(ctx.weekStart),
-    showToday: !sameDay(ctx.weekStart, startOfTodayUtc()),
+    weekStart: localYmd(ctx.weekStart),
+    showToday: !sameLocalDay(ctx.weekStart, localToday()),
   });
 }
 
@@ -180,8 +178,8 @@ function renderAvailabilitySurface(ctx) {
     siteColumnWidth: ctx.siteColumnWidth,
     filters: ctx.matrixFilters,
     selectedSiteRid: ctx.selectedSiteRid,
-    weekStart: isoDate(ctx.weekStart),
-    showToday: !sameDay(ctx.weekStart, startOfTodayUtc()),
+    weekStart: localYmd(ctx.weekStart),
+    showToday: !sameLocalDay(ctx.weekStart, localToday()),
     armedBook: ctx.armedBook,
   });
 }
@@ -211,10 +209,6 @@ function selectedAvailabilityDay(ctx) {
   const days = Array.isArray(ctx.days) ? ctx.days : [];
   if (!ctx.selectedDate || days.length === 0) return null;
   return days.find((d) => d.date === ctx.selectedDate) || null;
-}
-
-function availableCount(day) {
-  return day?.available_count ?? day?.availableCount ?? 0;
 }
 
 // ---- event wiring ---------------------------------------------------------
@@ -399,7 +393,7 @@ function updateMatrixFilter(ctx, key, value) {
     query: current.query || '',
     loop: current.loop || '',
     type: current.type || '',
-    sort: current.sort || 'site',
+    sort: current.sort || 'available',
     [key]: nextValue,
   };
   ctx.armedBook = null;
@@ -523,7 +517,7 @@ function endSiteColumnResize(ctx) {
 
 function shiftWeek(ctx, days) {
   resetWeekViewState(ctx);
-  ctx.weekStart = addDays(ctx.weekStart, days);
+  ctx.weekStart = addLocalDays(ctx.weekStart, days);
   fetchWeek(ctx);
 }
 
@@ -535,12 +529,12 @@ function openCalendar(ctx, anchorBtn) {
   popoverHost.className = 'cg-cal-host';
   anchorBtn.parentElement.appendChild(popoverHost);
 
-  const today = startOfTodayUtc();
+  const today = localToday();
   ctx.calendar = mountCalendarPopover(popoverHost, {
     viewMonth: ctx.weekStart,
     today,
     selectedDate: ctx.weekStart,
-    maxDate: addDays(today, CALENDAR_MAX_DAYS_OUT),
+    maxDate: addLocalDays(today, CALENDAR_MAX_DAYS_OUT),
     onPick: (date) => {
       ctx.calendar?.dispose();
       ctx.calendar = null;
@@ -557,9 +551,9 @@ function openCalendar(ctx, anchorBtn) {
 }
 
 function jumpMatrixToToday(ctx) {
-  const today = startOfTodayUtc();
+  const today = localToday();
   resetWeekViewState(ctx);
-  if (sameDay(ctx.weekStart, today)) {
+  if (sameLocalDay(ctx.weekStart, today)) {
     rerender(ctx);
     return;
   }
@@ -587,8 +581,8 @@ async function fetchWeek(ctx, { force = false } = {}) {
   ctx.skeletonTimer = setTimeout(() => {
     if (requestSeq === ctx.weekRequestSeq) rerender(ctx);
   }, SKELETON_RENDER_DELAY_MS);
-  const startDate = isoDate(ctx.weekStart);
-  const endDate = isoDate(addDays(ctx.weekStart, WEEK_DAYS));
+  const startDate = localYmd(ctx.weekStart);
+  const endDate = localYmd(addLocalDays(ctx.weekStart, WEEK_DAYS));
   try {
     const resp = await requestPoiReservablesAvailability(ctx.poiId, {
       startDate,
@@ -612,7 +606,6 @@ async function fetchWeek(ctx, { force = false } = {}) {
     if (fused.state === 'empty') {
       ctx.state = 'empty';
       ctx.days = [];
-      ctx.summary = fused.summary;
     } else if (fused.state === 'closed_for_season') {
       ctx.state = 'closed_for_season';
       ctx.days = [];
@@ -637,7 +630,6 @@ async function fetchWeek(ctx, { force = false } = {}) {
 // rollup over all reservables; the new endpoint hands us the streams and lets
 // the FE decide how to combine them. Same rollup rules:
 //   - status: available > first_come > unknown > reserved > closed > unknown
-//   - available_count: reservables with status === 'available' on that day
 //   - reservable_statuses: { rid → status } for the matrix tooltip
 //   - available_reservable_ids: rids that are bookable that day
 //
@@ -652,7 +644,6 @@ function fusePoiReservablesAvailability(json, startDate, endDate) {
     return {
       state: 'empty',
       days: [],
-      summary: 'No availability data for this campground.',
       season: null,
       cacheBlock: null,
     };
@@ -663,7 +654,6 @@ function fusePoiReservablesAvailability(json, startDate, endDate) {
     return {
       state: 'closed_for_season',
       days: [],
-      summary: '',
       season: seasonHint,
       cacheBlock: oldestCacheBlock(reservables),
     };
@@ -674,7 +664,6 @@ function fusePoiReservablesAvailability(json, startDate, endDate) {
   return {
     state: 'success',
     days,
-    summary: '',
     season: null,
     cacheBlock: oldestCacheBlock(reservables),
   };
@@ -694,13 +683,10 @@ function fuseDay(date, reservables) {
   for (const rid of ridsSorted) orderedStatuses[rid] = statuses[rid];
 
   const availableIds = ridsSorted.filter((rid) => statuses[rid] === 'available');
-  const total = ridsSorted.length;
   const status = rollupStatus(ridsSorted.map((rid) => statuses[rid]));
   return {
     date,
     status,
-    available_count: availableIds.length,
-    total,
     available_reservable_ids: availableIds,
     reservable_statuses: orderedStatuses,
   };
@@ -730,10 +716,9 @@ function oldestCacheBlock(reservables) {
 
 function enumerateDates(startDate, endDate) {
   const out = [];
-  const start = parseIsoDate(startDate);
-  const end = parseIsoDate(endDate);
-  for (let cur = start; cur < end; cur = new Date(cur.getTime() + MS_PER_DAY)) {
-    out.push(isoDate(cur));
+  const end = parseLocalYmd(endDate);
+  for (let cur = parseLocalYmd(startDate); cur < end; cur = addLocalDays(cur, 1)) {
+    out.push(localYmd(cur));
   }
   return out;
 }
@@ -752,7 +737,6 @@ async function fetchSites(ctx) {
     if (requestSeq !== ctx.sitesRequestSeq) return;
     ctx.sitesState = 'success';
     ctx.sites = Array.isArray(json?.reservables) ? json.reservables : [];
-    ctx.sitesTotal = typeof json?.total_at_poi === 'number' ? json.total_at_poi : ctx.sites.length;
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -837,7 +821,7 @@ function buildWatchPayload(ctx, date, endDate) {
 // ---- helpers --------------------------------------------------------------
 
 function stayEndDate(ctx, startDate) {
-  return isoDate(addDays(parseIsoDate(startDate), 1));
+  return localYmd(addLocalDays(parseLocalYmd(startDate), 1));
 }
 
 function watchWindowKey(startDate, endDate) {
@@ -919,32 +903,11 @@ function restoreMatrixScrollAfterTap(ctx, snapshot) {
 
 function placeholderMatrixDays(ctx) {
   return Array.from({ length: WEEK_DAYS }, (_, i) => {
-    const date = addDays(ctx.weekStart, i);
-    return { date: isoDate(date) };
+    const date = addLocalDays(ctx.weekStart, i);
+    return { date: localYmd(date) };
   });
 }
 
 function clampSiteColumnWidth(width) {
   return Math.max(MIN_SITE_COLUMN_WIDTH, Math.min(MAX_SITE_COLUMN_WIDTH, Math.round(width)));
-}
-
-function startOfTodayUtc() {
-  const now = new Date();
-  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-}
-
-function addDays(date, days) {
-  return new Date(date.getTime() + days * MS_PER_DAY);
-}
-
-function sameDay(a, b) {
-  return isoDate(a) === isoDate(b);
-}
-
-function isoDate(date) {
-  return date.toISOString().slice(0, 10);
-}
-
-function parseIsoDate(s) {
-  return new Date(s + 'T00:00:00Z');
 }
