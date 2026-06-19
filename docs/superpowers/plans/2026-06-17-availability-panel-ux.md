@@ -445,6 +445,7 @@ function renderShell(ctx) {
       ${renderSiteList({
         state: ctx.sitesState,
         reservables: ctx.sites,
+        totalAtPoi: ctx.sitesTotal,
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
         selectedDay: sitesDay,

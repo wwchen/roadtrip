@@ -1280,7 +1280,12 @@ private fun matrixReservablesAvailabilityFixture(): String {
             val days =
                 perDay.entries.joinToString(",") { (date, statuses) ->
                     val s = statuses[i]
-                    val availableIds = if (s == "available") """"available_reservable_ids":["$rid"],""" else """"available_reservable_ids":[],"""
+                    val availableIds =
+                        if (s == "available") {
+                            """"available_reservable_ids":["$rid"],"""
+                        } else {
+                            """"available_reservable_ids":[],"""
+                        }
                     """{"date":"$date","status":"$s",$availableIds"reservable_statuses":{"$rid":"$s"}}"""
                 }
             """

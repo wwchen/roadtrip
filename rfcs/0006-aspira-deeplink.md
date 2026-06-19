@@ -85,7 +85,7 @@ https://reservation.pc.gc.ca/create-booking/results
   &peopleCapacityCategoryCounts=[[-32767,null,1,null]]   -- "1 person, any category"
   &searchTime={ISO-8601}
   &flexibleSearch=[false,false,null,1]
-  &view=grid
+  &view=list
 ```
 
 Most params are inert defaults — only `transactionLocationId`, `mapId`,
@@ -168,7 +168,7 @@ export function buildAspiraDeeplink({ host, transactionLocationId, mapId, resour
     peopleCapacityCategoryCounts: '[[-32767,null,1,null]]',
     searchTime: new Date().toISOString().replace(/\.\d+/, '.000').replace(/Z$/, ''),
     flexibleSearch: '[false,false,null,1]',
-    view: 'grid',
+    view: 'list',
   });
   return `https://${host}/create-booking/results?${params}`;
 }

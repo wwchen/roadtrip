@@ -152,7 +152,7 @@ private fun Route.availabilityRoutes(
             } catch (e: Exception) {
                 call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
                 return@get
-        }
+            }
         val force = call.forceQuery()
 
         try {
@@ -163,7 +163,7 @@ private fun Route.availabilityRoutes(
                     endDate = endDate,
                     force = force,
                     siteTypes = call.queryValues("site_type", "siteType"),
-                )
+                ),
             )
         } catch (e: AvailabilityServiceError) {
             call.respondServiceAvailabilityError(e)
@@ -237,7 +237,7 @@ private fun Route.availabilityRoutes(
             } catch (e: Exception) {
                 call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
                 return@get
-        }
+            }
         val force = call.forceQuery()
 
         try {
@@ -247,7 +247,7 @@ private fun Route.availabilityRoutes(
                     startDate = startDate,
                     endDate = endDate,
                     force = force,
-                )
+                ),
             )
         } catch (e: AvailabilityServiceError) {
             call.respondServiceAvailabilityError(e)
@@ -410,8 +410,7 @@ private class IpRateLimiter(
     }
 }
 
-private fun ApplicationCall.optionalDateQuery(name: String): LocalDate? =
-    request.queryParameters[name]?.let(LocalDate::parse)
+private fun ApplicationCall.optionalDateQuery(name: String): LocalDate? = request.queryParameters[name]?.let(LocalDate::parse)
 
 private fun ApplicationCall.forceQuery(): Boolean = request.queryParameters["force"] == "1"
 

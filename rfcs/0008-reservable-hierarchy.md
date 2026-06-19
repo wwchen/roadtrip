@@ -400,7 +400,8 @@ GET /api/poi/{poi_id}/reservables?date=2026-09-12&min_nights=2&type=site
     },
     ...
   ],
-  "total_qualifying": 58                    // reservables matching filters that qualify for this date
+  "total_qualifying": 58,                   // reservables matching filters that qualify for this date
+  "total_at_poi": 250                       // catalog count of reservables at this POI of this type
 }
 ```
 
@@ -422,19 +423,23 @@ GET /api/poi/{poi_id}/availability?start=2026-09-12&days=7&min_nights=2&type=sit
     { "date": "2026-09-12", "available_count": 58, "total": 106 },
     ...
   ],
+  "total_at_poi": 250,                        // catalog count of reservables at this POI for the queried type
   "cache": { "hit": true, "age_seconds": 142, "ttl_seconds": 600 }
 }
 ```
 
-The response ships only descriptive data: per-day raw counts and the
-optional season-reopen hint. Derived fields
+The response ships only descriptive data: per-day raw counts, the
+catalog total, and the optional season-reopen hint. Derived fields
 (`status`, `state`, `summary`) are not included — the FE computes them
 from these primitives.
 
 The per-day `total` is "reservables the upstream returned data for that
-date." It can be smaller than the POI catalog size if sites are missing
-from the upstream's response window (e.g. season
+date." It's typically equal to `total_at_poi` but can be smaller if
+sites are missing from the upstream's response window (e.g. season
 boundary).
+
+`total_at_poi` is what the drawer uses to show "Upper Pines: 250 sites"
+without a side fetch.
 
 #### Deriving status / state on the FE
 
