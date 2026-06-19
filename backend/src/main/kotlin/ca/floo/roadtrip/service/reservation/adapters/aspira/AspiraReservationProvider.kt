@@ -2,11 +2,13 @@ package ca.floo.roadtrip.service.reservation.adapters.aspira
 
 import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
+import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.AspiraCatalogReservable
 import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import ca.floo.roadtrip.service.api.fetchAspiraAvailabilityObservations
 import ca.floo.roadtrip.service.api.fetchAspiraCatalogObservations
+import ca.floo.roadtrip.service.api.fetchAspiraCatalogOccupancyObservations
 import ca.floo.roadtrip.service.api.fetchAspiraResourceObservations
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
@@ -15,6 +17,7 @@ import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import java.time.temporal.ChronoUnit
 
 /**
  * Aspira NextGen adapter. One adapter *class* for the whole vendor; one
@@ -30,6 +33,7 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderId
 class AspiraReservationProvider(
     private val tenant: AspiraTenant,
     private val cache: CachedAspiraAvailability,
+    private val occupancyCache: CachedAspiraOccupancy? = null,
 ) : ReservationProvider {
     override val id: ReservationProviderId = ReservationProviderId.ASPIRA
 
@@ -69,16 +73,32 @@ class AspiraReservationProvider(
                     resourceLocationId = it.resourceLocationId?.let { value -> intOrThrow("resourceLocationId", value) },
                 )
             }
+        val resourceLocationId =
+            ref.resourceLocationId?.let { intOrThrow("resourceLocationId", it) }
+                ?: targets.mapNotNull { it.resourceLocationId }.distinct().singleOrNull()
         return runWithErrorMapping {
-            fetchAspiraCatalogObservations(
-                cache = cache,
-                host = tenant.host,
-                parentMapId = parentMapId,
-                reservables = targets,
-                startDate = req.startDate,
-                endDate = req.endDate,
-                force = req.force,
-            )
+            if (occupancyCache != null && resourceLocationId != null) {
+                fetchAspiraCatalogOccupancyObservations(
+                    cache = occupancyCache,
+                    host = tenant.host,
+                    parentMapId = parentMapId,
+                    resourceLocationId = resourceLocationId,
+                    reservables = targets,
+                    today = req.startDate,
+                    days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt(),
+                    force = req.force,
+                )
+            } else {
+                fetchAspiraCatalogObservations(
+                    cache = cache,
+                    host = tenant.host,
+                    parentMapId = parentMapId,
+                    reservables = targets,
+                    startDate = req.startDate,
+                    endDate = req.endDate,
+                    force = req.force,
+                )
+            }
         }
     }
 

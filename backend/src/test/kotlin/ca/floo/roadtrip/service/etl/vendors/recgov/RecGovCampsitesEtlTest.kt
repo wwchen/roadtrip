@@ -48,7 +48,7 @@ class RecGovCampsitesEtlTest {
     private lateinit var pg: PostgreSQLContainer<*>
     private lateinit var ds: HikariDataSource
     private lateinit var ctx: DSLContext
-    private lateinit var reservables: ReservableRepo
+    private lateinit var reservablesRepo: ReservableRepo
     private lateinit var rawDir: File
     private lateinit var poiRegistry: PoiRegistry
 
@@ -69,7 +69,7 @@ class RecGovCampsitesEtlTest {
         ds = HikariDataSource(cfg)
         migrate(ds)
         ctx = DSL.using(ds, SQLDialect.POSTGRES)
-        reservables = ReservableRepo(ctx)
+        reservablesRepo = ReservableRepo(ctx)
 
         rawDir = Files.createTempDirectory("etl-recgov-campsites-").toFile()
         // Mirror the on-disk shape the orchestrator expects:
@@ -110,7 +110,7 @@ class RecGovCampsitesEtlTest {
 
         // Spot-check the rich row's field mapping.
         val rid330257 = ReservableId(ReservableType.SITE, "recgov", "330257")
-        val r = reservables.findByRid(rid330257)!!
+        val r = reservablesRepo.findByRid(rid330257)!!
         assertEquals("FS1-20", r.name)
         assertEquals("AREA WHITE RIVER", r.loop)
         assertEquals("STANDARD NONELECTRIC", r.siteType)
@@ -141,7 +141,7 @@ class RecGovCampsitesEtlTest {
         orch.runReservableData("Federal Campsites")
 
         val r =
-            reservables.findByRid(
+            reservablesRepo.findByRid(
                 ReservableId(ReservableType.SITE, "recgov", "330259"),
             )!!
         assertEquals(null, r.name)
@@ -205,7 +205,7 @@ class RecGovCampsitesEtlTest {
         orch.runReservableData("Federal Campsites")
 
         fun parentOf(vendorId: String): String {
-            val r = reservables.findByRid(ReservableId(ReservableType.SITE, "recgov", vendorId))!!
+            val r = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "recgov", vendorId))!!
             return ((r.raw as JsonObject)["_parent_facility_id"] as JsonPrimitive).content
         }
         assertEquals("232447", parentOf("330257"))

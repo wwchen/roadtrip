@@ -38,8 +38,8 @@ class AvailabilityHeatmapRepo(
                 SELECT DISTINCT ON (reservable_id, target_date)
                     reservable_id, target_date, status, available, observed_at
                 FROM availability_snapshot
-                WHERE reservable_id = ANY(?)
-                  AND target_date = ANY(?)
+                WHERE reservable_id = ANY(?::bigint[])
+                  AND target_date = ANY(?::date[])
                 ORDER BY reservable_id, target_date, observed_at DESC, id DESC
                 """.trimIndent(),
                 reservableIdsArg,

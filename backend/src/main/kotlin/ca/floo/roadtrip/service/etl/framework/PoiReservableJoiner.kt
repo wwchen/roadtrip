@@ -58,7 +58,7 @@ interface PoiReservableJoiner {
  */
 data class JoinerCtx(
     val ctx: DSLContext,
-    val reservables: ReservableRepo,
+    val reservablesRepo: ReservableRepo,
     /** YAML `args:` map for the entry; empty when not declared. */
     val args: Map<String, String> = emptyMap(),
 )

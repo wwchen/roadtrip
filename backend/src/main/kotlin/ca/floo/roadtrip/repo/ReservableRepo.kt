@@ -207,7 +207,7 @@ class ReservableRepo(
             .fetch { fromRecord(it) }
     }
 
-    /** Catalog count at a POI — drives the `total_at_poi` field on responses. */
+    /** Catalog count at a POI for repo callers that need a count-only query. */
     fun countByPoi(
         poiId: Long,
         type: ReservableType,

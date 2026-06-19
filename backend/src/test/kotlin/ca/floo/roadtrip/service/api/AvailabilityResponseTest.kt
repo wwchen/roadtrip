@@ -18,6 +18,7 @@ import java.time.Instant
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class AvailabilityResponseTest {
     @Test
@@ -33,8 +34,6 @@ class AvailabilityResponseTest {
                             DayClassification(
                                 date = "2026-06-10",
                                 status = AvailabilityStatus.AVAILABLE,
-                                availableCount = 3,
-                                total = 5,
                                 availableReservableIds = listOf("site:recgov:100", "site:recgov:200", "site:recgov:300"),
                                 reservableStatuses =
                                     mapOf(
@@ -47,7 +46,6 @@ class AvailabilityResponseTest {
                             ),
                         ),
                     state = "success",
-                    summary = "1 date available",
                     seasonBlock = null,
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
                     campgroundId = "232447",
@@ -59,10 +57,13 @@ class AvailabilityResponseTest {
         assertEquals("recgov", json["provider"]!!.jsonPrimitive.content)
         assertEquals("232447", json["campground_id"]!!.jsonPrimitive.content)
         assertEquals(JsonNull, json["season"])
-        assertEquals("2026-06-10", json["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
-        assertEquals("2026-06-11", json["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+        assertEquals("2026-06-10", json["start_date"]!!.jsonPrimitive.content)
+        assertEquals("2026-06-11", json["end_date"]!!.jsonPrimitive.content)
+        assertNull(json["window"])
+        assertNull(json["summary"])
         assertEquals("available", availabilityDay["status"]!!.jsonPrimitive.content)
-        assertEquals(3, availabilityDay["available_count"]!!.jsonPrimitive.int)
+        assertNull(availabilityDay["available_count"])
+        assertNull(availabilityDay["total"])
         assertEquals(3, availabilityDay["available_reservable_ids"]!!.jsonArray.size)
         assertEquals(
             "first_come",
@@ -123,16 +124,11 @@ class AvailabilityResponseTest {
 
         assertEquals("recgov", dto.provider)
         assertEquals("232447", dto.campgroundId)
-        assertEquals("2026-06-10", dto.window.startDate)
-        assertEquals("2026-06-12", dto.window.endDate)
-        assertEquals("1 date available", dto.summary)
+        assertEquals("2026-06-10", dto.startDate)
+        assertEquals("2026-06-12", dto.endDate)
         assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
-        assertEquals(1, dto.availability[0].availableCount)
-        assertEquals(2, dto.availability[0].total)
         assertEquals(listOf("site:recgov:100"), dto.availability[0].availableReservableIds)
         assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
-        assertEquals(0, dto.availability[1].availableCount)
-        assertEquals(2, dto.availability[1].total)
     }
 
     @Test
@@ -162,8 +158,6 @@ class AvailabilityResponseTest {
         assertEquals(2, dto.availability.size)
         assertEquals(AvailabilityStatus.AVAILABLE, dto.availability[0].status)
         assertEquals(AvailabilityStatus.UNKNOWN, dto.availability[1].status)
-        assertEquals(0, dto.availability[1].availableCount)
-        assertEquals(0, dto.availability[1].total)
         assertEquals(emptyList(), dto.availability[1].availableReservableIds)
         assertEquals(emptyMap(), dto.availability[1].reservableStatuses)
     }
@@ -178,7 +172,6 @@ class AvailabilityResponseTest {
 
         assertEquals(AvailabilityStatus.UNKNOWN, day.status)
         assertEquals("success", classifyWindowState(listOf(day)))
-        assertEquals("Availability unknown", summarizeWindow(1, listOf(day), "success"))
     }
 
     @Test
@@ -195,11 +188,10 @@ class AvailabilityResponseTest {
 
         assertEquals(AvailabilityStatus.UNKNOWN, day.status)
         assertEquals("success", classifyWindowState(listOf(day)))
-        assertEquals("Availability unknown", summarizeWindow(1, listOf(day), "success"))
     }
 
     @Test
-    fun `summary has reserved fallback for non-bookable known statuses`() {
+    fun `reserved and closed known statuses still classify as success`() {
         val days =
             listOf(
                 dayClassificationFromStatuses(
@@ -213,7 +205,6 @@ class AvailabilityResponseTest {
             )
 
         assertEquals("success", classifyWindowState(days))
-        assertEquals("Reserved next 2 days", summarizeWindow(2, days, "success"))
     }
 
     @Test
@@ -302,7 +293,6 @@ class AvailabilityResponseTest {
                     ),
                 )
 
-            assertEquals(2, dto.availability.single().availableCount)
             assertEquals(AvailabilityStatus.AVAILABLE, dto.availability.single().status)
             assertEquals(
                 listOf("site:aspira_bc:-2147478966", "site:aspira_bc:-2147478967"),
@@ -366,14 +356,12 @@ class AvailabilityResponseTest {
                 )
 
             assertEquals((-999).toString(), dto.mapId)
-            assertEquals(2, dto.availability[0].availableCount)
-            assertEquals(4, dto.availability[0].total)
             assertEquals(
                 listOf("site:aspira_wa:a", "site:aspira_wa:c"),
                 dto.availability[0].availableReservableIds,
             )
-            assertEquals(2, dto.availability[1].availableCount)
-            assertEquals(4, dto.availability[1].total)
+            assertEquals(4, dto.availability[0].reservableStatuses!!.size)
+            assertEquals(4, dto.availability[1].reservableStatuses!!.size)
         }
 
     @Test
@@ -408,8 +396,6 @@ class AvailabilityResponseTest {
                 )
 
             assertEquals(AvailabilityStatus.UNKNOWN, dto.availability.single().status)
-            assertEquals(0, dto.availability.single().availableCount)
-            assertEquals(1, dto.availability.single().total)
             assertEquals(
                 mapOf("site:aspira_pc:100" to AvailabilityStatus.UNKNOWN),
                 dto.availability.single().reservableStatuses,
@@ -461,10 +447,7 @@ class AvailabilityResponseTest {
                     force = false,
                 )
 
-            assertEquals(1, dto.availability[0].availableCount)
-            assertEquals(3, dto.availability[0].total)
             assertEquals(listOf("site:aspira_pc:100"), dto.availability[0].availableReservableIds)
             assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
-            assertEquals(0, dto.availability[1].availableCount)
         }
 }

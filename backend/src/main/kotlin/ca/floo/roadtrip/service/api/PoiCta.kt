@@ -135,7 +135,7 @@ internal class PoiCta(
                 add("peopleCapacityCategoryCounts" to "[[-32767,null,1,null]]")
                 add("searchTime" to searchTime)
                 add("flexibleSearch" to "[false,false,\"$flexAnchor\",1]")
-                add("view" to "list")
+                add("view" to "grid")
                 // Only include resourceLocationId when present. Sending the
                 // string "NULL" (or omitting when required) makes WA bounce
                 // the user back to the homepage instead of the results page.

@@ -249,7 +249,7 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `poi reservables lists linked site reservables and total count`() =
+    fun `poi reservables lists linked site reservables`() =
         testApplication {
             val poiId = seedPoi("upper-pines", "Upper Pines Campground")
             val otherPoiId = seedPoi("mather", "Mather Campground")
@@ -266,7 +266,6 @@ class ReservableRoutesTest {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(poiId.toString(), body["poi_id"]!!.jsonPrimitive.content)
             assertEquals("site", body["type"]!!.jsonPrimitive.content)
-            assertEquals("2", body["total_at_poi"]!!.jsonPrimitive.content)
             val rids =
                 body["reservables"]!!
                     .jsonArray
@@ -426,7 +425,6 @@ class ReservableRoutesTest {
             val resp = client.get("/api/poi/$poiId/reservables?site_type=STANDARD")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("1", body["total_at_poi"]!!.jsonPrimitive.content)
             val row = body["reservables"]!!.jsonArray.single().jsonObject
             assertEquals("site:recgov:330257", row["rid"]!!.jsonPrimitive.content)
             assertEquals("STANDARD", row["site_type"]!!.jsonPrimitive.content)
@@ -441,7 +439,6 @@ class ReservableRoutesTest {
             val resp = client.get("/api/poi/$poiId/reservables?type=site")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("0", body["total_at_poi"]!!.jsonPrimitive.content)
             assertEquals(0, body["reservables"]!!.jsonArray.size)
         }
 
@@ -516,7 +513,8 @@ class ReservableRoutesTest {
                     .map { it.jsonObject["reservable_id"]!!.jsonPrimitive.content }
                     .sorted()
             assertEquals(listOf("site:recgov:330257", "site:recgov:330258"), rids)
-            assertEquals(2, FakeReservationProvider.reservableAvailabilityCalls)
+            assertEquals(1, FakeReservationProvider.catalogAvailabilityCalls)
+            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
         }
 
     @Test
@@ -706,7 +704,8 @@ class ReservableRoutesTest {
                     .map { it.jsonObject["reservable_id"]!!.jsonPrimitive.content }
                     .sorted()
             assertEquals(listOf("site:recgov:330257", "site:recgov:330259"), rids)
-            assertEquals(2, FakeReservationProvider.reservableAvailabilityCalls)
+            assertEquals(1, FakeReservationProvider.catalogAvailabilityCalls)
+            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
         }
 
     @Test
@@ -782,7 +781,8 @@ class ReservableRoutesTest {
                     .fetchOne("SELECT count(*) FROM availability_snapshot")!!
                     .get(0, Long::class.java)
             assertEquals(2L, rowCountAfterMultiNight)
-            assertEquals(1, FakeReservationProvider.reservableAvailabilityCalls)
+            assertEquals(1, FakeReservationProvider.catalogAvailabilityCalls)
+            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
         }
 
     @Test
@@ -810,8 +810,8 @@ class ReservableRoutesTest {
             val resp = client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-04")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("2026-07-01", body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-04", body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
+            assertEquals("2026-07-04", body["end_date"]!!.jsonPrimitive.content)
             assertEquals(3, body["availability"]!!.jsonArray.size)
             assertEquals(3L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
         }
@@ -855,6 +855,8 @@ class ReservableRoutesTest {
                     .map { it.jsonPrimitive.content },
             )
             assertEquals(3L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
+            assertEquals(1, FakeReservationProvider.catalogAvailabilityCalls)
+            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
         }
 
     @Test

@@ -40,7 +40,7 @@ class SectionDispatchTest {
     private lateinit var ctx: DSLContext
     private lateinit var rawDir: File
     private lateinit var registry: PoiRegistry
-    private lateinit var reservables: ReservableRepo
+    private lateinit var reservablesRepo: ReservableRepo
 
     @BeforeAll
     fun setUp() {
@@ -59,7 +59,7 @@ class SectionDispatchTest {
         ds = HikariDataSource(cfg)
         migrate(ds)
         ctx = DSL.using(ds, SQLDialect.POSTGRES)
-        reservables = ReservableRepo(ctx)
+        reservablesRepo = ReservableRepo(ctx)
         rawDir = Files.createTempDirectory("orch-section-").toFile()
         registry = synthesizeRegistry(rawDir)
     }
@@ -110,7 +110,7 @@ class SectionDispatchTest {
         assertEquals(1, stats.parsed)
         assertEquals(1, stats.upserted)
         assertEquals(0, stats.swept)
-        assertNotNull(reservables.findByRid(rid))
+        assertNotNull(reservablesRepo.findByRid(rid))
     }
 
     @Test
@@ -156,8 +156,8 @@ class SectionDispatchTest {
 
         assertEquals(1, stats.upserted)
         assertEquals(1, stats.swept)
-        assertNotNull(reservables.findByRid(ridA))
-        assertNull(reservables.findByRid(ridB))
+        assertNotNull(reservablesRepo.findByRid(ridA))
+        assertNull(reservablesRepo.findByRid(ridB))
     }
 
     @Test
@@ -166,7 +166,7 @@ class SectionDispatchTest {
         // the pair. Orchestrator turns that into a reservable_pois row.
         val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
         val reservableId =
-            reservables.upsert(ReservableRepo.Input(rid = rid, name = "FS1-20", loop = null, siteType = null, raw = null))
+            reservablesRepo.upsert(ReservableRepo.Input(rid = rid, name = "FS1-20", loop = null, siteType = null, raw = null))
         val poiId = insertCampgroundPoi(source = "fake-cg", sourceId = "232447", name = "Upper Pines")
 
         val fakeJoiner =
@@ -186,14 +186,14 @@ class SectionDispatchTest {
         assertEquals(1, stats.linksDiscovered)
         assertEquals(1, stats.linksInserted)
         assertEquals(0, stats.staleLinksDeleted)
-        assertEquals(1, reservables.countByPoi(poiId, ReservableType.SITE))
+        assertEquals(1, reservablesRepo.countByPoi(poiId, ReservableType.SITE))
     }
 
     @Test
     fun `runJoiner is idempotent — re-running creates no duplicate links`() {
         val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
         val reservableId =
-            reservables.upsert(ReservableRepo.Input(rid = rid, name = "FS1-20", loop = null, siteType = null, raw = null))
+            reservablesRepo.upsert(ReservableRepo.Input(rid = rid, name = "FS1-20", loop = null, siteType = null, raw = null))
         val poiId = insertCampgroundPoi(source = "fake-cg", sourceId = "232447", name = "Upper Pines")
 
         val fakeJoiner =
@@ -213,7 +213,7 @@ class SectionDispatchTest {
         val second = orch.runJoiner("Fake Joiner")
         assertEquals(1, first.linksInserted)
         assertEquals(0, second.linksInserted)
-        assertEquals(1, reservables.countByPoi(poiId, ReservableType.SITE))
+        assertEquals(1, reservablesRepo.countByPoi(poiId, ReservableType.SITE))
     }
 
     @Test

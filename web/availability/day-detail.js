@@ -5,6 +5,7 @@
 // Pure renderer; click handling lives in availability-week.js.
 
 import { escapeHtml } from '../core.js';
+import { availableCount, reservableCount } from './day-fields.js';
 import {
   availabilityStatusMeta,
   normalizeAvailabilityStatus,
@@ -38,17 +39,13 @@ export function renderDayDetail({ day, watching, canWatch }) {
 }
 
 function renderStatusLine(day) {
-  const total = day.total ?? 0;
-  const count = availableCount(day) ?? 0;
+  const total = reservableCount(day);
+  const count = availableCount(day);
   const meta = availabilityStatusMeta(day.status);
   if (meta.value === 'available') {
     return `<span class="${meta.detailClass}">${meta.text}</span> · ${count} of ${total} sites`;
   }
   return `<span class="${meta.detailClass}">${meta.text}</span>`;
-}
-
-function availableCount(day) {
-  return day.available_count ?? day.availableCount;
 }
 
 function renderActions({ day, watching, canWatch }) {

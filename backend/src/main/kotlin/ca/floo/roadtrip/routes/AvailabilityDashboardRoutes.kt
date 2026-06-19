@@ -43,7 +43,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
     val jobs = AvailabilityJobRepo(ctx)
     val runs = AvailabilityJobRunRepo(ctx)
     val snapshots = AvailabilitySnapshotRepo(ctx)
-    val reservables =
+    val reservablesRepo =
         ca.floo.roadtrip.repo
             .ReservableRepo(ctx)
 
@@ -198,7 +198,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                             "could not parse reservable_rid '$rid'",
                         )
                 val reservable =
-                    reservables.findByRid(parsed)
+                    reservablesRepo.findByRid(parsed)
                         ?: return@get call.respondError(
                             "reservable_not_found",
                             HttpStatusCode.NotFound,
@@ -245,7 +245,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                     "could not parse reservable_rid '$rid'",
                 )
         val reservable =
-            reservables.findByRid(parsed)
+            reservablesRepo.findByRid(parsed)
                 ?: return@get call.respondError(
                     "reservable_not_found",
                     HttpStatusCode.NotFound,

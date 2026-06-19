@@ -20,7 +20,6 @@ import java.time.ZoneOffset
 import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertTrue
 
 /**
  * Unit tests for the rec.gov classification + render pipeline. The HTTP
@@ -30,7 +29,7 @@ import kotlin.test.assertTrue
  *
  * Asserts:
  *   - state classification (success / zero_available / closed_for_season / empty)
- *   - JSON contract shape (provider field, window block, availability array,
+ *   - JSON contract shape (provider field, top-level date window, availability array,
  *     cache block)
  *   - cache hit on second call within TTL
  *   - force=true bypasses cache
@@ -94,10 +93,9 @@ class RecGovAvailabilityServiceTest {
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
         assertEquals("recgov", body["provider"]!!.jsonPrimitive.content)
         assertEquals("232447", body["campground_id"]!!.jsonPrimitive.content)
-        assertEquals(today.toString(), body["window"]!!.jsonObject["start_date"]!!.jsonPrimitive.content)
-        assertEquals(today.plusDays(7).toString(), body["window"]!!.jsonObject["end_date"]!!.jsonPrimitive.content)
+        assertEquals(today.toString(), body["start_date"]!!.jsonPrimitive.content)
+        assertEquals(today.plusDays(7).toString(), body["end_date"]!!.jsonPrimitive.content)
         assertEquals(7, body["availability"]!!.jsonArray.size)
-        assertTrue(body["summary"]!!.jsonPrimitive.content.contains("dates available"))
         assertEquals(false, body["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
     }
 
@@ -106,7 +104,6 @@ class RecGovAvailabilityServiceTest {
         val booked = (0..6L).associate { futureKey(it) to "Reserved" }
         val body = classify(cacheReturning(mapOf("100" to campsiteWith(booked))), days = 7)
         assertEquals("zero_available", body["state"]!!.jsonPrimitive.content)
-        assertEquals("Reserved next 7 days", body["summary"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -114,7 +111,6 @@ class RecGovAvailabilityServiceTest {
         val closed = (0..6L).associate { futureKey(it) to "Closed" }
         val body = classify(cacheReturning(mapOf("100" to campsiteWith(closed))), days = 7)
         assertEquals("closed_for_season", body["state"]!!.jsonPrimitive.content)
-        assertEquals("Closed for season", body["summary"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -137,8 +133,6 @@ class RecGovAvailabilityServiceTest {
 
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
         assertEquals("first_come", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
-        assertEquals(1, day["total"]!!.jsonPrimitive.content.toInt())
         assertEquals(0, day["available_reservable_ids"]!!.jsonArray.size)
         assertEquals(
             "first_come",
@@ -156,8 +150,6 @@ class RecGovAvailabilityServiceTest {
 
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
-        assertEquals(1, day["total"]!!.jsonPrimitive.content.toInt())
         assertEquals(
             "unknown",
             day["reservable_statuses"]!!
@@ -202,8 +194,8 @@ class RecGovAvailabilityServiceTest {
         val day = parseJson(body)["availability"]!!.jsonArray.single().jsonObject
 
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
-        assertEquals(2, day["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(0, day["available_reservable_ids"]!!.jsonArray.size)
+        assertEquals(2, day["reservable_statuses"]!!.jsonObject.size)
         assertEquals(
             "unknown",
             day["reservable_statuses"]!!
@@ -240,8 +232,8 @@ class RecGovAvailabilityServiceTest {
 
         assertEquals("site:recgov:100", json["reservable_id"]!!.jsonPrimitive.content)
         assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_count"]!!.jsonPrimitive.content.toInt())
-        assertEquals(1, day["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(0, day["available_reservable_ids"]!!.jsonArray.size)
+        assertEquals(1, day["reservable_statuses"]!!.jsonObject.size)
         assertEquals(
             "unknown",
             day["reservable_statuses"]!!
@@ -343,16 +335,16 @@ class RecGovAvailabilityServiceTest {
         val avail = body["availability"]!!.jsonArray
         assertEquals("available", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
         assertEquals(
-            1,
+            listOf("site:recgov:100"),
             avail[0]
-                .jsonObject["available_count"]!!
-                .jsonPrimitive.content
-                .toInt(),
+                .jsonObject["available_reservable_ids"]!!
+                .jsonArray
+                .map { it.jsonPrimitive.content },
         )
     }
 
     @Test
-    fun `per-day availability counts all sites open on that date`() {
+    fun `per-day availability includes all sites open on that date`() {
         val map =
             mapOf(
                 "100" to
@@ -373,8 +365,8 @@ class RecGovAvailabilityServiceTest {
         val body = classify(cacheReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray[0].jsonObject
         assertEquals("available", day["status"]!!.jsonPrimitive.content)
-        assertEquals(2, day["available_count"]!!.jsonPrimitive.content.toInt())
-        assertEquals(2, day["total"]!!.jsonPrimitive.content.toInt())
+        assertEquals(2, day["available_reservable_ids"]!!.jsonArray.size)
+        assertEquals(2, day["reservable_statuses"]!!.jsonObject.size)
     }
 
     @Test

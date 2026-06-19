@@ -129,22 +129,43 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
     today: LocalDate,
     days: Int,
     force: Boolean,
-): AvailabilityResponseDto {
+): AvailabilityResponseDto =
+    availabilityResponseFromObservations(
+        fetchAspiraCatalogOccupancyObservations(
+            cache = cache,
+            host = host,
+            parentMapId = parentMapId,
+            resourceLocationId = resourceLocationId,
+            reservables = reservables,
+            today = today,
+            days = days,
+            force = force,
+        ),
+    )
+
+internal suspend fun fetchAspiraCatalogOccupancyObservations(
+    cache: CachedAspiraOccupancy,
+    host: String,
+    parentMapId: Int,
+    resourceLocationId: Int,
+    reservables: List<AspiraCatalogReservable>,
+    today: LocalDate,
+    days: Int,
+    force: Boolean,
+): AvailabilityObservationBatch {
     val targets =
         reservables
             .distinctBy { it.rid }
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
-        return availabilityResponseFromObservations(
-            AvailabilityObservationBatch(
-                provider = "aspira",
-                startDate = today,
-                endDate = today.plusDays(days.toLong()),
-                observations = emptyList(),
-                cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
-                host = host,
-                mapId = parentMapId.toString(),
-            ),
+        return AvailabilityObservationBatch(
+            provider = "aspira",
+            startDate = today,
+            endDate = today.plusDays(days.toLong()),
+            observations = emptyList(),
+            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
+            host = host,
+            mapId = parentMapId.toString(),
         )
     }
 
@@ -163,16 +184,14 @@ internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
             ageSeconds = cachedByDate.maxOfOrNull { it.ageSeconds } ?: 0,
             ttlSeconds = cachedByDate.minOfOrNull { it.ttlSeconds } ?: 0,
         )
-    return availabilityResponseFromObservations(
-        AvailabilityObservationBatch(
-            provider = "aspira",
-            startDate = today,
-            endDate = today.plusDays(days.toLong()),
-            observations = observations,
-            cacheBlock = cacheBlock,
-            host = host,
-            mapId = parentMapId.toString(),
-        ),
+    return AvailabilityObservationBatch(
+        provider = "aspira",
+        startDate = today,
+        endDate = today.plusDays(days.toLong()),
+        observations = observations,
+        cacheBlock = cacheBlock,
+        host = host,
+        mapId = parentMapId.toString(),
     )
 }
 

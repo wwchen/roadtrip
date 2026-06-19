@@ -1,32 +1,22 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.clients.aspira.AspiraException
-import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
 import ca.floo.roadtrip.models.api.BulkAvailEntrySchema
 import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
 import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
-import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.PoiReservablesAvailabilityResponseDto
-import ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService
-import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.api.availabilityErrorDto
-import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.CatalogReservableRef
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
-import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.ReservationProvider
+import ca.floo.roadtrip.service.availability.AvailabilityService
+import ca.floo.roadtrip.service.availability.AvailabilityServiceError
+import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
+import ca.floo.roadtrip.service.availability.defaultSnapshotFreshnessTtl
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
@@ -40,18 +30,10 @@ import io.ktor.server.plugins.origin
 import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonPrimitive
-import kotlinx.serialization.json.longOrNull
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.LocalDate
-import java.time.ZoneOffset
-import java.time.temporal.ChronoUnit
 import java.util.concurrent.ConcurrentHashMap
 
 private val log = LoggerFactory.getLogger("AvailabilityRoutes")
@@ -61,17 +43,15 @@ private val log = LoggerFactory.getLogger("AvailabilityRoutes")
 // "which dates in this window have bookable sites?" Cap window length at 14
 // (any realistic trip leg) and ids at 50 (one per visible card row).
 private const val MAX_BULK_IDS = 50
-private const val MAX_BULK_WINDOW_DAYS = 14
-private const val MAX_AVAILABILITY_DAYS: Int = 60
 
 // Per-IP rate-limit budget. Cross-provider: one bucket regardless of which
 // adapter ends up answering.
 private const val IP_RATE_LIMIT_PER_MINUTE = 30
 
 /**
- * Unified availability endpoints. Dispatch to the upstream is the registry's
- * job; this route parses inputs, looks up the right [ReservationProvider], and
- * serializes the result.
+ * Unified availability endpoints. The route layer parses HTTP request shapes,
+ * applies cross-route HTTP guardrails, resolves POI requests to reservable ids,
+ * delegates availability lookup to [AvailabilityService], and serializes the result.
  *
  * See [ReservationProviderRegistry] / `docs/reservation-providers.md` for the
  * provider-port architecture. Adding a new upstream is one new adapter file
@@ -80,12 +60,34 @@ private const val IP_RATE_LIMIT_PER_MINUTE = 30
 fun Route.availabilityRoutes(
     providerRefs: CampsiteProviderRepo,
     reservationProviders: ReservationProviderRegistry,
-    reservables: ReservableRepo,
+    reservablesRepo: ReservableRepo,
     snapshots: AvailabilitySnapshotRepo? = null,
     snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
 ) {
+    val availabilityService =
+        AvailabilityServiceImpl(
+            providerRefs = providerRefs,
+            reservationProviders = reservationProviders,
+            reservablesRepo = reservablesRepo,
+            snapshots = snapshots,
+            snapshotFreshnessTtl = snapshotFreshnessTtl,
+        )
+    availabilityRoutes(
+        availabilityService = availabilityService,
+        controller =
+            AvailabilityRouteController(
+                providerRefs = providerRefs,
+                reservablesRepo = reservablesRepo,
+                availabilityService = availabilityService,
+            ),
+    )
+}
+
+private fun Route.availabilityRoutes(
+    availabilityService: AvailabilityService,
+    controller: AvailabilityRouteController,
+) {
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
-    val snapshotAvailability = SnapshotBackedAvailabilityService(snapshots)
 
     get("/api/poi/{poi_id}/reservables/availability", {
         tags = listOf("availability", "reservable")
@@ -100,7 +102,7 @@ fun Route.availabilityRoutes(
             "Optional `site_type` filters the linked catalog before dispatch."
         request {
             pathParameter<Long>("poi_id") { description = "pois.id primary key" }
-            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today UTC." }
+            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today's local date." }
             queryParameter<String>("end_date") { description = "Exclusive YYYY-MM-DD; default is start_date + 7 days." }
             queryParameter<String>("force") { description = "Set to 1 to bypass provider cache." }
             queryParameter<String>("site_type") { description = "Exact site type filter. Repeat or comma-separate for OR." }
@@ -137,82 +139,37 @@ fun Route.availabilityRoutes(
             return@get
         }
 
-        val row = providerRefs.findProviderRef(poiId)
-        val provider = row?.let { reservationProviders.forPoi(it) }
-        val parentRef = row?.providerRefJson?.let { ProviderRefParser.parse(it) }
-        if (row == null || provider == null || parentRef == null) {
-            // No usable provider_ref. Either the POI has no online reservations
-            // (walk-up / non-bookable), the source has no adapter wired, or the
-            // ref is unparseable. Distinguish "POI doesn't exist" (404) from
-            // "POI exists but isn't bookable" (empty array) so the FE can
-            // hide the matrix uniformly.
-            if (!providerRefs.campgroundExists(poiId)) {
-                return@get call.respondAvailabilityError("not_found", HttpStatusCode.NotFound)
+        val startDate =
+            try {
+                call.optionalDateQuery("start_date")
+            } catch (e: Exception) {
+                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
+                return@get
             }
-            call.respondAvailabilityJson(emptyPoiReservablesAvailability(poiId))
-            return@get
-        }
-
-        val query = call.parseAvailabilityWindow(provider.capabilities.bookingHorizonDays)
-        if (query == null) {
-            call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
-            return@get
-        }
-
-        val siteTypes = call.queryValues("site_type", "siteType")
-        val catalogRows =
-            reservables
-                .findByPoi(poiId, ReservableType.SITE)
-                .filterBySiteTypes(siteTypes)
-
-        if (catalogRows.isEmpty()) {
-            call.respondAvailabilityJson(
-                PoiReservablesAvailabilityResponseDto(
-                    poiId = poiId,
-                    startDate = query.startDate.toString(),
-                    endDate = query.endDate.toString(),
-                    reservables = emptyList(),
-                ),
-            )
-            return@get
-        }
+        val endDate =
+            try {
+                call.optionalDateQuery("end_date")
+            } catch (e: Exception) {
+                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
+                return@get
+            }
+        val force = call.forceQuery()
 
         try {
-            val perReservable =
-                coroutineScope {
-                    catalogRows
-                        .map { reservable ->
-                            async {
-                                fetchReservableAvailability(
-                                    reservable = reservable,
-                                    parentRef = parentRef,
-                                    provider = provider,
-                                    snapshotAvailability = snapshotAvailability,
-                                    snapshotFreshnessTtl = snapshotFreshnessTtl,
-                                    startDate = query.startDate,
-                                    endDate = query.endDate,
-                                    force = query.force,
-                                )
-                            }
-                        }.awaitAll()
-                }
-
             call.respondAvailabilityJson(
-                PoiReservablesAvailabilityResponseDto(
+                controller.poiReservablesAvailability(
                     poiId = poiId,
-                    startDate = query.startDate.toString(),
-                    endDate = query.endDate.toString(),
-                    reservables = perReservable,
+                    startDate = startDate,
+                    endDate = endDate,
+                    force = force,
+                    siteTypes = call.queryValues("site_type", "siteType"),
                 ),
             )
+        } catch (e: AvailabilityServiceError) {
+            call.respondServiceAvailabilityError(e)
         } catch (e: ReservationProviderError) {
             val (status, error) = mapProviderError(e)
-            log.info(
-                "poi reservables availability poi={} provider={} failed: {}",
-                poiId,
-                provider.id,
-                e.message,
-            )
+            log.info("poi reservables availability poi={} failed: {}", poiId, e.message)
             call.respondAvailabilityJson(error, status)
         }
     }
@@ -227,7 +184,7 @@ fun Route.availabilityRoutes(
             "the same availability response shape narrowed to that one site."
         request {
             pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
-            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today UTC." }
+            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today's local date." }
             queryParameter<String>("end_date") { description = "Exclusive YYYY-MM-DD; default is start_date + 7 days." }
             queryParameter<String>("force") { description = "Set to 1 to bypass provider cache." }
         }
@@ -257,9 +214,6 @@ fun Route.availabilityRoutes(
             call.parameters["rid"]
                 ?.let(ReservableId::parse)
                 ?: return@get call.respondAvailabilityError("bad_rid", HttpStatusCode.BadRequest)
-        val row =
-            reservables.findByRid(rid)
-                ?: return@get call.respondAvailabilityError("not_found", HttpStatusCode.NotFound)
 
         val ip = call.request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
@@ -270,45 +224,36 @@ fun Route.availabilityRoutes(
             return@get
         }
 
-        val poiIds = reservables.poiIdsForReservable(row.id)
-        val rowsById = providerRefs.findProviderRefs(poiIds)
-        val parent =
-            poiIds
-                .asSequence()
-                .mapNotNull { rowsById[it] }
-                .firstOrNull { reservationProviders.forPoi(it) != null && ProviderRefParser.parse(it.providerRefJson) != null }
-                ?: return@get call.respondAvailabilityError("unknown_campground", HttpStatusCode.NotFound)
-        val provider = reservationProviders.forPoi(parent)!!
-        val parentRef = ProviderRefParser.parse(parent.providerRefJson)!!
-
-        val query = call.parseAvailabilityWindow(provider.capabilities.bookingHorizonDays)
-        if (query == null) {
-            call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
-            return@get
-        }
+        val startDate =
+            try {
+                call.optionalDateQuery("start_date")
+            } catch (e: Exception) {
+                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
+                return@get
+            }
+        val endDate =
+            try {
+                call.optionalDateQuery("end_date")
+            } catch (e: Exception) {
+                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
+                return@get
+            }
+        val force = call.forceQuery()
 
         try {
-            val response =
-                fetchReservableAvailability(
-                    reservable = row,
-                    parentRef = parentRef,
-                    provider = provider,
-                    snapshotAvailability = snapshotAvailability,
-                    snapshotFreshnessTtl = snapshotFreshnessTtl,
-                    startDate = query.startDate,
-                    endDate = query.endDate,
-                    force = query.force,
-                )
-            call.respondAvailabilityJson(response)
+            call.respondAvailabilityJson(
+                availabilityService.getByRid(
+                    rid = rid,
+                    startDate = startDate,
+                    endDate = endDate,
+                    force = force,
+                ),
+            )
+        } catch (e: AvailabilityServiceError) {
+            call.respondServiceAvailabilityError(e)
         } catch (e: ReservationProviderError) {
             val (status, error) = mapProviderError(e)
-            log.info(
-                "reservable availability rid={} parent_poi={} provider={} failed: {}",
-                rid.encode(),
-                parent.poiId,
-                provider.id,
-                e.message,
-            )
+            log.info("reservable availability rid={} failed: {}", rid.encode(), e.message)
             call.respondAvailabilityJson(error, status)
         }
     }
@@ -400,18 +345,6 @@ fun Route.availabilityRoutes(
                 call.respondApiError("bad_end_date", HttpStatusCode.BadRequest, detail = "end_date must be YYYY-MM-DD")
                 return@post
             }
-        val days =
-            ChronoUnit.DAYS
-                .between(start, end)
-                .toInt()
-        if (days !in 1..MAX_BULK_WINDOW_DAYS) {
-            call.respondApiError(
-                "bad_date_window",
-                HttpStatusCode.BadRequest,
-                detail = "date window must be 1..$MAX_BULK_WINDOW_DAYS days",
-            )
-            return@post
-        }
 
         val ip = call.request.origin.remoteHost
         if (!rateLimit.allow(ip)) {
@@ -422,34 +355,21 @@ fun Route.availabilityRoutes(
             return@post
         }
 
-        val rowsById = providerRefs.findProviderRefs(req.ids)
-
-        val results =
-            coroutineScope {
-                req.ids
-                    .map { id ->
-                        async {
-                            fetchOneBulk(
-                                poiId = id,
-                                row = rowsById[id],
-                                reservationProviders = reservationProviders,
-                                reservables = reservables,
-                                snapshotAvailability = snapshotAvailability,
-                                snapshotFreshnessTtl = snapshotFreshnessTtl,
-                                startDate = start,
-                                endDate = end,
-                            )
-                        }
-                    }.awaitAll()
-            }
-
-        call.respondAvailabilityJson(
-            BulkAvailResponseSchema(
-                startDate = req.startDate,
-                endDate = req.endDate,
-                results = results,
-            ),
-        )
+        try {
+            call.respondAvailabilityJson(
+                controller.bulkAvailability(
+                    ids = req.ids,
+                    startDate = start,
+                    endDate = end,
+                ),
+            )
+        } catch (e: AvailabilityServiceError.BadDateWindow) {
+            call.respondApiError(
+                "bad_date_window",
+                HttpStatusCode.BadRequest,
+                detail = "date window must be 1..14 days",
+            )
+        }
     }
 }
 
@@ -490,222 +410,9 @@ private class IpRateLimiter(
     }
 }
 
-private fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
-    CatalogReservableRef(
-        rid = rid.encode(),
-        vendorId = rid.vendorId,
-        mapId = aspiraProviderRefLong("mapId"),
-        resourceLocationId = aspiraProviderRefLong("resourceLocationId"),
-    )
+private fun ApplicationCall.optionalDateQuery(name: String): LocalDate? = request.queryParameters[name]?.let(LocalDate::parse)
 
-private fun Reservable.toAvailabilityTarget(): SnapshotBackedAvailabilityService.TargetReservable =
-    SnapshotBackedAvailabilityService.TargetReservable(
-        dbId = id,
-        rid = rid.encode(),
-    )
-
-private fun availabilityMetadata(
-    providerId: ReservationProviderId,
-    ref: ProviderRef,
-    reservableId: String? = null,
-): SnapshotBackedAvailabilityService.Metadata =
-    SnapshotBackedAvailabilityService.Metadata(
-        provider = providerId.name.lowercase(),
-        campgroundId = (ref as? ProviderRef.RecGov)?.recgovId,
-        mapId = (ref as? ProviderRef.Aspira)?.mapId?.toString(),
-        reservableId = reservableId,
-    )
-
-private fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =
-    when (providerId) {
-        ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
-        ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
-        ReservationProviderId.CAMIS -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
-    }
-
-private fun Reservable.providerRefForReservable(parentRef: ProviderRef): ProviderRef =
-    when (parentRef) {
-        is ProviderRef.Aspira ->
-            parentRef.copy(
-                mapId = aspiraProviderRefLong("mapId") ?: parentRef.mapId,
-                resourceLocationId = aspiraProviderRefLong("resourceLocationId") ?: parentRef.resourceLocationId,
-            )
-        else -> parentRef
-    }
-
-private fun Reservable.aspiraProviderRefLong(key: String): Long? =
-    (providerRef as? JsonObject)
-        ?.get(key)
-        ?.jsonPrimitive
-        ?.longOrNull
-
-// POI exists but has no reservation provider wired (or its provider_ref is
-// unparseable). The bookable-state gate would normally hide the matrix anyway;
-// returning an empty wrapper keeps the response shape uniform with the
-// "POI has zero linked reservables" case so the FE has one branch to handle.
-//
-// Echoes the requested window (or today/+7) so the FE can render a placeholder
-// grid. The dates carry no real meaning when reservables is empty.
-private const val EMPTY_WINDOW_DEFAULT_DAYS: Long = 7
-
-private fun emptyPoiReservablesAvailability(poiId: Long): PoiReservablesAvailabilityResponseDto {
-    val today = LocalDate.now(ZoneOffset.UTC)
-    return PoiReservablesAvailabilityResponseDto(
-        poiId = poiId,
-        startDate = today.toString(),
-        endDate = today.plusDays(EMPTY_WINDOW_DEFAULT_DAYS).toString(),
-        reservables = emptyList(),
-    )
-}
-
-private suspend fun fetchReservableAvailability(
-    reservable: Reservable,
-    parentRef: ProviderRef,
-    provider: ReservationProvider,
-    snapshotAvailability: SnapshotBackedAvailabilityService,
-    snapshotFreshnessTtl: (ReservationProviderId) -> Duration,
-    startDate: LocalDate,
-    endDate: LocalDate,
-    force: Boolean,
-): AvailabilityResponseDto {
-    val ref = reservable.providerRefForReservable(parentRef)
-    val rid = reservable.rid.encode()
-    val batch =
-        snapshotAvailability.loadOrFetch(
-            SnapshotBackedAvailabilityService.Request(
-                metadata = availabilityMetadata(provider.id, ref, reservableId = rid),
-                targets = listOf(reservable.toAvailabilityTarget()),
-                startDate = startDate,
-                endDate = endDate,
-                ttl = snapshotFreshnessTtl(provider.id),
-                force = force,
-            ),
-        ) {
-            provider.reservableAvailability(
-                ReservableAvailabilityRequest(
-                    ref = ref,
-                    vendorId = reservable.rid.vendorId,
-                    startDate = startDate,
-                    endDate = endDate,
-                    force = force,
-                ),
-            )
-        }
-    return availabilityResponseFromObservations(batch)
-}
-
-private suspend fun fetchOneBulk(
-    poiId: Long,
-    row: CampsiteProviderRefRow?,
-    reservationProviders: ReservationProviderRegistry,
-    reservables: ReservableRepo,
-    snapshotAvailability: SnapshotBackedAvailabilityService,
-    snapshotFreshnessTtl: (ReservationProviderId) -> Duration,
-    startDate: LocalDate,
-    endDate: LocalDate,
-): BulkAvailEntrySchema {
-    if (row == null) {
-        return BulkAvailEntrySchema(id = poiId, status = 404, available_dates = emptyList())
-    }
-    val provider =
-        reservationProviders.forPoi(row)
-            ?: return BulkAvailEntrySchema(id = poiId, status = 422, available_dates = emptyList())
-    val ref =
-        ProviderRefParser.parse(row.providerRefJson)
-            ?: return BulkAvailEntrySchema(id = poiId, status = 422, available_dates = emptyList())
-
-    return try {
-        val catalogRows = reservables.findByPoi(poiId, ReservableType.SITE)
-        val catalogRefs = catalogRows.map { it.toCatalogReservableRef() }
-        val batch =
-            snapshotAvailability.loadOrFetch(
-                SnapshotBackedAvailabilityService.Request(
-                    metadata = availabilityMetadata(provider.id, ref),
-                    targets = catalogRows.map { it.toAvailabilityTarget() },
-                    startDate = startDate,
-                    endDate = endDate,
-                    ttl = snapshotFreshnessTtl(provider.id),
-                    force = false,
-                ),
-            ) {
-                provider.catalogAvailability(
-                    CatalogAvailabilityRequest(
-                        ref = ref,
-                        reservables = catalogRefs,
-                        startDate = startDate,
-                        endDate = endDate,
-                        force = false,
-                    ),
-                )
-            }
-        val dates = availabilityDatesFromObservations(batch)
-        BulkAvailEntrySchema(id = poiId, status = 200, available_dates = dates)
-    } catch (e: ReservationProviderError) {
-        log.info("bulk availability poi={} provider={} failed: {}", poiId, provider.id, e.message)
-        BulkAvailEntrySchema(id = poiId, status = httpStatusFor(e), available_dates = emptyList())
-    }
-}
-
-/**
- * Result of parsing the `?start_date=YYYY-MM-DD` query param against the provider's
- * booking horizon. Sealed so the route can branch on it without re-checking
- * any null state.
- */
-internal sealed class StartParam {
-    data class Ok(
-        val value: LocalDate,
-    ) : StartParam()
-
-    /** Malformed date, in the past, or beyond the provider's booking horizon. */
-    object Invalid : StartParam()
-}
-
-/**
- * Parse `?start_date=` into a [StartParam]. Null/missing means "default to today."
- * Anything outside `[today, today + horizonDays]` is [StartParam.Invalid] —
- * the upstream wouldn't have data for it either way.
- */
-internal fun parseStartParam(
-    raw: String?,
-    today: LocalDate,
-    horizonDays: Int,
-): StartParam {
-    if (raw == null) return StartParam.Ok(today)
-    val parsed = runCatching { LocalDate.parse(raw) }.getOrNull() ?: return StartParam.Invalid
-    if (parsed.isBefore(today)) return StartParam.Invalid
-    if (parsed.isAfter(today.plusDays(horizonDays.toLong()))) return StartParam.Invalid
-    return StartParam.Ok(parsed)
-}
-
-private data class AvailabilityWindowQuery(
-    val startDate: LocalDate,
-    val endDate: LocalDate,
-    val force: Boolean,
-) {
-    val days: Int = ChronoUnit.DAYS.between(startDate, endDate).toInt()
-}
-
-private fun ApplicationCall.parseAvailabilityWindow(
-    bookingHorizonDays: Int,
-    defaultDays: Int = 7,
-): AvailabilityWindowQuery? {
-    val today = LocalDate.now(ZoneOffset.UTC)
-    val start =
-        when (val parsed = parseStartParam(request.queryParameters["start_date"], today, bookingHorizonDays)) {
-            is StartParam.Ok -> parsed.value
-            StartParam.Invalid -> return null
-        }
-    val end =
-        request.queryParameters["end_date"]
-            ?.let { raw -> runCatching { LocalDate.parse(raw) }.getOrNull() ?: return null }
-            ?: start.plusDays(defaultDays.toLong())
-    if (!end.isAfter(start)) return null
-    if (end.isAfter(today.plusDays(bookingHorizonDays.toLong()))) return null
-    val days = ChronoUnit.DAYS.between(start, end).toInt()
-    if (days !in 1..MAX_AVAILABILITY_DAYS) return null
-    val force = request.queryParameters["force"] == "1"
-    return AvailabilityWindowQuery(startDate = start, endDate = end, force = force)
-}
+private fun ApplicationCall.forceQuery(): Boolean = request.queryParameters["force"] == "1"
 
 private fun ApplicationCall.queryValues(vararg names: String): List<String> =
     names
@@ -745,20 +452,21 @@ internal fun upstreamHttpStatus(e: ReservationProviderError): Int? {
     return null
 }
 
-/** Numeric status for the bulk endpoint's per-id `status` field. */
-private fun httpStatusFor(e: ReservationProviderError): Int =
-    when (e) {
-        is ReservationProviderError.RateLimited -> 429
-        is ReservationProviderError.Unsupported -> 422
-        is ReservationProviderError.WrongRefType -> 500
-        else -> 503
-    }
-
 private suspend fun ApplicationCall.respondAvailabilityError(
     error: String,
     status: HttpStatusCode,
 ) {
     respondAvailabilityJson(availabilityErrorDto(error), status)
+}
+
+private suspend fun ApplicationCall.respondServiceAvailabilityError(e: AvailabilityServiceError) {
+    val status =
+        when (e) {
+            AvailabilityServiceError.BadDateWindow -> HttpStatusCode.BadRequest
+            AvailabilityServiceError.NotFound -> HttpStatusCode.NotFound
+            AvailabilityServiceError.UnknownCampground -> HttpStatusCode.NotFound
+        }
+    respondAvailabilityJson(availabilityErrorDto(e.error), status)
 }
 
 private suspend fun ApplicationCall.respondApiError(

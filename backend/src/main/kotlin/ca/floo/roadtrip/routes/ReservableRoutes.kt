@@ -48,7 +48,7 @@ private val reservableRoutesJson =
     }
 
 fun Route.reservableRoutes(ctx: DSLContext) {
-    val reservables = ReservableRepo(ctx)
+    val reservablesRepo = ReservableRepo(ctx)
     val pois = PoiServingRepo(ctx)
 
     get("/api/reservables", {
@@ -102,15 +102,15 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 return@get call.respondReservableError(e.error, HttpStatusCode.BadRequest, e.detail)
             }
 
-        val rows = reservables.search(filters, limit, offset)
-        val poiIdsByReservable = reservables.poiIdsForReservables(rows.map { it.id })
+        val reservables = reservablesRepo.search(filters, limit, offset)
+        val poiIdsByReservable = reservablesRepo.poiIdsForReservables(reservables.map { it.id })
 
         call.respondReservableJson(
             ReservablesResponseSchema(
-                total = reservables.countSearch(filters),
+                total = reservablesRepo.countSearch(filters),
                 limit = limit,
                 offset = offset,
-                reservables = rows.map { it.toSchema(poiIdsByReservable[it.id].orEmpty()) },
+                reservables = reservables.map { it.toSchema(poiIdsByReservable[it.id].orEmpty()) },
             ),
         )
     }
@@ -143,15 +143,15 @@ fun Route.reservableRoutes(ctx: DSLContext) {
             call.parameters["rid"]
                 ?.let(ReservableId::parse)
                 ?: return@get call.respondReservableError("bad_rid", HttpStatusCode.BadRequest)
-        val row =
-            reservables.findByRid(rid)
+        val reservable =
+            reservablesRepo.findByRid(rid)
                 ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
 
-        val poiIds = reservables.poiIdsForReservable(row.id)
+        val poiIds = reservablesRepo.poiIdsForReservable(reservable.id)
 
         call.respondReservableJson(
             ReservableDetailResponseSchema(
-                reservable = row.toSchema(poiIds),
+                reservable = reservable.toSchema(poiIds),
                 poiIds = poiIds,
             ),
         )
@@ -172,7 +172,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         }
         response {
             code(HttpStatusCode.OK) {
-                description = "Reservables linked to the POI, plus total_at_poi."
+                description = "Reservables linked to the POI."
                 body<PoiReservablesResponseSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.BadRequest) {
@@ -203,17 +203,16 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
         val providerRef = poi.providerRefJson?.let { ProviderRefParser.parse(it) }
 
-        val rows =
-            reservables
+        val reservables =
+            reservablesRepo
                 .findByPoi(poiId, type)
                 .filterBySiteTypes(siteTypes)
         call.respondReservableJson(
             PoiReservablesResponseSchema(
                 poiId = poiId,
                 type = type.encode(),
-                totalAtPoi = rows.size,
                 reservables =
-                    rows.map {
+                    reservables.map {
                         it.toSchema(
                             poiIds = listOf(poiId),
                             reservationUrlTemplate = it.reservationUrlTemplate(providerRef),
@@ -414,7 +413,7 @@ private fun aspiraReservationUrl(
             "peopleCapacityCategoryCounts" to AspiraSearchDefaults.deeplinkPeopleCapacityCategoryCounts(),
             "searchTime" to "${startDate}T00:00:00.000",
             "flexibleSearch" to AspiraSearchDefaults.flexibleSearch(startDate),
-            "view" to "list",
+            "view" to "grid",
         )
     if (resourceLocationId != null) {
         params += "resourceLocationId" to resourceLocationId.toString()

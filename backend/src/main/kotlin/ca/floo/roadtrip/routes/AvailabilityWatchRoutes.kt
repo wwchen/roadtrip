@@ -51,9 +51,9 @@ fun Route.availabilityWatchRoutes(
     watchService: ca.floo.roadtrip.service.availability.AvailabilityWatchService,
 ) {
     val watches = AvailabilityWatchRepo(ctx)
-    val reservables = ReservableRepo(ctx)
+    val reservablesRepo = ReservableRepo(ctx)
     val heatmaps = AvailabilityHeatmapRepo(ctx)
-    val scopeResolver = WatchScopeResolver(reservables)
+    val scopeResolver = WatchScopeResolver(reservablesRepo)
 
     get("/api/availability/watches", {
         tags = listOf("availability")
@@ -128,7 +128,7 @@ fun Route.availabilityWatchRoutes(
                 return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
             }
         val resolved =
-            when (val r = resolveCreateScope(req, reservables)) {
+            when (val r = resolveCreateScope(req, reservablesRepo)) {
                 is ResolveResult.Err -> return@post call.respondError(r.error, HttpStatusCode.BadRequest, r.detail)
                 is ResolveResult.Ok -> r
             }
@@ -320,7 +320,7 @@ private sealed class ResolveResult {
 
 private fun resolveCreateScope(
     req: AvailabilityWatchCreateRequest,
-    reservables: ReservableRepo,
+    reservablesRepo: ReservableRepo,
 ): ResolveResult {
     val scopeKeysSet = listOf(req.poiId, req.reservableId, req.reservableRid).count { it != null }
     if (scopeKeysSet != 1) {
@@ -338,7 +338,7 @@ private fun resolveCreateScope(
                     "could not parse reservable_rid '${req.reservableRid}'",
                 )
         val resolvedReservable =
-            reservables.findByRid(parsed)
+            reservablesRepo.findByRid(parsed)
                 ?: return ResolveResult.Err(
                     "reservable_not_found",
                     "no reservable with rid ${req.reservableRid}",
