@@ -153,8 +153,76 @@
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
+      "description": "Each row is a reservation target date. Each grid cell is the status recorded by one availability fetch; the x-axis is observed_at, not the reservation date.",
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "gray",
+                  "index": 0,
+                  "text": "Unknown"
+                },
+                "1": {
+                  "color": "dark-gray",
+                  "index": 1,
+                  "text": "Closed"
+                },
+                "2": {
+                  "color": "red",
+                  "index": 2,
+                  "text": "Reserved"
+                },
+                "3": {
+                  "color": "orange",
+                  "index": 3,
+                  "text": "First come"
+                },
+                "4": {
+                  "color": "green",
+                  "index": 4,
+                  "text": "Available"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "No observation",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "gray",
+                "value": null
+              },
+              {
+                "color": "dark-gray",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              },
+              {
+                "color": "orange",
+                "value": 3
+              },
+              {
+                "color": "green",
+                "value": 4
+              }
+            ]
+          }
+        },
         "overrides": []
       },
       "gridPos": {
@@ -165,12 +233,15 @@
       },
       "id": 5,
       "options": {
+        "colWidth": 0.75,
         "legend": {
           "calcs": [],
           "displayMode": "list",
           "placement": "bottom",
           "showLegend": true
         },
+        "rowHeight": 0.8,
+        "showValue": "auto",
         "tooltip": {
           "mode": "single",
           "sort": "none"
@@ -185,12 +256,12 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.observed_at AS time,\n  s.target_date::text AS metric,\n  CASE WHEN s.available THEN 1 ELSE 0 END AS value\nFROM availability_snapshot s\nWHERE s.reservable_id = (\n  SELECT id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n)\n  AND s.observed_at >= now() - (${days_back} || ' days')::interval\nORDER BY s.observed_at ASC;",
+          "rawSql": "SELECT\n  s.observed_at AS time,\n  s.target_date::text AS metric,\n  CASE COALESCE(s.status::text, CASE WHEN s.available THEN 'available' ELSE 'unknown' END)\n    WHEN 'available' THEN 4\n    WHEN 'first_come' THEN 3\n    WHEN 'reserved' THEN 2\n    WHEN 'booked' THEN 2\n    WHEN 'closed' THEN 1\n    ELSE 0\n  END AS value\nFROM availability_snapshot s\nWHERE s.reservable_id = (\n  SELECT id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n)\n  AND s.observed_at >= now() - (${days_back} || ' days')::interval\n  AND (${target_date:sqlstring} = '' OR s.target_date = NULLIF(${target_date:sqlstring}, '')::date)\nORDER BY s.observed_at ASC, s.target_date ASC;",
           "refId": "A"
         }
       ],
-      "title": "Status Timeline",
-      "type": "timeseries"
+      "title": "Availability Status Grid By Target Date",
+      "type": "status-history"
     },
     {
       "datasource": {
