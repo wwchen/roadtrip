@@ -62,12 +62,13 @@ class ReserveCaliforniaEtl(
                             placeId = place.placeId,
                             facilityIds = place.facilityIds,
                         ),
-                    amenities = emptyList(),
-                    activities = emptyList(),
+                    amenities = place.amenities,
+                    activities = place.activities,
                     sites = null,
                     season = null,
                     near = null,
-                    photoUrl = null,
+                    description = place.description,
+                    photoUrl = place.imageUrl,
                     cellCoverage = null,
                     ratingReviews = null,
                     subcategory = bucket,
@@ -183,6 +184,7 @@ private fun parsePlace(payload: JsonObject): ReserveCaliforniaPlace? {
                 ?.firstOrNull()
         if (unitTypeName != null) unitTypes[facilityId] = unitTypeName
     }
+    val highlights = parseHighlights(selected["Allhighlights"]?.jsonPrimitive?.contentOrNull)
     return ReserveCaliforniaPlace(
         placeId = placeId,
         name = name,
@@ -190,6 +192,10 @@ private fun parsePlace(payload: JsonObject): ReserveCaliforniaPlace? {
         longitude = lon,
         facilityIds = facilityIds.distinct().sorted(),
         unitTypeByFacilityId = unitTypes,
+        imageUrl = selected.stringValue("ImageUrl"),
+        description = selected.stringValue("Description"),
+        amenities = highlights.filterNot(::isActivityHighlight),
+        activities = highlights.filter(::isActivityHighlight),
         raw = selected,
     )
 }
@@ -230,6 +236,27 @@ private fun parseGrid(payload: JsonObject): ReserveCaliforniaGridCatalog? {
 
 private fun parseFetchedAt(envelope: Envelope): Instant = runCatching { Instant.parse(envelope.fetchedAt) }.getOrDefault(Instant.now())
 
+private fun JsonObject.stringValue(key: String): String? =
+    this[key]
+        ?.jsonPrimitive
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+
+private fun parseHighlights(raw: String?): List<String> =
+    raw
+        ?.split(Regex("""(?i)<br\s*/?>"""))
+        ?.map { it.replace(Regex("""<[^>]+>"""), " ") }
+        ?.map { it.replace(Regex("""\s+"""), " ").trim() }
+        ?.filter { it.isNotEmpty() }
+        ?.distinct()
+        .orEmpty()
+
+private fun isActivityHighlight(label: String): Boolean {
+    val normalized = label.lowercase()
+    return ACTIVITY_HINTS.any { normalized.contains(it) }
+}
+
 private fun withSynthetic(
     raw: JsonObject,
     values: Map<String, String>,
@@ -255,6 +282,10 @@ data class ReserveCaliforniaPlace(
     val longitude: Double,
     val facilityIds: List<Long>,
     val unitTypeByFacilityId: Map<Long, String>,
+    val imageUrl: String?,
+    val description: String?,
+    val amenities: List<String>,
+    val activities: List<String>,
     val raw: JsonElement,
 )
 
@@ -283,3 +314,17 @@ data class ReserveCaliforniaUnit(
     val name: String?,
     val raw: JsonObject,
 )
+
+private val ACTIVITY_HINTS =
+    setOf(
+        "biking",
+        "bird",
+        "boating",
+        "fishing",
+        "hiking",
+        "riding",
+        "ski",
+        "swimming",
+        "trail",
+        "water sport",
+    )

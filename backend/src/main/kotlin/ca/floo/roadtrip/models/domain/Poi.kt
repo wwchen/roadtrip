@@ -56,6 +56,7 @@ sealed class Poi {
         val sites: Int?,
         val season: String?,
         val near: String?,
+        val description: String? = null,
         val photoUrl: String?,
         val cellCoverage: Map<String, CellSignal>?,
         val ratingReviews: RatingSummary?,
@@ -240,6 +241,7 @@ private fun perTypeProperties(poi: Poi): JsonObject =
                         sites = poi.sites,
                         season = poi.season,
                         near = poi.near,
+                        description = poi.description,
                         photoUrl = poi.photoUrl,
                         cellCoverage =
                             poi.cellCoverage?.mapValues { (_, signal) ->
@@ -298,6 +300,7 @@ private data class CampgroundPropertiesDto(
     val sites: Int? = null,
     val season: String? = null,
     val near: String? = null,
+    val description: String? = null,
     @SerialName("photo_url") val photoUrl: String? = null,
     @SerialName("cell_coverage") val cellCoverage: Map<String, JsonElement>? = null,
     @SerialName("rating_reviews") val ratingReviews: JsonElement? = null,

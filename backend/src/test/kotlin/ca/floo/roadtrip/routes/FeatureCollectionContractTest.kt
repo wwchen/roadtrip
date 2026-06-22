@@ -115,7 +115,10 @@ class FeatureCollectionContractTest {
                 infoUrl = "https://parks.canada.ca/banff",
                 addressJson = """{"city":"Banff","state":"AB"}""",
                 geomJson = """{"type":"Point","coordinates":[-115.547,51.1812]}""",
-                propertiesJson = """{"category":"federal","amenities":["showers"]}""",
+                propertiesJson =
+                    """{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
+                        """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
+                        """"season":"May-Oct","near":"Banff","agency":"Parks Canada"}""",
             )
         val expected = (
             """{"type":"Feature","id":42,""" +
@@ -128,9 +131,15 @@ class FeatureCollectionContractTest {
                 """"reserve_url":"https://reservation.pc.gc.ca",""" +
                 """"phone":"1-877-737-3783","info_url":"https://parks.canada.ca/banff",""" +
                 """"address":{"city":"Banff","state":"AB"},""" +
+                """"description":"Camp among redwoods.",""" +
+                """"photo_url":"https://example.test/photo.jpg",""" +
+                """"amenities":["showers"],"activities":["hiking"],"sites":42,""" +
+                """"season":"May-Oct","near":"Banff","agency":"Parks Canada",""" +
                 """"cta":{"url":"https://parks.canada.ca/banff",""" +
                 """"label":"Park info on parks.canada.ca","kind":"info"},""" +
-                """"raw":{"category":"federal","amenities":["showers"]}}}"""
+                """"raw":{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
+                """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
+                """"season":"May-Oct","near":"Banff","agency":"Parks Canada"}}}"""
         )
         val dateResolver = AvailabilityDateResolver(Clock.fixed(Instant.parse("2026-06-21T12:00:00Z"), ZoneOffset.UTC))
         assertEquals(expected, encodePoiFeatureJson(poiDetailFeature(row, dateResolver)))

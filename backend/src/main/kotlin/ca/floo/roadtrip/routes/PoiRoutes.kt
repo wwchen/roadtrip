@@ -31,6 +31,12 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
 import org.jooq.DSLContext
 
 // Hard cap. The Mapbox/MapLibre frontend chokes on >5k features per source,
@@ -349,6 +355,8 @@ internal fun poiDetailFeature(
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availabilitySupported: Boolean = providerRefShapeSupportsAvailability(r),
 ): PoiDetailFeatureSchema {
+    val raw = Json.parseToJsonElement(r.propertiesJson)
+    val rawObject = raw as? JsonObject ?: JsonObject(emptyMap())
     val dateContext =
         if (r.category == "campground") {
             dateResolver.context(lat = r.lat, lng = r.lng)
@@ -374,14 +382,45 @@ internal fun poiDetailFeature(
                 phone = r.phone,
                 infoUrl = r.infoUrl,
                 address = r.addressJson?.let { Json.parseToJsonElement(it) },
+                description = rawObject.stringProperty("description"),
+                photoUrl = rawObject.stringProperty("photo_url"),
+                amenities = rawObject.stringListProperty("amenities"),
+                activities = rawObject.stringListProperty("activities"),
+                sites = rawObject.intProperty("sites"),
+                season = rawObject.stringProperty("season"),
+                near = rawObject.stringProperty("near"),
+                cellCoverage = rawObject["cell_coverage"],
+                ratingReviews = rawObject["rating_reviews"],
+                agency = rawObject.stringProperty("agency"),
                 providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
                 availabilitySupported = availabilitySupported.takeIf { it },
                 cta = PoiCta.Default.computeCta(r),
                 bookingSystem = PoiCta.Default.bookingSystem(r),
-                raw = Json.parseToJsonElement(r.propertiesJson),
+                raw = raw,
             ),
     )
 }
+
+private fun JsonObject.stringProperty(key: String): String? =
+    (this[key] as? JsonPrimitive)
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
+
+private fun JsonObject.intProperty(key: String): Int? =
+    (this[key] as? JsonPrimitive)
+        ?.intOrNull
+
+private fun JsonObject.stringListProperty(key: String): List<String>? =
+    (this[key] as? JsonArray)
+        ?.mapNotNull { it.stringElement() }
+        ?.takeIf { it.isNotEmpty() }
+
+private fun JsonElement.stringElement(): String? =
+    (this as? JsonPrimitive)
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 
 private fun providerRefShapeSupportsAvailability(r: PoiDetailRow): Boolean =
     r.category == "campground" &&

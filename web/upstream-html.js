@@ -130,6 +130,13 @@ export function upstreamDecorations(upstream) {
   return { heroUrl, parentName, about, fees: feesSection, meta };
 }
 
+export function descriptionSectionHTML(description) {
+  const html = sanitizeUpstreamHtml(description);
+  return html
+    ? `<section class="cg-about"><h3>About</h3><div class="cg-html">${html}</div></section>`
+    : '';
+}
+
 function pickParentName(recArea) {
   if (!Array.isArray(recArea) || !recArea.length) return null;
   const name = recArea[0]?.RecAreaName;

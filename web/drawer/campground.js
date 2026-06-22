@@ -13,6 +13,7 @@
 
 import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';
 import {
+  parseActivities,
   parseAmenities,
   parseCellCoverage,
   parseRatingReviews,
@@ -25,7 +26,7 @@ import {
   seasonVerdictHTML,
   reserveButtonHTML,
 } from '../campground-card.js';
-import { upstreamDecorations } from '../upstream-html.js';
+import { descriptionSectionHTML, upstreamDecorations } from '../upstream-html.js';
 import {
   DRAWER_ROOT_ID,
   ensureDrawerDOM,
@@ -176,9 +177,10 @@ function renderShell(f, signal) {
   const sub = [subline, distLine].filter(Boolean).join(' · ');
 
   const amenities = parseAmenities(p);
+  const activities = parseActivities(p);
   const cc = parseCellCoverage(p);
   const rr = parseRatingReviews(p);
-  const pills = amenitiesPillsHTML(amenities);
+  const pills = amenitiesPillsHTML([...amenities, ...activities]);
   const cellPills = cellCoveragePillsHTML(cc);
   const rating = ratingHTML(rr);
   const sitesTag = sitesTagHTML(p);
@@ -233,6 +235,7 @@ function renderShell(f, signal) {
   // Always collapsed by default — this is a "what's available" surface,
   // not the primary read.
   const upstreamSection = upstreamHTML(p.upstream);
+  const aboutSection = descriptionSectionHTML(p.description) || decor.about;
 
   const content = document.querySelector(`#${DRAWER_ROOT_ID} .cg-drawer-content`);
   content.innerHTML = `
@@ -245,7 +248,7 @@ function renderShell(f, signal) {
 
     ${actions}
     ${availabilityMount}
-    ${decor.about}
+    ${aboutSection}
     ${decor.fees}
     ${decor.meta}
     ${detailsSection}

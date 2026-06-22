@@ -280,6 +280,118 @@ class SmokeTest {
     }
 
     @Test
+    fun `campground drawer surfaces promoted poi dto fields`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        context.route("**/api/pois") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"type":"FeatureCollection","features":[],"truncated":false}"""),
+            )
+        }
+        context.route("**/api/pois/45626") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "Feature",
+                          "id": 45626,
+                          "geometry": { "type": "Point", "coordinates": [-122.8127778, 39.00722222] },
+                          "properties": {
+                            "source": "california-state-parks",
+                            "source_id": "rc-629",
+                            "category": "campground",
+                            "subcategory": "state",
+                            "name": "Clear Lake SP Cabins",
+                            "region": "CA",
+                            "country": "US",
+                            "description": "Clear Lake State Park offers rental cabins near the lake.",
+                            "photo_url": "https://cali-content.usedirect.com/Images/California/ParkImages/Place/629.jpg",
+                            "amenities": ["Restrooms", "Showers"],
+                            "activities": ["Fishing", "Hiking"],
+                            "availability_supported": true,
+                            "cta": {
+                              "url": "https://reservecalifornia.com/park/629",
+                              "label": "Reserve on ReserveCalifornia",
+                              "kind": "reserve"
+                            },
+                            "provider_ref": { "place_id": 629, "facility_ids": [889] },
+                            "raw": {
+                              "upstream": {
+                                "Name": "Clear Lake SP Cabins"
+                              }
+                            }
+                          }
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+        context.route("**/api/poi/45626/reservables/availability?**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"poi_id":45626,"start_date":"2026-06-22","end_date":"2026-06-29","reservables":[]}"""),
+            )
+        }
+        context.route("**/api/poi/45626/reservables**") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody("""{"poi_id":45626,"type":"site","reservables":[]}"""),
+            )
+        }
+
+        try {
+            page.navigate("/?poi=45626")
+            val drawer = page.locator("#cg-drawer.open")
+            assertThat(drawer).isVisible(
+                com.microsoft.playwright.assertions.LocatorAssertions
+                    .IsVisibleOptions()
+                    .setTimeout(15_000.0),
+            )
+            assertThat(drawer.locator("h2")).containsText("Clear Lake SP Cabins")
+            assertThat(drawer.locator(".cg-about")).containsText("Clear Lake State Park offers rental cabins")
+            assertThat(drawer.locator(".cg-details")).containsText("Restrooms")
+            assertThat(drawer.locator(".cg-details")).containsText("Fishing")
+            val heroImage =
+                page.evaluate(
+                    """
+                    () => getComputedStyle(document.querySelector('.cg-hero')).backgroundImage
+                    """.trimIndent(),
+                ) as String
+            assertTrue(heroImage.contains("/Place/629.jpg"), "drawer should use DTO photo_url as hero image")
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during promoted POI DTO smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    @Test
     @Timeout(value = 60, unit = TimeUnit.SECONDS)
     fun `poi catalog links to poi reservables and reservable rows expand details and availability`() {
         val context =

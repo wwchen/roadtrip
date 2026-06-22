@@ -13,19 +13,37 @@
 
 import { escapeHtml } from './core.js';
 
-/** Parse properties.amenities (JSON-encoded array) → string[]; safe on bad input. */
+/** Parse properties.amenities (array or MapLibre JSON-encoded array) → string[]; safe on bad input. */
 export function parseAmenities(p) {
-  try { return JSON.parse(p.amenities) || []; } catch { return []; }
+  return parseStringList(p.amenities);
+}
+
+/** Parse properties.activities (array or MapLibre JSON-encoded array) → string[]; safe on bad input. */
+export function parseActivities(p) {
+  return parseStringList(p.activities);
+}
+
+function parseStringList(value) {
+  const list = parseJsonValue(value);
+  if (!Array.isArray(list)) return [];
+  return list.map(v => String(v).trim()).filter(Boolean);
+}
+
+function parseJsonValue(value) {
+  if (typeof value !== 'string') return value;
+  try { return JSON.parse(value); } catch { return null; }
 }
 
 /** Parse properties.cell_coverage → object or null. */
 export function parseCellCoverage(p) {
-  try { return JSON.parse(p.cell_coverage); } catch { return null; }
+  const value = parseJsonValue(p.cell_coverage);
+  return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 }
 
 /** Parse properties.rating_reviews → [avgRating, reviewCount] or null. */
 export function parseRatingReviews(p) {
-  try { return JSON.parse(p.rating_reviews); } catch { return null; }
+  const value = parseJsonValue(p.rating_reviews);
+  return Array.isArray(value) ? value : null;
 }
 
 /** Render amenities as a row of pill chips. Empty string when no amenities. */
@@ -219,4 +237,3 @@ function regionalParkSearch(p) {
     default: return null;
   }
 }
-

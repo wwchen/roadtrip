@@ -10,7 +10,10 @@ import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
@@ -92,7 +95,7 @@ class ReserveCaliforniaEtlTest {
 
         val row =
             ctx.fetchOne(
-                "SELECT source, source_id, name, info_url, provider_ref::text FROM pois WHERE source = ?",
+                "SELECT source, source_id, name, info_url, provider_ref::text, properties::text FROM pois WHERE source = ?",
                 "california-state-parks",
             )!!
         assertEquals("california-state-parks", row.get(0, String::class.java))
@@ -106,6 +109,19 @@ class ReserveCaliforniaEtlTest {
         val rc = assertIs<ProviderRef.ReserveCalifornia>(ref)
         assertEquals(690L, rc.placeId)
         assertEquals(listOf(612L), rc.facilityIds)
+
+        val properties = Json.parseToJsonElement(row.get(5, String::class.java)!!).jsonObject
+        assertEquals(
+            "https://cali-content.usedirect.com/Images/California/ParkImages/Place/690.jpg",
+            properties["photo_url"]!!.jsonPrimitive.content,
+        )
+        assertEquals("Camp along the Big Sur River under redwoods.", properties["description"]!!.jsonPrimitive.content)
+        assertEquals("Hiking", properties["activities"]!!.jsonArray[0].jsonPrimitive.content)
+        val upstream = properties["upstream"]!!.jsonObject
+        assertEquals(
+            "https://cali-content.usedirect.com/Images/California/ParkImages/Place/690.jpg",
+            upstream["ImageUrl"]!!.jsonPrimitive.content,
+        )
     }
 
     @Test
