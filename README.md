@@ -185,22 +185,27 @@ routes are reachable on `127.0.0.1:8765` directly. **If you ever expose dev
 to the public internet (port-forward, ngrok, etc.), bind admin routes to
 loopback only first.**
 
-The admin API only runs on hosts where `data/` is writable. The deploy
-container's `/app/static/data` is mounted **read-only** by design — POI
-refresh runs on the deploy host filesystem before/around `docker compose up`,
-not inside the container.
+The admin API only runs on hosts where `data/` is writable. In the Compose
+stack, the backend container mounts `./data` read-write at `/app/static/data`
+and mounts `./scripts` read-only so the admin fetch/import buttons run inside
+the backend container and write raw captures back to the checkout.
 
 ## Deploy via Docker + Cloudflare tunnel
 
 1. **Create a Cloudflare tunnel.** Zero Trust → Networks → Tunnels → Create
-   tunnel; set the public hostname to route to `http://app:8765`. Copy the
+   tunnel; set the public hostname to route to `http://backend:8765`. Copy the
    tunnel token.
 
 2. **`.env` on the host:**
    ```
    TESLA_COOKIES=ak_bmsc=...; _abck=...; bm_sz=...; ...
    CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+   GRAFANA_ADMIN_PASSWORD=<strong password>
+   GRAFANA_DB_PASSWORD=<strong password>
    ```
+
+   Grafana state is stored in the Docker named volume `roadtrip_grafana-data`;
+   dashboard JSON and datasource provisioning stay bind-mounted from `grafana/`.
 
 3. **Bring up the stack:** `make deploy` (ssh's to the mini, git pull, build,
    `docker compose up`). The deploy is also wired to GHA (push to master →

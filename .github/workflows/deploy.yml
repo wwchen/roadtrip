@@ -26,7 +26,9 @@ on:
       - 'index.html'
       - 'pois.html'
       - 'reservables.html'
-      - 'monitors.html'
+      - 'watches.html'
+      - 'watch-detail.html'
+      - 'availability.html'
       - 'web/**'
       - 'app.js'
       - 'style.css'
@@ -96,7 +98,7 @@ jobs:
           health_url="${{ vars.DEPLOY_HEALTH_URL || 'https://roadtrip.floo.ca/api/health' }}"
           for _ in $(seq 1 30); do
             if curl -fsS "$health_url" >/dev/null; then
-              for path in /pois /reservables /monitors; do
+              for path in /pois /reservables /watches /availability; do
                 curl -fsS "$base$path" >/dev/null
                 echo "health: $base$path OK"
               done

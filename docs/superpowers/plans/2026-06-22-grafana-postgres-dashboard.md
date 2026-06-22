@@ -210,11 +210,14 @@ In `docker-compose.yml`, add this service after `backend`:
       - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - ${GRAFANA_DATA:-$HOME/.roadtrip-map/grafana}:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
     depends_on:
       grafana-db-setup:
         condition: service_completed_successfully
+
+volumes:
+  grafana-data:
 ```
 
 - [ ] **Step 4: Default optional backend env vars**
@@ -405,6 +408,7 @@ DO $$
 DECLARE
   grafana_user text := current_setting('roadtrip.grafana_user');
   grafana_password text := current_setting('roadtrip.grafana_password');
+  inherited_role text;
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = grafana_user) THEN
     EXECUTE format(
@@ -419,8 +423,24 @@ BEGIN
       grafana_password
     );
   END IF;
+
+  FOR inherited_role IN
+    SELECT r.rolname
+    FROM pg_auth_members m
+    JOIN pg_roles r ON r.oid = m.roleid
+    JOIN pg_roles u ON u.oid = m.member
+    WHERE u.rolname = grafana_user
+  LOOP
+    EXECUTE format('REVOKE %I FROM %I', inherited_role, grafana_user);
+  END LOOP;
 END
 $$;
+
+REVOKE ALL PRIVILEGES ON DATABASE :"postgres_db" FROM :"grafana_user";
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM :"grafana_user";
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM :"grafana_user";
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM :"grafana_user";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM :"grafana_user";
 
 GRANT CONNECT ON DATABASE :"postgres_db" TO :"grafana_user";
 GRANT USAGE ON SCHEMA public TO :"grafana_user";
@@ -481,7 +501,7 @@ providers:
     updateIntervalSeconds: 10
     allowUiUpdates: false
     options:
-      path: /var/lib/grafana/dashboards
+      path: /etc/grafana/dashboards
 ```
 
 - [ ] **Step 5: Validate shell and YAML through Compose config**

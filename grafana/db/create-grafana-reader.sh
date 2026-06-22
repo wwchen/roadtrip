@@ -24,6 +24,7 @@ DO $$
 DECLARE
   grafana_user text := current_setting('roadtrip.grafana_user');
   grafana_password text := current_setting('roadtrip.grafana_password');
+  inherited_role text;
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = grafana_user) THEN
     EXECUTE format(
@@ -38,8 +39,24 @@ BEGIN
       grafana_password
     );
   END IF;
+
+  FOR inherited_role IN
+    SELECT r.rolname
+    FROM pg_auth_members m
+    JOIN pg_roles r ON r.oid = m.roleid
+    JOIN pg_roles u ON u.oid = m.member
+    WHERE u.rolname = grafana_user
+  LOOP
+    EXECUTE format('REVOKE %I FROM %I', inherited_role, grafana_user);
+  END LOOP;
 END
 $$;
+
+REVOKE ALL PRIVILEGES ON DATABASE :"postgres_db" FROM :"grafana_user";
+REVOKE ALL PRIVILEGES ON SCHEMA public FROM :"grafana_user";
+REVOKE ALL PRIVILEGES ON ALL TABLES IN SCHEMA public FROM :"grafana_user";
+REVOKE ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public FROM :"grafana_user";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public REVOKE ALL ON TABLES FROM :"grafana_user";
 
 GRANT CONNECT ON DATABASE :"postgres_db" TO :"grafana_user";
 GRANT USAGE ON SCHEMA public TO :"grafana_user";

@@ -130,8 +130,8 @@ services:
       - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
-      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
-      - ${GRAFANA_DATA:-$HOME/.roadtrip-map/grafana}:/var/lib/grafana
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
     depends_on:
       grafana-db-setup:
         condition: service_completed_successfully
@@ -149,3 +149,6 @@ services:
       - ./cloudflared:/etc/cloudflared:ro
     depends_on:
       - backend
+
+volumes:
+  grafana-data:
