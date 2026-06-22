@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
 import ca.floo.roadtrip.clients.recgov.Campsite
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
 import kotlinx.coroutines.runBlocking

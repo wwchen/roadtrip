@@ -541,6 +541,8 @@ class SmokeTest {
                             "subcategory": "federal",
                             "name": "Matrix Campground",
                             "state": "AB",
+                            "time_zone": "America/Edmonton",
+                            "earliest_date": "2026-06-16",
                             "provider_ref": { "recgov_id": "31337" }
                           }
                         }

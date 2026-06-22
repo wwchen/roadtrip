@@ -3,6 +3,7 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
 import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
 import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.service.availability.WatchStatus
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonObject
@@ -42,7 +43,7 @@ class AvailabilityWatchRepo(
         val triggerKinds: List<String>? = null,
         val triggerConfig: JsonObject? = null,
         val stopWhenTriggered: Boolean? = null,
-        val status: String? = null,
+        val status: WatchStatus? = null,
     )
 
     data class Watch(
@@ -57,7 +58,7 @@ class AvailabilityWatchRepo(
         val triggerKinds: List<String>,
         val triggerConfig: JsonObject,
         val stopWhenTriggered: Boolean,
-        val status: String,
+        val status: WatchStatus,
         val createdAt: OffsetDateTime,
         val updatedAt: OffsetDateTime,
     )
@@ -89,7 +90,7 @@ class AvailabilityWatchRepo(
     fun findById(id: Long): Watch? = baseSelect().where(AVAILABILITY_WATCH.ID.eq(id)).fetchOne()?.let(::fromRecord)
 
     fun list(
-        status: String? = null,
+        status: WatchStatus? = null,
         poiId: Long? = null,
         reservableId: Long? = null,
         limit: Int = DEFAULT_LIST_LIMIT,
@@ -97,7 +98,7 @@ class AvailabilityWatchRepo(
     ): List<Watch> {
         val effectiveLimit = limit.coerceIn(1, MAX_LIST_LIMIT)
         val conds = mutableListOf<org.jooq.Condition>()
-        if (status != null) conds += AVAILABILITY_WATCH.STATUS.eq(status)
+        if (status != null) conds += AVAILABILITY_WATCH.STATUS.eq(status.wireValue)
         if (poiId != null) conds += AVAILABILITY_WATCH.POI_ID.eq(poiId)
         if (reservableId != null) conds += AVAILABILITY_WATCH.RESERVABLE_ID.eq(reservableId)
         return baseSelect()
@@ -109,12 +110,12 @@ class AvailabilityWatchRepo(
     }
 
     fun count(
-        status: String? = null,
+        status: WatchStatus? = null,
         poiId: Long? = null,
         reservableId: Long? = null,
     ): Int {
         val conds = mutableListOf<org.jooq.Condition>()
-        if (status != null) conds += AVAILABILITY_WATCH.STATUS.eq(status)
+        if (status != null) conds += AVAILABILITY_WATCH.STATUS.eq(status.wireValue)
         if (poiId != null) conds += AVAILABILITY_WATCH.POI_ID.eq(poiId)
         if (reservableId != null) conds += AVAILABILITY_WATCH.RESERVABLE_ID.eq(reservableId)
         return ctx
@@ -149,8 +150,7 @@ class AvailabilityWatchRepo(
         }
         if (input.stopWhenTriggered != null) query = query.set(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED, input.stopWhenTriggered)
         if (input.status != null) {
-            require(input.status in setOf("active", "paused", "done")) { "invalid status" }
-            query = query.set(AVAILABILITY_WATCH.STATUS, input.status)
+            query = query.set(AVAILABILITY_WATCH.STATUS, input.status.wireValue)
         }
         val rows = query.where(AVAILABILITY_WATCH.ID.eq(id)).execute()
         if (rows == 0) return null
@@ -180,7 +180,7 @@ class AvailabilityWatchRepo(
             triggerKinds = r.get(AVAILABILITY_WATCH.TRIGGER_KINDS)!!.filterNotNull(),
             triggerConfig = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.TRIGGER_CONFIG)!!.data()).jsonObject,
             stopWhenTriggered = r.get(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED)!!,
-            status = r.get(AVAILABILITY_WATCH.STATUS)!!,
+            status = WatchStatus.parse(r.get(AVAILABILITY_WATCH.STATUS)!!) ?: error("invalid watch status"),
             createdAt = r.get(AVAILABILITY_WATCH.CREATED_AT)!!,
             updatedAt = r.get(AVAILABILITY_WATCH.UPDATED_AT)!!,
         )

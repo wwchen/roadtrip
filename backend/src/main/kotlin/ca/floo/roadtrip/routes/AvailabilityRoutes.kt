@@ -2,23 +2,18 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
-import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
-import ca.floo.roadtrip.models.api.BulkAvailEntrySchema
-import ca.floo.roadtrip.models.api.BulkAvailRequestSchema
-import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
+import ca.floo.roadtrip.models.api.AvailabilityErrorDto
+import ca.floo.roadtrip.models.api.BulkAvailabilityEntryDto
+import ca.floo.roadtrip.models.api.BulkAvailabilityRequestDto
+import ca.floo.roadtrip.models.api.BulkAvailabilityResponseDto
+import ca.floo.roadtrip.models.api.PoiReservablesAvailabilityResponseDto
 import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.api.PoiReservablesAvailabilityResponseDto
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
+import ca.floo.roadtrip.service.availability.AvailabilityQueryService
 import ca.floo.roadtrip.service.availability.AvailabilityService
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
-import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
-import ca.floo.roadtrip.service.availability.defaultSnapshotFreshnessTtl
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
@@ -32,7 +27,6 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.time.Duration
 import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 
@@ -57,35 +51,9 @@ private const val IP_RATE_LIMIT_PER_MINUTE = 30
  * provider-port architecture. Adding a new upstream is one new adapter file
  * + one registry wiring line; this file does not change.
  */
-fun Route.availabilityRoutes(
-    providerRefs: CampsiteProviderRepo,
-    reservationProviders: ReservationProviderRegistry,
-    reservablesRepo: ReservableRepo,
-    snapshots: AvailabilitySnapshotRepo? = null,
-    snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
-) {
-    val availabilityService =
-        AvailabilityServiceImpl(
-            providerRefs = providerRefs,
-            reservationProviders = reservationProviders,
-            reservablesRepo = reservablesRepo,
-            snapshots = snapshots,
-            snapshotFreshnessTtl = snapshotFreshnessTtl,
-        )
-    availabilityRoutes(
-        availabilityService = availabilityService,
-        controller =
-            AvailabilityRouteController(
-                providerRefs = providerRefs,
-                reservablesRepo = reservablesRepo,
-                availabilityService = availabilityService,
-            ),
-    )
-}
-
-private fun Route.availabilityRoutes(
+internal fun Route.availabilityRoutes(
     availabilityService: AvailabilityService,
-    controller: AvailabilityRouteController,
+    routeService: AvailabilityQueryService,
 ) {
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
 
@@ -114,15 +82,15 @@ private fun Route.availabilityRoutes(
             }
             code(HttpStatusCode.BadRequest) {
                 description = "Bad POI id or invalid date window."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.NotFound) {
                 description = "No active POI with that id."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.ServiceUnavailable) {
                 description = "Rate limited or upstream availability service unavailable."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
@@ -157,7 +125,7 @@ private fun Route.availabilityRoutes(
 
         try {
             call.respondAvailabilityJson(
-                controller.poiReservablesAvailability(
+                routeService.poiReservablesAvailability(
                     poiId = poiId,
                     startDate = startDate,
                     endDate = endDate,
@@ -194,19 +162,19 @@ private fun Route.availabilityRoutes(
             }
             code(HttpStatusCode.BadRequest) {
                 description = "Malformed reservable id or invalid date window."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.NotFound) {
                 description = "No reservable or linked campground provider row exists."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.NotImplemented) {
                 description = "The reservable's provider has no per-reservable availability adapter yet."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.ServiceUnavailable) {
                 description = "Rate limited or upstream availability service unavailable."
-                body<AvailabilityErrorSchema> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
@@ -269,15 +237,15 @@ private fun Route.availabilityRoutes(
         tags = listOf("availability")
         summary = "Bulk per-day availability for many campgrounds in a date window (poi-id keyed)"
         description =
-            "Body: { ids: number[], start_date: 'YYYY-MM-DD', end_date: 'YYYY-MM-DD' }. " +
+            "Deprecated. Body: { ids: number[], start_date: 'YYYY-MM-DD', end_date: 'YYYY-MM-DD' }. " +
             "Returns one entry per id with an HTTP-style `status` and the dates inside " +
             "the window where at least one site is available on each date. Mixed providers OK."
         request {
-            body<BulkAvailRequestSchema> {
+            body<BulkAvailabilityRequestDto> {
                 mediaTypes(ContentType.Application.Json)
                 example("3-night July 4 weekend") {
                     value =
-                        BulkAvailRequestSchema(
+                        BulkAvailabilityRequestDto(
                             ids = listOf(12345L, 67890L),
                             startDate = "2026-07-04",
                             endDate = "2026-07-07",
@@ -288,18 +256,18 @@ private fun Route.availabilityRoutes(
         response {
             code(HttpStatusCode.OK) {
                 description = "One entry per id. status==200 → available_dates is meaningful."
-                body<BulkAvailResponseSchema> {
+                body<BulkAvailabilityResponseDto> {
                     mediaTypes(ContentType.Application.Json)
                     example("mixed") {
                         value =
-                            BulkAvailResponseSchema(
+                            BulkAvailabilityResponseDto(
                                 startDate = "2026-07-04",
                                 endDate = "2026-07-07",
                                 results =
                                     listOf(
-                                        BulkAvailEntrySchema(12345L, 200, listOf("2026-07-04", "2026-07-06")),
-                                        BulkAvailEntrySchema(67890L, 200, emptyList()),
-                                        BulkAvailEntrySchema(99999L, 503, emptyList()),
+                                        BulkAvailabilityEntryDto(12345L, 200, listOf("2026-07-04", "2026-07-06")),
+                                        BulkAvailabilityEntryDto(67890L, 200, emptyList()),
+                                        BulkAvailabilityEntryDto(99999L, 503, emptyList()),
                                     ),
                             )
                     }
@@ -307,7 +275,7 @@ private fun Route.availabilityRoutes(
             }
             code(HttpStatusCode.BadRequest) {
                 description = "Malformed body, missing fields, or limits exceeded."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.ServiceUnavailable) {
                 description = "Rate limited."
@@ -315,9 +283,10 @@ private fun Route.availabilityRoutes(
             }
         }
     }) {
+        call.markBulkAvailabilityDeprecated()
         val req =
             try {
-                Json.decodeFromString(BulkAvailRequestSchema.serializer(), call.receiveText())
+                Json.decodeFromString(BulkAvailabilityRequestDto.serializer(), call.receiveText())
             } catch (e: Exception) {
                 call.respondApiError("bad_request", HttpStatusCode.BadRequest, detail = e.message ?: "parse failed")
                 return@post
@@ -357,17 +326,16 @@ private fun Route.availabilityRoutes(
 
         try {
             call.respondAvailabilityJson(
-                controller.bulkAvailability(
+                routeService.bulkAvailability(
                     ids = req.ids,
                     startDate = start,
                     endDate = end,
                 ),
             )
         } catch (e: AvailabilityServiceError.BadDateWindow) {
-            call.respondApiError(
-                "bad_date_window",
+            call.respondAvailabilityJson(
+                availabilityErrorDto(e),
                 HttpStatusCode.BadRequest,
-                detail = "date window must be 1..14 days",
             )
         }
     }
@@ -410,20 +378,8 @@ private class IpRateLimiter(
     }
 }
 
-private fun ApplicationCall.optionalDateQuery(name: String): LocalDate? = request.queryParameters[name]?.let(LocalDate::parse)
-
-private fun ApplicationCall.forceQuery(): Boolean = request.queryParameters["force"] == "1"
-
-private fun ApplicationCall.queryValues(vararg names: String): List<String> =
-    names
-        .flatMap { name -> request.queryParameters.getAll(name).orEmpty() }
-        .flatMap { value -> value.split(",") }
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .distinct()
-
-/** Map the typed provider error to (HTTP status, AvailabilityErrorSchema). */
-internal fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, AvailabilityErrorSchema> {
+/** Map the typed provider error to (HTTP status, AvailabilityErrorDto). */
+internal fun mapProviderError(e: ReservationProviderError): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val upstream = upstreamHttpStatus(e)
     return when (e) {
         is ReservationProviderError.RateLimited ->
@@ -462,11 +418,16 @@ private suspend fun ApplicationCall.respondAvailabilityError(
 private suspend fun ApplicationCall.respondServiceAvailabilityError(e: AvailabilityServiceError) {
     val status =
         when (e) {
-            AvailabilityServiceError.BadDateWindow -> HttpStatusCode.BadRequest
+            is AvailabilityServiceError.BadDateWindow -> HttpStatusCode.BadRequest
             AvailabilityServiceError.NotFound -> HttpStatusCode.NotFound
             AvailabilityServiceError.UnknownCampground -> HttpStatusCode.NotFound
         }
-    respondAvailabilityJson(availabilityErrorDto(e.error), status)
+    val body =
+        when (e) {
+            is AvailabilityServiceError.BadDateWindow -> availabilityErrorDto(e)
+            else -> availabilityErrorDto(e.error)
+        }
+    respondAvailabilityJson(body, status)
 }
 
 private suspend fun ApplicationCall.respondApiError(
@@ -482,4 +443,30 @@ private suspend inline fun <reified T> ApplicationCall.respondAvailabilityJson(
     status: HttpStatusCode = HttpStatusCode.OK,
 ) {
     respondText(encodeAvailabilityJson(value), ContentType.Application.Json, status)
+}
+
+private fun availabilityErrorDto(e: AvailabilityServiceError.BadDateWindow): AvailabilityErrorDto =
+    when (e) {
+        is AvailabilityServiceError.BadDateWindow.StartBeforeEarliest ->
+            availabilityErrorDto(
+                error = e.error,
+                earliestDate = e.earliestDate.toString(),
+                timeZone = e.timeZone.id,
+            )
+        AvailabilityServiceError.BadDateWindow.EndBeforeStart ->
+            availabilityErrorDto(error = e.error)
+        is AvailabilityServiceError.BadDateWindow.WindowTooLong ->
+            availabilityErrorDto(error = e.error, maxDays = e.maxDays)
+        is AvailabilityServiceError.BadDateWindow.BeyondBookingHorizon ->
+            availabilityErrorDto(error = e.error, latestDate = e.latestDate.toString())
+        AvailabilityServiceError.BadDateWindow.Invalid ->
+            availabilityErrorDto(error = e.error)
+    }
+
+private fun ApplicationCall.markBulkAvailabilityDeprecated() {
+    response.headers.append("Deprecation", "true")
+    response.headers.append(
+        "Warning",
+        "299 - \"/api/availability/bulk is deprecated; use POI/reservable availability service paths\"",
+    )
 }

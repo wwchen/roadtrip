@@ -16,6 +16,7 @@ import ca.floo.roadtrip.repo.PoiDetailRow
 import ca.floo.roadtrip.repo.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.api.PoiCta
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -70,9 +71,10 @@ private val poiFeatureJson =
 // planner's "campgrounds along route" list needs the full set, not a
 // viewport slice + per-cat sample, so the two paths have different
 // truncation rules and live in different endpoints.
-fun Route.poiRoutes(
+internal fun Route.poiRoutes(
     ctx: DSLContext,
     registry: PoiRegistry,
+    dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
 ) {
     // Default category list derives from the YAML registry so a new
     // poi_data category surfaces without code changes.
@@ -197,7 +199,7 @@ fun Route.poiRoutes(
             "Cache-Control",
             "public, max-age=300, stale-while-revalidate=3600",
         )
-        call.respondPoiFeatureJson(poiDetailFeature(row))
+        call.respondPoiFeatureJson(poiDetailFeature(row, dateResolver))
     }
 
     // GET /api/pois/search?q=...&limit=10
@@ -334,8 +336,17 @@ internal fun poiFeatureCollection(
             },
     )
 
-internal fun poiDetailFeature(r: PoiDetailRow): PoiDetailFeatureSchema =
-    PoiDetailFeatureSchema(
+internal fun poiDetailFeature(
+    r: PoiDetailRow,
+    dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
+): PoiDetailFeatureSchema {
+    val dateContext =
+        if (r.category == "campground") {
+            dateResolver.context(lat = r.lat, lng = r.lng)
+        } else {
+            null
+        }
+    return PoiDetailFeatureSchema(
         id = r.id,
         geometry = Json.parseToJsonElement(r.geomJson),
         properties =
@@ -346,6 +357,9 @@ internal fun poiDetailFeature(r: PoiDetailRow): PoiDetailFeatureSchema =
                 subcategory = r.subcategory,
                 name = r.name,
                 region = r.region,
+                country = r.country,
+                timeZone = dateContext?.timeZone?.id,
+                earliestDate = dateContext?.earliestDate?.toString(),
                 unitName = r.unitName,
                 reserveUrl = r.reserveUrl,
                 phone = r.phone,
@@ -357,6 +371,7 @@ internal fun poiDetailFeature(r: PoiDetailRow): PoiDetailFeatureSchema =
                 raw = Json.parseToJsonElement(r.propertiesJson),
             ),
     )
+}
 
 internal fun encodePoiFeatureJson(value: PoiFeatureCollectionSchema): String = poiFeatureJson.encodeToString(value)
 

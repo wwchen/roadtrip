@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.reservation.adapters.camis
 
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities

@@ -1,12 +1,17 @@
 package ca.floo.roadtrip.service.api
 
-import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
+import ca.floo.roadtrip.models.api.AvailabilityDayDto
+import ca.floo.roadtrip.models.api.AvailabilityErrorDto
+import ca.floo.roadtrip.models.api.AvailabilityResponseDto
+import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.DayClassification
+import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.encodeToJsonElement
 import java.time.Instant
@@ -31,33 +36,6 @@ internal val availabilityResponseJson: Json =
     }
 
 inline fun <reified T> encodeAvailabilityJson(value: T): String = availabilityResponseJson.encodeToString(value)
-
-data class DayClassification(
-    val date: String,
-    val status: AvailabilityStatus,
-    val availableReservableIds: List<String>? = null,
-    val reservableStatuses: Map<String, AvailabilityStatus>? = null,
-)
-
-data class ReservableDayObservation(
-    val reservableId: String,
-    val date: LocalDate,
-    val observedAt: Instant,
-    val status: AvailabilityStatus,
-)
-
-data class AvailabilityObservationBatch(
-    val provider: String,
-    val startDate: LocalDate,
-    val endDate: LocalDate,
-    val observations: List<ReservableDayObservation>,
-    val cacheBlock: AvailabilityCacheBlock,
-    val seasonBlock: AvailabilitySeasonBlock? = null,
-    val campgroundId: String? = null,
-    val host: String? = null,
-    val mapId: String? = null,
-    val reservableId: String? = null,
-)
 
 fun dayClassificationsFromObservations(
     startDate: LocalDate,
@@ -215,57 +193,19 @@ fun availabilityResponseDto(
         cache = cacheBlock,
     )
 
-@Serializable
-data class AvailabilityResponseDto(
-    val provider: String,
-    @SerialName("campground_id") val campgroundId: String? = null,
-    val host: String? = null,
-    @SerialName("map_id") val mapId: String? = null,
-    @SerialName("reservable_id") val reservableId: String? = null,
-    @SerialName("checked_at") val checkedAt: String,
-    @SerialName("start_date") val startDate: String,
-    @SerialName("end_date") val endDate: String,
-    val state: String,
-    val season: JsonElement,
-    val availability: List<AvailabilityDayDto>,
-    val cache: AvailabilityCacheBlock,
-)
-
-@Serializable
-data class AvailabilityDayDto(
-    val date: String,
-    val status: AvailabilityStatus,
-    @SerialName("available_reservable_ids") val availableReservableIds: List<String>? = null,
-    @SerialName("reservable_statuses") val reservableStatuses: Map<String, AvailabilityStatus>? = null,
-)
-
-@Serializable
-data class AvailabilitySeasonBlock(
-    @SerialName("reopens_on") val reopensOn: String,
-)
-
-@Serializable
-data class AvailabilityCacheBlock(
-    val hit: Boolean,
-    @SerialName("age_seconds") val ageSeconds: Long,
-    @SerialName("ttl_seconds") val ttlSeconds: Long,
-)
-
-// /api/poi/{poi_id}/reservables/availability — bulk per-reservable availability
-// for one POI. Each entry in `reservables` is the same envelope the single-
-// reservable endpoint returns; the FE fuses them into the week grid.
-//
-// `reservables` is empty when the POI has no linked reservables (walk-up /
-// non-bookable). The drawer should hide the matrix in that case.
-@Serializable
-data class PoiReservablesAvailabilityResponseDto(
-    @SerialName("poi_id") val poiId: Long,
-    @SerialName("start_date") val startDate: String,
-    @SerialName("end_date") val endDate: String,
-    val reservables: List<AvailabilityResponseDto>,
-)
-
 fun availabilityErrorDto(
     error: String,
     upstreamStatus: Int? = null,
-): AvailabilityErrorSchema = AvailabilityErrorSchema(error = error, upstream_status = upstreamStatus)
+    earliestDate: String? = null,
+    timeZone: String? = null,
+    latestDate: String? = null,
+    maxDays: Int? = null,
+): AvailabilityErrorDto =
+    AvailabilityErrorDto(
+        error = error,
+        upstreamStatus = upstreamStatus,
+        earliestDate = earliestDate,
+        timeZone = timeZone,
+        latestDate = latestDate,
+        maxDays = maxDays,
+    )

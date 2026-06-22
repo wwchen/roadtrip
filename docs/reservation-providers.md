@@ -1,19 +1,18 @@
 # Reservation providers
 
 Campsite availability and watches are dispatched through one abstraction:
-`ReservationProvider`. Every upstream reservation system (rec.gov, Aspira NextGen,
-Camis, future regional vendors) is an adapter behind this port. Routes,
-the watch poller, and any future endpoint never branch on a sealed
-`ProviderRef` — they consume the interface.
+`ReservationProvider`. Every upstream reservation system (rec.gov, Aspira
+NextGen, Camis, future regional vendors) is an adapter behind this port.
+Routes never call this port directly. Availability services resolve a POI or
+reservable into provider-ready targets, then call the adapter.
 
 ## Why an abstraction
 
-The dispatch logic used to live in three parallel `when` blocks (single-id
-availability, bulk availability, watch poller), each parsing
-`provider_ref` JSON inline and importing per-provider helper functions.
-Adding a third provider meant editing three files plus a fourth parser;
-forgetting one was a silent bug. The port collapses that into one
-registry lookup.
+The dispatch logic used to live in parallel paths (single-id availability,
+bulk availability, watch poller), each parsing `provider_ref` JSON inline and
+importing per-provider helper functions. Adding a third provider meant editing
+several files; forgetting one was a silent bug. The current shape collapses
+that into one registry lookup behind `AvailabilityTargetResolver`.
 
 This doc is the contract. **A new reservation provider is a new file under
 `service/reservation/adapters/<vendor>/` and one row in the registry — nothing
@@ -39,6 +38,17 @@ service/reservation/
 variants) is the wire shape. Adapters take a `ProviderRef` of their
 matching variant and the registry guarantees the dispatch is correct.
 
+The availability orchestration that consumes this port lives one layer above:
+
+```
+service/availability/
+├── AvailabilityService.kt          # rid/rids availability contract
+├── AvailabilityServiceImpl.kt      # grouping, window policy, snapshot fetch
+├── AvailabilityQueryService.kt     # POI/bulk query contract used by routes
+├── AvailabilityTargetResolver.kt   # reservable → parent provider + date context
+└── AvailabilityDateResolver.kt     # target-local earliest date/window policy
+```
+
 ## Capabilities
 
 Not every provider supports every monitoring action. The capability flags
@@ -62,10 +72,12 @@ drawer can hide affordances the provider doesn't support.
 
 | Action | Required interface | Notes |
 |---|---|---|
-| Per-day availability for a window | `ReservationProvider.availability(ref, start, days, force)` | Drives the drawer's week grid. Per-month cache lives in the adapter. |
+| Per-day availability for a window | `ReservationProvider.availability(AvailabilityRequest)` | Drives provider-level availability. Per-month cache lives in the adapter. |
+| Catalog availability for linked reservables | `ReservationProvider.catalogAvailability(CatalogAvailabilityRequest)` | POI/rids path uses this so the returned availability is narrowed to known catalog rows. |
+| Reservable availability | `ReservationProvider.reservableAvailability(ReservableAvailabilityRequest)` | Narrow projection for a single reservable when the adapter supports it. |
 | Capability probe | `ReservationProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
-| Append history snapshot | poller writes `availability_snapshots` row | Provider-agnostic; uses the standard `AvailabilityResult` shape. |
+| Append history snapshot | poller writes `availability_snapshot` rows | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
 | Notify on match | poller dispatches via Slack / push (future) | Channels are not provider-specific. |
 
 Reservation providers do not model cart automation, payment, or booking on
@@ -104,9 +116,10 @@ This shape gives us three properties that hold regardless of UI changes:
   collect stale polls. The slot table mirrors the watch table; both
   shrink together.
 
-Adapters do not own polling cadence — the platform poller does. Adapters
-expose a single `availability(ref, start, days, force)` call. Cadence,
-backoff, dedup, and the "should we poll right now" decision all live
+Adapters do not own polling cadence — the platform poller does. The poller
+uses `AvailabilityTargetResolver` to resolve the same provider target as live
+availability, then calls the provider through the same request models.
+Cadence, backoff, dedup, and the "should we poll right now" decision all live
 above the adapter, inside the generic poller.
 
 ### Cadence is layered config, not a constant
@@ -151,15 +164,14 @@ successful poll appends rows to `availability_snapshots`, keyed by
   just the alerted slot. Same upstream cost; vastly more history.
 
 History is read through provider-agnostic SQL on the snapshot table.
-Adapters do not own history queries — the snapshot shape
-(`available_count`, `total`, `status`) is the lingua franca. The shared
-status enum is `first_come | reserved | available | closed | unknown`.
-`available_count` counts only online-bookable `available` reservables.
-`first_come` is visible to users but does not count as online availability;
-missing provider data is `unknown`, not `closed`. Provider-specific
-richness (per-site detail, equipment-type breakdowns) is *not* captured in
-snapshots; that fidelity lives in the live availability call. Snapshots are
-the long-tail summary, not a replay log.
+Adapters do not own history queries. The snapshot lingua franca is one
+reservable/date/status observation with the shared status enum:
+`first_come | reserved | available | closed | unknown`. `first_come` is
+visible to users but does not count as online availability; missing provider
+data is `unknown`, not `closed`. Provider-specific richness (equipment-type
+breakdowns, upstream map structure) is *not* captured in snapshots; that
+fidelity lives in the live availability call. Snapshots are the long-tail
+summary, not a replay log.
 
 Retention is tiered: raw rows for 90 days, daily aggregates beyond,
 discard raw past 1 year. The query layer reads raw or aggregates
@@ -174,10 +186,13 @@ browse → pin click
   ↓
 GET /api/pois/{id}
   ↓
-GET /api/poi/{poi_id}/availability (per active watch, every cycle)
-  ↓                                ReservationProvider.availability
-week pages                           ↓
-  ↓                                watch evaluator
+GET /api/poi/{poi_id}/reservables/availability
+  ↓                                AvailabilityService
+week pages                         ↓
+  ↓                                AvailabilityTargetResolver
+  ↓                                ReservationProvider.catalogAvailability
+                                   ↓
+                                   watch evaluator
   ↓                                  ↓ (match)
 "Set watch" click                  notify (Slack / push)
   ↓                                  ↓
@@ -205,8 +220,9 @@ poller has produced.
    `pois.source` maps to the adapter in `ReservationProviderRegistryFactory`.
 5. Update the matrix table above.
 
-Steps 1–5 should be the entire diff. If you find yourself editing route
-files or the watch poller core, the abstraction is leaking — fix that
+Steps 1–5 should be the entire provider-registration diff. If you find
+yourself editing route files, `AvailabilityServiceImpl`, or the watch poller
+core only to branch on a new vendor, the abstraction is leaking — fix that
 before merging.
 
 ## Per-vendor API docs
@@ -229,8 +245,8 @@ per-vendor docs own the wire details.
 ## See also
 
 - [backend-architecture.md](backend-architecture.md) — overall layer
-  rules. Adapters live under `service/`; routes consume the registry,
-  not the adapters directly.
+  rules. Adapters live under `service/reservation/`; routes consume
+  availability services, not provider adapters or the provider registry.
 - `rfcs/0007-availability-search-and-alerts.md` — the RFC that introduced
   this abstraction and the monitoring lifecycle it enables.
 - [.claude/skills/probe-vendor-api/SKILL.md](../.claude/skills/probe-vendor-api/SKILL.md)

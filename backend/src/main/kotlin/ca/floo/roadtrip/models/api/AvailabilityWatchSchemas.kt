@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.models.api
 
-import ca.floo.roadtrip.service.api.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.JsonObject

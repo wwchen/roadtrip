@@ -1,15 +1,16 @@
 package ca.floo.roadtrip.service.reservation
 
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import java.time.LocalDate
 
 /**
  * Primary port for "give me this campground's availability." One adapter per
  * upstream reservation system (rec.gov, Aspira NextGen instance, Camis, …).
  *
- * Routes consume this interface; they never branch on `ProviderRef` variant
- * directly. See `docs/reservation-providers.md` for the architecture rules.
+ * Availability services consume this interface; routes stay at the HTTP
+ * boundary and never branch on `ProviderRef` variants directly. See
+ * `docs/reservation-providers.md` for the architecture rules.
  *
  * Adapters own:
  *   - their own caching (per-month, per-host, however the upstream wants)

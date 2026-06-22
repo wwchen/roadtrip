@@ -1,5 +1,9 @@
 package ca.floo.roadtrip.service.api
 
+import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.migrate
 import com.zaxxer.hikari.HikariConfig

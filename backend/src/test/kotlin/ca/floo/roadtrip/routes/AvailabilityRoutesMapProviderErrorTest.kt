@@ -14,7 +14,7 @@ class AvailabilityRoutesMapProviderErrorTest {
         val (status, dto) = mapProviderError(ReservationProviderError.RateLimited(AspiraException("429", httpStatus = 429)))
         assertEquals(HttpStatusCode.ServiceUnavailable, status)
         assertEquals("rate_limited", dto.error)
-        assertEquals(429, dto.upstream_status)
+        assertEquals(429, dto.upstreamStatus)
     }
 
     @Test
@@ -22,7 +22,7 @@ class AvailabilityRoutesMapProviderErrorTest {
         val (status, dto) = mapProviderError(ReservationProviderError.UpstreamBlocked(AspiraException("WAF", httpStatus = 503)))
         assertEquals(HttpStatusCode.ServiceUnavailable, status)
         assertEquals("upstream_blocked", dto.error)
-        assertEquals(503, dto.upstream_status)
+        assertEquals(503, dto.upstreamStatus)
     }
 
     @Test
@@ -31,13 +31,13 @@ class AvailabilityRoutesMapProviderErrorTest {
         val (status, dto) = mapProviderError(ReservationProviderError.UpstreamUnavailable(nested))
         assertEquals(HttpStatusCode.ServiceUnavailable, status)
         assertEquals("upstream_5xx", dto.error)
-        assertEquals(502, dto.upstream_status)
+        assertEquals(502, dto.upstreamStatus)
     }
 
     @Test
     fun `upstream status is null when cause is not Aspira`() {
         val (_, dto) = mapProviderError(ReservationProviderError.UpstreamUnavailable(RuntimeException("network")))
-        assertNull(dto.upstream_status)
+        assertNull(dto.upstreamStatus)
     }
 
     @Test
@@ -45,7 +45,7 @@ class AvailabilityRoutesMapProviderErrorTest {
         val (status, dto) = mapProviderError(ReservationProviderError.Unsupported("availability", ReservationProviderId.ASPIRA))
         assertEquals(HttpStatusCode.NotImplemented, status)
         assertEquals("unsupported", dto.error)
-        assertNull(dto.upstream_status)
+        assertNull(dto.upstreamStatus)
     }
 
     @Test

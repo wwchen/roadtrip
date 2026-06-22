@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.models.metadata.aspira
 
-import ca.floo.roadtrip.service.api.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
 

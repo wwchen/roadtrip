@@ -1,36 +1,31 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheEntity
+import ca.floo.roadtrip.models.api.AvailabilityResponseDto
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import java.time.Duration
 import java.time.LocalDate
-import java.time.ZoneId
-import java.time.temporal.ChronoUnit
 
 private const val MAX_AVAILABILITY_DAYS: Int = 60
+private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 
-class AvailabilityServiceImpl(
-    private val providerRefs: CampsiteProviderRepo,
-    private val reservationProviders: ReservationProviderRegistry,
-    private val reservablesRepo: ReservableRepo,
+internal class AvailabilityServiceImpl(
+    private val targets: AvailabilityTargetResolver,
+    private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     snapshots: AvailabilitySnapshotRepo? = null,
     private val snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
 ) : AvailabilityService {
@@ -50,21 +45,27 @@ class AvailabilityServiceImpl(
         force: Boolean,
     ): List<AvailabilityResponseDto> {
         if (rids.isEmpty()) return emptyList()
-        val resolved = rids.map { resolveReservable(it) }
+        val resolved = rids.map { targets.requireByRid(it) }
         val byRid = linkedMapOf<String, AvailabilityResponseDto>()
         resolved
-            .groupBy { AvailabilityFetchGroup(provider = it.provider, parentRef = it.parentRef) }
+            .groupBy { AvailabilityFetchGroup(provider = it.provider, parentRef = it.parentRef, dateContext = it.dateContext) }
             .forEach { (group, items) ->
                 val query =
-                    resolveAvailabilityWindow(startDate, endDate, force, group.provider.capabilities.bookingHorizonDays)
-                        ?: throw AvailabilityServiceError.BadDateWindow
+                    dateResolver.resolveWindow(
+                        startDate = startDate,
+                        endDate = endDate,
+                        context = group.dateContext,
+                        bookingHorizonDays = group.provider.capabilities.bookingHorizonDays,
+                        maxDays = MAX_AVAILABILITY_DAYS,
+                        defaultDays = DEFAULT_AVAILABILITY_DAYS,
+                    )
                 fetchCatalogReservablesAvailability(
                     catalogRows = items.map { it.reservable },
                     parentRef = group.parentRef,
                     provider = group.provider,
                     startDate = query.startDate,
                     endDate = query.endDate,
-                    force = query.force,
+                    force = force,
                 ).forEach { response ->
                     response.reservableId?.let { byRid[it] = response }
                 }
@@ -72,27 +73,6 @@ class AvailabilityServiceImpl(
         return rids.map { rid ->
             byRid[rid.encode()] ?: throw AvailabilityServiceError.NotFound
         }
-    }
-
-    private fun resolveReservable(rid: ReservableId): ResolvedReservable {
-        val reservable =
-            reservablesRepo.findByRid(rid)
-                ?: throw AvailabilityServiceError.NotFound
-        val poiIds = reservablesRepo.poiIdsForReservable(reservable.id)
-        val providerRefsByPoiId = providerRefs.findProviderRefs(poiIds)
-        val parent =
-            poiIds
-                .asSequence()
-                .mapNotNull { providerRefsByPoiId[it] }
-                .firstOrNull { reservationProviders.forPoi(it) != null && ProviderRefParser.parse(it.providerRefJson) != null }
-                ?: throw AvailabilityServiceError.UnknownCampground
-        val provider = reservationProviders.forPoi(parent)!!
-        val parentRef = ProviderRefParser.parse(parent.providerRefJson)!!
-        return ResolvedReservable(
-            reservable = reservable,
-            provider = provider,
-            parentRef = parentRef,
-        )
     }
 
     private suspend fun fetchCatalogReservablesAvailability(
@@ -158,62 +138,11 @@ class AvailabilityServiceImpl(
         }
 }
 
-private data class ResolvedReservable(
-    val reservable: Reservable,
-    val provider: ReservationProvider,
-    val parentRef: ProviderRef,
-)
-
 private data class AvailabilityFetchGroup(
     val provider: ReservationProvider,
     val parentRef: ProviderRef,
+    val dateContext: PoiDateContext,
 )
-
-internal sealed class StartParam {
-    data class Ok(
-        val value: LocalDate,
-    ) : StartParam()
-
-    object Invalid : StartParam()
-}
-
-internal fun parseStartParam(
-    raw: LocalDate?,
-    today: LocalDate,
-    horizonDays: Int,
-): StartParam {
-    if (raw == null) return StartParam.Ok(today)
-    if (raw.isBefore(today)) return StartParam.Invalid
-    if (raw.isAfter(today.plusDays(horizonDays.toLong()))) return StartParam.Invalid
-    return StartParam.Ok(raw)
-}
-
-private data class ResolvedAvailabilityWindow(
-    val startDate: LocalDate,
-    val endDate: LocalDate,
-    val force: Boolean,
-)
-
-private fun resolveAvailabilityWindow(
-    startDate: LocalDate?,
-    endDate: LocalDate?,
-    force: Boolean,
-    bookingHorizonDays: Int,
-    defaultDays: Int = 7,
-): ResolvedAvailabilityWindow? {
-    val today = LocalDate.now(ZoneId.systemDefault())
-    val start =
-        when (val parsed = parseStartParam(startDate, today, bookingHorizonDays)) {
-            is StartParam.Ok -> parsed.value
-            StartParam.Invalid -> return null
-        }
-    val end = endDate ?: start.plusDays(defaultDays.toLong())
-    if (!end.isAfter(start)) return null
-    if (end.isAfter(today.plusDays(bookingHorizonDays.toLong()))) return null
-    val days = ChronoUnit.DAYS.between(start, end).toInt()
-    if (days !in 1..MAX_AVAILABILITY_DAYS) return null
-    return ResolvedAvailabilityWindow(startDate = start, endDate = end, force = force)
-}
 
 internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =
     when (providerId) {

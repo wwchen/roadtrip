@@ -290,14 +290,6 @@ private fun ApplicationCall.rejectBookingLinkParams() {
     }
 }
 
-private fun ApplicationCall.queryValues(vararg names: String): List<String> =
-    names
-        .flatMap { name -> request.queryParameters.getAll(name).orEmpty() }
-        .flatMap { value -> value.split(",") }
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .distinct()
-
 internal fun Reservable.toSchema(
     poiIds: List<Long> = emptyList(),
     reservationUrlTemplate: String? = null,

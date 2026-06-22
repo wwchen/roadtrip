@@ -5,7 +5,12 @@ import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
 import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.clients.cache.CachedResult
-import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
+import ca.floo.roadtrip.models.api.AvailabilityErrorDto
+import ca.floo.roadtrip.models.api.AvailabilityResponseDto
+import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
 import io.ktor.http.HttpStatusCode
 import java.time.Instant
@@ -395,7 +400,7 @@ private fun daysBetween(
     endDate: LocalDate,
 ): Int = ChronoUnit.DAYS.between(startDate, endDate).toInt()
 
-internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorSchema> {
+internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val status = e.httpStatus
     return when {
         status == 429 ->

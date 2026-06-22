@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.service.availability.WatchStatus
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.JsonObject
@@ -107,7 +108,7 @@ class AvailabilityJobRunRepoTest {
                 watchId = watchId,
                 intentPayload = intent,
                 cadenceSec = 60,
-                status = "active",
+                status = WatchStatus.ACTIVE,
                 nextRunAt = now(),
             ).id
     }

@@ -29,7 +29,7 @@ class AvailabilityWatchService(
             val jobRepo = AvailabilityJobRepo(DSL.using(config))
             val watch = watchRepo.create(input)
             val intent = buildIntent(watch)
-            val nextRun = if (watch.status == "active") OffsetDateTime.now() else parkedFar
+            val nextRun = if (watch.status == WatchStatus.ACTIVE) OffsetDateTime.now() else parkedFar
             jobRepo.upsertForWatch(
                 watchId = watch.id,
                 intentPayload = intent.toJsonObject(),
@@ -51,21 +51,21 @@ class AvailabilityWatchService(
             val intent = buildIntent(updated)
             val nextRun =
                 when (updated.status) {
-                    "active" -> {
+                    WatchStatus.ACTIVE -> {
                         // If the watch was just resumed, kick the next run
                         // to "now" so polling restarts on the next tick.
                         // For an in-place edit (already active), keep the
                         // existing schedule by reusing the job's nextRunAt
                         // when present; otherwise default to now.
                         val existing = jobRepo.findByWatchId(updated.id)
-                        if (existing == null || existing.status != "active" || existing.nextRunAt == parkedFar) {
+                        if (existing == null || existing.status != WatchStatus.ACTIVE || existing.nextRunAt == parkedFar) {
                             OffsetDateTime.now()
                         } else {
                             existing.nextRunAt
                         }
                     }
-                    "paused" -> parkedFar
-                    else -> parkedFar
+                    WatchStatus.PAUSED -> parkedFar
+                    WatchStatus.DONE -> parkedFar
                 }
             jobRepo.upsertForWatch(
                 watchId = updated.id,

@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.api
+package ca.floo.roadtrip.models.availability
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable

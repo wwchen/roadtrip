@@ -217,7 +217,7 @@ function renderWeekNav({ weekStart, visibleDays, showToday }) {
   const startIso = typeof weekStart === 'string' && weekStart ? weekStart : visibleDays[0]?.date || '';
   const endIso = visibleDays[visibleDays.length - 1]?.date || startIso;
   const todayBtn = showToday
-    ? '<button type="button" class="cg-week-today" aria-label="Jump to today">Today</button>'
+    ? '<button type="button" class="cg-week-today" aria-label="Jump to earliest date">Earliest</button>'
     : '';
   const todayClass = showToday ? ' has-today' : ' no-today';
   return `

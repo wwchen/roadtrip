@@ -1,14 +1,18 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
-import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
-import ca.floo.roadtrip.service.api.AvailabilityStatus
-import ca.floo.roadtrip.service.api.ReservableDayObservation
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
+import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -42,7 +46,9 @@ import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.assertAll
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.time.Clock
 import java.time.Instant
+import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -860,6 +866,106 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `bulk availability returns empty success for existing poi with no reservables`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "bulk-walkup",
+                    name = "Bulk Walkup Campground",
+                    providerRefJson = null,
+                )
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeReservationProviders(),
+                        ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
+                    )
+                }
+            }
+
+            val resp =
+                client.post("/api/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"ids":[$poiId,999999],"start_date":"2026-07-01","end_date":"2026-07-04"}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val results =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["results"]!!
+                    .jsonArray
+                    .map { it.jsonObject }
+            val existingPoiResult = results.first { it["id"]!!.jsonPrimitive.content.toLong() == poiId }
+            val unknownPoiResult = results.first { it["id"]!!.jsonPrimitive.content.toLong() == 999999L }
+            assertEquals(200, existingPoiResult["status"]!!.jsonPrimitive.content.toInt())
+            assertEquals(404, unknownPoiResult["status"]!!.jsonPrimitive.content.toInt())
+            assertEquals(0, FakeReservationProvider.catalogAvailabilityCalls)
+            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
+        }
+
+    @Test
+    fun `bulk reservable availability resolves date windows per poi timezone`() =
+        testApplication {
+            val westPoi =
+                seedPoi(
+                    sourceId = "adak-same-provider-ref",
+                    name = "Adak Same Provider Ref",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                    lng = -176.6368,
+                    lat = 51.8800,
+                )
+            val eastPoi =
+                seedPoi(
+                    sourceId = "kiritimati-same-provider-ref",
+                    name = "Kiritimati Same Provider Ref",
+                    providerRefJson = """{"recgov_id":"232447"}""",
+                    lng = -157.4278,
+                    lat = 1.8721,
+                )
+            val westReservable = seedReservable(vendorId = "330301", name = "West A")
+            val eastReservable = seedReservable(vendorId = "330302", name = "East A")
+            link(westReservable, westPoi)
+            link(eastReservable, eastPoi)
+            val dateResolver =
+                AvailabilityDateResolver(
+                    clock = Clock.fixed(Instant.parse("2026-06-18T04:00:00Z"), ZoneOffset.UTC),
+                )
+            val availabilityService =
+                AvailabilityServiceImpl(
+                    targets =
+                        AvailabilityTargetResolver(
+                            providerRefs = CampsiteProviderRepo(ctx),
+                            reservablesRepo = ReservableRepo(ctx),
+                            reservationProviders = fakeReservationProviders(),
+                            dateResolver = dateResolver,
+                        ),
+                    dateResolver = dateResolver,
+                )
+
+            val availability =
+                availabilityService
+                    .getByRids(
+                        rids =
+                            listOf(
+                                ReservableId.parse("site:recgov:330301")!!,
+                                ReservableId.parse("site:recgov:330302")!!,
+                            ),
+                        startDate = null,
+                        endDate = null,
+                        force = false,
+                    ).associateBy { it.reservableId }
+
+            assertEquals("2026-06-18", availability["site:recgov:330301"]!!.startDate)
+            assertEquals("2026-06-25", availability["site:recgov:330301"]!!.endDate)
+            assertEquals("2026-06-19", availability["site:recgov:330302"]!!.startDate)
+            assertEquals("2026-06-26", availability["site:recgov:330302"]!!.endDate)
+            assertEquals(2, FakeReservationProvider.catalogAvailabilityCalls)
+        }
+
+    @Test
     fun `poi reservables availability passes linked aspira child-map ref to provider`() =
         testApplication {
             val poiId =
@@ -1003,6 +1109,8 @@ class ReservableRoutesTest {
         name: String,
         providerRefJson: String? = null,
         source: String = "test",
+        lng: Double = -119.56,
+        lat: Double = 37.74,
     ): Long =
         ctx
             .fetchOne(
@@ -1012,7 +1120,7 @@ class ReservableRoutesTest {
                     region, properties, provider_ref, fetched_at
                 ) VALUES (
                     ?, ?, 'campground', ?,
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
+                    ST_SetSRID(ST_MakePoint(?, ?), 4326),
                     'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
                 )
                 RETURNING id
@@ -1020,6 +1128,8 @@ class ReservableRoutesTest {
                 source,
                 sourceId,
                 name,
+                lng,
+                lat,
                 providerRefJson,
             )!!
             .get("id", Long::class.java)

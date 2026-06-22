@@ -71,12 +71,14 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
 // ---- context --------------------------------------------------------------
 
 function makeContext(host, feature, signal) {
+  const earliestDate = featureEarliestDate(feature);
   return {
     host,
     feature,
     poiId: feature.id,
     signal,
-    weekStart: localToday(),
+    earliestDate,
+    weekStart: earliestDate,
     siteColumnWidth: loadSiteColumnWidth(),
     selectedDate: null,
     state: 'loading', // 'loading' | 'success' | 'empty' | 'closed_for_season' | 'error'
@@ -145,7 +147,7 @@ function renderBody(ctx) {
       days: placeholderMatrixDays(ctx),
       siteColumnWidth: ctx.siteColumnWidth,
       weekStart: localYmd(ctx.weekStart),
-      showToday: !sameLocalDay(ctx.weekStart, localToday()),
+      showToday: shouldShowEarliestButton(ctx),
     });
   }
   if (ctx.state === 'error') {
@@ -163,7 +165,7 @@ function renderBody(ctx) {
     days: ctx.days,
     siteColumnWidth: ctx.siteColumnWidth,
     weekStart: localYmd(ctx.weekStart),
-    showToday: !sameLocalDay(ctx.weekStart, localToday()),
+    showToday: shouldShowEarliestButton(ctx),
   });
 }
 
@@ -179,7 +181,7 @@ function renderAvailabilitySurface(ctx) {
     filters: ctx.matrixFilters,
     selectedSiteRid: ctx.selectedSiteRid,
     weekStart: localYmd(ctx.weekStart),
-    showToday: !sameLocalDay(ctx.weekStart, localToday()),
+    showToday: shouldShowEarliestButton(ctx),
     armedBook: ctx.armedBook,
   });
 }
@@ -517,7 +519,8 @@ function endSiteColumnResize(ctx) {
 
 function shiftWeek(ctx, days) {
   resetWeekViewState(ctx);
-  ctx.weekStart = addLocalDays(ctx.weekStart, days);
+  const next = addLocalDays(ctx.weekStart, days);
+  ctx.weekStart = next < ctx.earliestDate ? ctx.earliestDate : next;
   fetchWeek(ctx);
 }
 
@@ -529,7 +532,7 @@ function openCalendar(ctx, anchorBtn) {
   popoverHost.className = 'cg-cal-host';
   anchorBtn.parentElement.appendChild(popoverHost);
 
-  const today = localToday();
+  const today = ctx.earliestDate;
   ctx.calendar = mountCalendarPopover(popoverHost, {
     viewMonth: ctx.weekStart,
     today,
@@ -551,7 +554,7 @@ function openCalendar(ctx, anchorBtn) {
 }
 
 function jumpMatrixToToday(ctx) {
-  const today = localToday();
+  const today = ctx.earliestDate;
   resetWeekViewState(ctx);
   if (sameLocalDay(ctx.weekStart, today)) {
     rerender(ctx);
@@ -906,6 +909,16 @@ function placeholderMatrixDays(ctx) {
     const date = addLocalDays(ctx.weekStart, i);
     return { date: localYmd(date) };
   });
+}
+
+function featureEarliestDate(feature) {
+  const raw = feature?.properties?.earliest_date ?? feature?.properties?.earliestDate;
+  const parsed = parseLocalYmd(raw);
+  return Number.isFinite(parsed.getTime()) ? parsed : localToday();
+}
+
+function shouldShowEarliestButton(ctx) {
+  return !sameLocalDay(ctx.weekStart, ctx.earliestDate);
 }
 
 function clampSiteColumnWidth(width) {

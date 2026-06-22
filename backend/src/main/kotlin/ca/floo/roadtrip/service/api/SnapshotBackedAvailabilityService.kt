@@ -1,5 +1,10 @@
 package ca.floo.roadtrip.service.api
 
+import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import java.time.Clock
 import java.time.Duration
