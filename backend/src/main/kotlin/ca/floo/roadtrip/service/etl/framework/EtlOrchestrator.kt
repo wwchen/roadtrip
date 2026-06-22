@@ -422,6 +422,9 @@ class EtlOrchestrator(
                 "alberta-provincial" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
                         .ReserveAmericaEtl(),
+                "new-york-state-parks" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaEtl("new-york-state-parks"),
                 // RIDB (recreation.gov backend) — one ETL covers every
                 // publishing agency (NPS, USFS, BLM, USACE, FWS, BOR, TVA, …).
                 // Per-row agency stamped on Poi.Campground.agency at

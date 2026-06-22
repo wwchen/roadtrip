@@ -17,9 +17,9 @@ import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonPrimitive
 import java.time.Instant
 
-// ReserveAmerica (Active Network) Alberta Parks → Poi.Campground.
+// ReserveAmerica (Active Network) tenant park pages → Poi.Campground.
 //
-// Capture path: data/raw/reserveamerica-abpp/<ts>/{directory-X-NNN.json,
+// Capture path: data/raw/reserveamerica-<tenant>/<ts>/{directory-X-NNN.json,
 // park-<id>.json}. The directory pages are by-letter index lists; the
 // per-park pages carry the actual POI metadata (lat/lon, name, phone,
 // photo). We only mine the park-*.json envelopes — directory pages give
@@ -27,10 +27,11 @@ import java.time.Instant
 //
 // Payload is HTML, parsed via regex against stable Open Graph + microdata
 // markup (place:location:latitude/longitude, og:title, itemprop=telephone).
-// Brittle to a redesign of shop.albertaparks.ca but cheap and obvious;
-// a redesign would shake out as a validation drop, not silent corruption.
-class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
-    override val etlSlug = "alberta-provincial"
+// Brittle to an Active Network redesign but cheap and obvious; a redesign
+// would shake out as a validation drop, not silent corruption.
+class ReserveAmericaEtl(
+    override val etlSlug: String = "alberta-provincial",
+) : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): ReserveAmericaDto {
@@ -58,20 +59,22 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
         ctx: TransformCtx,
     ): List<Poi.Campground> {
         val bucket = ctx.subcategoryFor(etlSlug)
+        val settings = ReserveAmericaSettings.from(ctx, etlSlug)
         return dto.parks.map { park ->
+            val name = displayName(park.name, settings.titleSuffix)
             Poi.Campground(
                 source = etlSlug,
-                sourceId = "ra-${park.parkId}",
-                name = park.name,
+                sourceId = "${settings.sourceIdPrefix}-${park.parkId}",
+                name = name,
                 geomGeoJson = pointGeoJson(park.lon, park.lat),
-                region = "AB",
-                country = "CA",
+                region = settings.region,
+                country = settings.country,
                 phone = park.phone,
                 address = null,
                 infoUrl = park.infoUrl,
                 fetchedAt = dto.fetchedAt,
                 lastVerified = null,
-                providerRef = ProviderRef.Camis(facilityId = park.parkId.toString()),
+                providerRef = providerRef(settings.provider, park),
                 amenities = emptyList(),
                 activities = emptyList(),
                 sites = null,
@@ -81,8 +84,8 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
                 cellCoverage = null,
                 ratingReviews = null,
                 subcategory = bucket,
-                agency = "Alberta Parks",
-                extras = parkExtras(park),
+                agency = settings.agency,
+                extras = parkExtras(park, name, settings.contract),
             )
         }
     }
@@ -92,11 +95,16 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
      * drawer's "Upstream data" accordion can surface what we know.
      * Upstream is HTML — there's no canonical row-shaped JSON.
      */
-    private fun parkExtras(park: ParsedPark): JsonElement =
+    private fun parkExtras(
+        park: ParsedPark,
+        name: String,
+        contract: String,
+    ): JsonElement =
         reserveAmericaExtrasJson.encodeToJsonElement(
             ReserveAmericaParkExtrasDto(
+                contract = contract,
                 parkId = park.parkId,
-                name = park.name,
+                name = name,
                 latitude = park.lat,
                 longitude = park.lon,
                 phone = park.phone,
@@ -122,8 +130,7 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
                 ?.get(1)
                 ?.toDoubleOrNull() ?: return null
         val rawTitle = OG_TITLE.find(html)?.groupValues?.get(1) ?: return null
-        // Strip the trailing ", AB" the og:title carries on every page.
-        val name = rawTitle.removeSuffix(", AB").trim().ifBlank { return null }
+        val name = rawTitle.trim().ifBlank { return null }
         val phone =
             TELEPHONE
                 .find(html)
@@ -164,6 +171,28 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
             Instant.now()
         }
 
+    private fun displayName(
+        rawName: String,
+        titleSuffix: String,
+    ): String {
+        val trimmed = rawName.trim()
+        return if (titleSuffix.isNotBlank() && trimmed.endsWith(titleSuffix)) {
+            trimmed.removeSuffix(titleSuffix).trim()
+        } else {
+            trimmed
+        }
+    }
+
+    private fun providerRef(
+        provider: String,
+        park: ParsedPark,
+    ): ProviderRef? =
+        when (provider.lowercase()) {
+            "camis" -> ProviderRef.Camis(facilityId = park.parkId.toString())
+            "none", "" -> null
+            else -> error("$etlSlug: unsupported ReserveAmerica provider='$provider'")
+        }
+
     companion object {
         private val LATITUDE = Regex("""place:location:latitude"\s+content='([^']+)'""")
         private val LONGITUDE = Regex("""place:location:longitude"\s+content='([^']+)'""")
@@ -171,6 +200,34 @@ class ReserveAmericaEtl : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
         private val OG_IMAGE = Regex("""og:image"\s+content='([^']+)'""")
         private val OG_URL = Regex("""og:url"\s+content='([^']+)'""")
         private val TELEPHONE = Regex("""itemprop="telephone"[^>]*>([^<]+)""")
+    }
+}
+
+private data class ReserveAmericaSettings(
+    val contract: String,
+    val region: String,
+    val country: String,
+    val agency: String,
+    val provider: String,
+    val titleSuffix: String,
+    val sourceIdPrefix: String,
+) {
+    companion object {
+        fun from(
+            ctx: TransformCtx,
+            etlSlug: String,
+        ): ReserveAmericaSettings {
+            val region = ctx.argFor(etlSlug, "region") ?: "AB"
+            return ReserveAmericaSettings(
+                contract = ctx.argFor(etlSlug, "contract") ?: "ABPP",
+                region = region,
+                country = ctx.argFor(etlSlug, "country") ?: "CA",
+                agency = ctx.argFor(etlSlug, "agency") ?: "Alberta Parks",
+                provider = ctx.argFor(etlSlug, "provider") ?: "camis",
+                titleSuffix = ctx.argFor(etlSlug, "title_suffix") ?: ", $region",
+                sourceIdPrefix = ctx.argFor(etlSlug, "source_id_prefix") ?: "ra",
+            )
+        }
     }
 }
 
@@ -183,6 +240,7 @@ private val reserveAmericaExtrasJson =
 
 @Serializable
 private data class ReserveAmericaParkExtrasDto(
+    val contract: String,
     @SerialName("park_id") val parkId: Long,
     val name: String,
     val latitude: Double,
