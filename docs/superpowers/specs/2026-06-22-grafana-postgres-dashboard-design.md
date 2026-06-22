@@ -1,0 +1,635 @@
+# Grafana Postgres Dashboard Design
+
+## Problem
+
+The project has three standalone catalog/dashboard UIs:
+
+- `/pois`
+- `/reservables`
+- `/availability`
+
+Those pages mostly expose read-only database views that could be better served by Grafana querying Postgres directly. Before removing any UI or API surface, we want to add Grafana to the stack and make the SQL equivalents explicit.
+
+## Goals
+
+- Add Grafana to the Docker Compose stack using the official Grafana image.
+- Keep Grafana dashboards and datasource provisioning in the repo.
+- Move backend image build configuration to a root `Dockerfile`.
+- Integrate Docker Compose with Tilt using `docker_compose`, `docker_build`, and `dc_resource`.
+- Keep all existing app APIs and static pages during this first pass.
+- Create Grafana dashboards that show which read-only APIs can later be replaced by direct SQL panels.
+
+## Non-Goals
+
+- Do not remove `/pois`, `/reservables`, or `/availability` in this pass.
+- Do not remove any `/api/*` route in this pass.
+- Do not build a custom Grafana image.
+- Do not put multiple services into one container.
+- Do not replace app flows that perform route search, map rendering, upstream availability fetches, or watch mutations.
+
+## Existing Context
+
+The backend is a Kotlin/Ktor app. It currently serves static pages from `Main.kt` and exposes typed API routes under `backend/src/main/kotlin/ca/floo/roadtrip/routes/`.
+
+Current Docker shape:
+
+- `docker-compose.yml` defines Postgres, backend, cookie-bot, and cloudflared.
+- `backend/Dockerfile` builds only the backend runtime image from a prebuilt shadow jar.
+- `docker-compose.local.yml` exposes Postgres locally.
+- `Tiltfile` currently shells out through `local_resource` for Postgres and runs the backend on the host JVM.
+
+The future shape should make Compose the source of truth for runtime services, with Tilt managing Compose resources and backend image rebuilds.
+
+## Architecture
+
+Use one root `Dockerfile` for images this repo actually builds. For now, that means only the backend image.
+
+Use official vendor images directly for infrastructure:
+
+- `postgis/postgis:16-3.4` for Postgres/PostGIS.
+- `grafana/grafana:13.0.0` for Grafana.
+- `cloudflare/cloudflared:latest` for the tunnel.
+
+Runtime layout:
+
+```text
+docker-compose.yml
+  postgres   -> official PostGIS image
+  backend    -> roadtrip/backend image built from root Dockerfile target backend
+  grafana    -> official Grafana image plus mounted repo config
+  cloudflared-> official cloudflared image
+
+Tiltfile
+  docker_compose(['docker-compose.yml', 'docker-compose.local.yml'])
+  docker_build('roadtrip/backend', '.', dockerfile='Dockerfile', target='backend')
+  dc_resource('postgres')
+  dc_resource('backend', resource_deps=['postgres'])
+  dc_resource('grafana', resource_deps=['postgres'])
+```
+
+This gives us one repo-level Dockerfile without collapsing services into one runnable image.
+
+## Dockerfile Design
+
+Create `Dockerfile` at the repo root:
+
+```dockerfile
+FROM eclipse-temurin:21-jre AS backend
+
+WORKDIR /app
+
+ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
+
+COPY backend/build/libs/roadtrip-backend-*-all.jar /app/app.jar
+
+EXPOSE 8765
+
+ENTRYPOINT ["sh", "-c", "exec java $JAVA_OPTS -jar /app/app.jar"]
+```
+
+Retire `backend/Dockerfile` after Compose is updated to build the `backend` target from the root Dockerfile.
+
+## Compose Design
+
+Update the backend service:
+
+```yaml
+backend:
+  image: roadtrip/backend
+  build:
+    context: .
+    dockerfile: Dockerfile
+    target: backend
+```
+
+Add Grafana:
+
+```yaml
+grafana-db-setup:
+  profiles: [pois]
+  image: postgis/postgis:16-3.4
+  restart: "no"
+  environment:
+    - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+    - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
+    - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+    - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
+    - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
+  depends_on:
+    postgres:
+      condition: service_healthy
+  command:
+    - /bin/sh
+    - -c
+    - /docker-entrypoint-initdb.d/create-grafana-reader.sh
+  volumes:
+    - ./grafana/db/create-grafana-reader.sh:/docker-entrypoint-initdb.d/create-grafana-reader.sh:ro
+
+grafana:
+  profiles: [pois]
+  image: grafana/grafana:13.0.0
+  restart: unless-stopped
+  hostname: grafana
+  environment:
+    - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+    - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+    - GF_USERS_ALLOW_SIGN_UP=false
+  volumes:
+    - ./grafana/provisioning:/etc/grafana/provisioning:ro
+    - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+    - ${GRAFANA_DATA:-$HOME/.roadtrip-map/grafana}:/var/lib/grafana
+  depends_on:
+    grafana-db-setup:
+      condition: service_completed_successfully
+```
+
+Update `docker-compose.local.yml`:
+
+```yaml
+grafana:
+  ports:
+    - "127.0.0.1:3000:3000"
+```
+
+For deploy, either expose Grafana through Cloudflare later or keep it private. This first pass should only guarantee local access through `127.0.0.1:3000`.
+
+## Tilt Design
+
+Replace shell-based Compose lifecycle management with Tilt's Compose integration:
+
+```python
+docker_compose(['docker-compose.yml', 'docker-compose.local.yml'])
+
+docker_build(
+    'roadtrip/backend',
+    '.',
+    dockerfile='Dockerfile',
+    target='backend',
+)
+
+dc_resource('postgres', labels=['infra'])
+dc_resource('backend', resource_deps=['postgres'], labels=['app'])
+dc_resource(
+    'grafana',
+    resource_deps=['postgres'],
+    labels=['infra'],
+    links=['http://127.0.0.1:3000'],
+)
+```
+
+Tilt behavior:
+
+- Backend image inputs are watched through `docker_build`.
+- Compose services using `roadtrip/backend` restart when the backend image changes.
+- Grafana dashboard files are bind-mounted, so dashboard JSON changes do not need an image rebuild.
+- Grafana datasource provisioning changes may need a Grafana container restart; Tilt can restart the `grafana` Compose service when that resource updates.
+
+## Grafana Provisioning
+
+Add these repo directories:
+
+```text
+grafana/
+  provisioning/
+    datasources/
+      roadtrip-postgres.yml
+    dashboards/
+      roadtrip.yml
+  dashboards/
+    api-sql-equivalence.json
+```
+
+Datasource provisioning:
+
+```yaml
+apiVersion: 1
+
+datasources:
+  - name: Roadtrip Postgres
+    uid: roadtrip-postgres
+    type: postgres
+    access: proxy
+    url: postgres:5432
+    user: ${GRAFANA_DB_USER}
+    secureJsonData:
+      password: ${GRAFANA_DB_PASSWORD}
+    jsonData:
+      database: ${POSTGRES_DB}
+      sslmode: disable
+      postgresVersion: 1600
+      timescaledb: false
+      maxOpenConns: 10
+      maxIdleConns: 2
+      connMaxLifetime: 14400
+```
+
+Use a read-only database role for Grafana. Grafana's PostgreSQL datasource allows arbitrary SQL, so it should not use the app owner credentials.
+
+Create or update the role through an idempotent Compose setup container, not Flyway. Roles and passwords are operational state, and Compose can pass `GRAFANA_DB_USER` / `GRAFANA_DB_PASSWORD` without baking secrets into a migration.
+
+`grafana/db/create-grafana-reader.sh` should run `psql` as the app database owner and execute:
+
+```sql
+SELECT set_config('roadtrip.grafana_user', :'grafana_user', false);
+SELECT set_config('roadtrip.grafana_password', :'grafana_password', false);
+
+DO $$
+DECLARE
+  grafana_user text := current_setting('roadtrip.grafana_user');
+  grafana_password text := current_setting('roadtrip.grafana_password');
+BEGIN
+  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = grafana_user) THEN
+    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', grafana_user, grafana_password);
+  ELSE
+    EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', grafana_user, grafana_password);
+  END IF;
+END
+$$;
+
+GRANT CONNECT ON DATABASE :"postgres_db" TO :"grafana_user";
+GRANT USAGE ON SCHEMA public TO :"grafana_user";
+GRANT SELECT ON ALL TABLES IN SCHEMA public TO :"grafana_user";
+ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO :"grafana_user";
+```
+
+The script should call `psql` with `-v grafana_user="$GRAFANA_DB_USER"`, `-v grafana_password="$GRAFANA_DB_PASSWORD"`, and `-v postgres_db="$POSTGRES_DB"` so local defaults and production overrides use the same path.
+
+## API To SQL Equivalence
+
+The first dashboard should compare the read-only APIs against direct SQL. These panels make removal decisions observable.
+
+### `/api/availability/jobs`
+
+API behavior:
+
+- Optional `status`
+- Optional `watch_id`
+- `limit`, `offset`
+- Ordered by `created_at DESC, id DESC`
+
+SQL:
+
+```sql
+SELECT
+  id,
+  watch_id,
+  cadence_sec,
+  status,
+  next_run_at,
+  claimed_until,
+  last_run_at,
+  created_at,
+  updated_at
+FROM availability_job
+WHERE (${status:sqlstring} = '' OR status = ${status:sqlstring})
+  AND (${watch_id:sqlstring} = '' OR watch_id = NULLIF(${watch_id:sqlstring}, '')::bigint)
+ORDER BY created_at DESC, id DESC
+LIMIT 100;
+```
+
+### `/api/availability/jobs/summary`
+
+API behavior:
+
+- Counts active, paused, done, due now, and claimed jobs.
+
+SQL:
+
+```sql
+SELECT
+  count(*) FILTER (WHERE status = 'active') AS active,
+  count(*) FILTER (WHERE status = 'paused') AS paused,
+  count(*) FILTER (WHERE status = 'done') AS done,
+  count(*) FILTER (
+    WHERE status = 'active'
+      AND next_run_at <= now()
+      AND (claimed_until IS NULL OR claimed_until < now())
+  ) AS due_now,
+  count(*) FILTER (
+    WHERE claimed_until IS NOT NULL
+      AND claimed_until >= now()
+  ) AS claimed
+FROM availability_job;
+```
+
+### `/api/availability/jobs/{id}/runs`
+
+API behavior:
+
+- Runs for one job, newest first.
+
+SQL:
+
+```sql
+SELECT
+  id,
+  job_id,
+  status,
+  snapshot_count,
+  duration_ms,
+  error,
+  started_at,
+  completed_at
+FROM availability_job_run
+WHERE job_id = ${job_id}
+ORDER BY started_at DESC, id DESC
+LIMIT 100;
+```
+
+### `/api/availability/runs`
+
+API behavior:
+
+- Optional `status`
+- Optional `job_id`
+- Optional `since`
+- Ordered by `started_at DESC, id DESC`
+
+SQL:
+
+```sql
+SELECT
+  id,
+  job_id,
+  status,
+  snapshot_count,
+  duration_ms,
+  error,
+  started_at,
+  completed_at
+FROM availability_job_run
+WHERE (${run_status:sqlstring} = '' OR status = ${run_status:sqlstring})
+  AND (${job_id:sqlstring} = '' OR job_id = NULLIF(${job_id:sqlstring}, '')::bigint)
+  AND (${since:sqlstring} = '' OR started_at >= NULLIF(${since:sqlstring}, '')::timestamptz)
+ORDER BY started_at DESC, id DESC
+LIMIT 100;
+```
+
+### `/api/availability/snapshots`
+
+API behavior:
+
+- Query either by reservable RID or run ID.
+- By reservable: newest by `target_date`, `observed_at`, `id`.
+- By run: ordered by `target_date ASC`.
+
+SQL by reservable:
+
+```sql
+SELECT
+  s.id,
+  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,
+  s.run_id,
+  s.target_date,
+  s.observed_at,
+  s.status,
+  s.available,
+  s.day_payload
+FROM availability_snapshot s
+JOIN reservables r ON r.id = s.reservable_id
+WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}
+ORDER BY s.target_date DESC, s.observed_at DESC, s.id DESC
+LIMIT 200;
+```
+
+SQL by run:
+
+```sql
+SELECT
+  s.id,
+  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,
+  s.run_id,
+  s.target_date,
+  s.observed_at,
+  s.status,
+  s.available,
+  s.day_payload
+FROM availability_snapshot s
+LEFT JOIN reservables r ON r.id = s.reservable_id
+WHERE s.run_id = ${run_id}
+ORDER BY s.target_date ASC
+LIMIT 500;
+```
+
+### `/api/availability/snapshots/summary`
+
+API behavior:
+
+- For a reservable RID, summarize per target date over a window.
+- Computes total snapshots, last open timestamp, current open state, current or last open window, median open window, and flips over the last 24 hours.
+
+SQL for the first-pass Grafana panel:
+
+```sql
+WITH scoped AS (
+  SELECT
+    s.target_date,
+    s.observed_at,
+    s.available,
+    lag(s.available) OVER (
+      PARTITION BY s.target_date
+      ORDER BY s.observed_at ASC, s.id ASC
+    ) AS prev_available
+  FROM availability_snapshot s
+  JOIN reservables r ON r.id = s.reservable_id
+  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}
+    AND s.observed_at >= now() - (${window_hours} || ' hours')::interval
+)
+SELECT
+  target_date,
+  count(*) AS total_snapshots,
+  max(observed_at) FILTER (WHERE available) AS last_open_at,
+  (array_agg(available ORDER BY observed_at DESC))[1] AS is_currently_open,
+  count(*) FILTER (
+    WHERE observed_at >= now() - interval '24 hours'
+      AND prev_available = false
+      AND available = true
+  ) AS flips_last_24h
+FROM scoped
+GROUP BY target_date
+ORDER BY target_date ASC;
+```
+
+The Kotlin API computes median open-window duration and current-or-last-open-window duration in application code. Grafana can either omit those in the first pass or add a more complex SQL panel later. This is a useful distinction: some API wrappers are direct SQL, while some contain derived application logic worth preserving or moving into SQL views before deletion.
+
+### `/api/reservables`
+
+API behavior:
+
+- Search active reservables across fields.
+- Joins linked active POI IDs in the response.
+
+SQL:
+
+```sql
+SELECT
+  r.id,
+  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,
+  r.type,
+  r.vendor,
+  r.vendor_id,
+  r.name,
+  r.loop,
+  r.site_type,
+  array_remove(array_agg(p.id ORDER BY p.id), NULL) AS poi_ids,
+  r.tags,
+  r.raw
+FROM reservables r
+LEFT JOIN reservable_pois rp ON rp.reservable_id = r.id
+LEFT JOIN pois p ON p.id = rp.poi_id AND p.deleted_at IS NULL
+WHERE r.deleted_at IS NULL
+  AND (${vendor:sqlstring} = '' OR r.vendor = ${vendor:sqlstring})
+  AND (${site_type:sqlstring} = '' OR r.site_type = ${site_type:sqlstring})
+  AND (${name:sqlstring} = '' OR r.name = ${name:sqlstring})
+GROUP BY r.id
+ORDER BY r.type ASC, r.vendor ASC, r.vendor_id ASC
+LIMIT 100;
+```
+
+### `/api/reservable/{rid}`
+
+API behavior:
+
+- Detail for one composite reservable ID.
+- Includes active linked POI IDs.
+
+SQL:
+
+```sql
+SELECT
+  r.id,
+  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,
+  r.type,
+  r.vendor,
+  r.vendor_id,
+  r.name,
+  r.loop,
+  r.site_type,
+  array_remove(array_agg(p.id ORDER BY p.id), NULL) AS poi_ids,
+  r.provider_ref,
+  r.tags,
+  r.raw
+FROM reservables r
+LEFT JOIN reservable_pois rp ON rp.reservable_id = r.id
+LEFT JOIN pois p ON p.id = rp.poi_id AND p.deleted_at IS NULL
+WHERE r.deleted_at IS NULL
+  AND r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}
+GROUP BY r.id;
+```
+
+### `/api/pois/search`
+
+API behavior:
+
+- App topbar text search.
+- Used outside the standalone `/pois` page.
+- Should remain for the app.
+
+Grafana comparison SQL:
+
+```sql
+SELECT
+  id,
+  name,
+  category,
+  region,
+  ST_X(geom) AS lng,
+  ST_Y(geom) AS lat
+FROM pois
+WHERE deleted_at IS NULL
+  AND name ILIKE '%' || ${poi_query:sqlstring} || '%'
+ORDER BY
+  (name ILIKE ${poi_query:sqlstring} || '%') DESC,
+  length(name) ASC,
+  name ASC
+LIMIT 25;
+```
+
+## API Removal Classification
+
+Likely removable after Grafana proves equivalent:
+
+- `GET /api/availability/jobs`
+- `GET /api/availability/jobs/summary`
+- `GET /api/availability/jobs/{id}/runs`
+- `GET /api/availability/runs`
+- `GET /api/availability/snapshots`
+- `GET /api/reservables`
+- `GET /api/reservable/{rid}`
+
+Needs more analysis before removal:
+
+- `GET /api/availability/snapshots/summary` because part of the response is derived in Kotlin.
+- `GET /api/reservable/{rid}/availability` because it performs a live provider availability lookup, not just a Postgres query.
+
+Should remain:
+
+- `POST /api/pois`
+- `GET /api/pois/{id}`
+- `GET /api/pois/search`
+- `POST /api/pois/on-route`
+- `GET /api/poi/{id}/reservables`
+- `GET /api/poi/{id}/reservables/availability`
+- `POST /api/availability/bulk`
+- `/api/availability/watches*`
+- `/api/route`
+- `/api/geocode`
+- `/api/admin/data/*`
+- `/api/health`
+
+## Testing Strategy
+
+Configuration checks:
+
+- Run `docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois config`.
+- Confirm Compose resolves the root Dockerfile backend target and the official Grafana image.
+
+Backend image check:
+
+- Run `./gradlew :backend:shadowJar`.
+- Run `docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois build backend`.
+
+Grafana health check:
+
+- Start `postgres` and `grafana`.
+- Verify `http://127.0.0.1:3000/api/health` returns healthy JSON.
+- Verify Grafana can query Postgres through the provisioned datasource.
+
+Tilt check:
+
+- Run `tilt up`.
+- Confirm Tilt shows separate resources for `postgres`, `backend`, and `grafana`.
+- Confirm backend image changes trigger a rebuild/restart.
+- Confirm dashboard JSON changes update through the bind mount without rebuilding an image.
+
+Regression checks:
+
+- Existing backend route tests should still pass because no APIs are removed.
+- Existing smoke tests may need URL expectations updated only if Tilt now runs backend as a Compose service on the same port.
+
+## Rollout Plan
+
+1. Add root Dockerfile target for backend.
+2. Update Compose backend build to use the root Dockerfile.
+3. Add Grafana service with official image and mounted provisioning/dashboards.
+4. Add Grafana read-only database role setup service.
+5. Update Tiltfile to use `docker_compose`, `docker_build`, and `dc_resource`.
+6. Add the initial API-to-SQL equivalence dashboard.
+7. Validate local Compose and Tilt startup.
+8. Defer static UI and API removal to a later PR after the dashboard proves coverage.
+
+## Risks
+
+- Grafana provisioning can fail silently if environment variables are missing. Use explicit defaults locally and document production overrides.
+- Grafana datasource changes often need a restart. Keep dashboards bind-mounted, but expect datasource YAML edits to restart the Grafana service.
+- Moving Tilt backend execution from host JVM to Compose backend changes the dev loop. It improves Docker parity but can be slower than host `:backend:run`.
+- SQL panels can drift from Kotlin API behavior. This first pass should present equivalence, not immediately delete routes.
+- The read-only role setup service needs enough database privilege to create or alter a role. In this stack, the Compose-managed app database owner is expected to have that privilege.
+
+## References
+
+- Grafana Docker image docs: https://grafana.com/docs/grafana/latest/setup-grafana/configure-docker/
+- Grafana provisioning docs: https://grafana.com/docs/grafana/latest/administration/provisioning/
+- Grafana PostgreSQL datasource docs: https://grafana.com/docs/grafana/latest/datasources/postgres/configure/
+- Tilt dependent images and `docker_build`: https://docs.tilt.dev/dependent_images.html
+- Tilt Docker Compose integration: https://docs.tilt.dev/docker_compose.html
