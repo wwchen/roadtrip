@@ -6,6 +6,7 @@ import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
@@ -32,12 +33,13 @@ import java.time.OffsetDateTime
  * Handler always returns a [HandlerResult] — even on upstream failure —
  * because losing the row would mean the watch silently stops polling.
  */
-class AvailabilityPollExecutor(
+internal class AvailabilityPollExecutor(
     private val reservablesRepo: ReservableRepo,
     private val campsiteProviders: CampsiteProviderRepo,
     private val reservationProviders: ReservationProviderRegistry,
     private val fetches: ReservableAvailabilityFetchService,
     private val runs: AvailabilityJobRunRepo,
+    private val dateResolver: AvailabilityDateResolver,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scopeResolver = WatchScopeResolver(reservablesRepo)
@@ -151,8 +153,18 @@ class AvailabilityPollExecutor(
         val provider = reservationProviders.forPoi(parent)!!
         val ref = ProviderRefParser.parse(parent.providerRefJson)!!
 
-        val start = LocalDate.parse(startDate)
-        val end = LocalDate.parse(endDate)
+        val dateContext = dateResolver.context(country = parent.country, region = parent.region, lng = parent.lng)
+        val window =
+            dateResolver.resolvePollingWindow(
+                startDate = LocalDate.parse(startDate),
+                endDate = LocalDate.parse(endDate),
+                context = dateContext,
+                bookingHorizonDays = provider.capabilities.bookingHorizonDays,
+                maxDays = MAX_POLL_WINDOW_DAYS,
+            ) ?: run {
+                log.info("job {}: reservable {} watch window has no future dates", jobId, reservable.id)
+                return 0
+            }
 
         val response =
             fetches.fetch(
@@ -162,8 +174,8 @@ class AvailabilityPollExecutor(
                     provider = provider,
                     ref = ref,
                     vendorId = reservable.rid.vendorId,
-                    startDate = start,
-                    endDate = end,
+                    startDate = window.startDate,
+                    endDate = window.endDate,
                     force = false,
                     runId = runId,
                 ),
@@ -174,3 +186,5 @@ class AvailabilityPollExecutor(
         return response.availability.size
     }
 }
+
+private const val MAX_POLL_WINDOW_DAYS = 60

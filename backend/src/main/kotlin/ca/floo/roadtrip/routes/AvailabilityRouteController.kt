@@ -9,6 +9,7 @@ import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.AvailabilityStatus
 import ca.floo.roadtrip.service.api.PoiReservablesAvailabilityResponseDto
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityService
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
@@ -17,18 +18,20 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
-import java.time.ZoneId
 import java.time.temporal.ChronoUnit
 
 private val availabilityRouteControllerLog = LoggerFactory.getLogger("AvailabilityRouteController")
 
 private const val MAX_BULK_WINDOW_DAYS = 14
-private const val EMPTY_WINDOW_DEFAULT_DAYS: Long = 7
+private const val EMPTY_WINDOW_DEFAULT_DAYS = 7
+private const val EMPTY_WINDOW_MAX_DAYS = 60
+private const val EMPTY_WINDOW_HORIZON_DAYS = 365
 
 internal class AvailabilityRouteController(
     private val providerRefs: CampsiteProviderRepo,
     private val reservablesRepo: ReservableRepo,
     private val availabilityService: AvailabilityService,
+    private val dateResolver: AvailabilityDateResolver,
 ) {
     suspend fun poiReservablesAvailability(
         poiId: Long,
@@ -42,10 +45,7 @@ internal class AvailabilityRouteController(
                 .findByPoi(poiId, ReservableType.SITE)
                 .filterAvailabilitySiteTypes(siteTypes)
         if (reservables.isEmpty()) {
-            if (!providerRefs.campgroundExists(poiId)) {
-                throw AvailabilityServiceError.NotFound
-            }
-            val (start, end) = displayWindow(startDate, endDate)
+            val (start, end) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)
             return PoiReservablesAvailabilityResponseDto(
                 poiId = poiId,
                 startDate = start.toString(),
@@ -61,7 +61,7 @@ internal class AvailabilityRouteController(
                 endDate = endDate,
                 force = force,
             )
-        val (fallbackStart, fallbackEnd) = displayWindow(startDate, endDate)
+        val (fallbackStart, fallbackEnd) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)
         return PoiReservablesAvailabilityResponseDto(
             poiId = poiId,
             startDate = availability.firstOrNull()?.startDate ?: fallbackStart.toString(),
@@ -75,9 +75,7 @@ internal class AvailabilityRouteController(
         startDate: LocalDate,
         endDate: LocalDate,
     ): BulkAvailResponseSchema {
-        if (!bulkWindowIsValid(startDate, endDate)) {
-            throw AvailabilityServiceError.BadDateWindow
-        }
+        validateBulkWindow(startDate, endDate)
         val results =
             coroutineScope {
                 ids
@@ -145,26 +143,41 @@ private fun availableDates(responses: List<AvailabilityResponseDto>): List<Strin
         .sorted()
 
 private fun displayWindow(
+    poiId: Long,
     startDate: LocalDate?,
     endDate: LocalDate?,
+    providerRefs: CampsiteProviderRepo,
+    dateResolver: AvailabilityDateResolver,
 ): Pair<LocalDate, LocalDate> {
-    val start = startDate ?: LocalDate.now(ZoneId.systemDefault())
-    val end = endDate ?: start.plusDays(EMPTY_WINDOW_DEFAULT_DAYS)
-    if (!end.isAfter(start)) throw AvailabilityServiceError.BadDateWindow
-    return start to end
+    val row = providerRefs.findDateContext(poiId) ?: throw AvailabilityServiceError.NotFound
+    val dateContext = dateResolver.context(country = row.country, region = row.region, lng = row.lng)
+    val window =
+        dateResolver.resolveWindow(
+            startDate = startDate,
+            endDate = endDate,
+            context = dateContext,
+            bookingHorizonDays = EMPTY_WINDOW_HORIZON_DAYS,
+            maxDays = EMPTY_WINDOW_MAX_DAYS,
+            defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
+        )
+    return window.startDate to window.endDate
 }
 
-private fun bulkWindowIsValid(
+private fun validateBulkWindow(
     startDate: LocalDate,
     endDate: LocalDate,
-): Boolean =
-    ChronoUnit.DAYS
-        .between(startDate, endDate)
-        .toInt() in 1..MAX_BULK_WINDOW_DAYS
+) {
+    if (!endDate.isAfter(startDate)) throw AvailabilityServiceError.BadDateWindow.EndBeforeStart
+    val days =
+        ChronoUnit.DAYS
+            .between(startDate, endDate)
+            .toInt() in 1..MAX_BULK_WINDOW_DAYS
+    if (!days) throw AvailabilityServiceError.BadDateWindow.WindowTooLong(maxDays = MAX_BULK_WINDOW_DAYS)
+}
 
 private fun httpStatusFor(e: AvailabilityServiceError): Int =
     when (e) {
-        AvailabilityServiceError.BadDateWindow -> 400
+        is AvailabilityServiceError.BadDateWindow -> 400
         AvailabilityServiceError.NotFound -> 404
         AvailabilityServiceError.UnknownCampground -> 404
     }

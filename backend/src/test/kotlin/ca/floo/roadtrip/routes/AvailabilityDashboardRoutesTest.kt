@@ -3,6 +3,7 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.service.availability.WatchStatus
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
@@ -113,7 +114,7 @@ class AvailabilityDashboardRoutesTest {
                 watchId = watchId,
                 intentPayload = buildJsonObject { put("kind", JsonPrimitive("reservable")) },
                 cadenceSec = 60,
-                status = "active",
+                status = WatchStatus.ACTIVE,
                 nextRunAt = OffsetDateTime.now(ZoneOffset.UTC),
             ).id
     }
@@ -226,7 +227,7 @@ class AvailabilityDashboardRoutesTest {
                                 .get("id", Long::class.java),
                         intentPayload = buildJsonObject { put("kind", JsonPrimitive("reservable")) },
                         cadenceSec = 60,
-                        status = "active",
+                        status = WatchStatus.ACTIVE,
                         nextRunAt = OffsetDateTime.now(ZoneOffset.UTC),
                     ).id
             val runRepo = AvailabilityJobRunRepo(ctx)

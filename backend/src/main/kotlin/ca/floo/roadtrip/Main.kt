@@ -22,6 +22,7 @@ import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.dataSourceFor
 import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.routes.AvailabilityRouteController
 import ca.floo.roadtrip.routes.adminIngestRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
 import ca.floo.roadtrip.routes.availabilityRoutes
@@ -33,6 +34,8 @@ import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
@@ -200,7 +203,34 @@ fun Application.module() {
             aspiraOccupancyCache = aspiraOccupancyCache,
         )
 
-    val availabilityWatchService = AvailabilityWatchService(ctx, ReservableRepo(ctx))
+    val reservablesRepo = ReservableRepo(ctx)
+    val campsiteProviders = CampsiteProviderRepo(ctx)
+    val availabilitySnapshots = AvailabilitySnapshotRepo(ctx)
+    val availabilityDateResolver = AvailabilityDateResolver()
+    val availabilitySnapshotFreshnessTtl: (ReservationProviderId) -> java.time.Duration = { providerId ->
+        when (providerId) {
+            ReservationProviderId.RECGOV -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
+            ReservationProviderId.ASPIRA -> appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY)
+            ReservationProviderId.CAMIS -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
+        }
+    }
+    val availabilityService =
+        AvailabilityServiceImpl(
+            providerRefs = campsiteProviders,
+            reservationProviders = reservationProviderRegistry,
+            reservablesRepo = reservablesRepo,
+            dateResolver = availabilityDateResolver,
+            snapshots = availabilitySnapshots,
+            snapshotFreshnessTtl = availabilitySnapshotFreshnessTtl,
+        )
+    val availabilityRouteController =
+        AvailabilityRouteController(
+            providerRefs = campsiteProviders,
+            reservablesRepo = reservablesRepo,
+            availabilityService = availabilityService,
+            dateResolver = availabilityDateResolver,
+        )
+    val availabilityWatchService = AvailabilityWatchService(ctx, reservablesRepo)
 
     // Availability poller. One Scheduler<AvailabilityJob> ticks every few
     // seconds, claims due jobs, calls AvailabilityPollExecutor, and writes
@@ -209,17 +239,16 @@ fun Application.module() {
     val availabilityJobs = AvailabilityJobRepo(ctx)
     val availabilityFetches =
         ReservableAvailabilityFetchService(
-            snapshots = AvailabilitySnapshotRepo(ctx),
+            snapshots = availabilitySnapshots,
         )
     val pollExecutor =
         AvailabilityPollExecutor(
-            reservablesRepo =
-                ca.floo.roadtrip.repo
-                    .ReservableRepo(ctx),
-            campsiteProviders = CampsiteProviderRepo(ctx),
+            reservablesRepo = reservablesRepo,
+            campsiteProviders = campsiteProviders,
             reservationProviders = reservationProviderRegistry,
             fetches = availabilityFetches,
             runs = AvailabilityJobRunRepo(ctx),
+            dateResolver = availabilityDateResolver,
         )
     val availabilityScheduler =
         Scheduler(
@@ -244,7 +273,7 @@ fun Application.module() {
             openApiSpec()
         }
 
-        poiRoutes(ctx, poiRegistry)
+        poiRoutes(ctx, poiRegistry, availabilityDateResolver)
         reservableRoutes(ctx)
         availabilityWatchRoutes(ctx, availabilityWatchService)
         availabilityDashboardRoutes(ctx)
@@ -253,17 +282,8 @@ fun Application.module() {
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
         availabilityRoutes(
-            CampsiteProviderRepo(ctx),
-            reservationProviderRegistry,
-            ReservableRepo(ctx),
-            AvailabilitySnapshotRepo(ctx),
-            snapshotFreshnessTtl = { providerId ->
-                when (providerId) {
-                    ReservationProviderId.RECGOV -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
-                    ReservationProviderId.ASPIRA -> appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY)
-                    ReservationProviderId.CAMIS -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
-                }
-            },
+            availabilityService = availabilityService,
+            controller = availabilityRouteController,
         )
         adminIngestRoutes(ingestController, ctx)
         // Static site. /web/* and /data/* serve directly from the repo

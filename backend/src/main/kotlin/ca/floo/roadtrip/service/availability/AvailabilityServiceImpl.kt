@@ -22,15 +22,15 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import java.time.Duration
 import java.time.LocalDate
-import java.time.ZoneId
-import java.time.temporal.ChronoUnit
 
 private const val MAX_AVAILABILITY_DAYS: Int = 60
+private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 
-class AvailabilityServiceImpl(
+internal class AvailabilityServiceImpl(
     private val providerRefs: CampsiteProviderRepo,
     private val reservationProviders: ReservationProviderRegistry,
     private val reservablesRepo: ReservableRepo,
+    private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     snapshots: AvailabilitySnapshotRepo? = null,
     private val snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
 ) : AvailabilityService {
@@ -56,15 +56,21 @@ class AvailabilityServiceImpl(
             .groupBy { AvailabilityFetchGroup(provider = it.provider, parentRef = it.parentRef) }
             .forEach { (group, items) ->
                 val query =
-                    resolveAvailabilityWindow(startDate, endDate, force, group.provider.capabilities.bookingHorizonDays)
-                        ?: throw AvailabilityServiceError.BadDateWindow
+                    dateResolver.resolveWindow(
+                        startDate = startDate,
+                        endDate = endDate,
+                        context = items.first().dateContext,
+                        bookingHorizonDays = group.provider.capabilities.bookingHorizonDays,
+                        maxDays = MAX_AVAILABILITY_DAYS,
+                        defaultDays = DEFAULT_AVAILABILITY_DAYS,
+                    )
                 fetchCatalogReservablesAvailability(
                     catalogRows = items.map { it.reservable },
                     parentRef = group.parentRef,
                     provider = group.provider,
                     startDate = query.startDate,
                     endDate = query.endDate,
-                    force = query.force,
+                    force = force,
                 ).forEach { response ->
                     response.reservableId?.let { byRid[it] = response }
                 }
@@ -92,6 +98,7 @@ class AvailabilityServiceImpl(
             reservable = reservable,
             provider = provider,
             parentRef = parentRef,
+            dateContext = dateResolver.context(country = parent.country, region = parent.region, lng = parent.lng),
         )
     }
 
@@ -162,6 +169,7 @@ private data class ResolvedReservable(
     val reservable: Reservable,
     val provider: ReservationProvider,
     val parentRef: ProviderRef,
+    val dateContext: PoiDateContext,
 )
 
 private data class AvailabilityFetchGroup(
@@ -186,33 +194,6 @@ internal fun parseStartParam(
     if (raw.isBefore(today)) return StartParam.Invalid
     if (raw.isAfter(today.plusDays(horizonDays.toLong()))) return StartParam.Invalid
     return StartParam.Ok(raw)
-}
-
-private data class ResolvedAvailabilityWindow(
-    val startDate: LocalDate,
-    val endDate: LocalDate,
-    val force: Boolean,
-)
-
-private fun resolveAvailabilityWindow(
-    startDate: LocalDate?,
-    endDate: LocalDate?,
-    force: Boolean,
-    bookingHorizonDays: Int,
-    defaultDays: Int = 7,
-): ResolvedAvailabilityWindow? {
-    val today = LocalDate.now(ZoneId.systemDefault())
-    val start =
-        when (val parsed = parseStartParam(startDate, today, bookingHorizonDays)) {
-            is StartParam.Ok -> parsed.value
-            StartParam.Invalid -> return null
-        }
-    val end = endDate ?: start.plusDays(defaultDays.toLong())
-    if (!end.isAfter(start)) return null
-    if (end.isAfter(today.plusDays(bookingHorizonDays.toLong()))) return null
-    val days = ChronoUnit.DAYS.between(start, end).toInt()
-    if (days !in 1..MAX_AVAILABILITY_DAYS) return null
-    return ResolvedAvailabilityWindow(startDate = start, endDate = end, force = force)
 }
 
 internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =

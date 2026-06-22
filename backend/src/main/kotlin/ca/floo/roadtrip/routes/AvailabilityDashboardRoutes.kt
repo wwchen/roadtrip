@@ -13,6 +13,7 @@ import ca.floo.roadtrip.models.api.AvailabilitySnapshotsSummaryResponse
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
+import ca.floo.roadtrip.service.availability.WatchStatus
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -60,9 +61,14 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
             code(HttpStatusCode.OK) {
                 body<AvailabilityJobsListResponse> { mediaTypes(ContentType.Application.Json) }
             }
+            code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
-        val status = call.request.queryParameters["status"]
+        val status =
+            call.request.queryParameters["status"]?.let {
+                WatchStatus.parse(it)
+                    ?: return@get call.respondError("invalid_status", HttpStatusCode.BadRequest, "status must be active, paused, or done")
+            }
         val watchId = call.request.queryParameters["watch_id"]?.toLongOrNull()
         val limit =
             (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT)
@@ -298,7 +304,7 @@ private fun AvailabilityJobRepo.Job.toSchema(): AvailabilityJobSchema =
         id = id,
         watchId = watchId,
         cadenceSec = cadenceSec,
-        status = status,
+        status = status.wireValue,
         nextRunAt = nextRunAt.toString(),
         claimedUntil = claimedUntil?.toString(),
         lastRunAt = lastRunAt?.toString(),

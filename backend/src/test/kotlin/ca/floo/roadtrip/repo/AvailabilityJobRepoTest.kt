@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.service.availability.WatchStatus
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.JsonObject
@@ -109,10 +110,10 @@ class AvailabilityJobRepoTest {
     fun `upsertForWatch creates a new job`() {
         val watchId = seedWatch(seedPoi())
         val repo = AvailabilityJobRepo(ctx)
-        val job = repo.upsertForWatch(watchId, sampleIntent, 60, "active", now())
+        val job = repo.upsertForWatch(watchId, sampleIntent, 60, WatchStatus.ACTIVE, now())
         assertEquals(watchId, job.watchId)
         assertEquals(60, job.cadenceSec)
-        assertEquals("active", job.status)
+        assertEquals(WatchStatus.ACTIVE, job.status)
         assertEquals(sampleIntent, job.intentPayload)
     }
 
@@ -120,11 +121,11 @@ class AvailabilityJobRepoTest {
     fun `upsertForWatch is idempotent on watch_id`() {
         val watchId = seedWatch(seedPoi())
         val repo = AvailabilityJobRepo(ctx)
-        val first = repo.upsertForWatch(watchId, sampleIntent, 60, "active", now())
-        val second = repo.upsertForWatch(watchId, sampleIntent, 120, "paused", now())
+        val first = repo.upsertForWatch(watchId, sampleIntent, 60, WatchStatus.ACTIVE, now())
+        val second = repo.upsertForWatch(watchId, sampleIntent, 120, WatchStatus.PAUSED, now())
         assertEquals(first.id, second.id)
         assertEquals(120, second.cadenceSec)
-        assertEquals("paused", second.status)
+        assertEquals(WatchStatus.PAUSED, second.status)
     }
 
     @Test
@@ -132,7 +133,7 @@ class AvailabilityJobRepoTest {
         val watchId = seedWatch(seedPoi())
         val repo = AvailabilityJobRepo(ctx)
         val past = now().minusMinutes(1)
-        repo.upsertForWatch(watchId, sampleIntent, 60, "active", past)
+        repo.upsertForWatch(watchId, sampleIntent, 60, WatchStatus.ACTIVE, past)
         val claimed = repo.claimDue(now(), limit = 10, leaseDuration = Duration.ofSeconds(30))
         assertEquals(1, claimed.size)
         assertNotNull(claimed[0].claimToken)
@@ -157,8 +158,8 @@ class AvailabilityJobRepoTest {
                 )!!
                 .get("id", Long::class.java)
         val repo = AvailabilityJobRepo(ctx)
-        repo.upsertForWatch(activeWatch, sampleIntent, 60, "active", now().minusSeconds(5))
-        repo.upsertForWatch(pausedWatchId, sampleIntent, 60, "paused", now().minusSeconds(5))
+        repo.upsertForWatch(activeWatch, sampleIntent, 60, WatchStatus.ACTIVE, now().minusSeconds(5))
+        repo.upsertForWatch(pausedWatchId, sampleIntent, 60, WatchStatus.PAUSED, now().minusSeconds(5))
         val futureWatchId =
             ctx
                 .fetchOne(
@@ -172,7 +173,7 @@ class AvailabilityJobRepoTest {
                     poiId,
                 )!!
                 .get("id", Long::class.java)
-        repo.upsertForWatch(futureWatchId, sampleIntent, 60, "active", now().plusMinutes(1))
+        repo.upsertForWatch(futureWatchId, sampleIntent, 60, WatchStatus.ACTIVE, now().plusMinutes(1))
         val claimed = repo.claimDue(now(), limit = 10, leaseDuration = Duration.ofSeconds(30))
         assertEquals(1, claimed.size)
         assertEquals(activeWatch, claimed[0].watchId)
@@ -182,7 +183,7 @@ class AvailabilityJobRepoTest {
     fun `release advances nextRunAt only with matching token`() {
         val watchId = seedWatch(seedPoi())
         val repo = AvailabilityJobRepo(ctx)
-        repo.upsertForWatch(watchId, sampleIntent, 60, "active", now().minusMinutes(1))
+        repo.upsertForWatch(watchId, sampleIntent, 60, WatchStatus.ACTIVE, now().minusMinutes(1))
         val claimed = repo.claimDue(now(), limit = 1, leaseDuration = Duration.ofSeconds(30))[0]
         val nextRun = now().plusMinutes(1)
         assertTrue(repo.release(claimed.id, claimed.claimToken!!, nextRun, now()))
@@ -199,7 +200,7 @@ class AvailabilityJobRepoTest {
         val watchId = seedWatch(seedPoi())
         val repo = AvailabilityJobRepo(ctx)
         val baseTime = now()
-        repo.upsertForWatch(watchId, sampleIntent, 60, "active", baseTime.minusMinutes(2))
+        repo.upsertForWatch(watchId, sampleIntent, 60, WatchStatus.ACTIVE, baseTime.minusMinutes(2))
         repo.claimDue(baseTime.minusMinutes(1), limit = 1, leaseDuration = Duration.ofSeconds(10))
         val reclaimed = repo.reclaimExpired(baseTime)
         assertEquals(1, reclaimed)

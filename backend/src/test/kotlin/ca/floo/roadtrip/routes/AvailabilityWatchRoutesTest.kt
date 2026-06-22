@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.service.availability.WatchStatus
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.delete
@@ -471,7 +472,7 @@ class AvailabilityWatchRoutesTest {
             val job = jobs.findByWatchId(watchId)
             assertNotNull(job)
             assertEquals(60, job.cadenceSec)
-            assertEquals("active", job.status)
+            assertEquals(WatchStatus.ACTIVE, job.status)
 
             val paused =
                 client.patch("/api/availability/watches/$watchId") {
@@ -480,7 +481,7 @@ class AvailabilityWatchRoutesTest {
                 }
             assertEquals(HttpStatusCode.OK, paused.status)
             val pausedJob = jobs.findByWatchId(watchId)!!
-            assertEquals("paused", pausedJob.status)
+            assertEquals(WatchStatus.PAUSED, pausedJob.status)
             assertTrue(pausedJob.nextRunAt.year >= 9990, "nextRunAt should be parked in far future, got ${pausedJob.nextRunAt}")
         }
 

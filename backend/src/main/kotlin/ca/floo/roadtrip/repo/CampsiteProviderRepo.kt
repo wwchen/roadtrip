@@ -6,6 +6,16 @@ data class CampsiteProviderRefRow(
     val poiId: Long,
     val source: String,
     val providerRefJson: String,
+    val region: String? = null,
+    val country: String? = null,
+    val lng: Double? = null,
+)
+
+data class CampsiteDateContextRow(
+    val poiId: Long,
+    val region: String?,
+    val country: String?,
+    val lng: Double?,
 )
 
 class CampsiteProviderRepo(
@@ -17,7 +27,8 @@ class CampsiteProviderRepo(
             ctx
                 .fetchOne(
                     """
-                    SELECT id, source, provider_ref::text AS pref
+                    SELECT id, source, region, country, ST_X(ST_PointOnSurface(geom)) AS lng,
+                           provider_ref::text AS pref
                     FROM pois
                     WHERE id = ?
                       AND deleted_at IS NULL
@@ -30,6 +41,30 @@ class CampsiteProviderRepo(
             poiId = (r.get("id") as Number).toLong(),
             source = r.get("source") as String,
             providerRefJson = pref,
+            region = r.get("region") as String?,
+            country = r.get("country") as String?,
+            lng = (r.get("lng") as Number?)?.toDouble(),
+        )
+    }
+
+    fun findDateContext(poiId: Long): CampsiteDateContextRow? {
+        val r =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT id, region, country, ST_X(ST_PointOnSurface(geom)) AS lng
+                    FROM pois
+                    WHERE id = ?
+                      AND deleted_at IS NULL
+                      AND category = 'campground'
+                    """.trimIndent(),
+                    poiId,
+                ) ?: return null
+        return CampsiteDateContextRow(
+            poiId = (r.get("id") as Number).toLong(),
+            region = r.get("region") as String?,
+            country = r.get("country") as String?,
+            lng = (r.get("lng") as Number?)?.toDouble(),
         )
     }
 
@@ -58,7 +93,8 @@ class CampsiteProviderRepo(
         val placeholders = poiIds.joinToString(",") { "?" }
         val sql =
             """
-            SELECT id, source, provider_ref::text AS pref
+            SELECT id, source, region, country, ST_X(ST_PointOnSurface(geom)) AS lng,
+                   provider_ref::text AS pref
             FROM pois
             WHERE id IN ($placeholders)
               AND deleted_at IS NULL
@@ -75,6 +111,9 @@ class CampsiteProviderRepo(
                     poiId = id,
                     source = r.get("source") as String,
                     providerRefJson = pref,
+                    region = r.get("region") as String?,
+                    country = r.get("country") as String?,
+                    lng = (r.get("lng") as Number?)?.toDouble(),
                 )
         }
         return out

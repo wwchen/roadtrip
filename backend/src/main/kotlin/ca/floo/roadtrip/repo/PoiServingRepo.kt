@@ -30,6 +30,8 @@ internal data class PoiDetailRow(
     val subcategory: String?,
     val name: String,
     val region: String?,
+    val country: String? = null,
+    val lng: Double? = null,
     val unitName: String?,
     val reserveUrl: String?,
     val phone: String?,
@@ -92,7 +94,9 @@ internal class PoiServingRepo(
             ctx.fetchOne(
                 """
                 SELECT id, source, source_id, category, subcategory, name,
-                       region, unit_name, reserve_url, phone, info_url,
+                       region, country,
+                       ST_X(ST_PointOnSurface(geom)) AS lng,
+                       unit_name, reserve_url, phone, info_url,
                        address::text AS address_text,
                        provider_ref::text AS provider_ref_text,
                        ST_AsGeoJSON(geom) AS geom_json,
@@ -111,6 +115,8 @@ internal class PoiServingRepo(
             subcategory = r.get("subcategory") as String?,
             name = r.get("name") as String,
             region = r.get("region") as String?,
+            country = r.get("country") as String?,
+            lng = (r.get("lng") as Number?)?.toDouble(),
             unitName = r.get("unit_name") as String?,
             reserveUrl = r.get("reserve_url") as String?,
             phone = r.get("phone") as String?,

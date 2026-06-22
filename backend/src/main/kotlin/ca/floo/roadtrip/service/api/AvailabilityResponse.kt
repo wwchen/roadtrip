@@ -268,4 +268,16 @@ data class PoiReservablesAvailabilityResponseDto(
 fun availabilityErrorDto(
     error: String,
     upstreamStatus: Int? = null,
-): AvailabilityErrorSchema = AvailabilityErrorSchema(error = error, upstream_status = upstreamStatus)
+    earliestDate: String? = null,
+    timeZone: String? = null,
+    latestDate: String? = null,
+    maxDays: Int? = null,
+): AvailabilityErrorSchema =
+    AvailabilityErrorSchema(
+        error = error,
+        upstream_status = upstreamStatus,
+        earliestDate = earliestDate,
+        timeZone = timeZone,
+        latestDate = latestDate,
+        maxDays = maxDays,
+    )

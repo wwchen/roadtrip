@@ -17,6 +17,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.WatchStatus
 import io.github.smiley4.ktorswaggerui.dsl.routing.delete
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.patch
@@ -71,7 +72,11 @@ fun Route.availabilityWatchRoutes(
             }
         }
     }) {
-        val status = call.request.queryParameters["status"]
+        val status =
+            call.request.queryParameters["status"]?.let {
+                WatchStatus.parse(it)
+                    ?: return@get call.respondError("invalid_status", HttpStatusCode.BadRequest, "status must be active, paused, or done")
+            }
         val poiId = call.request.queryParameters["poi_id"]?.toLongOrNull()
         val reservableId = call.request.queryParameters["reservable_id"]?.toLongOrNull()
         val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT).coerceIn(1, MAX_LIST_LIMIT)
@@ -179,6 +184,11 @@ fun Route.availabilityWatchRoutes(
             }
         val err = validateUpdateBody(req)
         if (err != null) return@patch call.respondError(err.first, HttpStatusCode.BadRequest, err.second)
+        val status =
+            req.status?.let {
+                WatchStatus.parse(it)
+                    ?: return@patch call.respondError("invalid_status", HttpStatusCode.BadRequest, "status must be active, paused, or done")
+            }
         val dateWindow =
             when {
                 (req.startDate == null) xor (req.endDate == null) ->
@@ -197,23 +207,19 @@ fun Route.availabilityWatchRoutes(
                 else -> null
             }
         val updated =
-            try {
-                watchService.update(
-                    id,
-                    AvailabilityWatchRepo.UpdateInput(
-                        reservableFilters = req.reservableFilters,
-                        startDate = dateWindow?.first,
-                        endDate = dateWindow?.second,
-                        cadenceSec = req.cadenceSec,
-                        triggerKinds = req.triggerKinds,
-                        triggerConfig = req.triggerConfig,
-                        stopWhenTriggered = req.stopWhenTriggered,
-                        status = req.status,
-                    ),
-                )
-            } catch (e: IllegalArgumentException) {
-                return@patch call.respondError("invalid_status", HttpStatusCode.BadRequest, e.message)
-            }
+            watchService.update(
+                id,
+                AvailabilityWatchRepo.UpdateInput(
+                    reservableFilters = req.reservableFilters,
+                    startDate = dateWindow?.first,
+                    endDate = dateWindow?.second,
+                    cadenceSec = req.cadenceSec,
+                    triggerKinds = req.triggerKinds,
+                    triggerConfig = req.triggerConfig,
+                    stopWhenTriggered = req.stopWhenTriggered,
+                    status = status,
+                ),
+            )
         if (updated == null) return@patch call.respondError("not_found", HttpStatusCode.NotFound)
         call.respondJson(AvailabilityWatchResponse(updated.toSchema()))
     }
@@ -402,7 +408,7 @@ private fun Watch.toSchema(): AvailabilityWatchSchema =
         triggerKinds = triggerKinds,
         triggerConfig = triggerConfig,
         stopWhenTriggered = stopWhenTriggered,
-        status = status,
+        status = status.wireValue,
         createdAt = createdAt.toString(),
         updatedAt = updatedAt.toString(),
     )
