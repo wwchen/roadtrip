@@ -66,7 +66,6 @@ class AvailabilityWatchService(
                     }
                     WatchStatus.PAUSED -> parkedFar
                     WatchStatus.DONE -> parkedFar
-                    else -> parkedFar
                 }
             jobRepo.upsertForWatch(
                 watchId = updated.id,

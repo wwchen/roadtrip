@@ -58,11 +58,21 @@ internal class AvailabilityQueryServiceImpl(
                 endDate = endDate,
                 force = force,
             )
+        val firstAvailability = availability.firstOrNull()
+        if (firstAvailability != null) {
+            return PoiReservablesAvailabilityResponseDto(
+                poiId = poiId,
+                startDate = firstAvailability.startDate,
+                endDate = firstAvailability.endDate,
+                reservables = availability,
+            )
+        }
+
         val (fallbackStart, fallbackEnd) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)
         return PoiReservablesAvailabilityResponseDto(
             poiId = poiId,
-            startDate = availability.firstOrNull()?.startDate ?: fallbackStart.toString(),
-            endDate = availability.firstOrNull()?.endDate ?: fallbackEnd.toString(),
+            startDate = fallbackStart.toString(),
+            endDate = fallbackEnd.toString(),
             reservables = availability,
         )
     }

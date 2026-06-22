@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.AvailabilityResponseDto
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
@@ -47,13 +48,13 @@ internal class AvailabilityServiceImpl(
         val resolved = rids.map { targets.requireByRid(it) }
         val byRid = linkedMapOf<String, AvailabilityResponseDto>()
         resolved
-            .groupBy { AvailabilityFetchGroup(provider = it.provider, parentRef = it.parentRef) }
+            .groupBy { AvailabilityFetchGroup(provider = it.provider, parentRef = it.parentRef, dateContext = it.dateContext) }
             .forEach { (group, items) ->
                 val query =
                     dateResolver.resolveWindow(
                         startDate = startDate,
                         endDate = endDate,
-                        context = items.first().dateContext,
+                        context = group.dateContext,
                         bookingHorizonDays = group.provider.capabilities.bookingHorizonDays,
                         maxDays = MAX_AVAILABILITY_DAYS,
                         defaultDays = DEFAULT_AVAILABILITY_DAYS,
@@ -140,6 +141,7 @@ internal class AvailabilityServiceImpl(
 private data class AvailabilityFetchGroup(
     val provider: ReservationProvider,
     val parentRef: ProviderRef,
+    val dateContext: PoiDateContext,
 )
 
 internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =

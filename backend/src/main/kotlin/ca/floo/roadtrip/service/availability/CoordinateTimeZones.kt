@@ -10,6 +10,10 @@ internal object CoordinateTimeZones {
         TimeZoneEngine.initialize()
     }
 
+    fun warmUp() {
+        engine.knownZoneIds
+    }
+
     fun resolve(
         lat: Double?,
         lng: Double?,

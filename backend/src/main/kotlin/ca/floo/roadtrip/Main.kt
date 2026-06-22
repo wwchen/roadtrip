@@ -38,6 +38,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityQueryServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
+import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
@@ -208,6 +209,7 @@ fun Application.module() {
     val campsiteProviders = CampsiteProviderRepo(ctx)
     val availabilitySnapshots = AvailabilitySnapshotRepo(ctx)
     val availabilityDateResolver = AvailabilityDateResolver()
+    CoordinateTimeZones.warmUp()
     val availabilityTargets =
         AvailabilityTargetResolver(
             providerRefs = campsiteProviders,
