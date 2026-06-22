@@ -1,0 +1,211 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "graphTooltip": 0,
+  "links": [],
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH ranked AS (\n  SELECT\n    ir.*,\n    row_number() OVER (\n      PARTITION BY ir.target, ir.phase\n      ORDER BY ir.started_at DESC, ir.id DESC\n    ) AS rn\n  FROM ingest_runs ir\n  WHERE ir.phase_kind = 'target'\n    AND (${target:sqlstring} = '' OR ir.target = ${target:sqlstring})\n)\nSELECT\n  target,\n  phase,\n  status,\n  started_at,\n  completed_at,\n  completed_at - started_at AS duration,\n  counts,\n  notes,\n  triggered_by\nFROM ranked\nWHERE rn = 1\nORDER BY target ASC, phase ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest Ingest By Target",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  child.id,\n  child.parent_run_id,\n  parent.target,\n  parent.phase AS run_kind,\n  child.phase,\n  child.phase_kind,\n  child.status,\n  child.started_at,\n  child.completed_at,\n  child.completed_at - child.started_at AS duration,\n  child.exit_code,\n  child.counts,\n  child.notes\nFROM ingest_runs child\nLEFT JOIN ingest_runs parent ON parent.id = child.parent_run_id\nWHERE child.started_at >= now() - (${days_back} || ' days')::interval\n  AND child.phase_kind <> 'target'\n  AND (\n    child.status IN ('failed', 'aborted')\n    OR (child.status = 'started' AND child.started_at < now() - interval '30 minutes')\n  )\n  AND (${target:sqlstring} = '' OR parent.target = ${target:sqlstring})\nORDER BY child.started_at DESC, child.id DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Failed Or Stuck Ingest Phases",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  id,\n  source,\n  status,\n  started_at,\n  completed_at,\n  completed_at - started_at AS duration,\n  seen_count,\n  notes\nFROM import_runs\nWHERE started_at >= now() - (${days_back} || ' days')::interval\n  AND (${source:sqlstring} = '' OR source = ${source:sqlstring})\nORDER BY started_at DESC, id DESC\nLIMIT 200;",
+          "refId": "A"
+        }
+      ],
+      "title": "Import Runs",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  'poi' AS row_type,\n  p.id,\n  p.source,\n  p.name,\n  p.updated_at,\n  p.fetched_at,\n  p.deleted_at,\n  p.last_seen_run_id,\n  p.last_poller_run_id,\n  now() - p.updated_at AS updated_age\nFROM pois p\nWHERE (${source:sqlstring} = '' OR p.source = ${source:sqlstring})\n\nUNION ALL\n\nSELECT\n  'reservable' AS row_type,\n  r.id,\n  r.source,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS name,\n  r.updated_at,\n  NULL::timestamptz AS fetched_at,\n  r.deleted_at,\n  r.last_seen_run_id,\n  NULL::bigint AS last_poller_run_id,\n  now() - r.updated_at AS updated_age\nFROM reservables r\nWHERE (${source:sqlstring} = '' OR r.source = ${source:sqlstring})\nORDER BY updated_age DESC NULLS LAST\nLIMIT 300;",
+          "refId": "A"
+        }
+      ],
+      "title": "Catalog Rows By Freshness",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "roadtrip",
+    "ingest",
+    "freshness"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "target",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT DISTINCT target AS __text, target AS __value FROM ingest_runs WHERE target IS NOT NULL ORDER BY target ASC",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "source",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT DISTINCT source AS __text, source AS __value FROM (SELECT source FROM pois UNION SELECT source FROM reservables UNION SELECT source FROM import_runs) sources WHERE source IS NOT NULL ORDER BY source ASC",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "days_back",
+        "type": "custom",
+        "query": "7,14,30,90",
+        "current": {
+          "text": "30",
+          "value": "30"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Roadtrip / Ingest & Catalog Freshness",
+  "uid": "roadtrip-ingest-catalog-freshness",
+  "version": 1
+}
