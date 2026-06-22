@@ -14,10 +14,6 @@ class CachePolicyTest {
         )
         assertEquals(
             "no-store",
-            cacheOptionsFor("/api/availability/bulk", ContentType.Application.Json)?.cacheControl.toString(),
-        )
-        assertEquals(
-            "no-store",
             cacheOptionsFor("/api/pois/search", ContentType.Application.Json)?.cacheControl.toString(),
         )
     }

@@ -8,11 +8,11 @@ reservable into provider-ready targets, then call the adapter.
 
 ## Why an abstraction
 
-The dispatch logic used to live in parallel paths (single-id availability,
-bulk availability, watch poller), each parsing `provider_ref` JSON inline and
-importing per-provider helper functions. Adding a third provider meant editing
-several files; forgetting one was a silent bug. The current shape collapses
-that into one registry lookup behind `AvailabilityTargetResolver`.
+The dispatch logic used to live in parallel paths (single-id availability and
+watch polling), each parsing `provider_ref` JSON inline and importing
+per-provider helper functions. Adding a third provider meant editing several
+files; forgetting one was a silent bug. The current shape collapses that into
+one registry lookup behind `AvailabilityTargetResolver`.
 
 This doc is the contract. **A new reservation provider is a new file under
 `service/reservation/adapters/<vendor>/` and one row in the registry — nothing

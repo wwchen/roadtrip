@@ -1,11 +1,7 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.clients.aspira.AspiraException
-import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.AvailabilityErrorDto
-import ca.floo.roadtrip.models.api.BulkAvailabilityEntryDto
-import ca.floo.roadtrip.models.api.BulkAvailabilityRequestDto
-import ca.floo.roadtrip.models.api.BulkAvailabilityResponseDto
 import ca.floo.roadtrip.models.api.PoiReservablesAvailabilityResponseDto
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -16,27 +12,17 @@ import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
-import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.application.call
 import io.ktor.server.plugins.origin
-import io.ktor.server.request.receiveText
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
-import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
-import java.time.LocalDate
 import java.util.concurrent.ConcurrentHashMap
 
 private val log = LoggerFactory.getLogger("AvailabilityRoutes")
-
-// Bulk endpoint guardrails. The single-id endpoint already serves the drawer;
-// bulk is for the route-planner card list which scores N campgrounds against
-// "which dates in this window have bookable sites?" Cap window length at 14
-// (any realistic trip leg) and ids at 50 (one per visible card row).
-private const val MAX_BULK_IDS = 50
 
 // Per-IP rate-limit budget. Cross-provider: one bucket regardless of which
 // adapter ends up answering.
@@ -225,120 +211,6 @@ internal fun Route.availabilityRoutes(
             call.respondAvailabilityJson(error, status)
         }
     }
-
-    // POST /api/availability/bulk
-    //
-    // Trip-planner endpoint. The FE has a list of campgrounds along the
-    // active corridor and wants to know "for these N campgrounds, which
-    // dates in [start_date, end_date) have at least one bookable site?"
-    // Mixed providers in one call are fine — each id is dispatched
-    // by the registry independently.
-    post("/api/availability/bulk", {
-        tags = listOf("availability")
-        summary = "Bulk per-day availability for many campgrounds in a date window (poi-id keyed)"
-        description =
-            "Deprecated. Body: { ids: number[], start_date: 'YYYY-MM-DD', end_date: 'YYYY-MM-DD' }. " +
-            "Returns one entry per id with an HTTP-style `status` and the dates inside " +
-            "the window where at least one site is available on each date. Mixed providers OK."
-        request {
-            body<BulkAvailabilityRequestDto> {
-                mediaTypes(ContentType.Application.Json)
-                example("3-night July 4 weekend") {
-                    value =
-                        BulkAvailabilityRequestDto(
-                            ids = listOf(12345L, 67890L),
-                            startDate = "2026-07-04",
-                            endDate = "2026-07-07",
-                        )
-                }
-            }
-        }
-        response {
-            code(HttpStatusCode.OK) {
-                description = "One entry per id. status==200 → available_dates is meaningful."
-                body<BulkAvailabilityResponseDto> {
-                    mediaTypes(ContentType.Application.Json)
-                    example("mixed") {
-                        value =
-                            BulkAvailabilityResponseDto(
-                                startDate = "2026-07-04",
-                                endDate = "2026-07-07",
-                                results =
-                                    listOf(
-                                        BulkAvailabilityEntryDto(12345L, 200, listOf("2026-07-04", "2026-07-06")),
-                                        BulkAvailabilityEntryDto(67890L, 200, emptyList()),
-                                        BulkAvailabilityEntryDto(99999L, 503, emptyList()),
-                                    ),
-                            )
-                    }
-                }
-            }
-            code(HttpStatusCode.BadRequest) {
-                description = "Malformed body, missing fields, or limits exceeded."
-                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.ServiceUnavailable) {
-                description = "Rate limited."
-                body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
-    }) {
-        call.markBulkAvailabilityDeprecated()
-        val req =
-            try {
-                Json.decodeFromString(BulkAvailabilityRequestDto.serializer(), call.receiveText())
-            } catch (e: Exception) {
-                call.respondApiError("bad_request", HttpStatusCode.BadRequest, detail = e.message ?: "parse failed")
-                return@post
-            }
-
-        if (req.ids.isEmpty() || req.ids.size > MAX_BULK_IDS) {
-            call.respondApiError(
-                "bad_ids",
-                HttpStatusCode.BadRequest,
-                detail = "need 1..$MAX_BULK_IDS ids, got ${req.ids.size}",
-            )
-            return@post
-        }
-        val start =
-            try {
-                LocalDate.parse(req.startDate)
-            } catch (e: Exception) {
-                call.respondApiError("bad_start_date", HttpStatusCode.BadRequest, detail = "start_date must be YYYY-MM-DD")
-                return@post
-            }
-        val end =
-            try {
-                LocalDate.parse(req.endDate)
-            } catch (e: Exception) {
-                call.respondApiError("bad_end_date", HttpStatusCode.BadRequest, detail = "end_date must be YYYY-MM-DD")
-                return@post
-            }
-
-        val ip = call.request.origin.remoteHost
-        if (!rateLimit.allow(ip)) {
-            call.respondApiError(
-                "ip_throttled",
-                HttpStatusCode.ServiceUnavailable,
-            )
-            return@post
-        }
-
-        try {
-            call.respondAvailabilityJson(
-                routeService.bulkAvailability(
-                    ids = req.ids,
-                    startDate = start,
-                    endDate = end,
-                ),
-            )
-        } catch (e: AvailabilityServiceError.BadDateWindow) {
-            call.respondAvailabilityJson(
-                availabilityErrorDto(e),
-                HttpStatusCode.BadRequest,
-            )
-        }
-    }
 }
 
 /**
@@ -430,14 +302,6 @@ private suspend fun ApplicationCall.respondServiceAvailabilityError(e: Availabil
     respondAvailabilityJson(body, status)
 }
 
-private suspend fun ApplicationCall.respondApiError(
-    error: String,
-    status: HttpStatusCode,
-    detail: String? = null,
-) {
-    respondAvailabilityJson(ApiErrorSchema(error = error, detail = detail), status)
-}
-
 private suspend inline fun <reified T> ApplicationCall.respondAvailabilityJson(
     value: T,
     status: HttpStatusCode = HttpStatusCode.OK,
@@ -462,11 +326,3 @@ private fun availabilityErrorDto(e: AvailabilityServiceError.BadDateWindow): Ava
         AvailabilityServiceError.BadDateWindow.Invalid ->
             availabilityErrorDto(error = e.error)
     }
-
-private fun ApplicationCall.markBulkAvailabilityDeprecated() {
-    response.headers.append("Deprecation", "true")
-    response.headers.append(
-        "Warning",
-        "299 - \"/api/availability/bulk is deprecated; use POI/reservable availability service paths\"",
-    )
-}
