@@ -108,7 +108,7 @@ internal class AvailabilityQueryServiceImpl(
         startDate: LocalDate,
         endDate: LocalDate,
     ): BulkAvailabilityEntryDto {
-        if (providerRefs.findProviderRef(poiId) == null) {
+        if (!providerRefs.campgroundExists(poiId)) {
             return BulkAvailabilityEntryDto(id = poiId, status = 404, availableDates = emptyList())
         }
         val rids = reservablesRepo.findByPoi(poiId, ReservableType.SITE).map { it.rid }

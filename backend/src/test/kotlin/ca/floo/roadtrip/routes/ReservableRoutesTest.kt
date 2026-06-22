@@ -866,6 +866,47 @@ class ReservableRoutesTest {
         }
 
     @Test
+    fun `bulk availability returns empty success for existing poi with no reservables`() =
+        testApplication {
+            val poiId =
+                seedPoi(
+                    sourceId = "bulk-walkup",
+                    name = "Bulk Walkup Campground",
+                    providerRefJson = null,
+                )
+            application {
+                routing {
+                    availabilityRoutes(
+                        CampsiteProviderRepo(ctx),
+                        fakeReservationProviders(),
+                        ReservableRepo(ctx),
+                        AvailabilitySnapshotRepo(ctx),
+                    )
+                }
+            }
+
+            val resp =
+                client.post("/api/availability/bulk") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"ids":[$poiId,999999],"start_date":"2026-07-01","end_date":"2026-07-04"}""")
+                }
+
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val results =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["results"]!!
+                    .jsonArray
+                    .map { it.jsonObject }
+            val existingPoiResult = results.first { it["id"]!!.jsonPrimitive.content.toLong() == poiId }
+            val unknownPoiResult = results.first { it["id"]!!.jsonPrimitive.content.toLong() == 999999L }
+            assertEquals(200, existingPoiResult["status"]!!.jsonPrimitive.content.toInt())
+            assertEquals(404, unknownPoiResult["status"]!!.jsonPrimitive.content.toInt())
+            assertEquals(0, FakeReservationProvider.catalogAvailabilityCalls)
+            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
+        }
+
+    @Test
     fun `bulk reservable availability resolves date windows per poi timezone`() =
         testApplication {
             val westPoi =
