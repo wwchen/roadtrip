@@ -19,8 +19,19 @@ def is_single_quoted_sql_literal(value: str) -> bool:
 
 
 def main() -> int:
-    dashboard_dir = Path(__file__).resolve().parents[1] / "grafana" / "dashboards"
+    repo_root = Path(__file__).resolve().parents[1]
+    dashboard_dir = repo_root / "grafana" / "dashboards"
     failures: list[str] = []
+
+    compose_text = (repo_root / "docker-compose.yml").read_text()
+    for required_grafana_env in (
+        "GF_SERVER_ROOT_URL=",
+        "GF_SERVER_SERVE_FROM_SUB_PATH=",
+    ):
+        if required_grafana_env not in compose_text:
+            failures.append(
+                f"docker-compose.yml grafana service missing {required_grafana_env}"
+            )
 
     dashboards: dict[str, dict] = {}
     for path in sorted(dashboard_dir.glob("*.json")):

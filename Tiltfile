@@ -79,7 +79,7 @@ dc_resource(
     'grafana',
     resource_deps=['postgres', 'grafana-db-setup'],
     labels=['infra'],
-    links=['http://127.0.0.1:3000'],
+    links=['http://127.0.0.1:3000/dash/'],
 )
 
 # --- companion (host Node) ---------------------------------------------------

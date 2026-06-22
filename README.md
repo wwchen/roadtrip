@@ -25,7 +25,8 @@ make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger
 for Postgres, the backend container, and Grafana, then runs the campsite
 companion as a host Node process so Playwright can drive a real Chromium.
 The backend still serves the app on <http://127.0.0.1:8765>. Grafana is
-available at <http://127.0.0.1:3000> with anonymous viewer access enabled.
+available at <http://127.0.0.1:3000/dash/> with anonymous viewer access
+enabled.
 Provisioned dashboards include POI detail, POIs with reservables, Tesla
 Supercharger detail/stats, reservable detail/stats, DB stats, ingest/catalog
 freshness, provider cache audit, watch/scheduler health, and API/SQL
@@ -197,14 +198,17 @@ the backend container and write raw captures back to the checkout.
 ## Deploy via Docker + Cloudflare tunnel
 
 1. **Create a Cloudflare tunnel.** Zero Trust → Networks → Tunnels → Create
-   tunnel; set the public hostname to route to `http://backend:8765`. Copy the
-   tunnel token. The tunnel's public hostname routing is managed in Cloudflare;
-   Compose only starts `cloudflared` with the token.
+   tunnel. Add public hostname routes for `roadtrip.floo.ca` →
+   `http://backend:8765` and `roadtrip.floo.ca/dash` →
+   `http://grafana:3000`. Copy the tunnel token. The tunnel's public hostname
+   routing is managed in Cloudflare; Compose only starts `cloudflared` with the
+   token.
 
 2. **`.env` on the host:**
    ```
    TESLA_COOKIES=ak_bmsc=...; _abck=...; bm_sz=...; ...
    CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+   GRAFANA_ROOT_URL=https://roadtrip.floo.ca/dash/
    GRAFANA_ADMIN_PASSWORD=<strong password>
    GRAFANA_DB_PASSWORD=<strong password>
    ```

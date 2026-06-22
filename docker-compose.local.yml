@@ -14,5 +14,8 @@ services:
       - "127.0.0.1:8765:8765"
 
   grafana:
+    environment:
+      - GF_SERVER_ROOT_URL=http://127.0.0.1:3000/dash/
+      - GF_SERVER_SERVE_FROM_SUB_PATH=true
     ports:
       - "127.0.0.1:3000:3000"
