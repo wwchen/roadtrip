@@ -146,7 +146,9 @@ def write_envelope(
     }
     if part:
         envelope["part"] = part
-    out.write_text(json.dumps(envelope, ensure_ascii=False))
+    tmp = out.with_name(f".{out.name}.tmp")
+    tmp.write_text(json.dumps(envelope, ensure_ascii=False))
+    tmp.replace(out)
     log(f" wrote file to {out}")
     return out
 
@@ -226,7 +228,7 @@ def parse_payload(content_type: str, body: str):
     return body
 
 def log(msg: str) -> None:
-    print(msg, file=sys.stdout)
+    print(msg, file=sys.stdout, flush=True)
 
 def err(msg: str) -> None:
-    print(msg, file=sys.stderr)
+    print(msg, file=sys.stderr, flush=True)

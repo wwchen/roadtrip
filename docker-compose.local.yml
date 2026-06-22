@@ -10,9 +10,11 @@ services:
       - "127.0.0.1:5432:5432"
 
   backend:
+    restart: "no"
     ports:
       - "127.0.0.1:8765:8765"
 
   grafana:
+    restart: "no"
     ports:
       - "127.0.0.1:3000:3000"

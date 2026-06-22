@@ -21,6 +21,11 @@ class PoiTest {
                 activities = listOf("hiking"),
                 sites = 42,
                 photoUrl = "https://example.test/photo.jpg",
+                cellCoverage =
+                    mapOf(
+                        "verizon" to CellSignal(avg = 3.5f, count = 4),
+                    ),
+                ratingReviews = RatingSummary(avg = 4.25f, count = 8),
                 subcategory = "federal",
                 agency = "NPS",
                 extras = Json.parseToJsonElement("""{"description":"quoted \"text\""}"""),
@@ -34,6 +39,12 @@ class PoiTest {
         assertEquals("hiking", activity.content)
         assertEquals(42, properties["sites"]!!.jsonPrimitive.int)
         assertEquals("https://example.test/photo.jpg", properties["photo_url"]!!.jsonPrimitive.content)
+        val cellCoverage = properties["cell_coverage"]!!.jsonObject
+        assertEquals(3.5, cellCoverage["verizon"]!!.jsonArray[0].jsonPrimitive.double)
+        assertEquals(4, cellCoverage["verizon"]!!.jsonArray[1].jsonPrimitive.int)
+        val ratingReviews = properties["rating_reviews"]!!.jsonArray
+        assertEquals(4.25, ratingReviews[0].jsonPrimitive.double)
+        assertEquals(8, ratingReviews[1].jsonPrimitive.int)
         assertEquals("federal", properties["subcategory"]!!.jsonPrimitive.content)
         assertEquals("NPS", properties["agency"]!!.jsonPrimitive.content)
         assertEquals("quoted \"text\"", upstream["description"]!!.jsonPrimitive.content)
@@ -117,6 +128,8 @@ class PoiTest {
         activities: List<String> = emptyList(),
         sites: Int? = null,
         photoUrl: String? = null,
+        cellCoverage: Map<String, CellSignal>? = null,
+        ratingReviews: RatingSummary? = null,
         subcategory: String? = null,
         agency: String? = null,
         extras: JsonElement? = null,
@@ -140,8 +153,8 @@ class PoiTest {
             season = null,
             near = null,
             photoUrl = photoUrl,
-            cellCoverage = null,
-            ratingReviews = null,
+            cellCoverage = cellCoverage,
+            ratingReviews = ratingReviews,
             subcategory = subcategory,
             agency = agency,
             extras = extras,

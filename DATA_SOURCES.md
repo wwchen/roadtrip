@@ -106,35 +106,31 @@ attaches rec.gov-specific metadata to the federal subset.
   category=`provincial`, state=`BC`, `bcparks_url` set for the popup link).
 
 **Enrichment — recreation.gov (federal only)**
-- `scripts/enrich_campgrounds.py` queries two public-browser endpoints per federal campground:
-  - `GET /api/search?lat=..&lng=..&radius=2&entity_type=campground&inventory_type=camping`
-    — rec.gov's map search. Geographic match is far more reliable than name
-    matching. Returns `entity_id`, `parent_name` (e.g. "Gifford Pinchot
-    National Forest"), `preview_image_url`, `activities`, `average_rating`,
-    `number_of_ratings`, `aggregate_cell_coverage`, and more.
+- `scripts/fetch_recgov_campground_enrichment.py` reads the newest
+  `recgov-campgrounds` RIDB capture for `FacilityID` values, then queries
+  one public-browser endpoint per reservable federal campground:
   - `GET /api/ratingreview/aggregate?location_id=<id>&location_type=Campground`
-    — per-carrier cell coverage on rec.gov's 0–4 scale (0 none, 1 major
-    issues, 2 some, 3 good, 4 excellent) for Verizon/AT&T/T-Mobile/Sprint.
+    — listing rating plus per-carrier cell coverage on rec.gov's 0–4 scale
+    (0 none, 1 major issues, 2 some, 3 good, 4 excellent) for
+    Verizon/AT&T/T-Mobile/Sprint.
 - No API key required. These are the same endpoints the rec.gov SPA uses.
-- Rate-limited: stays at 4 concurrent with 429 exponential backoff; the
-  script is resume-safe via an `enriched: true` flag on each feature.
-- Writes these fields into `campgrounds.geojson` properties:
-  `recgov_id`, `parent_name`, `parent_type`, `photo_url`, `activities`,
-  `rating_reviews` (`[avg, count]`), `cell_coverage` (`{carrier: [avg, count]}`).
+- Rate-limited: one request at a time with a configurable `--min-gap`,
+  429 exponential backoff, and `--resume` support for partial backfills.
+- Writes envelope-wrapped raw captures under
+  `data/raw/recgov-campground-enrichment/<ts>/facility-<id>.json`.
+- `RecGovCampgroundsEtl` promotes RIDB media/activity fields from
+  `recgov-campgrounds` plus `rating_reviews` (`[avg, count]`) and
+  `cell_coverage` (`{carrier: [avg, count]}`) from the enrichment capture
+  into `pois.properties`.
 
 **Optional — Overpass `tourism=camp_site`** for gap-filling / dispersed
 camping. Not yet integrated.
 
-**Plan:** weekly GH Action runs both scripts in sequence. Enrichment is
-idempotent (only re-queries features missing `enriched: true`) so reruns
-only hit rec.gov for new or never-matched campgrounds.
-
 **Note on RIDB:** the public Recreation Information Database API
 (`https://ridb.recreation.gov/api/v1/facilities/...`, free key required) was
-evaluated and can return media + activities per facility, but the SPA-backing
-endpoints above return the same data *plus* rating/cell coverage in one
-response without a key. RIDB remains a useful fallback if the SPA endpoints
-ever tighten access.
+evaluated and is now the base federal campground source. It returns media and
+activities per facility, but not rating/cell coverage, so the SPA aggregate
+endpoint above remains the enrichment source for those fields.
 
 ## 4. Free chargers (non-Tesla)
 
@@ -181,18 +177,21 @@ Skip for the POC.
   ├─ scripts/fetch_campgrounds.py      # weekly — USCampgrounds.info seed (US)
   ├─ scripts/fetch_bc_parks.py         # weekly — BC Parks Strapi API (BC)
   ├─ scripts/fetch_parks_canada.py     # static — hand-curated Parks Canada BC frontcountry
-  ├─ scripts/enrich_campgrounds.py     # weekly — rec.gov search + rating/review APIs (US federal only)
+  ├─ scripts/fetch_recgov.py           # weekly — RIDB federal campgrounds
+  ├─ scripts/fetch_recgov_campground_enrichment.py
+  │                                      # weekly — rec.gov rating/cell aggregates
   ├─ scripts/fetch_planet_fitness.py   # weekly — Overpass
   └─ scripts/fetch_parks.py            # monthly — PAD-US FeatureServer
-commits any changed GeoJSON back to main → deploy server pulls.
+captures raw envelopes under `data/raw/`, then `make data-import` replays
+those captures into Postgres.
 ```
 
-The fetcher scripts above produce GeoJSON inputs. `make data-import` (or
-`make data-import TARGET=<name>`) ingests those GeoJSON files into
-Postgres+PostGIS via the Kotlin importer, and the Ktor backend serves them via
-the bbox-keyed `/api/pois` endpoint at runtime. Static parks polygons and
-Supercharger geometry remain file-served (`/data/*` and a live fetch from
-supercharge.info, respectively).
+The fetcher scripts above produce envelope-wrapped raw captures. `make
+data-import` (or `make data-import TARGET=<name>`) ingests the newest capture
+for each configured input into Postgres+PostGIS via the Kotlin ETL pipeline,
+and the Ktor backend serves POIs via the bbox-keyed `/api/pois` endpoint at
+runtime. Static parks polygons and Supercharger geometry remain file-served
+(`/data/*` and a live fetch from supercharge.info, respectively).
 
 This sidesteps:
 - CORS (no runtime cross-origin calls — though supercharge.info, Overpass, OCM, NREL AFDC, PAD-US all support CORS and could be fetched live if we wanted)
@@ -203,7 +202,7 @@ This sidesteps:
 **API keys needed (all free, store as GH Action secrets when refresh runs move to CI):**
 - `NREL_API_KEY` — developer.nrel.gov (1000 req/hr) — for a future free-chargers fetcher
 - `OCM_API_KEY` — openchargemap.org — optional fallback
-- supercharge.info, Overpass, PAD-US, USCampgrounds.info, recreation.gov (search + ratingreview) — no key needed
+- supercharge.info, Overpass, PAD-US, USCampgrounds.info, recreation.gov ratingreview — no key needed
 
 Tesla pricing offline refresh worker (`scripts/fetch_tesla_superchargers.py`)
 requires a separately-managed session cookie in `.env`; see README_PRICING.md.
