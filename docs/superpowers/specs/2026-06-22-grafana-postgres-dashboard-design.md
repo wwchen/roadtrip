@@ -17,6 +17,7 @@ Those pages mostly expose read-only database views that could be better served b
 - Move backend image build configuration to a root `Dockerfile`.
 - Integrate Docker Compose with Tilt using `docker_compose`, `docker_build`, and `dc_resource`.
 - Keep all existing app APIs and static pages during this first pass.
+- Create object-centric dashboards for POI, reservable, watch/scheduler, ingest freshness, and provider cache investigation.
 - Create Grafana dashboards that show which read-only APIs can later be replaced by direct SQL panels.
 
 ## Non-Goals
@@ -198,6 +199,9 @@ grafana/
   dashboards/
     reservable-detail.json
     poi-detail.json
+    watch-scheduler-health.json
+    ingest-catalog-freshness.json
+    provider-cache-audit.json
     api-sql-equivalence.json
 ```
 
@@ -262,7 +266,29 @@ The primary Grafana experience should be object-centric, not API-centric:
 
 - **Reservable Detail** answers "what do we know about this reservable, how fresh is it, what availability fetches touched it, and what raw upstream payload created it?"
 - **POI Detail** answers "what is this place, and which reservable RIDs are linked to it?"
+- **Watch & Scheduler Health** answers "what monitoring intent exists, what is due or stuck, and which runs are failing?"
+- **Ingest & Catalog Freshness** answers "when did each source last fetch/import successfully, and which catalog rows are stale?"
+- **Provider Cache / Raw Data Audit** answers "is a stale result caused by database state, provider cache state, or raw upstream payload shape?"
 - **API / SQL Equivalence** remains a supporting dashboard for deciding which old read APIs can be removed later.
+
+The first two dashboards are the primary replacement candidates for the standalone `/pois` and `/reservables` views. The next three dashboards expose active database tables that would otherwise remain hidden from Grafana while still explaining freshness and availability behavior. The API equivalence dashboard is temporary scaffolding: it should help decide what can be deleted later, not become the main operator workflow.
+
+## Table Coverage
+
+Active tables should be visible through Grafana as follows:
+
+- `pois`: POI Detail, Reservable Detail linked POIs, Ingest & Catalog Freshness.
+- `reservables`: Reservable Detail, POI Detail linked RIDs, Ingest & Catalog Freshness.
+- `reservable_pois`: POI/reservable relationship panels in POI Detail and Reservable Detail.
+- `availability_snapshot`: availability timelines, fetch audit, POI coverage, scheduler run output.
+- `availability_watch`: Watch & Scheduler Health.
+- `availability_job`: Watch & Scheduler Health and API / SQL Equivalence.
+- `availability_job_run`: Watch & Scheduler Health, Reservable Detail fetch audit, API / SQL Equivalence.
+- `ingest_runs`: Ingest & Catalog Freshness.
+- `import_runs`: Ingest & Catalog Freshness, with joins from `pois.last_seen_run_id` and `reservables.last_seen_run_id`.
+- `api_cache`: Provider Cache / Raw Data Audit and Reservable Detail freshness heuristics.
+
+Dropped or obsolete tables should not get dashboards: `alerts`, `matches`, `settings`, `schedules`, `governing_body`, `booking_provider`, `reservable_availability_monitors`, and the pre-rename `reservable_availability_log`.
 
 ## Reservable Detail Dashboard
 
@@ -563,6 +589,388 @@ SELECT
   properties
 FROM pois
 WHERE id = ${poi_id};
+```
+
+## Watch & Scheduler Health Dashboard
+
+Dashboard file:
+
+```text
+grafana/dashboards/watch-scheduler-health.json
+```
+
+Core variables:
+
+- `watch_status`: optional filter for `active`, `paused`, or `done`.
+- `job_status`: optional filter for `active`, `paused`, or `done`.
+- `run_status`: optional filter for `started`, `completed`, or `failed`.
+- `poi_id`: optional POI drill-down.
+- `reservable_rid`: optional reservable drill-down.
+- `days_back`: numeric interval for run history, default `14`.
+
+This dashboard makes `availability_watch`, `availability_job`, and `availability_job_run` first-class. It should link to the POI and reservable detail dashboards when the selected watch can be resolved to a POI or RID.
+
+### Queue Summary
+
+Shows scheduler pressure and obviously stuck work.
+
+```sql
+SELECT
+  count(*) FILTER (WHERE j.status = 'active') AS active_jobs,
+  count(*) FILTER (WHERE j.status = 'paused') AS paused_jobs,
+  count(*) FILTER (WHERE j.status = 'done') AS done_jobs,
+  count(*) FILTER (
+    WHERE j.status = 'active'
+      AND j.next_run_at <= now()
+      AND (j.claimed_until IS NULL OR j.claimed_until < now())
+  ) AS due_now,
+  count(*) FILTER (
+    WHERE j.claimed_until IS NOT NULL
+      AND j.claimed_until >= now()
+  ) AS currently_claimed,
+  count(*) FILTER (
+    WHERE j.claimed_until IS NOT NULL
+      AND j.claimed_until < now()
+      AND j.last_run_at IS NULL
+  ) AS expired_claim_without_run
+FROM availability_job j;
+```
+
+### Watch And Job Table
+
+Shows user intent beside scheduler state. POI-scoped watches may cover many reservables; reservable-scoped watches resolve directly to one RID.
+
+```sql
+SELECT
+  w.id AS watch_id,
+  CASE
+    WHEN w.poi_id IS NOT NULL THEN 'poi'
+    ELSE 'reservable'
+  END AS scope,
+  w.poi_id,
+  p.name AS poi_name,
+  w.reservable_id,
+  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,
+  w.reservable_filters,
+  w.start_date,
+  w.end_date,
+  w.cadence_sec AS watch_cadence_sec,
+  w.trigger_kinds,
+  w.trigger_config,
+  w.stop_when_triggered,
+  w.status AS watch_status,
+  j.id AS job_id,
+  j.status AS job_status,
+  j.next_run_at,
+  j.claimed_until,
+  j.last_run_at,
+  j.updated_at AS job_updated_at
+FROM availability_watch w
+LEFT JOIN availability_job j ON j.watch_id = w.id
+LEFT JOIN pois p ON p.id = w.poi_id
+LEFT JOIN reservables r ON r.id = w.reservable_id
+WHERE (${watch_status:sqlstring} = '' OR w.status = ${watch_status:sqlstring})
+  AND (${job_status:sqlstring} = '' OR j.status = ${job_status:sqlstring})
+  AND (${poi_id:sqlstring} = '' OR w.poi_id = NULLIF(${poi_id:sqlstring}, '')::bigint)
+  AND (
+    ${reservable_rid:sqlstring} = ''
+    OR r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}
+  )
+ORDER BY
+  j.next_run_at ASC NULLS LAST,
+  w.created_at DESC,
+  w.id DESC;
+```
+
+### Recent Runs
+
+Shows status, failure details, and duration by scheduler run. This is the audit trail that explains missing or stale `availability_snapshot` rows.
+
+```sql
+SELECT
+  jr.id AS run_id,
+  jr.job_id,
+  j.watch_id,
+  jr.status,
+  jr.snapshot_count,
+  jr.duration_ms,
+  jr.error,
+  jr.started_at,
+  jr.completed_at,
+  w.poi_id,
+  p.name AS poi_name,
+  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid
+FROM availability_job_run jr
+JOIN availability_job j ON j.id = jr.job_id
+JOIN availability_watch w ON w.id = j.watch_id
+LEFT JOIN pois p ON p.id = w.poi_id
+LEFT JOIN reservables r ON r.id = w.reservable_id
+WHERE jr.started_at >= now() - (${days_back} || ' days')::interval
+  AND (${run_status:sqlstring} = '' OR jr.status = ${run_status:sqlstring})
+ORDER BY jr.started_at DESC, jr.id DESC
+LIMIT 200;
+```
+
+### Snapshots Produced By Runs
+
+Shows whether completed runs produced useful snapshot rows.
+
+```sql
+SELECT
+  jr.id AS run_id,
+  jr.job_id,
+  jr.status AS run_status,
+  jr.snapshot_count AS recorded_snapshot_count,
+  count(s.id) AS actual_snapshot_rows,
+  min(s.target_date) AS first_target_date,
+  max(s.target_date) AS last_target_date,
+  min(s.observed_at) AS first_observed_at,
+  max(s.observed_at) AS last_observed_at
+FROM availability_job_run jr
+LEFT JOIN availability_snapshot s ON s.run_id = jr.id
+WHERE jr.started_at >= now() - (${days_back} || ' days')::interval
+GROUP BY jr.id
+ORDER BY jr.started_at DESC, jr.id DESC
+LIMIT 200;
+```
+
+## Ingest & Catalog Freshness Dashboard
+
+Dashboard file:
+
+```text
+grafana/dashboards/ingest-catalog-freshness.json
+```
+
+Core variables:
+
+- `target`: optional ingest target filter.
+- `source`: optional catalog source filter.
+- `days_back`: numeric interval for run history, default `30`.
+
+This dashboard makes `ingest_runs` and `import_runs` visible. It should answer whether stale POI or reservable data is caused by failed fetch/import work, old successful imports, or catalog rows that have not been seen recently.
+
+### Latest Ingest By Target
+
+Shows the latest parent run for each ingest target and phase kind.
+
+```sql
+WITH ranked AS (
+  SELECT
+    ir.*,
+    row_number() OVER (
+      PARTITION BY ir.target, ir.phase
+      ORDER BY ir.started_at DESC, ir.id DESC
+    ) AS rn
+  FROM ingest_runs ir
+  WHERE ir.phase_kind = 'target'
+    AND (${target:sqlstring} = '' OR ir.target = ${target:sqlstring})
+)
+SELECT
+  target,
+  phase,
+  status,
+  started_at,
+  completed_at,
+  completed_at - started_at AS duration,
+  counts,
+  notes,
+  triggered_by
+FROM ranked
+WHERE rn = 1
+ORDER BY target ASC, phase ASC;
+```
+
+### Failed Or Stuck Ingest Phases
+
+Shows failed, aborted, or long-running phase rows with the stderr/failure tail in `notes`.
+
+```sql
+SELECT
+  child.id,
+  child.parent_run_id,
+  parent.target,
+  parent.phase AS run_kind,
+  child.phase,
+  child.phase_kind,
+  child.status,
+  child.started_at,
+  child.completed_at,
+  child.completed_at - child.started_at AS duration,
+  child.exit_code,
+  child.counts,
+  child.notes
+FROM ingest_runs child
+LEFT JOIN ingest_runs parent ON parent.id = child.parent_run_id
+WHERE child.started_at >= now() - (${days_back} || ' days')::interval
+  AND child.phase_kind <> 'target'
+  AND (
+    child.status IN ('failed', 'aborted')
+    OR (child.status = 'started' AND child.started_at < now() - interval '30 minutes')
+  )
+  AND (${target:sqlstring} = '' OR parent.target = ${target:sqlstring})
+ORDER BY child.started_at DESC, child.id DESC;
+```
+
+### Import Runs
+
+Shows the lower-level importer audit rows that POIs and reservables reference through `last_seen_run_id`.
+
+```sql
+SELECT
+  id,
+  source,
+  status,
+  started_at,
+  completed_at,
+  completed_at - started_at AS duration,
+  seen_count,
+  notes
+FROM import_runs
+WHERE started_at >= now() - (${days_back} || ' days')::interval
+  AND (${source:sqlstring} = '' OR source = ${source:sqlstring})
+ORDER BY started_at DESC, id DESC
+LIMIT 200;
+```
+
+### Catalog Rows By Freshness
+
+Shows stale POI and reservable rows side by side.
+
+```sql
+SELECT
+  'poi' AS row_type,
+  p.id,
+  p.source,
+  p.name,
+  p.updated_at,
+  p.fetched_at,
+  p.deleted_at,
+  p.last_seen_run_id,
+  p.last_poller_run_id,
+  now() - p.updated_at AS updated_age
+FROM pois p
+WHERE (${source:sqlstring} = '' OR p.source = ${source:sqlstring})
+
+UNION ALL
+
+SELECT
+  'reservable' AS row_type,
+  r.id,
+  r.source,
+  r.type || ':' || r.vendor || ':' || r.vendor_id AS name,
+  r.updated_at,
+  NULL::timestamptz AS fetched_at,
+  r.deleted_at,
+  r.last_seen_run_id,
+  NULL::bigint AS last_poller_run_id,
+  now() - r.updated_at AS updated_age
+FROM reservables r
+WHERE (${source:sqlstring} = '' OR r.source = ${source:sqlstring})
+ORDER BY updated_age DESC NULLS LAST
+LIMIT 300;
+```
+
+## Provider Cache / Raw Data Audit Dashboard
+
+Dashboard file:
+
+```text
+grafana/dashboards/provider-cache-audit.json
+```
+
+Core variables:
+
+- `namespace`: optional cache namespace filter.
+- `cache_key_search`: optional text search.
+- `include_expired`: boolean-like selector default `false`.
+
+This dashboard makes `api_cache` easier to inspect without hiding raw provider payloads. It should be used when a POI or reservable dashboard shows stale or surprising state and the operator needs to understand whether the provider cache is involved.
+
+### Cache Namespace Summary
+
+Shows cache volume, expiration, and payload size by namespace.
+
+```sql
+SELECT
+  namespace,
+  count(*) AS rows,
+  count(*) FILTER (WHERE expires_at <= now()) AS expired_rows,
+  min(created_at) AS oldest_created_at,
+  max(created_at) AS newest_created_at,
+  min(expires_at) AS earliest_expires_at,
+  max(expires_at) AS latest_expires_at,
+  pg_size_pretty(sum(pg_column_size(payload))::bigint) AS payload_size
+FROM api_cache
+WHERE (${namespace:sqlstring} = '' OR namespace = ${namespace:sqlstring})
+GROUP BY namespace
+ORDER BY namespace ASC;
+```
+
+### Cache Rows
+
+Shows raw cache rows with age and expiration state.
+
+```sql
+SELECT
+  namespace,
+  cache_key,
+  created_at,
+  expires_at,
+  now() - created_at AS age,
+  expires_at - now() AS freshness_remaining,
+  expires_at <= now() AS expired,
+  pg_column_size(payload) AS payload_bytes,
+  payload
+FROM api_cache
+WHERE (${namespace:sqlstring} = '' OR namespace = ${namespace:sqlstring})
+  AND (${cache_key_search:sqlstring} = '' OR cache_key ILIKE '%' || ${cache_key_search:sqlstring} || '%')
+  AND (
+    ${include_expired:sqlstring} = 'true'
+    OR expires_at > now()
+  )
+ORDER BY created_at DESC
+LIMIT 200;
+```
+
+### Cache Rows Related To A Reservable
+
+This duplicates the Reservable Detail cache panel as a broader audit view. It remains heuristic because `api_cache.cache_key` is not a normalized foreign key to `reservables`.
+
+```sql
+WITH selected AS (
+  SELECT
+    vendor_id,
+    provider_ref->>'mapId' AS map_id,
+    provider_ref->>'resourceLocationId' AS resource_location_id
+  FROM reservables
+  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}
+),
+needles AS (
+  SELECT value
+  FROM selected
+  CROSS JOIN LATERAL (
+    VALUES (vendor_id), (map_id), (resource_location_id)
+  ) AS raw(value)
+  WHERE value IS NOT NULL AND value <> ''
+)
+SELECT
+  c.namespace,
+  c.cache_key,
+  c.created_at,
+  c.expires_at,
+  now() - c.created_at AS age,
+  c.expires_at <= now() AS expired,
+  c.payload
+FROM api_cache c
+WHERE ${reservable_rid:sqlstring} <> ''
+  AND EXISTS (
+    SELECT 1
+    FROM needles
+    WHERE c.cache_key ILIKE '%' || needles.value || '%'
+  )
+ORDER BY c.created_at DESC
+LIMIT 100;
 ```
 
 ## API To SQL Equivalence
@@ -905,7 +1313,7 @@ Grafana health check:
 - Start `postgres` and `grafana`.
 - Verify `http://127.0.0.1:3000/api/health` returns healthy JSON.
 - Verify Grafana can query Postgres through the provisioned datasource.
-- Verify `reservable-detail`, `poi-detail`, and `api-sql-equivalence` dashboards load with their query variables populated.
+- Verify `reservable-detail`, `poi-detail`, `watch-scheduler-health`, `ingest-catalog-freshness`, `provider-cache-audit`, and `api-sql-equivalence` dashboards load with their query variables populated.
 
 Tilt check:
 
@@ -926,7 +1334,7 @@ Regression checks:
 3. Add Grafana service with official image and mounted provisioning/dashboards.
 4. Add Grafana read-only database role setup service.
 5. Update Tiltfile to use `docker_compose`, `docker_build`, and `dc_resource`.
-6. Add the reservable detail, POI detail, and API-to-SQL equivalence dashboards.
+6. Add the POI detail, reservable detail, watch/scheduler health, ingest/catalog freshness, provider cache audit, and API-to-SQL equivalence dashboards.
 7. Validate local Compose and Tilt startup.
 8. Defer static UI and API removal to a later PR after the dashboard proves coverage.
 
