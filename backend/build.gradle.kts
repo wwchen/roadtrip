@@ -168,13 +168,37 @@ jooq {
                     database.apply {
                         name = "org.jooq.meta.postgres.PostgresDatabase"
                         inputSchema = "public"
-                        // PostGIS extension adds dozens of objects to public; exclude
-                        // them so generated code stays focused on roadtrip-owned tables.
+                        // PostGIS extension adds dozens of objects to public; include
+                        // only roadtrip-owned schema objects so generated code stays
+                        // focused and clean builds do not emit PostGIS routine wrappers.
+                        includes =
+                            listOf(
+                                "alerts",
+                                "api_cache",
+                                "availability_job",
+                                "availability_job_run",
+                                "availability_snapshot",
+                                "availability_status",
+                                "availability_watch",
+                                "booking_provider",
+                                "governing_body",
+                                "import_runs",
+                                "ingest_runs",
+                                "matches",
+                                "pois",
+                                "reservable_availability_log",
+                                "reservable_availability_monitors",
+                                "reservable_pois",
+                                "reservables",
+                                "schedules",
+                                "settings",
+                            ).joinToString("|")
                         excludes = "spatial_ref_sys|geometry_columns|geography_columns|" +
                             "raster_columns|raster_overviews|flyway_schema_history"
                     }
                     generate.apply {
                         isDeprecated = false
+                        isRoutines = false
                         isRecords = true
                         isImmutablePojos = false
                         isFluentSetters = true

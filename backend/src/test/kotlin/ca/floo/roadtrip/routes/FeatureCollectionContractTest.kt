@@ -163,8 +163,36 @@ class FeatureCollectionContractTest {
         assert(!out.contains("\"phone\""))
         assert(!out.contains("\"info_url\""))
         assert(!out.contains("\"address\""))
+        assert(!out.contains("\"availability_supported\""))
         assert(!out.contains("\"cta\""))
         assert(!out.contains("\"booking_system\""))
+    }
+
+    @Test
+    fun `single feature detail — availability support is provider agnostic`() {
+        val row =
+            PoiDetailRow(
+                id = 117,
+                source = "new-york-state-parks",
+                sourceId = "ra-117",
+                category = "campground",
+                subcategory = "state",
+                name = "KENNETH L. WILSON",
+                region = "NY",
+                country = "US",
+                unitName = null,
+                reserveUrl = null,
+                phone = null,
+                infoUrl = "https://newyorkstateparks.reserveamerica.com/camping/x/r/campgroundDetails.do?contractCode=NY&parkId=117",
+                addressJson = null,
+                geomJson = """{"type":"Point","coordinates":[-74.2170278,42.0250833]}""",
+                propertiesJson = """{}""",
+                providerRefJson = """{"contract_code":"NY","park_id":"117"}""",
+            )
+
+        val out = encodePoiFeatureJson(poiDetailFeature(row))
+
+        assert(out.contains(""""availability_supported":true"""))
     }
 
     @Test

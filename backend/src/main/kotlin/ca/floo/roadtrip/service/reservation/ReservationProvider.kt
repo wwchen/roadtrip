@@ -6,7 +6,7 @@ import java.time.LocalDate
 
 /**
  * Primary port for "give me this campground's availability." One adapter per
- * upstream reservation system (rec.gov, Aspira NextGen instance, Camis, …).
+ * upstream reservation system (rec.gov, Aspira NextGen instance, ReserveAmerica, …).
  *
  * Availability services consume this interface; routes stay at the HTTP
  * boundary and never branch on `ProviderRef` variants directly. See

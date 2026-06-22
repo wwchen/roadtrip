@@ -51,8 +51,8 @@ import { mountAvailabilityWeek } from '../availability/availability-week.js';
 let mountedWeek = null;
 
 /**
- * Campground-specific drawer. Renders availability for recgov pins and
- * skips it for everything else.
+ * Campground-specific drawer. Renders availability for pins the backend
+ * marks as supported and skips it for everything else.
  */
 export function openCampgroundDrawer(f) {
   ensureDrawerDOM();
@@ -196,12 +196,8 @@ function renderShell(f, signal) {
     ? `<div class="cg-hero" role="img" aria-label="${escapeHtml(p.name)}" style="background-image: url('${escapeHtml(heroUrl)}')"></div>`
     : '';
 
-  // Pins with a known availability provider (rec.gov or Aspira NextGen)
-  // get a week-grid mount point. Detected via provider_ref. The week
-  // component owns its own loading + error UI; we just render the host
-  // div and mount into it after innerHTML is set.
-  const pr = p.provider_ref;
-  const hasAvailability = !!(pr && (pr.recgov_id || pr.mapId != null));
+  // The backend owns provider capability detection.
+  const hasAvailability = availabilitySupported(p);
   const availabilityMount = hasAvailability
     ? `<div class="cg-availability-mount"></div>`
     : '';
@@ -265,4 +261,8 @@ function renderShell(f, signal) {
     const host = content.querySelector('.cg-availability-mount');
     if (host) mountedWeek = mountAvailabilityWeek(host, f, { signal });
   }
+}
+
+function availabilitySupported(p) {
+  return p?.availability_supported === true;
 }

@@ -43,6 +43,7 @@ internal fun Route.availabilityRoutes(
                 reservablesRepo = reservablesRepo,
                 availabilityService = availabilityService,
                 dateResolver = dateResolver,
+                reservationProviders = reservationProviders,
             ),
     )
 }

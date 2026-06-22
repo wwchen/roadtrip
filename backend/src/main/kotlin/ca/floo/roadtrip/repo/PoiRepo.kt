@@ -235,8 +235,13 @@ class Upsert(
                         resourceLocationId = ref.resourceLocationId,
                     ),
                 )
-            is ProviderRef.Camis ->
-                Json.encodeToString(CamisProviderRefDto(facilityId = ref.facilityId))
+            is ProviderRef.ReserveAmerica ->
+                Json.encodeToString(
+                    ReserveAmericaProviderRefDto(
+                        contractCode = ref.contractCode,
+                        parkId = ref.parkId,
+                    ),
+                )
         }
 
     private fun addressToJson(a: Address): String =
@@ -268,8 +273,9 @@ private data class AspiraProviderRefDto(
 )
 
 @Serializable
-private data class CamisProviderRefDto(
-    @SerialName("facility_id") val facilityId: String,
+private data class ReserveAmericaProviderRefDto(
+    @SerialName("contract_code") val contractCode: String?,
+    @SerialName("park_id") val parkId: String,
 )
 
 @Serializable

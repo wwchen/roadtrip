@@ -74,7 +74,7 @@ class ReserveAmericaEtl(
                 infoUrl = park.infoUrl,
                 fetchedAt = dto.fetchedAt,
                 lastVerified = null,
-                providerRef = providerRef(settings.provider, park),
+                providerRef = providerRef(settings, park),
                 amenities = emptyList(),
                 activities = emptyList(),
                 sites = null,
@@ -184,13 +184,17 @@ class ReserveAmericaEtl(
     }
 
     private fun providerRef(
-        provider: String,
+        settings: ReserveAmericaSettings,
         park: ParsedPark,
     ): ProviderRef? =
-        when (provider.lowercase()) {
-            "camis" -> ProviderRef.Camis(facilityId = park.parkId.toString())
+        when (settings.provider.lowercase()) {
+            "reserveamerica" ->
+                ProviderRef.ReserveAmerica(
+                    contractCode = settings.contract,
+                    parkId = park.parkId.toString(),
+                )
             "none", "" -> null
-            else -> error("$etlSlug: unsupported ReserveAmerica provider='$provider'")
+            else -> error("$etlSlug: unsupported ReserveAmerica provider='${settings.provider}'")
         }
 
     companion object {
@@ -223,7 +227,7 @@ private data class ReserveAmericaSettings(
                 region = region,
                 country = ctx.argFor(etlSlug, "country") ?: "CA",
                 agency = ctx.argFor(etlSlug, "agency") ?: "Alberta Parks",
-                provider = ctx.argFor(etlSlug, "provider") ?: "camis",
+                provider = ctx.argFor(etlSlug, "provider") ?: "reserveamerica",
                 titleSuffix = ctx.argFor(etlSlug, "title_suffix") ?: ", $region",
                 sourceIdPrefix = ctx.argFor(etlSlug, "source_id_prefix") ?: "ra",
             )

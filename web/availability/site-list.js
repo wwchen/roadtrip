@@ -33,7 +33,8 @@ export function renderSiteList({
   const availableIds = availableReservableIds(selectedDay);
   if (availableIds.length === 0) return '';
   const count = availableCount(selectedDay);
-  const total = Array.isArray(reservables) ? reservables.length : null;
+  const catalogRows = Array.isArray(reservables) ? reservables : [];
+  const total = catalogRows.length > 0 ? catalogRows.length : null;
 
   if (state === 'loading') {
     return renderSection({

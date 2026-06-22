@@ -2,7 +2,7 @@
 
 Campsite availability and watches are dispatched through one abstraction:
 `ReservationProvider`. Every upstream reservation system (rec.gov, Aspira
-NextGen, Camis, future regional vendors) is an adapter behind this port.
+NextGen, ReserveAmerica, future regional vendors) is an adapter behind this port.
 Routes never call this port directly. Availability services resolve a POI or
 reservable into provider-ready targets, then call the adapter.
 
@@ -31,10 +31,10 @@ service/reservation/
 └── adapters/
     ├── recgov/                 # availability
     ├── aspira/                 # availability
-    └── camis/                  # availability stub
+    └── reserveamerica/         # availability
 ```
 
-`models.ProviderRef` (sealed class with `RecGov` / `Aspira` / `Camis`
+`models.ProviderRef` (sealed class with `RecGov` / `Aspira` / `ReserveAmerica`
 variants) is the wire shape. Adapters take a `ProviderRef` of their
 matching variant and the registry guarantees the dispatch is correct.
 
@@ -90,7 +90,7 @@ availability history only.
 |---|---|---|---|
 | RecGov (rec.gov) | ✓ | ✓ | Availability and generic watch polling. |
 | Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | Availability ships now; watch dispatch still needs work. |
-| Camis (Alberta Parks) | stub | ✗ | Adapter file exists so dispatch is explicit; throws `Unsupported` on call. POIs render without the week grid until the real adapter lands. |
+| ReserveAmerica / Active Network (Alberta Parks, New York State Parks) | ✓ | ✗ | Availability reads the live campsite-calendar matrix. Alerts stay off until upstream cadence/load limits are validated. |
 
 When a row is added here, it should match a real file in
 `service/reservation/adapters/<vendor>/`. If the table promises a capability
@@ -233,7 +233,9 @@ Each adapter's upstream API is documented separately under
 - [aspira.md](reservation-providers/aspira.md) — Aspira NextGen
   (`reservation.pc.gc.ca`, `camping.bcparks.ca`,
   `washington.goingtocamp.com`).
-- _recgov.md, camis.md — to be written._
+- [reservecalifornia.md](reservation-providers/reservecalifornia.md) —
+  ReserveCalifornia / Tyler Technologies discovery notes. Not implemented.
+- _recgov.md, reserveamerica.md — to be written._
 
 When adding a new vendor, follow the
 [probe-vendor-api skill](../.claude/skills/probe-vendor-api/SKILL.md)

@@ -46,8 +46,10 @@ internal class OnRoutePoiRepo(
                             THEN 'aspira:' || source || ':' ||
                               (provider_ref ->> 'transactionLocationId') || ':' ||
                               (provider_ref ->> 'mapId')
+                          WHEN category = 'campground' AND NULLIF(provider_ref ->> 'park_id', '') IS NOT NULL
+                            THEN 'reserveamerica:' || source || ':' || (provider_ref ->> 'park_id')
                           WHEN category = 'campground' AND NULLIF(provider_ref ->> 'facility_id', '') IS NOT NULL
-                            THEN 'camis:' || source || ':' || (provider_ref ->> 'facility_id')
+                            THEN 'reserveamerica:' || source || ':' || (provider_ref ->> 'facility_id')
                           ELSE source || ':' || source_id
                         END AS poi_key
                       FROM pois, corridor

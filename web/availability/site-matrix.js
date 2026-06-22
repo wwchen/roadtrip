@@ -57,7 +57,7 @@ export function renderSiteMatrix({
     });
   }
 
-  const allRows = sortedReservables(reservables);
+  const allRows = sortedReservables(reservables, visibleDays);
   if (allRows.length === 0) {
     return renderSection({
       title: 'Sites by date',
@@ -463,8 +463,31 @@ function availableReservableIds(day) {
   return Array.isArray(ids) ? ids.map(String) : [];
 }
 
-function sortedReservables(reservables) {
-  return [...(Array.isArray(reservables) ? reservables : [])].sort(compareReservable);
+function sortedReservables(reservables, days = []) {
+  const catalogRows = Array.isArray(reservables) ? reservables : [];
+  const rows = catalogRows.length > 0 ? catalogRows : fallbackReservablesFromDays(days);
+  return [...rows].sort(compareReservable);
+}
+
+function fallbackReservablesFromDays(days) {
+  const ids = new Set();
+  for (const day of Array.isArray(days) ? days : []) {
+    const statuses = day?.reservable_statuses ?? day?.reservableStatuses;
+    if (statuses && typeof statuses === 'object') {
+      Object.keys(statuses).forEach((rid) => ids.add(String(rid)));
+    }
+    availableReservableIds(day).forEach((rid) => ids.add(String(rid)));
+  }
+  return [...ids].sort().map(fallbackReservable);
+}
+
+function fallbackReservable(rid) {
+  const parts = String(rid).split(':');
+  return {
+    rid: String(rid),
+    vendor: parts[1] || '',
+    vendor_id: parts.slice(2).join(':') || String(rid),
+  };
 }
 
 function normalizeFilters(filters) {

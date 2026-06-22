@@ -8,6 +8,8 @@ import ca.floo.roadtrip.clients.cache.RouteCache
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.AvailabilityClient
+import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaAvailability
+import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
@@ -44,8 +46,10 @@ import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
+import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmericaTenant
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import io.github.smiley4.ktorswaggerui.SwaggerUI
@@ -91,10 +95,11 @@ fun Application.module() {
     val ctx = dsl(ds)
     val persistentCache = ApiCacheRepo(ctx)
     val recgovAvailabilityClient = AvailabilityClient()
+    val recgovAvailabilityTtl = appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
     val recgovAvailabilityCache =
         CachedRecGovAvailability(
             recgovAvailabilityClient,
-            ttl = appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY),
+            ttl = recgovAvailabilityTtl,
             persistentCache = persistentCache,
         )
 
@@ -185,18 +190,28 @@ fun Application.module() {
     // with config-driven TTL and a 1.5s mutex against Aspira's Azure WAF.
     // See ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
     val aspiraClient = AspiraAvailabilityClient()
+    val aspiraAvailabilityTtl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY)
     val aspiraCache =
         CachedAspiraAvailability(
             aspiraClient,
-            ttl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY),
+            ttl = aspiraAvailabilityTtl,
             persistentCache = persistentCache,
         )
     val aspiraOccupancyCache =
         CachedAspiraOccupancy(
             aspiraClient,
-            ttl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY),
+            ttl = aspiraAvailabilityTtl,
             persistentCache = persistentCache,
         )
+    val reserveAmericaAvailabilityTtl =
+        appConfig.cache.ttlFor(ApiCacheEntity.RESERVEAMERICA_AVAILABILITY)
+    val reserveAmericaCacheFactory: (ReserveAmericaTenant) -> CachedReserveAmericaAvailability =
+        { tenant ->
+            CachedReserveAmericaAvailability(
+                client = HttpReserveAmericaAvailabilityClient(host = tenant.host),
+                ttl = reserveAmericaAvailabilityTtl,
+            )
+        }
     // Reservation-provider port registry: one adapter per upstream reservation
     // system, dispatched by `pois.source`. Routes consume the registry; they
     // never see vendor types. See docs/reservation-providers.md.
@@ -206,6 +221,7 @@ fun Application.module() {
             recgovCache = recgovAvailabilityCache,
             aspiraCache = aspiraCache,
             aspiraOccupancyCache = aspiraOccupancyCache,
+            reserveAmericaCacheFactory = reserveAmericaCacheFactory,
         )
 
     val reservablesRepo = ReservableRepo(ctx)
@@ -222,9 +238,9 @@ fun Application.module() {
         )
     val availabilitySnapshotFreshnessTtl: (ReservationProviderId) -> java.time.Duration = { providerId ->
         when (providerId) {
-            ReservationProviderId.RECGOV -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
-            ReservationProviderId.ASPIRA -> appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY)
-            ReservationProviderId.CAMIS -> appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
+            ReservationProviderId.RECGOV -> recgovAvailabilityTtl
+            ReservationProviderId.ASPIRA -> aspiraAvailabilityTtl
+            ReservationProviderId.RESERVEAMERICA -> reserveAmericaAvailabilityTtl
         }
     }
     val availabilityService =
@@ -240,6 +256,7 @@ fun Application.module() {
             reservablesRepo = reservablesRepo,
             availabilityService = availabilityService,
             dateResolver = availabilityDateResolver,
+            reservationProviders = reservationProviderRegistry,
         )
     val availabilityWatchService = AvailabilityWatchService(ctx, reservablesRepo)
 
@@ -283,7 +300,20 @@ fun Application.module() {
             openApiSpec()
         }
 
-        poiRoutes(ctx, poiRegistry, availabilityDateResolver)
+        poiRoutes(
+            ctx = ctx,
+            registry = poiRegistry,
+            dateResolver = availabilityDateResolver,
+            availabilitySupport = { row ->
+                val providerRefJson = row.providerRefJson
+                providerRefJson != null &&
+                    ProviderRefParser.parse(providerRefJson) != null &&
+                    reservationProviderRegistry
+                        .forSource(row.source)
+                        ?.capabilities
+                        ?.supportsAvailability == true
+            },
+        )
         reservableRoutes(ctx)
         availabilityWatchRoutes(ctx, availabilityWatchService)
         availabilityDashboardRoutes(ctx)

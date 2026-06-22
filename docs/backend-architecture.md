@@ -302,7 +302,7 @@ because every ETL is `f(inputs) → output`.
   inside `service` next to their callers. Promote to ports if a layer
   ever gains multiple implementations worth swapping at runtime. The
   one place we do this today is `service/reservation/`, where multiple
-  reservation upstreams (rec.gov, Aspira, Camis) each need an adapter
+  reservation upstreams (rec.gov, Aspira, ReserveAmerica) each need an adapter
   with the same contract — see [reservation-providers.md](reservation-providers.md).
 
 ## See also

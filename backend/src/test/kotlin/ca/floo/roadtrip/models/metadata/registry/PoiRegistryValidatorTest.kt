@@ -285,4 +285,44 @@ class PoiRegistryValidatorTest {
         // path mirrors EtlOrchestratorTest's resolution.
         PoiRegistry.load(file)
     }
+
+    @Test
+    fun `reserveamerica provider tenants are read from terminal etl args`() {
+        val r =
+            load(
+                """
+                data_sources:
+                  - slug: reserveamerica-test
+                    name: ReserveAmerica test
+                    fetcher:
+                      executor: python3
+                      filename: scripts/x.py
+                      output_dir_prefix: data/raw/reserveamerica-test
+                poi_data:
+                  - name: Test ReserveAmerica Parks
+                    category: campground
+                    etls:
+                      - slug: test-reserveamerica-parks
+                        adapter: ReserveAmericaEtl
+                        inputs: [reserveamerica-test]
+                        args:
+                          contract: ZZ
+                          host: example.reserveamerica.test
+                          booking_horizon_days: "123"
+                          provider: reserveamerica
+                """.trimIndent(),
+            )
+
+        assertEquals(
+            listOf(
+                ReserveAmericaSourceConfig(
+                    source = "test-reserveamerica-parks",
+                    host = "example.reserveamerica.test",
+                    contractCode = "ZZ",
+                    bookingHorizonDays = 123,
+                ),
+            ),
+            r.reserveAmericaSources(),
+        )
+    }
 }

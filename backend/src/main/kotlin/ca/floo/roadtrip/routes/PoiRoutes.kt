@@ -17,6 +17,7 @@ import ca.floo.roadtrip.repo.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.api.PoiCta
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -75,6 +76,7 @@ internal fun Route.poiRoutes(
     ctx: DSLContext,
     registry: PoiRegistry,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
+    availabilitySupport: (PoiDetailRow) -> Boolean = ::providerRefShapeSupportsAvailability,
 ) {
     // Default category list derives from the YAML registry so a new
     // poi_data category surfaces without code changes.
@@ -199,7 +201,13 @@ internal fun Route.poiRoutes(
             "Cache-Control",
             "public, max-age=300, stale-while-revalidate=3600",
         )
-        call.respondPoiFeatureJson(poiDetailFeature(row, dateResolver))
+        call.respondPoiFeatureJson(
+            poiDetailFeature(
+                r = row,
+                dateResolver = dateResolver,
+                availabilitySupported = availabilitySupport(row),
+            ),
+        )
     }
 
     // GET /api/pois/search?q=...&limit=10
@@ -339,6 +347,7 @@ internal fun poiFeatureCollection(
 internal fun poiDetailFeature(
     r: PoiDetailRow,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
+    availabilitySupported: Boolean = providerRefShapeSupportsAvailability(r),
 ): PoiDetailFeatureSchema {
     val dateContext =
         if (r.category == "campground") {
@@ -366,12 +375,17 @@ internal fun poiDetailFeature(
                 infoUrl = r.infoUrl,
                 address = r.addressJson?.let { Json.parseToJsonElement(it) },
                 providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
+                availabilitySupported = availabilitySupported.takeIf { it },
                 cta = PoiCta.Default.computeCta(r),
                 bookingSystem = PoiCta.Default.bookingSystem(r),
                 raw = Json.parseToJsonElement(r.propertiesJson),
             ),
     )
 }
+
+private fun providerRefShapeSupportsAvailability(r: PoiDetailRow): Boolean =
+    r.category == "campground" &&
+        r.providerRefJson?.let { ProviderRefParser.parse(it) } != null
 
 internal fun encodePoiFeatureJson(value: PoiFeatureCollectionSchema): String = poiFeatureJson.encodeToString(value)
 

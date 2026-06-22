@@ -331,17 +331,45 @@ data class PoiRegistry(
             .toSet()
 
     /**
-     * Sources whose terminal ETL produces Camis-keyed campgrounds (Alberta
-     * Provincial via ReserveAmericaEtl today; future Camis-direct ETLs
-     * would join here too).
+     * ReserveAmerica terminal ETL sources with their Active Network tenant
+     * config. Unlike Aspira, these tenants are fully config-driven because the
+     * contract code, host, and booking horizon are all declared on the
+     * terminal ETL row.
      */
-    fun camisSources(): Set<String> =
+    fun reserveAmericaSources(): List<ReserveAmericaSourceConfig> =
         poiData
             .mapNotNull { row -> row.etls.lastOrNull() }
             .filter { it.adapter == "ReserveAmericaEtl" }
-            .map { it.slug }
-            .toSet()
+            .filter { (it.args["provider"] ?: "reserveamerica").lowercase() == "reserveamerica" }
+            .map { terminal ->
+                val contract =
+                    terminal.args["contract"]
+                        ?: error("ReserveAmerica source '${terminal.slug}' is missing args.contract")
+                val host =
+                    terminal.args["host"]
+                        ?: error("ReserveAmerica source '${terminal.slug}' is missing args.host")
+                val horizon =
+                    terminal.args["booking_horizon_days"]
+                        ?.toIntOrNull()
+                        ?: error("ReserveAmerica source '${terminal.slug}' has invalid args.booking_horizon_days")
+                require(horizon > 0) {
+                    "ReserveAmerica source '${terminal.slug}' args.booking_horizon_days must be positive"
+                }
+                ReserveAmericaSourceConfig(
+                    source = terminal.slug,
+                    host = host,
+                    contractCode = contract,
+                    bookingHorizonDays = horizon,
+                )
+            }
 }
+
+data class ReserveAmericaSourceConfig(
+    val source: String,
+    val host: String,
+    val contractCode: String,
+    val bookingHorizonDays: Int,
+)
 
 private fun detectCycles(edges: Map<String, Set<String>>): List<List<String>> {
     val visited = mutableSetOf<String>()

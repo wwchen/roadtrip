@@ -311,6 +311,11 @@ poi_data:
       - slug: alberta-provincial
         adapter: ReserveAmericaEtl
         inputs: [reserveamerica-abpp]
+        args:
+          contract: ABPP
+          host: shop.albertaparks.ca
+          booking_horizon_days: "270"
+          provider: reserveamerica
 
   - name: New York State Parks
     category: campground
@@ -321,10 +326,12 @@ poi_data:
         inputs: [reserveamerica-ny]
         args:
           contract: NY
+          host: newyorkstateparks.reserveamerica.com
+          booking_horizon_days: "270"
           region: NY
           country: US
           agency: New York State Parks
-          provider: none
+          provider: reserveamerica
 
   - name: Planet Fitness
     category: planet-fitness
