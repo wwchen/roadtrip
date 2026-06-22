@@ -130,6 +130,7 @@ services:
       - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
       - GF_AUTH_DISABLE_LOGIN_FORM=true
       - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-https://roadtrip.floo.ca/dash/}
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
