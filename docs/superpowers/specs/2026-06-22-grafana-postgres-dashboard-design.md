@@ -48,7 +48,7 @@ Use one root `Dockerfile` for images this repo actually builds. For now, that me
 Use official vendor images directly for infrastructure:
 
 - `postgis/postgis:16-3.4` for Postgres/PostGIS.
-- `grafana/grafana:13.0.0` for Grafana.
+- `grafana/grafana:12.4.4` for Grafana.
 - `cloudflare/cloudflared:latest` for the tunnel.
 
 Runtime layout:
@@ -147,7 +147,7 @@ grafana-db-setup:
 
 grafana:
   profiles: [pois]
-  image: grafana/grafana:13.0.0
+  image: grafana/grafana:12.4.4
   restart: unless-stopped
   hostname: grafana
   environment:

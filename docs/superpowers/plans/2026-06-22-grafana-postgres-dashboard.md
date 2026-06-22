@@ -4,7 +4,7 @@
 
 **Goal:** Add Grafana to the local/deploy Docker stack using the official Grafana image, with provisioned Postgres datasource and object-centric dashboards for POIs, reservables, watches, ingest freshness, provider cache, and API-to-SQL equivalence.
 
-**Architecture:** Compose remains the runtime service graph. The backend image is built from a new root `Dockerfile` and referenced as `roadtrip/backend`; Tilt owns local backend image rebuilds with `docker_build()` while Makefile/deploy build the same image explicitly before `docker compose up`. Grafana is not built: the official `grafana/grafana:13.0.0` image mounts datasource provisioning, dashboard provisioning, and dashboard JSON from the repo.
+**Architecture:** Compose remains the runtime service graph. The backend image is built from a new root `Dockerfile` and referenced as `roadtrip/backend`; Tilt owns local backend image rebuilds with `docker_build()` while Makefile/deploy build the same image explicitly before `docker compose up`. Grafana is not built: the official `grafana/grafana:12.4.4` image mounts datasource provisioning, dashboard provisioning, and dashboard JSON from the repo.
 
 **Tech Stack:** Docker Compose, Tilt, official Grafana Docker image, Grafana file provisioning, Grafana PostgreSQL datasource, Postgres/PostGIS, Kotlin/Ktor backend fat jar.
 
@@ -198,7 +198,7 @@ In `docker-compose.yml`, add this service after `backend`:
 ```yaml
   grafana:
     profiles: [pois]
-    image: grafana/grafana:13.0.0
+    image: grafana/grafana:12.4.4
     restart: unless-stopped
     hostname: grafana
     environment:
@@ -355,7 +355,7 @@ Expected: command exits 0. Inspect `/tmp/roadtrip-compose.yml` and confirm:
 
 - `backend.image` is `roadtrip/backend`
 - `backend` has no `build:` key
-- `grafana.image` is `grafana/grafana:13.0.0`
+- `grafana.image` is `grafana/grafana:12.4.4`
 - local ports include `127.0.0.1:8765:8765` and `127.0.0.1:3000:3000`
 
 - [ ] **Step 12: Commit**

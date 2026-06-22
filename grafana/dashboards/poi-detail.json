@@ -27,7 +27,7 @@
       "options": {
         "showHeader": true
       },
-      "pluginVersion": "13.0.0",
+      "pluginVersion": "12.4.4",
       "targets": [
         {
           "datasource": {
@@ -62,7 +62,7 @@
       "options": {
         "showHeader": true
       },
-      "pluginVersion": "13.0.0",
+      "pluginVersion": "12.4.4",
       "targets": [
         {
           "datasource": {
@@ -97,7 +97,7 @@
       "options": {
         "showHeader": true
       },
-      "pluginVersion": "13.0.0",
+      "pluginVersion": "12.4.4",
       "targets": [
         {
           "datasource": {
@@ -132,7 +132,7 @@
       "options": {
         "showHeader": true
       },
-      "pluginVersion": "13.0.0",
+      "pluginVersion": "12.4.4",
       "targets": [
         {
           "datasource": {
