@@ -196,6 +196,8 @@ grafana/
     dashboards/
       roadtrip.yml
   dashboards/
+    reservable-detail.json
+    poi-detail.json
     api-sql-equivalence.json
 ```
 
@@ -254,9 +256,318 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO :"grafana_us
 
 The script should call `psql` with `-v grafana_user="$GRAFANA_DB_USER"`, `-v grafana_password="$GRAFANA_DB_PASSWORD"`, and `-v postgres_db="$POSTGRES_DB"` so local defaults and production overrides use the same path.
 
+## Dashboard Information Architecture
+
+The primary Grafana experience should be object-centric, not API-centric:
+
+- **Reservable Detail** answers "what do we know about this reservable, how fresh is it, what availability fetches touched it, and what raw upstream payload created it?"
+- **POI Detail** answers "what is this place, and which reservable RIDs are linked to it?"
+- **API / SQL Equivalence** remains a supporting dashboard for deciding which old read APIs can be removed later.
+
+## Reservable Detail Dashboard
+
+Dashboard file:
+
+```text
+grafana/dashboards/reservable-detail.json
+```
+
+Core variables:
+
+- `reservable_rid`: query-backed selector of `type || ':' || vendor || ':' || vendor_id`.
+- `days_back`: numeric interval for freshness/audit panels, default `14`.
+- `target_date`: optional date selector for narrowing availability observations.
+
+### Reservable Header
+
+Shows the normalized catalog identity and data timestamps.
+
+```sql
+SELECT
+  r.id,
+  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,
+  r.source,
+  r.name,
+  r.loop,
+  r.site_type,
+  r.created_at,
+  r.updated_at,
+  r.last_seen_run_id,
+  r.deleted_at,
+  now() - r.updated_at AS catalog_age
+FROM reservables r
+WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring};
+```
+
+### Data Freshness
+
+Shows catalog freshness, latest availability observation, and cache freshness as separate signals.
+
+```sql
+WITH selected AS (
+  SELECT id
+  FROM reservables
+  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}
+),
+latest_snapshot AS (
+  SELECT max(observed_at) AS latest_observed_at
+  FROM availability_snapshot
+  WHERE reservable_id = (SELECT id FROM selected)
+)
+SELECT
+  r.updated_at AS catalog_updated_at,
+  now() - r.updated_at AS catalog_age,
+  latest_snapshot.latest_observed_at,
+  now() - latest_snapshot.latest_observed_at AS availability_observation_age,
+  r.last_seen_run_id
+FROM reservables r
+CROSS JOIN latest_snapshot
+WHERE r.id = (SELECT id FROM selected);
+```
+
+Cache freshness should be a table because provider cache keys differ by upstream:
+
+- rec.gov availability cache namespace: `recgov_availability`, key format `provider:campgroundId:month`.
+- Aspira availability cache namespace: `aspira_availability`, key format `host:mapId:startDate:endDate`.
+- Aspira occupancy cache namespace: `aspira_occupancy`, key format `host:resourceLocationId:startDate:endDate`.
+
+```sql
+WITH selected AS (
+  SELECT
+    split_part(type || ':' || vendor || ':' || vendor_id, ':', 3) AS vendor_id,
+    provider_ref->>'mapId' AS map_id,
+    provider_ref->>'resourceLocationId' AS resource_location_id
+  FROM reservables
+  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}
+),
+needles AS (
+  SELECT value
+  FROM selected
+  CROSS JOIN LATERAL (
+    VALUES (vendor_id), (map_id), (resource_location_id)
+  ) AS raw(value)
+  WHERE value IS NOT NULL AND value <> ''
+)
+SELECT
+  namespace,
+  cache_key,
+  created_at,
+  expires_at,
+  now() - created_at AS age,
+  expires_at - now() AS freshness_remaining,
+  expires_at <= now() AS expired
+FROM api_cache
+WHERE namespace IN ('recgov_availability', 'aspira_availability', 'aspira_occupancy')
+  AND EXISTS (
+    SELECT 1
+    FROM needles
+    WHERE api_cache.cache_key ILIKE '%' || needles.value || '%'
+  )
+ORDER BY created_at DESC;
+```
+
+This cache panel is intentionally heuristic. The canonical availability audit is `availability_snapshot`; cache keys explain provider fetch freshness, but they are not normalized foreign keys.
+
+### Availability Fetch Audit
+
+Shows scheduled fetch runs that produced observations for the selected reservable. Runs with `run_id IS NULL` are ad-hoc request-time observations rather than scheduler runs.
+
+```sql
+SELECT
+  s.observed_at,
+  s.target_date,
+  s.status AS observed_status,
+  s.available,
+  s.run_id,
+  jr.job_id,
+  jr.status AS run_status,
+  jr.snapshot_count,
+  jr.duration_ms,
+  jr.error,
+  jr.started_at,
+  jr.completed_at
+FROM availability_snapshot s
+LEFT JOIN availability_job_run jr ON jr.id = s.run_id
+WHERE s.reservable_id = (
+  SELECT id
+  FROM reservables
+  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}
+)
+  AND s.observed_at >= now() - (${days_back} || ' days')::interval
+  AND (${target_date:sqlstring} = '' OR s.target_date = NULLIF(${target_date:sqlstring}, '')::date)
+ORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC;
+```
+
+Add a compact status timeline panel for the same data:
+
+```sql
+SELECT
+  s.observed_at AS time,
+  s.target_date::text AS metric,
+  CASE WHEN s.available THEN 1 ELSE 0 END AS value
+FROM availability_snapshot s
+WHERE s.reservable_id = (
+  SELECT id
+  FROM reservables
+  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}
+)
+  AND s.observed_at >= now() - (${days_back} || ' days')::interval
+ORDER BY s.observed_at ASC;
+```
+
+### Raw Reservable Data
+
+Shows provider reference, normalized tags, and raw upstream catalog payload. This is the trust/debug panel for ETL output.
+
+```sql
+SELECT
+  provider_ref,
+  tags,
+  raw
+FROM reservables
+WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring};
+```
+
+### Linked POIs
+
+Shows every active POI linked to this reservable.
+
+```sql
+SELECT
+  p.id AS poi_id,
+  p.name,
+  p.category,
+  p.subcategory,
+  p.source,
+  p.source_id,
+  p.region,
+  ST_X(ST_Centroid(p.geom)) AS lng,
+  ST_Y(ST_Centroid(p.geom)) AS lat
+FROM reservable_pois rp
+JOIN reservables r ON r.id = rp.reservable_id
+JOIN pois p ON p.id = rp.poi_id
+WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}
+  AND p.deleted_at IS NULL
+ORDER BY p.name ASC, p.id ASC;
+```
+
+## POI Detail Dashboard
+
+Dashboard file:
+
+```text
+grafana/dashboards/poi-detail.json
+```
+
+Core variables:
+
+- `poi_id`: query-backed selector for active POIs.
+- `rid_type`: optional filter, default `site`.
+- `include_deleted_reservables`: boolean-like selector default `false`.
+
+### POI Header
+
+Shows the active POI row and upstream provider metadata.
+
+```sql
+SELECT
+  id,
+  source,
+  source_id,
+  category,
+  subcategory,
+  name,
+  region,
+  unit_name,
+  reserve_url,
+  phone,
+  info_url,
+  fetched_at,
+  updated_at,
+  provider_ref,
+  properties AS raw_properties,
+  ST_AsGeoJSON(geom)::jsonb AS geometry
+FROM pois
+WHERE id = ${poi_id};
+```
+
+### All Linked RIDs
+
+This is the load-bearing POI-centric panel: every reservable RID attached to the place.
+
+```sql
+SELECT
+  r.id AS reservable_id,
+  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,
+  r.type,
+  r.vendor,
+  r.vendor_id,
+  r.name,
+  r.loop,
+  r.site_type,
+  r.source,
+  r.updated_at,
+  r.deleted_at,
+  max(s.observed_at) AS latest_availability_observed_at,
+  count(s.id) FILTER (WHERE s.observed_at >= now() - interval '7 days') AS snapshots_last_7d,
+  bool_or(s.available) FILTER (WHERE s.observed_at >= now() - interval '7 days') AS any_available_last_7d
+FROM reservable_pois rp
+JOIN reservables r ON r.id = rp.reservable_id
+LEFT JOIN availability_snapshot s ON s.reservable_id = r.id
+WHERE rp.poi_id = ${poi_id}
+  AND (${rid_type:sqlstring} = '' OR r.type = ${rid_type:sqlstring})
+  AND (
+    ${include_deleted_reservables:sqlstring} = 'true'
+    OR r.deleted_at IS NULL
+  )
+GROUP BY r.id
+ORDER BY r.loop NULLS LAST, r.name NULLS LAST, rid ASC;
+```
+
+### POI Availability Coverage
+
+Shows whether the POI has linked reservables, how many have recent observations, and how stale the newest observation is.
+
+```sql
+WITH linked AS (
+  SELECT r.id
+  FROM reservable_pois rp
+  JOIN reservables r ON r.id = rp.reservable_id
+  WHERE rp.poi_id = ${poi_id}
+    AND r.deleted_at IS NULL
+),
+latest AS (
+  SELECT
+    reservable_id,
+    max(observed_at) AS latest_observed_at
+  FROM availability_snapshot
+  WHERE reservable_id IN (SELECT id FROM linked)
+  GROUP BY reservable_id
+)
+SELECT
+  count(*) AS linked_reservables,
+  count(latest.reservable_id) AS reservables_with_observations,
+  max(latest.latest_observed_at) AS newest_observation,
+  now() - max(latest.latest_observed_at) AS newest_observation_age
+FROM linked
+LEFT JOIN latest ON latest.reservable_id = linked.id;
+```
+
+### POI Raw Data
+
+Shows POI-level raw properties and provider reference.
+
+```sql
+SELECT
+  provider_ref,
+  properties
+FROM pois
+WHERE id = ${poi_id};
+```
+
 ## API To SQL Equivalence
 
-The first dashboard should compare the read-only APIs against direct SQL. These panels make removal decisions observable.
+The API / SQL equivalence dashboard should compare the read-only APIs against direct SQL. These panels make removal decisions observable, but they are secondary to the reservable and POI detail dashboards.
 
 ### `/api/availability/jobs`
 
@@ -594,6 +905,7 @@ Grafana health check:
 - Start `postgres` and `grafana`.
 - Verify `http://127.0.0.1:3000/api/health` returns healthy JSON.
 - Verify Grafana can query Postgres through the provisioned datasource.
+- Verify `reservable-detail`, `poi-detail`, and `api-sql-equivalence` dashboards load with their query variables populated.
 
 Tilt check:
 
@@ -614,7 +926,7 @@ Regression checks:
 3. Add Grafana service with official image and mounted provisioning/dashboards.
 4. Add Grafana read-only database role setup service.
 5. Update Tiltfile to use `docker_compose`, `docker_build`, and `dc_resource`.
-6. Add the initial API-to-SQL equivalence dashboard.
+6. Add the reservable detail, POI detail, and API-to-SQL equivalence dashboards.
 7. Validate local Compose and Tilt startup.
 8. Defer static UI and API removal to a later PR after the dashboard proves coverage.
 
