@@ -18,12 +18,17 @@ on:
       - 'gradlew'
       - 'gradlew.bat'
       - 'settings.gradle.kts'
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'grafana/**'
       - 'data/**'
       - 'docker-compose*.yml'
       - 'index.html'
       - 'pois.html'
       - 'reservables.html'
-      - 'monitors.html'
+      - 'watches.html'
+      - 'watch-detail.html'
+      - 'availability.html'
       - 'web/**'
       - 'app.js'
       - 'style.css'
@@ -82,7 +87,7 @@ jobs:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '~/workspace/roadtrip' }}
         run: |
           ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd $DEPLOY_DIR && git pull --ff-only && ./gradlew :backend:shadowJar && docker compose --profile tunnel --profile pois up -d --build"
+            "cd $DEPLOY_DIR && git pull --ff-only && ./gradlew :backend:shadowJar && docker build -t roadtrip/backend --target backend . && docker compose --profile tunnel --profile pois up -d"
 
       - name: Health check
         run: |
@@ -93,7 +98,7 @@ jobs:
           health_url="${{ vars.DEPLOY_HEALTH_URL || 'https://roadtrip.floo.ca/api/health' }}"
           for _ in $(seq 1 30); do
             if curl -fsS "$health_url" >/dev/null; then
-              for path in /pois /reservables /monitors; do
+              for path in /pois /reservables /watches /availability; do
                 curl -fsS "$base$path" >/dev/null
                 echo "health: $base$path OK"
               done

@@ -1,0 +1,731 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n)\nSELECT count(*) AS superchargers FROM scoped;",
+          "refId": "A"
+        }
+      ],
+      "title": "Superchargers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n)\nSELECT count(*) FILTER (WHERE has_detail) AS with_detail FROM scoped;",
+          "refId": "A"
+        }
+      ],
+      "title": "With Detail",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n)\nSELECT count(*) FILTER (WHERE has_pricebooks) AS with_pricebooks FROM scoped;",
+          "refId": "A"
+        }
+      ],
+      "title": "With Pricebooks",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n)\nSELECT count(*) FILTER (WHERE (properties->>'stall_count')::int > 0 AND (properties->>'max_power_kw')::int > 0) AS with_stall_and_power FROM scoped;",
+          "refId": "A"
+        }
+      ],
+      "title": "With Stall And Power",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "basemap": {
+          "config": {},
+          "name": "Layer 0",
+          "type": "default"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": false,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "fixed": "blue"
+                },
+                "opacity": 0.8,
+                "size": {
+                  "fixed": 6,
+                  "max": 20,
+                  "min": 2
+                }
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "Superchargers",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lat": 49,
+          "lon": -123,
+          "zoom": 4
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n)\nSELECT\n  id,\n  name,\n  source_id,\n  region,\n  country,\n  site_status,\n  charging_accessibility,\n  has_detail,\n  has_pricebooks,\n  (properties->>'stall_count')::int AS stall_count,\n  (properties->>'max_power_kw')::int AS max_power_kw,\n  ST_X(ST_Centroid(geom)) AS lng,\n  ST_Y(ST_Centroid(geom)) AS lat\nFROM scoped\nORDER BY name ASC, id ASC\nLIMIT 6000;",
+          "refId": "A"
+        }
+      ],
+      "title": "Supercharger Map",
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_price_per_kwh"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "min_price_per_kwh"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "max_price_per_kwh"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 11,
+      "options": {
+        "basemap": {
+          "config": {},
+          "name": "Layer 0",
+          "type": "default"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": false,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "fixed": "orange",
+                  "field": "avg_price_per_kwh"
+                },
+                "opacity": 0.85,
+                "size": {
+                  "field": "priced_superchargers",
+                  "fixed": 9,
+                  "max": 24,
+                  "min": 4
+                }
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "Average TSLA kWh price by region",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lat": 39,
+          "lon": -98,
+          "zoom": 3
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n), pricebook_rows AS (\n  SELECT\n    p.id,\n    coalesce(nullif(p.country::text, ''), '(unknown)') AS country,\n    coalesce(nullif(p.region, ''), '(unknown)') AS region,\n    NULLIF(pricebook->>'currencyCode', '') AS currency,\n    NULLIF(pricebook->>'rateBase', '')::numeric AS rate_base,\n    ST_X(ST_Centroid(p.geom)) AS lng,\n    ST_Y(ST_Centroid(p.geom)) AS lat\n  FROM scoped p\n  CROSS JOIN LATERAL jsonb_array_elements(\n    CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n  ) AS e(pricebook)\n  WHERE pricebook->>'feeType' = 'CHARGING'\n    AND pricebook->>'uom' = 'kwh'\n    AND pricebook->>'vehicleMakeType' = 'TSLA'\n    AND NULLIF(pricebook->>'currencyCode', '') IS NOT NULL\n    AND NULLIF(pricebook->>'rateBase', '') IS NOT NULL\n), site_prices AS (\n  SELECT\n    id,\n    country,\n    region,\n    currency,\n    avg(rate_base) AS site_avg_price_per_kwh,\n    min(rate_base) AS site_min_price_per_kwh,\n    max(rate_base) AS site_max_price_per_kwh,\n    max(lng) AS lng,\n    max(lat) AS lat\n  FROM pricebook_rows\n  GROUP BY id, country, region, currency\n)\nSELECT\n  country,\n  region,\n  currency,\n  round(avg(site_avg_price_per_kwh), 3) AS avg_price_per_kwh,\n  count(*) AS priced_superchargers,\n  round(min(site_min_price_per_kwh), 3) AS min_price_per_kwh,\n  round(max(site_max_price_per_kwh), 3) AS max_price_per_kwh,\n  avg(lng) AS lng,\n  avg(lat) AS lat\nFROM site_prices\nGROUP BY country, region, currency\nORDER BY avg_price_per_kwh DESC, priced_superchargers DESC, country ASC, region ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Average Charging Price By Region",
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n)\nSELECT\n  coalesce(site_status, '(unknown)') AS site_status,\n  coalesce(project_status, '(unknown)') AS project_status,\n  coalesce(access_type, '(unknown)') AS access_type,\n  coalesce(charging_accessibility, '(unknown)') AS charging_accessibility,\n  count(*) AS superchargers,\n  count(*) FILTER (WHERE has_detail) AS with_detail,\n  count(*) FILTER (WHERE has_pricebooks) AS with_pricebooks\nFROM scoped\nGROUP BY 1, 2, 3, 4\nORDER BY superchargers DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Status And Accessibility",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n)\nSELECT\n  coalesce(nullif(country::text, ''), '(unknown)') AS country,\n  coalesce(nullif(region, ''), '(unknown)') AS region,\n  count(*) AS superchargers,\n  count(*) FILTER (WHERE has_detail) AS with_detail,\n  count(*) FILTER (WHERE has_pricebooks) AS with_pricebooks,\n  round(avg(NULLIF(properties->>'stall_count', '')::numeric), 1) AS avg_stalls,\n  max((properties->>'max_power_kw')::int) AS max_power_kw\nFROM scoped\nGROUP BY 1, 2\nORDER BY superchargers DESC, country ASC, region ASC\nLIMIT 200;",
+          "refId": "A"
+        }
+      ],
+      "title": "Country And Region Coverage",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 0,
+        "y": 38
+      },
+      "id": 8,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n)\nSELECT\n  (properties->>'max_power_kw')::int AS max_power_kw,\n  count(*) AS superchargers,\n  min((properties->>'stall_count')::int) AS min_stalls,\n  round(avg((properties->>'stall_count')::numeric), 1) AS avg_stalls,\n  max((properties->>'stall_count')::int) AS max_stalls\nFROM scoped\nGROUP BY 1\nORDER BY max_power_kw DESC NULLS LAST;",
+          "refId": "A"
+        }
+      ],
+      "title": "Capability Distribution",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Tesla Supercharger Detail",
+                    "url": "/d/roadtrip-tesla-supercharger-detail/roadtrip-tesla-supercharger-detail?var-supercharger_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 12,
+        "x": 12,
+        "y": 38
+      },
+      "id": 9,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n)\nSELECT\n  id,\n  name,\n  source_id,\n  region,\n  country,\n  has_detail,\n  has_pricebooks,\n  (properties->>'stall_count')::int AS stall_count,\n  (properties->>'max_power_kw')::int AS max_power_kw,\n  updated_at\nFROM scoped\nWHERE NOT has_detail OR NOT has_pricebooks OR (properties->>'stall_count')::int = 0 OR (properties->>'max_power_kw')::int = 0\nORDER BY has_detail ASC, has_pricebooks ASC, updated_at ASC NULLS FIRST, name ASC\nLIMIT 300;",
+          "refId": "A"
+        }
+      ],
+      "title": "Incomplete Tesla Rows",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 47
+      },
+      "id": 10,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  ir.source,\n  ir.status,\n  count(*) AS runs,\n  max(ir.completed_at) AS latest_completed_at,\n  now() - max(ir.completed_at) AS latest_completed_age,\n  sum(ir.seen_count) AS seen_count_sum\nFROM import_runs ir\nWHERE ir.source = 'tesla-superchargers'\nGROUP BY ir.source, ir.status\nORDER BY latest_completed_at DESC NULLS LAST;",
+          "refId": "A"
+        }
+      ],
+      "title": "Tesla Import Freshness",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "roadtrip",
+    "poi",
+    "tesla",
+    "supercharger",
+    "stats"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "country",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM pois WHERE deleted_at IS NULL AND category = 'supercharger' AND country IS NOT NULL AND country <> '' ORDER BY country::text ASC",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": "'__all'",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "region_search",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "accessibility",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT DISTINCT properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS __text, properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS __value FROM pois WHERE deleted_at IS NULL AND category = 'supercharger' AND properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IS NOT NULL ORDER BY 1 ASC",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": "'__all'",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "detail_state",
+        "type": "custom",
+        "query": "all,with_detail,missing_detail,with_pricebooks,missing_pricebooks",
+        "current": {
+          "text": "all",
+          "value": "all"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "POI / Tesla Supercharger / Stats",
+  "uid": "roadtrip-tesla-supercharger-stats",
+  "version": 1
+}

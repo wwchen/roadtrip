@@ -14,23 +14,26 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 ## Local dev
 
 ```sh
-tilt up                  # full dev stack (postgres in Docker, backend + companion on host)
+tilt up                  # Compose stack (Postgres/backend/Grafana) + host companion
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make companion           # campsite Playwright companion against the local backend
 make deploy              # ssh to the mini, git pull, docker compose up
 make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
 ```
 
-Local dev runs the backend on the host (Gradle), with only Postgres in
-Docker. The backend's `Dockerfile` is still used by `make deploy` to build
-the container that runs on mini-ca behind cloudflared, but it's no longer
-part of the laptop dev loop.
+`tilt up` is the easiest path for full-stack dev: Tilt uses Docker Compose
+for Postgres, the backend container, and Grafana, then runs the campsite
+companion as a host Node process so Playwright can drive a real Chromium.
+The backend still serves the app on <http://127.0.0.1:8765>. Grafana is
+available at <http://127.0.0.1:3000> with anonymous viewer access enabled.
+Provisioned dashboards include POI detail, POIs with reservables, Tesla
+Supercharger detail/stats, reservable detail/stats, DB stats, ingest/catalog
+freshness, provider cache audit, watch/scheduler health, and API/SQL
+equivalence.
+Tilt UI is at <http://localhost:10350>.
 
-`tilt up` is the easiest path for full-stack dev: Tilt brings up Docker
-Postgres (idempotent `compose up -d`), runs the backend with Gradle on the
-host so Kotlin recompiles are fast, and runs the campsite companion as a
-host Node process so Playwright can drive a real Chromium. Tilt UI is at
-<http://localhost:10350>.
+`make run` remains the fastest backend-only loop: it starts Postgres in
+Docker and runs the Kotlin/Ktor backend on the host with Gradle.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`) for POI refresh. Tesla Supercharger pricing
@@ -186,22 +189,29 @@ routes are reachable on `127.0.0.1:8765` directly. **If you ever expose dev
 to the public internet (port-forward, ngrok, etc.), bind admin routes to
 loopback only first.**
 
-The admin API only runs on hosts where `data/` is writable. The deploy
-container's `/app/static/data` is mounted **read-only** by design — POI
-refresh runs on the deploy host filesystem before/around `docker compose up`,
-not inside the container.
+The admin API only runs on hosts where `data/` is writable. In the Compose
+stack, the backend container mounts `./data` read-write at `/app/static/data`
+and mounts `./scripts` read-only so the admin fetch/import buttons run inside
+the backend container and write raw captures back to the checkout.
 
 ## Deploy via Docker + Cloudflare tunnel
 
 1. **Create a Cloudflare tunnel.** Zero Trust → Networks → Tunnels → Create
-   tunnel; set the public hostname to route to `http://app:8765`. Copy the
-   tunnel token.
+   tunnel; set the public hostname to route to `http://backend:8765`. Copy the
+   tunnel token. The tunnel's public hostname routing is managed in Cloudflare;
+   Compose only starts `cloudflared` with the token.
 
 2. **`.env` on the host:**
    ```
    TESLA_COOKIES=ak_bmsc=...; _abck=...; bm_sz=...; ...
    CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+   GRAFANA_ADMIN_PASSWORD=<strong password>
+   GRAFANA_DB_PASSWORD=<strong password>
    ```
+
+   Grafana state is stored in the Compose-managed named volume
+   `grafana-data` (Docker prefixes it with the Compose project name);
+   dashboard JSON and datasource provisioning stay bind-mounted from `grafana/`.
 
 3. **Bring up the stack:** `make deploy` (ssh's to the mini, git pull, build,
    `docker compose up`). The deploy is also wired to GHA (push to master →

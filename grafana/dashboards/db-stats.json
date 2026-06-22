@@ -1,0 +1,525 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT regexp_replace(version(), 'PostgreSQL ([^ ]+) .*', '\\1') AS version;",
+          "refId": "A"
+        }
+      ],
+      "title": "PostgreSQL Version",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT pg_database_size(current_database()) AS size;",
+          "refId": "A"
+        }
+      ],
+      "title": "Database Size",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS active_pois FROM pois WHERE deleted_at IS NULL;",
+          "refId": "A"
+        }
+      ],
+      "title": "Active POIs",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT count(*) AS active_reservables FROM reservables WHERE deleted_at IS NULL;",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Reservables",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 8,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT *\nFROM (\n  VALUES\n    ('pois', (SELECT count(*)::bigint FROM pois)),\n    ('active_pois', (SELECT count(*)::bigint FROM pois WHERE deleted_at IS NULL)),\n    ('reservables', (SELECT count(*)::bigint FROM reservables)),\n    ('active_reservables', (SELECT count(*)::bigint FROM reservables WHERE deleted_at IS NULL)),\n    ('reservable_pois', (SELECT count(*)::bigint FROM reservable_pois)),\n    ('availability_snapshot', (SELECT count(*)::bigint FROM availability_snapshot)),\n    ('availability_watch', (SELECT count(*)::bigint FROM availability_watch)),\n    ('availability_job', (SELECT count(*)::bigint FROM availability_job)),\n    ('availability_job_run', (SELECT count(*)::bigint FROM availability_job_run)),\n    ('ingest_runs', (SELECT count(*)::bigint FROM ingest_runs)),\n    ('import_runs', (SELECT count(*)::bigint FROM import_runs)),\n    ('api_cache_metadata', (SELECT count(*)::bigint FROM grafana_api_cache_metadata))\n) AS counts(table_name, exact_rows)\nORDER BY exact_rows DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Exact Core Row Counts",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 8,
+        "x": 8,
+        "y": 4
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  relname AS table_name,\n  pg_relation_size(relid) AS data_bytes,\n  pg_indexes_size(relid) AS index_bytes,\n  pg_total_relation_size(relid) AS total_bytes,\n  pg_size_pretty(pg_total_relation_size(relid)) AS total_size\nFROM pg_catalog.pg_statio_user_tables\nORDER BY pg_total_relation_size(relid) DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Table Storage",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 8,
+        "x": 16,
+        "y": 4
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  relname AS table_name,\n  n_live_tup,\n  n_dead_tup,\n  seq_scan,\n  idx_scan,\n  last_vacuum,\n  last_autovacuum,\n  last_analyze,\n  last_autoanalyze\nFROM pg_stat_user_tables\nORDER BY n_live_tup DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Table Estimates And Activity",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 8,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  relname AS table_name,\n  indexrelname AS index_name,\n  idx_scan AS index_scans,\n  idx_tup_read AS tuples_read,\n  idx_tup_fetch AS tuples_fetched,\n  pg_relation_size(indexrelid) AS index_bytes\nFROM pg_stat_all_indexes\nWHERE schemaname NOT LIKE 'pg_%'\n  AND indexrelname IS NOT NULL\nORDER BY idx_scan DESC, index_bytes DESC\nLIMIT 300;",
+          "refId": "A"
+        }
+      ],
+      "title": "Index Usage",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 9,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  'pois' AS table_name,\n  max(updated_at) AS latest_updated_at,\n  max(fetched_at) AS latest_fetched_at,\n  now() - max(updated_at) AS latest_update_age\nFROM pois\nUNION ALL\nSELECT\n  'reservables' AS table_name,\n  max(updated_at) AS latest_updated_at,\n  NULL::timestamptz AS latest_fetched_at,\n  now() - max(updated_at) AS latest_update_age\nFROM reservables\nUNION ALL\nSELECT\n  'availability_snapshot' AS table_name,\n  max(observed_at) AS latest_updated_at,\n  NULL::timestamptz AS latest_fetched_at,\n  now() - max(observed_at) AS latest_update_age\nFROM availability_snapshot\nUNION ALL\nSELECT\n  'ingest_runs' AS table_name,\n  max(completed_at) AS latest_updated_at,\n  NULL::timestamptz AS latest_fetched_at,\n  now() - max(completed_at) AS latest_update_age\nFROM ingest_runs\nUNION ALL\nSELECT\n  'import_runs' AS table_name,\n  max(completed_at) AS latest_updated_at,\n  NULL::timestamptz AS latest_fetched_at,\n  now() - max(completed_at) AS latest_update_age\nFROM import_runs\nORDER BY latest_update_age DESC NULLS LAST;",
+          "refId": "A"
+        }
+      ],
+      "title": "Catalog Freshness",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 0,
+        "y": 28
+      },
+      "id": 10,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT extname, extversion FROM pg_extension ORDER BY extname ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Installed Extensions",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 12,
+        "x": 12,
+        "y": 28
+      },
+      "id": 11,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  namespace,\n  count(*) AS rows,\n  count(*) FILTER (WHERE expires_at <= now()) AS expired_rows,\n  pg_size_pretty(sum(payload_bytes)::bigint) AS payload_size,\n  min(created_at) AS oldest_created_at,\n  max(created_at) AS newest_created_at\nFROM grafana_api_cache_metadata\nGROUP BY namespace\nORDER BY rows DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Metadata Summary",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "roadtrip",
+    "database",
+    "stats"
+  ],
+  "templating": {
+    "list": []
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "DB Stats",
+  "uid": "roadtrip-db-stats",
+  "version": 1
+}

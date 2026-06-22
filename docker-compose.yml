@@ -13,7 +13,7 @@ services:
     volumes:
       - ${COOKIE_BOT_DATA:-$HOME/.roadtrip-map/cookie-bot}:/var/cache/cookie-bot
     environment:
-      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN}
+      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
       - HEADLESS=true
       - LOG_LEVEL=INFO
 
@@ -43,6 +43,28 @@ services:
       timeout: 3s
       retries: 10
 
+  grafana-db-setup:
+    profiles: [pois]
+    image: postgis/postgis:16-3.4
+    restart: "no"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
+      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - /docker-entrypoint-initdb.d/create-grafana-reader.sh
+    volumes:
+      - ./grafana/db/create-grafana-reader.sh:/docker-entrypoint-initdb.d/create-grafana-reader.sh:ro
+
   # Kotlin/Ktor backend. Serves the entire site:
   #   - GET /                       → index.html
   #   - GET /pois, /reservables,
@@ -55,7 +77,7 @@ services:
   # docker compose up — no Dockerfile rebuild needed for HTML/JS/data changes.
   backend:
     profiles: [pois]
-    build: ./backend
+    image: roadtrip/backend
     restart: unless-stopped
     hostname: backend
     environment:
@@ -68,7 +90,11 @@ services:
       # (forward geocoding) read this; the FE never sees the token. Both
       # endpoints return 503 when unset, so the trip planner just doesn't
       # work, instead of leaking the token by accident.
-      - MAPBOX_TOKEN=${MAPBOX_TOKEN}
+      - MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
+      - RIDB_API_KEY=${RIDB_API_KEY:-}
+      - COOKIE_BOT_URL=${COOKIE_BOT_URL:-}
+      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
+      - TESLA_COOKIES=${TESLA_COOKIES:-}
     volumes:
       - ./index.html:/app/static/index.html:ro
       - ./pois.html:/app/static/pois.html:ro
@@ -77,24 +103,54 @@ services:
       - ./watch-detail.html:/app/static/watch-detail.html:ro
       - ./availability.html:/app/static/availability.html:ro
       - ./web:/app/static/web:ro
-      - ./data:/app/static/data:ro
+      - ./scripts:/app/static/scripts:ro
+      - ./data:/app/static/data
       # PoiRegistry.load reads /app/static/config/poi-registry.yaml at boot;
       # backend hard-flaps without it.
       - ./config:/app/static/config:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${PORT:-8765}/api/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
 
+  grafana:
+    profiles: [pois]
+    image: grafana/grafana:12.4.4
+    restart: unless-stopped
+    hostname: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Viewer
+      - GF_AUTH_DISABLE_LOGIN_FORM=true
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
+      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/etc/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      grafana-db-setup:
+        condition: service_completed_successfully
+
   cloudflared:
-    # Only runs with `--profile tunnel` (deploy target). Local modes skip it.
-    # Mounts a config.yml so path-based routing lives in the repo, not the
-    # dashboard. With backend serving everything, the config is now a single
-    # catch-all.
+    # Runs in deploy with `--profile tunnel --profile pois`. Local modes skip it.
+    # Public hostname routing is managed in Cloudflare Zero Trust; this
+    # container only needs the tunnel token.
     profiles: [tunnel]
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CLOUDFLARE_TUNNEL_TOKEN}
-    volumes:
-      - ./cloudflared:/etc/cloudflared:ro
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
       - backend
+
+volumes:
+  grafana-data:

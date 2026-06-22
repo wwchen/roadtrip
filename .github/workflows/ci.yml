@@ -18,6 +18,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Validate Grafana dashboards
+        run: python3 scripts/validate_grafana_dashboards.py
       - uses: actions/setup-java@v4
         with:
           distribution: temurin

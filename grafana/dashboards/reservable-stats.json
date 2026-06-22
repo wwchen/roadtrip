@@ -1,0 +1,614 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT count(*) AS active_reservables FROM scoped;",
+          "refId": "A"
+        }
+      ],
+      "title": "Active Reservables",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT count(DISTINCT rp.poi_id) AS linked_pois FROM scoped r JOIN reservable_pois rp ON rp.reservable_id = r.id;",
+          "refId": "A"
+        }
+      ],
+      "title": "Linked POIs",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT count(DISTINCT r.id) AS with_observations FROM scoped r JOIN availability_snapshot s ON s.reservable_id = r.id;",
+          "refId": "A"
+        }
+      ],
+      "title": "With Observations",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 4,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT count(s.id) AS snapshots_in_window FROM scoped r JOIN availability_snapshot s ON s.reservable_id = r.id WHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval;",
+          "refId": "A"
+        }
+      ],
+      "title": "Snapshots In Window",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 5,
+      "options": {
+        "basemap": {
+          "config": {},
+          "name": "Layer 0",
+          "type": "default"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": false,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "fixed": "dark-green"
+                },
+                "opacity": 0.8,
+                "size": {
+                  "fixed": 7,
+                  "max": 20,
+                  "min": 2
+                }
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "POIs",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lat": 49,
+          "lon": -123,
+          "zoom": 4
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.source,\n  p.region,\n  count(DISTINCT r.id) AS reservable_count,\n  max(s.observed_at) AS latest_observed_at,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat\nFROM scoped r\nJOIN reservable_pois rp ON rp.reservable_id = r.id\nJOIN pois p ON p.id = rp.poi_id\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE p.deleted_at IS NULL\nGROUP BY p.id\nORDER BY reservable_count DESC, p.name ASC\nLIMIT 2000;",
+          "refId": "A"
+        }
+      ],
+      "title": "Reservable-Linked POIs Map",
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 15
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  vendor,\n  type,\n  coalesce(site_type, '(none)') AS site_type,\n  count(*) AS reservables,\n  count(*) FILTER (WHERE raw IS NOT NULL) AS with_raw,\n  count(*) FILTER (WHERE tags IS NOT NULL) AS with_tags,\n  count(*) FILTER (WHERE provider_ref IS NOT NULL) AS with_provider_ref,\n  max(updated_at) AS latest_updated_at,\n  now() - max(updated_at) AS latest_update_age\nFROM scoped\nGROUP BY 1, 2, 3\nORDER BY reservables DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Catalog By Vendor Type And Site Type",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 15
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  r.vendor,\n  r.type,\n  count(DISTINCT r.id) AS reservables,\n  count(DISTINCT s.reservable_id) AS reservables_with_observations,\n  count(s.id) FILTER (WHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval) AS snapshots_in_window,\n  max(s.observed_at) AS latest_observed_at,\n  now() - max(s.observed_at) AS latest_observation_age\nFROM scoped r\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nGROUP BY r.vendor, r.type\nORDER BY reservables DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Availability Coverage By Vendor",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 25
+      },
+      "id": 8,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  s.status::text AS status,\n  s.available,\n  count(*) AS snapshots,\n  min(s.observed_at) AS first_observed_at,\n  max(s.observed_at) AS latest_observed_at\nFROM scoped r\nJOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval\nGROUP BY s.status, s.available\nORDER BY snapshots DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Snapshot Status Distribution",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "poi_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open POI Detail",
+                    "url": "/d/roadtrip-poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 25
+      },
+      "id": 9,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.source,\n  p.region,\n  count(DISTINCT r.id) AS reservable_count,\n  count(DISTINCT s.reservable_id) AS reservables_with_observations,\n  max(s.observed_at) AS latest_observed_at\nFROM scoped r\nJOIN reservable_pois rp ON rp.reservable_id = r.id\nJOIN pois p ON p.id = rp.poi_id\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE p.deleted_at IS NULL\nGROUP BY p.id\nORDER BY reservable_count DESC, p.name ASC\nLIMIT 200;",
+          "refId": "A"
+        }
+      ],
+      "title": "Top POIs By Reservable Count",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 10,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  'active_unlinked_reservables' AS metric,\n  count(*) AS rows\nFROM reservables r\nWHERE r.deleted_at IS NULL\n  AND NOT EXISTS (SELECT 1 FROM reservable_pois rp WHERE rp.reservable_id = r.id)\nUNION ALL\nSELECT\n  'deleted_reservables' AS metric,\n  count(*) AS rows\nFROM reservables r\nWHERE r.deleted_at IS NOT NULL\nUNION ALL\nSELECT\n  'links_to_deleted_pois' AS metric,\n  count(*) AS rows\nFROM reservable_pois rp\nJOIN pois p ON p.id = rp.poi_id\nWHERE p.deleted_at IS NOT NULL\nUNION ALL\nSELECT\n  'links_to_deleted_reservables' AS metric,\n  count(*) AS rows\nFROM reservable_pois rp\nJOIN reservables r ON r.id = rp.reservable_id\nWHERE r.deleted_at IS NOT NULL;",
+          "refId": "A"
+        }
+      ],
+      "title": "Unlinked And Deleted Audit",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "roadtrip",
+    "reservable",
+    "stats"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "vendor",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT DISTINCT vendor AS __text, vendor AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY vendor ASC",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": "'__all'",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "source",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT DISTINCT source AS __text, source AS __value FROM reservables WHERE deleted_at IS NULL AND source IS NOT NULL ORDER BY source ASC",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": "'__all'",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "site_type",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT DISTINCT site_type AS __text, site_type AS __value FROM reservables WHERE deleted_at IS NULL AND site_type IS NOT NULL ORDER BY site_type ASC",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": "'__all'",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "days_back",
+        "type": "custom",
+        "query": "7,14,30,90",
+        "current": {
+          "text": "30",
+          "value": "30"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Reservable / Stats",
+  "uid": "roadtrip-reservable-stats",
+  "version": 1
+}
