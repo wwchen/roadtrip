@@ -13,36 +13,30 @@
 
 import { escapeHtml } from './core.js';
 
-/** Parse properties.amenities (array or MapLibre JSON-encoded array) → string[]; safe on bad input. */
+/** Parse properties.amenities (array) → string[]; safe on bad input. */
 export function parseAmenities(p) {
   return parseStringList(p.amenities);
 }
 
-/** Parse properties.activities (array or MapLibre JSON-encoded array) → string[]; safe on bad input. */
+/** Parse properties.activities (array) → string[]; safe on bad input. */
 export function parseActivities(p) {
   return parseStringList(p.activities);
 }
 
 function parseStringList(value) {
-  const list = parseJsonValue(value);
-  if (!Array.isArray(list)) return [];
-  return list.map(v => String(v).trim()).filter(Boolean);
-}
-
-function parseJsonValue(value) {
-  if (typeof value !== 'string') return value;
-  try { return JSON.parse(value); } catch { return null; }
+  if (!Array.isArray(value)) return [];
+  return value.map(v => String(v).trim()).filter(Boolean);
 }
 
 /** Parse properties.cell_coverage → object or null. */
 export function parseCellCoverage(p) {
-  const value = parseJsonValue(p.cell_coverage);
+  const value = p.cell_coverage;
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 }
 
 /** Parse properties.rating_reviews → [avgRating, reviewCount] or null. */
 export function parseRatingReviews(p) {
-  const value = parseJsonValue(p.rating_reviews);
+  const value = p.rating_reviews;
   return Array.isArray(value) ? value : null;
 }
 
