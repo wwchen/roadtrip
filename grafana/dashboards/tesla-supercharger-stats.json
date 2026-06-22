@@ -346,13 +346,135 @@
       },
       "fieldConfig": {
         "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_price_per_kwh"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "min_price_per_kwh"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "max_price_per_kwh"
+            },
+            "properties": [
+              {
+                "id": "decimals",
+                "value": 3
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 11,
+      "options": {
+        "basemap": {
+          "config": {},
+          "name": "Layer 0",
+          "type": "default"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": false,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "fixed": "orange",
+                  "field": "avg_price_per_kwh"
+                },
+                "opacity": 0.85,
+                "size": {
+                  "field": "priced_superchargers",
+                  "fixed": 9,
+                  "max": 24,
+                  "min": 4
+                }
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "Average TSLA kWh price by region",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lat": 39,
+          "lon": -98,
+          "zoom": 3
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n    p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n    p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n    p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region_search:sqlstring} = '' OR p.region ILIKE '%' || ${region_search:sqlstring} || '%')\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n), pricebook_rows AS (\n  SELECT\n    p.id,\n    coalesce(nullif(p.country::text, ''), '(unknown)') AS country,\n    coalesce(nullif(p.region, ''), '(unknown)') AS region,\n    NULLIF(pricebook->>'currencyCode', '') AS currency,\n    NULLIF(pricebook->>'rateBase', '')::numeric AS rate_base,\n    ST_X(ST_Centroid(p.geom)) AS lng,\n    ST_Y(ST_Centroid(p.geom)) AS lat\n  FROM scoped p\n  CROSS JOIN LATERAL jsonb_array_elements(\n    CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n  ) AS e(pricebook)\n  WHERE pricebook->>'feeType' = 'CHARGING'\n    AND pricebook->>'uom' = 'kwh'\n    AND pricebook->>'vehicleMakeType' = 'TSLA'\n    AND NULLIF(pricebook->>'currencyCode', '') IS NOT NULL\n    AND NULLIF(pricebook->>'rateBase', '') IS NOT NULL\n), site_prices AS (\n  SELECT\n    id,\n    country,\n    region,\n    currency,\n    avg(rate_base) AS site_avg_price_per_kwh,\n    min(rate_base) AS site_min_price_per_kwh,\n    max(rate_base) AS site_max_price_per_kwh,\n    max(lng) AS lng,\n    max(lat) AS lat\n  FROM pricebook_rows\n  GROUP BY id, country, region, currency\n)\nSELECT\n  country,\n  region,\n  currency,\n  round(avg(site_avg_price_per_kwh), 3) AS avg_price_per_kwh,\n  count(*) AS priced_superchargers,\n  round(min(site_min_price_per_kwh), 3) AS min_price_per_kwh,\n  round(max(site_max_price_per_kwh), 3) AS max_price_per_kwh,\n  avg(lng) AS lng,\n  avg(lat) AS lat\nFROM site_prices\nGROUP BY country, region, currency\nORDER BY avg_price_per_kwh DESC, priced_superchargers DESC, country ASC, region ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Average Charging Price By Region",
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
         "overrides": []
       },
       "gridPos": {
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 28
       },
       "id": 6,
       "options": {
@@ -387,7 +509,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 28
       },
       "id": 7,
       "options": {
@@ -422,7 +544,7 @@
         "h": 9,
         "w": 12,
         "x": 0,
-        "y": 26
+        "y": 38
       },
       "id": 8,
       "options": {
@@ -476,7 +598,7 @@
         "h": 9,
         "w": 12,
         "x": 12,
-        "y": 26
+        "y": 38
       },
       "id": 9,
       "options": {
@@ -511,7 +633,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 35
+        "y": 47
       },
       "id": 10,
       "options": {

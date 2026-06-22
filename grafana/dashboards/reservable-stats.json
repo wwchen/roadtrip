@@ -608,7 +608,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Reservable Stats",
+  "title": "Reservable / Stats",
   "uid": "roadtrip-reservable-stats",
   "version": 1
 }
