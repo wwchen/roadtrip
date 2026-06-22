@@ -1,21 +1,14 @@
 # Roadtrip Map dev stack.
 #
-# Three resources:
-#   postgres  — Docker (PostGIS), idempotent `compose up -d postgres`.
-#   backend   — Kotlin/Ktor on the host, hot-rebuilt on src changes.
-#   companion — Node/Playwright on the host, restarted on src changes.
-#
-# Postgres lives in Docker because the schema needs PostGIS — keeping it out
-# of host Homebrew avoids the brew-postgis install dance. Backend + companion
-# run on the host so Tilt can watch their source trees and the JVM/Node
-# processes stay attached for log streaming.
+# Compose owns the database, backend container, and Grafana services. Tilt
+# watches the backend source, builds the fat jar, rebuilds the backend image,
+# and keeps the host-side companion plus manual data resources available.
 
 PORT = '8765'
 
-# Pull MAPBOX_TOKEN from .env so the backend's /api/route endpoint can call
-# Mapbox Directions. read_file with default='' returns empty when the file
-# is missing, and the dotenv parser ignores blank/comment lines. Tokens
-# never appear on the rendered command line — they go through serve_env.
+# Keep .env values available for local manual resources and future host-side
+# commands. read_file with default='' returns empty when the file is missing,
+# and the dotenv parser ignores blank/comment lines.
 def _load_dotenv(path):
     out = {}
     raw = str(read_file(path, default=''))
@@ -32,70 +25,9 @@ def _load_dotenv(path):
 
 DOTENV = _load_dotenv('.env')
 
-# --- postgres (Docker) -------------------------------------------------------
-# Reuse the same compose file the rest of the project uses. `up -d` is
-# idempotent (no-op when postgres is already running). Tilt won't manage
-# Docker state directly — it just shells out and shows the result.
-
 local_resource(
-    'postgres',
-    # Lifecycle is tied to Tilt: container exists while Tilt runs, gone
-    # when Tilt exits. Bind-mounted Postgres data ($HOME/.roadtrip-map/
-    # postgres) persists across runs, so DB state survives.
-    #
-    # Implementation: foreground `compose up` runs while Tilt is alive; a
-    # bash trap on EXIT runs `compose down postgres` so the container is
-    # removed (not just stopped). docker-compose.yml's restart policy is
-    # `no` (see comment there), so Docker Desktop won't resurrect the
-    # container if it reboots while Tilt is gone.
-    serve_cmd=(
-        'trap "docker compose --env-file /dev/null ' +
-        '-f docker-compose.yml -f docker-compose.local.yml --profile pois ' +
-        'down postgres" EXIT INT TERM; ' +
-        'docker compose --env-file /dev/null ' +
-        '-f docker-compose.yml -f docker-compose.local.yml --profile pois ' +
-        'up postgres'
-    ),
-    deps=['docker-compose.yml', 'docker-compose.local.yml'],
-    # Probe via `docker exec` directly (not `docker compose exec`) so we
-    # don't pay the compose-CLI parsing tax on every probe. The exec call
-    # alone takes ~3s on Apple Silicon (Rosetta-emulating the amd64
-    # PostGIS image), so the period is set above that to keep Tilt from
-    # killing probes mid-flight.
-    readiness_probe=probe(
-        period_secs=10,
-        timeout_secs=8,
-        exec=exec_action([
-            'docker', 'exec',
-            'roadtrip-postgres-1',
-            'pg_isready', '-U', 'roadtrip', '-d', 'roadtrip',
-        ]),
-    ),
-    labels=['infra'],
-)
-
-# --- backend (host JVM) ------------------------------------------------------
-# `./gradlew :backend:run` keeps the daemon alive and recompiles on src change. We
-# point ROADTRIP_STATIC_DIR at the repo root so static/data files get served
-# from the working tree (no copy step). Health check uses /api/health, which
-# returns 200 once Flyway has finished migrating.
-
-local_resource(
-    'backend',
-    serve_cmd='PORT=' + PORT + ' ROADTRIP_STATIC_DIR=$PWD ' +
-              'ROADTRIP_DB_URL=jdbc:postgresql://127.0.0.1:5432/roadtrip ' +
-              'ROADTRIP_DB_USER=roadtrip ROADTRIP_DB_PASSWORD=roadtrip ' +
-              './gradlew --console=plain :backend:run',
-    serve_env={
-        'JAVA_TOOL_OPTIONS': '-Dorg.gradle.daemon=true',
-        # MAPBOX_TOKEN is read by /api/route. Empty when .env is missing —
-        # endpoint then 503s, rest of the app is unaffected.
-        'MAPBOX_TOKEN': DOTENV.get('MAPBOX_TOKEN', ''),
-        # RIDB_API_KEY is read by scripts/fetch_recgov.py (federal
-        # campground catalog from recreation.gov). Free key, register
-        # at https://ridb.recreation.gov.
-        'RIDB_API_KEY': DOTENV.get('RIDB_API_KEY', ''),
-    },
+    'backend-jar',
+    cmd='./gradlew --console=plain :backend:shadowJar',
     deps=[
         'backend/src/main',
         'backend/build.gradle.kts',
@@ -105,17 +37,49 @@ local_resource(
     ],
     ignore=[
         '.gradle',
-        'backend/build',
         'backend/.gradle',
-        'backend/src/main/resources/static',
+        'backend/build/classes',
+        'backend/build/generated',
+        'backend/build/reports',
+        'backend/build/test-results',
+        'backend/build/tmp',
     ],
-    readiness_probe=probe(
-        period_secs=3,
-        initial_delay_secs=10,
-        http_get=http_get_action(port=int(PORT), path='/api/health'),
-    ),
+    labels=['build'],
+)
+
+docker_compose(
+    ['docker-compose.yml', 'docker-compose.local.yml'],
+    profiles=['pois'],
+)
+
+docker_build(
+    'roadtrip/backend',
+    '.',
+    dockerfile='Dockerfile',
+    target='backend',
+    only=[
+        'Dockerfile',
+        'backend/build/libs',
+    ],
+)
+
+dc_resource('postgres', labels=['infra'])
+dc_resource(
+    'grafana-db-setup',
     resource_deps=['postgres'],
+    labels=['infra'],
+)
+dc_resource(
+    'backend',
+    resource_deps=['postgres', 'backend-jar'],
     labels=['app'],
+    links=['http://127.0.0.1:' + PORT],
+)
+dc_resource(
+    'grafana',
+    resource_deps=['postgres', 'grafana-db-setup'],
+    labels=['infra'],
+    links=['http://127.0.0.1:3000'],
 )
 
 # --- companion (host Node) ---------------------------------------------------
