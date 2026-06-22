@@ -1145,7 +1145,8 @@ SELECT
   started_at,
   completed_at
 FROM availability_job_run
-WHERE job_id = ${job_id}
+WHERE ${job_id:sqlstring} <> ''
+  AND job_id = NULLIF(${job_id:sqlstring}, '')::bigint
 ORDER BY started_at DESC, id DESC
 LIMIT 100;
 ```
@@ -1220,7 +1221,8 @@ SELECT
   s.day_payload
 FROM availability_snapshot s
 LEFT JOIN reservables r ON r.id = s.reservable_id
-WHERE s.run_id = ${run_id}
+WHERE ${run_id:sqlstring} <> ''
+  AND s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint
 ORDER BY s.target_date ASC
 LIMIT 500;
 ```
@@ -1347,10 +1349,11 @@ SELECT
   name,
   category,
   region,
-  ST_X(geom) AS lng,
-  ST_Y(geom) AS lat
+  ST_X(ST_Centroid(geom)) AS lng,
+  ST_Y(ST_Centroid(geom)) AS lat
 FROM pois
 WHERE deleted_at IS NULL
+  AND ${poi_query:sqlstring} <> ''
   AND name ILIKE '%' || ${poi_query:sqlstring} || '%'
 ORDER BY
   (name ILIKE ${poi_query:sqlstring} || '%') DESC,

@@ -104,7 +104,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  id,\n  job_id,\n  status,\n  snapshot_count,\n  duration_ms,\n  error,\n  started_at,\n  completed_at\nFROM availability_job_run\nWHERE job_id = ${job_id}\nORDER BY started_at DESC, id DESC\nLIMIT 100;",
+          "rawSql": "SELECT\n  id,\n  job_id,\n  status,\n  snapshot_count,\n  duration_ms,\n  error,\n  started_at,\n  completed_at\nFROM availability_job_run\nWHERE ${job_id:sqlstring} <> ''\n  AND job_id = NULLIF(${job_id:sqlstring}, '')::bigint\nORDER BY started_at DESC, id DESC\nLIMIT 100;",
           "refId": "A"
         }
       ],
@@ -209,7 +209,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  s.run_id,\n  s.target_date,\n  s.observed_at,\n  s.status,\n  s.available,\n  s.day_payload\nFROM availability_snapshot s\nLEFT JOIN reservables r ON r.id = s.reservable_id\nWHERE s.run_id = ${run_id}\nORDER BY s.target_date ASC\nLIMIT 500;",
+          "rawSql": "SELECT\n  s.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  s.run_id,\n  s.target_date,\n  s.observed_at,\n  s.status,\n  s.available,\n  s.day_payload\nFROM availability_snapshot s\nLEFT JOIN reservables r ON r.id = s.reservable_id\nWHERE ${run_id:sqlstring} <> ''\n  AND s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.target_date ASC\nLIMIT 500;",
           "refId": "A"
         }
       ],
@@ -349,7 +349,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  id,\n  name,\n  category,\n  region,\n  ST_X(geom) AS lng,\n  ST_Y(geom) AS lat\nFROM pois\nWHERE deleted_at IS NULL\n  AND name ILIKE '%' || ${poi_query:sqlstring} || '%'\nORDER BY\n  (name ILIKE ${poi_query:sqlstring} || '%') DESC,\n  length(name) ASC,\n  name ASC\nLIMIT 25;",
+          "rawSql": "SELECT\n  id,\n  name,\n  category,\n  region,\n  ST_X(ST_Centroid(geom)) AS lng,\n  ST_Y(ST_Centroid(geom)) AS lat\nFROM pois\nWHERE deleted_at IS NULL\n  AND ${poi_query:sqlstring} <> ''\n  AND name ILIKE '%' || ${poi_query:sqlstring} || '%'\nORDER BY\n  (name ILIKE ${poi_query:sqlstring} || '%') DESC,\n  length(name) ASC,\n  name ASC\nLIMIT 25;",
           "refId": "A"
         }
       ],
@@ -389,8 +389,8 @@
         "type": "textbox",
         "query": "",
         "current": {
-          "text": "0",
-          "value": "0"
+          "text": "",
+          "value": ""
         }
       },
       {
@@ -398,8 +398,8 @@
         "type": "textbox",
         "query": "",
         "current": {
-          "text": "0",
-          "value": "0"
+          "text": "",
+          "value": ""
         }
       },
       {
