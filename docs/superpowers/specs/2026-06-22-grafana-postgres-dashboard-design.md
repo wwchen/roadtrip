@@ -219,7 +219,7 @@ datasources:
     url: postgres:5432
     user: ${GRAFANA_DB_USER}
     secureJsonData:
-      password: ${GRAFANA_DB_PASSWORD}
+      password: $GRAFANA_DB_PASSWORD
     jsonData:
       database: ${POSTGRES_DB}
       sslmode: disable
@@ -246,9 +246,17 @@ DECLARE
   grafana_password text := current_setting('roadtrip.grafana_password');
 BEGIN
   IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = grafana_user) THEN
-    EXECUTE format('CREATE ROLE %I LOGIN PASSWORD %L', grafana_user, grafana_password);
+    EXECUTE format(
+      'CREATE ROLE %I LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
+      grafana_user,
+      grafana_password
+    );
   ELSE
-    EXECUTE format('ALTER ROLE %I WITH LOGIN PASSWORD %L', grafana_user, grafana_password);
+    EXECUTE format(
+      'ALTER ROLE %I WITH LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE NOREPLICATION NOBYPASSRLS PASSWORD %L',
+      grafana_user,
+      grafana_password
+    );
   END IF;
 END
 $$;

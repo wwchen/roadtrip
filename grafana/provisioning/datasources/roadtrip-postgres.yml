@@ -8,7 +8,7 @@ datasources:
     url: postgres:5432
     user: ${GRAFANA_DB_USER}
     secureJsonData:
-      password: ${GRAFANA_DB_PASSWORD}
+      password: $GRAFANA_DB_PASSWORD
     jsonData:
       database: ${POSTGRES_DB}
       sslmode: disable
