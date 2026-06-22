@@ -61,11 +61,13 @@ docker-compose.yml
   cloudflared-> official cloudflared image
 
 Tiltfile
-  docker_compose(['docker-compose.yml', 'docker-compose.local.yml'])
-  docker_build('roadtrip/backend', '.', dockerfile='Dockerfile', target='backend')
+  local_resource('backend-jar') builds :backend:shadowJar
+  docker_compose(['docker-compose.yml', 'docker-compose.local.yml'], profiles=['pois'])
+  docker_build('roadtrip/backend', '.', dockerfile='Dockerfile', target='backend', only=['Dockerfile', 'backend/build/libs'])
   dc_resource('postgres')
-  dc_resource('backend', resource_deps=['postgres'])
-  dc_resource('grafana', resource_deps=['postgres'])
+  dc_resource('grafana-db-setup', resource_deps=['postgres'])
+  dc_resource('backend', resource_deps=['postgres', 'backend-jar'])
+  dc_resource('grafana', resource_deps=['postgres', 'grafana-db-setup'])
 ```
 
 This gives us one repo-level Dockerfile without collapsing services into one runnable image.
@@ -179,20 +181,59 @@ For deploy, either expose Grafana through Cloudflare later or keep it private. T
 Replace shell-based Compose lifecycle management with Tilt's Compose integration:
 
 ```python
-docker_compose(['docker-compose.yml', 'docker-compose.local.yml'])
+local_resource(
+    'backend-jar',
+    cmd='./gradlew --console=plain :backend:shadowJar',
+    deps=[
+        'backend/src/main',
+        'backend/build.gradle.kts',
+        'settings.gradle.kts',
+        'gradle.properties',
+        'gradle/wrapper/gradle-wrapper.properties',
+    ],
+    ignore=[
+        '.gradle',
+        'backend/.gradle',
+        'backend/build/classes',
+        'backend/build/generated',
+        'backend/build/reports',
+        'backend/build/test-results',
+        'backend/build/tmp',
+    ],
+    labels=['build'],
+)
+
+docker_compose(
+    ['docker-compose.yml', 'docker-compose.local.yml'],
+    profiles=['pois'],
+)
 
 docker_build(
     'roadtrip/backend',
     '.',
     dockerfile='Dockerfile',
     target='backend',
+    only=[
+        'Dockerfile',
+        'backend/build/libs',
+    ],
 )
 
 dc_resource('postgres', labels=['infra'])
-dc_resource('backend', resource_deps=['postgres'], labels=['app'])
+dc_resource(
+    'grafana-db-setup',
+    resource_deps=['postgres'],
+    labels=['infra'],
+)
+dc_resource(
+    'backend',
+    resource_deps=['postgres', 'backend-jar'],
+    labels=['app'],
+    links=['http://127.0.0.1:8765'],
+)
 dc_resource(
     'grafana',
-    resource_deps=['postgres'],
+    resource_deps=['postgres', 'grafana-db-setup'],
     labels=['infra'],
     links=['http://127.0.0.1:3000'],
 )
@@ -200,8 +241,9 @@ dc_resource(
 
 Tilt behavior:
 
-- Backend image inputs are watched through `docker_build`.
-- Compose services using `roadtrip/backend` restart when the backend image changes.
+- Backend source changes trigger `backend-jar`, which rebuilds the fat jar.
+- Fat jar changes under `backend/build/libs` trigger `docker_build`.
+- The Compose backend service restarts when the `roadtrip/backend` image changes.
 - Grafana dashboard files are bind-mounted, so dashboard JSON changes do not need an image rebuild.
 - Grafana datasource provisioning changes may need a Grafana container restart; Tilt can restart the `grafana` Compose service when that resource updates.
 
