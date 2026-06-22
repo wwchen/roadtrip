@@ -3,13 +3,16 @@ package ca.floo.roadtrip.clients.reservecalifornia
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -40,31 +43,37 @@ class HttpReserveCaliforniaAvailabilityClient(
         maxDate: LocalDate,
     ): ReserveCaliforniaGridAvailability {
         val observedAt = Instant.now()
-        val body =
-            """
-            {
-              "FacilityId": $facilityId,
-              "UnitSort": "availability",
-              "StartDate": "$startDate",
-              "EndDate": "$endDate",
-              "InSeasonOnly": true,
-              "WebOnly": true,
-              "MaxDate": "${maxDate}T00:00:00",
-              "MinDate": "${minDate}T00:00:00",
-              "IsADA": false,
-              "RestrictADA": false,
-              "UnitCategoryId": 0,
-              "SleepingUnitId": 0,
-              "MinVehicleLength": 0,
-              "UnitTypesGroupIds": [],
-              "AmenityIds": [],
-              "CustomerId": 0,
-              "customerClassificationId": 0
-            }
-            """.trimIndent()
+        val body = gridRequestBody(facilityId, startDate, endDate, minDate, maxDate)
         val payload = postJson("$rdrBaseUrl/search/grid", body)
         return ReserveCaliforniaGridParser.parse(payload, observedAt)
     }
+
+    private fun gridRequestBody(
+        facilityId: Long,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        minDate: LocalDate,
+        maxDate: LocalDate,
+    ): String =
+        buildJsonObject {
+            put("FacilityId", facilityId)
+            put("UnitSort", "availability")
+            put("StartDate", startDate.toString())
+            put("EndDate", endDate.toString())
+            put("InSeasonOnly", true)
+            put("WebOnly", true)
+            put("MaxDate", "${maxDate}T00:00:00")
+            put("MinDate", "${minDate}T00:00:00")
+            put("IsADA", false)
+            put("RestrictADA", false)
+            put("UnitCategoryId", 0)
+            put("SleepingUnitId", 0)
+            put("MinVehicleLength", 0)
+            put("UnitTypesGroupIds", JsonArray(emptyList()))
+            put("AmenityIds", JsonArray(emptyList()))
+            put("CustomerId", 0)
+            put("customerClassificationId", 0)
+        }.toString()
 
     private suspend fun postJson(
         url: String,

@@ -4,6 +4,12 @@ import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import com.sun.net.httpserver.HttpExchange
 import com.sun.net.httpserver.HttpServer
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.long
 import java.net.InetSocketAddress
 import java.time.Duration
 import java.time.LocalDate
@@ -26,6 +32,18 @@ class ReserveCaliforniaAvailabilityClientTest {
             server.createContext("/rdr/search/grid") { exchange ->
                 assertEquals("POST", exchange.requestMethod)
                 assertEquals("cali", exchange.requestHeaders.getFirst("tenantId"))
+                val body =
+                    Json
+                        .parseToJsonElement(exchange.requestBody.bufferedReader().use { it.readText() })
+                        .jsonObject
+                assertEquals(612L, body["FacilityId"]!!.jsonPrimitive.long)
+                assertEquals("availability", body["UnitSort"]!!.jsonPrimitive.contentOrNull)
+                assertEquals("2026-12-15", body["StartDate"]!!.jsonPrimitive.contentOrNull)
+                assertEquals("2026-12-19", body["EndDate"]!!.jsonPrimitive.contentOrNull)
+                assertEquals("2026-06-22T00:00:00", body["MinDate"]!!.jsonPrimitive.contentOrNull)
+                assertEquals("2026-12-22T00:00:00", body["MaxDate"]!!.jsonPrimitive.contentOrNull)
+                assertEquals(0, body["UnitTypesGroupIds"]!!.jsonArray.size)
+                assertEquals(0, body["AmenityIds"]!!.jsonArray.size)
                 respondJson(exchange, gridJson())
             }
             server.start()

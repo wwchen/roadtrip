@@ -13,18 +13,28 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import java.net.InetSocketAddress
+import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
+import java.time.ZoneOffset
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.AfterTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class ReserveCaliforniaReservationProviderTest {
     private val server = HttpServer.create(InetSocketAddress("127.0.0.1", 0), 0)
     private val baseUrl = "http://127.0.0.1:${server.address.port}"
+    private var serverStarted = false
+    private var serverExecutor: ExecutorService? = null
 
     @AfterTest
     fun stopServer() {
-        server.stop(0)
+        if (serverStarted) server.stop(0)
+        serverExecutor?.shutdownNow()
     }
 
     @Test
@@ -45,7 +55,7 @@ class ReserveCaliforniaReservationProviderTest {
                     else -> error("unexpected request body: $body")
                 }
             }
-            server.start()
+            startServer()
 
             val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
             val provider = ReserveCaliforniaReservationProvider(CachedReserveCaliforniaAvailability(client))
@@ -81,6 +91,82 @@ class ReserveCaliforniaReservationProviderTest {
                 batch.observations.sortedBy { it.date }.map { it.status },
             )
         }
+
+    @Test
+    fun `catalog availability fetches facility grids concurrently`() =
+        runBlocking {
+            val activeRequests = AtomicInteger(0)
+            val maxActiveRequests = AtomicInteger(0)
+            server.createContext("/rdr/search/grid") { exchange ->
+                val body = exchange.requestBody.bufferedReader().use { it.readText() }
+                val facilityId =
+                    Json
+                        .parseToJsonElement(body)
+                        .jsonObject["FacilityId"]!!
+                        .jsonPrimitive
+                        .long
+                val active = activeRequests.incrementAndGet()
+                maxActiveRequests.updateAndGet { current -> maxOf(current, active) }
+                try {
+                    Thread.sleep(500)
+                    respondJson(exchange, gridJson(facilityId, facilityId * 100, "Facility $facilityId Site", "2026-12-15"))
+                } finally {
+                    activeRequests.decrementAndGet()
+                }
+            }
+            startServer(Executors.newFixedThreadPool(2))
+
+            val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
+            val provider = ReserveCaliforniaReservationProvider(CachedReserveCaliforniaAvailability(client))
+
+            provider.catalogAvailability(
+                CatalogAvailabilityRequest(
+                    ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
+                    reservables = emptyList(),
+                    startDate = LocalDate.parse("2026-12-15"),
+                    endDate = LocalDate.parse("2026-12-16"),
+                ),
+            )
+
+            assertTrue(maxActiveRequests.get() > 1, "facility grid requests should overlap")
+        }
+
+    @Test
+    fun `catalog availability uses provider clock when no facility observations exist`() =
+        runBlocking {
+            val fixed = Instant.parse("2026-06-22T12:00:00Z")
+            val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
+            val provider =
+                ReserveCaliforniaReservationProvider(
+                    cache = CachedReserveCaliforniaAvailability(client),
+                    clock = Clock.fixed(fixed, ZoneOffset.UTC),
+                )
+
+            val batch =
+                provider.catalogAvailability(
+                    CatalogAvailabilityRequest(
+                        ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = emptyList()),
+                        reservables =
+                            listOf(
+                                CatalogReservableRef(rid = "site:reservecalifornia:43793", vendorId = "43793"),
+                            ),
+                        startDate = LocalDate.parse("2026-12-15"),
+                        endDate = LocalDate.parse("2026-12-17"),
+                    ),
+                )
+
+            assertEquals(listOf(fixed, fixed), batch.observations.map { it.observedAt })
+            assertEquals(listOf(AvailabilityStatus.UNKNOWN, AvailabilityStatus.UNKNOWN), batch.observations.map { it.status })
+        }
+
+    private fun startServer(executor: ExecutorService? = null) {
+        if (executor != null) {
+            serverExecutor = executor
+            server.executor = executor
+        }
+        server.start()
+        serverStarted = true
+    }
 
     private fun respondJson(
         exchange: HttpExchange,

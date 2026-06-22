@@ -17,12 +17,17 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 class ReserveCaliforniaReservationProvider(
     private val cache: CachedReserveCaliforniaAvailability,
+    private val clock: Clock = Clock.systemUTC(),
 ) : ReservationProvider {
     override val id: ReservationProviderId = ReservationProviderId.RESERVECALIFORNIA
 
@@ -94,15 +99,20 @@ class ReserveCaliforniaReservationProvider(
         force: Boolean,
     ): List<CachedReserveCaliforniaGridResult> =
         runWithErrorMapping {
-            ref.facilityIds.map { facilityId ->
-                cache.getGrid(
-                    facilityId = facilityId,
-                    startDate = startDate,
-                    endDate = endDate,
-                    minDate = startDate,
-                    maxDate = startDate.plusDays(BOOKING_HORIZON_DAYS.toLong()),
-                    force = force,
-                )
+            coroutineScope {
+                ref.facilityIds
+                    .map { facilityId ->
+                        async {
+                            cache.getGrid(
+                                facilityId = facilityId,
+                                startDate = startDate,
+                                endDate = endDate,
+                                minDate = startDate,
+                                maxDate = startDate.plusDays(BOOKING_HORIZON_DAYS.toLong()),
+                                force = force,
+                            )
+                        }
+                    }.awaitAll()
             }
         }
 
@@ -148,17 +158,17 @@ class ReserveCaliforniaReservationProvider(
         (ref as? ProviderRef.ReserveCalifornia)
             ?: throw ReservationProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
 
-    private inline fun <T> runWithErrorMapping(block: () -> T): T =
+    private fun observedAt(results: List<CachedReserveCaliforniaGridResult>): Instant =
+        results.firstOrNull()?.data?.observedAt ?: Instant.now(clock)
+
+    private suspend fun <T> runWithErrorMapping(block: suspend () -> T): T =
         try {
             block()
         } catch (e: ReservationProviderError) {
             throw e
         } catch (e: ReserveCaliforniaException) {
-            when {
-                e.httpStatus == 429 -> throw ReservationProviderError.RateLimited(e)
-                e.httpStatus != null && e.httpStatus in 500..599 -> throw ReservationProviderError.UpstreamUnavailable(e)
-                else -> throw ReservationProviderError.UpstreamUnavailable(e)
-            }
+            if (e.httpStatus == 429) throw ReservationProviderError.RateLimited(e)
+            throw ReservationProviderError.UpstreamUnavailable(e)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -177,7 +187,5 @@ private fun dates(
 ): List<LocalDate> =
     (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt())
         .map { startDate.plusDays(it.toLong()) }
-
-private fun observedAt(results: List<CachedReserveCaliforniaGridResult>): Instant = results.firstOrNull()?.data?.observedAt ?: Instant.now()
 
 private fun rid(unitId: String): String = "site:reservecalifornia:$unitId"
