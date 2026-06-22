@@ -3,6 +3,10 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.repo.OnRouteRow
 import ca.floo.roadtrip.repo.PoiDetailRow
 import ca.floo.roadtrip.repo.PoiRow
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import java.time.Clock
+import java.time.Instant
+import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -102,6 +106,8 @@ class FeatureCollectionContractTest {
                 subcategory = "federal",
                 name = "Tunnel Mountain Village I",
                 region = "AB",
+                country = "CA",
+                lng = -115.547,
                 unitName = "Banff",
                 reserveUrl = "https://reservation.pc.gc.ca",
                 phone = "1-877-737-3783",
@@ -116,7 +122,8 @@ class FeatureCollectionContractTest {
                 """"properties":{"source":"uscampgrounds","source_id":"abc-123",""" +
                 """"category":"campground","subcategory":"federal",""" +
                 """"name":"Tunnel Mountain Village I",""" +
-                """"region":"AB","unit_name":"Banff",""" +
+                """"region":"AB","country":"CA","time_zone":"America/Edmonton",""" +
+                """"earliest_date":"2026-06-21","unit_name":"Banff",""" +
                 """"reserve_url":"https://reservation.pc.gc.ca",""" +
                 """"phone":"1-877-737-3783","info_url":"https://parks.canada.ca/banff",""" +
                 """"address":{"city":"Banff","state":"AB"},""" +
@@ -124,7 +131,8 @@ class FeatureCollectionContractTest {
                 """"label":"Park info on parks.canada.ca","kind":"info"},""" +
                 """"raw":{"category":"federal","amenities":["showers"]}}}"""
         )
-        assertEquals(expected, encodePoiFeatureJson(poiDetailFeature(row)))
+        val dateResolver = AvailabilityDateResolver(Clock.fixed(Instant.parse("2026-06-21T12:00:00Z"), ZoneOffset.UTC))
+        assertEquals(expected, encodePoiFeatureJson(poiDetailFeature(row, dateResolver)))
     }
 
     @Test
