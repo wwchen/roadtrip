@@ -128,7 +128,7 @@ SOURCE=--list` for the current set; abridged:
 | `apca-{accommodation,places}` | Parks Canada ArcGIS feeds        | `data/raw/apca-accommodation/<ts>/...`, `data/raw/apca-places/<ts>/...` |
 | `aspira-maps-{pc,bc,wa}` | Aspira `/api/maps` (one row per host) | `data/raw/aspira-maps-pc/<ts>.json`, `…-bc`, `…-wa` |
 | `recgov-campgrounds`  | RIDB /facilities (all RIDB agencies)    | `data/raw/recgov-campgrounds/<ts>/page-NNN.json` |
-| `reserveamerica-abpp` | Active Network ReserveAmerica (Alberta) | `data/raw/reserveamerica-abpp/<ts>/{directory-*,park-*}.json` |
+| `reserveamerica-{abpp,ny}` | Active Network ReserveAmerica (Alberta, New York) | `data/raw/reserveamerica-<contract>/<ts>/{directory-*,park-*}.json` |
 | `tesla-index`         | tesla.com get-locations (curl-impersonate) | `data/raw/tesla-index/<ts>.json` |
 | `tesla-locations`     | tesla.com per-slug, cache-aware (~30d)  | `data/raw/tesla-locations/<slug>/<ts>.json` |
 

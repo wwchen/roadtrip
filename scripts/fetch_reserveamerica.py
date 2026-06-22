@@ -9,6 +9,7 @@ is.
 Currently configured:
 
   ABPP  shop.albertaparks.ca   Alberta Provincial Parks  →  data/raw/reserveamerica-abpp/
+  NY    newyorkstateparks.reserveamerica.com  New York State Parks → data/raw/reserveamerica-ny/
 
 Adding a tenant = one row in TENANTS below. Other Active Network park
 agencies use the same `campgroundDirectoryList.do` / `campgroundDetails.do`
@@ -91,7 +92,8 @@ class Tenant:
 
 TENANTS: list[Tenant] = [
     Tenant(contract="ABPP", host="shop.albertaparks.ca", label="Alberta Parks"),
-    # Add NSPP / others by appending here once their hosts are confirmed.
+    Tenant(contract="NY", host="newyorkstateparks.reserveamerica.com", label="New York State Parks"),
+    # Add others by appending here once their hosts are confirmed.
 ]
 
 
