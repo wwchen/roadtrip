@@ -148,7 +148,7 @@ internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Dur
     when (providerId) {
         ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
         ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
-        ReservationProviderId.CAMIS -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
+        ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
     }
 
 private fun Reservable.toCatalogReservableRef(): CatalogReservableRef =

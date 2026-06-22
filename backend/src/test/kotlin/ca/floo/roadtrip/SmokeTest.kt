@@ -543,7 +543,8 @@ class SmokeTest {
                             "state": "AB",
                             "time_zone": "America/Edmonton",
                             "earliest_date": "2026-06-16",
-                            "provider_ref": { "recgov_id": "31337" }
+                            "availability_supported": true,
+                            "provider_ref": { "contract_code": "NY", "park_id": "31337" }
                           }
                         }
                         """.trimIndent(),

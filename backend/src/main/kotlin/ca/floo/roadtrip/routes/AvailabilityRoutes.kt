@@ -50,9 +50,10 @@ internal fun Route.availabilityRoutes(
             "Path key is `pois.id`. Returns one availability envelope per reservable " +
             "linked to this POI — the same shape `/api/reservable/{rid}/availability` " +
             "returns for a single reservable. The FE fuses the per-reservable streams " +
-            "into the campground week grid. " +
-            "An empty `reservables` array means the POI has no online-bookable " +
-            "reservables (walk-up / non-reservable); the drawer should hide the matrix. " +
+            "into the campground week grid. If no local catalog rows are linked, providers " +
+            "that can answer from a campground-level matrix may still return synthetic " +
+            "per-reservable streams. An empty `reservables` array means the POI has no " +
+            "known online-bookable reservables; the drawer should hide the matrix. " +
             "Optional `site_type` filters the linked catalog before dispatch."
         request {
             pathParameter<Long>("poi_id") { description = "pois.id primary key" }

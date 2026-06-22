@@ -185,10 +185,11 @@ sealed class ProviderRef {
         val resourceLocationId: Long?,
     ) : ProviderRef()
 
-    // Camis (Alberta Parks). No adapter implemented yet (RFC decision #11);
-    // the ProviderRef variant exists so the type system stays exhaustive.
-    data class Camis(
-        val facilityId: String,
+    // Active Network / ReserveAmerica. The contract may be omitted on legacy
+    // rows that only carried facility_id; adapters fill it from tenant config.
+    data class ReserveAmerica(
+        val contractCode: String?,
+        val parkId: String,
     ) : ProviderRef()
 }
 

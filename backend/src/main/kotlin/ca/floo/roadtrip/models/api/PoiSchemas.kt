@@ -62,6 +62,9 @@ data class PoiDetailPropertiesSchema(
     @SerialName("info_url") val infoUrl: String? = null,
     val address: JsonElement? = null,
     @SerialName("provider_ref") val providerRef: JsonElement? = null,
+    // Backend-owned capability flag. The FE should not know individual
+    // provider_ref shapes just to decide whether to mount availability UI.
+    @SerialName("availability_supported") val availabilitySupported: Boolean? = null,
     // Backend-computed CTA for the pin's primary action button. Picks the
     // best upstream URL + label from provider_ref / info_url so the FE can
     // render blindly without owning per-vendor precedence rules. null when

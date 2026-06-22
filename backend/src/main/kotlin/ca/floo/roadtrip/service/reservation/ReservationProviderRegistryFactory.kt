@@ -3,11 +3,14 @@ package ca.floo.roadtrip.service.reservation
 import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
 import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaAvailability
+import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
-import ca.floo.roadtrip.service.reservation.adapters.camis.CamisReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
+import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmericaReservationProvider
+import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmericaTenant
 
 /**
  * Builds a [ReservationProviderRegistry] from boot-time config + caches. One
@@ -15,11 +18,9 @@ import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationPro
  * keeps that knowledge out of [Main] (which would otherwise have to wire
  * each adapter manually) and out of routes.
  *
- * Aspira hosts come from the YAML registry — see
- * [PoiRegistry.aspiraHostBySource] — and resolve to a tenant config row
- * in [AspiraTenants]. Each unique host gets one adapter instance.
- * Adding a tenant is one row in [AspiraTenants] plus a YAML row; no
- * change here.
+ * Aspira hosts come from the YAML registry — see [PoiRegistry.aspiraHostBySource]
+ * — and resolve to a tenant config row in [AspiraTenants]. ReserveAmerica
+ * tenant host/contract/horizon config comes directly from the YAML row.
  */
 object ReservationProviderRegistryFactory {
     fun build(
@@ -27,6 +28,11 @@ object ReservationProviderRegistryFactory {
         recgovCache: CachedRecGovAvailability,
         aspiraCache: CachedAspiraAvailability,
         aspiraOccupancyCache: CachedAspiraOccupancy? = null,
+        reserveAmericaCacheFactory: (ReserveAmericaTenant) -> CachedReserveAmericaAvailability = { tenant ->
+            CachedReserveAmericaAvailability(
+                client = HttpReserveAmericaAvailabilityClient(host = tenant.host),
+            )
+        },
     ): ReservationProviderRegistry {
         val adaptersBySource = mutableMapOf<String, ReservationProvider>()
 
@@ -59,12 +65,20 @@ object ReservationProviderRegistryFactory {
             adaptersBySource[source] = adapter
         }
 
-        // Camis — capability stub. Wired so registry dispatch is exhaustive
-        // and so the adapter matrix is honest about what we don't yet
-        // support; calls throw ReservationProviderError.Unsupported.
-        val camis = CamisReservationProvider()
-        for (source in registry.camisSources()) {
-            adaptersBySource[source] = camis
+        // ReserveAmerica / Active Network — one adapter per tenant source.
+        for (config in registry.reserveAmericaSources()) {
+            val tenant =
+                ReserveAmericaTenant(
+                    source = config.source,
+                    host = config.host,
+                    contractCode = config.contractCode,
+                    bookingHorizonDays = config.bookingHorizonDays,
+                )
+            adaptersBySource[config.source] =
+                ReserveAmericaReservationProvider(
+                    tenant = tenant,
+                    cache = reserveAmericaCacheFactory(tenant),
+                )
         }
 
         return ReservationProviderRegistry(adaptersBySource = adaptersBySource.toMap())

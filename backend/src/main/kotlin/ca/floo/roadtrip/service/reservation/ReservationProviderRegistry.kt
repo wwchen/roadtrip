@@ -30,7 +30,7 @@ class ReservationProviderRegistry(
 ) {
     /**
      * Look up the adapter that handles a campground POI row. Returns null
-     * when the source is unmapped (e.g. Camis before its adapter is wired,
+     * when the source is unmapped (e.g. a brand-new ReserveAmerica tenant,
      * or a brand-new ETL whose registry entry forgot to set a provider).
      */
     fun forPoi(row: CampsiteProviderRefRow): ReservationProvider? = adaptersBySource[row.source]

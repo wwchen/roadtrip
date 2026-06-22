@@ -14,11 +14,10 @@ import java.io.File
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertNull
 
 class ReserveAmericaEtlTest {
     @Test
-    fun `new york args stamp state campground metadata without unsupported provider ref`() {
+    fun `new york args stamp state campground metadata with reserveamerica provider ref`() {
         val etl = ReserveAmericaEtl("new-york-state-parks")
         val dto = etl.parse(bundle("reserveamerica-ny", nyParkEnvelope()))
         assertEquals("ALGER ISLAND, NY", dto.parks.single().name)
@@ -32,7 +31,9 @@ class ReserveAmericaEtlTest {
         assertEquals("US", poi.country)
         assertEquals("state", poi.subcategory)
         assertEquals("New York State Parks", poi.agency)
-        assertNull(poi.providerRef)
+        val ref = poi.providerRef as ProviderRef.ReserveAmerica
+        assertEquals("NY", ref.contractCode)
+        assertEquals("695", ref.parkId)
         assertEquals(
             "https://newyorkstateparks.reserveamerica.com/camping/alger-island/r/campgroundDetails.do?contractCode=NY&parkId=695",
             poi.infoUrl,
@@ -44,7 +45,7 @@ class ReserveAmericaEtlTest {
     }
 
     @Test
-    fun `alberta defaults preserve existing source shape and camis provider ref`() {
+    fun `alberta defaults preserve existing source shape and reserveamerica provider ref`() {
         val poi =
             ReserveAmericaEtl()
                 .transform(
@@ -73,9 +74,10 @@ class ReserveAmericaEtlTest {
         assertEquals("CA", poi.country)
         assertEquals("provincial", poi.subcategory)
         assertEquals("Alberta Parks", poi.agency)
-        val ref = poi.providerRef as ProviderRef.Camis
+        val ref = poi.providerRef as ProviderRef.ReserveAmerica
         val extras = poi.extras!!.jsonObject
-        assertEquals("123", ref.facilityId)
+        assertEquals("ABPP", ref.contractCode)
+        assertEquals("123", ref.parkId)
         assertEquals("ABPP", extras["contract"]!!.jsonPrimitive.content)
     }
 

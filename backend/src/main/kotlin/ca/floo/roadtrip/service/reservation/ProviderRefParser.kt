@@ -38,8 +38,15 @@ object ProviderRefParser {
             )
         }
 
-        obj["facility_id"]?.jsonPrimitive?.contentOrNull?.let {
-            return ProviderRef.Camis(facilityId = it)
+        obj["park_id"]?.jsonPrimitive?.contentOrNull?.let {
+            return ProviderRef.ReserveAmerica(
+                contractCode = obj["contract_code"]?.jsonPrimitive?.contentOrNull,
+                parkId = it,
+            )
+        }
+
+        obj["facility_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.toLongOrNull() != null }?.let {
+            return ProviderRef.ReserveAmerica(contractCode = null, parkId = it)
         }
 
         return null

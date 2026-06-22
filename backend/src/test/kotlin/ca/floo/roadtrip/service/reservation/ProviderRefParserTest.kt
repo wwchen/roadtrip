@@ -37,10 +37,24 @@ class ProviderRefParserTest {
     }
 
     @Test
-    fun `parses camis`() {
-        val ref = ProviderRefParser.parse("""{"facility_id": "AB-12"}""")
-        assertTrue(ref is ProviderRef.Camis)
-        assertEquals("AB-12", ref.facilityId)
+    fun `parses reserveamerica`() {
+        val ref = ProviderRefParser.parse("""{"contract_code": "NY", "park_id": "489"}""")
+        assertTrue(ref is ProviderRef.ReserveAmerica)
+        assertEquals("NY", ref.contractCode)
+        assertEquals("489", ref.parkId)
+    }
+
+    @Test
+    fun `parses numeric legacy facility id as reserveamerica without contract`() {
+        val ref = ProviderRefParser.parse("""{"facility_id": "489"}""")
+        assertTrue(ref is ProviderRef.ReserveAmerica)
+        assertEquals(null, ref.contractCode)
+        assertEquals("489", ref.parkId)
+    }
+
+    @Test
+    fun `non numeric legacy facility id is not availability capable`() {
+        assertNull(ProviderRefParser.parse("""{"facility_id": "AB-12"}"""))
     }
 
     @Test

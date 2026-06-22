@@ -33,6 +33,11 @@ enum class ApiCacheEntity(
         envKey = "ROADTRIP_CACHE_ASPIRA_AVAILABILITY_TTL",
         defaultTtl = Duration.ofHours(2),
     ),
+    RESERVEAMERICA_AVAILABILITY(
+        namespace = "reserveamerica_availability",
+        envKey = "ROADTRIP_CACHE_RESERVEAMERICA_AVAILABILITY_TTL",
+        defaultTtl = Duration.ofHours(2),
+    ),
 }
 
 data class ApiCacheConfig(

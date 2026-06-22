@@ -49,7 +49,7 @@ internal class PoiCta(
                 val host = row.infoUrl?.let { extractHost(it) }
                 aspiraBookingSystemLabel(host)
             }
-            is ProviderRef.Camis -> "Camis"
+            is ProviderRef.ReserveAmerica -> "ReserveAmerica"
             null -> null
         }
     }
