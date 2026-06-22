@@ -98,17 +98,32 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "value"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 900
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 7,
         "w": 24,
         "x": 0,
         "y": 10
       },
       "id": 2,
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "cellHeight": "sm",
+        "wrapText": true
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -119,11 +134,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  p.id,\n  p.name,\n  p.source_id,\n  p.source,\n  p.region,\n  p.country,\n  p.info_url,\n  p.fetched_at,\n  p.updated_at,\n  now() - p.updated_at AS catalog_age,\n  (p.properties->>'stall_count')::int AS stall_count,\n  (p.properties->>'max_power_kw')::int AS max_power_kw,\n  CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN jsonb_array_length(p.properties->'pricebooks') ELSE 0 END AS pricebook_count,\n  (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS detail_captured,\n  p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n  p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n  p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type,\n  p.properties#>>'{upstream,index,supercharger_function,open_to_non_tesla}' AS open_to_non_tesla,\n  p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "rawSql": "WITH selected AS (\n  SELECT p.*\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n    AND p.id::text = ${supercharger_id:sqlstring}\n), details AS (\n  SELECT\n    p.*,\n    COALESCE(\n      (\n        SELECT string_agg(DISTINCT pricebook->>'currencyCode', ', ' ORDER BY pricebook->>'currencyCode')\n        FROM jsonb_array_elements(\n          CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n        ) AS e(pricebook)\n        WHERE NULLIF(pricebook->>'currencyCode', '') IS NOT NULL\n      ),\n      'n/a'\n    ) AS pricebook_currency\n  FROM selected p\n)\nSELECT field, value\nFROM details p\nCROSS JOIN LATERAL (\n  VALUES\n    ('Name', p.name),\n    ('POI ID', p.id::text),\n    ('Address', concat_ws(', ', NULLIF(p.address->>'street', ''), NULLIF(p.address->>'city', ''), NULLIF(p.address->>'state', ''), NULLIF(p.address->>'postcode', ''), NULLIF(p.address->>'country', ''))),\n    ('Currency', p.pricebook_currency),\n    ('Catalog Age', (now() - p.updated_at)::text),\n    ('Updated At', to_char(p.updated_at AT TIME ZONE 'UTC', 'YYYY-MM-DD HH24:MI UTC')),\n    ('Tesla URL', p.info_url)\n) AS detail(field, value);",
           "refId": "A"
         }
       ],
-      "title": "Supercharger Header",
+      "title": "Supercharger Details",
       "type": "table"
     },
     {
@@ -132,18 +147,99 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "lineWidth": 1,
+            "axisLabel": "price / kWh"
+          },
+          "unit": "short"
+        },
         "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 9,
+      "options": {
+        "barRadius": 0,
+        "barWidth": 0.8,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        },
+        "xField": "hour_label",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT p.*\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n    AND p.id::text = ${supercharger_id:sqlstring}\n), pricebooks AS (\n  SELECT\n    pricebook,\n    NULLIF(pricebook->>'vehicleMakeType', '') AS vehicle_make_type,\n    NULLIF(pricebook->>'currencyCode', '') AS currency,\n    NULLIF(pricebook->>'startTime', '') AS start_time,\n    NULLIF(pricebook->>'endTime', '') AS end_time,\n    NULLIF(pricebook->>'rateBase', '')::numeric AS rate_base,\n    NULLIF(pricebook->>'minSiteOccupancy', '')::numeric AS min_site_occupancy,\n    NULLIF(pricebook->>'maxSiteOccupancy', '')::numeric AS max_site_occupancy\n  FROM selected p\n  CROSS JOIN LATERAL jsonb_array_elements(\n    CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n  ) AS e(pricebook)\n  WHERE pricebook->>'feeType' = 'CHARGING'\n    AND pricebook->>'uom' = 'kwh'\n    AND NULLIF(pricebook->>'rateBase', '') IS NOT NULL\n), hourly_windows AS (\n  SELECT\n    *,\n    CASE WHEN start_time ~ '^[0-9]{2}:[0-9]{2}$' THEN split_part(start_time, ':', 1)::int END AS start_hour,\n    CASE WHEN end_time ~ '^[0-9]{2}:[0-9]{2}$' THEN split_part(end_time, ':', 1)::int END AS end_hour\n  FROM pricebooks\n), expanded AS (\n  SELECT\n    h.hour,\n    w.vehicle_make_type,\n    w.rate_base,\n    w.start_hour IS NOT NULL AND w.end_hour IS NOT NULL AND w.start_hour <> w.end_hour AS has_time_window,\n    w.min_site_occupancy IS NOT NULL OR w.max_site_occupancy IS NOT NULL AS has_occupancy_band\n  FROM hourly_windows w\n  CROSS JOIN generate_series(0, 23) AS h(hour)\n  WHERE start_hour IS NULL\n     OR end_hour IS NULL\n     OR start_hour = end_hour\n     OR (start_hour < end_hour AND h.hour >= start_hour AND h.hour < end_hour)\n     OR (start_hour > end_hour AND (h.hour >= start_hour OR h.hour < end_hour))\n), ranked AS (\n  SELECT\n    *,\n    row_number() OVER (\n      PARTITION BY hour, vehicle_make_type\n      ORDER BY has_time_window DESC, has_occupancy_band ASC, rate_base ASC\n    ) AS rn\n  FROM expanded\n)\nSELECT\n  lpad(hours.hour::text, 2, '0') || ':00' AS hour_label,\n  max(ranked.rate_base) FILTER (WHERE ranked.vehicle_make_type = 'TSLA' AND ranked.rn = 1)::double precision AS tsla_price,\n  max(ranked.rate_base) FILTER (WHERE ranked.vehicle_make_type = 'NTSLA' AND ranked.rn = 1)::double precision AS non_tesla_price\nFROM generate_series(0, 23) AS hours(hour)\nLEFT JOIN ranked ON ranked.hour = hours.hour\nGROUP BY hours.hour\nORDER BY hours.hour ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Pricebook By Hour",
+      "type": "barchart"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "raw_pricebook"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 27
       },
-      "id": 3,
+      "id": 10,
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "cellHeight": "sm"
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -154,11 +250,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  p.properties#>>'{facility}' AS facility,\n  p.properties#>>'{upstream,detail,timeZone}' AS time_zone,\n  p.properties#>>'{upstream,detail,address,streetNumber}' AS street_number,\n  p.properties#>>'{upstream,detail,address,street}' AS street,\n  p.properties#>>'{upstream,detail,address,city}' AS city,\n  p.properties#>>'{upstream,detail,address,state}' AS state,\n  p.properties#>>'{upstream,detail,address,country}' AS country,\n  p.properties#>>'{upstream,detail,address,postalCode}' AS postal_code,\n  p.properties->'upstream'->'detail'->'amenities' AS amenities,\n  p.properties->'upstream'->'index'->'supercharger_function' AS index_status\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "rawSql": "SELECT\n  e.row_num,\n  e.pricebook->>'vehicleMakeType' AS vehicle_make_type,\n  e.pricebook->>'feeType' AS fee_type,\n  e.pricebook->>'currencyCode' AS currency,\n  e.pricebook->>'uom' AS unit,\n  e.pricebook->>'startTime' AS start_time,\n  e.pricebook->>'endTime' AS end_time,\n  NULLIF(e.pricebook->>'rateBase', '')::numeric AS rate_base,\n  NULLIF(e.pricebook->>'rateTier1', '')::numeric AS rate_tier_1,\n  NULLIF(e.pricebook->>'rateTier2', '')::numeric AS rate_tier_2,\n  NULLIF(e.pricebook->>'minSiteOccupancy', '')::numeric AS min_site_occupancy,\n  NULLIF(e.pricebook->>'maxSiteOccupancy', '')::numeric AS max_site_occupancy,\n  e.pricebook->>'isMemberPricebook' AS member_pricebook,\n  e.pricebook AS raw_pricebook\nFROM pois p\nCROSS JOIN LATERAL jsonb_array_elements(\n  CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n) WITH ORDINALITY AS e(pricebook, row_num)\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring}\nORDER BY e.row_num ASC;",
           "refId": "A"
         }
       ],
-      "title": "Tesla Detail Fields",
+      "title": "Pricebook Rows",
       "type": "table"
     },
     {
@@ -168,17 +264,104 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "provider_ref"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "address"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "pricebooks"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upstream_index"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "upstream_detail"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "raw_properties"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 35
       },
-      "id": 4,
+      "id": 11,
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "cellHeight": "lg",
+        "wrapText": true
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -189,46 +372,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  e.row_num,\n  e.pricebook->>'vehicleMakeType' AS vehicle_make_type,\n  e.pricebook->>'feeType' AS fee_type,\n  e.pricebook->>'currencyCode' AS currency,\n  e.pricebook->>'uom' AS unit,\n  NULLIF(e.pricebook->>'rateBase', '')::numeric AS rate_base,\n  NULLIF(e.pricebook->>'rateTier1', '')::numeric AS rate_tier_1,\n  NULLIF(e.pricebook->>'rateTier2', '')::numeric AS rate_tier_2,\n  NULLIF(e.pricebook->>'minSiteOccupancy', '')::numeric AS min_site_occupancy,\n  NULLIF(e.pricebook->>'maxSiteOccupancy', '')::numeric AS max_site_occupancy,\n  e.pricebook->>'isMemberPricebook' AS member_pricebook,\n  e.pricebook AS raw_pricebook\nFROM pois p\nCROSS JOIN LATERAL jsonb_array_elements(\n  CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n) WITH ORDINALITY AS e(pricebook, row_num)\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring}\nORDER BY e.row_num ASC;",
+          "rawSql": "SELECT\n  p.provider_ref,\n  p.address,\n  p.properties->'pricebooks' AS pricebooks,\n  p.properties->'upstream'->'index' AS upstream_index,\n  p.properties->'upstream'->'detail' AS upstream_detail,\n  p.properties AS raw_properties\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
           "refId": "A"
         }
       ],
-      "title": "Pricebooks",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 36
-      },
-      "id": 5,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  p.provider_ref,\n  p.address,\n  p.properties->'upstream'->'index' AS upstream_index,\n  p.properties->'upstream'->'detail' AS upstream_detail,\n  p.properties AS raw_properties\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
-          "refId": "A"
-        }
-      ],
-      "title": "Raw Tesla Upstream Data",
+      "title": "Raw Tesla JSON",
       "type": "table"
     }
   ],
@@ -289,5 +437,5 @@
   "timezone": "browser",
   "title": "POI / Tesla Supercharger / Detail",
   "uid": "roadtrip-tesla-supercharger-detail",
-  "version": 1
+  "version": 3
 }

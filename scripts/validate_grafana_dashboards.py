@@ -27,6 +27,18 @@ def main() -> int:
         dashboard = json.loads(path.read_text())
         uid = dashboard.get("uid", path.name)
         dashboards[uid] = dashboard
+        panel_ids: dict[int, str] = {}
+        for panel in dashboard.get("panels", []):
+            panel_id = panel.get("id")
+            if panel_id is None:
+                continue
+            if panel_id in panel_ids:
+                failures.append(
+                    f"{uid} has duplicate panel id {panel_id}: "
+                    f"{panel_ids[panel_id]!r} and {panel.get('title')!r}"
+                )
+            else:
+                panel_ids[panel_id] = panel.get("title", "<untitled>")
         for variable in dashboard.get("templating", {}).get("list", []):
             if not variable.get("includeAll"):
                 continue
@@ -161,6 +173,87 @@ def main() -> int:
                     "Average Charging Price By Region SQL missing "
                     f"{fragment!r}"
                 )
+
+    tesla_detail = dashboards["roadtrip-tesla-supercharger-detail"]
+    tesla_detail_panels = {
+        panel.get("title"): panel
+        for panel in tesla_detail.get("panels", [])
+        if panel.get("title")
+    }
+    supercharger_details = tesla_detail_panels.get("Supercharger Details")
+    if supercharger_details is None:
+        failures.append(
+            "roadtrip-tesla-supercharger-detail is missing "
+            "'Supercharger Details'"
+        )
+    else:
+        if supercharger_details.get("type") != "table":
+            failures.append("Supercharger Details must be a table panel")
+        raw_sql = "\n".join(
+            target.get("rawSql", "")
+            for target in supercharger_details.get("targets", [])
+        )
+        required_fragments = [
+            "'Name'",
+            "'POI ID'",
+            "'Address'",
+            "'Currency'",
+            "'Catalog Age'",
+            "'Updated At'",
+            "'Tesla URL'",
+        ]
+        for fragment in required_fragments:
+            if fragment not in raw_sql:
+                failures.append(
+                    "Supercharger Details SQL missing "
+                    f"{fragment!r}"
+                )
+
+    pricebook_by_hour = tesla_detail_panels.get("Pricebook By Hour")
+    if pricebook_by_hour is None:
+        failures.append(
+            "roadtrip-tesla-supercharger-detail is missing "
+            "'Pricebook By Hour'"
+        )
+    else:
+        if pricebook_by_hour.get("type") != "barchart":
+            failures.append("Pricebook By Hour must be a barchart panel")
+        raw_sql = "\n".join(
+            target.get("rawSql", "")
+            for target in pricebook_by_hour.get("targets", [])
+        )
+        required_fragments = [
+            "generate_series(0, 23)",
+            "hour_label",
+            "pricebook->>'feeType' = 'CHARGING'",
+            "pricebook->>'uom' = 'kwh'",
+            "pricebook->>'startTime'",
+            "pricebook->>'endTime'",
+            "tsla_price",
+            "non_tesla_price",
+            "row_number() OVER",
+        ]
+        for fragment in required_fragments:
+            if fragment not in raw_sql:
+                failures.append(
+                    "Pricebook By Hour SQL missing "
+                    f"{fragment!r}"
+                )
+
+    raw_json_panel = tesla_detail_panels.get("Raw Tesla JSON")
+    if raw_json_panel is None:
+        failures.append(
+            "roadtrip-tesla-supercharger-detail is missing 'Raw Tesla JSON'"
+        )
+    else:
+        has_json_view = any(
+            property_config.get("id") == "custom.cellOptions"
+            and property_config.get("value", {}).get("type") == "json-view"
+            for override in raw_json_panel.get("fieldConfig", {}).get("overrides", [])
+            for property_config in override.get("properties", [])
+        )
+        if not has_json_view:
+            failures.append("Raw Tesla JSON must use JSON View cell overrides")
 
     if failures:
         for failure in failures:
