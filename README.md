@@ -204,7 +204,8 @@ the backend container and write raw captures back to the checkout.
    GRAFANA_DB_PASSWORD=<strong password>
    ```
 
-   Grafana state is stored in the Docker named volume `roadtrip_grafana-data`;
+   Grafana state is stored in the Compose-managed named volume
+   `grafana-data` (Docker prefixes it with the Compose project name);
    dashboard JSON and datasource provisioning stay bind-mounted from `grafana/`.
 
 3. **Bring up the stack:** `make deploy` (ssh's to the mini, git pull, build,
