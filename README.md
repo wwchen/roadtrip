@@ -194,7 +194,8 @@ the backend container and write raw captures back to the checkout.
 
 1. **Create a Cloudflare tunnel.** Zero Trust → Networks → Tunnels → Create
    tunnel; set the public hostname to route to `http://backend:8765`. Copy the
-   tunnel token.
+   tunnel token. The tunnel's public hostname routing is managed in Cloudflare;
+   Compose only starts `cloudflared` with the token.
 
 2. **`.env` on the host:**
    ```

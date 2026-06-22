@@ -137,16 +137,13 @@ services:
         condition: service_completed_successfully
 
   cloudflared:
-    # Only runs with `--profile tunnel` (deploy target). Local modes skip it.
-    # Mounts a config.yml so path-based routing lives in the repo, not the
-    # dashboard. With backend serving everything, the config is now a single
-    # catch-all.
+    # Runs in deploy with `--profile tunnel --profile pois`. Local modes skip it.
+    # Public hostname routing is managed in Cloudflare Zero Trust; this
+    # container only needs the tunnel token.
     profiles: [tunnel]
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
-    volumes:
-      - ./cloudflared:/etc/cloudflared:ro
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     depends_on:
       - backend
 

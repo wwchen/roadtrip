@@ -239,7 +239,7 @@ If `COOKIE_BOT_TOKEN` or `CLOUDFLARE_TUNNEL_TOKEN` emit config warnings during v
 ```
 
 ```yaml
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
 ```
 
 - [ ] **Step 5: Mount backend fetch inputs and writable data**
