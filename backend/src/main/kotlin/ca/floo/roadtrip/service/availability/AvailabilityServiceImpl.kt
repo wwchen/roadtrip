@@ -149,6 +149,7 @@ internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Dur
         ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
         ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
         ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
+        ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
     }
 
 private fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
@@ -173,7 +174,12 @@ private fun availabilityMetadata(
     SnapshotBackedAvailabilityService.Metadata(
         provider = providerId.name.lowercase(),
         campgroundId = (ref as? ProviderRef.RecGov)?.recgovId,
-        mapId = (ref as? ProviderRef.Aspira)?.mapId?.toString(),
+        mapId =
+            when (ref) {
+                is ProviderRef.Aspira -> ref.mapId.toString()
+                is ProviderRef.ReserveCalifornia -> ref.facilityIds.joinToString(",")
+                else -> null
+            },
         reservableId = reservableId,
     )
 

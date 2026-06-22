@@ -425,6 +425,9 @@ class EtlOrchestrator(
                 "new-york-state-parks" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
                         .ReserveAmericaEtl("new-york-state-parks"),
+                "california-state-parks" to
+                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
+                        .ReserveCaliforniaEtl("california-state-parks"),
                 // RIDB (recreation.gov backend) — one ETL covers every
                 // publishing agency (NPS, USFS, BLM, USACE, FWS, BOR, TVA, …).
                 // Per-row agency stamped on Poi.Campground.agency at
@@ -491,6 +494,9 @@ class EtlOrchestrator(
                             dictionariesInputSlug = "aspira-dictionaries-pc",
                             vendor = "aspira_pc",
                         ),
+                "california-state-park-sites" to
+                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
+                        .ReserveCaliforniaSitesEtl("california-state-park-sites"),
             )
 
         /**
@@ -507,6 +513,9 @@ class EtlOrchestrator(
                 "AspiraPoiReservableJoiner" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraPoiReservableJoiner(),
+                "ReserveCaliforniaPoiReservableJoiner" to
+                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
+                        .ReserveCaliforniaPoiReservableJoiner(),
             )
     }
 }

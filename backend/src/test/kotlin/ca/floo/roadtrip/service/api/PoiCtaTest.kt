@@ -25,6 +25,14 @@ class PoiCtaTest {
     }
 
     @Test
+    fun `reservecalifornia provider_ref produces park deeplink`() {
+        val out = cta.computeCta(row(providerRefJson = """{"place_id":660,"facility_ids":[901]}"""))
+        assertEquals("https://reservecalifornia.com/park/660", out?.url)
+        assertEquals("Reserve on ReserveCalifornia", out?.label)
+        assertEquals("reserve", out?.kind)
+    }
+
+    @Test
     fun `aspira parks canada produces dated NextGen deeplink with tenant label`() {
         val out =
             cta.computeCta(

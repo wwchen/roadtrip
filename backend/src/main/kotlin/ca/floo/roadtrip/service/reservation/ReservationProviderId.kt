@@ -18,4 +18,5 @@ enum class ReservationProviderId {
     RECGOV,
     ASPIRA,
     RESERVEAMERICA,
+    RESERVECALIFORNIA,
 }

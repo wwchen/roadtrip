@@ -130,6 +130,7 @@ SOURCE=--list` for the current set; abridged:
 | `recgov-campgrounds`  | RIDB /facilities (all RIDB agencies)    | `data/raw/recgov-campgrounds/<ts>/page-NNN.json` |
 | `recgov-campground-enrichment` | Recreation.gov rating/cell aggregate API | `data/raw/recgov-campground-enrichment/<ts>/facility-<id>.json` |
 | `reserveamerica-{abpp,ny}` | Active Network ReserveAmerica (Alberta, New York) | `data/raw/reserveamerica-<contract>/<ts>/{directory-*,park-*}.json` |
+| `reservecalifornia-catalog` | ReserveCalifornia Search All + place/facility/grid API | `data/raw/reservecalifornia-catalog/<ts>/{website-settings,search-all,place-*,facility-*,grid-*}.json` |
 | `tesla-index`         | tesla.com get-locations (curl-impersonate) | `data/raw/tesla-index/<ts>.json` |
 | `tesla-locations`     | tesla.com per-slug, cache-aware (~30d)  | `data/raw/tesla-locations/<slug>/<ts>.json` |
 

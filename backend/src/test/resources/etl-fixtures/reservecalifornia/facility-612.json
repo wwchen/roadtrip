@@ -1,0 +1,23 @@
+{
+  "fetcher": "fetch_reservecalifornia",
+  "fetcher_version": "1",
+  "fetched_at": "2026-09-12T17:00:00Z",
+  "request": {
+    "url": "https://california-rdr.prod.cali.rd12.recreation-management.tylerapp.com/rdr/fd/facilities/612",
+    "method": "GET",
+    "headers": {}
+  },
+  "response": {
+    "status": 200,
+    "headers": {}
+  },
+  "part": "facility-612",
+  "payload": {
+    "FacilityId": 612,
+    "PlaceId": 690,
+    "Name": "Weyland Camp (sites 79-130)",
+    "FacilityTypeNew": 1,
+    "FacilityBehaviourType": 0,
+    "AllowWebBooking": true
+  }
+}

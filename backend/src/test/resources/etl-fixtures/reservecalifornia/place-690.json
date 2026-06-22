@@ -1,0 +1,36 @@
+{
+  "fetcher": "fetch_reservecalifornia",
+  "fetcher_version": "1",
+  "fetched_at": "2026-09-12T17:00:00Z",
+  "request": {
+    "url": "https://california-rdr.prod.cali.rd12.recreation-management.tylerapp.com/rdr/search/place",
+    "method": "POST",
+    "headers": {}
+  },
+  "response": {
+    "status": 200,
+    "headers": {}
+  },
+  "part": "place-690",
+  "payload": {
+    "SelectedPlace": {
+      "PlaceId": 690,
+      "Name": "Pfeiffer Big Sur SP",
+      "Latitude": 36.25305556,
+      "Longitude": -121.7811111,
+      "Facilities": {
+        "612": {
+          "FacilityId": 612,
+          "Name": "Weyland Camp (sites 79-130)",
+          "UnitTypes": {
+            "4303": {
+              "UnitTypeId": 4303,
+              "Name": "Campsite",
+              "AvailableCount": 0
+            }
+          }
+        }
+      }
+    }
+  }
+}

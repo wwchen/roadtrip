@@ -21,9 +21,11 @@ import java.time.format.DateTimeFormatter
 //   2. provider_ref.Aspira  → fully-formed dated NextGen deeplink to today/
 //      tomorrow, anchored to the park's TZ (stub: America/New_York for
 //      everyone). Tenant-aware label.
-//   3. info_url             → upstream info page (kind=info, label by host)
-//   4. null                 → no usable URL; FE falls back to name search
+//   3. provider_ref.ReserveCalifornia → ReserveCalifornia landing page
+//   4. info_url             → upstream info page (kind=info, label by host)
+//   5. null                 → no usable URL; FE falls back to name search
 private const val RECGOV_CAMPGROUND_URL = "https://www.recreation.gov/camping/campgrounds/"
+private const val RESERVECALIFORNIA_URL = "https://reservecalifornia.com"
 
 // TODO: per-tenant TZ via YAML once we ingest more parks across more zones.
 // For now: every Aspira tenant we run lives close enough to Eastern that an
@@ -50,6 +52,7 @@ internal class PoiCta(
                 aspiraBookingSystemLabel(host)
             }
             is ProviderRef.ReserveAmerica -> "ReserveAmerica"
+            is ProviderRef.ReserveCalifornia -> "ReserveCalifornia"
             null -> null
         }
     }
@@ -84,6 +87,13 @@ internal class PoiCta(
                 return PoiCtaSchema(
                     url = aspiraDeeplink(host, providerRef),
                     label = aspiraLabelForHost(host),
+                    kind = "reserve",
+                )
+            }
+            is ProviderRef.ReserveCalifornia -> {
+                return PoiCtaSchema(
+                    url = reserveCaliforniaParkUrl(providerRef.placeId),
+                    label = "Reserve on ReserveCalifornia",
                     kind = "reserve",
                 )
             }
@@ -146,6 +156,8 @@ internal class PoiCta(
     }
 
     private fun urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
+
+    private fun reserveCaliforniaParkUrl(placeId: Long): String = "$RESERVECALIFORNIA_URL/park/$placeId"
 
     private fun aspiraLabelForHost(host: String): String =
         when {

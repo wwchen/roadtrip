@@ -5,12 +5,15 @@ import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
 import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.clients.reservecalifornia.CachedReserveCaliforniaAvailability
+import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
 import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmericaReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmericaTenant
+import ca.floo.roadtrip.service.reservation.adapters.reservecalifornia.ReserveCaliforniaReservationProvider
 
 /**
  * Builds a [ReservationProviderRegistry] from boot-time config + caches. One
@@ -31,6 +34,11 @@ object ReservationProviderRegistryFactory {
         reserveAmericaCacheFactory: (ReserveAmericaTenant) -> CachedReserveAmericaAvailability = { tenant ->
             CachedReserveAmericaAvailability(
                 client = HttpReserveAmericaAvailabilityClient(host = tenant.host),
+            )
+        },
+        reserveCaliforniaCacheFactory: () -> CachedReserveCaliforniaAvailability = {
+            CachedReserveCaliforniaAvailability(
+                client = HttpReserveCaliforniaAvailabilityClient(),
             )
         },
     ): ReservationProviderRegistry {
@@ -79,6 +87,14 @@ object ReservationProviderRegistryFactory {
                     tenant = tenant,
                     cache = reserveAmericaCacheFactory(tenant),
                 )
+        }
+
+        val reserveCaliforniaSources = registry.reserveCaliforniaSources()
+        if (reserveCaliforniaSources.isNotEmpty()) {
+            val reserveCalifornia = ReserveCaliforniaReservationProvider(cache = reserveCaliforniaCacheFactory())
+            for (source in reserveCaliforniaSources) {
+                adaptersBySource[source] = reserveCalifornia
+            }
         }
 
         return ReservationProviderRegistry(adaptersBySource = adaptersBySource.toMap())
