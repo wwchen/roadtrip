@@ -133,8 +133,6 @@ class FeatureCollectionContractTest {
                 """"address":{"city":"Banff","state":"AB"},""" +
                 """"description":"Camp among redwoods.",""" +
                 """"photo_url":"https://example.test/photo.jpg",""" +
-                """"amenities":["showers"],"activities":["hiking"],"sites":42,""" +
-                """"season":"May-Oct","near":"Banff","agency":"Parks Canada",""" +
                 """"cta":{"url":"https://parks.canada.ca/banff",""" +
                 """"label":"Park info on parks.canada.ca","kind":"info"},""" +
                 """"raw":{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +

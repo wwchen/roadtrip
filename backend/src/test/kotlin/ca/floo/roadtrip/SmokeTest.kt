@@ -323,8 +323,6 @@ class SmokeTest {
                             "country": "US",
                             "description": "Clear Lake State Park offers rental cabins near the lake.",
                             "photo_url": "https://cali-content.usedirect.com/Images/California/ParkImages/Place/629.jpg",
-                            "amenities": ["Restrooms", "Showers"],
-                            "activities": ["Fishing", "Hiking"],
                             "availability_supported": true,
                             "cta": {
                               "url": "https://reservecalifornia.com/park/629",
@@ -333,6 +331,8 @@ class SmokeTest {
                             },
                             "provider_ref": { "place_id": 629, "facility_ids": [889] },
                             "raw": {
+                              "amenities": ["Restrooms", "Showers"],
+                              "activities": ["Fishing", "Hiking"],
                               "upstream": {
                                 "Name": "Clear Lake SP Cabins",
                                 "FacilityDescription": "<p>Raw-only description should not render.</p>",
@@ -383,8 +383,7 @@ class SmokeTest {
                 drawer.locator(".cg-about").textContent().contains("Raw-only description"),
                 "drawer About should render DTO description, not raw upstream description",
             )
-            assertThat(drawer.locator(".cg-details")).containsText("Restrooms")
-            assertThat(drawer.locator(".cg-details")).containsText("Fishing")
+            assertThat(drawer.locator(".cg-details")).hasCount(0)
             val heroImage =
                 page.evaluate(
                     """
