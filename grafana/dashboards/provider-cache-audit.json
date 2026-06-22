@@ -34,7 +34,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  namespace,\n  count(*) AS rows,\n  count(*) FILTER (WHERE expires_at <= now()) AS expired_rows,\n  min(created_at) AS oldest_created_at,\n  max(created_at) AS newest_created_at,\n  min(expires_at) AS earliest_expires_at,\n  max(expires_at) AS latest_expires_at,\n  pg_size_pretty(sum(pg_column_size(payload))::bigint) AS payload_size\nFROM api_cache\nWHERE (${namespace:sqlstring} = '' OR namespace = ${namespace:sqlstring})\nGROUP BY namespace\nORDER BY namespace ASC;",
+          "rawSql": "SELECT\n  namespace,\n  count(*) AS rows,\n  count(*) FILTER (WHERE expires_at <= now()) AS expired_rows,\n  min(created_at) AS oldest_created_at,\n  max(created_at) AS newest_created_at,\n  min(expires_at) AS earliest_expires_at,\n  max(expires_at) AS latest_expires_at,\n  pg_size_pretty(sum(payload_bytes)::bigint) AS payload_size\nFROM grafana_api_cache_metadata\nWHERE (${namespace:sqlstring} = '' OR namespace = ${namespace:sqlstring})\nGROUP BY namespace\nORDER BY namespace ASC;",
           "refId": "A"
         }
       ],
@@ -69,7 +69,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  namespace,\n  cache_key,\n  created_at,\n  expires_at,\n  now() - created_at AS age,\n  expires_at - now() AS freshness_remaining,\n  expires_at <= now() AS expired,\n  pg_column_size(payload) AS payload_bytes,\n  payload\nFROM api_cache\nWHERE (${namespace:sqlstring} = '' OR namespace = ${namespace:sqlstring})\n  AND (${cache_key_search:sqlstring} = '' OR cache_key ILIKE '%' || ${cache_key_search:sqlstring} || '%')\n  AND (\n    ${include_expired:sqlstring} = 'true'\n    OR expires_at > now()\n  )\nORDER BY created_at DESC\nLIMIT 200;",
+          "rawSql": "SELECT\n  namespace,\n  cache_key,\n  created_at,\n  expires_at,\n  now() - created_at AS age,\n  expires_at - now() AS freshness_remaining,\n  expires_at <= now() AS expired,\n  payload_bytes\nFROM grafana_api_cache_metadata\nWHERE (${namespace:sqlstring} = '' OR namespace = ${namespace:sqlstring})\n  AND (${cache_key_search:sqlstring} = '' OR cache_key ILIKE '%' || ${cache_key_search:sqlstring} || '%')\n  AND (\n    ${include_expired:sqlstring} = 'true'\n    OR expires_at > now()\n  )\nORDER BY created_at DESC\nLIMIT 200;",
           "refId": "A"
         }
       ],
@@ -104,7 +104,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT\n    vendor_id,\n    provider_ref->>'mapId' AS map_id,\n    provider_ref->>'resourceLocationId' AS resource_location_id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n),\nneedles AS (\n  SELECT value\n  FROM selected\n  CROSS JOIN LATERAL (\n    VALUES (vendor_id), (map_id), (resource_location_id)\n  ) AS raw(value)\n  WHERE value IS NOT NULL AND value <> ''\n)\nSELECT\n  c.namespace,\n  c.cache_key,\n  c.created_at,\n  c.expires_at,\n  now() - c.created_at AS age,\n  c.expires_at <= now() AS expired,\n  c.payload\nFROM api_cache c\nWHERE ${reservable_rid:sqlstring} <> ''\n  AND EXISTS (\n    SELECT 1\n    FROM needles\n    WHERE c.cache_key ILIKE '%' || needles.value || '%'\n  )\nORDER BY c.created_at DESC\nLIMIT 100;",
+          "rawSql": "WITH selected AS (\n  SELECT\n    vendor_id,\n    provider_ref->>'mapId' AS map_id,\n    provider_ref->>'resourceLocationId' AS resource_location_id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n),\nneedles AS (\n  SELECT value\n  FROM selected\n  CROSS JOIN LATERAL (\n    VALUES (vendor_id), (map_id), (resource_location_id)\n  ) AS raw(value)\n  WHERE value IS NOT NULL AND value <> ''\n)\nSELECT\n  c.namespace,\n  c.cache_key,\n  c.created_at,\n  c.expires_at,\n  now() - c.created_at AS age,\n  c.expires_at <= now() AS expired,\n  c.payload_bytes\nFROM grafana_api_cache_metadata c\nWHERE ${reservable_rid:sqlstring} <> ''\n  AND EXISTS (\n    SELECT 1\n    FROM needles\n    WHERE c.cache_key ILIKE '%' || needles.value || '%'\n  )\nORDER BY c.created_at DESC\nLIMIT 100;",
           "refId": "A"
         }
       ],
@@ -128,7 +128,7 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "query": "SELECT DISTINCT namespace AS __text, namespace AS __value FROM api_cache ORDER BY namespace ASC",
+        "query": "SELECT DISTINCT namespace AS __text, namespace AS __value FROM grafana_api_cache_metadata ORDER BY namespace ASC",
         "refresh": 1,
         "includeAll": true,
         "allValue": "",

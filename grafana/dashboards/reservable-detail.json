@@ -106,7 +106,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT\n    split_part(type || ':' || vendor || ':' || vendor_id, ':', 3) AS vendor_id,\n    provider_ref->>'mapId' AS map_id,\n    provider_ref->>'resourceLocationId' AS resource_location_id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n),\nneedles AS (\n  SELECT value\n  FROM selected\n  CROSS JOIN LATERAL (\n    VALUES (vendor_id), (map_id), (resource_location_id)\n  ) AS raw(value)\n  WHERE value IS NOT NULL AND value <> ''\n)\nSELECT\n  namespace,\n  cache_key,\n  created_at,\n  expires_at,\n  now() - created_at AS age,\n  expires_at - now() AS freshness_remaining,\n  expires_at <= now() AS expired\nFROM api_cache\nWHERE namespace IN ('recgov_availability', 'aspira_availability', 'aspira_occupancy')\n  AND EXISTS (\n    SELECT 1\n    FROM needles\n    WHERE api_cache.cache_key ILIKE '%' || needles.value || '%'\n  )\nORDER BY created_at DESC;",
+          "rawSql": "WITH selected AS (\n  SELECT\n    split_part(type || ':' || vendor || ':' || vendor_id, ':', 3) AS vendor_id,\n    provider_ref->>'mapId' AS map_id,\n    provider_ref->>'resourceLocationId' AS resource_location_id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n),\nneedles AS (\n  SELECT value\n  FROM selected\n  CROSS JOIN LATERAL (\n    VALUES (vendor_id), (map_id), (resource_location_id)\n  ) AS raw(value)\n  WHERE value IS NOT NULL AND value <> ''\n)\nSELECT\n  namespace,\n  cache_key,\n  created_at,\n  expires_at,\n  now() - created_at AS age,\n  expires_at - now() AS freshness_remaining,\n  expires_at <= now() AS expired,\n  payload_bytes\nFROM grafana_api_cache_metadata\nWHERE namespace IN ('recgov_availability', 'aspira_availability', 'aspira_occupancy')\n  AND EXISTS (\n    SELECT 1\n    FROM needles\n    WHERE grafana_api_cache_metadata.cache_key ILIKE '%' || needles.value || '%'\n  )\nORDER BY created_at DESC;",
           "refId": "A"
         }
       ],
@@ -141,7 +141,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.observed_at,\n  s.target_date,\n  s.status AS observed_status,\n  s.available,\n  s.run_id,\n  jr.job_id,\n  jr.status AS run_status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nWHERE s.reservable_id = (\n  SELECT id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n)\n  AND s.observed_at >= now() - (${days_back} || ' days')::interval\n  AND (${target_date:sqlstring} = '' OR s.target_date = NULLIF(${target_date:sqlstring}, '')::date)\nORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC;",
+          "rawSql": "SELECT\n  s.observed_at,\n  s.target_date,\n  s.status AS observed_status,\n  s.available,\n  s.run_id,\n  jr.job_id,\n  jr.status AS run_status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nWHERE s.reservable_id = (\n  SELECT id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n)\n  AND s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval\n  AND (${target_date:sqlstring} = '' OR s.target_date = NULLIF(${target_date:sqlstring}, '')::date)\nORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC;",
           "refId": "A"
         }
       ],
@@ -256,7 +256,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.observed_at AS time,\n  s.target_date::text AS metric,\n  CASE COALESCE(s.status::text, CASE WHEN s.available THEN 'available' ELSE 'unknown' END)\n    WHEN 'available' THEN 4\n    WHEN 'first_come' THEN 3\n    WHEN 'reserved' THEN 2\n    WHEN 'booked' THEN 2\n    WHEN 'closed' THEN 1\n    ELSE 0\n  END AS value\nFROM availability_snapshot s\nWHERE s.reservable_id = (\n  SELECT id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n)\n  AND s.observed_at >= now() - (${days_back} || ' days')::interval\n  AND (${target_date:sqlstring} = '' OR s.target_date = NULLIF(${target_date:sqlstring}, '')::date)\nORDER BY s.observed_at ASC, s.target_date ASC;",
+          "rawSql": "SELECT\n  s.observed_at AS time,\n  s.target_date::text AS metric,\n  CASE COALESCE(s.status::text, CASE WHEN s.available THEN 'available' ELSE 'unknown' END)\n    WHEN 'available' THEN 4\n    WHEN 'first_come' THEN 3\n    WHEN 'reserved' THEN 2\n    WHEN 'booked' THEN 2\n    WHEN 'closed' THEN 1\n    ELSE 0\n  END AS value\nFROM availability_snapshot s\nWHERE s.reservable_id = (\n  SELECT id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n)\n  AND s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval\n  AND (${target_date:sqlstring} = '' OR s.target_date = NULLIF(${target_date:sqlstring}, '')::date)\nORDER BY s.observed_at ASC, s.target_date ASC;",
           "refId": "A"
         }
       ],
@@ -305,7 +305,26 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "poi_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open POI Detail",
+                    "url": "/d/roadtrip-poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 8,

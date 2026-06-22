@@ -104,7 +104,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  jr.id AS run_id,\n  jr.job_id,\n  j.watch_id,\n  jr.status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at,\n  w.poi_id,\n  p.name AS poi_name,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE jr.started_at >= now() - (${days_back} || ' days')::interval\n  AND (${run_status:sqlstring} = '' OR jr.status = ${run_status:sqlstring})\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
+          "rawSql": "SELECT\n  jr.id AS run_id,\n  jr.job_id,\n  j.watch_id,\n  jr.status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at,\n  w.poi_id,\n  p.name AS poi_name,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE jr.started_at >= now() - (${days_back:sqlstring} || ' days')::interval\n  AND (${run_status:sqlstring} = '' OR jr.status = ${run_status:sqlstring})\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
           "refId": "A"
         }
       ],
@@ -139,7 +139,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  jr.id AS run_id,\n  jr.job_id,\n  jr.status AS run_status,\n  jr.snapshot_count AS recorded_snapshot_count,\n  count(s.id) AS actual_snapshot_rows,\n  min(s.target_date) AS first_target_date,\n  max(s.target_date) AS last_target_date,\n  min(s.observed_at) AS first_observed_at,\n  max(s.observed_at) AS last_observed_at\nFROM availability_job_run jr\nLEFT JOIN availability_snapshot s ON s.run_id = jr.id\nWHERE jr.started_at >= now() - (${days_back} || ' days')::interval\nGROUP BY jr.id\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
+          "rawSql": "SELECT\n  jr.id AS run_id,\n  jr.job_id,\n  jr.status AS run_status,\n  jr.snapshot_count AS recorded_snapshot_count,\n  count(s.id) AS actual_snapshot_rows,\n  min(s.target_date) AS first_target_date,\n  max(s.target_date) AS last_target_date,\n  min(s.observed_at) AS first_observed_at,\n  max(s.observed_at) AS last_observed_at\nFROM availability_job_run jr\nLEFT JOIN availability_snapshot s ON s.run_id = jr.id\nWHERE jr.started_at >= now() - (${days_back:sqlstring} || ' days')::interval\nGROUP BY jr.id\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
           "refId": "A"
         }
       ],

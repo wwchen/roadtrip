@@ -63,8 +63,18 @@ REVOKE ALL PRIVILEGES ON DATABASE :"postgres_db" FROM PUBLIC;
 GRANT CONNECT ON DATABASE :"postgres_db" TO PUBLIC;
 GRANT USAGE ON SCHEMA public TO PUBLIC;
 
+CREATE OR REPLACE VIEW grafana_api_cache_metadata AS
+SELECT
+  namespace,
+  cache_key,
+  created_at,
+  expires_at,
+  pg_column_size(payload) AS payload_bytes
+FROM api_cache;
+
 GRANT CONNECT ON DATABASE :"postgres_db" TO :"grafana_user";
 GRANT USAGE ON SCHEMA public TO :"grafana_user";
 GRANT SELECT ON ALL TABLES IN SCHEMA public TO :"grafana_user";
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT ON TABLES TO :"grafana_user";
+REVOKE SELECT ON api_cache FROM :"grafana_user";
 SQL

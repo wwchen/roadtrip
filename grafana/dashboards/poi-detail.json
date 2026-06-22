@@ -84,7 +84,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  id,\n  name,\n  category,\n  subcategory,\n  source,\n  source_id,\n  region,\n  ST_X(ST_Centroid(geom)) AS lng,\n  ST_Y(ST_Centroid(geom)) AS lat\nFROM pois\nWHERE deleted_at IS NULL\n  AND (${poi_name_search:sqlstring} = '' OR name ILIKE '%' || ${poi_name_search:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id_search:sqlstring} = '' THEN true\n    WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${poi_id_search:sqlstring}\n    ELSE false\n  END\n  AND category IN (${poi_category:sqlstring})\nORDER BY name ASC, id ASC\nLIMIT 1000;",
+          "rawSql": "SELECT\n  id,\n  name,\n  category,\n  subcategory,\n  source,\n  source_id,\n  region,\n  ST_X(ST_Centroid(geom)) AS lng,\n  ST_Y(ST_Centroid(geom)) AS lat\nFROM pois\nWHERE deleted_at IS NULL\n  AND (${poi_name_search:sqlstring} = '' OR name ILIKE '%' || ${poi_name_search:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id_search:sqlstring} = '' THEN true\n    WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${poi_id_search:sqlstring}\n    ELSE false\n  END\n  AND (${poi_category:sqlstring} = '' OR category IN (${poi_category:sqlstring}))\nORDER BY name ASC, id ASC\nLIMIT 1000;",
           "refId": "A"
         }
       ],
@@ -133,7 +133,26 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rid"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Reservable Detail",
+                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-reservable_rid=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 10,
@@ -281,7 +300,7 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "query": "WITH matches AS (SELECT id::text || ' - ' || name || ' [' || category || ']' AS __text, id::text AS __value, name, id FROM pois WHERE deleted_at IS NULL AND (${poi_name_search:sqlstring} = '' OR name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${poi_id_search:sqlstring} ELSE false END AND category IN (${poi_category:sqlstring}) ORDER BY name ASC, id ASC LIMIT 500) SELECT __text, __value FROM matches UNION ALL SELECT 'No matching POI' AS __text, '__none' AS __value WHERE NOT EXISTS (SELECT 1 FROM matches)",
+        "query": "WITH matches AS (SELECT id::text || ' - ' || name || ' [' || category || ']' AS __text, id::text AS __value, name, id FROM pois WHERE deleted_at IS NULL AND (${poi_name_search:sqlstring} = '' OR name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${poi_id_search:sqlstring} ELSE false END AND (${poi_category:sqlstring} = '' OR category IN (${poi_category:sqlstring})) ORDER BY name ASC, id ASC LIMIT 500) SELECT __text, __value FROM matches UNION ALL SELECT 'No matching POI' AS __text, '__none' AS __value WHERE NOT EXISTS (SELECT 1 FROM matches)",
         "refresh": 1
       },
       {

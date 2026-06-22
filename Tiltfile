@@ -66,7 +66,7 @@ docker_build(
 dc_resource('postgres', labels=['infra'])
 dc_resource(
     'grafana-db-setup',
-    resource_deps=['postgres'],
+    resource_deps=['backend'],
     labels=['infra'],
 )
 dc_resource(
