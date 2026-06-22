@@ -144,7 +144,9 @@ export function reinstallOverlays() {
 export function flattenHydratedPoi(f) {
   const p = f.properties || {};
   const raw = p.raw || {};
-  const flat = { id: f.id, ...raw, ...p };
+  const flat = p.category === 'campground'
+    ? { id: f.id, ...p, upstream: p.upstream || raw.upstream || null }
+    : { id: f.id, ...raw, ...p };
   delete flat.raw;
 
   // Address arrives as a nested object from /api/pois/{id} (the JSONB
@@ -162,8 +164,8 @@ export function flattenHydratedPoi(f) {
   flat.website = p.info_url || p.website || '';
   flat.infoUrl = p.info_url || '';
 
-  if (p.category === 'campground' && (p.subcategory || raw.subcategory)) {
-    flat.category = p.subcategory || raw.subcategory;
+  if (p.category === 'campground' && p.subcategory) {
+    flat.category = p.subcategory;
   }
   if (p.category === 'national-park' || p.category === 'state-park') {
     // Park layers + popups read Unit_Nm / Loc_Nm / State_Nm / GIS_Acres /

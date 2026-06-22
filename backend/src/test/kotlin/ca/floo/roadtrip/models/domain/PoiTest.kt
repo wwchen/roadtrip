@@ -20,6 +20,7 @@ class PoiTest {
                 amenities = listOf("showers", "water"),
                 activities = listOf("hiking"),
                 sites = 42,
+                description = "Camp among redwoods.",
                 photoUrl = "https://example.test/photo.jpg",
                 cellCoverage =
                     mapOf(
@@ -38,6 +39,7 @@ class PoiTest {
 
         assertEquals("hiking", activity.content)
         assertEquals(42, properties["sites"]!!.jsonPrimitive.int)
+        assertEquals("Camp among redwoods.", properties["description"]!!.jsonPrimitive.content)
         assertEquals("https://example.test/photo.jpg", properties["photo_url"]!!.jsonPrimitive.content)
         val cellCoverage = properties["cell_coverage"]!!.jsonObject
         assertEquals(3.5, cellCoverage["verizon"]!!.jsonArray[0].jsonPrimitive.double)
@@ -127,6 +129,7 @@ class PoiTest {
         amenities: List<String> = emptyList(),
         activities: List<String> = emptyList(),
         sites: Int? = null,
+        description: String? = null,
         photoUrl: String? = null,
         cellCoverage: Map<String, CellSignal>? = null,
         ratingReviews: RatingSummary? = null,
@@ -152,6 +155,7 @@ class PoiTest {
             sites = sites,
             season = null,
             near = null,
+            description = description,
             photoUrl = photoUrl,
             cellCoverage = cellCoverage,
             ratingReviews = ratingReviews,

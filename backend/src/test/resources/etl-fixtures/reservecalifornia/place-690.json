@@ -18,6 +18,9 @@
       "Name": "Pfeiffer Big Sur SP",
       "Latitude": 36.25305556,
       "Longitude": -121.7811111,
+      "ImageUrl": "https://cali-content.usedirect.com/Images/California/ParkImages/Place/690.jpg",
+      "Description": "Camp along the Big Sur River under redwoods.",
+      "Allhighlights": "Hiking<br>Restrooms<br>Showers",
       "Facilities": {
         "612": {
           "FacilityId": 612,

@@ -31,6 +31,9 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import org.jooq.DSLContext
 
 // Hard cap. The Mapbox/MapLibre frontend chokes on >5k features per source,
@@ -349,6 +352,8 @@ internal fun poiDetailFeature(
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availabilitySupported: Boolean = providerRefShapeSupportsAvailability(r),
 ): PoiDetailFeatureSchema {
+    val raw = Json.parseToJsonElement(r.propertiesJson)
+    val rawObject = raw as? JsonObject ?: JsonObject(emptyMap())
     val dateContext =
         if (r.category == "campground") {
             dateResolver.context(lat = r.lat, lng = r.lng)
@@ -374,14 +379,22 @@ internal fun poiDetailFeature(
                 phone = r.phone,
                 infoUrl = r.infoUrl,
                 address = r.addressJson?.let { Json.parseToJsonElement(it) },
+                description = rawObject.stringProperty("description"),
+                photoUrl = rawObject.stringProperty("photo_url"),
                 providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
                 availabilitySupported = availabilitySupported.takeIf { it },
                 cta = PoiCta.Default.computeCta(r),
                 bookingSystem = PoiCta.Default.bookingSystem(r),
-                raw = Json.parseToJsonElement(r.propertiesJson),
+                raw = raw,
             ),
     )
 }
+
+private fun JsonObject.stringProperty(key: String): String? =
+    (this[key] as? JsonPrimitive)
+        ?.contentOrNull
+        ?.trim()
+        ?.takeIf { it.isNotEmpty() }
 
 private fun providerRefShapeSupportsAvailability(r: PoiDetailRow): Boolean =
     r.category == "campground" &&

@@ -61,6 +61,8 @@ data class PoiDetailPropertiesSchema(
     val phone: String? = null,
     @SerialName("info_url") val infoUrl: String? = null,
     val address: JsonElement? = null,
+    val description: String? = null,
+    @SerialName("photo_url") val photoUrl: String? = null,
     @SerialName("provider_ref") val providerRef: JsonElement? = null,
     // Backend-owned capability flag. The FE should not know individual
     // provider_ref shapes just to decide whether to mount availability UI.

@@ -47,6 +47,7 @@ class EtlExtrasDtoTest {
                                     lat = 49.083,
                                     lon = -111.617,
                                     phone = null,
+                                    description = "Hoodoo country camping.",
                                     photoUrl = "https://example.test/photo.jpg",
                                     infoUrl = "https://example.test/park",
                                 ),
@@ -61,6 +62,7 @@ class EtlExtrasDtoTest {
         assertEquals("Writing-on-Stone Provincial Park", extras["name"]!!.jsonPrimitive.content)
         assertEquals(49.083, extras["latitude"]!!.jsonPrimitive.double)
         assertEquals(-111.617, extras["longitude"]!!.jsonPrimitive.double)
+        assertEquals("Hoodoo country camping.", extras["description"]!!.jsonPrimitive.content)
         assertEquals("https://example.test/photo.jpg", extras["photo_url"]!!.jsonPrimitive.content)
         assertEquals("https://example.test/park", extras["info_url"]!!.jsonPrimitive.content)
         assertNull(extras["phone"])

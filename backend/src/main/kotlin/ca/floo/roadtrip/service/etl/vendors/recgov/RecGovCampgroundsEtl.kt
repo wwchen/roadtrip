@@ -163,6 +163,7 @@ class RecGovCampgroundsEtl(
             sites = null,
             season = null,
             near = null,
+            description = description(rawObj),
             photoUrl = photoUrl(rawObj),
             cellCoverage = cellCoverage(enrichment),
             ratingReviews = ratingSummary(enrichment),
@@ -210,6 +211,14 @@ class RecGovCampgroundsEtl(
             .split(Regex("\\s+"))
             .filter { it.isNotBlank() }
             .joinToString(" ") { word -> word.replaceFirstChar { it.uppercase() } }
+
+    private fun description(raw: JsonObject?): String? =
+        raw
+            ?.get("FacilityDescription")
+            ?.jsonPrimitive
+            ?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotBlank() }
 
     private fun photoUrl(raw: JsonObject?): String? {
         val media =

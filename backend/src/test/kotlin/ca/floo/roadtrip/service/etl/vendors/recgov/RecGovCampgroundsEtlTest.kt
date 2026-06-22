@@ -46,12 +46,13 @@ class RecGovCampgroundsEtlTest {
     }
 
     @Test
-    fun `transform promotes RIDB media activities and recgov rating cell enrichment`() {
+    fun `transform promotes RIDB description media activities and recgov rating cell enrichment`() {
         val etl = RecGovCampgroundsEtl("federal-campgrounds")
         val pois = etl.transform(etl.parse(bundle(withEnrichment = true)), transformCtx).associateBy { it.sourceId }
 
         val upperPines = pois.getValue("recgov-232447")
 
+        assertEquals("<p>Upper Pines is a Yosemite campground.</p>", upperPines.description)
         assertEquals("https://cdn.example/primary.webp", upperPines.photoUrl)
         assertEquals(listOf("Camping", "Hiking"), upperPines.activities)
 
@@ -95,6 +96,7 @@ class RecGovCampgroundsEtlTest {
                           "FacilityLatitude": 37.739,
                           "FacilityLongitude": -119.565,
                           "FacilityReservationURL": "https://www.recreation.gov/camping/campgrounds/232447",
+                          "FacilityDescription": "<p>Upper Pines is a Yosemite campground.</p>",
                           "Reservable": true,
                           "ACTIVITY": [
                             {"ActivityName": "CAMPING"},
