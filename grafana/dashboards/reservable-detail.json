@@ -1,0 +1,312 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  r.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,\n  r.source,\n  r.name,\n  r.loop,\n  r.site_type,\n  r.created_at,\n  r.updated_at,\n  r.last_seen_run_id,\n  r.deleted_at,\n  now() - r.updated_at AS catalog_age\nFROM reservables r\nWHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring};",
+          "refId": "A"
+        }
+      ],
+      "title": "Reservable Header",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n),\nlatest_snapshot AS (\n  SELECT max(observed_at) AS latest_observed_at\n  FROM availability_snapshot\n  WHERE reservable_id = (SELECT id FROM selected)\n)\nSELECT\n  r.updated_at AS catalog_updated_at,\n  now() - r.updated_at AS catalog_age,\n  latest_snapshot.latest_observed_at,\n  now() - latest_snapshot.latest_observed_at AS availability_observation_age,\n  r.last_seen_run_id\nFROM reservables r\nCROSS JOIN latest_snapshot\nWHERE r.id = (SELECT id FROM selected);",
+          "refId": "A"
+        }
+      ],
+      "title": "Data Freshness",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT\n    split_part(type || ':' || vendor || ':' || vendor_id, ':', 3) AS vendor_id,\n    provider_ref->>'mapId' AS map_id,\n    provider_ref->>'resourceLocationId' AS resource_location_id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n),\nneedles AS (\n  SELECT value\n  FROM selected\n  CROSS JOIN LATERAL (\n    VALUES (vendor_id), (map_id), (resource_location_id)\n  ) AS raw(value)\n  WHERE value IS NOT NULL AND value <> ''\n)\nSELECT\n  namespace,\n  cache_key,\n  created_at,\n  expires_at,\n  now() - created_at AS age,\n  expires_at - now() AS freshness_remaining,\n  expires_at <= now() AS expired\nFROM api_cache\nWHERE namespace IN ('recgov_availability', 'aspira_availability', 'aspira_occupancy')\n  AND EXISTS (\n    SELECT 1\n    FROM needles\n    WHERE api_cache.cache_key ILIKE '%' || needles.value || '%'\n  )\nORDER BY created_at DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Cache Freshness",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  s.observed_at,\n  s.target_date,\n  s.status AS observed_status,\n  s.available,\n  s.run_id,\n  jr.job_id,\n  jr.status AS run_status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nWHERE s.reservable_id = (\n  SELECT id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n)\n  AND s.observed_at >= now() - (${days_back} || ' days')::interval\n  AND (${target_date:sqlstring} = '' OR s.target_date = NULLIF(${target_date:sqlstring}, '')::date)\nORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Availability Fetch Audit",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "id": 5,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  s.observed_at AS time,\n  s.target_date::text AS metric,\n  CASE WHEN s.available THEN 1 ELSE 0 END AS value\nFROM availability_snapshot s\nWHERE s.reservable_id = (\n  SELECT id\n  FROM reservables\n  WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}\n)\n  AND s.observed_at >= now() - (${days_back} || ' days')::interval\nORDER BY s.observed_at ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Status Timeline",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 6,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  provider_ref,\n  tags,\n  raw\nFROM reservables\nWHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring};",
+          "refId": "A"
+        }
+      ],
+      "title": "Raw Reservable Data",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 51
+      },
+      "id": 7,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.subcategory,\n  p.source,\n  p.source_id,\n  p.region,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat\nFROM reservable_pois rp\nJOIN reservables r ON r.id = rp.reservable_id\nJOIN pois p ON p.id = rp.poi_id\nWHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\n  AND p.deleted_at IS NULL\nORDER BY p.name ASC, p.id ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Linked POIs",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "roadtrip",
+    "reservable"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "reservable_rid",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
+        "refresh": 1
+      },
+      {
+        "name": "days_back",
+        "type": "custom",
+        "query": "7,14,30,90",
+        "current": {
+          "text": "14",
+          "value": "14"
+        }
+      },
+      {
+        "name": "target_date",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Roadtrip / Reservable Detail",
+  "uid": "roadtrip-reservable-detail",
+  "version": 1
+}

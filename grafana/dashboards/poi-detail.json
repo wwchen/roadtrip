@@ -1,0 +1,198 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  id,\n  source,\n  source_id,\n  category,\n  subcategory,\n  name,\n  region,\n  unit_name,\n  reserve_url,\n  phone,\n  info_url,\n  fetched_at,\n  updated_at,\n  provider_ref,\n  properties AS raw_properties,\n  ST_AsGeoJSON(geom)::jsonb AS geometry\nFROM pois\nWHERE id = ${poi_id};",
+          "refId": "A"
+        }
+      ],
+      "title": "POI Header",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  r.id AS reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,\n  r.type,\n  r.vendor,\n  r.vendor_id,\n  r.name,\n  r.loop,\n  r.site_type,\n  r.source,\n  r.updated_at,\n  r.deleted_at,\n  max(s.observed_at) AS latest_availability_observed_at,\n  count(s.id) FILTER (WHERE s.observed_at >= now() - interval '7 days') AS snapshots_last_7d,\n  bool_or(s.available) FILTER (WHERE s.observed_at >= now() - interval '7 days') AS any_available_last_7d\nFROM reservable_pois rp\nJOIN reservables r ON r.id = rp.reservable_id\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE rp.poi_id = ${poi_id}\n  AND (${rid_type:sqlstring} = '' OR r.type = ${rid_type:sqlstring})\n  AND (\n    ${include_deleted_reservables:sqlstring} = 'true'\n    OR r.deleted_at IS NULL\n  )\nGROUP BY r.id\nORDER BY r.loop NULLS LAST, r.name NULLS LAST, rid ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "All Linked RIDs",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH linked AS (\n  SELECT r.id\n  FROM reservable_pois rp\n  JOIN reservables r ON r.id = rp.reservable_id\n  WHERE rp.poi_id = ${poi_id}\n    AND r.deleted_at IS NULL\n),\nlatest AS (\n  SELECT\n    reservable_id,\n    max(observed_at) AS latest_observed_at\n  FROM availability_snapshot\n  WHERE reservable_id IN (SELECT id FROM linked)\n  GROUP BY reservable_id\n)\nSELECT\n  count(*) AS linked_reservables,\n  count(latest.reservable_id) AS reservables_with_observations,\n  max(latest.latest_observed_at) AS newest_observation,\n  now() - max(latest.latest_observed_at) AS newest_observation_age\nFROM linked\nLEFT JOIN latest ON latest.reservable_id = linked.id;",
+          "refId": "A"
+        }
+      ],
+      "title": "POI Availability Coverage",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.0.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  provider_ref,\n  properties\nFROM pois\nWHERE id = ${poi_id};",
+          "refId": "A"
+        }
+      ],
+      "title": "POI Raw Data",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "roadtrip",
+    "poi"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "poi_id",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT id::text || ' - ' || name AS __text, id AS __value FROM pois WHERE deleted_at IS NULL ORDER BY name ASC LIMIT 500",
+        "refresh": 1
+      },
+      {
+        "name": "rid_type",
+        "type": "custom",
+        "query": ",site",
+        "current": {
+          "text": "site",
+          "value": "site"
+        }
+      },
+      {
+        "name": "include_deleted_reservables",
+        "type": "custom",
+        "query": "false,true",
+        "current": {
+          "text": "false",
+          "value": "false"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Roadtrip / POI Detail",
+  "uid": "roadtrip-poi-detail",
+  "version": 1
+}
