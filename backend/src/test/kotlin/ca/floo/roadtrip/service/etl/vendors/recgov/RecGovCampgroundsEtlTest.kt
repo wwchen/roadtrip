@@ -14,6 +14,7 @@ import org.junit.jupiter.api.TestInstance
 import java.io.File
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -44,9 +45,35 @@ class RecGovCampgroundsEtlTest {
         assertEquals("https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276", nonReservable.infoUrl)
     }
 
-    private fun bundle(): InputBundle =
+    @Test
+    fun `transform promotes RIDB media activities and recgov rating cell enrichment`() {
+        val etl = RecGovCampgroundsEtl("federal-campgrounds")
+        val pois = etl.transform(etl.parse(bundle(withEnrichment = true)), transformCtx).associateBy { it.sourceId }
+
+        val upperPines = pois.getValue("recgov-232447")
+
+        assertEquals("https://cdn.example/primary.webp", upperPines.photoUrl)
+        assertEquals(listOf("Camping", "Hiking"), upperPines.activities)
+
+        val rating = assertNotNull(upperPines.ratingReviews)
+        assertEquals(4.25f, rating.avg)
+        assertEquals(8, rating.count)
+
+        val cell = assertNotNull(upperPines.cellCoverage)
+        assertEquals(3.5f, cell.getValue("verizon").avg)
+        assertEquals(4, cell.getValue("verizon").count)
+        assertEquals(1.25f, cell.getValue("att").avg)
+        assertEquals(2, cell.getValue("att").count)
+    }
+
+    private fun bundle(withEnrichment: Boolean = false): InputBundle =
         InputBundle(
-            rawCaptures = linkedMapOf("recgov-campgrounds" to listOf(envelope())),
+            rawCaptures =
+                linkedMapOf("recgov-campgrounds" to listOf(envelope())).apply {
+                    if (withEnrichment) {
+                        put("recgov-campground-enrichment", listOf(enrichmentEnvelope()))
+                    }
+                },
             etlOutputs = linkedMapOf(),
         )
 
@@ -69,6 +96,22 @@ class RecGovCampgroundsEtlTest {
                           "FacilityLongitude": -119.565,
                           "FacilityReservationURL": "https://www.recreation.gov/camping/campgrounds/232447",
                           "Reservable": true,
+                          "ACTIVITY": [
+                            {"ActivityName": "CAMPING"},
+                            {"ActivityName": "HIKING"}
+                          ],
+                          "MEDIA": [
+                            {
+                              "URL": "https://cdn.example/preview.webp",
+                              "IsPreview": true,
+                              "IsPrimary": false
+                            },
+                            {
+                              "URL": "https://cdn.example/primary.webp",
+                              "IsPreview": false,
+                              "IsPrimary": true
+                            }
+                          ],
                           "ORGANIZATION": [{"OrgAbbrevName": "NPS"}],
                           "FACILITYADDRESS": [
                             {
@@ -101,6 +144,48 @@ class RecGovCampgroundsEtlTest {
                           ]
                         }
                       ]
+                    }
+                    """.trimIndent(),
+                ),
+        )
+
+    private fun enrichmentEnvelope(): Envelope =
+        Envelope(
+            fetcher = "fetch_recgov_campground_enrichment",
+            fetcherVersion = "1",
+            fetchedAt = "2026-06-17T00:05:00Z",
+            request =
+                RequestMeta(
+                    url = "https://www.recreation.gov/api/ratingreview/aggregate?location_id=232447&location_type=Campground",
+                    method = "GET",
+                ),
+            response = ResponseMeta(status = 200),
+            payload =
+                Json.parseToJsonElement(
+                    """
+                    {
+                      "facility_id": "232447",
+                      "aggregate": {
+                        "average_rating": 4.25,
+                        "number_of_ratings": 8,
+                        "aggregate_cell_coverage_ratings": [
+                          {
+                            "carrier": "Verizon",
+                            "average_rating": 3.5,
+                            "number_of_ratings": 4
+                          },
+                          {
+                            "carrier": "AT&T",
+                            "average_rating": 1.25,
+                            "number_of_ratings": 2
+                          },
+                          {
+                            "carrier": "T-Mobile",
+                            "average_rating": null,
+                            "number_of_ratings": 0
+                          }
+                        ]
+                      }
                     }
                     """.trimIndent(),
                 ),

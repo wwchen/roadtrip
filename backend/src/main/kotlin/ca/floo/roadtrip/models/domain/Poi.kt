@@ -6,6 +6,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonObject
 import java.time.Instant
@@ -233,6 +235,20 @@ private fun perTypeProperties(poi: Poi): JsonObject =
                         season = poi.season,
                         near = poi.near,
                         photoUrl = poi.photoUrl,
+                        cellCoverage =
+                            poi.cellCoverage?.mapValues { (_, signal) ->
+                                buildJsonArray {
+                                    add(signal.avg.toDouble())
+                                    add(signal.count)
+                                }
+                            },
+                        ratingReviews =
+                            poi.ratingReviews?.let { rating ->
+                                buildJsonArray {
+                                    add(rating.avg.toDouble())
+                                    add(rating.count)
+                                }
+                            },
                         subcategory = poi.subcategory,
                         agency = poi.agency,
                         upstream = poi.extras,
@@ -277,6 +293,8 @@ private data class CampgroundPropertiesDto(
     val season: String? = null,
     val near: String? = null,
     @SerialName("photo_url") val photoUrl: String? = null,
+    @SerialName("cell_coverage") val cellCoverage: Map<String, JsonElement>? = null,
+    @SerialName("rating_reviews") val ratingReviews: JsonElement? = null,
     // FE reads `properties.subcategory` for legend toggles and circle color.
     val subcategory: String? = null,
     val agency: String? = null,

@@ -84,7 +84,7 @@ class IngestController(
     /** Fan-out targets for [kind]. Import order is significant: joiners run after data rows. */
     fun fanOutTargets(kind: RunKind): List<String> =
         when (kind) {
-            RunKind.FETCH -> fetchTargets.keys.sorted()
+            RunKind.FETCH -> fetchTargets.keys.toList()
             RunKind.IMPORT -> importTargets.keys.toList()
         }
 

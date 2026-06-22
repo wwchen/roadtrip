@@ -27,7 +27,7 @@ fun fetchTargetsFromRegistry(
     repoRoot: File,
 ): Map<String, Target> {
     val out = mutableMapOf<String, Target>()
-    for (src in registry.dataSources) {
+    for (src in orderedDataSources(registry.dataSources)) {
         out[src.slug] =
             Target(
                 name = src.slug,
@@ -35,6 +35,28 @@ fun fetchTargetsFromRegistry(
                 importPhases = emptyList(),
             )
     }
+    return out
+}
+
+private fun orderedDataSources(sources: List<DataSourceEntry>): List<DataSourceEntry> {
+    val bySlug = sources.associateBy { it.slug }
+    val visited = mutableSetOf<String>()
+    val visiting = mutableSetOf<String>()
+    val out = mutableListOf<DataSourceEntry>()
+
+    fun visit(src: DataSourceEntry) {
+        if (src.slug in visited) return
+        require(src.slug !in visiting) { "depends_on cycle on ${src.slug}" }
+        visiting += src.slug
+        for (dep in src.dependsOn) {
+            bySlug[dep]?.let { visit(it) }
+        }
+        visiting -= src.slug
+        visited += src.slug
+        out += src
+    }
+
+    for (src in sources) visit(src)
     return out
 }
 
@@ -140,5 +162,5 @@ private fun fetchPhaseFor(
     val cliArgs = src.fetcher.args.flatMap { (k, v) -> listOf("--$k", v) }
     val cmd = listOf(src.fetcher.executor, script) + cliArgs
     val label = "${src.fetcher.filename.substringAfterLast('/')} ${src.slug}"
-    return Phase.Fetch(label, cmd)
+    return Phase.Fetch(label, cmd, timeoutSec = src.fetcher.timeoutSec)
 }
