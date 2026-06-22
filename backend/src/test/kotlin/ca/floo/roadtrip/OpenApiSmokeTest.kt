@@ -37,6 +37,7 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
+import io.ktor.server.routing.get as ktorGet
 
 // Smoke for /api/docs (issue #47).
 //
@@ -54,7 +55,9 @@ class OpenApiSmokeTest {
     fun `swagger UI serves at api docs`() =
         testApplication {
             application {
-                install(SwaggerUI)
+                install(SwaggerUI) {
+                    pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
+                }
                 routing {
                     route("/api/docs") { swaggerUI("/api/docs/openapi.json") }
                     route("/api/docs/openapi.json") { openApiSpec() }
@@ -63,7 +66,6 @@ class OpenApiSmokeTest {
             val resp = client.get("/api/docs")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = resp.bodyAsText()
-            // Swagger UI's loader page references swagger-initializer.js.
             assertTrue(
                 body.contains("swagger-ui", ignoreCase = true) ||
                     body.contains("swagger-initializer", ignoreCase = true),
@@ -75,11 +77,15 @@ class OpenApiSmokeTest {
     fun `openapi spec lists representative real routes with summaries and tags`() =
         testApplication {
             application {
-                install(SwaggerUI)
+                install(SwaggerUI) {
+                    pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
+                }
                 val ctx = DSL.using(SQLDialect.POSTGRES)
                 val registry = PoiRegistry.load(File("../config/poi-registry.yaml"))
                 routing {
                     route("/api/docs/openapi.json") { openApiSpec() }
+                    ktorGet("/") { call.respondText("root") }
+                    ktorGet("/web/{path...}") { call.respondText("static") }
                     healthRoutes()
                     poiRoutes(ctx, registry)
                     poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), registry)
@@ -127,13 +133,10 @@ class OpenApiSmokeTest {
                 onRoutePost["summary"]!!.jsonPrimitive.content,
             )
 
-            val bulkPost =
-                paths["/api/availability/bulk"]!!.jsonObject["post"]!!.jsonObject
-            assertEquals(
-                "Bulk per-day availability for many campgrounds in a date window (poi-id keyed)",
-                bulkPost["summary"]!!.jsonPrimitive.content,
-            )
-
+            assertFalse(paths.containsKey("/api/availability/bulk"))
+            assertFalse(paths.containsKey("/api/docs"))
+            assertFalse(paths.containsKey("/"))
+            assertFalse(paths.keys.any { it.startsWith("/web") })
             assertFalse(paths.containsKey("/api/campsite/events"))
             assertFalse(paths.containsKey("/api/campsite/availability/{poi_id}"))
             assertFalse(paths.containsKey("/api/admin/campsite/debug/synth-match"))
@@ -143,7 +146,9 @@ class OpenApiSmokeTest {
     fun `response examples land in the openapi spec`() =
         testApplication {
             application {
-                install(SwaggerUI)
+                install(SwaggerUI) {
+                    pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
+                }
                 routing {
                     route("/api/docs/openapi.json") { openApiSpec() }
                     get("/api/example", {

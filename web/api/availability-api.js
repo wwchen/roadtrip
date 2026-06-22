@@ -1,5 +1,3 @@
-import { jsonPostOk } from './http.js';
-
 /**
  * Fetch per-reservable availability for a POI's reservables. The BE returns one
  * envelope per linked reservable; the FE fuses them into per-day classifications
@@ -25,8 +23,4 @@ export function requestPoiReservablesAvailability(id, { startDate, endDate, site
   if (force) params.set('force', '1');
   const qs = params.toString();
   return fetch(`/api/poi/${encodeURIComponent(id)}/reservables/availability${qs ? `?${qs}` : ''}`, { signal });
-}
-
-export async function fetchBulkAvailability({ ids, startDate, endDate, signal }) {
-  return jsonPostOk('/api/availability/bulk', { ids, start_date: startDate, end_date: endDate }, { signal });
 }

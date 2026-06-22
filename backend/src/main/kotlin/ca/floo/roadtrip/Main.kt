@@ -80,6 +80,8 @@ fun main() {
     embeddedServer(Netty, port = port, host = "0.0.0.0", module = Application::module).start(wait = true)
 }
 
+internal fun includeInRoadtripOpenApi(path: List<String>): Boolean = path.firstOrNull() == "api" && path.getOrNull(1) != "docs"
+
 fun Application.module() {
     val appConfig = AppConfig.fromEnv()
     val ds = dataSourceFor(DbConfig.fromEnv())
@@ -149,6 +151,7 @@ fun Application.module() {
     // { summary = ... }` blocks. /api/docs serves Swagger UI; /api/docs/openapi.json
     // serves the spec. Both are public — non-sensitive paths + summaries.
     install(SwaggerUI) {
+        pathFilter = { _, path -> includeInRoadtripOpenApi(path) }
         info {
             title = "roadtrip API"
             description = "Backend for roadtrip.floo.ca. Endpoints reflect the live routing tree."

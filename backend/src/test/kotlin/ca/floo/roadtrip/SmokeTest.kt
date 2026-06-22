@@ -1042,7 +1042,7 @@ class SmokeTest {
             assertThat(page.locator("#tb-actions #tb-route-summary")).containsText("230 km")
             assertThat(page.locator("#tb-actions #tb-route-summary")).containsText("2h 30m")
             assertThat(page.locator("#tb-results .tb-results-body #tb-corridor")).isVisible()
-            assertThat(page.locator("#tb-results .tb-results-body #tb-trip-dates")).isVisible()
+            assertThat(page.locator("#tb-results .tb-results-body #tb-trip-dates")).hasCount(0)
             page.locator("#tb-results .tb-results-head").click()
             assertThat(page.locator("#tb-results .tb-results-body")).isHidden()
             assertTrue(page.url().contains("route="), "shared route should be represented by the visible URL")

@@ -24,11 +24,8 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.get
 import io.ktor.client.request.post
-import io.ktor.client.request.setBody
 import io.ktor.client.statement.bodyAsText
-import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
-import io.ktor.http.contentType
 import io.ktor.server.routing.routing
 import io.ktor.server.testing.testApplication
 import kotlinx.serialization.json.Json
@@ -823,16 +820,8 @@ class ReservableRoutesTest {
         }
 
     @Test
-    fun `bulk availability accepts start and end date window`() =
+    fun `bulk availability endpoint is not registered`() =
         testApplication {
-            val poiId =
-                seedPoi(
-                    sourceId = "bulk-window",
-                    name = "Bulk Window Campground",
-                    providerRefJson = """{"recgov_id":"232447"}""",
-                )
-            val reservableId = seedReservable(vendorId = "330257", name = "A12")
-            link(reservableId, poiId)
             application {
                 routing {
                     availabilityRoutes(
@@ -844,66 +833,8 @@ class ReservableRoutesTest {
                 }
             }
 
-            val resp =
-                client.post("/api/availability/bulk") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"ids":[$poiId],"start_date":"2026-07-01","end_date":"2026-07-04"}""")
-                }
-            assertEquals(HttpStatusCode.OK, resp.status)
-            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-04", body["end_date"]!!.jsonPrimitive.content)
-            val result = body["results"]!!.jsonArray.single().jsonObject
-            assertEquals(
-                listOf("2026-07-01", "2026-07-02", "2026-07-03"),
-                result["available_dates"]!!
-                    .jsonArray
-                    .map { it.jsonPrimitive.content },
-            )
-            assertEquals(3L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
-            assertEquals(1, FakeReservationProvider.catalogAvailabilityCalls)
-            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
-        }
-
-    @Test
-    fun `bulk availability returns empty success for existing poi with no reservables`() =
-        testApplication {
-            val poiId =
-                seedPoi(
-                    sourceId = "bulk-walkup",
-                    name = "Bulk Walkup Campground",
-                    providerRefJson = null,
-                )
-            application {
-                routing {
-                    availabilityRoutes(
-                        CampsiteProviderRepo(ctx),
-                        fakeReservationProviders(),
-                        ReservableRepo(ctx),
-                        AvailabilitySnapshotRepo(ctx),
-                    )
-                }
-            }
-
-            val resp =
-                client.post("/api/availability/bulk") {
-                    contentType(ContentType.Application.Json)
-                    setBody("""{"ids":[$poiId,999999],"start_date":"2026-07-01","end_date":"2026-07-04"}""")
-                }
-
-            assertEquals(HttpStatusCode.OK, resp.status)
-            val results =
-                Json
-                    .parseToJsonElement(resp.bodyAsText())
-                    .jsonObject["results"]!!
-                    .jsonArray
-                    .map { it.jsonObject }
-            val existingPoiResult = results.first { it["id"]!!.jsonPrimitive.content.toLong() == poiId }
-            val unknownPoiResult = results.first { it["id"]!!.jsonPrimitive.content.toLong() == 999999L }
-            assertEquals(200, existingPoiResult["status"]!!.jsonPrimitive.content.toInt())
-            assertEquals(404, unknownPoiResult["status"]!!.jsonPrimitive.content.toInt())
-            assertEquals(0, FakeReservationProvider.catalogAvailabilityCalls)
-            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
+            val resp = client.post("/api/availability/bulk")
+            assertEquals(HttpStatusCode.NotFound, resp.status)
         }
 
     @Test
