@@ -4,6 +4,10 @@ FROM eclipse-temurin:21-jre AS backend
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-yaml curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
 
 COPY backend/build/libs/roadtrip-backend-*-all.jar /app/app.jar

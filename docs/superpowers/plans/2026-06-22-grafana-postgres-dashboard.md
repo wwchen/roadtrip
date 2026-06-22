@@ -62,6 +62,10 @@ FROM eclipse-temurin:21-jre AS backend
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-yaml curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
 
 COPY backend/build/libs/roadtrip-backend-*-all.jar /app/app.jar
@@ -159,7 +163,7 @@ with:
     image: roadtrip/backend
 ```
 
-Keep the existing `restart`, `hostname`, `environment`, `volumes`, and `depends_on` fields.
+Keep the existing `restart` and `hostname` fields. Ensure `environment`, `volumes`, `healthcheck`, and `depends_on` match the backend container contract below.
 
 - [ ] **Step 2: Add Grafana DB role setup service**
 
@@ -219,6 +223,10 @@ In `docker-compose.yml`, change optional env lines so Compose config does not wa
 
 ```yaml
       - MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
+      - RIDB_API_KEY=${RIDB_API_KEY:-}
+      - COOKIE_BOT_URL=${COOKIE_BOT_URL:-}
+      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
+      - TESLA_COOKIES=${TESLA_COOKIES:-}
 ```
 
 If `COOKIE_BOT_TOKEN` or `CLOUDFLARE_TUNNEL_TOKEN` emit config warnings during verification, default them the same way:
@@ -231,7 +239,31 @@ If `COOKIE_BOT_TOKEN` or `CLOUDFLARE_TUNNEL_TOKEN` emit config warnings during v
     command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
 ```
 
-- [ ] **Step 5: Expose local backend and Grafana ports**
+- [ ] **Step 5: Mount backend fetch inputs and writable data**
+
+In `docker-compose.yml`, ensure backend can run admin fetch subprocesses inside the container:
+
+```yaml
+      - ./scripts:/app/static/scripts:ro
+      - ./data:/app/static/data
+```
+
+Replace any read-only `./data:/app/static/data:ro` mount with the writable mount above.
+
+- [ ] **Step 6: Add backend healthcheck**
+
+In `docker-compose.yml`, add the backend healthcheck before `depends_on`:
+
+```yaml
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${PORT:-8765}/api/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+```
+
+- [ ] **Step 7: Expose local backend and Grafana ports**
 
 Update `docker-compose.local.yml` comments so they no longer claim the backend only runs on the host. Add local ports:
 
@@ -250,7 +282,7 @@ services:
       - "127.0.0.1:3000:3000"
 ```
 
-- [ ] **Step 6: Update Makefile deploy build**
+- [ ] **Step 8: Update Makefile deploy build**
 
 Add the image variable near the other variables:
 
@@ -270,7 +302,7 @@ to:
 ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && ./gradlew :backend:shadowJar && docker build -t $(BACKEND_IMAGE) --target backend . && docker compose --profile tunnel --profile pois up -d'
 ```
 
-- [ ] **Step 7: Update GitHub deploy workflow**
+- [ ] **Step 9: Update GitHub deploy workflow**
 
 In `.github/workflows/deploy.yml`, add these path triggers:
 
@@ -292,7 +324,7 @@ to:
 "cd $DEPLOY_DIR && git pull --ff-only && ./gradlew :backend:shadowJar && docker build -t roadtrip/backend --target backend . && docker compose --profile tunnel --profile pois up -d"
 ```
 
-- [ ] **Step 8: Update README local-dev wording**
+- [ ] **Step 10: Update README local-dev wording**
 
 In `README.md`, replace the paragraph that says Tilt runs only Postgres in Docker and backend on the host with:
 
@@ -308,7 +340,7 @@ Tilt UI is at <http://localhost:10350>.
 Docker and runs the Kotlin/Ktor backend on the host with Gradle.
 ```
 
-- [ ] **Step 9: Verify Compose config**
+- [ ] **Step 11: Verify Compose config**
 
 Run:
 
@@ -323,7 +355,7 @@ Expected: command exits 0. Inspect `/tmp/roadtrip-compose.yml` and confirm:
 - `grafana.image` is `grafana/grafana:13.0.0`
 - local ports include `127.0.0.1:8765:8765` and `127.0.0.1:3000:3000`
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 12: Commit**
 
 Run:
 

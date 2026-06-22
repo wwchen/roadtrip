@@ -89,6 +89,10 @@ services:
       # endpoints return 503 when unset, so the trip planner just doesn't
       # work, instead of leaking the token by accident.
       - MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
+      - RIDB_API_KEY=${RIDB_API_KEY:-}
+      - COOKIE_BOT_URL=${COOKIE_BOT_URL:-}
+      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
+      - TESLA_COOKIES=${TESLA_COOKIES:-}
     volumes:
       - ./index.html:/app/static/index.html:ro
       - ./pois.html:/app/static/pois.html:ro
@@ -97,10 +101,17 @@ services:
       - ./watch-detail.html:/app/static/watch-detail.html:ro
       - ./availability.html:/app/static/availability.html:ro
       - ./web:/app/static/web:ro
-      - ./data:/app/static/data:ro
+      - ./scripts:/app/static/scripts:ro
+      - ./data:/app/static/data
       # PoiRegistry.load reads /app/static/config/poi-registry.yaml at boot;
       # backend hard-flaps without it.
       - ./config:/app/static/config:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${PORT:-8765}/api/health >/dev/null"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy

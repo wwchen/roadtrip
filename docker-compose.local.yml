@@ -1,7 +1,6 @@
 # Pin the compose project name so container names don't drift with the
-# parent directory. `roadtrip-postgres-1` regardless of whether the repo is
-# checked out as roadtrip/, roadtrip-map/, or a worktree. The Tiltfile's
-# readiness probe uses the literal container name.
+# parent directory, regardless of whether the repo is checked out as
+# roadtrip/, roadtrip-map/, or a worktree.
 name: roadtrip
 
 services:

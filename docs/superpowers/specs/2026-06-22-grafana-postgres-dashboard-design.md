@@ -79,6 +79,10 @@ FROM eclipse-temurin:21-jre AS backend
 
 WORKDIR /app
 
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-yaml curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
 ENV JAVA_OPTS="-XX:MaxRAMPercentage=75 -XX:+UseG1GC"
 
 COPY backend/build/libs/roadtrip-backend-*-all.jar /app/app.jar
@@ -97,6 +101,21 @@ Update the backend service to reference the image but not build it directly:
 ```yaml
 backend:
   image: roadtrip/backend
+  environment:
+    - MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
+    - RIDB_API_KEY=${RIDB_API_KEY:-}
+    - COOKIE_BOT_URL=${COOKIE_BOT_URL:-}
+    - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
+    - TESLA_COOKIES=${TESLA_COOKIES:-}
+  volumes:
+    - ./scripts:/app/static/scripts:ro
+    - ./data:/app/static/data
+  healthcheck:
+    test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:$${PORT:-8765}/api/health >/dev/null"]
+    interval: 5s
+    timeout: 3s
+    retries: 20
+    start_period: 10s
 ```
 
 This avoids split ownership in Tilt. Tilt's Docker Compose integration expects an image used by a Compose service to be built either by the Compose `build:` key or by Tilt's `docker_build()`, not both. Normal `make deploy` and GitHub deploy should build `roadtrip/backend` explicitly before `docker compose up`.
