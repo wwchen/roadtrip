@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.reservation
 
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import java.time.LocalDate
 
 /**

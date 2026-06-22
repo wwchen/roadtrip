@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.api
 
+import ca.floo.roadtrip.models.api.AvailabilityResponseDto
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest

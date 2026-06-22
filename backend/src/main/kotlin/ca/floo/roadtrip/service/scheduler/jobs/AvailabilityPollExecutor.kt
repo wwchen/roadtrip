@@ -3,13 +3,11 @@ package ca.floo.roadtrip.service.scheduler.jobs
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
@@ -35,11 +33,10 @@ import java.time.OffsetDateTime
  */
 internal class AvailabilityPollExecutor(
     private val reservablesRepo: ReservableRepo,
-    private val campsiteProviders: CampsiteProviderRepo,
-    private val reservationProviders: ReservationProviderRegistry,
     private val fetches: ReservableAvailabilityFetchService,
     private val runs: AvailabilityJobRunRepo,
     private val dateResolver: AvailabilityDateResolver,
+    private val targets: AvailabilityTargetResolver,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scopeResolver = WatchScopeResolver(reservablesRepo)
@@ -135,31 +132,17 @@ internal class AvailabilityPollExecutor(
         startDate: String,
         endDate: String,
     ): Int {
-        val poiIds = reservablesRepo.poiIdsForReservable(reservable.id)
-        if (poiIds.isEmpty()) {
-            log.warn("job {}: reservable {} has no POI parent", jobId, reservable.id)
-            return 0
-        }
-        val refRowsById = campsiteProviders.findProviderRefs(poiIds)
-        val parent =
-            poiIds
-                .asSequence()
-                .mapNotNull { refRowsById[it] }
-                .firstOrNull { reservationProviders.forPoi(it) != null && ProviderRefParser.parse(it.providerRefJson) != null }
-        if (parent == null) {
+        val target = targets.resolve(reservable)
+        if (target == null) {
             log.warn("job {}: reservable {} has no resolvable reservation provider", jobId, reservable.id)
             return 0
         }
-        val provider = reservationProviders.forPoi(parent)!!
-        val ref = ProviderRefParser.parse(parent.providerRefJson)!!
-
-        val dateContext = dateResolver.context(country = parent.country, region = parent.region, lng = parent.lng)
         val window =
             dateResolver.resolvePollingWindow(
                 startDate = LocalDate.parse(startDate),
                 endDate = LocalDate.parse(endDate),
-                context = dateContext,
-                bookingHorizonDays = provider.capabilities.bookingHorizonDays,
+                context = target.dateContext,
+                bookingHorizonDays = target.provider.capabilities.bookingHorizonDays,
                 maxDays = MAX_POLL_WINDOW_DAYS,
             ) ?: run {
                 log.info("job {}: reservable {} watch window has no future dates", jobId, reservable.id)
@@ -171,8 +154,8 @@ internal class AvailabilityPollExecutor(
                 ReservableAvailabilityFetchService.Request(
                     reservableId = reservable.id,
                     reservableRid = reservable.rid.encode(),
-                    provider = provider,
-                    ref = ref,
+                    provider = target.provider,
+                    ref = target.parentRef,
                     vendorId = reservable.rid.vendorId,
                     startDate = window.startDate,
                     endDate = window.endDate,

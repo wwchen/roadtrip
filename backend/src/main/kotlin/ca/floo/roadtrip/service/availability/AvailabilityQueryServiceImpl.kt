@@ -1,17 +1,14 @@
-package ca.floo.roadtrip.routes
+package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.api.BulkAvailEntrySchema
-import ca.floo.roadtrip.models.api.BulkAvailResponseSchema
+import ca.floo.roadtrip.models.api.AvailabilityResponseDto
+import ca.floo.roadtrip.models.api.BulkAvailabilityEntryDto
+import ca.floo.roadtrip.models.api.BulkAvailabilityResponseDto
+import ca.floo.roadtrip.models.api.PoiReservablesAvailabilityResponseDto
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
-import ca.floo.roadtrip.service.api.AvailabilityStatus
-import ca.floo.roadtrip.service.api.PoiReservablesAvailabilityResponseDto
-import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.availability.AvailabilityService
-import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -20,20 +17,20 @@ import org.slf4j.LoggerFactory
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-private val availabilityRouteControllerLog = LoggerFactory.getLogger("AvailabilityRouteController")
+private val availabilityQueryServiceLog = LoggerFactory.getLogger("AvailabilityQueryService")
 
 private const val MAX_BULK_WINDOW_DAYS = 14
 private const val EMPTY_WINDOW_DEFAULT_DAYS = 7
 private const val EMPTY_WINDOW_MAX_DAYS = 60
 private const val EMPTY_WINDOW_HORIZON_DAYS = 365
 
-internal class AvailabilityRouteController(
+internal class AvailabilityQueryServiceImpl(
     private val providerRefs: CampsiteProviderRepo,
     private val reservablesRepo: ReservableRepo,
     private val availabilityService: AvailabilityService,
     private val dateResolver: AvailabilityDateResolver,
-) {
-    suspend fun poiReservablesAvailability(
+) : AvailabilityQueryService {
+    override suspend fun poiReservablesAvailability(
         poiId: Long,
         startDate: LocalDate?,
         endDate: LocalDate?,
@@ -70,11 +67,11 @@ internal class AvailabilityRouteController(
         )
     }
 
-    suspend fun bulkAvailability(
+    override suspend fun bulkAvailability(
         ids: List<Long>,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): BulkAvailResponseSchema {
+    ): BulkAvailabilityResponseDto {
         validateBulkWindow(startDate, endDate)
         val results =
             coroutineScope {
@@ -89,7 +86,7 @@ internal class AvailabilityRouteController(
                         }
                     }.awaitAll()
             }
-        return BulkAvailResponseSchema(
+        return BulkAvailabilityResponseDto(
             startDate = startDate.toString(),
             endDate = endDate.toString(),
             results = results,
@@ -100,13 +97,13 @@ internal class AvailabilityRouteController(
         poiId: Long,
         startDate: LocalDate,
         endDate: LocalDate,
-    ): BulkAvailEntrySchema {
+    ): BulkAvailabilityEntryDto {
         if (providerRefs.findProviderRef(poiId) == null) {
-            return BulkAvailEntrySchema(id = poiId, status = 404, available_dates = emptyList())
+            return BulkAvailabilityEntryDto(id = poiId, status = 404, availableDates = emptyList())
         }
         val rids = reservablesRepo.findByPoi(poiId, ReservableType.SITE).map { it.rid }
         if (rids.isEmpty()) {
-            return BulkAvailEntrySchema(id = poiId, status = 200, available_dates = emptyList())
+            return BulkAvailabilityEntryDto(id = poiId, status = 200, availableDates = emptyList())
         }
 
         return try {
@@ -117,12 +114,12 @@ internal class AvailabilityRouteController(
                     endDate = endDate,
                     force = false,
                 )
-            BulkAvailEntrySchema(id = poiId, status = 200, available_dates = availableDates(availability))
+            BulkAvailabilityEntryDto(id = poiId, status = 200, availableDates = availableDates(availability))
         } catch (e: AvailabilityServiceError) {
-            BulkAvailEntrySchema(id = poiId, status = httpStatusFor(e), available_dates = emptyList())
+            BulkAvailabilityEntryDto(id = poiId, status = httpStatusFor(e), availableDates = emptyList())
         } catch (e: ReservationProviderError) {
-            availabilityRouteControllerLog.info("bulk availability poi={} failed: {}", poiId, e.message)
-            BulkAvailEntrySchema(id = poiId, status = httpStatusFor(e), available_dates = emptyList())
+            availabilityQueryServiceLog.info("bulk availability poi={} failed: {}", poiId, e.message)
+            BulkAvailabilityEntryDto(id = poiId, status = httpStatusFor(e), availableDates = emptyList())
         }
     }
 }

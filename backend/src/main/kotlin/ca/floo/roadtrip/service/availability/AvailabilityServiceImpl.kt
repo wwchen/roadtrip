@@ -1,22 +1,18 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheEntity
+import ca.floo.roadtrip.models.api.AvailabilityResponseDto
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
-import ca.floo.roadtrip.service.api.AvailabilityResponseDto
 import ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -27,9 +23,7 @@ private const val MAX_AVAILABILITY_DAYS: Int = 60
 private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 
 internal class AvailabilityServiceImpl(
-    private val providerRefs: CampsiteProviderRepo,
-    private val reservationProviders: ReservationProviderRegistry,
-    private val reservablesRepo: ReservableRepo,
+    private val targets: AvailabilityTargetResolver,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     snapshots: AvailabilitySnapshotRepo? = null,
     private val snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
@@ -50,7 +44,7 @@ internal class AvailabilityServiceImpl(
         force: Boolean,
     ): List<AvailabilityResponseDto> {
         if (rids.isEmpty()) return emptyList()
-        val resolved = rids.map { resolveReservable(it) }
+        val resolved = rids.map { targets.requireByRid(it) }
         val byRid = linkedMapOf<String, AvailabilityResponseDto>()
         resolved
             .groupBy { AvailabilityFetchGroup(provider = it.provider, parentRef = it.parentRef) }
@@ -78,28 +72,6 @@ internal class AvailabilityServiceImpl(
         return rids.map { rid ->
             byRid[rid.encode()] ?: throw AvailabilityServiceError.NotFound
         }
-    }
-
-    private fun resolveReservable(rid: ReservableId): ResolvedReservable {
-        val reservable =
-            reservablesRepo.findByRid(rid)
-                ?: throw AvailabilityServiceError.NotFound
-        val poiIds = reservablesRepo.poiIdsForReservable(reservable.id)
-        val providerRefsByPoiId = providerRefs.findProviderRefs(poiIds)
-        val parent =
-            poiIds
-                .asSequence()
-                .mapNotNull { providerRefsByPoiId[it] }
-                .firstOrNull { reservationProviders.forPoi(it) != null && ProviderRefParser.parse(it.providerRefJson) != null }
-                ?: throw AvailabilityServiceError.UnknownCampground
-        val provider = reservationProviders.forPoi(parent)!!
-        val parentRef = ProviderRefParser.parse(parent.providerRefJson)!!
-        return ResolvedReservable(
-            reservable = reservable,
-            provider = provider,
-            parentRef = parentRef,
-            dateContext = dateResolver.context(country = parent.country, region = parent.region, lng = parent.lng),
-        )
     }
 
     private suspend fun fetchCatalogReservablesAvailability(
@@ -165,36 +137,10 @@ internal class AvailabilityServiceImpl(
         }
 }
 
-private data class ResolvedReservable(
-    val reservable: Reservable,
-    val provider: ReservationProvider,
-    val parentRef: ProviderRef,
-    val dateContext: PoiDateContext,
-)
-
 private data class AvailabilityFetchGroup(
     val provider: ReservationProvider,
     val parentRef: ProviderRef,
 )
-
-internal sealed class StartParam {
-    data class Ok(
-        val value: LocalDate,
-    ) : StartParam()
-
-    object Invalid : StartParam()
-}
-
-internal fun parseStartParam(
-    raw: LocalDate?,
-    today: LocalDate,
-    horizonDays: Int,
-): StartParam {
-    if (raw == null) return StartParam.Ok(today)
-    if (raw.isBefore(today)) return StartParam.Invalid
-    if (raw.isAfter(today.plusDays(horizonDays.toLong()))) return StartParam.Invalid
-    return StartParam.Ok(raw)
-}
 
 internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =
     when (providerId) {

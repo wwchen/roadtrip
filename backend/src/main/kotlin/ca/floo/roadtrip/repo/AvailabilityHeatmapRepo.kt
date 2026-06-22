@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.service.api.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import org.jooq.DSLContext
 import java.time.LocalDate
 import java.time.OffsetDateTime

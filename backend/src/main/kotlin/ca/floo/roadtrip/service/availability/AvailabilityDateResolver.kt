@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.availability.PoiDateContext
+import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -8,16 +10,6 @@ import java.time.temporal.ChronoUnit
 
 private val DEFAULT_TIME_ZONE: ZoneId = ZoneId.of("America/Vancouver")
 private val GLOBAL_EARLIEST_DATE_CUTOFF: LocalTime = LocalTime.of(18, 0)
-
-internal data class PoiDateContext(
-    val timeZone: ZoneId,
-    val earliestDate: LocalDate,
-)
-
-internal data class ResolvedDateWindow(
-    val startDate: LocalDate,
-    val endDate: LocalDate,
-)
 
 internal class AvailabilityDateResolver(
     private val clock: Clock = Clock.systemUTC(),

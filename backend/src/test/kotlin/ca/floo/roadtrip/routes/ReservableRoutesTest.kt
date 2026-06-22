@@ -1,14 +1,14 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
-import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
-import ca.floo.roadtrip.service.api.AvailabilityStatus
-import ca.floo.roadtrip.service.api.ReservableDayObservation
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest

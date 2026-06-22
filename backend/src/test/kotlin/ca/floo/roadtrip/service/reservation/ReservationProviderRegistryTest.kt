@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.reservation
 
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull

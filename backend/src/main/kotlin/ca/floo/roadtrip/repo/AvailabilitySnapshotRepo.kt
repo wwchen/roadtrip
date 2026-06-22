@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.Companion.AVAILABILITY_SNAPSHOT
-import ca.floo.roadtrip.service.api.AvailabilityDayDto
-import ca.floo.roadtrip.service.api.AvailabilityStatus
+import ca.floo.roadtrip.models.api.AvailabilityDayDto
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.service.api.availabilityResponseJson
 import kotlinx.serialization.encodeToString
 import org.jooq.DSLContext

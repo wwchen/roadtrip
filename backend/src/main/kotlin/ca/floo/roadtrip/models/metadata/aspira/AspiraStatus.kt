@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.models.metadata.aspira
 
-import ca.floo.roadtrip.service.api.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
 
 /**
  * Aspira NextGen returns availability as integer codes per (map, day). The

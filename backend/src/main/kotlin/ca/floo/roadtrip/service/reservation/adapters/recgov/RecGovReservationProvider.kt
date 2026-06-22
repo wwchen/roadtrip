@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.reservation.adapters.recgov
 
 import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
 import ca.floo.roadtrip.service.api.recgov.fetchRecgovAvailabilityObservations
 import ca.floo.roadtrip.service.api.recgov.fetchRecgovCatalogObservations
 import ca.floo.roadtrip.service.api.recgov.fetchRecgovReservableObservations

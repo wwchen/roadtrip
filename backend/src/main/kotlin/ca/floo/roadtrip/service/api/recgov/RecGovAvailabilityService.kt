@@ -3,12 +3,12 @@ package ca.floo.roadtrip.service.api.recgov
 import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
 import ca.floo.roadtrip.clients.cache.CachedRecGovResult
 import ca.floo.roadtrip.clients.recgov.Campsite
-import ca.floo.roadtrip.models.api.AvailabilityErrorSchema
-import ca.floo.roadtrip.service.api.AvailabilityCacheBlock
-import ca.floo.roadtrip.service.api.AvailabilityObservationBatch
-import ca.floo.roadtrip.service.api.AvailabilitySeasonBlock
-import ca.floo.roadtrip.service.api.AvailabilityStatus
-import ca.floo.roadtrip.service.api.ReservableDayObservation
+import ca.floo.roadtrip.models.api.AvailabilityErrorDto
+import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
@@ -251,7 +251,7 @@ private fun aggregateCacheBlock(results: List<CachedRecGovResult>): Availability
         ttlSeconds = results.firstOrNull()?.ttlSeconds ?: 7200L,
     )
 
-internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, AvailabilityErrorSchema> {
+internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val msg = e.message.orEmpty()
     return when {
         msg.contains("429") ->
