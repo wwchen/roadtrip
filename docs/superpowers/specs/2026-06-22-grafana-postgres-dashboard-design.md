@@ -129,10 +129,13 @@ grafana:
   image: grafana/grafana:13.0.0
   restart: unless-stopped
   hostname: grafana
-  environment:
-    - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-    - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
-    - GF_USERS_ALLOW_SIGN_UP=false
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
+      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
   volumes:
     - ./grafana/provisioning:/etc/grafana/provisioning:ro
     - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
