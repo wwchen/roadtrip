@@ -389,8 +389,8 @@
         "type": "textbox",
         "query": "",
         "current": {
-          "text": "",
-          "value": ""
+          "text": "0",
+          "value": "0"
         }
       },
       {
@@ -398,8 +398,8 @@
         "type": "textbox",
         "query": "",
         "current": {
-          "text": "",
-          "value": ""
+          "text": "0",
+          "value": "0"
         }
       },
       {
