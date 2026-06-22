@@ -108,6 +108,7 @@ class FeatureCollectionContractTest {
                 region = "AB",
                 country = "CA",
                 lng = -115.547,
+                lat = 51.1812,
                 unitName = "Banff",
                 reserveUrl = "https://reservation.pc.gc.ca",
                 phone = "1-877-737-3783",

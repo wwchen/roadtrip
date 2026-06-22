@@ -342,7 +342,7 @@ internal fun poiDetailFeature(
 ): PoiDetailFeatureSchema {
     val dateContext =
         if (r.category == "campground") {
-            dateResolver.context(country = r.country, region = r.region, lng = r.lng)
+            dateResolver.context(lat = r.lat, lng = r.lng)
         } else {
             null
         }

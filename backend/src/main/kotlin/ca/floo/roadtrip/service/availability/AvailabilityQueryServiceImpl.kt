@@ -147,7 +147,7 @@ private fun displayWindow(
     dateResolver: AvailabilityDateResolver,
 ): Pair<LocalDate, LocalDate> {
     val row = providerRefs.findDateContext(poiId) ?: throw AvailabilityServiceError.NotFound
-    val dateContext = dateResolver.context(country = row.country, region = row.region, lng = row.lng)
+    val dateContext = dateResolver.context(lat = row.lat, lng = row.lng)
     val window =
         dateResolver.resolveWindow(
             startDate = startDate,

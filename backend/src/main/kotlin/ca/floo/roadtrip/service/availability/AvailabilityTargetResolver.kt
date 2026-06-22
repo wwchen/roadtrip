@@ -40,7 +40,7 @@ internal class AvailabilityTargetResolver(
             reservable = reservable,
             provider = provider,
             parentRef = parentRef,
-            dateContext = dateResolver.context(country = parent.country, region = parent.region, lng = parent.lng),
+            dateContext = dateResolver.context(lat = parent.lat, lng = parent.lng),
         )
     }
 }

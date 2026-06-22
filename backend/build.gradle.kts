@@ -86,6 +86,7 @@ val jooqVersion = "3.19.15"
 val postgresVersion = "42.7.4"
 val flywayVersion = "10.20.1"
 val testcontainersVersion = "1.21.4"
+val timeshapeVersion = "2025b.26"
 
 dependencies {
     implementation("io.ktor:ktor-server-core:$ktorVersion")
@@ -121,6 +122,8 @@ dependencies {
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
     // YAML reader for config/poi-registry.yaml (kotlinx.serialization-shaped).
     implementation("com.charleskorn.kaml:kaml:0.74.0")
+    // Coordinate -> IANA ZoneId lookup from timezone-boundary-builder data.
+    implementation("net.iakovlev:timeshape:$timeshapeVersion")
 
     jooqGenerator("org.postgresql:postgresql:$postgresVersion")
     jooqGenerator("org.testcontainers:postgresql:$testcontainersVersion")
