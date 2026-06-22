@@ -4,6 +4,7 @@ PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
 DEPLOY_USER ?= mini
 DEPLOY_DIR  ?= ~/workspace/roadtrip
+BACKEND_IMAGE ?= roadtrip/backend
 POSTGRES_DB ?= roadtrip
 POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
@@ -63,7 +64,7 @@ check-pushed:
 	 if [ -n "$$dirty" ]; then echo "refusing: working tree has uncommitted changes"; git status --short; exit 1; fi
 
 deploy: check-pushed
-	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && ./gradlew :backend:shadowJar && docker compose --profile tunnel --profile pois up -d --build'
+	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && ./gradlew :backend:shadowJar && docker build -t $(BACKEND_IMAGE) --target backend . && docker compose --profile tunnel --profile pois up -d'
 
 # Two-step refresh through the backend's admin API (RFC 0004 / issue #44):
 #   make data-fetch                       # all targets

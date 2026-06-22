@@ -21,16 +21,15 @@ make deploy              # ssh to the mini, git pull, docker compose up
 make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
 ```
 
-Local dev runs the backend on the host (Gradle), with only Postgres in
-Docker. The backend's `Dockerfile` is still used by `make deploy` to build
-the container that runs on mini-ca behind cloudflared, but it's no longer
-part of the laptop dev loop.
+`tilt up` is the easiest path for full-stack dev: Tilt uses Docker Compose
+for Postgres, the backend container, and Grafana, then runs the campsite
+companion as a host Node process so Playwright can drive a real Chromium.
+The backend still serves the app on <http://127.0.0.1:8765>. Grafana is
+available at <http://127.0.0.1:3000> with local defaults `admin` / `admin`.
+Tilt UI is at <http://localhost:10350>.
 
-`tilt up` is the easiest path for full-stack dev: Tilt brings up Docker
-Postgres (idempotent `compose up -d`), runs the backend with Gradle on the
-host so Kotlin recompiles are fast, and runs the campsite companion as a
-host Node process so Playwright can drive a real Chromium. Tilt UI is at
-<http://localhost:10350>.
+`make run` remains the fastest backend-only loop: it starts Postgres in
+Docker and runs the Kotlin/Ktor backend on the host with Gradle.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`) for POI refresh. Tesla Supercharger pricing

@@ -13,7 +13,7 @@ services:
     volumes:
       - ${COOKIE_BOT_DATA:-$HOME/.roadtrip-map/cookie-bot}:/var/cache/cookie-bot
     environment:
-      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN}
+      - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
       - HEADLESS=true
       - LOG_LEVEL=INFO
 
@@ -43,6 +43,26 @@ services:
       timeout: 3s
       retries: 10
 
+  grafana-db-setup:
+    profiles: [pois]
+    image: postgis/postgis:16-3.4
+    restart: "no"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
+      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command:
+      - /bin/sh
+      - -c
+      - /docker-entrypoint-initdb.d/create-grafana-reader.sh
+    volumes:
+      - ./grafana/db/create-grafana-reader.sh:/docker-entrypoint-initdb.d/create-grafana-reader.sh:ro
+
   # Kotlin/Ktor backend. Serves the entire site:
   #   - GET /                       → index.html
   #   - GET /pois, /reservables,
@@ -55,7 +75,7 @@ services:
   # docker compose up — no Dockerfile rebuild needed for HTML/JS/data changes.
   backend:
     profiles: [pois]
-    build: ./backend
+    image: roadtrip/backend
     restart: unless-stopped
     hostname: backend
     environment:
@@ -68,7 +88,7 @@ services:
       # (forward geocoding) read this; the FE never sees the token. Both
       # endpoints return 503 when unset, so the trip planner just doesn't
       # work, instead of leaking the token by accident.
-      - MAPBOX_TOKEN=${MAPBOX_TOKEN}
+      - MAPBOX_TOKEN=${MAPBOX_TOKEN:-}
     volumes:
       - ./index.html:/app/static/index.html:ro
       - ./pois.html:/app/static/pois.html:ro
@@ -85,6 +105,26 @@ services:
       postgres:
         condition: service_healthy
 
+  grafana:
+    profiles: [pois]
+    image: grafana/grafana:13.0.0
+    restart: unless-stopped
+    hostname: grafana
+    environment:
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
+      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
+      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - ${GRAFANA_DATA:-$HOME/.roadtrip-map/grafana}:/var/lib/grafana
+    depends_on:
+      grafana-db-setup:
+        condition: service_completed_successfully
+
   cloudflared:
     # Only runs with `--profile tunnel` (deploy target). Local modes skip it.
     # Mounts a config.yml so path-based routing lives in the repo, not the
@@ -93,7 +133,7 @@ services:
     profiles: [tunnel]
     image: cloudflare/cloudflared:latest
     restart: unless-stopped
-    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate --config /etc/cloudflared/config.yml run --token ${CLOUDFLARE_TUNNEL_TOKEN:-}
     volumes:
       - ./cloudflared:/etc/cloudflared:ro
     depends_on:
