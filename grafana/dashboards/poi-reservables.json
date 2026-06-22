@@ -1,0 +1,291 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "basemap": {
+          "config": {},
+          "name": "Layer 0",
+          "type": "default"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": false,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "showLegend": true,
+              "style": {
+                "color": {
+                  "fixed": "dark-blue"
+                },
+                "opacity": 0.85,
+                "size": {
+                  "fixed": 9,
+                  "max": 18,
+                  "min": 3
+                }
+              }
+            },
+            "location": {
+              "latitude": "lat",
+              "longitude": "lng",
+              "mode": "coords"
+            },
+            "name": "POIs with reservables",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lat": 49,
+          "lon": -123,
+          "zoom": 5
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  p.id,\n  p.name,\n  p.category,\n  p.subcategory,\n  p.source,\n  p.source_id,\n  p.region,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat,\n  count(DISTINCT r.id) AS reservable_count,\n  max(s.observed_at) AS latest_availability_observed_at\nFROM pois p\nJOIN reservable_pois rp ON rp.poi_id = p.id\nJOIN reservables r ON r.id = rp.reservable_id\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE p.deleted_at IS NULL\n  AND r.deleted_at IS NULL\n  AND (${poi_name_search:sqlstring} = '' OR p.name ILIKE '%' || ${poi_name_search:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id_search:sqlstring} = '' THEN true\n    WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN p.id::text = ${poi_id_search:sqlstring}\n    ELSE false\n  END\n  AND p.category IN (${poi_category:sqlstring})\nGROUP BY p.id\nORDER BY reservable_count DESC, p.name ASC, p.id ASC\nLIMIT 1000;",
+          "refId": "A"
+        }
+      ],
+      "title": "POIs With Reservables Map",
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.subcategory,\n  p.source,\n  p.source_id,\n  p.region,\n  count(DISTINCT r.id) AS reservable_count,\n  count(DISTINCT r.id) FILTER (WHERE r.type = 'site') AS site_count,\n  max(r.updated_at) AS latest_catalog_updated_at,\n  max(s.observed_at) AS latest_availability_observed_at,\n  bool_or(s.available) FILTER (WHERE s.observed_at >= now() - interval '7 days') AS any_available_last_7d\nFROM pois p\nJOIN reservable_pois rp ON rp.poi_id = p.id\nJOIN reservables r ON r.id = rp.reservable_id\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE p.deleted_at IS NULL\n  AND r.deleted_at IS NULL\n  AND (${poi_name_search:sqlstring} = '' OR p.name ILIKE '%' || ${poi_name_search:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id_search:sqlstring} = '' THEN true\n    WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN p.id::text = ${poi_id_search:sqlstring}\n    ELSE false\n  END\n  AND p.category IN (${poi_category:sqlstring})\nGROUP BY p.id\nORDER BY reservable_count DESC, p.name ASC, p.id ASC\nLIMIT 500;",
+          "refId": "A"
+        }
+      ],
+      "title": "POIs With Reservables",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.subcategory,\n  p.source,\n  p.source_id,\n  p.region,\n  p.reserve_url,\n  p.info_url,\n  p.provider_ref,\n  count(DISTINCT r.id) AS reservable_count,\n  max(s.observed_at) AS latest_availability_observed_at,\n  now() - max(s.observed_at) AS latest_availability_age,\n  bool_or(s.available) FILTER (WHERE s.observed_at >= now() - interval '7 days') AS any_available_last_7d\nFROM pois p\nJOIN reservable_pois rp ON rp.poi_id = p.id\nJOIN reservables r ON r.id = rp.reservable_id\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${poi_id:sqlstring}\n  AND p.deleted_at IS NULL\n  AND r.deleted_at IS NULL\nGROUP BY p.id;",
+          "refId": "A"
+        }
+      ],
+      "title": "Selected POI Reservable Summary",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rid"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Reservable Detail",
+                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-reservable_rid=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  r.id AS reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,\n  r.type,\n  r.vendor,\n  r.vendor_id,\n  r.name,\n  r.loop,\n  r.site_type,\n  r.source,\n  r.updated_at,\n  max(s.observed_at) AS latest_availability_observed_at,\n  count(s.id) FILTER (WHERE s.observed_at >= now() - interval '7 days') AS snapshots_last_7d,\n  bool_or(s.available) FILTER (WHERE s.observed_at >= now() - interval '7 days') AS any_available_last_7d,\n  r.provider_ref,\n  r.tags,\n  r.raw\nFROM reservable_pois rp\nJOIN reservables r ON r.id = rp.reservable_id\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n  AND rp.poi_id::text = ${poi_id:sqlstring}\n  AND r.deleted_at IS NULL\n  AND (${rid_type:sqlstring} = '' OR r.type = ${rid_type:sqlstring})\nGROUP BY r.id\nORDER BY r.loop NULLS LAST, r.name NULLS LAST, rid ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Linked Reservables For Selected POI",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "roadtrip",
+    "poi",
+    "reservable"
+  ],
+  "templating": {
+    "list": [
+      {
+        "name": "poi_name_search",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "poi_id_search",
+        "type": "textbox",
+        "query": "",
+        "current": {
+          "text": "",
+          "value": ""
+        }
+      },
+      {
+        "name": "poi_category",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "SELECT DISTINCT p.category AS __text, p.category AS __value FROM pois p WHERE p.deleted_at IS NULL AND EXISTS (SELECT 1 FROM reservable_pois rp JOIN reservables r ON r.id = rp.reservable_id WHERE rp.poi_id = p.id AND r.deleted_at IS NULL) ORDER BY p.category ASC",
+        "refresh": 1,
+        "includeAll": true,
+        "allValue": "",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "poi_id",
+        "type": "query",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "query": "WITH matches AS (SELECT p.id::text || ' - ' || p.name || ' [' || p.category || ']' AS __text, p.id::text AS __value, p.name, p.id FROM pois p WHERE p.deleted_at IS NULL AND EXISTS (SELECT 1 FROM reservable_pois rp JOIN reservables r ON r.id = rp.reservable_id WHERE rp.poi_id = p.id AND r.deleted_at IS NULL) AND (${poi_name_search:sqlstring} = '' OR p.name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN p.id::text = ${poi_id_search:sqlstring} ELSE false END AND p.category IN (${poi_category:sqlstring}) ORDER BY p.name ASC, p.id ASC LIMIT 500) SELECT __text, __value FROM matches UNION ALL SELECT 'No matching POI' AS __text, '__none' AS __value WHERE NOT EXISTS (SELECT 1 FROM matches)",
+        "refresh": 1
+      },
+      {
+        "name": "rid_type",
+        "type": "custom",
+        "query": ",site",
+        "current": {
+          "text": "site",
+          "value": "site"
+        }
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Roadtrip / POIs With Reservables",
+  "uid": "roadtrip-poi-reservables",
+  "version": 1
+}

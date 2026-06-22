@@ -34,7 +34,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH ranked AS (\n  SELECT\n    ir.*,\n    row_number() OVER (\n      PARTITION BY ir.target, ir.phase\n      ORDER BY ir.started_at DESC, ir.id DESC\n    ) AS rn\n  FROM ingest_runs ir\n  WHERE ir.phase_kind = 'target'\n    AND (${target:sqlstring} = '' OR ir.target = ${target:sqlstring})\n)\nSELECT\n  target,\n  phase,\n  status,\n  started_at,\n  completed_at,\n  completed_at - started_at AS duration,\n  counts,\n  notes,\n  triggered_by\nFROM ranked\nWHERE rn = 1\nORDER BY target ASC, phase ASC;",
+          "rawSql": "WITH ranked AS (\n  SELECT\n    ir.*,\n    row_number() OVER (\n      PARTITION BY ir.target, ir.phase\n      ORDER BY ir.started_at DESC, ir.id DESC\n    ) AS rn\n  FROM ingest_runs ir\n  WHERE ir.phase_kind = 'target'\n    AND ir.target IN (${target:sqlstring})\n)\nSELECT\n  target,\n  phase,\n  status,\n  started_at,\n  completed_at,\n  completed_at - started_at AS duration,\n  counts,\n  notes,\n  triggered_by\nFROM ranked\nWHERE rn = 1\nORDER BY target ASC, phase ASC;",
           "refId": "A"
         }
       ],
@@ -69,7 +69,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  child.id,\n  child.parent_run_id,\n  parent.target,\n  parent.phase AS run_kind,\n  child.phase,\n  child.phase_kind,\n  child.status,\n  child.started_at,\n  child.completed_at,\n  child.completed_at - child.started_at AS duration,\n  child.exit_code,\n  child.counts,\n  child.notes\nFROM ingest_runs child\nLEFT JOIN ingest_runs parent ON parent.id = child.parent_run_id\nWHERE child.started_at >= now() - (${days_back} || ' days')::interval\n  AND child.phase_kind <> 'target'\n  AND (\n    child.status IN ('failed', 'aborted')\n    OR (child.status = 'started' AND child.started_at < now() - interval '30 minutes')\n  )\n  AND (${target:sqlstring} = '' OR parent.target = ${target:sqlstring})\nORDER BY child.started_at DESC, child.id DESC;",
+          "rawSql": "SELECT\n  child.id,\n  child.parent_run_id,\n  parent.target,\n  parent.phase AS run_kind,\n  child.phase,\n  child.phase_kind,\n  child.status,\n  child.started_at,\n  child.completed_at,\n  child.completed_at - child.started_at AS duration,\n  child.exit_code,\n  child.counts,\n  child.notes\nFROM ingest_runs child\nLEFT JOIN ingest_runs parent ON parent.id = child.parent_run_id\nWHERE child.started_at >= now() - (${days_back} || ' days')::interval\n  AND child.phase_kind <> 'target'\n  AND (\n    child.status IN ('failed', 'aborted')\n    OR (child.status = 'started' AND child.started_at < now() - interval '30 minutes')\n  )\n  AND parent.target IN (${target:sqlstring})\nORDER BY child.started_at DESC, child.id DESC;",
           "refId": "A"
         }
       ],
@@ -104,7 +104,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  id,\n  source,\n  status,\n  started_at,\n  completed_at,\n  completed_at - started_at AS duration,\n  seen_count,\n  notes\nFROM import_runs\nWHERE started_at >= now() - (${days_back} || ' days')::interval\n  AND (${source:sqlstring} = '' OR source = ${source:sqlstring})\nORDER BY started_at DESC, id DESC\nLIMIT 200;",
+          "rawSql": "SELECT\n  id,\n  source,\n  status,\n  started_at,\n  completed_at,\n  completed_at - started_at AS duration,\n  seen_count,\n  notes\nFROM import_runs\nWHERE started_at >= now() - (${days_back} || ' days')::interval\n  AND source IN (${source:sqlstring})\nORDER BY started_at DESC, id DESC\nLIMIT 200;",
           "refId": "A"
         }
       ],
@@ -139,7 +139,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  'poi' AS row_type,\n  p.id,\n  p.source,\n  p.name,\n  p.updated_at,\n  p.fetched_at,\n  p.deleted_at,\n  p.last_seen_run_id,\n  p.last_poller_run_id,\n  now() - p.updated_at AS updated_age\nFROM pois p\nWHERE (${source:sqlstring} = '' OR p.source = ${source:sqlstring})\n\nUNION ALL\n\nSELECT\n  'reservable' AS row_type,\n  r.id,\n  r.source,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS name,\n  r.updated_at,\n  NULL::timestamptz AS fetched_at,\n  r.deleted_at,\n  r.last_seen_run_id,\n  NULL::bigint AS last_poller_run_id,\n  now() - r.updated_at AS updated_age\nFROM reservables r\nWHERE (${source:sqlstring} = '' OR r.source = ${source:sqlstring})\nORDER BY updated_age DESC NULLS LAST\nLIMIT 300;",
+          "rawSql": "SELECT\n  'poi' AS row_type,\n  p.id,\n  p.source,\n  p.name,\n  p.updated_at,\n  p.fetched_at,\n  p.deleted_at,\n  p.last_seen_run_id,\n  p.last_poller_run_id,\n  now() - p.updated_at AS updated_age\nFROM pois p\nWHERE p.source IN (${source:sqlstring})\n\nUNION ALL\n\nSELECT\n  'reservable' AS row_type,\n  r.id,\n  r.source,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS name,\n  r.updated_at,\n  NULL::timestamptz AS fetched_at,\n  r.deleted_at,\n  r.last_seen_run_id,\n  NULL::bigint AS last_poller_run_id,\n  now() - r.updated_at AS updated_age\nFROM reservables r\nWHERE r.source IN (${source:sqlstring})\nORDER BY updated_age DESC NULLS LAST\nLIMIT 300;",
           "refId": "A"
         }
       ],
@@ -168,8 +168,8 @@
         "includeAll": true,
         "allValue": "",
         "current": {
-          "text": "",
-          "value": ""
+          "text": "All",
+          "value": "$__all"
         }
       },
       {
@@ -184,8 +184,8 @@
         "includeAll": true,
         "allValue": "",
         "current": {
-          "text": "",
-          "value": ""
+          "text": "All",
+          "value": "$__all"
         }
       },
       {
