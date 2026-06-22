@@ -14,6 +14,7 @@ class AppConfigTest {
         assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY))
         assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY))
         assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.RESERVEAMERICA_AVAILABILITY))
+        assertEquals(Duration.ofHours(2), config.cache.ttlFor(ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY))
     }
 
     @Test
@@ -25,6 +26,7 @@ class AppConfigTest {
                     "ROADTRIP_CACHE_RECGOV_AVAILABILITY_TTL" to "4h",
                     "ROADTRIP_CACHE_ASPIRA_AVAILABILITY_TTL" to "900",
                     "ROADTRIP_CACHE_RESERVEAMERICA_AVAILABILITY_TTL" to "30m",
+                    "ROADTRIP_CACHE_RESERVECALIFORNIA_AVAILABILITY_TTL" to "45m",
                 ),
             )
 
@@ -32,6 +34,7 @@ class AppConfigTest {
         assertEquals(Duration.ofHours(4), config.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY))
         assertEquals(Duration.ofMinutes(15), config.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY))
         assertEquals(Duration.ofMinutes(30), config.cache.ttlFor(ApiCacheEntity.RESERVEAMERICA_AVAILABILITY))
+        assertEquals(Duration.ofMinutes(45), config.cache.ttlFor(ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY))
     }
 
     @Test

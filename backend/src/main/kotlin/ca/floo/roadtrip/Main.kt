@@ -10,6 +10,8 @@ import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.clients.reservecalifornia.CachedReserveCaliforniaAvailability
+import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
@@ -212,6 +214,15 @@ fun Application.module() {
                 ttl = reserveAmericaAvailabilityTtl,
             )
         }
+    val reserveCaliforniaAvailabilityTtl =
+        appConfig.cache.ttlFor(ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY)
+    val reserveCaliforniaCacheFactory: () -> CachedReserveCaliforniaAvailability =
+        {
+            CachedReserveCaliforniaAvailability(
+                client = HttpReserveCaliforniaAvailabilityClient(),
+                ttl = reserveCaliforniaAvailabilityTtl,
+            )
+        }
     // Reservation-provider port registry: one adapter per upstream reservation
     // system, dispatched by `pois.source`. Routes consume the registry; they
     // never see vendor types. See docs/reservation-providers.md.
@@ -222,6 +233,7 @@ fun Application.module() {
             aspiraCache = aspiraCache,
             aspiraOccupancyCache = aspiraOccupancyCache,
             reserveAmericaCacheFactory = reserveAmericaCacheFactory,
+            reserveCaliforniaCacheFactory = reserveCaliforniaCacheFactory,
         )
 
     val reservablesRepo = ReservableRepo(ctx)
@@ -241,6 +253,7 @@ fun Application.module() {
             ReservationProviderId.RECGOV -> recgovAvailabilityTtl
             ReservationProviderId.ASPIRA -> aspiraAvailabilityTtl
             ReservationProviderId.RESERVEAMERICA -> reserveAmericaAvailabilityTtl
+            ReservationProviderId.RESERVECALIFORNIA -> reserveCaliforniaAvailabilityTtl
         }
     }
     val availabilityService =

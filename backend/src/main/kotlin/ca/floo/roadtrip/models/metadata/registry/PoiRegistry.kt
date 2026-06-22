@@ -362,6 +362,13 @@ data class PoiRegistry(
                     bookingHorizonDays = horizon,
                 )
             }
+
+    fun reserveCaliforniaSources(): Set<String> =
+        poiData
+            .mapNotNull { row -> row.etls.lastOrNull() }
+            .filter { it.adapter == "ReserveCaliforniaEtl" }
+            .map { it.slug }
+            .toSet()
 }
 
 data class ReserveAmericaSourceConfig(

@@ -4,10 +4,11 @@ ReserveCalifornia is the booking surface for California State Parks:
 
 | Tenant | Public host | API vendor evidence | `pois.source` |
 |---|---|---|---|
-| California State Parks | `reservecalifornia.com` | Tyler Technologies / US eDirect Recreation Dynamics | not implemented |
+| California State Parks | `reservecalifornia.com` | Tyler Technologies / US eDirect Recreation Dynamics | `california-state-parks` |
 
-Observed on 2026-06-22. This is a vendor discovery note, not an implemented
-adapter contract yet.
+Observed on 2026-06-22. Implemented support covers Search All catalog import
+and standard facility-grid availability. Alerts remain disabled until rate
+limits and sustained polling behavior are validated.
 
 ## Summary
 
@@ -125,6 +126,12 @@ There are at least three public ID systems:
 | `FacilityId` | RDR `search/place`, `fd/facilities/{id}`, `search/grid` | Bookable facility or campground area under a place. |
 | `UnitId` | RDR `search/grid` | Individual reservable unit/site id. |
 
+ReserveCalifornia park pages use the public route:
+
+```
+https://reservecalifornia.com/park/{PlaceId}
+```
+
 Example mapping:
 
 - `parks.ca.gov` `page_id=464` is Ahjumawi Lava Springs SP. The
@@ -161,12 +168,32 @@ Relevant response:
 ]
 ```
 
-Use this for discovery/backfill, not for hot availability calls.
+Use this for targeted backfills, not for default catalog discovery or hot
+availability calls.
+
+### `GET /enterprise/websitesettings`
+
+The public SPA reads Search All defaults from RDR website settings.
+
+```
+GET {rdrApiUrl}/enterprise/websitesettings
+tenantId: cali
+```
+
+Relevant observed fields:
+
+```json
+{
+  "facility_default_place_id": 691,
+  "default_place_results_range": 100
+}
+```
 
 ### `POST /search/place`
 
 Place search and facility rollup. This maps a `PlaceId` to facilities and
 unit-type availability counts for a requested arrival date and stay length.
+It is also the Search All Parks endpoint when `isSearchAllParks` is true.
 
 ```
 POST {rdrApiUrl}/search/place
@@ -204,6 +231,28 @@ Minimal observed request shape:
   "HighlightedPlaceId": 0
 }
 ```
+
+Search All uses the same endpoint with the SPA's default place and coordinates:
+
+```json
+{
+  "PlaceId": 691,
+  "Latitude": 34.2570034764866,
+  "Longitude": -114.162234470524,
+  "Nights": 1,
+  "StartDate": "2026-06-22",
+  "NearbyLimit": 100,
+  "isSearchAllParks": true,
+  "InSeasonOnly": true,
+  "WebOnly": true,
+  "CountNearby": true,
+  "CountUnits": true
+}
+```
+
+The response carries the default `SelectedPlace` plus the broader
+`NearbyPlaces` list; the fetcher follows each place with a normal
+`isSearchAllParks=false` `search/place` request to capture facility details.
 
 For `PlaceId=690`, the response included facilities:
 
@@ -365,16 +414,17 @@ Open questions before implementation:
 
 Minimal v1 path:
 
-1. Add `ReservationProviderId.RESERVECALIFORNIA`.
-2. Add `ProviderRef.ReserveCalifornia(placeId: Long, facilityIds: List<Long>)`.
-3. Add parser/writer support for `place_id` and `facility_ids`.
-4. Add a `ReserveCaliforniaAvailabilityClient` with:
-   - future booking window fetch;
-   - `search/place` facility discovery;
-   - `search/grid` per-facility availability fetch.
-5. Add a provider that merges unit slices across facilities into
-   `AvailabilityObservationBatch`.
-6. Keep `supportsAlerts = false` until rate limits and snapshot behavior are
+1. `scripts/fetch_reservecalifornia.py` captures Search All `website-settings`
+   and `search-all` envelopes, then per-place `place`, `facility`, and `grid`
+   envelopes under
+   `reservecalifornia-catalog`.
+2. `ReserveCaliforniaEtl` imports `california-state-parks` POIs with
+   `ProviderRef.ReserveCalifornia(placeId, facilityIds)`.
+3. `ReserveCaliforniaSitesEtl` imports site reservables from captured standard
+   facility grids.
+4. `ReserveCaliforniaReservationProvider` fetches `search/grid` per facility
+   and merges unit slices into `AvailabilityObservationBatch`.
+5. `supportsAlerts = false` until rate limits and snapshot behavior are
    validated.
 
 No Flyway migration should be required if the adapter uses the existing

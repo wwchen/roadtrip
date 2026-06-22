@@ -45,6 +45,14 @@ class ProviderRefParserTest {
     }
 
     @Test
+    fun `parses reservecalifornia`() {
+        val ref = ProviderRefParser.parse("""{"place_id": 690, "facility_ids": [611, 612, 767]}""")
+        assertTrue(ref is ProviderRef.ReserveCalifornia)
+        assertEquals(690L, ref.placeId)
+        assertEquals(listOf(611L, 612L, 767L), ref.facilityIds)
+    }
+
+    @Test
     fun `parses numeric legacy facility id as reserveamerica without contract`() {
         val ref = ProviderRefParser.parse("""{"facility_id": "489"}""")
         assertTrue(ref is ProviderRef.ReserveAmerica)

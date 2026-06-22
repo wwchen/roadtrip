@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.reservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -47,6 +48,18 @@ object ProviderRefParser {
 
         obj["facility_id"]?.jsonPrimitive?.contentOrNull?.takeIf { it.toLongOrNull() != null }?.let {
             return ProviderRef.ReserveAmerica(contractCode = null, parkId = it)
+        }
+
+        val placeId = obj["place_id"]?.jsonPrimitive?.longOrNull
+        val facilityIds =
+            runCatching {
+                obj["facility_ids"]
+                    ?.jsonArray
+                    ?.mapNotNull { it.jsonPrimitive.longOrNull }
+                    .orEmpty()
+            }.getOrDefault(emptyList())
+        if (placeId != null && facilityIds.isNotEmpty()) {
+            return ProviderRef.ReserveCalifornia(placeId = placeId, facilityIds = facilityIds)
         }
 
         return null

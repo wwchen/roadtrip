@@ -38,6 +38,11 @@ enum class ApiCacheEntity(
         envKey = "ROADTRIP_CACHE_RESERVEAMERICA_AVAILABILITY_TTL",
         defaultTtl = Duration.ofHours(2),
     ),
+    RESERVECALIFORNIA_AVAILABILITY(
+        namespace = "reservecalifornia_availability",
+        envKey = "ROADTRIP_CACHE_RESERVECALIFORNIA_AVAILABILITY_TTL",
+        defaultTtl = Duration.ofHours(2),
+    ),
 }
 
 data class ApiCacheConfig(

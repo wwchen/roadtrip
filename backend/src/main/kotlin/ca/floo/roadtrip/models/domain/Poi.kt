@@ -191,6 +191,11 @@ sealed class ProviderRef {
         val contractCode: String?,
         val parkId: String,
     ) : ProviderRef()
+
+    data class ReserveCalifornia(
+        val placeId: Long,
+        val facilityIds: List<Long>,
+    ) : ProviderRef()
 }
 
 // Drives the row's `category` column. Stable strings that match the
