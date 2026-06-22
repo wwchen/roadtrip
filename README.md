@@ -14,7 +14,7 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 ## Local dev
 
 ```sh
-tilt up                  # full dev stack (postgres in Docker, backend + companion on host)
+tilt up                  # Compose stack (Postgres/backend/Grafana) + host companion
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make companion           # campsite Playwright companion against the local backend
 make deploy              # ssh to the mini, git pull, docker compose up
