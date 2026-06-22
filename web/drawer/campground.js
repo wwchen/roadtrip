@@ -229,8 +229,8 @@ function renderShell(f, signal) {
 
   // Raw upstream payload (whatever the ETL didn't promote). Flat key/value
   // table for top-level fields, nested objects/arrays as collapsed JSON.
-  // Always collapsed by default — this is a "what's available" surface,
-  // not the primary read.
+  // TODO: Decide whether raw-upstream auxiliary UI belongs in this feature;
+  // this PR's first-class POI scope is description/photo_url only.
   const upstreamSection = upstreamHTML(p.upstream);
   const aboutSection = descriptionSectionHTML(p.description);
 
