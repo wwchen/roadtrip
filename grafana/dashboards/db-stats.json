@@ -519,7 +519,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Roadtrip / DB Stats",
+  "title": "DB Stats",
   "uid": "roadtrip-db-stats",
   "version": 1
 }

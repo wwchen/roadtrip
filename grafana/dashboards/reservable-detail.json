@@ -396,7 +396,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Roadtrip / Reservable Detail",
+  "title": "Reservable Detail",
   "uid": "roadtrip-reservable-detail",
   "version": 1
 }

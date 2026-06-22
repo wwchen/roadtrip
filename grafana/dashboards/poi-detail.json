@@ -319,7 +319,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Roadtrip / POI Detail",
+  "title": "POI Detail",
   "uid": "roadtrip-poi-detail",
   "version": 1
 }

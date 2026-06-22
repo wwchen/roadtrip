@@ -285,7 +285,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Roadtrip / POIs With Reservables",
+  "title": "POIs With Reservables",
   "uid": "roadtrip-poi-reservables",
   "version": 1
 }

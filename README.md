@@ -25,7 +25,7 @@ make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger
 for Postgres, the backend container, and Grafana, then runs the campsite
 companion as a host Node process so Playwright can drive a real Chromium.
 The backend still serves the app on <http://127.0.0.1:8765>. Grafana is
-available at <http://127.0.0.1:3000> with local defaults `admin` / `admin`.
+available at <http://127.0.0.1:3000> with anonymous viewer access enabled.
 Provisioned dashboards include POI detail, POIs with reservables, Tesla
 Supercharger detail/stats, reservable detail/stats, DB stats, ingest/catalog
 freshness, provider cache audit, watch/scheduler health, and API/SQL
