@@ -279,7 +279,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  r.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,\n  r.type,\n  r.vendor,\n  r.vendor_id,\n  r.name,\n  r.loop,\n  r.site_type,\n  array_remove(array_agg(p.id ORDER BY p.id), NULL) AS poi_ids,\n  r.tags,\n  r.raw\nFROM reservables r\nLEFT JOIN reservable_pois rp ON rp.reservable_id = r.id\nLEFT JOIN pois p ON p.id = rp.poi_id AND p.deleted_at IS NULL\nWHERE r.deleted_at IS NULL\n  AND (${vendor:sqlstring} = '' OR r.vendor = ${vendor:sqlstring})\n  AND (${site_type:sqlstring} = '' OR r.site_type = ${site_type:sqlstring})\n  AND (${name:sqlstring} = '' OR r.name = ${name:sqlstring})\nGROUP BY r.id\nORDER BY r.type ASC, r.vendor ASC, r.vendor_id ASC\nLIMIT 100;",
+          "rawSql": "SELECT\n  r.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,\n  r.type,\n  r.vendor,\n  r.vendor_id,\n  r.name,\n  r.loop,\n  r.site_type,\n  array_remove(array_agg(p.id ORDER BY p.id), NULL) AS poi_ids,\n  r.tags,\n  r.raw\nFROM reservables r\nLEFT JOIN reservable_pois rp ON rp.reservable_id = r.id\nLEFT JOIN pois p ON p.id = rp.poi_id AND p.deleted_at IS NULL\nWHERE r.deleted_at IS NULL\n  AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor = ${vendor:sqlstring})\n  AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type = ${site_type:sqlstring})\n  AND (${name:sqlstring} = '' OR r.name = ${name:sqlstring})\nGROUP BY r.id\nORDER BY r.type ASC, r.vendor ASC, r.vendor_id ASC\nLIMIT 100;",
           "refId": "A"
         }
       ],
@@ -430,7 +430,7 @@
         "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
         "refresh": 1,
         "includeAll": true,
-        "allValue": "",
+        "allValue": "'__all'",
         "current": {
           "text": "",
           "value": ""
@@ -455,7 +455,7 @@
         "query": "SELECT DISTINCT vendor AS __text, vendor AS __value FROM reservables WHERE vendor IS NOT NULL ORDER BY vendor ASC",
         "refresh": 1,
         "includeAll": true,
-        "allValue": "",
+        "allValue": "'__all'",
         "current": {
           "text": "",
           "value": ""
@@ -471,7 +471,7 @@
         "query": "SELECT DISTINCT site_type AS __text, site_type AS __value FROM reservables WHERE site_type IS NOT NULL ORDER BY site_type ASC",
         "refresh": 1,
         "includeAll": true,
-        "allValue": "",
+        "allValue": "'__all'",
         "current": {
           "text": "",
           "value": ""

@@ -69,7 +69,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  w.id AS watch_id,\n  CASE\n    WHEN w.poi_id IS NOT NULL THEN 'poi'\n    ELSE 'reservable'\n  END AS scope,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.reservable_filters,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec AS watch_cadence_sec,\n  w.trigger_kinds,\n  w.trigger_config,\n  w.stop_when_triggered,\n  w.status AS watch_status,\n  j.id AS job_id,\n  j.status AS job_status,\n  j.next_run_at,\n  j.claimed_until,\n  j.last_run_at,\n  j.updated_at AS job_updated_at\nFROM availability_watch w\nLEFT JOIN availability_job j ON j.watch_id = w.id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE (${watch_status:sqlstring} = '' OR w.status = ${watch_status:sqlstring})\n  AND (${job_status:sqlstring} = '' OR j.status = ${job_status:sqlstring})\n  AND (${poi_id:sqlstring} = '' OR w.poi_id = NULLIF(${poi_id:sqlstring}, '')::bigint)\n  AND (\n    ${reservable_rid:sqlstring} = ''\n    OR r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\n  )\nORDER BY\n  j.next_run_at ASC NULLS LAST,\n  w.created_at DESC,\n  w.id DESC;",
+          "rawSql": "SELECT\n  w.id AS watch_id,\n  CASE\n    WHEN w.poi_id IS NOT NULL THEN 'poi'\n    ELSE 'reservable'\n  END AS scope,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.reservable_filters,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec AS watch_cadence_sec,\n  w.trigger_kinds,\n  w.trigger_config,\n  w.stop_when_triggered,\n  w.status AS watch_status,\n  j.id AS job_id,\n  j.status AS job_status,\n  j.next_run_at,\n  j.claimed_until,\n  j.last_run_at,\n  j.updated_at AS job_updated_at\nFROM availability_watch w\nLEFT JOIN availability_job j ON j.watch_id = w.id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE (${watch_status:sqlstring} = '' OR w.status = ${watch_status:sqlstring})\n  AND (${job_status:sqlstring} = '' OR j.status = ${job_status:sqlstring})\n  AND (${poi_id:sqlstring} IN ('', '__all') OR w.poi_id = NULLIF(${poi_id:sqlstring}, '')::bigint)\n  AND (\n    ${reservable_rid:sqlstring} IN ('', '__all')\n    OR r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\n  )\nORDER BY\n  j.next_run_at ASC NULLS LAST,\n  w.created_at DESC,\n  w.id DESC;",
           "refId": "A"
         }
       ],
@@ -193,7 +193,7 @@
         "query": "SELECT id::text || ' - ' || name AS __text, id AS __value FROM pois WHERE deleted_at IS NULL ORDER BY name ASC LIMIT 500",
         "refresh": 1,
         "includeAll": true,
-        "allValue": "",
+        "allValue": "'__all'",
         "current": {
           "text": "",
           "value": ""
@@ -209,7 +209,7 @@
         "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
         "refresh": 1,
         "includeAll": true,
-        "allValue": "",
+        "allValue": "'__all'",
         "current": {
           "text": "",
           "value": ""
