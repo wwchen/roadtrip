@@ -92,16 +92,14 @@ Retire `backend/Dockerfile` after Compose is updated to build the `backend` targ
 
 ## Compose Design
 
-Update the backend service:
+Update the backend service to reference the image but not build it directly:
 
 ```yaml
 backend:
   image: roadtrip/backend
-  build:
-    context: .
-    dockerfile: Dockerfile
-    target: backend
 ```
+
+This avoids split ownership in Tilt. Tilt's Docker Compose integration expects an image used by a Compose service to be built either by the Compose `build:` key or by Tilt's `docker_build()`, not both. Normal `make deploy` and GitHub deploy should build `roadtrip/backend` explicitly before `docker compose up`.
 
 Add Grafana:
 
@@ -1306,7 +1304,7 @@ Configuration checks:
 Backend image check:
 
 - Run `./gradlew :backend:shadowJar`.
-- Run `docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois build backend`.
+- Run `docker build -t roadtrip/backend --target backend .`.
 
 Grafana health check:
 
@@ -1330,19 +1328,21 @@ Regression checks:
 ## Rollout Plan
 
 1. Add root Dockerfile target for backend.
-2. Update Compose backend build to use the root Dockerfile.
+2. Update Compose backend service to use `image: roadtrip/backend`.
 3. Add Grafana service with official image and mounted provisioning/dashboards.
 4. Add Grafana read-only database role setup service.
 5. Update Tiltfile to use `docker_compose`, `docker_build`, and `dc_resource`.
-6. Add the POI detail, reservable detail, watch/scheduler health, ingest/catalog freshness, provider cache audit, and API-to-SQL equivalence dashboards.
-7. Validate local Compose and Tilt startup.
-8. Defer static UI and API removal to a later PR after the dashboard proves coverage.
+6. Update Makefile and GitHub deploy to run `docker build -t roadtrip/backend --target backend .` after `:backend:shadowJar` and before `docker compose up`.
+7. Add the POI detail, reservable detail, watch/scheduler health, ingest/catalog freshness, provider cache audit, and API-to-SQL equivalence dashboards.
+8. Validate local Compose and Tilt startup.
+9. Defer static UI and API removal to a later PR after the dashboard proves coverage.
 
 ## Risks
 
 - Grafana provisioning can fail silently if environment variables are missing. Use explicit defaults locally and document production overrides.
 - Grafana datasource changes often need a restart. Keep dashboards bind-mounted, but expect datasource YAML edits to restart the Grafana service.
 - Moving Tilt backend execution from host JVM to Compose backend changes the dev loop. It improves Docker parity but can be slower than host `:backend:run`.
+- Compose no longer owns the backend build when Tilt is in use. Keep Makefile and deploy workflow explicit: build the fat jar, build `roadtrip/backend`, then run Compose.
 - SQL panels can drift from Kotlin API behavior. This first pass should present equivalence, not immediately delete routes.
 - The read-only role setup service needs enough database privilege to create or alter a role. In this stack, the Compose-managed app database owner is expected to have that privilege.
 
