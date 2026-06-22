@@ -43,6 +43,7 @@ def main() -> int:
                 )
 
     expected_titles = {
+        "roadtrip-catalog-explorer": "Catalog / POIs, Reservables, Availability",
         "roadtrip-reservable-detail": "Reservable / Detail",
         "roadtrip-reservable-stats": "Reservable / Stats",
     }
@@ -52,6 +53,80 @@ def main() -> int:
             failures.append(
                 f"{uid} title must be {expected_title!r}, got {actual_title!r}"
             )
+
+    catalog = dashboards.get("roadtrip-catalog-explorer")
+    if catalog is None:
+        failures.append("missing roadtrip-catalog-explorer dashboard")
+    else:
+        expected_panels = {
+            "Catalog Summary",
+            "POI Map",
+            "POI Search Results",
+            "Selected POI Header",
+            "Reservables For Selected POI",
+            "Reservable Catalog Search",
+            "Selected Reservable Header",
+            "Latest Availability For Selected Reservable",
+            "Availability Status Grid By Target Date",
+            "Selected POI Latest Availability",
+            "Recent Snapshot Rows For Selected Reservable",
+            "Availability Provider Cache For Selected Reservable",
+        }
+        panel_titles = {
+            panel.get("title") for panel in catalog.get("panels", []) if panel.get("title")
+        }
+        for panel_title in sorted(expected_panels - panel_titles):
+            failures.append(
+                f"roadtrip-catalog-explorer is missing {panel_title!r}"
+            )
+        variables = {
+            variable.get("name"): variable
+            for variable in catalog.get("templating", {}).get("list", [])
+        }
+        for variable_name in (
+            "poi_id",
+            "reservable_rid",
+            "reservable_search",
+            "observed_days_back",
+            "target_start_date",
+            "target_end_date",
+        ):
+            if variable_name not in variables:
+                failures.append(
+                    "roadtrip-catalog-explorer is missing "
+                    f"{variable_name!r} variable"
+                )
+        raw_sql = "\n".join(
+            target.get("rawSql", "")
+            for panel in catalog.get("panels", [])
+            for target in panel.get("targets", [])
+        )
+        required_fragments = [
+            "pois",
+            "reservables",
+            "reservable_pois",
+            "availability_snapshot",
+            "grafana_api_cache_metadata",
+            "Latest Availability For Selected Reservable",
+            "Selected POI Latest Availability",
+            "/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer",
+            "/d/roadtrip-poi-detail/roadtrip-poi-detail",
+            "/d/roadtrip-reservable-detail/roadtrip-reservable-detail",
+        ]
+        dashboard_text = json.dumps(catalog)
+        for fragment in required_fragments:
+            haystack = raw_sql if fragment in {
+                "pois",
+                "reservables",
+                "reservable_pois",
+                "availability_snapshot",
+                "grafana_api_cache_metadata",
+            } else dashboard_text
+            if fragment not in haystack:
+                failures.append(
+                    "roadtrip-catalog-explorer missing "
+                    f"{fragment!r}"
+                )
 
     fetches = dashboards.get("roadtrip-reservable-availability-fetches")
     if fetches is None:
