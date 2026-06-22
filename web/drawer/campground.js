@@ -160,10 +160,9 @@ function renderShell(f, signal) {
   const p = f.properties;
   const [lng, lat] = f.geometry.coordinates;
 
-  // Per-source decorations from properties.upstream — RIDB ships rich
-  // MEDIA / FacilityDescription / fees / parent-park name that other ETLs
-  // don't carry. Each section is empty string when absent so the drawer
-  // renders sparse for sources that don't have them.
+  // Per-source auxiliary decorations from properties.upstream. Product
+  // fields such as description/photo_url are promoted by ETL and rendered
+  // from the POI DTO; raw is only used for secondary upstream details.
   const decor = upstreamDecorations(p.upstream);
 
   // Subline: parent park (RIDB RECAREA[0].RecAreaName when present, else
@@ -189,11 +188,9 @@ function renderShell(f, signal) {
 
   const verdict = seasonVerdictHTML(p.season, p.reservable);
 
-  // Hero photo lands flush against the top edges when present. Prefer the
-  // RIDB MEDIA hero (Primary → Preview → first), fall back to legacy
-  // p.photo_url. Falls back to extra header padding when neither (drawer-
-  // head's first-child rule).
-  const heroUrl = decor.heroUrl || p.photo_url;
+  // Hero photo lands flush against the top edges when present. The backend
+  // owns source-specific promotion into properties.photo_url.
+  const heroUrl = p.photo_url;
   const hero = heroUrl
     ? `<div class="cg-hero" role="img" aria-label="${escapeHtml(p.name)}" style="background-image: url('${escapeHtml(heroUrl)}')"></div>`
     : '';
@@ -235,7 +232,7 @@ function renderShell(f, signal) {
   // Always collapsed by default — this is a "what's available" surface,
   // not the primary read.
   const upstreamSection = upstreamHTML(p.upstream);
-  const aboutSection = descriptionSectionHTML(p.description) || decor.about;
+  const aboutSection = descriptionSectionHTML(p.description);
 
   const content = document.querySelector(`#${DRAWER_ROOT_ID} .cg-drawer-content`);
   content.innerHTML = `

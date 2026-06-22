@@ -108,7 +108,8 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
             sites = null,
             season = null,
             near = null,
-            photoUrl = null,
+            description = row.description?.trim()?.takeIf { it.isNotBlank() },
+            photoUrl = parkPhotoUrl(row.parkPhotos),
             cellCoverage = null,
             ratingReviews = null,
             subcategory = bucket,
@@ -123,6 +124,18 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
         } catch (e: Exception) {
             Instant.now()
         }
+
+    private fun parkPhotoUrl(photos: List<BcParksPhoto>): String? {
+        val withUrl = photos.filter { !it.imageUrl.isNullOrBlank() }
+        val candidates = withUrl.filter { it.isActive != false }.ifEmpty { withUrl }
+        return candidates
+            .sortedWith(
+                compareByDescending<BcParksPhoto> { it.isFeatured == true }
+                    .thenBy { it.sortOrder ?: Int.MAX_VALUE },
+            ).firstOrNull()
+            ?.imageUrl
+            ?.trim()
+    }
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
@@ -146,6 +159,16 @@ data class BcParksRow(
     val latitude: Double? = null,
     val longitude: Double? = null,
     val parkContact: String? = null,
+    val description: String? = null,
+    val parkPhotos: List<BcParksPhoto> = emptyList(),
+)
+
+@Serializable
+data class BcParksPhoto(
+    val imageUrl: String? = null,
+    val isFeatured: Boolean? = null,
+    val isActive: Boolean? = null,
+    val sortOrder: Int? = null,
 )
 
 data class BcParksDto(

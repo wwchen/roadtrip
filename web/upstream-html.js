@@ -1,15 +1,13 @@
-// Decorate the campground drawer with rich fields from `properties.upstream`.
+// Decorate the campground drawer with auxiliary fields from `properties.upstream`.
 //
 // The ETL stuffs the verbatim upstream record under properties.upstream
 // (see Poi.Campground.extras). For RecGov / RIDB pins that means:
-//   - MEDIA: array of {URL, Title, Description, IsPrimary, IsPreview, MediaType}
-//   - FacilityDescription: HTML, h2-sectioned (Overview / Recreation / …)
 //   - FacilityUseFeeDescription: HTML
 //   - FacilityDirections, StayLimit: plain strings
+//   - RECAREA: parent park names
 //
-// Other upstreams (BC Strapi, Aspira-WA join output) ship different shapes;
-// the per-source helpers below return null when their field isn't present
-// so the drawer can compose them additively.
+// First-class UI fields like description and photo_url must be promoted by
+// the backend ETL and read from the POI DTO, not scraped out of raw here.
 
 import { escapeHtml } from './core.js';
 
@@ -75,42 +73,22 @@ function scrub(node) {
 }
 
 /**
- * Pick the best hero image URL from a RIDB-style MEDIA array.
- * Preference: IsPrimary → IsPreview → first Image entry → null.
- */
-export function pickHeroFromMedia(media) {
-  if (!Array.isArray(media)) return null;
-  const images = media.filter((m) => m && (m.MediaType === 'Image' || !m.MediaType) && m.URL);
-  if (!images.length) return null;
-  return (
-    images.find((m) => m.IsPrimary)?.URL ||
-    images.find((m) => m.IsPreview)?.URL ||
-    images[0].URL
-  );
-}
-
-/**
  * Section blocks (HTML strings) decorated from upstream. Returns an object
  * with named pieces so the drawer composer can place them where it wants;
  * each piece is empty string when the corresponding field isn't shipped.
  */
 export function upstreamDecorations(upstream) {
   if (!upstream || typeof upstream !== 'object') {
-    return { heroUrl: null, parentName: null, about: '', fees: '', meta: '' };
+    return { parentName: null, fees: '', meta: '' };
   }
   // RIDB shape (NPS / USFS / BLM via recreation.gov).
-  const heroUrl = pickHeroFromMedia(upstream.MEDIA);
   // Parent park: RIDB returns RECAREA[] when fetched with ?full=true.
   // The first entry is the immediate parent (e.g. "Buffalo National
   // River" for a Steel Creek facility).
   const parentName = pickParentName(upstream.RECAREA);
-  const description = sanitizeUpstreamHtml(upstream.FacilityDescription);
   const fees = sanitizeUpstreamHtml(upstream.FacilityUseFeeDescription);
   const directions = sanitizeUpstreamHtml(upstream.FacilityDirections);
 
-  const about = description
-    ? `<section class="cg-about"><h3>About</h3><div class="cg-html">${description}</div></section>`
-    : '';
   const feesSection = fees
     ? `<section class="cg-fees"><h3>Fees & cancellation</h3><div class="cg-html">${fees}</div></section>`
     : '';
@@ -127,7 +105,7 @@ export function upstreamDecorations(upstream) {
     ? `<section class="cg-upstream-meta">${metaItems.join('')}</section>`
     : '';
 
-  return { heroUrl, parentName, about, fees: feesSection, meta };
+  return { parentName, fees: feesSection, meta };
 }
 
 export function descriptionSectionHTML(description) {

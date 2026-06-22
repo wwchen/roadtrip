@@ -38,10 +38,13 @@ class ReserveAmericaEtlTest {
             "https://newyorkstateparks.reserveamerica.com/camping/alger-island/r/campgroundDetails.do?contractCode=NY&parkId=695",
             poi.infoUrl,
         )
+        assertEquals("Island campground on Fourth Lake.", poi.description)
+        assertEquals("https://newyorkstateparks.reserveamerica.com/photo.jpg", poi.photoUrl)
 
         val extras = poi.extras!!.jsonObject
         assertEquals("NY", extras["contract"]!!.jsonPrimitive.content)
         assertEquals("ALGER ISLAND", extras["name"]!!.jsonPrimitive.content)
+        assertEquals("Island campground on Fourth Lake.", extras["description"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -58,6 +61,7 @@ class ReserveAmericaEtlTest {
                                     lat = 49.083,
                                     lon = -111.617,
                                     phone = null,
+                                    description = null,
                                     photoUrl = null,
                                     infoUrl = "https://shop.albertaparks.ca/camping/x/r/campgroundDetails.do?contractCode=ABPP&parkId=123",
                                 ),
@@ -102,6 +106,7 @@ class ReserveAmericaEtlTest {
                         <meta property="place:location:latitude" content='43.7597'>
                         <meta property="place:location:longitude" content='-74.7244'>
                         <meta property="og:title" content='ALGER ISLAND, NY'>
+                        <meta property="og:description" content='Island campground on Fourth Lake.'>
                         <meta property="og:image" content='https://newyorkstateparks.reserveamerica.com/photo.jpg'>
                         <meta property="og:url" content='https://newyorkstateparks.reserveamerica.com/camping/alger-island/r/campgroundDetails.do?contractCode=NY&parkId=695'>
                       </head>

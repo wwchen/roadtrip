@@ -80,6 +80,7 @@ class ReserveAmericaEtl(
                 sites = null,
                 season = null,
                 near = null,
+                description = park.description,
                 photoUrl = park.photoUrl,
                 cellCoverage = null,
                 ratingReviews = null,
@@ -108,6 +109,7 @@ class ReserveAmericaEtl(
                 latitude = park.lat,
                 longitude = park.lon,
                 phone = park.phone,
+                description = park.description,
                 photoUrl = park.photoUrl,
                 infoUrl = park.infoUrl,
             ),
@@ -144,6 +146,13 @@ class ReserveAmericaEtl(
                 ?.groupValues
                 ?.get(1)
                 ?.takeIf { it.isNotBlank() }
+        val description =
+            OG_DESCRIPTION
+                .find(html)
+                ?.groupValues
+                ?.get(1)
+                ?.trim()
+                ?.takeIf { it.isNotBlank() }
         // og:url is the page's own canonical link — pulling it out of the
         // HTML keeps the host + querystring shape owned by upstream rather
         // than hardcoded in the ETL.
@@ -159,6 +168,7 @@ class ReserveAmericaEtl(
             lat = lat,
             lon = lon,
             phone = phone,
+            description = description,
             photoUrl = photoUrl,
             infoUrl = infoUrl,
         )
@@ -201,6 +211,7 @@ class ReserveAmericaEtl(
         private val LATITUDE = Regex("""place:location:latitude"\s+content='([^']+)'""")
         private val LONGITUDE = Regex("""place:location:longitude"\s+content='([^']+)'""")
         private val OG_TITLE = Regex("""og:title"\s+content='([^']+)'""")
+        private val OG_DESCRIPTION = Regex("""og:description"\s+content='([^']*)'""")
         private val OG_IMAGE = Regex("""og:image"\s+content='([^']+)'""")
         private val OG_URL = Regex("""og:url"\s+content='([^']+)'""")
         private val TELEPHONE = Regex("""itemprop="telephone"[^>]*>([^<]+)""")
@@ -250,6 +261,7 @@ private data class ReserveAmericaParkExtrasDto(
     val latitude: Double,
     val longitude: Double,
     val phone: String? = null,
+    val description: String? = null,
     @SerialName("photo_url") val photoUrl: String? = null,
     @SerialName("info_url") val infoUrl: String? = null,
 )
@@ -260,6 +272,7 @@ data class ParsedPark(
     val lat: Double,
     val lon: Double,
     val phone: String?,
+    val description: String?,
     val photoUrl: String?,
     val infoUrl: String?,
 )

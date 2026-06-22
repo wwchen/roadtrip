@@ -334,7 +334,14 @@ class SmokeTest {
                             "provider_ref": { "place_id": 629, "facility_ids": [889] },
                             "raw": {
                               "upstream": {
-                                "Name": "Clear Lake SP Cabins"
+                                "Name": "Clear Lake SP Cabins",
+                                "FacilityDescription": "<p>Raw-only description should not render.</p>",
+                                "MEDIA": [
+                                  {
+                                    "URL": "https://example.test/raw-only.jpg",
+                                    "IsPrimary": true
+                                  }
+                                ]
                               }
                             }
                           }
@@ -372,6 +379,10 @@ class SmokeTest {
             )
             assertThat(drawer.locator("h2")).containsText("Clear Lake SP Cabins")
             assertThat(drawer.locator(".cg-about")).containsText("Clear Lake State Park offers rental cabins")
+            assertFalse(
+                drawer.locator(".cg-about").textContent().contains("Raw-only description"),
+                "drawer About should render DTO description, not raw upstream description",
+            )
             assertThat(drawer.locator(".cg-details")).containsText("Restrooms")
             assertThat(drawer.locator(".cg-details")).containsText("Fishing")
             val heroImage =
@@ -381,6 +392,7 @@ class SmokeTest {
                     """.trimIndent(),
                 ) as String
             assertTrue(heroImage.contains("/Place/629.jpg"), "drawer should use DTO photo_url as hero image")
+            assertFalse(heroImage.contains("raw-only.jpg"), "drawer hero should render DTO photo_url, not raw upstream media")
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during promoted POI DTO smoke: ${pageErrors.joinToString(" | ")}",
