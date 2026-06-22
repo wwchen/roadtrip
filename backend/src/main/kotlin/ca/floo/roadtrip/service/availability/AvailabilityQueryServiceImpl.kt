@@ -87,6 +87,9 @@ private suspend fun cataloglessProviderAvailability(
 ): PoiReservablesAvailabilityResponseDto {
     val row = providerRefs.findProviderRef(poiId)
     if (row == null || siteTypes.isNotEmpty()) {
+        // `site_type` filters apply to local catalog rows. Catalogless provider
+        // fallback has upstream site ids only, so returning empty is explicit:
+        // the caller asked for a catalog classification we cannot prove.
         val (start, end) = displayWindow(poiId, startDate, endDate, providerRefs, dateResolver)
         return emptyPoiAvailability(poiId, start, end)
     }
@@ -117,6 +120,9 @@ private suspend fun cataloglessProviderAvailability(
                 force = force,
             ),
         )
+    // Render-only fallback for POIs without linked reservables. Snapshot
+    // persistence currently happens through AvailabilityService once catalog
+    // rows exist; synthetic upstream ids are not persisted here.
     val byReservableId =
         batch.observations
             .groupBy { it.reservableId }

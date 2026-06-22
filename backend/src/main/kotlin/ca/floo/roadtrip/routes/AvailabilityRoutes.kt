@@ -54,7 +54,9 @@ internal fun Route.availabilityRoutes(
             "that can answer from a campground-level matrix may still return synthetic " +
             "per-reservable streams. An empty `reservables` array means the POI has no " +
             "known online-bookable reservables; the drawer should hide the matrix. " +
-            "Optional `site_type` filters the linked catalog before dispatch."
+            "Optional `site_type` filters the linked catalog before dispatch. " +
+            "For catalogless POIs, `site_type` returns an empty response because " +
+            "there are no local catalog rows to classify."
         request {
             pathParameter<Long>("poi_id") { description = "pois.id primary key" }
             queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today's local date." }
@@ -64,7 +66,7 @@ internal fun Route.availabilityRoutes(
         }
         response {
             code(HttpStatusCode.OK) {
-                description = "Wrapped envelope. `reservables` is empty when none are linked."
+                description = "Wrapped envelope. `reservables` is empty when none are linked or a catalogless filter cannot be applied."
                 body<PoiReservablesAvailabilityResponseDto> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.BadRequest) {

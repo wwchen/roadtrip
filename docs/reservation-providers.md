@@ -233,6 +233,8 @@ Each adapter's upstream API is documented separately under
 - [aspira.md](reservation-providers/aspira.md) — Aspira NextGen
   (`reservation.pc.gc.ca`, `camping.bcparks.ca`,
   `washington.goingtocamp.com`).
+- [reservecalifornia.md](reservation-providers/reservecalifornia.md) —
+  ReserveCalifornia / Tyler Technologies discovery notes. Not implemented.
 - _recgov.md, reserveamerica.md — to be written._
 
 When adding a new vendor, follow the

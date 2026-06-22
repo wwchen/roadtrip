@@ -46,6 +46,18 @@ class ReservationProviderRegistryTest {
     }
 
     @Test
+    fun `forSource resolves source without requiring a campground row`() {
+        val recgov = FakeProvider(ReservationProviderId.RECGOV)
+        val registry =
+            ReservationProviderRegistry(
+                adaptersBySource = mapOf("federal-campgrounds" to recgov),
+            )
+
+        assertSame(recgov, registry.forSource("federal-campgrounds"))
+        assertNull(registry.forSource("never-registered"))
+    }
+
+    @Test
     fun `multiple sources can share one adapter instance`() {
         val recgov = FakeProvider(ReservationProviderId.RECGOV)
         val registry =

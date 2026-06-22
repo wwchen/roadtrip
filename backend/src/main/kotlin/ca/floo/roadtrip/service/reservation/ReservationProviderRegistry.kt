@@ -36,6 +36,13 @@ class ReservationProviderRegistry(
     fun forPoi(row: CampsiteProviderRefRow): ReservationProvider? = adaptersBySource[row.source]
 
     /**
+     * Source-only lookup for call sites that only need static adapter
+     * capabilities. Use [forPoi] when future provider routing may need the
+     * full campground row.
+     */
+    fun forSource(source: String): ReservationProvider? = adaptersBySource[source]
+
+    /**
      * All distinct adapter instances. Used by capability probes and admin
      * tooling. The same instance may appear under multiple sources
      * (e.g. one RecGov adapter handles every recgov source); this method

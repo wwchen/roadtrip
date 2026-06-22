@@ -18,7 +18,6 @@ import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.ReservableRepo
@@ -47,6 +46,7 @@ import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
 import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmericaTenant
@@ -307,16 +307,10 @@ fun Application.module() {
             availabilitySupport = { row ->
                 val providerRefJson = row.providerRefJson
                 providerRefJson != null &&
+                    ProviderRefParser.parse(providerRefJson) != null &&
                     reservationProviderRegistry
-                        .forPoi(
-                            CampsiteProviderRefRow(
-                                poiId = row.id,
-                                source = row.source,
-                                providerRefJson = providerRefJson,
-                                lng = row.lng,
-                                lat = row.lat,
-                            ),
-                        )?.capabilities
+                        .forSource(row.source)
+                        ?.capabilities
                         ?.supportsAvailability == true
             },
         )
