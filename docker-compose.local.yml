@@ -16,5 +16,7 @@ services:
 
   grafana:
     restart: "no"
+    environment:
+      GF_SERVER_ROOT_URL: "http://localhost:3000/dash/"
     ports:
       - "127.0.0.1:3000:3000"
