@@ -174,6 +174,7 @@ function renderShell(f, signal) {
     ? formatDistance(distanceKm(state.userLocation.lat, state.userLocation.lng, lat, lng))
     : '';
   const sub = [subline, distLine].filter(Boolean).join(' · ');
+  const agency = typeof p.agency === 'string' ? p.agency.trim() : '';
 
   const amenities = parseAmenities(p);
   const activities = parseActivities(p);
@@ -239,6 +240,7 @@ function renderShell(f, signal) {
     ${hero}
     <header class="cg-drawer-head">
       <h2>${escapeHtml(p.name)}</h2>
+      ${agency ? `<div class="cg-agency-subtitle">${escapeHtml(agency)}</div>` : ''}
       ${sub ? `<div class="cg-sub">${escapeHtml(sub)}</div>` : ''}
       ${verdict ? `<div class="cg-verdict-row">${verdict}</div>` : ''}
     </header>
