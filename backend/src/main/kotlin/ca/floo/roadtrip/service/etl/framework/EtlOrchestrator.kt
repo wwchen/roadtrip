@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.etl.framework
 import ca.floo.roadtrip.models.domain.Poi
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.models.metadata.registry.AgencyConfig
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.models.metadata.registry.ReservableDataEntry
@@ -119,7 +120,7 @@ class EtlOrchestrator(
         for ((index, entry) in row.etls.withIndex()) {
             val isTerminal = index == row.etls.lastIndex
             val etl =
-                registry[entry.slug]
+                etlRegistry[entry.slug]
                     ?: error("no adapter registered for etl slug='${entry.slug}'")
             log.info(
                 "  stage {}/{} slug={} adapter={} terminal={}",
@@ -267,6 +268,7 @@ class EtlOrchestrator(
                 }
             }
         val pois = concrete.transform(validated, transformCtx)
+        validateAgencyConfig(row, pois)
         val ups = upsert.run(setOf(concrete.etlSlug), pois)
         log.info(
             "poi_data '{}' terminal slug={} transformed={} upserted={} swept={}",
@@ -283,6 +285,27 @@ class EtlOrchestrator(
             transformed = pois.size,
             upsertResult = ups,
         )
+    }
+
+    private fun validateAgencyConfig(
+        row: PoiDataEntry,
+        pois: List<Poi>,
+    ) {
+        when (val agency = row.agency) {
+            null -> return
+            is AgencyConfig.Constant -> {
+                val mismatched = pois.count { it.agency != agency.value }
+                check(mismatched == 0) {
+                    "poi_data '${row.name}' agency=${agency.value} but $mismatched terminal POI(s) had a different agency"
+                }
+            }
+            is AgencyConfig.DerivedFromField -> {
+                val missing = pois.count { it.agency.isNullOrBlank() }
+                check(missing == 0) {
+                    "poi_data '${row.name}' agency derived_from_field=${agency.field} but $missing terminal POI(s) had null agency"
+                }
+            }
+        }
     }
 
     /**
@@ -430,8 +453,8 @@ class EtlOrchestrator(
                         .ReserveCaliforniaEtl("california-state-parks"),
                 // RIDB (recreation.gov backend) — one ETL covers every
                 // publishing agency (NPS, USFS, BLM, USACE, FWS, BOR, TVA, …).
-                // Per-row agency stamped on Poi.Campground.agency at
-                // transform time from ORGANIZATION[0].OrgAbbrevName.
+                // Per-facility agency stamped on Poi.Campground.agency at
+                // transform time from ORGANIZATION[0].OrgName.
                 "federal-campgrounds" to
                     ca.floo.roadtrip.service.etl.vendors.recgov
                         .RecGovCampgroundsEtl("federal-campgrounds"),

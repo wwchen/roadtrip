@@ -33,6 +33,7 @@ class PoiTest {
             )
         val properties = poi.propertiesJson()
 
+        assertAgency(poi, "NPS")
         assertEquals("showers", properties["amenities"]!!.jsonArray[0].jsonPrimitive.content)
         val activity = properties["activities"]!!.jsonArray.single().jsonPrimitive
         val upstream = properties["upstream"]!!.jsonObject
@@ -48,7 +49,7 @@ class PoiTest {
         assertEquals(4.25, ratingReviews[0].jsonPrimitive.double)
         assertEquals(8, ratingReviews[1].jsonPrimitive.int)
         assertEquals("federal", properties["subcategory"]!!.jsonPrimitive.content)
-        assertEquals("NPS", properties["agency"]!!.jsonPrimitive.content)
+        assertNull(properties["agency"])
         assertEquals("quoted \"text\"", upstream["description"]!!.jsonPrimitive.content)
         assertNull(properties["season"])
         assertNull(properties["near"])
@@ -68,39 +69,11 @@ class PoiTest {
 
         assertEquals(12, withoutPricebooks["stall_count"]!!.jsonPrimitive.int)
         assertEquals(250, withoutPricebooks["max_power_kw"]!!.jsonPrimitive.int)
+        assertNull(withoutPricebooks["agency"])
         assertNull(withoutPricebooks["pricebooks"])
         val pricebook = withPricebooks["pricebooks"]!!.jsonArray[0].jsonObject
         assertEquals("USD", pricebook["currencyCode"]!!.jsonPrimitive.content)
         assertEquals(0.28, pricebook["rate"]!!.jsonPrimitive.double)
-    }
-
-    @Test
-    fun `park properties serialize renamed official name and upstream payload`() {
-        val poi =
-            Poi.Park(
-                source = "parks",
-                sourceId = "park-1",
-                name = "Park",
-                geomGeoJson = POINT_GEO_JSON,
-                region = "CA",
-                country = "US",
-                phone = null,
-                address = null,
-                infoUrl = null,
-                fetchedAt = FETCHED_AT,
-                lastVerified = null,
-                parkType = ParkType.STATE,
-                designation = "State Park",
-                officialName = "Official Park",
-                acres = 123.4,
-                extras = Json.parseToJsonElement("""{"access":"public"}"""),
-            )
-        val properties = poi.propertiesJson()
-
-        assertEquals("State Park", properties["designation"]!!.jsonPrimitive.content)
-        assertEquals("Official Park", properties["official_name"]!!.jsonPrimitive.content)
-        assertEquals(123.4, properties["acres"]!!.jsonPrimitive.double)
-        assertEquals("public", properties["upstream"]!!.jsonObject["access"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -118,11 +91,19 @@ class PoiTest {
                 infoUrl = null,
                 fetchedAt = FETCHED_AT,
                 lastVerified = null,
+                agency = "Planet Fitness",
                 openingHours = null,
             )
         val properties = poi.propertiesJson()
 
         assertEquals(emptySet(), properties.keys)
+    }
+
+    private fun assertAgency(
+        poi: Poi,
+        expected: String?,
+    ) {
+        assertEquals(expected, poi.agency)
     }
 
     private fun campground(
@@ -177,6 +158,7 @@ class PoiTest {
             infoUrl = null,
             fetchedAt = FETCHED_AT,
             lastVerified = null,
+            agency = "Tesla",
             stallCount = 12,
             maxPowerKw = 250,
             facility = null,

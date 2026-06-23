@@ -42,6 +42,7 @@ class ReserveCaliforniaEtl(
         ctx: TransformCtx,
     ): List<Poi.Campground> {
         val bucket = ctx.subcategoryFor(etlSlug)
+        val agency = ctx.requiredConstantAgency(etlSlug)
         return dto.places.values
             .filter { it.facilityIds.isNotEmpty() }
             .map { place ->
@@ -72,7 +73,7 @@ class ReserveCaliforniaEtl(
                     cellCoverage = null,
                     ratingReviews = null,
                     subcategory = bucket,
-                    agency = "California State Parks",
+                    agency = agency,
                     extras = place.raw,
                 )
             }

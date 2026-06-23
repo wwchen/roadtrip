@@ -23,6 +23,7 @@ sealed class Poi {
     abstract val source: String
     abstract val sourceId: String
     abstract val name: String
+    abstract val agency: String?
 
     // GeoJSON geometry as a string. Stays opaque through the ETL and
     // gets handed to ST_GeomFromGeoJSON at upsert time. Avoids dragging
@@ -67,13 +68,10 @@ sealed class Poi {
         // or stamp per-row from the upstream's own classification
         // (uscampgrounds).
         val subcategory: String?,
-        // Managing body abbreviation. Per-row, not per-source — RIDB ships
-        // NPS / FS / BLM / USACE / FWS / BOR / TVA in one feed, and the
-        // ETL stamps each row from ORGANIZATION[0].OrgAbbrevName. Other
-        // ETLs (BC Parks, Aspira tenants, Alberta) hard-code their constant
-        // because the upstream is implicitly single-agency. Null only when
-        // the upstream omits it; FE can label or filter when present.
-        val agency: String?,
+        // Managing or publishing body for this POI. For mixed upstreams such
+        // as RIDB, ETLs stamp it from each raw row; single-agency feeds read
+        // their constant from poi-registry.yaml.
+        override val agency: String?,
         // Verbatim upstream payload for the row, merged into the FE
         // properties bag under `properties.upstream`. Lets the drawer
         // surface every field the ETL didn't promote — descriptions,
@@ -95,6 +93,7 @@ sealed class Poi {
         override val infoUrl: String?,
         override val fetchedAt: Instant,
         override val lastVerified: LocalDate?,
+        override val agency: String? = null,
         val stallCount: Int,
         val maxPowerKw: Int,
         val facility: String?,
@@ -103,25 +102,6 @@ sealed class Poi {
         // render. Empty list when the detail capture is missing or had no
         // pricebooks.
         val pricebooks: List<JsonElement> = emptyList(),
-        val extras: JsonElement? = null,
-    ) : Poi()
-
-    data class Park(
-        override val source: String,
-        override val sourceId: String,
-        override val name: String,
-        override val geomGeoJson: String,
-        override val region: String?,
-        override val country: String?,
-        override val phone: String?,
-        override val address: Address?,
-        override val infoUrl: String?,
-        override val fetchedAt: Instant,
-        override val lastVerified: LocalDate?,
-        val parkType: ParkType,
-        val designation: String,
-        val officialName: String?,
-        val acres: Double?,
         val extras: JsonElement? = null,
     ) : Poi()
 
@@ -137,6 +117,7 @@ sealed class Poi {
         override val infoUrl: String?,
         override val fetchedAt: Instant,
         override val lastVerified: LocalDate?,
+        override val agency: String? = null,
         val openingHours: String?,
         val extras: JsonElement? = null,
     ) : Poi()
@@ -163,12 +144,6 @@ data class RatingSummary(
     val avg: Float, // 0..5
     val count: Int,
 )
-
-enum class ParkType {
-    NATIONAL,
-    STATE,
-    PROVINCIAL,
-}
 
 // Sealed ProviderRef per RFC decision #22. Stored as JSONB on the row;
 // the sealed type tag plus pois.source drives reservation-provider dispatch.
@@ -205,11 +180,6 @@ fun Poi.categorySql(): String =
     when (this) {
         is Poi.Campground -> "campground"
         is Poi.Supercharger -> "supercharger"
-        is Poi.Park ->
-            when (this.parkType) {
-                ParkType.NATIONAL -> "national-park"
-                ParkType.STATE, ParkType.PROVINCIAL -> "state-park"
-            }
         is Poi.PlanetFitness -> "planet-fitness"
     }
 
@@ -258,7 +228,6 @@ private fun perTypeProperties(poi: Poi): JsonObject =
                                 }
                             },
                         subcategory = poi.subcategory,
-                        agency = poi.agency,
                         upstream = poi.extras,
                     ),
                 ).jsonObject
@@ -270,16 +239,6 @@ private fun perTypeProperties(poi: Poi): JsonObject =
                         maxPowerKw = poi.maxPowerKw,
                         facility = poi.facility,
                         pricebooks = poi.pricebooks.takeIf { it.isNotEmpty() },
-                        upstream = poi.extras,
-                    ),
-                ).jsonObject
-        is Poi.Park ->
-            poiPropertiesJson
-                .encodeToJsonElement(
-                    ParkPropertiesDto(
-                        designation = poi.designation,
-                        officialName = poi.officialName,
-                        acres = poi.acres,
                         upstream = poi.extras,
                     ),
                 ).jsonObject
@@ -306,7 +265,6 @@ private data class CampgroundPropertiesDto(
     @SerialName("rating_reviews") val ratingReviews: JsonElement? = null,
     // FE reads `properties.subcategory` for legend toggles and circle color.
     val subcategory: String? = null,
-    val agency: String? = null,
     val upstream: JsonElement? = null,
 )
 
@@ -316,14 +274,6 @@ private data class SuperchargerPropertiesDto(
     @SerialName("max_power_kw") val maxPowerKw: Int,
     val facility: String? = null,
     val pricebooks: List<JsonElement>? = null,
-    val upstream: JsonElement? = null,
-)
-
-@Serializable
-private data class ParkPropertiesDto(
-    val designation: String,
-    @SerialName("official_name") val officialName: String? = null,
-    val acres: Double? = null,
     val upstream: JsonElement? = null,
 )
 

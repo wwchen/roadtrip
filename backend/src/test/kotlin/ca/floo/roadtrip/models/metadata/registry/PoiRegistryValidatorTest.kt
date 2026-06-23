@@ -54,6 +54,78 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
+    fun `poi_data agency accepts scalar constants and derived field mappings`() {
+        val r =
+            load(
+                """
+                data_sources:
+                  - slug: src-a
+                    name: Source A
+                    fetcher:
+                      executor: python3
+                      filename: scripts/x.py
+                      output_dir_prefix: data/raw/src-a
+                  - slug: src-b
+                    name: Source B
+                    fetcher:
+                      executor: python3
+                      filename: scripts/y.py
+                      output_dir_prefix: data/raw/src-b
+                poi_data:
+                  - name: Federal Campgrounds
+                    category: campground
+                    agency:
+                      derived_from_field: ORGANIZATION[0].OrgName
+                    etls:
+                      - slug: federal-campgrounds
+                        adapter: RecGovCampgroundsEtl
+                        inputs: [src-a]
+                  - name: Planet Fitness
+                    category: planet-fitness
+                    agency: Planet Fitness
+                    etls:
+                      - slug: planet-fitness
+                        adapter: PlanetFitnessEtl
+                        inputs: [src-b]
+                """.trimIndent(),
+            )
+
+        assertEquals(AgencyConfig.DerivedFromField("ORGANIZATION[0].OrgName"), r.poiData[0].agency)
+        assertEquals(AgencyConfig.Constant("Planet Fitness"), r.poiData[1].agency)
+    }
+
+    @Test
+    fun `poi_data agency rejects blank scalar constants`() {
+        val ex =
+            assertFailsWith<IllegalArgumentException> {
+                load(
+                    """
+                    data_sources:
+                      - slug: src-a
+                        name: Source A
+                        fetcher:
+                          executor: python3
+                          filename: scripts/x.py
+                          output_dir_prefix: data/raw/src-a
+                    poi_data:
+                      - name: Blank Agency
+                        category: planet-fitness
+                        agency: ""
+                        etls:
+                          - slug: blank-agency
+                            adapter: PlanetFitnessEtl
+                            inputs: [src-a]
+                    """.trimIndent(),
+                )
+            }
+
+        assertTrue(
+            ex.message!!.contains("agency must not be blank"),
+            "expected blank-agency error, got: ${ex.message}",
+        )
+    }
+
+    @Test
     fun `reservable_data row with valid etl chain loads`() {
         val r =
             load(

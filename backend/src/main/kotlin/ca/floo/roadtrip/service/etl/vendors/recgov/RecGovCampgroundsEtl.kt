@@ -7,14 +7,17 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.RatingSummary
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.models.metadata.registry.AgencyConfig
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.pointGeoJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
@@ -30,11 +33,10 @@ import kotlin.math.round
 // RECDATA array of Facility records). Multi-part read concatenates
 // every page into one logical capture.
 //
-// One ETL class, multiple registry entries (one per agency). The
-// agency identity isn't on the row — every facility in a given
-// data_source belongs to that source's agency. Reservable facilities get
-// provider_ref=RecGov(FacilityID); non-reservable facilities remain useful
-// map POIs but are not live availability targets.
+// One ETL class covers every RIDB-publishing agency. Agency identity comes
+// from the configured facility raw field and lands on Poi.Campground.agency.
+// Reservable facilities get provider_ref=RecGov(FacilityID); non-reservable
+// facilities remain useful map POIs but are not live availability targets.
 class RecGovCampgroundsEtl(
     override val etlSlug: String,
 ) : SourceEtl<RecGovDto, List<Poi.Campground>> {
@@ -88,6 +90,7 @@ class RecGovCampgroundsEtl(
         ctx: TransformCtx,
     ): List<Poi.Campground> {
         val bucket = ctx.subcategoryFor(etlSlug)
+        val agencyConfig = ctx.agencyFor(etlSlug)
         return dto.rows.mapNotNull {
             transformRow(
                 row = it,
@@ -95,6 +98,7 @@ class RecGovCampgroundsEtl(
                 enrichment = dto.enrichmentById[it.FacilityID],
                 fetchedAt = dto.fetchedAt,
                 bucket = bucket,
+                agencyConfig = agencyConfig,
             )
         }
     }
@@ -105,22 +109,13 @@ class RecGovCampgroundsEtl(
         enrichment: JsonObject?,
         fetchedAt: Instant,
         bucket: String?,
+        agencyConfig: AgencyConfig?,
     ): Poi.Campground? {
-        // RIDB ships ORGANIZATION[0].OrgAbbrevName per row when full=true.
-        // Stamps each campground with its actual managing agency (NPS, FS,
-        // BLM, USACE, FWS, BOR, TVA, …) without us splitting the dataset.
+        // RIDB ships ORGANIZATION per row when full=true. The registry decides
+        // which field becomes the user-facing agency label.
         val rawObj = raw as? JsonObject
         val reservable = isReservable(rawObj)
-        val agency =
-            rawObj
-                ?.get("ORGANIZATION")
-                ?.jsonArray
-                ?.firstOrNull()
-                ?.jsonObject
-                ?.get("OrgAbbrevName")
-                ?.jsonPrimitive
-                ?.contentOrNull
-                ?.takeIf { it.isNotBlank() }
+        val agency = agencyFrom(rawObj, agencyConfig)
         val name = row.FacilityName?.takeIf { it.isNotBlank() } ?: return null
         val lat = row.FacilityLatitude
         val lon = row.FacilityLongitude
@@ -172,6 +167,16 @@ class RecGovCampgroundsEtl(
             extras = raw,
         )
     }
+
+    private fun agencyFrom(
+        raw: JsonObject?,
+        agencyConfig: AgencyConfig?,
+    ): String? =
+        when (agencyConfig) {
+            is AgencyConfig.Constant -> agencyConfig.value
+            is AgencyConfig.DerivedFromField -> raw?.stringAtRawPath(agencyConfig.field)
+            null -> null
+        }
 
     private fun parseEnrichment(envelopes: List<Envelope>): Map<Long, JsonObject> {
         val out = mutableMapOf<Long, JsonObject>()
@@ -352,6 +357,28 @@ class RecGovCampgroundsEtl(
             )
     }
 }
+
+private fun JsonObject.stringAtRawPath(path: String): String? {
+    var current: JsonElement = this
+    for (segment in path.split(RAW_PATH_SEPARATOR)) {
+        val match = RAW_PATH_SEGMENT.matchEntire(segment) ?: return null
+        val field = match.groupValues[RAW_PATH_FIELD_GROUP]
+        val index = match.groupValues[RAW_PATH_INDEX_GROUP].takeIf { it.isNotBlank() }?.toIntOrNull()
+        val obj = current as? JsonObject ?: return null
+        current = obj[field] ?: return null
+        if (index != null) {
+            val arr = current as? JsonArray ?: return null
+            current = arr.getOrNull(index) ?: return null
+        }
+    }
+    val scalar = current as? JsonPrimitive ?: return null
+    return scalar.contentOrNull?.takeIf { it.isNotBlank() }
+}
+
+private const val RAW_PATH_SEPARATOR = "."
+private const val RAW_PATH_FIELD_GROUP = 1
+private const val RAW_PATH_INDEX_GROUP = 2
+private val RAW_PATH_SEGMENT = Regex("""([^\[\]]+)(?:\[(\d+)])?""")
 
 // RIDB page envelope: { METADATA: {...}, RECDATA: [Facility, ...] }.
 // Field names match RIDB's PascalCase verbatim — kotlinx-serialization

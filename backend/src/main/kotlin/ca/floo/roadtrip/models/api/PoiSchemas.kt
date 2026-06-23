@@ -51,6 +51,7 @@ data class PoiDetailPropertiesSchema(
     @SerialName("source_id") val sourceId: String,
     val category: String,
     val subcategory: String? = null,
+    val agency: String? = null,
     val name: String,
     val region: String? = null,
     val country: String? = null,

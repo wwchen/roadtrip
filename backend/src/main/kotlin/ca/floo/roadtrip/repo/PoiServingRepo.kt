@@ -28,6 +28,7 @@ internal data class PoiDetailRow(
     val sourceId: String,
     val category: String,
     val subcategory: String?,
+    val agency: String? = null,
     val name: String,
     val region: String?,
     val country: String? = null,
@@ -94,7 +95,7 @@ internal class PoiServingRepo(
         val r =
             ctx.fetchOne(
                 """
-                SELECT id, source, source_id, category, subcategory, name,
+                SELECT id, source, source_id, category, subcategory, agency, name,
                        region, country,
                        ST_X(ST_PointOnSurface(geom)) AS lng,
                        ST_Y(ST_PointOnSurface(geom)) AS lat,
@@ -115,6 +116,7 @@ internal class PoiServingRepo(
             sourceId = r.get("source_id") as String,
             category = r.get("category") as String,
             subcategory = r.get("subcategory") as String?,
+            agency = r.get("agency") as String?,
             name = r.get("name") as String,
             region = r.get("region") as String?,
             country = r.get("country") as String?,

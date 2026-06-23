@@ -87,6 +87,7 @@ class AspiraJoinByNameEtl(
     ): List<Poi.Campground> {
         val host = ctx.argFor(etlSlug, "host") ?: error("$etlSlug: missing args.host")
         val subcategory = ctx.subcategoryFor(etlSlug)
+        val agency = ctx.requiredConstantAgency(etlSlug)
 
         // Build one merged name index: normalized name → first (lat, lon).
         // Geometry entries are walked in declared order, so the YAML's
@@ -178,7 +179,7 @@ class AspiraJoinByNameEtl(
                     cellCoverage = null,
                     ratingReviews = null,
                     subcategory = subcategory,
-                    agency = aspiraAgencyForHost(host),
+                    agency = agency,
                     extras = leafExtras(leaf, host, matchKind),
                 )
         }
@@ -253,19 +254,6 @@ private data class AspiraLeafExtrasDto(
     @SerialName("parent_name") val parentName: String?,
     @SerialName("match_kind") val matchKind: String,
 )
-
-/**
- * Display-name for Poi.Campground.agency, derived from the booking host.
- * Falls back to the host string for hosts we haven't classified — better
- * than null, and the FE can still show *something* useful.
- */
-private fun aspiraAgencyForHost(host: String): String =
-    when (host) {
-        "reservation.pc.gc.ca" -> "Parks Canada"
-        "camping.bcparks.ca" -> "BC Parks"
-        "washington.goingtocamp.com" -> "WA State Parks"
-        else -> host
-    }
 
 // ---- DTO + per-source strategies ------------------------------------------
 

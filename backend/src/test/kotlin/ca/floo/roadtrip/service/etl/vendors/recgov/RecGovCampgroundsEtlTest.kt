@@ -52,6 +52,7 @@ class RecGovCampgroundsEtlTest {
 
         val upperPines = pois.getValue("recgov-232447")
 
+        assertEquals("National Park Service", upperPines.agency)
         assertEquals("<p>Upper Pines is a Yosemite campground.</p>", upperPines.description)
         assertEquals("https://cdn.example/primary.webp", upperPines.photoUrl)
         assertEquals(listOf("Camping", "Hiking"), upperPines.activities)
@@ -65,6 +66,46 @@ class RecGovCampgroundsEtlTest {
         assertEquals(4, cell.getValue("verizon").count)
         assertEquals(1.25f, cell.getValue("att").avg)
         assertEquals(2, cell.getValue("att").count)
+    }
+
+    @Test
+    fun `transform treats non-scalar agency paths as missing values`() {
+        val etl = RecGovCampgroundsEtl("federal-campgrounds")
+        val ctx =
+            TransformCtx.load(
+                rawDir = File("build/tmp/recgov-campgrounds-etl-test-raw"),
+                registry =
+                    PoiRegistry.load(
+                        File("build/tmp/recgov-campgrounds-derived-object-agency.yaml").apply {
+                            parentFile.mkdirs()
+                            writeText(
+                                """
+                                data_sources:
+                                  - slug: recgov-campgrounds
+                                    name: RIDB
+                                    fetcher:
+                                      executor: python
+                                      filename: fetch_recgov.py
+                                      output_dir_prefix: recgov-campgrounds
+                                poi_data:
+                                  - name: Federal Campgrounds
+                                    category: campground
+                                    subcategory: federal
+                                    agency:
+                                      derived_from_field: ORGANIZATION[0]
+                                    etls:
+                                      - slug: federal-campgrounds
+                                        adapter: RecGovCampgroundsEtl
+                                        inputs: [recgov-campgrounds]
+                                """.trimIndent(),
+                            )
+                        },
+                    ),
+            )
+
+        val pois = etl.transform(etl.parse(bundle()), ctx)
+
+        assertNull(pois.first { it.sourceId == "recgov-232447" }.agency)
     }
 
     private fun bundle(withEnrichment: Boolean = false): InputBundle =
@@ -114,7 +155,7 @@ class RecGovCampgroundsEtlTest {
                               "IsPrimary": true
                             }
                           ],
-                          "ORGANIZATION": [{"OrgAbbrevName": "NPS"}],
+                          "ORGANIZATION": [{"OrgAbbrevName": "NPS", "OrgName": "National Park Service"}],
                           "FACILITYADDRESS": [
                             {
                               "AddressStateCode": "CA",
@@ -137,7 +178,7 @@ class RecGovCampgroundsEtlTest {
                               "LinkType": "Official Web Site"
                             }
                           ],
-                          "ORGANIZATION": [{"OrgAbbrevName": "FS"}],
+                          "ORGANIZATION": [{"OrgAbbrevName": "FS", "OrgName": "USDA Forest Service"}],
                           "FACILITYADDRESS": [
                             {
                               "AddressStateCode": "CA",
