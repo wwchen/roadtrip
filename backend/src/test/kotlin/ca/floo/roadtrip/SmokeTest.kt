@@ -188,6 +188,7 @@ class SmokeTest {
                 null,
                 Page.WaitForFunctionOptions().setTimeout(15_000.0),
             )
+            assertThat(page.locator("#panel #status")).hasCount(0)
 
             page.locator("#panel-toggle").click()
             page.waitForFunction(
@@ -292,8 +293,34 @@ class SmokeTest {
             )
 
             assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
-            page.locator("#cg-agency-federal summary").click()
-            page.locator("""#cg-agency-federal input[data-cg-agency][value="National Park Service"]""").check()
+            assertTrue(
+                page.locator("#cg-agency-federal details").evaluate("el => el.open") as Boolean,
+            )
+            assertEquals(0, page.locator("""#cg-agency-federal input[data-cg-agency-all]""").count())
+            val allFederal = page.locator("#f-cg-federal")
+            val npsAgency = page.locator("""#cg-agency-federal input[data-cg-agency][value="National Park Service"]""")
+            val forestServiceAgency =
+                page.locator("""#cg-agency-federal input[data-cg-agency][value="US Forest Service"]""")
+            assertTrue(allFederal.isChecked())
+            assertFalse(allFederal.evaluate("el => el.indeterminate") as Boolean)
+            assertTrue(npsAgency.isChecked())
+            assertTrue(forestServiceAgency.isChecked())
+
+            allFederal.uncheck()
+            assertFalse(npsAgency.isChecked())
+            assertFalse(forestServiceAgency.isChecked())
+            assertThat(page.locator("#cg-agency-federal summary")).containsText("No agencies")
+
+            allFederal.check()
+            assertTrue(npsAgency.isChecked())
+            assertTrue(forestServiceAgency.isChecked())
+            assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
+
+            forestServiceAgency.uncheck()
+            assertFalse(allFederal.isChecked())
+            assertTrue(allFederal.evaluate("el => el.indeterminate") as Boolean)
+            assertTrue(npsAgency.isChecked())
+            assertFalse(forestServiceAgency.isChecked())
 
             page.waitForFunction(
                 """
@@ -314,6 +341,13 @@ class SmokeTest {
                 Page.WaitForFunctionOptions().setTimeout(5_000.0),
             )
             assertThat(page.locator("#cg-agency-federal summary")).containsText("National Park Service")
+
+            allFederal.check()
+            assertTrue(allFederal.isChecked())
+            assertFalse(allFederal.evaluate("el => el.indeterminate") as Boolean)
+            assertTrue(npsAgency.isChecked())
+            assertTrue(forestServiceAgency.isChecked())
+            assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during agency filter smoke: ${pageErrors.joinToString(" | ")}",
