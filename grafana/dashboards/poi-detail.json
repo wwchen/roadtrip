@@ -146,7 +146,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable / Detail",
-                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-reservable_rid=${__value.raw}"
+                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-rid=${__value.raw}"
                   }
                 ]
               }
