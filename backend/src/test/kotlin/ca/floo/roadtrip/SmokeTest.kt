@@ -342,6 +342,69 @@ class SmokeTest {
             )
             assertThat(page.locator("#cg-agency-federal summary")).containsText("National Park Service")
 
+            page.evaluate(
+                """
+                () => {
+                  globalThis.__rtSetRoutePois([
+                    {
+                      type: 'Feature',
+                      id: 8101,
+                      geometry: { type: 'Point', coordinates: [-123.00, 49.00] },
+                      properties: {
+                        category: 'campground',
+                        subcategory: 'federal',
+                        agency: 'National Park Service'
+                      }
+                    }
+                  ]);
+                  return true;
+                }
+                """.trimIndent(),
+            )
+            page.waitForFunction(
+                "() => document.querySelectorAll('#cg-agency-federal input[data-cg-agency]').length >= 2",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+            )
+            assertFalse(allFederal.isChecked())
+            assertTrue(allFederal.evaluate("el => el.indeterminate") as Boolean)
+            assertTrue(npsAgency.isChecked())
+            assertFalse(forestServiceAgency.isChecked())
+
+            page.evaluate(
+                """
+                () => {
+                  globalThis.__rtSetRoutePois([
+                    {
+                      type: 'Feature',
+                      id: 8101,
+                      geometry: { type: 'Point', coordinates: [-123.00, 49.00] },
+                      properties: {
+                        category: 'campground',
+                        subcategory: 'federal',
+                        agency: 'National Park Service'
+                      }
+                    },
+                    {
+                      type: 'Feature',
+                      id: 8102,
+                      geometry: { type: 'Point', coordinates: [-123.02, 49.02] },
+                      properties: {
+                        category: 'campground',
+                        subcategory: 'federal',
+                        agency: 'US Forest Service'
+                      }
+                    }
+                  ]);
+                  return true;
+                }
+                """.trimIndent(),
+            )
+            assertFalse(allFederal.isChecked())
+            assertTrue(allFederal.evaluate("el => el.indeterminate") as Boolean)
+            assertTrue(npsAgency.isChecked())
+            assertFalse(forestServiceAgency.isChecked())
+
             allFederal.check()
             assertTrue(allFederal.isChecked())
             assertFalse(allFederal.evaluate("el => el.indeterminate") as Boolean)

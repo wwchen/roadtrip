@@ -41,6 +41,9 @@ const CG_NO_AGENCY_MATCH = '__roadtrip_no_agency_match__';
 const cgAgencySelections = Object.fromEntries(
   CG_SUBCATEGORIES.map(cat => [cat, { all: true, agencies: new Set() }]),
 );
+const cgKnownAgencies = Object.fromEntries(
+  CG_SUBCATEGORIES.map(cat => [cat, new Set()]),
+);
 const cgFilterListeners = new Set();
 let lastCgGeojson = CG_EMPTY_FC;
 let cgFilterControlsBound = false;
@@ -102,13 +105,22 @@ export function campgroundFeaturePassesFilter(featureOrProps) {
 }
 
 function agenciesByCategory(geojson) {
-  const out = Object.fromEntries(CG_SUBCATEGORIES.map(cat => [cat, new Set(cgAgencySelections[cat].agencies)]));
+  const out = Object.fromEntries(
+    CG_SUBCATEGORIES.map(cat => {
+      const selection = cgAgencySelections[cat];
+      const known = selection.all ? [] : [...cgKnownAgencies[cat], ...selection.agencies];
+      return [cat, new Set(known)];
+    }),
+  );
   for (const feature of geojson?.features || []) {
     const props = feature.properties || {};
     const category = featureCampgroundCategory(props);
     if (!Object.prototype.hasOwnProperty.call(out, category)) continue;
     const agency = normalizeAgency(props.agency);
-    if (agency) out[category].add(agency);
+    if (agency) {
+      cgKnownAgencies[category].add(agency);
+      out[category].add(agency);
+    }
   }
   return out;
 }
@@ -121,9 +133,8 @@ function syncCampgroundCategoryCheckbox(category, agencies = availableAgencies(c
   const selectedCount = selection.all
     ? agencies.length
     : agencies.filter(agency => selection.agencies.has(agency)).length;
-  const isAllSelected = selection.all || (agencies.length > 0 && selectedCount === agencies.length);
-  checkbox.checked = isAllSelected;
-  checkbox.indeterminate = !isAllSelected && selectedCount > 0;
+  checkbox.checked = selection.all;
+  checkbox.indeterminate = !selection.all && selectedCount > 0;
 }
 
 function renderCgAgencyControls(geojson = lastCgGeojson) {
@@ -143,8 +154,7 @@ function renderCgAgencyControls(geojson = lastCgGeojson) {
       continue;
     }
     const selected = selection.all ? agencies : agencies.filter(agency => selection.agencies.has(agency));
-    const isAllSelected = selection.all || selected.length === agencies.length;
-    if (isAllSelected && !selection.all) selectAllAgencies(category);
+    const isAllSelected = selection.all;
     const wasOpen = host.querySelector('details')?.open ?? true;
     const summary =
       isAllSelected
