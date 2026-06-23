@@ -188,6 +188,7 @@ class SmokeTest {
                 null,
                 Page.WaitForFunctionOptions().setTimeout(15_000.0),
             )
+            assertThat(page.locator("#panel #status")).hasCount(0)
 
             page.locator("#panel-toggle").click()
             page.waitForFunction(
