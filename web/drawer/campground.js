@@ -13,7 +13,6 @@
 
 import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';
 import {
-  parseActivities,
   parseAmenities,
   parseCellCoverage,
   parseRatingReviews,
@@ -176,10 +175,9 @@ function renderShell(f, signal) {
   const sub = [subline, distLine].filter(Boolean).join(' · ');
 
   const amenities = parseAmenities(p);
-  const activities = parseActivities(p);
   const cc = parseCellCoverage(p);
   const rr = parseRatingReviews(p);
-  const pills = amenitiesPillsHTML([...amenities, ...activities]);
+  const pills = amenitiesPillsHTML(amenities);
   const cellPills = cellCoveragePillsHTML(cc);
   const rating = ratingHTML(rr);
   const sitesTag = sitesTagHTML(p);

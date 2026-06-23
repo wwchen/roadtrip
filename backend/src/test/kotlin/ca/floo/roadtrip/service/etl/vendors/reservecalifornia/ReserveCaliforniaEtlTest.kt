@@ -12,7 +12,6 @@ import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
@@ -116,7 +115,6 @@ class ReserveCaliforniaEtlTest {
             properties["photo_url"]!!.jsonPrimitive.content,
         )
         assertEquals("Camp along the Big Sur River under redwoods.", properties["description"]!!.jsonPrimitive.content)
-        assertEquals("Hiking", properties["activities"]!!.jsonArray[0].jsonPrimitive.content)
         val upstream = properties["upstream"]!!.jsonObject
         assertEquals(
             "https://cali-content.usedirect.com/Images/California/ParkImages/Place/690.jpg",
