@@ -201,10 +201,10 @@ map.on('style.load', () => {
 // value the legend toggles + circle-color match against. Promote it to the
 // top-level `category` so layers.js filter expressions stay simple.
 //
-// Slim path (POST /api/pois): properties carries only category +
-// subcategory. We rewrite category here for the legend filter; everything
-// richer (name, address, provider_ref, raw upstream) is fetched on click
-// via GET /api/pois/{id} and re-runs this function in flattenHydrated().
+// Slim path (POST /api/pois): properties carries category, subcategory,
+// and agency. We rewrite category here for the legend filter; everything
+// richer (name, address, provider_ref, raw upstream) is fetched on click via
+// GET /api/pois/{id} and re-runs this function in flattenHydrated().
 //
 // Hydrated path (GET /api/pois/{id}): properties carries the wide row.
 // flattenHydrated calls into this same function so the post-hydration
@@ -316,8 +316,10 @@ async function load() {
     cgCounts.federal = 0; cgCounts.state = 0; cgCounts.local = 0;
     cgCounts.provincial = 0; cgCounts.other = 0;
     cg.forEach(f => {
-      const cat = f.properties.category;
-      cgCounts[cat] = (cgCounts[cat] || cgCounts.other) + 1;
+      const cat = Object.prototype.hasOwnProperty.call(cgCounts, f.properties.category)
+        ? f.properties.category
+        : 'other';
+      cgCounts[cat] += 1;
     });
     for (const [k, v] of Object.entries(cgCounts)) setCount('c-cg-' + k, v);
     if (wantCG) {

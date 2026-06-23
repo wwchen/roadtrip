@@ -167,7 +167,7 @@ internal fun Route.poiRoutes(
     // GET /api/pois/{id}
     //
     // Per-row detail. The bbox endpoint ships only id + lat/lng + category +
-    // subcategory; this endpoint backs the popup/drawer "I clicked a pin"
+    // subcategory + agency; this endpoint backs the popup/drawer "I clicked a pin"
     // flow with the full feature shape (name, address, provider_ref, raw
     // properties blob — everything the legacy bbox response carried).
     //
@@ -342,6 +342,7 @@ internal fun poiFeatureCollection(
                         SlimPoiPropertiesSchema(
                             category = row.category,
                             subcategory = row.subcategory,
+                            agency = row.agency,
                         ),
                 )
             },

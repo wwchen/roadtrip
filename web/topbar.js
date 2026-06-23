@@ -17,7 +17,7 @@
 
 import { state, distanceKm, formatDistance, flattenHydratedPoi, geomCenter, zoomForBbox } from './core.js';
 import { fitAndSelect } from './search.js';
-import { synthesizeClick } from './layers.js';
+import { campgroundFeaturePassesFilter, onCampgroundFilterChange, synthesizeClick } from './layers.js';
 import { openCampgroundDrawer } from './drawer/campground.js';
 import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
@@ -1795,6 +1795,7 @@ function setTripPois(cgFeatures) {
       season: null,
       reservable: undefined,
       rating: null,
+      agency: p.agency || '',
       lng, lat,
       // Prefer the BE-supplied along-route distance — the FE projection
       // only knows about the cached polyline and may disagree on long
@@ -1839,6 +1840,7 @@ async function hydrateTripCards(cards) {
       live.name = p.name || 'Campground';
       live.sub = p.typeLabel || '';
       live.location = p.state || p.country || '';
+      live.agency = p.agency || live.agency || '';
       live.sites = Number.isFinite(Number(p.sites)) ? Number(p.sites) : null;
       live.season = p.season || null;
       live.reservable = p.reservable;
@@ -1898,7 +1900,7 @@ function visibleCards() {
   }
   // 'other' rides with federal — same as the map filter in layers.js.
   if (allowed.has('federal')) allowed.add('other');
-  return tripResults.cards.filter(c => allowed.has(c.category));
+  return tripResults.cards.filter(c => allowed.has(c.category) && campgroundFeaturePassesFilter(c));
 }
 
 function renderResults() {
@@ -1975,9 +1977,7 @@ function renderResults() {
   // the card list so it reflects what's visible on the map.
   if (!tripResults.legendBound) {
     tripResults.legendBound = true;
-    for (const id of CG_LEGEND_TOGGLES) {
-      document.getElementById(id)?.addEventListener('change', () => renderResults());
-    }
+    onCampgroundFilterChange(() => renderResults());
   }
   el.querySelectorAll('.tb-card').forEach(node => {
     node.addEventListener('click', () => {

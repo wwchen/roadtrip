@@ -14,8 +14,8 @@ import kotlin.test.assertEquals
 // per-row detail JSON. The webapp depends on the exact wire shapes:
 //
 //   - poiFeatureCollection (slim): drives map rendering. Only id +
-//     geometry + {category, subcategory?} per feature. Anything richer
-//     would inflate the bbox payload and undo the perf refactor.
+//     geometry + {category, subcategory?, agency?} per feature. Anything
+//     richer would inflate the bbox payload and undo the perf refactor.
 //   - poiDetailFeature (wide): drives popup/drawer hydration via
 //     GET /api/pois/{id}. Same shape /api/pois used to ship inline.
 //
@@ -29,6 +29,7 @@ class FeatureCollectionContractTest {
                     id = 42,
                     category = "campground",
                     subcategory = "federal",
+                    agency = "National Park Service",
                     lng = -115.547,
                     lat = 51.1812,
                 ),
@@ -37,7 +38,7 @@ class FeatureCollectionContractTest {
             """{"type":"FeatureCollection","truncated":false,"features":[""" +
                 """{"type":"Feature","id":42,""" +
                 """"geometry":{"type":"Point","coordinates":[-115.547,51.1812]},""" +
-                """"properties":{"category":"campground","subcategory":"federal"}}""" +
+                """"properties":{"category":"campground","subcategory":"federal","agency":"National Park Service"}}""" +
                 """]}"""
         )
         assertEquals(expected, encodePoiFeatureJson(poiFeatureCollection(rows, truncated = false)))
@@ -51,12 +52,14 @@ class FeatureCollectionContractTest {
                     id = 1,
                     category = "planet-fitness",
                     subcategory = null,
+                    agency = null,
                     lng = -123.0,
                     lat = 49.0,
                 ),
             )
         val out = encodePoiFeatureJson(poiFeatureCollection(rows, truncated = false))
         assert(!out.contains("subcategory"))
+        assert(!out.contains("agency"))
         assert(out.contains(""""category":"planet-fitness""""))
     }
 
@@ -74,6 +77,7 @@ class FeatureCollectionContractTest {
                     id = 7,
                     category = "campground",
                     subcategory = "federal",
+                    agency = "National Park Service",
                     lng = -122.7,
                     lat = 48.4,
                     routeKm = 95.5,
@@ -83,7 +87,7 @@ class FeatureCollectionContractTest {
             """{"type":"FeatureCollection","features":[""" +
                 """{"type":"Feature","id":7,""" +
                 """"geometry":{"type":"Point","coordinates":[-122.7,48.4]},""" +
-                """"properties":{"category":"campground","subcategory":"federal","route_km":95.5}}""" +
+                """"properties":{"category":"campground","subcategory":"federal","agency":"National Park Service","route_km":95.5}}""" +
                 """]}"""
         )
         assertEquals(expected, encodeOnRouteJson(onRouteFeatureCollection(rows)))

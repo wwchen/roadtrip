@@ -34,6 +34,7 @@ internal class OnRoutePoiRepo(
                         id,
                         category,
                         subcategory,
+                        agency,
                         ST_X(ST_Centroid(geom)) AS lng,
                         ST_Y(ST_Centroid(geom)) AS lat,
                         ST_LineLocatePoint(corridor.line, ST_Centroid(geom)) * corridor.len_km AS route_km,
@@ -62,7 +63,7 @@ internal class OnRoutePoiRepo(
                              ROW_NUMBER() OVER (PARTITION BY poi_key ORDER BY route_km ASC, id ASC) AS rn
                       FROM candidates
                     )
-                    SELECT id, category, subcategory, lng, lat, route_km
+                    SELECT id, category, subcategory, agency, lng, lat, route_km
                     FROM ranked
                     WHERE rn = 1
                     ORDER BY route_km ASC, id ASC
@@ -80,12 +81,13 @@ internal class OnRoutePoiRepo(
 }
 
 // Slim per-row shape for /api/pois/on-route. Same id + category +
-// lat/lng + subcategory as the bbox endpoint, plus along-route distance
-// in km so the FE can sort without re-projecting client-side.
+// lat/lng + subcategory + agency as the bbox endpoint, plus along-route
+// distance in km so the FE can sort without re-projecting client-side.
 internal data class OnRouteRow(
     val id: Long,
     val category: String,
     val subcategory: String?,
+    val agency: String?,
     val lng: Double,
     val lat: Double,
     val routeKm: Double,
@@ -96,6 +98,7 @@ internal data class OnRouteRow(
                 id = (record.get("id") as Number).toLong(),
                 category = record.get("category") as String,
                 subcategory = record.get("subcategory") as String?,
+                agency = record.get("agency") as String?,
                 lng = (record.get("lng") as Number).toDouble(),
                 lat = (record.get("lat") as Number).toDouble(),
                 routeKm = (record.get("route_km") as Number).toDouble(),

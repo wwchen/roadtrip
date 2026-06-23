@@ -223,6 +223,7 @@ private fun onRouteFeature(row: OnRouteRow): PoisOnRouteFeatureSchema =
             PoisOnRouteFeaturePropertiesSchema(
                 category = row.category,
                 subcategory = row.subcategory,
+                agency = row.agency,
                 routeKm = row.routeKm,
             ),
     )

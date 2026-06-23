@@ -93,7 +93,7 @@ class PoisOnRouteRoutesTest {
             seed(
                 listOf(
                     row("south", -122.4, 47.7, "campground"),
-                    row("north", -123.05, 49.2, "campground"),
+                    row("north", -123.05, 49.2, "campground", agency = "National Park Service"),
                     row("middle", -122.7, 48.4, "campground"),
                 ),
             )
@@ -125,6 +125,13 @@ class PoisOnRouteRoutesTest {
                 }
             assertTrue(routeKms[0] < routeKms[1])
             assertTrue(routeKms[1] < routeKms[2])
+            assertEquals(
+                "National Park Service",
+                features[0]
+                    .jsonObject["properties"]!!
+                    .jsonObject["agency"]!!
+                    .jsonPrimitive.content,
+            )
         }
 
     @Test
@@ -366,6 +373,7 @@ class PoisOnRouteRoutesTest {
         val geomGeoJson: String,
         val source: String,
         val providerRefJson: String?,
+        val agency: String?,
     )
 
     private fun row(
@@ -375,6 +383,7 @@ class PoisOnRouteRoutesTest {
         category: String,
         source: String = "test",
         providerRefJson: String? = null,
+        agency: String? = null,
     ): TestRow =
         TestRow(
             sourceId = sourceId,
@@ -383,6 +392,7 @@ class PoisOnRouteRoutesTest {
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
             source = source,
             providerRefJson = providerRefJson,
+            agency = agency,
         )
 
     private fun seed(rows: List<TestRow>) {
@@ -390,11 +400,12 @@ class PoisOnRouteRoutesTest {
             ctx.execute(
                 """
                 INSERT INTO pois (
-                    source, source_id, category, name, geom, provider_ref, fetched_at
+                    source, source_id, category, name, geom, provider_ref, agency, fetched_at
                 ) VALUES (
                     ?, ?, ?, ?,
                     ST_SetSRID(ST_GeomFromGeoJSON(?), 4326),
                     ?::jsonb,
+                    ?,
                     '2026-06-01 00:00:00+00'::timestamptz
                 )
                 """.trimIndent(),
@@ -404,6 +415,7 @@ class PoisOnRouteRoutesTest {
                 r.name,
                 r.geomGeoJson,
                 r.providerRefJson,
+                r.agency,
             )
         }
     }

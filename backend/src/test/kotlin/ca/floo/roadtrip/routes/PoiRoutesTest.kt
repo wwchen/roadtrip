@@ -164,6 +164,44 @@ class PoiRoutesTest {
         }
 
     @Test
+    fun `bbox slim properties include agency when present`() =
+        testApplication {
+            seed(
+                listOf(
+                    row("nps-camp", "National Park Camp", -123.0, 49.0, "campground", agency = "National Park Service"),
+                    row("pf-1", "PF Vancouver", -123.1, 49.1, "planet-fitness"),
+                ),
+            )
+            application { routing { poiRoutes(ctx, testRegistry) } }
+
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51", categories = listOf("campground", "planet-fitness")))
+                }
+            val features = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["features"]!!.jsonArray
+            val campgroundProps =
+                features
+                    .first {
+                        it.jsonObject["properties"]!!
+                            .jsonObject["category"]!!
+                            .jsonPrimitive.content == "campground"
+                    }.jsonObject["properties"]!!
+                    .jsonObject
+            val planetFitnessProps =
+                features
+                    .first {
+                        it.jsonObject["properties"]!!
+                            .jsonObject["category"]!!
+                            .jsonPrimitive.content == "planet-fitness"
+                    }.jsonObject["properties"]!!
+                    .jsonObject
+
+            assertEquals("National Park Service", campgroundProps["agency"]!!.jsonPrimitive.content)
+            assertEquals(null, planetFitnessProps["agency"])
+        }
+
+    @Test
     fun `truncated flag flips and the cap is filled when raw count exceeds it`() =
         testApplication {
             // Seed POI_LIMIT + 5 campground rows spread evenly across the
@@ -548,6 +586,7 @@ class PoiRoutesTest {
         val category: String,
         val name: String,
         val geomGeoJson: String,
+        val agency: String? = null,
         val region: String? = "BC",
         val unitName: String? = null,
         val properties: String = """{"test":true}""",
@@ -559,12 +598,14 @@ class PoiRoutesTest {
         lon: Double,
         lat: Double,
         category: String,
+        agency: String? = null,
     ): TestRow =
         TestRow(
             sourceId = sourceId,
             category = category,
             name = name,
             geomGeoJson = """{"type":"Point","coordinates":[$lon,$lat]}""",
+            agency = agency,
         )
 
     private fun seed(rows: List<TestRow>) {
@@ -577,11 +618,11 @@ class PoiRoutesTest {
                 """
                 INSERT INTO pois (
                     source, source_id, category, name, geom,
-                    region, unit_name, properties, fetched_at
+                    agency, region, unit_name, properties, fetched_at
                 ) VALUES (
                     ?, ?, ?, ?,
                     ST_SetSRID(ST_GeomFromGeoJSON(?), 4326),
-                    ?, ?, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
+                    ?, ?, ?, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
                 )
                 """.trimIndent(),
                 "test",
@@ -589,6 +630,7 @@ class PoiRoutesTest {
                 r.category,
                 r.name,
                 r.geomGeoJson,
+                r.agency,
                 r.region,
                 r.unitName,
                 r.properties,
