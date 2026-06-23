@@ -62,6 +62,11 @@ function agencySelection(category) {
   return cgAgencySelections[effectiveCampgroundCategory(category)];
 }
 
+function campgroundCategoryHasSelection(category) {
+  const selection = agencySelection(category);
+  return !!selection && (selection.all || selection.agencies.size > 0);
+}
+
 function availableAgencies(category, geojson = lastCgGeojson) {
   return [...agenciesByCategory(geojson)[effectiveCampgroundCategory(category)]].sort((a, b) => a.localeCompare(b));
 }
@@ -90,9 +95,8 @@ export function onCampgroundFilterChange(listener) {
 export function campgroundFeaturePassesFilter(featureOrProps) {
   const props = featureOrProps?.properties || featureOrProps || {};
   const category = featureCampgroundCategory(props);
-  const categoryToggle = document.getElementById(`f-cg-${category}`);
-  if (!categoryToggle?.checked) return false;
   const selection = agencySelection(category);
+  if (!selection) return false;
   if (selection.all) return true;
   return selection.agencies.has(normalizeAgency(props.agency));
 }
@@ -109,16 +113,33 @@ function agenciesByCategory(geojson) {
   return out;
 }
 
+function syncCampgroundCategoryCheckbox(category, agencies = availableAgencies(category)) {
+  const checkbox = document.getElementById(`f-cg-${category}`);
+  if (!(checkbox instanceof HTMLInputElement)) return;
+  const selection = agencySelection(category);
+  if (!selection) return;
+  const selectedCount = selection.all
+    ? agencies.length
+    : agencies.filter(agency => selection.agencies.has(agency)).length;
+  const isAllSelected = selection.all || (agencies.length > 0 && selectedCount === agencies.length);
+  checkbox.checked = isAllSelected;
+  checkbox.indeterminate = !isAllSelected && selectedCount > 0;
+}
+
 function renderCgAgencyControls(geojson = lastCgGeojson) {
   const byCategory = agenciesByCategory(geojson);
   for (const category of CG_SUBCATEGORIES) {
     const host = document.getElementById(`cg-agency-${category}`);
-    if (!host) continue;
     const selection = agencySelection(category);
     const agencies = [...byCategory[category]].sort((a, b) => a.localeCompare(b));
+    if (!host) {
+      syncCampgroundCategoryCheckbox(category, agencies);
+      continue;
+    }
     if (agencies.length === 0) {
       host.hidden = true;
       host.innerHTML = '';
+      syncCampgroundCategoryCheckbox(category, agencies);
       continue;
     }
     const selected = selection.all ? agencies : agencies.filter(agency => selection.agencies.has(agency));
@@ -138,10 +159,6 @@ function renderCgAgencyControls(geojson = lastCgGeojson) {
       <details class="cg-agency-menu"${wasOpen ? ' open' : ''}>
         <summary>${escapeHtml(summary)}</summary>
         <div class="cg-agency-options">
-          <label class="cg-agency-choice">
-            <input type="checkbox" data-cg-agency-all="${category}"${isAllSelected ? ' checked' : ''}>
-            <span>All agencies</span>
-          </label>
           ${agencies.map(agency => `
             <label class="cg-agency-choice">
               <input type="checkbox" data-cg-agency="${category}" value="${escapeHtml(agency)}"${isAllSelected || selection.agencies.has(agency) ? ' checked' : ''}>
@@ -151,15 +168,12 @@ function renderCgAgencyControls(geojson = lastCgGeojson) {
         </div>
       </details>
     `;
+    syncCampgroundCategoryCheckbox(category, agencies);
   }
 }
 
 function checkedCampgroundCategories() {
-  const cats = [];
-  for (const category of CG_SUBCATEGORIES) {
-    if (document.getElementById(`f-cg-${category}`)?.checked) cats.push(category);
-  }
-  return cats;
+  return CG_SUBCATEGORIES.filter(campgroundCategoryHasSelection);
 }
 
 function filterCategoriesFor(category) {
@@ -191,27 +205,20 @@ function applyCGFilter() {
 function onCgAgencyControlChange(e) {
   const target = e.target;
   if (!(target instanceof HTMLInputElement)) return;
-  const allCategory = target.dataset.cgAgencyAll;
   const agencyCategory = target.dataset.cgAgency;
-  if (allCategory) {
-    if (target.checked) selectAllAgencies(allCategory);
-    else selectNoAgencies(allCategory);
-  } else if (agencyCategory) {
-    const agency = normalizeAgency(target.value);
-    const selection = agencySelection(agencyCategory);
-    if (selection.all) {
-      selection.all = false;
-      selection.agencies.clear();
-      for (const availableAgency of availableAgencies(agencyCategory)) selection.agencies.add(availableAgency);
-    }
-    if (agency && target.checked) selection.agencies.add(agency);
-    else selection.agencies.delete(agency);
-    const agencies = availableAgencies(agencyCategory);
-    if (agencies.length > 0 && agencies.every(availableAgency => selection.agencies.has(availableAgency))) {
-      selectAllAgencies(agencyCategory);
-    }
-  } else {
-    return;
+  if (!agencyCategory) return;
+  const agency = normalizeAgency(target.value);
+  const selection = agencySelection(agencyCategory);
+  if (selection.all) {
+    selection.all = false;
+    selection.agencies.clear();
+    for (const availableAgency of availableAgencies(agencyCategory)) selection.agencies.add(availableAgency);
+  }
+  if (agency && target.checked) selection.agencies.add(agency);
+  else selection.agencies.delete(agency);
+  const agencies = availableAgencies(agencyCategory);
+  if (agencies.length > 0 && agencies.every(availableAgency => selection.agencies.has(availableAgency))) {
+    selectAllAgencies(agencyCategory);
   }
   renderCgAgencyControls();
   applyCGFilter();
@@ -222,7 +229,13 @@ function bindCGFilterControls() {
   if (cgFilterControlsBound) return;
   cgFilterControlsBound = true;
   for (const category of CG_SUBCATEGORIES) {
-    document.getElementById(`f-cg-${category}`)?.addEventListener('change', () => {
+    document.getElementById(`f-cg-${category}`)?.addEventListener('change', (event) => {
+      const target = event.target;
+      if (target instanceof HTMLInputElement) {
+        if (target.checked) selectAllAgencies(category);
+        else selectNoAgencies(category);
+        renderCgAgencyControls();
+      }
       applyCGFilter();
       notifyCampgroundFilterChanged();
     });

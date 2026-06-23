@@ -295,16 +295,29 @@ class SmokeTest {
             assertTrue(
                 page.locator("#cg-agency-federal details").evaluate("el => el.open") as Boolean,
             )
-            val allFederal = page.locator("""#cg-agency-federal input[data-cg-agency-all="federal"]""")
+            assertEquals(0, page.locator("""#cg-agency-federal input[data-cg-agency-all]""").count())
+            val allFederal = page.locator("#f-cg-federal")
             val npsAgency = page.locator("""#cg-agency-federal input[data-cg-agency][value="National Park Service"]""")
             val forestServiceAgency =
                 page.locator("""#cg-agency-federal input[data-cg-agency][value="US Forest Service"]""")
             assertTrue(allFederal.isChecked())
+            assertFalse(allFederal.evaluate("el => el.indeterminate") as Boolean)
             assertTrue(npsAgency.isChecked())
             assertTrue(forestServiceAgency.isChecked())
 
+            allFederal.uncheck()
+            assertFalse(npsAgency.isChecked())
+            assertFalse(forestServiceAgency.isChecked())
+            assertThat(page.locator("#cg-agency-federal summary")).containsText("No agencies")
+
+            allFederal.check()
+            assertTrue(npsAgency.isChecked())
+            assertTrue(forestServiceAgency.isChecked())
+            assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
+
             forestServiceAgency.uncheck()
             assertFalse(allFederal.isChecked())
+            assertTrue(allFederal.evaluate("el => el.indeterminate") as Boolean)
             assertTrue(npsAgency.isChecked())
             assertFalse(forestServiceAgency.isChecked())
 
@@ -330,6 +343,7 @@ class SmokeTest {
 
             allFederal.check()
             assertTrue(allFederal.isChecked())
+            assertFalse(allFederal.evaluate("el => el.indeterminate") as Boolean)
             assertTrue(npsAgency.isChecked())
             assertTrue(forestServiceAgency.isChecked())
             assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")

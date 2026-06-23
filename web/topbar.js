@@ -1697,8 +1697,6 @@ const CG_DOT_COLOR = {
   other: '#cddc39',
 };
 
-const CG_LEGEND_TOGGLES = ['f-cg-federal', 'f-cg-state', 'f-cg-local', 'f-cg-provincial'];
-
 const tripResults = {
   cards: [],     // [{ id, name, sub, lng, lat, category, routeKm, distKm, rating, sites, season, feature }]
   byId: new Map(),
@@ -1893,14 +1891,7 @@ function bindResultsHead(el) {
 }
 
 function visibleCards() {
-  const allowed = new Set();
-  for (const id of CG_LEGEND_TOGGLES) {
-    const el = document.getElementById(id);
-    if (el?.checked) allowed.add(id.replace('f-cg-', ''));
-  }
-  // 'other' rides with federal — same as the map filter in layers.js.
-  if (allowed.has('federal')) allowed.add('other');
-  return tripResults.cards.filter(c => allowed.has(c.category) && campgroundFeaturePassesFilter(c));
+  return tripResults.cards.filter(c => campgroundFeaturePassesFilter(c));
 }
 
 function renderResults() {
