@@ -318,6 +318,7 @@ class SmokeTest {
                             "source_id": "rc-629",
                             "category": "campground",
                             "subcategory": "state",
+                            "agency": "California State Parks",
                             "name": "Clear Lake SP Cabins",
                             "region": "CA",
                             "country": "US",
@@ -378,6 +379,7 @@ class SmokeTest {
                     .setTimeout(15_000.0),
             )
             assertThat(drawer.locator("h2")).containsText("Clear Lake SP Cabins")
+            assertThat(drawer.locator("h2 + .cg-agency-subtitle")).containsText("California State Parks")
             assertThat(drawer.locator(".cg-about")).containsText("Clear Lake State Park offers rental cabins")
             assertFalse(
                 drawer.locator(".cg-about").textContent().contains("Raw-only description"),
