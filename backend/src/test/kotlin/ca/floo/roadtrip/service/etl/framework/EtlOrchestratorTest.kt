@@ -26,7 +26,6 @@ import java.io.File
 import java.nio.file.Files
 import java.time.Instant
 import kotlin.test.assertEquals
-import kotlin.test.assertFailsWith
 import kotlin.test.assertNotNull
 
 // End-to-end: copy a captured envelope into a tempdir-shaped data/raw/<source>/,
@@ -202,7 +201,7 @@ class EtlOrchestratorTest {
     }
 
     @Test
-    fun `derived agency config requires terminal POIs to expose agency field`() {
+    fun `derived agency config tolerates terminal POIs whose agency field is missing`() {
         val registry =
             registryFromYaml(
                 """
@@ -226,12 +225,12 @@ class EtlOrchestratorTest {
                 etlRegistry = mapOf("derived-agency-test" to MissingAgencyEtl),
             )
 
-        val ex = assertFailsWith<IllegalStateException> { orch.runPoiData("Derived Agency Test") }
+        // One bad row mustn't abort the whole import — derived agency is best-effort
+        // per row, like the upstream's per-facility ORGANIZATION shape.
+        val stats = orch.runPoiData("Derived Agency Test")
 
-        assertEquals(
-            "poi_data 'Derived Agency Test' agency derived_from_field=agency but 1 terminal POI(s) had null agency",
-            ex.message,
-        )
+        assertEquals(1, stats.transformed)
+        assertEquals(1, stats.upsertResult.seenCount)
     }
 
     private fun registryFromYaml(text: String): PoiRegistry {

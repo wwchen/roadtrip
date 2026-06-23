@@ -31,7 +31,7 @@ class TransformCtx private constructor(
         when (val agency = agencyFor(etlSlug)) {
             is AgencyConfig.Constant -> agency.value
             is AgencyConfig.DerivedFromField ->
-                error("$etlSlug uses poi_data.agency.$AGENCY_DERIVED_FROM_FIELD_KEY='${agency.field}', not a constant agency")
+                error("$etlSlug uses poi_data.agency.${AgencyConfig.DERIVED_FROM_FIELD_KEY}='${agency.field}', not a constant agency")
             null -> error("$etlSlug is missing required poi_data.agency")
         }
 
@@ -64,5 +64,3 @@ class TransformCtx private constructor(
         }
     }
 }
-
-private const val AGENCY_DERIVED_FROM_FIELD_KEY = "derived_from_field"

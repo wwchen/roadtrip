@@ -473,6 +473,10 @@ sealed interface AgencyConfig {
     data class DerivedFromField(
         val field: String,
     ) : AgencyConfig
+
+    companion object {
+        const val DERIVED_FROM_FIELD_KEY = "derived_from_field"
+    }
 }
 
 private fun YamlNode.toAgencyConfig(): AgencyConfig =
@@ -483,21 +487,20 @@ private fun YamlNode.toAgencyConfig(): AgencyConfig =
             AgencyConfig.Constant(value)
         }
         is YamlMap -> {
-            val entries = entries.mapKeys { (key, _) -> key.content }
-            val unknown = entries.keys - AGENCY_DERIVED_FROM_FIELD_KEY
+            val key = AgencyConfig.DERIVED_FROM_FIELD_KEY
+            val entries = entries.mapKeys { (k, _) -> k.content }
+            val unknown = entries.keys - key
             require(unknown.isEmpty()) {
-                "supports only '$AGENCY_DERIVED_FROM_FIELD_KEY'; unknown keys: ${unknown.joinToString()}"
+                "supports only '$key'; unknown keys: ${unknown.joinToString()}"
             }
-            val derived = entries[AGENCY_DERIVED_FROM_FIELD_KEY] as? YamlScalar
-            require(derived != null) { "$AGENCY_DERIVED_FROM_FIELD_KEY must be a scalar" }
+            val derived = entries[key] as? YamlScalar
+            require(derived != null) { "$key must be a scalar" }
             val field = derived.content.takeIf { it.isNotBlank() }
-            require(field != null) { "$AGENCY_DERIVED_FROM_FIELD_KEY must not be blank" }
+            require(field != null) { "$key must not be blank" }
             AgencyConfig.DerivedFromField(field)
         }
-        else -> error("must be a scalar string or mapping")
+        else -> throw IllegalArgumentException("agency must be a scalar string or mapping")
     }
-
-private const val AGENCY_DERIVED_FROM_FIELD_KEY = "derived_from_field"
 
 @Serializable
 data class EtlEntry(

@@ -300,9 +300,18 @@ class EtlOrchestrator(
                 }
             }
             is AgencyConfig.DerivedFromField -> {
+                // Per-row null tolerance: upstream feeds (e.g. RIDB) ship occasional
+                // rows with the agency path missing or non-scalar. We log the count
+                // rather than aborting the whole import — a single bad row mustn't
+                // sink the dataset.
                 val missing = pois.count { it.agency.isNullOrBlank() }
-                check(missing == 0) {
-                    "poi_data '${row.name}' agency derived_from_field=${agency.field} but $missing terminal POI(s) had null agency"
+                if (missing > 0) {
+                    log.warn(
+                        "poi_data '{}' agency derived_from_field={} produced {} terminal POI(s) with null agency",
+                        row.name,
+                        agency.field,
+                        missing,
+                    )
                 }
             }
         }
