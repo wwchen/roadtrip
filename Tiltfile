@@ -5,6 +5,16 @@
 # and keeps the host-side companion plus manual data resources available.
 
 PORT = '8765'
+COMPOSE_PROJECT = 'roadtrip'
+COMPOSE = 'docker compose -p ' + COMPOSE_PROJECT + ' --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois'
+COMPOSE_DEV_SERVICES = 'postgres backend grafana grafana-db-setup'
+COMPOSE_DOWN = COMPOSE + ' down --timeout 10 ' + COMPOSE_DEV_SERVICES
+DETACHED_COMPOSE_DOWN = (
+    "python3 -c 'import os, subprocess, sys; " +
+    "os.setsid(); " +
+    "subprocess.Popen(sys.argv[1:], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)' " +
+    COMPOSE_DOWN
+)
 
 # Keep .env values available for local manual resources and future host-side
 # commands. read_file with default='' returns empty when the file is missing,
@@ -24,6 +34,23 @@ def _load_dotenv(path):
     return out
 
 DOTENV = _load_dotenv('.env')
+
+# Tilt keeps Docker Compose resources running on Ctrl+C by default. Keep an
+# attached local resource alive so Tilt terminates it on exit; the shell trap
+# tears down dev containers while preserving bind-mounted and named volumes.
+local_resource(
+    'compose-cleanup',
+    cmd='true',
+    serve_cmd=(
+        "cleanup() { trap - EXIT INT TERM HUP; " +
+        'if [ -n "${sleep_pid:-}" ]; then kill "$sleep_pid" 2>/dev/null || true; wait "$sleep_pid" 2>/dev/null || true; fi; ' +
+        DETACHED_COMPOSE_DOWN + "; }; " +
+        "trap cleanup EXIT; " +
+        'trap "cleanup; exit 0" INT TERM HUP; ' +
+        'while true; do sleep 86400 & sleep_pid=$!; wait "$sleep_pid"; done'
+    ),
+    labels=['infra'],
+)
 
 local_resource(
     'backend-jar',
@@ -49,6 +76,7 @@ local_resource(
 
 docker_compose(
     ['docker-compose.yml', 'docker-compose.local.yml'],
+    project_name=COMPOSE_PROJECT,
     profiles=['pois'],
 )
 
@@ -63,7 +91,7 @@ docker_build(
     ],
 )
 
-dc_resource('postgres', labels=['infra'])
+dc_resource('postgres', resource_deps=['compose-cleanup'], labels=['infra'])
 dc_resource(
     'grafana-db-setup',
     resource_deps=['backend'],
