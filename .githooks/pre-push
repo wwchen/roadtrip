@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Run backend tests before pushing. Skip when no backend code changed in the
-# range about to be pushed, and skip entirely under SKIP_PREPUSH=1 for the
-# rare "yes I know, just push it" case. Enable with `make install-hooks`.
+# Run backend tests before pushing. Skip when no backend code or smoke-covered
+# static asset changed in the range about to be pushed, and skip entirely under
+# SKIP_PREPUSH=1 for the rare "yes I know, just push it" case. Enable with
+# `make install-hooks`.
 #
 # Pre-push (vs pre-commit) is the right gate for tests: pre-commit runs every
 # few minutes during a flow session and slow tests would train people to
@@ -33,8 +34,18 @@ while read -r local_ref local_sha remote_ref remote_sha; do
   changed+=$(git diff --name-only "$range" 2>/dev/null || true)$'\n'
 done
 
-if ! echo "$changed" | grep -qE '^backend/'; then
-  echo "pre-push: no backend changes — skipping tests"
+should_test=0
+while IFS= read -r path; do
+  case "$path" in
+    backend/*|*.html|*.js|*.css)
+      should_test=1
+      break
+      ;;
+  esac
+done <<< "$changed"
+
+if [ "$should_test" -ne 1 ]; then
+  echo "pre-push: no backend or smoke-covered static changes — skipping tests"
   exit 0
 fi
 
