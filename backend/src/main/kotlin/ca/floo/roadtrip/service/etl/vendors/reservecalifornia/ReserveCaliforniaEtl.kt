@@ -62,8 +62,8 @@ class ReserveCaliforniaEtl(
                             placeId = place.placeId,
                             facilityIds = place.facilityIds,
                         ),
-                    amenities = place.amenities,
-                    activities = place.activities,
+                    amenities = emptyList(),
+                    activities = emptyList(),
                     sites = null,
                     season = null,
                     near = null,
@@ -184,7 +184,6 @@ private fun parsePlace(payload: JsonObject): ReserveCaliforniaPlace? {
                 ?.firstOrNull()
         if (unitTypeName != null) unitTypes[facilityId] = unitTypeName
     }
-    val highlights = parseHighlights(selected["Allhighlights"]?.jsonPrimitive?.contentOrNull)
     return ReserveCaliforniaPlace(
         placeId = placeId,
         name = name,
@@ -194,8 +193,6 @@ private fun parsePlace(payload: JsonObject): ReserveCaliforniaPlace? {
         unitTypeByFacilityId = unitTypes,
         imageUrl = selected.stringValue("ImageUrl"),
         description = selected.stringValue("Description"),
-        amenities = highlights.filterNot(::isActivityHighlight),
-        activities = highlights.filter(::isActivityHighlight),
         raw = selected,
     )
 }
@@ -243,20 +240,6 @@ private fun JsonObject.stringValue(key: String): String? =
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
 
-private fun parseHighlights(raw: String?): List<String> =
-    raw
-        ?.split(Regex("""(?i)<br\s*/?>"""))
-        ?.map { it.replace(Regex("""<[^>]+>"""), " ") }
-        ?.map { it.replace(Regex("""\s+"""), " ").trim() }
-        ?.filter { it.isNotEmpty() }
-        ?.distinct()
-        .orEmpty()
-
-private fun isActivityHighlight(label: String): Boolean {
-    val normalized = label.lowercase()
-    return ACTIVITY_HINTS.any { normalized.contains(it) }
-}
-
 private fun withSynthetic(
     raw: JsonObject,
     values: Map<String, String>,
@@ -284,8 +267,6 @@ data class ReserveCaliforniaPlace(
     val unitTypeByFacilityId: Map<Long, String>,
     val imageUrl: String?,
     val description: String?,
-    val amenities: List<String>,
-    val activities: List<String>,
     val raw: JsonElement,
 )
 
@@ -314,17 +295,3 @@ data class ReserveCaliforniaUnit(
     val name: String?,
     val raw: JsonObject,
 )
-
-private val ACTIVITY_HINTS =
-    setOf(
-        "biking",
-        "bird",
-        "boating",
-        "fishing",
-        "hiking",
-        "riding",
-        "ski",
-        "swimming",
-        "trail",
-        "water sport",
-    )

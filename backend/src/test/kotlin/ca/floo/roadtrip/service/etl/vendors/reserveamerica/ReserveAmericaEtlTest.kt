@@ -44,7 +44,6 @@ class ReserveAmericaEtlTest {
         val extras = poi.extras!!.jsonObject
         assertEquals("NY", extras["contract"]!!.jsonPrimitive.content)
         assertEquals("ALGER ISLAND", extras["name"]!!.jsonPrimitive.content)
-        assertEquals("Island campground on Fourth Lake.", extras["description"]!!.jsonPrimitive.content)
     }
 
     @Test

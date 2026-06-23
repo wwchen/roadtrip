@@ -109,7 +109,6 @@ class ReserveAmericaEtl(
                 latitude = park.lat,
                 longitude = park.lon,
                 phone = park.phone,
-                description = park.description,
                 photoUrl = park.photoUrl,
                 infoUrl = park.infoUrl,
             ),
@@ -261,7 +260,6 @@ private data class ReserveAmericaParkExtrasDto(
     val latitude: Double,
     val longitude: Double,
     val phone: String? = null,
-    val description: String? = null,
     @SerialName("photo_url") val photoUrl: String? = null,
     @SerialName("info_url") val infoUrl: String? = null,
 )
