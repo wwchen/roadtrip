@@ -37,7 +37,10 @@ const CG_COLOR = {
 };
 const CG_SUBCATEGORIES = ['federal', 'state', 'provincial', 'local'];
 const CG_EMPTY_FC = { type: 'FeatureCollection', features: [] };
-const cgAgencySelections = Object.fromEntries(CG_SUBCATEGORIES.map(cat => [cat, new Set()]));
+const CG_NO_AGENCY_MATCH = '__roadtrip_no_agency_match__';
+const cgAgencySelections = Object.fromEntries(
+  CG_SUBCATEGORIES.map(cat => [cat, { all: true, agencies: new Set() }]),
+);
 const cgFilterListeners = new Set();
 let lastCgGeojson = CG_EMPTY_FC;
 let cgFilterControlsBound = false;
@@ -55,8 +58,24 @@ function featureCampgroundCategory(props) {
   return effectiveCampgroundCategory(category || 'other');
 }
 
-function selectedAgencies(category) {
-  return cgAgencySelections[effectiveCampgroundCategory(category)] || new Set();
+function agencySelection(category) {
+  return cgAgencySelections[effectiveCampgroundCategory(category)];
+}
+
+function availableAgencies(category, geojson = lastCgGeojson) {
+  return [...agenciesByCategory(geojson)[effectiveCampgroundCategory(category)]].sort((a, b) => a.localeCompare(b));
+}
+
+function selectAllAgencies(category) {
+  const selection = agencySelection(category);
+  selection.all = true;
+  selection.agencies.clear();
+}
+
+function selectNoAgencies(category) {
+  const selection = agencySelection(category);
+  selection.all = false;
+  selection.agencies.clear();
 }
 
 function notifyCampgroundFilterChanged() {
@@ -73,13 +92,13 @@ export function campgroundFeaturePassesFilter(featureOrProps) {
   const category = featureCampgroundCategory(props);
   const categoryToggle = document.getElementById(`f-cg-${category}`);
   if (!categoryToggle?.checked) return false;
-  const agencies = selectedAgencies(category);
-  if (agencies.size === 0) return true;
-  return agencies.has(normalizeAgency(props.agency));
+  const selection = agencySelection(category);
+  if (selection.all) return true;
+  return selection.agencies.has(normalizeAgency(props.agency));
 }
 
 function agenciesByCategory(geojson) {
-  const out = Object.fromEntries(CG_SUBCATEGORIES.map(cat => [cat, new Set(cgAgencySelections[cat])]));
+  const out = Object.fromEntries(CG_SUBCATEGORIES.map(cat => [cat, new Set(cgAgencySelections[cat].agencies)]));
   for (const feature of geojson?.features || []) {
     const props = feature.properties || {};
     const category = featureCampgroundCategory(props);
@@ -95,32 +114,37 @@ function renderCgAgencyControls(geojson = lastCgGeojson) {
   for (const category of CG_SUBCATEGORIES) {
     const host = document.getElementById(`cg-agency-${category}`);
     if (!host) continue;
-    const selected = selectedAgencies(category);
+    const selection = agencySelection(category);
     const agencies = [...byCategory[category]].sort((a, b) => a.localeCompare(b));
     if (agencies.length === 0) {
       host.hidden = true;
       host.innerHTML = '';
       continue;
     }
-    const wasOpen = host.querySelector('details')?.open;
+    const selected = selection.all ? agencies : agencies.filter(agency => selection.agencies.has(agency));
+    const isAllSelected = selection.all || selected.length === agencies.length;
+    if (isAllSelected && !selection.all) selectAllAgencies(category);
+    const wasOpen = host.querySelector('details')?.open ?? true;
     const summary =
-      selected.size === 0
+      isAllSelected
         ? 'All agencies'
-        : selected.size === 1
-          ? [...selected][0]
-          : `${selected.size} agencies`;
+        : selected.length === 0
+          ? 'No agencies'
+          : selected.length === 1
+            ? selected[0]
+            : `${selected.length} agencies`;
     host.hidden = false;
     host.innerHTML = `
       <details class="cg-agency-menu"${wasOpen ? ' open' : ''}>
         <summary>${escapeHtml(summary)}</summary>
         <div class="cg-agency-options">
           <label class="cg-agency-choice">
-            <input type="checkbox" data-cg-agency-all="${category}"${selected.size === 0 ? ' checked' : ''}>
+            <input type="checkbox" data-cg-agency-all="${category}"${isAllSelected ? ' checked' : ''}>
             <span>All agencies</span>
           </label>
           ${agencies.map(agency => `
             <label class="cg-agency-choice">
-              <input type="checkbox" data-cg-agency="${category}" value="${escapeHtml(agency)}"${selected.has(agency) ? ' checked' : ''}>
+              <input type="checkbox" data-cg-agency="${category}" value="${escapeHtml(agency)}"${isAllSelected || selection.agencies.has(agency) ? ' checked' : ''}>
               <span>${escapeHtml(agency)}</span>
             </label>
           `).join('')}
@@ -144,8 +168,9 @@ function filterCategoriesFor(category) {
 
 function campgroundFilterClause(category) {
   const categoryClause = ['in', ['get', 'category'], ['literal', filterCategoriesFor(category)]];
-  const agencies = [...selectedAgencies(category)];
-  if (agencies.length === 0) return categoryClause;
+  const selection = agencySelection(category);
+  if (selection.all) return categoryClause;
+  const agencies = selection.agencies.size > 0 ? [...selection.agencies] : [CG_NO_AGENCY_MATCH];
   return ['all', categoryClause, ['in', ['get', 'agency'], ['literal', agencies]]];
 }
 
@@ -169,12 +194,22 @@ function onCgAgencyControlChange(e) {
   const allCategory = target.dataset.cgAgencyAll;
   const agencyCategory = target.dataset.cgAgency;
   if (allCategory) {
-    if (target.checked) selectedAgencies(allCategory).clear();
-    else if (selectedAgencies(allCategory).size === 0) target.checked = true;
+    if (target.checked) selectAllAgencies(allCategory);
+    else selectNoAgencies(allCategory);
   } else if (agencyCategory) {
     const agency = normalizeAgency(target.value);
-    if (agency && target.checked) selectedAgencies(agencyCategory).add(agency);
-    else selectedAgencies(agencyCategory).delete(agency);
+    const selection = agencySelection(agencyCategory);
+    if (selection.all) {
+      selection.all = false;
+      selection.agencies.clear();
+      for (const availableAgency of availableAgencies(agencyCategory)) selection.agencies.add(availableAgency);
+    }
+    if (agency && target.checked) selection.agencies.add(agency);
+    else selection.agencies.delete(agency);
+    const agencies = availableAgencies(agencyCategory);
+    if (agencies.length > 0 && agencies.every(availableAgency => selection.agencies.has(availableAgency))) {
+      selectAllAgencies(agencyCategory);
+    }
   } else {
     return;
   }

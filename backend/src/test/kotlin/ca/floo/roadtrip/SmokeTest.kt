@@ -292,8 +292,21 @@ class SmokeTest {
             )
 
             assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
-            page.locator("#cg-agency-federal summary").click()
-            page.locator("""#cg-agency-federal input[data-cg-agency][value="National Park Service"]""").check()
+            assertTrue(
+                page.locator("#cg-agency-federal details").evaluate("el => el.open") as Boolean,
+            )
+            val allFederal = page.locator("""#cg-agency-federal input[data-cg-agency-all="federal"]""")
+            val npsAgency = page.locator("""#cg-agency-federal input[data-cg-agency][value="National Park Service"]""")
+            val forestServiceAgency =
+                page.locator("""#cg-agency-federal input[data-cg-agency][value="US Forest Service"]""")
+            assertTrue(allFederal.isChecked())
+            assertTrue(npsAgency.isChecked())
+            assertTrue(forestServiceAgency.isChecked())
+
+            forestServiceAgency.uncheck()
+            assertFalse(allFederal.isChecked())
+            assertTrue(npsAgency.isChecked())
+            assertFalse(forestServiceAgency.isChecked())
 
             page.waitForFunction(
                 """
@@ -314,6 +327,12 @@ class SmokeTest {
                 Page.WaitForFunctionOptions().setTimeout(5_000.0),
             )
             assertThat(page.locator("#cg-agency-federal summary")).containsText("National Park Service")
+
+            allFederal.check()
+            assertTrue(allFederal.isChecked())
+            assertTrue(npsAgency.isChecked())
+            assertTrue(forestServiceAgency.isChecked())
+            assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
             assertTrue(
                 pageErrors.isEmpty(),
                 "Page errors during agency filter smoke: ${pageErrors.joinToString(" | ")}",
