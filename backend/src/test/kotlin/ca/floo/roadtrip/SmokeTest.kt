@@ -214,6 +214,117 @@ class SmokeTest {
     }
 
     @Test
+    fun `campground agency filter narrows rendered federal pins`() {
+        val context =
+            browser.newContext(
+                Browser
+                    .NewContextOptions()
+                    .setBaseURL(baseUrl)
+                    .setViewportSize(1280, 800),
+            )
+        val page = context.newPage()
+        val pageErrors = mutableListOf<String>()
+        page.onPageError { pageErrors.add(it) }
+
+        context.route("**/api/pois") { route: Route ->
+            route.fulfill(
+                Route
+                    .FulfillOptions()
+                    .setStatus(200)
+                    .setContentType("application/json")
+                    .setBody(
+                        """
+                        {
+                          "type": "FeatureCollection",
+                          "truncated": false,
+                          "features": [
+                            {
+                              "type": "Feature",
+                              "id": 8101,
+                              "geometry": { "type": "Point", "coordinates": [-123.00, 49.00] },
+                              "properties": {
+                                "category": "campground",
+                                "subcategory": "federal",
+                                "agency": "National Park Service"
+                              }
+                            },
+                            {
+                              "type": "Feature",
+                              "id": 8102,
+                              "geometry": { "type": "Point", "coordinates": [-123.02, 49.02] },
+                              "properties": {
+                                "category": "campground",
+                                "subcategory": "federal",
+                                "agency": "US Forest Service"
+                              }
+                            },
+                            {
+                              "type": "Feature",
+                              "id": 8103,
+                              "geometry": { "type": "Point", "coordinates": [-123.04, 49.04] },
+                              "properties": {
+                                "category": "campground",
+                                "subcategory": "state",
+                                "agency": "WA State Parks"
+                              }
+                            }
+                          ]
+                        }
+                        """.trimIndent(),
+                    ),
+            )
+        }
+
+        try {
+            page.navigate("/")
+            page.waitForFunction(
+                "() => globalThis.__rtState?.mapReady === true",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(15_000.0),
+            )
+            page.evaluate(
+                "() => { globalThis.__rtMap.jumpTo({ center: [-123.02, 49.02], zoom: 10 }); return true; }",
+            )
+            page.waitForFunction(
+                "() => document.querySelectorAll('#cg-agency-federal input[data-cg-agency]').length >= 2",
+                null,
+                Page.WaitForFunctionOptions().setTimeout(15_000.0),
+            )
+
+            assertThat(page.locator("#cg-agency-federal summary")).containsText("All agencies")
+            page.locator("#cg-agency-federal summary").click()
+            page.locator("""#cg-agency-federal input[data-cg-agency][value="National Park Service"]""").check()
+
+            page.waitForFunction(
+                """
+                () => {
+                  const map = globalThis.__rtMap;
+                  const canvas = map?.getCanvas?.();
+                  if (!map || !canvas || !map.getLayer('cg-points')) return false;
+                  const agencies = map
+                    .queryRenderedFeatures([[0, 0], [canvas.width, canvas.height]], { layers: ['cg-points'] })
+                    .filter(f => f.properties.category === 'federal')
+                    .map(f => f.properties.agency)
+                    .filter(Boolean)
+                    .sort();
+                  return JSON.stringify(agencies) === JSON.stringify(['National Park Service']);
+                }
+                """.trimIndent(),
+                null,
+                Page.WaitForFunctionOptions().setTimeout(5_000.0),
+            )
+            assertThat(page.locator("#cg-agency-federal summary")).containsText("National Park Service")
+            assertTrue(
+                pageErrors.isEmpty(),
+                "Page errors during agency filter smoke: ${pageErrors.joinToString(" | ")}",
+            )
+        } finally {
+            page.close()
+            context.close()
+        }
+    }
+
+    @Test
     fun `poi share link opens drawer by id`() {
         val context =
             browser.newContext(

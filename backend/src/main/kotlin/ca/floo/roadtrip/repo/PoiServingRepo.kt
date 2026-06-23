@@ -10,12 +10,14 @@ data class Bbox(
 )
 
 // Slim row shape for the bbox endpoint. Just enough for MapLibre to place
-// + color a pin: id, lat/lng, category for color band, subcategory for the
-// campground sub-bucket. Everything richer lives behind GET /api/pois/{id}.
+// + color/filter a pin: id, lat/lng, category for color band, subcategory
+// for the campground sub-bucket, agency for layer filtering. Everything
+// richer lives behind GET /api/pois/{id}.
 internal data class PoiRow(
     val id: Long,
     val category: String,
     val subcategory: String?,
+    val agency: String?,
     val lng: Double,
     val lat: Double,
 )
@@ -248,10 +250,10 @@ internal class PoiServingRepo(
             buildString {
                 cats.forEachIndexed { idx, _ ->
                     if (idx > 0) append("\nUNION ALL\n")
-                    append("(SELECT id, category, subcategory, lng, lat FROM (")
+                    append("(SELECT id, category, subcategory, agency, lng, lat FROM (")
                     append(
                         """
-                        SELECT id, category, subcategory,
+                        SELECT id, category, subcategory, agency,
                                ST_X(ST_Centroid(geom)) AS lng,
                                ST_Y(ST_Centroid(geom)) AS lat,
                                row_number() OVER (
@@ -289,6 +291,7 @@ internal class PoiServingRepo(
                 id = (r.get("id") as Number).toLong(),
                 category = r.get("category") as String,
                 subcategory = r.get("subcategory") as String?,
+                agency = r.get("agency") as String?,
                 lng = (r.get("lng") as Number).toDouble(),
                 lat = (r.get("lat") as Number).toDouble(),
             )

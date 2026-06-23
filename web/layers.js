@@ -1,4 +1,4 @@
-import { state, geomCenter } from './core.js';
+import { state, geomCenter, escapeHtml } from './core.js';
 import { openCampgroundDrawer } from './drawer/campground.js';
 import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
@@ -35,6 +35,165 @@ const CG_COLOR = {
   local: '#9ccc65',         // light green — US county/municipal
   other: '#cddc39',         // unclassified
 };
+const CG_SUBCATEGORIES = ['federal', 'state', 'provincial', 'local'];
+const CG_EMPTY_FC = { type: 'FeatureCollection', features: [] };
+const cgAgencySelections = Object.fromEntries(CG_SUBCATEGORIES.map(cat => [cat, new Set()]));
+const cgFilterListeners = new Set();
+let lastCgGeojson = CG_EMPTY_FC;
+let cgFilterControlsBound = false;
+
+function normalizeAgency(value) {
+  return typeof value === 'string' ? value.trim() : '';
+}
+
+function effectiveCampgroundCategory(category) {
+  return category === 'other' ? 'federal' : category;
+}
+
+function featureCampgroundCategory(props) {
+  const category = props?.category === 'campground' ? props?.subcategory : props?.category;
+  return effectiveCampgroundCategory(category || 'other');
+}
+
+function selectedAgencies(category) {
+  return cgAgencySelections[effectiveCampgroundCategory(category)] || new Set();
+}
+
+function notifyCampgroundFilterChanged() {
+  for (const listener of cgFilterListeners) listener();
+}
+
+export function onCampgroundFilterChange(listener) {
+  cgFilterListeners.add(listener);
+  return () => cgFilterListeners.delete(listener);
+}
+
+export function campgroundFeaturePassesFilter(featureOrProps) {
+  const props = featureOrProps?.properties || featureOrProps || {};
+  const category = featureCampgroundCategory(props);
+  const categoryToggle = document.getElementById(`f-cg-${category}`);
+  if (!categoryToggle?.checked) return false;
+  const agencies = selectedAgencies(category);
+  if (agencies.size === 0) return true;
+  return agencies.has(normalizeAgency(props.agency));
+}
+
+function agenciesByCategory(geojson) {
+  const out = Object.fromEntries(CG_SUBCATEGORIES.map(cat => [cat, new Set(cgAgencySelections[cat])]));
+  for (const feature of geojson?.features || []) {
+    const props = feature.properties || {};
+    const category = featureCampgroundCategory(props);
+    if (!Object.prototype.hasOwnProperty.call(out, category)) continue;
+    const agency = normalizeAgency(props.agency);
+    if (agency) out[category].add(agency);
+  }
+  return out;
+}
+
+function renderCgAgencyControls(geojson = lastCgGeojson) {
+  const byCategory = agenciesByCategory(geojson);
+  for (const category of CG_SUBCATEGORIES) {
+    const host = document.getElementById(`cg-agency-${category}`);
+    if (!host) continue;
+    const selected = selectedAgencies(category);
+    const agencies = [...byCategory[category]].sort((a, b) => a.localeCompare(b));
+    if (agencies.length === 0) {
+      host.hidden = true;
+      host.innerHTML = '';
+      continue;
+    }
+    const wasOpen = host.querySelector('details')?.open;
+    const summary =
+      selected.size === 0
+        ? 'All agencies'
+        : selected.size === 1
+          ? [...selected][0]
+          : `${selected.size} agencies`;
+    host.hidden = false;
+    host.innerHTML = `
+      <details class="cg-agency-menu"${wasOpen ? ' open' : ''}>
+        <summary>${escapeHtml(summary)}</summary>
+        <div class="cg-agency-options">
+          <label class="cg-agency-choice">
+            <input type="checkbox" data-cg-agency-all="${category}"${selected.size === 0 ? ' checked' : ''}>
+            <span>All agencies</span>
+          </label>
+          ${agencies.map(agency => `
+            <label class="cg-agency-choice">
+              <input type="checkbox" data-cg-agency="${category}" value="${escapeHtml(agency)}"${selected.has(agency) ? ' checked' : ''}>
+              <span>${escapeHtml(agency)}</span>
+            </label>
+          `).join('')}
+        </div>
+      </details>
+    `;
+  }
+}
+
+function checkedCampgroundCategories() {
+  const cats = [];
+  for (const category of CG_SUBCATEGORIES) {
+    if (document.getElementById(`f-cg-${category}`)?.checked) cats.push(category);
+  }
+  return cats;
+}
+
+function filterCategoriesFor(category) {
+  return category === 'federal' ? ['federal', 'other'] : [category];
+}
+
+function campgroundFilterClause(category) {
+  const categoryClause = ['in', ['get', 'category'], ['literal', filterCategoriesFor(category)]];
+  const agencies = [...selectedAgencies(category)];
+  if (agencies.length === 0) return categoryClause;
+  return ['all', categoryClause, ['in', ['get', 'agency'], ['literal', agencies]]];
+}
+
+function applyCGFilter() {
+  const { map } = state;
+  if (!map?.getLayer('cg-points') || !map?.getLayer('cg-points-hit')) return;
+  const cats = checkedCampgroundCategories();
+  const visibility = cats.length === 0 ? 'none' : 'visible';
+  map.setLayoutProperty('cg-points', 'visibility', visibility);
+  map.setLayoutProperty('cg-points-hit', 'visibility', visibility);
+  if (cats.length === 0) return;
+  const clauses = cats.map(campgroundFilterClause);
+  const filter = clauses.length === 1 ? clauses[0] : ['any', ...clauses];
+  map.setFilter('cg-points', filter);
+  map.setFilter('cg-points-hit', filter);
+}
+
+function onCgAgencyControlChange(e) {
+  const target = e.target;
+  if (!(target instanceof HTMLInputElement)) return;
+  const allCategory = target.dataset.cgAgencyAll;
+  const agencyCategory = target.dataset.cgAgency;
+  if (allCategory) {
+    if (target.checked) selectedAgencies(allCategory).clear();
+    else if (selectedAgencies(allCategory).size === 0) target.checked = true;
+  } else if (agencyCategory) {
+    const agency = normalizeAgency(target.value);
+    if (agency && target.checked) selectedAgencies(agencyCategory).add(agency);
+    else selectedAgencies(agencyCategory).delete(agency);
+  } else {
+    return;
+  }
+  renderCgAgencyControls();
+  applyCGFilter();
+  notifyCampgroundFilterChanged();
+}
+
+function bindCGFilterControls() {
+  if (cgFilterControlsBound) return;
+  cgFilterControlsBound = true;
+  for (const category of CG_SUBCATEGORIES) {
+    document.getElementById(`f-cg-${category}`)?.addEventListener('change', () => {
+      applyCGFilter();
+      notifyCampgroundFilterChanged();
+    });
+    document.getElementById(`cg-agency-${category}`)?.addEventListener('change', onCgAgencyControlChange);
+  }
+}
 
 export function installCGLayer(geojson) {
   const { map } = state;
@@ -81,23 +240,10 @@ export function installCGLayer(geojson) {
     },
   });
 
-  const applyCGFilter = () => {
-    const cats = [];
-    for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local', 'f-cg-provincial']) {
-      if (document.getElementById(id).checked) cats.push(id.replace('f-cg-', ''));
-    }
-    const visibility = cats.length === 0 ? 'none' : 'visible';
-    map.setLayoutProperty('cg-points', 'visibility', visibility);
-    map.setLayoutProperty('cg-points-hit', 'visibility', visibility);
-    if (cats.length > 0) {
-      // 'other' is mostly unclassified federal entries; bundle it with federal.
-      const filterCats = cats.includes('federal') ? [...cats, 'other'] : cats;
-      const filter = ['in', ['get', 'category'], ['literal', filterCats]];
-      map.setFilter('cg-points', filter);
-      map.setFilter('cg-points-hit', filter);
-    }
-  };
+  lastCgGeojson = geojson || CG_EMPTY_FC;
+  renderCgAgencyControls(lastCgGeojson);
   applyCGFilter();
+  bindCGFilterControls();
 
   // Layer-scoped map handlers do NOT survive setStyle — always rebind here.
   // Bind to the hit layer (transparent, generous radius); MapLibre dispatches
@@ -111,10 +257,6 @@ export function installCGLayer(geojson) {
 
   if (state.bound.cg) return;
   state.bound.cg = true;
-  // DOM listeners live on checkbox elements — bind once, survive forever.
-  for (const id of ['f-cg-federal', 'f-cg-state', 'f-cg-local', 'f-cg-provincial']) {
-    document.getElementById(id).addEventListener('change', applyCGFilter);
-  }
 }
 
 export function installStateLines(states) {
@@ -333,8 +475,11 @@ export function installSCLayer(geojson) {
 // loader on moveend — installX layers stay mounted, only the GeoJSON changes.
 // No-ops if the layer hasn't been installed yet (initial load races moveend).
 export function setCGData(geojson) {
+  lastCgGeojson = geojson || CG_EMPTY_FC;
+  renderCgAgencyControls(lastCgGeojson);
   const src = state.map?.getSource('cg');
-  if (src) src.setData(geojson);
+  if (src) src.setData(lastCgGeojson);
+  applyCGFilter();
 }
 export function setPFData(geojson) {
   const src = state.map?.getSource('pf');

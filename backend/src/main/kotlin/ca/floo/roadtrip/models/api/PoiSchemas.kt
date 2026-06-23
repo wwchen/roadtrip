@@ -34,6 +34,7 @@ data class SlimPoiFeatureSchema(
 data class SlimPoiPropertiesSchema(
     val category: String,
     val subcategory: String? = null,
+    val agency: String? = null,
 )
 
 // /api/pois/{id} response. Wide GeoJSON used for pin popups/drawers.
@@ -126,6 +127,7 @@ data class PointGeometrySchema(
 data class PoisOnRouteFeaturePropertiesSchema(
     val category: String,
     val subcategory: String? = null,
+    val agency: String? = null,
     @SerialName("route_km") val routeKm: Double,
 )
 
