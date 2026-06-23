@@ -75,6 +75,7 @@ class PlanetFitnessEtlTest {
                 "unexpected sourceId=${p.sourceId}",
             )
             assertEquals("planet-fitness", p.source)
+            assertEquals("Planet Fitness", p.agency)
             assertEquals("US", p.country)
             assertNotNull(p.geomGeoJson)
             assertTrue(p.geomGeoJson.contains("\"Point\""))

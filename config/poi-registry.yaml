@@ -5,7 +5,8 @@
 #    Always wired up; the IngestController will run a fetcher whenever it's
 #    asked to. Unreachable upstreams produce failed runs, not boot failures.
 # 2. poi_data    — POI datasets. Each row carries `name`, optional `enabled`
-#    (default true), `category`, optional `subcategory`, and an ordered
+#    (default true), `category`, optional `subcategory`, optional `agency`
+#    (constant string OR `{derived_from_field: <raw path>}`), and an ordered
 #    `etls:` list. The LAST entry in `etls:` is the POI emitter (must output
 #    Poi.*); earlier entries are intermediates whose typed payload is handed
 #    to the next stage in memory (every ETL is f(inputs) → output, so re-
@@ -88,8 +89,8 @@ data_sources:
 
   # --- Federal campgrounds (RIDB) --------------------------------------------
   # One capture covers every RIDB-publishing agency (NPS, USFS, BLM, USACE,
-  # FWS, BOR, TVA, …). Per-row agency lands on Poi.Campground.agency at
-  # transform time from ORGANIZATION[0].OrgAbbrevName.
+  # FWS, BOR, TVA, …). Per-facility agency lands on Poi.Campground.agency at
+  # transform time from ORGANIZATION[0].OrgName.
   - slug: recgov-campgrounds
     name: Federal campgrounds via RIDB (all agencies)
     fetcher:
@@ -271,6 +272,8 @@ poi_data:
   - name: Federal Campgrounds
     category: campground
     subcategory: federal
+    agency:
+      derived_from_field: ORGANIZATION[0].OrgName
     etls:
       - slug: federal-campgrounds
         adapter: RecGovCampgroundsEtl
@@ -279,6 +282,7 @@ poi_data:
   - name: Washington State Parks
     category: campground
     subcategory: state
+    agency: WA State Parks
     etls:
       - slug: aspira-leaves-wa
         adapter: AspiraLeavesEtl
@@ -293,6 +297,7 @@ poi_data:
   - name: BC Provincial Parks
     category: campground
     subcategory: provincial
+    agency: BC Parks
     etls:
       - slug: aspira-leaves-bc
         adapter: AspiraLeavesEtl
@@ -306,6 +311,7 @@ poi_data:
   - name: Parks Canada
     category: campground
     subcategory: federal
+    agency: Parks Canada
     etls:
       - slug: aspira-leaves-pc
         adapter: AspiraLeavesEtl
@@ -320,6 +326,7 @@ poi_data:
   - name: Alberta Provincial Parks
     category: campground
     subcategory: provincial
+    agency: Alberta Parks
     etls:
       - slug: alberta-provincial
         adapter: ReserveAmericaEtl
@@ -333,6 +340,7 @@ poi_data:
   - name: New York State Parks
     category: campground
     subcategory: state
+    agency: New York State Parks
     etls:
       - slug: new-york-state-parks
         adapter: ReserveAmericaEtl
@@ -343,12 +351,12 @@ poi_data:
           booking_horizon_days: "270"
           region: NY
           country: US
-          agency: New York State Parks
           provider: reserveamerica
 
   - name: California State Parks
     category: campground
     subcategory: state
+    agency: California State Parks
     etls:
       - slug: california-state-parks
         adapter: ReserveCaliforniaEtl
@@ -356,6 +364,7 @@ poi_data:
 
   - name: Planet Fitness
     category: planet-fitness
+    agency: Planet Fitness
     etls:
       - slug: planet-fitness
         adapter: PlanetFitnessEtl
@@ -367,6 +376,7 @@ poi_data:
     # when the cache is fresh.
     enabled: false
     category: supercharger
+    agency: Tesla
     etls:
       # tesla-locations is side-loaded from ctx.rawDir per-slug rather
       # than declared as an input, because the per-slug filesystem layout

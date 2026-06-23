@@ -92,6 +92,7 @@ class EtlExtrasDtoTest {
                 ).single()
 
         val extras = poi.extras!!.jsonObject
+        assertEquals("Tesla", poi.agency)
         assertEquals("test-slug", extras["index"]!!.jsonObject["location_url_slug"]!!.jsonPrimitive.content)
         assertEquals(JsonNull, extras["detail"])
     }
@@ -121,6 +122,7 @@ class EtlExtrasDtoTest {
                 ).single()
 
         val extras = poi.extras!!.jsonObject
+        assertEquals("Planet Fitness", poi.agency)
         assertEquals("way", extras["type"]!!.jsonPrimitive.content)
         assertEquals(456, extras["id"]!!.jsonPrimitive.int)
         assertEquals(47.61, extras["center"]!!.jsonObject["lat"]!!.jsonPrimitive.double)

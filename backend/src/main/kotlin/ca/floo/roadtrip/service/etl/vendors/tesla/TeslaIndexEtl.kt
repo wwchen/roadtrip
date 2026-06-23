@@ -77,9 +77,10 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
         // from ctx.rawDir directly; the YAML keeps it as a sibling
         // data_source so fetch + cache-clear flows still address it.
         val locationsDir = File(ctx.rawDir, "tesla-locations")
+        val agency = ctx.requiredConstantAgency(etlSlug)
         return dto.rows.mapNotNull { row ->
             val rawIndex = row.locationUrlSlug?.let { dto.rawBySlug[it] }
-            transformRow(row, rawIndex, dto.fetchedAt, locationsDir)
+            transformRow(row, rawIndex, dto.fetchedAt, locationsDir, agency)
         }
     }
 
@@ -88,6 +89,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
         rawIndex: JsonObject?,
         fetchedAt: Instant,
         locationsDir: File,
+        agency: String,
     ): Poi.Supercharger? {
         // Filter mirrors scripts/fetch_tesla_locations.py:na_supercharger_slugs.
         // Trust supercharger_function over location_type — Tesla's bulk index
@@ -124,6 +126,7 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
             infoUrl = "https://www.tesla.com/findus?location=$slug",
             fetchedAt = fetchedAt,
             lastVerified = null,
+            agency = agency,
             stallCount = detail?.publicStallCount ?: 0,
             maxPowerKw = detail?.maxPowerKw ?: 0,
             facility = detail?.accessType?.takeIf { it.isNotBlank() },

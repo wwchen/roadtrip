@@ -237,7 +237,7 @@ private data class ReserveAmericaSettings(
                 contract = ctx.argFor(etlSlug, "contract") ?: "ABPP",
                 region = region,
                 country = ctx.argFor(etlSlug, "country") ?: "CA",
-                agency = ctx.argFor(etlSlug, "agency") ?: "Alberta Parks",
+                agency = ctx.requiredConstantAgency(etlSlug),
                 provider = ctx.argFor(etlSlug, "provider") ?: "reserveamerica",
                 titleSuffix = ctx.argFor(etlSlug, "title_suffix") ?: ", $region",
                 sourceIdPrefix = ctx.argFor(etlSlug, "source_id_prefix") ?: "ra",

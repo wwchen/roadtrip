@@ -4,6 +4,7 @@ import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.models.domain.Address
 import ca.floo.roadtrip.models.domain.Poi
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.Upsert
 import ca.floo.roadtrip.repo.migrate
@@ -120,13 +121,13 @@ class EtlOrchestratorTest {
     }
 
     @Test
-    fun `upserted rows carry the right category and country`() {
+    fun `upserted rows carry the right category country and agency column`() {
         val orch = newOrchestrator()
         orch.runPoiData("Planet Fitness")
 
         val sample =
             ctx
-                .select(POIS.NAME, POIS.CATEGORY, POIS.COUNTRY)
+                .select(POIS.NAME, POIS.CATEGORY, POIS.COUNTRY, POIS.AGENCY, POIS.PROPERTIES)
                 .from(POIS)
                 .where(POIS.SOURCE.eq("planet-fitness"))
                 .and(POIS.DELETED_AT.isNull)
@@ -135,6 +136,9 @@ class EtlOrchestratorTest {
         assertNotNull(sample)
         assertEquals("planet-fitness", sample.value2())
         assertEquals("US", sample.value3())
+        assertEquals("Planet Fitness", sample.value4())
+        val properties = Json.parseToJsonElement(sample.value5()!!.data()).jsonObject
+        assertEquals(null, properties["agency"])
     }
 
     @Test
@@ -194,5 +198,74 @@ class EtlOrchestratorTest {
         assertEquals("BC", addressJson["state"]!!.jsonPrimitive.content)
         assertEquals("CA", addressJson["country"]!!.jsonPrimitive.content)
         assertEquals(null, addressJson["postcode"])
+    }
+
+    @Test
+    fun `derived agency config tolerates terminal POIs whose agency field is missing`() {
+        val registry =
+            registryFromYaml(
+                """
+                data_sources: []
+                poi_data:
+                  - name: Derived Agency Test
+                    category: planet-fitness
+                    agency:
+                      derived_from_field: agency
+                    etls:
+                      - slug: derived-agency-test
+                        adapter: MissingAgencyEtl
+                        inputs: []
+                """.trimIndent(),
+            )
+        val orch =
+            EtlOrchestrator(
+                ctx = ctx,
+                rawDir = rawDir,
+                poiRegistry = registry,
+                etlRegistry = mapOf("derived-agency-test" to MissingAgencyEtl),
+            )
+
+        // One bad row mustn't abort the whole import — derived agency is best-effort
+        // per row, like the upstream's per-facility ORGANIZATION shape.
+        val stats = orch.runPoiData("Derived Agency Test")
+
+        assertEquals(1, stats.transformed)
+        assertEquals(1, stats.upsertResult.seenCount)
+    }
+
+    private fun registryFromYaml(text: String): PoiRegistry {
+        val file = Files.createTempFile("poi-registry-test-", ".yaml").toFile()
+        file.writeText(text)
+        return PoiRegistry.load(file)
+    }
+
+    private object MissingAgencyEtl : SourceEtl<Unit, List<Poi>> {
+        override val etlSlug: String = "derived-agency-test"
+
+        override fun parse(inputs: InputBundle) = Unit
+
+        override fun validate(dto: Unit): ValidationResult<Unit> = ValidationResult.Ok(dto)
+
+        override fun transform(
+            dto: Unit,
+            ctx: TransformCtx,
+        ): List<Poi> =
+            listOf(
+                Poi.PlanetFitness(
+                    source = etlSlug,
+                    sourceId = "pf-missing-agency",
+                    name = "Planet Fitness",
+                    geomGeoJson = """{"type":"Point","coordinates":[-123.1,49.2]}""",
+                    region = "WA",
+                    country = "US",
+                    phone = null,
+                    address = null,
+                    infoUrl = null,
+                    fetchedAt = Instant.parse("2026-01-01T00:00:00Z"),
+                    lastVerified = null,
+                    agency = null,
+                    openingHours = null,
+                ),
+            )
     }
 }

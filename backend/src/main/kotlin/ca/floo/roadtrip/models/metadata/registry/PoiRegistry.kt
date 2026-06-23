@@ -1,6 +1,10 @@
 package ca.floo.roadtrip.models.metadata.registry
 
 import com.charleskorn.kaml.Yaml
+import com.charleskorn.kaml.YamlMap
+import com.charleskorn.kaml.YamlNode
+import com.charleskorn.kaml.YamlScalar
+import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
 
@@ -110,6 +114,13 @@ data class PoiRegistry(
         // within one runPoiData / runReservableData invocation, not
         // between them).
         val etlSlugs = mutableSetOf<String>()
+        for (row in poiData) {
+            try {
+                row.agency
+            } catch (e: IllegalArgumentException) {
+                errs += "poi_data '${row.name}' has invalid agency: ${e.message}"
+            }
+        }
         validateEtlSection(
             label = "poi_data",
             rows = poiData.map { EtlRowRef(it.name, it.etls, it) },
@@ -299,6 +310,15 @@ data class PoiRegistry(
         return out
     }
 
+    fun agencyByTerminalEtlSlug(): Map<String, AgencyConfig?> {
+        val out = mutableMapOf<String, AgencyConfig?>()
+        for (row in poiData) {
+            val terminal = row.etls.lastOrNull() ?: continue
+            out[terminal.slug] = row.agency
+        }
+        return out
+    }
+
     /**
      * Aspira upstream host keyed by terminal etl slug (== pois.source).
      * Returns the `host` arg from the terminal AspiraJoinByNameEtl row.
@@ -437,8 +457,50 @@ data class PoiDataEntry(
     // federal | state | local | provincial). Null when the category has
     // no sub-bucket (planet-fitness, supercharger).
     val subcategory: String? = null,
+    @SerialName("agency")
+    val agencyNode: YamlNode? = null,
     val etls: List<EtlEntry>,
-)
+) {
+    val agency: AgencyConfig?
+        get() = agencyNode?.toAgencyConfig()
+}
+
+sealed interface AgencyConfig {
+    data class Constant(
+        val value: String,
+    ) : AgencyConfig
+
+    data class DerivedFromField(
+        val field: String,
+    ) : AgencyConfig
+
+    companion object {
+        const val DERIVED_FROM_FIELD_KEY = "derived_from_field"
+    }
+}
+
+private fun YamlNode.toAgencyConfig(): AgencyConfig =
+    when (this) {
+        is YamlScalar -> {
+            val value = content.takeIf { it.isNotBlank() }
+            require(value != null) { "agency must not be blank" }
+            AgencyConfig.Constant(value)
+        }
+        is YamlMap -> {
+            val key = AgencyConfig.DERIVED_FROM_FIELD_KEY
+            val entries = entries.mapKeys { (k, _) -> k.content }
+            val unknown = entries.keys - key
+            require(unknown.isEmpty()) {
+                "supports only '$key'; unknown keys: ${unknown.joinToString()}"
+            }
+            val derived = entries[key] as? YamlScalar
+            require(derived != null) { "$key must be a scalar" }
+            val field = derived.content.takeIf { it.isNotBlank() }
+            require(field != null) { "$key must not be blank" }
+            AgencyConfig.DerivedFromField(field)
+        }
+        else -> throw IllegalArgumentException("agency must be a scalar string or mapping")
+    }
 
 @Serializable
 data class EtlEntry(

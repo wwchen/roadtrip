@@ -65,9 +65,9 @@ private val poiFeatureJson =
 // Returns a GeoJSON FeatureCollection of POIs in the requested bbox.
 // One round-trip per pan — the FE debounces moveend by 250ms.
 //
-// Categories are picked by the FE; default (when omitted) is the full set
-// {campground, state-park, national-park, planet-fitness, supercharger}.
-// Each requested category gets its own slot budget out of POI_LIMIT so a
+// Categories are picked by the FE; default (when omitted) is derived from
+// enabled poi_data rows in config/poi-registry.yaml. Each requested category
+// gets its own slot budget out of POI_LIMIT so a
 // dense layer (Planet Fitness ~1.5k rows) can't starve sparser ones;
 // truncated:true tells the client to ask the user to zoom in further.
 //
@@ -369,6 +369,7 @@ internal fun poiDetailFeature(
                 sourceId = r.sourceId,
                 category = r.category,
                 subcategory = r.subcategory,
+                agency = r.agency,
                 name = r.name,
                 region = r.region,
                 country = r.country,

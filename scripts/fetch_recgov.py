@@ -3,9 +3,9 @@
 
 One data_source for every agency at once. RIDB's /facilities endpoint
 (no orgId scope) returns the union — NPS + USFS + BLM + USACE + FWS +
-BOR + TVA + everyone else publishing to RIDB. The per-row agency lands
+BOR + TVA + everyone else publishing to RIDB. The per-facility agency lands
 on Poi.Campground.agency at transform time, sourced from the inline
-ORGANIZATION[0].OrgAbbrevName that ?full=true ships with each record.
+ORGANIZATION[0].OrgName that ?full=true ships with each record.
 
 Multi-part output: one envelope per page under
   data/raw/<slug>/<UTC-ts>/page-NNN.json
@@ -63,7 +63,8 @@ def main() -> int:
     while True:
         # full=true expands the inline RECAREA + ORGANIZATION arrays so each
         # facility row carries the parent park's name + the managing agency
-        # (NPS, FS, BLM, USACE, …). The ETL reads ORGANIZATION[0].OrgAbbrevName
+        # (National Park Service, USDA Forest Service, Bureau of Land Management,
+        # …). The ETL reads ORGANIZATION[0].OrgName
         # into Poi.Campground.agency so the FE can label/colour by agency
         # without us splitting the dataset upstream.
         params = {"activity": "CAMPING", "full": "true", "limit": PAGE_SIZE, "offset": offset}

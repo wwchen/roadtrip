@@ -58,11 +58,15 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>>
     override fun transform(
         dto: PlanetFitnessRawDto,
         ctx: TransformCtx,
-    ): List<Poi.PlanetFitness> = dto.elements.mapNotNull { el -> transformElement(el, dto._fetchedAt) }
+    ): List<Poi.PlanetFitness> {
+        val agency = ctx.requiredConstantAgency(etlSlug)
+        return dto.elements.mapNotNull { el -> transformElement(el, dto._fetchedAt, agency) }
+    }
 
     private fun transformElement(
         el: OverpassElement,
         fetchedAt: Instant,
+        agency: String,
     ): Poi.PlanetFitness? {
         // Resolve lat/lon: nodes have it directly, ways/relations have it
         // under `center` (Overpass `out center` semantics).
@@ -89,6 +93,7 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>>
             infoUrl = tags["website"]?.takeIf { it.isNotBlank() },
             fetchedAt = fetchedAt,
             lastVerified = null, // OSM — no editorial-touch field
+            agency = agency,
             openingHours = tags["opening_hours"]?.takeIf { it.isNotBlank() },
             // OSM stores the interesting per-element data as tags (key/value
             // strings). Surface the full tag map via extras so the drawer's

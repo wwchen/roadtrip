@@ -104,6 +104,7 @@ class FeatureCollectionContractTest {
                 sourceId = "abc-123",
                 category = "campground",
                 subcategory = "federal",
+                agency = "Parks Canada",
                 name = "Tunnel Mountain Village I",
                 region = "AB",
                 country = "CA",
@@ -118,13 +119,14 @@ class FeatureCollectionContractTest {
                 propertiesJson =
                     """{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
                         """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
-                        """"season":"May-Oct","near":"Banff","agency":"Parks Canada"}""",
+                        """"season":"May-Oct","near":"Banff"}""",
             )
         val expected = (
             """{"type":"Feature","id":42,""" +
                 """"geometry":{"type":"Point","coordinates":[-115.547,51.1812]},""" +
                 """"properties":{"source":"uscampgrounds","source_id":"abc-123",""" +
                 """"category":"campground","subcategory":"federal",""" +
+                """"agency":"Parks Canada",""" +
                 """"name":"Tunnel Mountain Village I",""" +
                 """"region":"AB","country":"CA","time_zone":"America/Edmonton",""" +
                 """"earliest_date":"2026-06-21","unit_name":"Banff",""" +
@@ -137,7 +139,7 @@ class FeatureCollectionContractTest {
                 """"label":"Park info on parks.canada.ca","kind":"info"},""" +
                 """"raw":{"category":"federal","amenities":["showers"],"activities":["hiking"],""" +
                 """"sites":42,"description":"Camp among redwoods.","photo_url":"https://example.test/photo.jpg",""" +
-                """"season":"May-Oct","near":"Banff","agency":"Parks Canada"}}}"""
+                """"season":"May-Oct","near":"Banff"}}}"""
         )
         val dateResolver = AvailabilityDateResolver(Clock.fixed(Instant.parse("2026-06-21T12:00:00Z"), ZoneOffset.UTC))
         assertEquals(expected, encodePoiFeatureJson(poiDetailFeature(row, dateResolver)))
@@ -164,6 +166,7 @@ class FeatureCollectionContractTest {
             )
         val out = encodePoiFeatureJson(poiDetailFeature(row))
         assert(!out.contains("\"subcategory\""))
+        assert(!out.contains("\"agency\""))
         assert(!out.contains("\"region\""))
         assert(!out.contains("\"unit_name\""))
         assert(!out.contains("\"reserve_url\""))
