@@ -302,7 +302,7 @@
           "links": [
             {
               "title": "Details",
-              "url": "/d/ad9l4lk/e29c94-efb88e-poi-with-reservables-details?var-poi_id_search=${__data.fields.poi_id}&var-poi_name_search=${__data.fields.name}"
+              "url": "/d/roadtrip-poi-reservables/poi-with-reservables-details?var-poi_id=${__data.fields.poi_id}&var-poi_name=${__data.fields.name}"
             }
           ],
           "mappings": [],
@@ -544,7 +544,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable Detail",
-                    "url": "/d/ghh9t4/e29c94-efb88e-reservable-detail?var-reservable_id=${__data.fields.id}"
+                    "url": "/d/roadtrip-reservable-detail/reservable-detail?var-reservable_id=${__data.fields.id}"
                   }
                 ]
               }
@@ -1516,7 +1516,7 @@
     "hidden": true
   },
   "timezone": "browser",
-  "title": "✔︎ Reservable / Detail",
+  "title": "Reservable / Detail",
   "uid": "roadtrip-reservable-detail",
   "version": 1,
   "weekStart": ""

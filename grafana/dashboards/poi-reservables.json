@@ -582,7 +582,7 @@
                   {
                     "targetBlank": false,
                     "title": "Show details",
-                    "url": "/d/ghh9t4/e29c94-efb88e-reservable-detail?var-reservable_id=${__data.fields.id}"
+                    "url": "/d/roadtrip-reservable-detail/reservable-detail?var-reservable_id=${__data.fields.id}"
                   }
                 ]
               }
@@ -830,7 +830,7 @@
     "hidden": true
   },
   "timezone": "browser",
-  "title": "✔︎ POI with Reservables / Details",
+  "title": "POI with Reservables / Details",
   "uid": "roadtrip-poi-reservables",
   "version": 1,
   "weekStart": ""
