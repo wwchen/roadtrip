@@ -544,61 +544,61 @@
   "templating": {
     "list": [
       {
-        "name": "vendor",
-        "type": "query",
+        "allValue": "'__all'",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "includeAll": true,
+        "name": "vendor",
         "query": "SELECT DISTINCT vendor AS __text, vendor AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY vendor ASC",
         "refresh": 1,
-        "includeAll": true,
+        "type": "query"
+      },
+      {
         "allValue": "'__all'",
         "current": {
           "text": "All",
           "value": "$__all"
-        }
-      },
-      {
-        "name": "source",
-        "type": "query",
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "includeAll": true,
+        "name": "source",
         "query": "SELECT DISTINCT source AS __text, source AS __value FROM reservables WHERE deleted_at IS NULL AND source IS NOT NULL ORDER BY source ASC",
         "refresh": 1,
-        "includeAll": true,
+        "type": "query"
+      },
+      {
         "allValue": "'__all'",
         "current": {
           "text": "All",
           "value": "$__all"
-        }
-      },
-      {
-        "name": "site_type",
-        "type": "query",
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "includeAll": true,
+        "name": "site_type",
         "query": "SELECT DISTINCT site_type AS __text, site_type AS __value FROM reservables WHERE deleted_at IS NULL AND site_type IS NOT NULL ORDER BY site_type ASC",
         "refresh": 1,
-        "includeAll": true,
-        "allValue": "'__all'",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        }
+        "type": "query"
       },
       {
-        "name": "days_back",
-        "type": "custom",
-        "query": "7,14,30,90",
         "current": {
           "text": "30",
           "value": "30"
-        }
+        },
+        "name": "days_back",
+        "query": "7,14,30,90",
+        "type": "custom"
       }
     ]
   },

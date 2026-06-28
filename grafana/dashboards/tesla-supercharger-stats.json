@@ -412,8 +412,8 @@
               "showLegend": true,
               "style": {
                 "color": {
-                  "fixed": "orange",
-                  "field": "avg_price_per_kwh"
+                  "field": "avg_price_per_kwh",
+                  "fixed": "orange"
                 },
                 "opacity": 0.85,
                 "size": {
@@ -668,54 +668,54 @@
   "templating": {
     "list": [
       {
-        "name": "country",
-        "type": "query",
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
-        },
-        "query": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM pois WHERE deleted_at IS NULL AND category = 'supercharger' AND country IS NOT NULL AND country <> '' ORDER BY country::text ASC",
-        "refresh": 1,
-        "includeAll": true,
         "allValue": "'__all'",
         "current": {
           "text": "All",
           "value": "$__all"
-        }
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "includeAll": true,
+        "name": "country",
+        "query": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM pois WHERE deleted_at IS NULL AND category = 'supercharger' AND country IS NOT NULL AND country <> '' ORDER BY country::text ASC",
+        "refresh": 1,
+        "type": "query"
       },
       {
-        "name": "region_search",
-        "type": "textbox",
-        "query": "",
         "current": {
           "text": "",
           "value": ""
-        }
+        },
+        "name": "region_search",
+        "query": "",
+        "type": "textbox"
       },
       {
-        "name": "accessibility",
-        "type": "query",
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
-        },
-        "query": "SELECT DISTINCT properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS __text, properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS __value FROM pois WHERE deleted_at IS NULL AND category = 'supercharger' AND properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IS NOT NULL ORDER BY 1 ASC",
-        "refresh": 1,
-        "includeAll": true,
         "allValue": "'__all'",
         "current": {
           "text": "All",
           "value": "$__all"
-        }
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "includeAll": true,
+        "name": "accessibility",
+        "query": "SELECT DISTINCT properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS __text, properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS __value FROM pois WHERE deleted_at IS NULL AND category = 'supercharger' AND properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IS NOT NULL ORDER BY 1 ASC",
+        "refresh": 1,
+        "type": "query"
       },
       {
-        "name": "detail_state",
-        "type": "custom",
-        "query": "all,with_detail,missing_detail,with_pricebooks,missing_pricebooks",
         "current": {
           "text": "all",
           "value": "all"
-        }
+        },
+        "name": "detail_state",
+        "query": "all,with_detail,missing_detail,with_pricebooks,missing_pricebooks",
+        "type": "custom"
       }
     ]
   },

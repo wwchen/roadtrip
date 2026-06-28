@@ -1,0 +1,793 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "panels": [],
+      "title": "Run",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "field"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT kv.field, kv.value\nFROM selected r\nCROSS JOIN LATERAL (\n  VALUES\n    ('id', r.id::text),\n    ('job_id', r.job_id::text),\n    ('status', r.status),\n    ('snapshot_count', r.snapshot_count::text),\n    ('duration_ms', coalesce(r.duration_ms::text, '')),\n    ('error', coalesce(r.error, '')),\n    ('started_at', r.started_at::text),\n    ('completed_at', coalesce(r.completed_at::text, ''))\n) AS kv(field, value)\nORDER BY CASE field\n  WHEN 'id' THEN 1\n  WHEN 'job_id' THEN 2\n  WHEN 'status' THEN 3\n  WHEN 'snapshot_count' THEN 4\n  WHEN 'duration_ms' THEN 5\n  WHEN 'error' THEN 6\n  WHEN 'started_at' THEN 7\n  WHEN 'completed_at' THEN 8\n  ELSE 100\nEND;",
+          "refId": "A"
+        }
+      ],
+      "title": "Run properties",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "field"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "value"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 12,
+        "x": 12,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "cellHeight": "md",
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n),\nj AS (\n  SELECT j.* FROM availability_job j JOIN selected r ON r.job_id = j.id\n),\nw AS (\n  SELECT w.* FROM availability_watch w JOIN j ON j.watch_id = w.id\n)\nSELECT 'job.intent_payload' AS field, coalesce(jsonb_pretty(j.intent_payload), '') AS value FROM j\nUNION ALL\nSELECT 'watch.reservable_filters', coalesce(jsonb_pretty(w.reservable_filters), '') FROM w\nUNION ALL\nSELECT 'watch.trigger_config', coalesce(jsonb_pretty(w.trigger_config), '') FROM w;",
+          "refId": "A"
+        }
+      ],
+      "title": "Run inputs (job intent + watch config)",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "id": 4,
+      "panels": [],
+      "title": "Related",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "watch_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rid"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 230
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Reservable Detail",
+                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-rid=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  j.id AS job_id,\n  w.id AS watch_id,\n  w.status AS watch_status,\n  j.status AS job_status,\n  w.cadence_sec,\n  w.start_date,\n  w.end_date,\n  w.trigger_kinds,\n  w.stop_when_triggered,\n  w.poi_id,\n  CASE WHEN r.id IS NOT NULL THEN r.type || ':' || r.vendor || ':' || r.vendor_id END AS rid,\n  r.name,\n  j.next_run_at,\n  j.last_run_at,\n  w.created_at AS watch_created_at\nFROM selected sr\nJOIN availability_job j ON j.id = sr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables r ON r.id = w.reservable_id;",
+          "refId": "A"
+        }
+      ],
+      "title": "Parent job & watch",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 6,
+      "panels": [],
+      "title": "Snapshots produced by this run",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "description": "Each row is one reservable polled by this run; cell shows status per target_date.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "mappings": [
+            {
+              "options": {
+                "available": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "available"
+                },
+                "closed": {
+                  "color": "dark-gray",
+                  "index": 3,
+                  "text": "closed"
+                },
+                "first_come": {
+                  "color": "orange",
+                  "index": 1,
+                  "text": "first_come"
+                },
+                "reserved": {
+                  "color": "red",
+                  "index": 2,
+                  "text": "reserved"
+                },
+                "unknown": {
+                  "color": "gray",
+                  "index": 4,
+                  "text": "unknown"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "gray",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 21
+      },
+      "id": 7,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "mergeValues": false,
+        "rowHeight": 0.9,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  s.target_date::timestamptz AS \"time\",\n  CASE WHEN r.id IS NOT NULL\n    THEN r.type || ':' || r.vendor || ':' || r.vendor_id\n    ELSE 'reservable:' || s.reservable_id::text\n  END AS metric,\n  s.status::text AS value\nFROM availability_snapshot s\nJOIN selected sr ON sr.id = s.run_id\nLEFT JOIN reservables r ON r.id = s.reservable_id\nORDER BY metric ASC, s.target_date ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Run snapshots — status by target date",
+      "transformations": [
+        {
+          "id": "partitionByValues",
+          "options": {
+            "fields": [
+              "metric"
+            ],
+            "keepFields": false,
+            "naming": {
+              "asLabels": false
+            }
+          }
+        }
+      ],
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rid"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 230
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Reservable Detail",
+                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-rid=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "available": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "available"
+                      },
+                      "closed": {
+                        "color": "dark-gray",
+                        "index": 3,
+                        "text": "closed"
+                      },
+                      "first_come": {
+                        "color": "orange",
+                        "index": 1,
+                        "text": "first_come"
+                      },
+                      "reserved": {
+                        "color": "red",
+                        "index": 2,
+                        "text": "reserved"
+                      },
+                      "unknown": {
+                        "color": "gray",
+                        "index": 4,
+                        "text": "unknown"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "day_payload"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 11,
+        "w": 24,
+        "x": 0,
+        "y": 31
+      },
+      "id": 8,
+      "options": {
+        "cellHeight": "md",
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  s.id AS snapshot_id,\n  CASE WHEN r.id IS NOT NULL\n    THEN r.type || ':' || r.vendor || ':' || r.vendor_id\n  END AS rid,\n  s.target_date,\n  s.status::text AS status,\n  s.available,\n  s.observed_at,\n  s.day_payload\nFROM availability_snapshot s\nJOIN selected sr ON sr.id = s.run_id\nLEFT JOIN reservables r ON r.id = s.reservable_id\nORDER BY rid NULLS LAST, s.target_date ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Snapshot rows (raw)",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 9,
+      "panels": [],
+      "title": "History (this job's runs)",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "description": "All runs for this run's parent job, ordered by started_at. Color = run status.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 80,
+            "lineWidth": 0
+          },
+          "mappings": [
+            {
+              "options": {
+                "completed": {
+                  "color": "green",
+                  "index": 0,
+                  "text": "completed"
+                },
+                "failed": {
+                  "color": "red",
+                  "index": 2,
+                  "text": "failed"
+                },
+                "started": {
+                  "color": "blue",
+                  "index": 1,
+                  "text": "started"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "gray",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 43
+      },
+      "id": 10,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "rowHeight": 0.9,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.started_at AS \"time\",\n  'job ' || ajr.job_id::text AS metric,\n  ajr.status AS value\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nWHERE $__timeFilter(ajr.started_at)\nORDER BY ajr.started_at ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Run status timeline (this job)",
+      "transformations": [
+        {
+          "id": "partitionByValues",
+          "options": {
+            "fields": [
+              "metric"
+            ],
+            "keepFields": false,
+            "naming": {
+              "asLabels": false
+            }
+          }
+        }
+      ],
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "description": "snapshot_count per run, colored by status. Useful to see drops/spikes around the selected run.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 1
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 49
+      },
+      "id": 11,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "rowHeight": 0.9,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.started_at AS \"time\",\n  'snapshot_count' AS metric,\n  ajr.snapshot_count::double precision AS value\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nWHERE $__timeFilter(ajr.started_at)\nORDER BY ajr.started_at ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Snapshot count per run (this job)",
+      "type": "status-history"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Run Detail",
+                    "url": "/d/roadtrip-watch-job-run-detail/roadtrip-watch-job-run-detail?var-run_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "completed": {
+                        "color": "green",
+                        "index": 0,
+                        "text": "completed"
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 2,
+                        "text": "failed"
+                      },
+                      "started": {
+                        "color": "blue",
+                        "index": 1,
+                        "text": "started"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 56
+      },
+      "id": 12,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.id AS run_id,\n  ajr.status,\n  ajr.snapshot_count,\n  ajr.duration_ms,\n  ajr.started_at,\n  ajr.completed_at,\n  ajr.error,\n  CASE WHEN ajr.id = (SELECT id FROM selected) THEN true ELSE false END AS selected\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nWHERE $__timeFilter(ajr.started_at)\nORDER BY ajr.started_at DESC, ajr.id DESC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Recent runs for this job",
+      "type": "table"
+    }
+  ],
+  "refresh": "",
+  "schemaVersion": 39,
+  "tags": [
+    "roadtrip",
+    "availability",
+    "watch"
+  ],
+  "templating": {
+    "list": [
+      {
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "label": "Run ID",
+        "name": "run_id",
+        "query": "SELECT ajr.id::text AS __text, ajr.id::text AS __value FROM availability_job_run ajr ORDER BY ajr.started_at DESC, ajr.id DESC LIMIT 500",
+        "refresh": 1,
+        "sort": 0,
+        "type": "query"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-7d",
+    "to": "now"
+  },
+  "timezone": "browser",
+  "title": "Availability Watch / Job Run Detail",
+  "uid": "roadtrip-watch-job-run-detail",
+  "version": 1
+}

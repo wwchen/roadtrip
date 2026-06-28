@@ -243,41 +243,41 @@
   "templating": {
     "list": [
       {
+        "current": {
+          "text": "",
+          "value": ""
+        },
         "name": "supercharger_name_search",
-        "type": "textbox",
         "query": "",
+        "type": "textbox"
+      },
+      {
         "current": {
           "text": "",
           "value": ""
-        }
-      },
-      {
+        },
         "name": "supercharger_id_search",
-        "type": "textbox",
         "query": "",
+        "type": "textbox"
+      },
+      {
         "current": {
           "text": "",
           "value": ""
-        }
-      },
-      {
+        },
         "name": "supercharger_source_id_search",
-        "type": "textbox",
         "query": "",
-        "current": {
-          "text": "",
-          "value": ""
-        }
+        "type": "textbox"
       },
       {
-        "name": "supercharger_id",
-        "type": "query",
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "name": "supercharger_id",
         "query": "WITH matches AS (\n  SELECT\n    id::text || ' - ' || name || COALESCE(' [' || NULLIF(region, '') || ']', '') AS __text,\n    id::text AS __value,\n    name,\n    id\n  FROM pois\n  WHERE deleted_at IS NULL\n    AND category = 'supercharger'\n    AND (${supercharger_name_search:sqlstring} = '' OR name ILIKE '%' || ${supercharger_name_search:sqlstring} || '%')\n    AND CASE\n      WHEN ${supercharger_id_search:sqlstring} = '' THEN true\n      WHEN ${supercharger_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${supercharger_id_search:sqlstring}\n      ELSE false\n    END\n    AND (${supercharger_source_id_search:sqlstring} = '' OR source_id ILIKE '%' || ${supercharger_source_id_search:sqlstring} || '%')\n  ORDER BY name ASC, id ASC\n  LIMIT 500\n)\nSELECT __text, __value FROM matches\nUNION ALL\nSELECT 'No matching Tesla supercharger' AS __text, '__none' AS __value\nWHERE NOT EXISTS (SELECT 1 FROM matches)",
-        "refresh": 1
+        "refresh": 1,
+        "type": "query"
       }
     ]
   },

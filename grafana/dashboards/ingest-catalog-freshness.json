@@ -157,45 +157,45 @@
   "templating": {
     "list": [
       {
-        "name": "target",
-        "type": "query",
+        "allValue": "'__all'",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "includeAll": true,
+        "name": "target",
         "query": "SELECT DISTINCT target AS __text, target AS __value FROM ingest_runs WHERE target IS NOT NULL ORDER BY target ASC",
         "refresh": 1,
-        "includeAll": true,
+        "type": "query"
+      },
+      {
         "allValue": "'__all'",
         "current": {
           "text": "All",
           "value": "$__all"
-        }
-      },
-      {
-        "name": "source",
-        "type": "query",
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "includeAll": true,
+        "name": "source",
         "query": "SELECT DISTINCT source AS __text, source AS __value FROM (SELECT source FROM pois UNION SELECT source FROM reservables UNION SELECT source FROM import_runs) sources WHERE source IS NOT NULL ORDER BY source ASC",
         "refresh": 1,
-        "includeAll": true,
-        "allValue": "'__all'",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        }
+        "type": "query"
       },
       {
-        "name": "days_back",
-        "type": "custom",
-        "query": "7,14,30,90",
         "current": {
           "text": "30",
           "value": "30"
-        }
+        },
+        "name": "days_back",
+        "query": "7,14,30,90",
+        "type": "custom"
       }
     ]
   },

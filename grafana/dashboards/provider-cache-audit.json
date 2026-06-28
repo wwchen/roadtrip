@@ -122,54 +122,54 @@
   "templating": {
     "list": [
       {
-        "name": "namespace",
-        "type": "query",
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
-        },
-        "query": "SELECT DISTINCT namespace AS __text, namespace AS __value FROM grafana_api_cache_metadata ORDER BY namespace ASC",
-        "refresh": 1,
-        "includeAll": true,
         "allValue": "'__all'",
         "current": {
           "text": "",
           "value": ""
-        }
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "includeAll": true,
+        "name": "namespace",
+        "query": "SELECT DISTINCT namespace AS __text, namespace AS __value FROM grafana_api_cache_metadata ORDER BY namespace ASC",
+        "refresh": 1,
+        "type": "query"
       },
       {
-        "name": "cache_key_search",
-        "type": "textbox",
-        "query": "",
         "current": {
           "text": "",
           "value": ""
-        }
+        },
+        "name": "cache_key_search",
+        "query": "",
+        "type": "textbox"
       },
       {
-        "name": "include_expired",
-        "type": "custom",
-        "query": "false,true",
         "current": {
           "text": "false",
           "value": "false"
-        }
+        },
+        "name": "include_expired",
+        "query": "false,true",
+        "type": "custom"
       },
       {
-        "name": "reservable_rid",
-        "type": "query",
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
-        },
-        "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
-        "refresh": 1,
-        "includeAll": true,
         "allValue": "'__all'",
         "current": {
           "text": "",
           "value": ""
-        }
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "includeAll": true,
+        "name": "reservable_rid",
+        "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
+        "refresh": 1,
+        "type": "query"
       }
     ]
   },
