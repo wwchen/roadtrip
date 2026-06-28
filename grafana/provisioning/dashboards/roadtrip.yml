@@ -9,6 +9,6 @@ providers:
     disableDeletion: false
     editable: true
     updateIntervalSeconds: 10
-    allowUiUpdates: false
+    allowUiUpdates: $GRAFANA_DASHBOARD_ALLOW_UI_UPDATES
     options:
       path: /etc/grafana/dashboards
