@@ -1,4 +1,4 @@
-.PHONY: help run deploy check-pushed data-fetch data-import reset-db qa install install-hooks companion
+.PHONY: help run deploy check-pushed data-fetch data-import reset-db qa install install-hooks companion grafana-export
 
 PORT       ?= 8765
 DEPLOY_HOST ?= mini-ca
@@ -30,6 +30,7 @@ help:
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
+	@echo "  make grafana-export   Snapshot UI-edited dashboards back to grafana/dashboards/*.json"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
@@ -109,3 +110,10 @@ qa:
 install-hooks:
 	git config core.hooksPath .githooks
 	@echo "git hooks installed (.githooks/pre-commit)"
+
+# Snapshot Grafana dashboards from the running container into
+# grafana/dashboards/*.json. Workflow: edit in the UI (allowUiUpdates=true
+# in dev), then `make grafana-export` before committing. UID, password, and
+# UID list overridable via env vars; see scripts/export_grafana_dashboards.py.
+grafana-export:
+	./scripts/export_grafana_dashboards.py
