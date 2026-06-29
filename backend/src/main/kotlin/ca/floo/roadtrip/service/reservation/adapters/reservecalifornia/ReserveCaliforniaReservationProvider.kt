@@ -150,8 +150,7 @@ class ReserveCaliforniaReservationProvider(
         (ref as? ProviderRef.ReserveCalifornia)
             ?: throw ReservationProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
 
-    private fun observedAt(grids: List<ReserveCaliforniaGridAvailability>): Instant =
-        grids.firstOrNull()?.observedAt ?: Instant.now(clock)
+    private fun observedAt(grids: List<ReserveCaliforniaGridAvailability>): Instant = grids.firstOrNull()?.observedAt ?: Instant.now(clock)
 
     private suspend fun <T> runWithErrorMapping(block: suspend () -> T): T =
         try {

@@ -20,14 +20,10 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 /**
- * Hits rec.gov's monthly availability endpoint with a global throttle and 429 backoff.
- *
- * Mirrors poller.js verbatim: 1.5s minimum gap between calls, 3s/6s/12s retries on 429.
- * The throttle is global — module-level in JS, instance-level mutex here.
- */
-/**
- * rec.gov availability fetch surface. The HTTP-backed implementation is
- * [HttpAvailabilityClient]; tests pass fakes.
+ * rec.gov availability fetch surface. The HTTP-backed implementation
+ * ([HttpAvailabilityClient]) hits the monthly availability endpoint with a
+ * global throttle and 429 backoff. Mirrors poller.js verbatim: 1.5s minimum
+ * gap between calls, 3s/6s/12s retries on 429. Tests pass fakes.
  */
 interface AvailabilityClient {
     suspend fun fetchMonth(

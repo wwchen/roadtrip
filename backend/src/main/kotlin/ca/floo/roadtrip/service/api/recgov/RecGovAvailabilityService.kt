@@ -226,8 +226,7 @@ private fun inferReopenDate(
     return AvailabilitySeasonBlock(reopensOn = earliest.toString())
 }
 
-private fun directFetchCacheBlock(): AvailabilityCacheBlock =
-    AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)
+private fun directFetchCacheBlock(): AvailabilityCacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)
 
 internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val msg = e.message.orEmpty()

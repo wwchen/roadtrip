@@ -22,9 +22,11 @@ import java.time.Duration
 import java.time.LocalDate
 
 /**
- * Reads availability from Aspira NextGen's public `/api/availability/map`
- * endpoint. Same vendor as the deeplink builder ([web/aspira.js], RFC 0006);
- * powers reservation.pc.gc.ca, washington.goingtocamp.com, discovercamping.ca.
+ * Aspira availability + occupancy fetch surface. The HTTP-backed
+ * implementation ([HttpAspiraAvailabilityClient]) reads Aspira NextGen's
+ * public `/api/availability/map` endpoint. Same vendor as the deeplink
+ * builder ([web/aspira.js], RFC 0006); powers reservation.pc.gc.ca,
+ * washington.goingtocamp.com, discovercamping.ca. Tests pass fakes.
  *
  * Wire shape (verified by manual probe 2026-06-07):
  *
@@ -59,10 +61,6 @@ import java.time.LocalDate
  * We use Java's built-in HttpClient instead of Ktor's CIO because Ktor's
  * HttpPlainText plugin auto-adds `Accept-Charset: UTF-8` and Aspira's WAF
  * rejects requests carrying that header (real browsers don't send it).
- */
-/**
- * Aspira availability + occupancy fetch surface. The HTTP-backed
- * implementation is [HttpAspiraAvailabilityClient]; tests pass fakes.
  */
 interface AspiraAvailabilityClient {
     suspend fun fetch(

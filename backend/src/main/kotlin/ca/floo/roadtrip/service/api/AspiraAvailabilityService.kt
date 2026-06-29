@@ -334,8 +334,7 @@ private fun daysBetween(
     endDate: LocalDate,
 ): Int = ChronoUnit.DAYS.between(startDate, endDate).toInt()
 
-private fun directFetchCacheBlock(): AvailabilityCacheBlock =
-    AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)
+private fun directFetchCacheBlock(): AvailabilityCacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)
 
 internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val status = e.httpStatus
