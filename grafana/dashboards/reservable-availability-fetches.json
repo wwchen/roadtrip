@@ -436,83 +436,83 @@
   "templating": {
     "list": [
       {
-        "name": "days_back",
-        "type": "custom",
-        "query": "7,14,30,90",
         "current": {
           "text": "30",
           "value": "30"
-        }
+        },
+        "name": "days_back",
+        "query": "7,14,30,90",
+        "type": "custom"
       },
       {
-        "name": "bucket",
-        "type": "custom",
-        "query": "hour,day",
         "current": {
           "text": "day",
           "value": "day"
-        }
-      },
-      {
-        "name": "run_status",
-        "type": "custom",
-        "query": "all,started,completed,failed",
-        "current": {
-          "text": "all",
-          "value": "all"
-        }
-      },
-      {
-        "name": "job_status",
-        "type": "custom",
-        "query": "all,active,paused,done",
-        "current": {
-          "text": "all",
-          "value": "all"
-        }
-      },
-      {
-        "name": "vendor",
-        "type": "query",
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
         },
-        "query": "SELECT DISTINCT vendor AS __text, vendor AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY vendor ASC",
-        "refresh": 1,
-        "includeAll": true,
+        "name": "bucket",
+        "query": "hour,day",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "all",
+          "value": "all"
+        },
+        "name": "run_status",
+        "query": "all,started,completed,failed",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "all",
+          "value": "all"
+        },
+        "name": "job_status",
+        "query": "all,active,paused,done",
+        "type": "custom"
+      },
+      {
         "allValue": "'__all'",
         "current": {
           "text": "All",
           "value": "$__all"
-        }
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "includeAll": true,
+        "name": "vendor",
+        "query": "SELECT DISTINCT vendor AS __text, vendor AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY vendor ASC",
+        "refresh": 1,
+        "type": "query"
       },
       {
+        "current": {
+          "text": "",
+          "value": ""
+        },
         "name": "rid_search",
-        "type": "textbox",
         "query": "",
+        "type": "textbox"
+      },
+      {
         "current": {
           "text": "",
           "value": ""
-        }
-      },
-      {
+        },
         "name": "poi_name_search",
-        "type": "textbox",
         "query": "",
-        "current": {
-          "text": "",
-          "value": ""
-        }
+        "type": "textbox"
       },
       {
-        "name": "cache_key_search",
-        "type": "textbox",
-        "query": "",
         "current": {
           "text": "",
           "value": ""
-        }
+        },
+        "name": "cache_key_search",
+        "query": "",
+        "type": "textbox"
       }
     ]
   },

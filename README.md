@@ -25,7 +25,10 @@ make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger
 for Postgres, the backend container, and Grafana, then runs the campsite
 companion as a host Node process so Playwright can drive a real Chromium.
 The backend still serves the app on <http://127.0.0.1:8765>. Grafana is
-available at <http://127.0.0.1:3000> with anonymous viewer access enabled.
+available at <http://127.0.0.1:3000>. Local Compose enables anonymous editor
+access and provisioned dashboard UI saves so dashboards can be adjusted in the
+Grafana UI; those saves live in the local `grafana-data` volume and are not
+written back to `grafana/dashboards/*.json`.
 Provisioned dashboards include a catalog explorer
 (`/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer`) that covers POIs,
 reservables, and snapshot-backed availability, plus POI detail, POIs with
@@ -216,6 +219,9 @@ the backend container and write raw captures back to the checkout.
    Grafana state is stored in the Compose-managed named volume
    `grafana-data` (Docker prefixes it with the Compose project name);
    dashboard JSON and datasource provisioning stay bind-mounted from `grafana/`.
+   Provisioned dashboard UI saves are disabled by default on deploy hosts; set
+   `GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=true` only when you intentionally want
+   Grafana to persist UI edits in its database.
 
 3. **Bring up the stack:** `make deploy` (ssh's to the mini, git pull, build,
    `docker compose up`). The deploy is also wired to GHA (push to master →

@@ -367,133 +367,133 @@
   "templating": {
     "list": [
       {
-        "name": "status",
-        "type": "custom",
-        "query": ",active,paused,done",
         "current": {
           "text": "",
           "value": ""
-        }
-      },
-      {
-        "name": "watch_id",
-        "type": "textbox",
-        "query": "",
-        "current": {
-          "text": "",
-          "value": ""
-        }
-      },
-      {
-        "name": "job_id",
-        "type": "textbox",
-        "query": "",
-        "current": {
-          "text": "",
-          "value": ""
-        }
-      },
-      {
-        "name": "run_id",
-        "type": "textbox",
-        "query": "",
-        "current": {
-          "text": "",
-          "value": ""
-        }
-      },
-      {
-        "name": "run_status",
-        "type": "custom",
-        "query": ",started,completed,failed",
-        "current": {
-          "text": "",
-          "value": ""
-        }
-      },
-      {
-        "name": "since",
-        "type": "textbox",
-        "query": "",
-        "current": {
-          "text": "",
-          "value": ""
-        }
-      },
-      {
-        "name": "reservable_rid",
-        "type": "query",
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
         },
-        "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
-        "refresh": 1,
-        "includeAll": true,
+        "name": "status",
+        "query": ",active,paused,done",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "name": "watch_id",
+        "query": "",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "name": "job_id",
+        "query": "",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "name": "run_id",
+        "query": "",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "name": "run_status",
+        "query": ",started,completed,failed",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "name": "since",
+        "query": "",
+        "type": "textbox"
+      },
+      {
         "allValue": "'__all'",
         "current": {
           "text": "",
           "value": ""
-        }
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "includeAll": true,
+        "name": "reservable_rid",
+        "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
+        "refresh": 1,
+        "type": "query"
       },
       {
-        "name": "window_hours",
-        "type": "custom",
-        "query": "24,48,168,720",
         "current": {
           "text": "168",
           "value": "168"
-        }
+        },
+        "name": "window_hours",
+        "query": "24,48,168,720",
+        "type": "custom"
       },
       {
-        "name": "vendor",
-        "type": "query",
+        "allValue": "'__all'",
+        "current": {
+          "text": "",
+          "value": ""
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "includeAll": true,
+        "name": "vendor",
         "query": "SELECT DISTINCT vendor AS __text, vendor AS __value FROM reservables WHERE vendor IS NOT NULL ORDER BY vendor ASC",
         "refresh": 1,
-        "includeAll": true,
+        "type": "query"
+      },
+      {
         "allValue": "'__all'",
         "current": {
           "text": "",
           "value": ""
-        }
-      },
-      {
-        "name": "site_type",
-        "type": "query",
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "includeAll": true,
+        "name": "site_type",
         "query": "SELECT DISTINCT site_type AS __text, site_type AS __value FROM reservables WHERE site_type IS NOT NULL ORDER BY site_type ASC",
         "refresh": 1,
-        "includeAll": true,
-        "allValue": "'__all'",
+        "type": "query"
+      },
+      {
         "current": {
           "text": "",
           "value": ""
-        }
-      },
-      {
+        },
         "name": "name",
-        "type": "textbox",
         "query": "",
-        "current": {
-          "text": "",
-          "value": ""
-        }
+        "type": "textbox"
       },
       {
-        "name": "poi_query",
-        "type": "textbox",
-        "query": "",
         "current": {
           "text": "",
           "value": ""
-        }
+        },
+        "name": "poi_query",
+        "query": "",
+        "type": "textbox"
       }
     ]
   },

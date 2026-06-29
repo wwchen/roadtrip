@@ -1,56 +1,99 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "links": [],
-  "liveNow": false,
   "panels": [
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 1,
-      "panels": [],
-      "title": "Reservable Details",
-      "type": "row"
-    },
     {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "field"
+              "options": "Field"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 180
+                "value": 169
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/[0-9]+/"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
               }
             ]
           }
         ]
       },
       "gridPos": {
-        "h": 9,
-        "w": 24,
+        "h": 17,
+        "w": 15,
         "x": 0,
-        "y": 1
+        "y": 0
       },
       "id": 2,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -60,90 +103,191 @@
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT\n    r.*,\n    r.type || ':' || r.vendor || ':' || r.vendor_id AS rid\n  FROM reservables r\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${rid:sqlstring}\n)\nSELECT kv.field, kv.value\nFROM selected\nCROSS JOIN LATERAL (\n  VALUES\n    ('rid', rid),\n    ('name', coalesce(name, '')),\n    ('type', type),\n    ('vendor', vendor),\n    ('vendor_id', vendor_id),\n    ('source', coalesce(source, '')),\n    ('loop', coalesce(loop, '')),\n    ('site_type', coalesce(site_type, '')),\n    ('created_at', created_at::text),\n    ('updated_at', updated_at::text),\n    ('deleted_at', coalesce(deleted_at::text, '')),\n    ('last_seen_run_id', coalesce(last_seen_run_id::text, ''))\n) AS kv(field, value)\nORDER BY CASE field\n  WHEN 'rid' THEN 1\n  WHEN 'name' THEN 2\n  WHEN 'type' THEN 3\n  WHEN 'vendor' THEN 4\n  WHEN 'vendor_id' THEN 5\n  ELSE 100\nEND;",
-          "refId": "A"
+          "rawSql": "SELECT\n  r.*,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid\nFROM\n  reservables r\nWHERE\n  r.type || ':' || r.vendor || ':' || r.vendor_id = ${rid:sqlstring}",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Reservable properties",
+      "transformations": [
+        {
+          "id": "transpose",
+          "options": {}
+        }
+      ],
       "type": "table"
     },
     {
       "datasource": {
-        "type": "postgres",
+        "type": "grafana-postgresql-datasource",
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "payload"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 160
-              }
-            ]
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
           },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "json"
-            },
-            "properties": [
+          "custom": {
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            }
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
               {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "json-view"
-                }
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
               }
             ]
           }
-        ]
+        },
+        "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 10
+        "h": 7,
+        "w": 9,
+        "x": 15,
+        "y": 0
       },
-      "id": 3,
+      "id": 20,
       "options": {
-        "showHeader": true,
-        "cellHeight": "md"
+        "basemap": {
+          "config": {},
+          "name": "Layer 0",
+          "noRepeat": false,
+          "type": "default"
+        },
+        "controls": {
+          "mouseWheelZoom": true,
+          "showAttribution": true,
+          "showDebug": false,
+          "showMeasure": false,
+          "showScale": false,
+          "showZoom": true
+        },
+        "layers": [
+          {
+            "config": {
+              "showLegend": false,
+              "style": {
+                "color": {
+                  "fixed": "dark-green"
+                },
+                "opacity": 1,
+                "rotation": {
+                  "fixed": 0,
+                  "max": 360,
+                  "min": -360,
+                  "mode": "mod"
+                },
+                "size": {
+                  "fixed": 5,
+                  "max": 15,
+                  "min": 2
+                },
+                "symbol": {
+                  "fixed": "img/icons/marker/circle.svg",
+                  "mode": "fixed"
+                },
+                "symbolAlign": {
+                  "horizontal": "center",
+                  "vertical": "center"
+                },
+                "text": {
+                  "field": "name",
+                  "fixed": "",
+                  "mode": "field"
+                },
+                "textConfig": {
+                  "fontSize": 12,
+                  "offsetX": 0,
+                  "offsetY": 20,
+                  "textAlign": "center",
+                  "textBaseline": "middle"
+                }
+              }
+            },
+            "name": "POI",
+            "tooltip": true,
+            "type": "markers"
+          }
+        ],
+        "tooltip": {
+          "mode": "details"
+        },
+        "view": {
+          "allLayers": true,
+          "id": "fit",
+          "lastOnly": false,
+          "lat": 0,
+          "layer": "Layer 1",
+          "lon": 0,
+          "noRepeat": false,
+          "padding": 10,
+          "zoom": 10
+        }
       },
       "pluginVersion": "12.4.4",
       "targets": [
         {
+          "dataset": "roadtrip",
           "datasource": {
-            "type": "postgres",
+            "type": "grafana-postgresql-datasource",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT\n    r.*,\n    r.type || ':' || r.vendor || ':' || r.vendor_id AS rid\n  FROM reservables r\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${rid:sqlstring}\n)\nSELECT\n  'provider_ref' AS payload,\n  coalesce(jsonb_pretty(provider_ref), '') AS json\nFROM selected\nUNION ALL\nSELECT\n  'raw',\n  coalesce(jsonb_pretty(raw), '')\nFROM selected;",
-          "refId": "A"
+          "rawSql": "SELECT\n  p.name,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat\nFROM pois p\nJOIN reservable_pois rp ON rp.poi_id = p.id\nJOIN reservables r ON r.id = rp.reservable_id\nWHERE p.deleted_at IS NULL\n  AND r.deleted_at IS NULL\n  AND r.id = $reservable_id",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
-      "title": "Debug ETL payloads",
-      "type": "table"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 18
-      },
-      "id": 4,
-      "panels": [],
-      "title": "Relationships",
-      "type": "row"
+      "title": "POI",
+      "type": "geomap"
     },
     {
       "datasource": {
@@ -151,7 +295,27 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "links": [
+            {
+              "title": "Details",
+              "url": "/d/roadtrip-poi-reservables/poi-with-reservables-details?var-poi_id=${__data.fields.poi_id}&var-poi_name=${__data.fields.name}"
+            }
+          ],
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -176,24 +340,33 @@
               "id": "byName",
               "options": "poi_id"
             },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 90
-              }
-            ]
+            "properties": []
           }
         ]
       },
       "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 19
+        "h": 4,
+        "w": 9,
+        "x": 15,
+        "y": 7
       },
-      "id": 5,
+      "id": 19,
       "options": {
-        "showHeader": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "/^name$/",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -202,14 +375,127 @@
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
           "rawSql": "WITH selected AS (\n  SELECT\n    r.*,\n    r.type || ':' || r.vendor || ':' || r.vendor_id AS rid\n  FROM reservables r\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${rid:sqlstring}\n),\nparent_poi AS (\n  SELECT p.*\n  FROM selected r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  JOIN pois p ON p.id = rp.poi_id\n  ORDER BY rp.created_at ASC, p.id ASC\n  LIMIT 1\n)\nSELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.subcategory,\n  p.agency,\n  p.source,\n  p.source_id,\n  p.region,\n  p.country,\n  ST_Y(ST_PointOnSurface(p.geom)) AS latitude,\n  ST_X(ST_PointOnSurface(p.geom)) AS longitude,\n  p.unit_name,\n  p.phone,\n  coalesce(jsonb_pretty(p.address), '') AS address,\n  p.info_url,\n  p.fetched_at,\n  p.updated_at\nFROM parent_poi p;",
-          "refId": "A"
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Parent POI",
-      "type": "table"
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "grafana-postgresql-datasource",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 5,
+        "x": 15,
+        "y": 11
+      },
+      "id": 18,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "dataset": "roadtrip",
+          "datasource": {
+            "type": "grafana-postgresql-datasource",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  count(DISTINCT sib.reservable_id) :: int AS sibling_count\nFROM\n  reservable_pois rp\n  JOIN reservable_pois sib ON sib.poi_id = rp.poi_id\n  JOIN reservables r ON r.id = sib.reservable_id\nWHERE\n  rp.reservable_id = NULLIF(${reservable_id:sqlstring}, '') :: bigint\n  AND sib.reservable_id <> rp.reservable_id\n  AND (\n    ${include_deleted_siblings}\n    OR r.deleted_at IS NULL\n  );",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Sibling reservables",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 4,
+      "panels": [],
+      "title": "Relationships",
+      "type": "row"
     },
     {
       "datasource": {
@@ -217,12 +503,39 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": [
+                "countAll"
+              ]
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
               "id": "byName",
-              "options": "rid"
+              "options": "id"
             },
             "properties": [
               {
@@ -231,21 +544,9 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable Detail",
-                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-rid=${__value.raw}"
+                    "url": "/d/roadtrip-reservable-detail/reservable-detail?var-reservable_id=${__data.fields.id}"
                   }
                 ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rid"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 230
               }
             ]
           }
@@ -255,10 +556,11 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 18
       },
       "id": 6,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -268,10 +570,28 @@
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT\n    r.*,\n    r.type || ':' || r.vendor || ':' || r.vendor_id AS rid\n  FROM reservables r\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${rid:sqlstring}\n),\nparent_poi AS (\n  SELECT p.*\n  FROM selected r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  JOIN pois p ON p.id = rp.poi_id\n  ORDER BY rp.created_at ASC, p.id ASC\n  LIMIT 1\n)\nSELECT\n  sr.type || ':' || sr.vendor || ':' || sr.vendor_id AS rid,\n  sr.name,\n  sr.loop,\n  sr.site_type,\n  sr.vendor,\n  sr.vendor_id,\n  sr.source,\n  sr.updated_at,\n  sr.deleted_at,\n  CASE WHEN sr.id = (SELECT id FROM selected) THEN true ELSE false END AS selected\nFROM parent_poi p\nJOIN reservable_pois rp ON rp.poi_id = p.id\nJOIN reservables sr ON sr.id = rp.reservable_id\nWHERE (${include_deleted_siblings:sqlstring} = 'true' OR sr.deleted_at IS NULL)\nORDER BY selected DESC, sr.loop NULLS LAST, sr.name NULLS LAST, sr.vendor_id ASC;",
-          "refId": "A"
+          "rawSql": "SELECT r.*\n  FROM reservable_pois rp\n  JOIN reservable_pois sib ON sib.poi_id = rp.poi_id\n  JOIN reservables r       ON r.id = sib.reservable_id\n  WHERE rp.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n    AND sib.reservable_id <> rp.reservable_id\n    AND (${include_deleted_siblings} OR r.deleted_at IS NULL)\n  GROUP BY r.id\n  ORDER BY r.id;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Sibling reservables under parent POI",
@@ -283,7 +603,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 28
       },
       "id": 7,
       "panels": [],
@@ -296,7 +616,32 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -368,7 +713,7 @@
                   "steps": [
                     {
                       "color": "gray",
-                      "value": null
+                      "value": 0
                     },
                     {
                       "color": "dark-gray",
@@ -453,11 +798,13 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 29
       },
       "id": 16,
       "options": {
-        "showHeader": true
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -466,10 +813,28 @@
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT\n    r.*,\n    r.type || ':' || r.vendor || ':' || r.vendor_id AS rid\n  FROM reservables r\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${rid:sqlstring}\n),\ngrouped AS (\n  SELECT\n    s.target_date,\n    (array_agg(s.status::text ORDER BY s.observed_at DESC, s.id DESC))[1] AS latest_status,\n    (array_agg(s.available ORDER BY s.observed_at DESC, s.id DESC))[1] AS latest_available,\n    max(s.observed_at) AS last_observed_at,\n    count(*) AS observation_count,\n    max(s.observed_at) FILTER (WHERE s.status = 'available') AS last_available_observed_at,\n    max(s.observed_at) FILTER (WHERE s.available) AS last_available_flag_observed_at\n  FROM availability_snapshot s\n  JOIN selected r ON r.id = s.reservable_id\n  WHERE $__timeFilter(s.observed_at)\n  GROUP BY s.target_date\n)\nSELECT\n  target_date,\n  CASE latest_status\n    WHEN 'available' THEN 4\n    WHEN 'first_come' THEN 3\n    WHEN 'reserved' THEN 2\n    WHEN 'booked' THEN 2\n    WHEN 'closed' THEN 1\n    ELSE 0\n  END AS status,\n  latest_available,\n  last_observed_at,\n  observation_count,\n  last_available_observed_at,\n  last_available_flag_observed_at\nFROM grouped\nORDER BY target_date ASC;",
-          "refId": "A"
+          "rawSql": "select * from availability_snapshot WHERE reservable_id = $reservable_id ",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Latest availability by target date",
@@ -481,7 +846,161 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 70,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 0,
+            "spanNulls": false
+          },
+          "fieldMinMax": false,
+          "mappings": [
+            {
+              "options": {
+                "closed": {
+                  "color": "red",
+                  "index": 0
+                },
+                "open": {
+                  "color": "green",
+                  "index": 2
+                },
+                "reserved": {
+                  "color": "orange",
+                  "index": 3
+                },
+                "unknown": {
+                  "color": "text",
+                  "index": 1
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 39
+      },
+      "id": 17,
+      "options": {
+        "alignValue": "left",
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "mergeValues": true,
+        "rowHeight": 0.9,
+        "showValue": "auto",
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "single",
+          "sort": "none"
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "  SELECT\n    s.observed_at AS \"time\",\n    s.target_date::TEXT as metric,\n    s.status        AS value\n  FROM availability_snapshot s\n  WHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n    AND $__timeFilter(s.observed_at)\n  ORDER BY s.target_date ASC, s.observed_at ASC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Latest availability by target date",
+      "transformations": [
+        {
+          "id": "partitionByValues",
+          "options": {
+            "fields": [
+              "metric"
+            ],
+            "keepFields": false,
+            "naming": {
+              "asLabels": false
+            }
+          }
+        }
+      ],
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -501,10 +1020,11 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 49
       },
       "id": 8,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -529,7 +1049,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 60
+        "y": 61
       },
       "id": 9,
       "panels": [],
@@ -542,7 +1062,32 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -574,10 +1119,11 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 62
       },
       "id": 10,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -602,7 +1148,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 70
+        "y": 71
       },
       "id": 11,
       "panels": [],
@@ -625,7 +1171,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -637,7 +1183,7 @@
         "h": 4,
         "w": 8,
         "x": 0,
-        "y": 71
+        "y": 72
       },
       "id": 12,
       "options": {
@@ -645,6 +1191,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -688,7 +1235,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -700,7 +1247,7 @@
         "h": 4,
         "w": 8,
         "x": 8,
-        "y": 71
+        "y": 72
       },
       "id": 13,
       "options": {
@@ -708,6 +1255,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -751,7 +1299,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -763,7 +1311,7 @@
         "h": 4,
         "w": 8,
         "x": 16,
-        "y": 71
+        "y": 72
       },
       "id": 14,
       "options": {
@@ -771,6 +1319,7 @@
         "graphMode": "none",
         "justifyMode": "auto",
         "orientation": "auto",
+        "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
@@ -804,7 +1353,32 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -824,10 +1398,11 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 75
+        "y": 76
       },
       "id": 15,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -847,34 +1422,89 @@
       "type": "table"
     }
   ],
+  "preload": false,
   "refresh": "",
-  "schemaVersion": 39,
-  "tags": [
-    "roadtrip",
-    "reservable"
-  ],
+  "schemaVersion": 42,
+  "tags": [],
   "templating": {
     "list": [
       {
-        "name": "rid",
-        "label": "RID",
-        "type": "query",
+        "allowCustomValue": false,
+        "current": {
+          "text": "116385",
+          "value": "116385"
+        },
+        "datasource": {
+          "type": "grafana-postgresql-datasource",
+          "uid": "roadtrip-postgres"
+        },
+        "definition": "SELECT\n    r.*,\n    r.type || ':' || r.vendor || ':' || r.vendor_id AS rid\n  FROM reservables r\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${rid:sqlstring}",
+        "description": "",
+        "label": "ID",
+        "name": "reservable_id",
+        "options": [],
+        "query": {
+          "dataset": "roadtrip",
+          "editorMode": "code",
+          "format": "table",
+          "meta": {
+            "valueField": "id"
+          },
+          "query": "SELECT\n    r.*,\n    r.type || ':' || r.vendor || ':' || r.vendor_id AS rid\n  FROM reservables r\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${rid:sqlstring}",
+          "rawQuery": true,
+          "rawSql": "SELECT\n    r.*,\n    r.type || ':' || r.vendor || ':' || r.vendor_id AS rid\n  FROM reservables r\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${rid:sqlstring}",
+          "refId": "SQLVariableQueryEditor-VariableQuery",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "type": "query"
+      },
+      {
+        "current": {
+          "text": "site:aspira_bc:-2147472080",
+          "value": "site:aspira_bc:-2147472080"
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "label": "RID",
+        "name": "rid",
+        "options": [],
         "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
-        "refresh": 1
+        "refresh": 1,
+        "regexApplyTo": "value",
+        "type": "query"
       },
       {
-        "name": "include_deleted_siblings",
-        "label": "Include deleted siblings",
-        "type": "custom",
-        "query": "false,true",
         "current": {
           "text": "false",
           "value": "false"
-        }
+        },
+        "label": "Include deleted siblings",
+        "name": "include_deleted_siblings",
+        "options": [],
+        "query": "false,true",
+        "type": "custom",
+        "valuesFormat": "csv"
       }
     ]
   },
@@ -882,8 +1512,12 @@
     "from": "now-30d",
     "to": "now"
   },
+  "timepicker": {
+    "hidden": true
+  },
   "timezone": "browser",
-  "title": "Reservable / Detail",
+  "title": "✔︎ Reservable / Detail",
   "uid": "roadtrip-reservable-detail",
-  "version": 1
+  "version": 1,
+  "weekStart": ""
 }

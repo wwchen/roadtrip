@@ -260,57 +260,57 @@
   "templating": {
     "list": [
       {
-        "name": "poi_name_search",
-        "type": "textbox",
-        "query": "",
         "current": {
           "text": "",
           "value": ""
-        }
-      },
-      {
-        "name": "poi_id_search",
-        "type": "textbox",
-        "query": "",
-        "current": {
-          "text": "",
-          "value": ""
-        }
-      },
-      {
-        "name": "poi_category",
-        "type": "query",
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
         },
-        "query": "SELECT DISTINCT category AS __text, category AS __value FROM pois WHERE deleted_at IS NULL ORDER BY category ASC",
-        "refresh": 1,
-        "includeAll": true,
+        "name": "poi_name_search",
+        "query": "",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "name": "poi_id_search",
+        "query": "",
+        "type": "textbox"
+      },
+      {
         "allValue": "'__all'",
         "current": {
           "text": "All",
           "value": "$__all"
-        }
-      },
-      {
-        "name": "poi_id",
-        "type": "query",
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "query": "WITH matches AS (SELECT id::text || ' - ' || name || ' [' || category || ']' AS __text, id::text AS __value, name, id FROM pois WHERE deleted_at IS NULL AND (${poi_name_search:sqlstring} = '' OR name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${poi_id_search:sqlstring} ELSE false END AND (${poi_category:sqlstring} IN ('', '__all') OR category IN (${poi_category:sqlstring})) ORDER BY name ASC, id ASC LIMIT 500) SELECT __text, __value FROM matches UNION ALL SELECT 'No matching POI' AS __text, '__none' AS __value WHERE NOT EXISTS (SELECT 1 FROM matches)",
-        "refresh": 1
+        "includeAll": true,
+        "name": "poi_category",
+        "query": "SELECT DISTINCT category AS __text, category AS __value FROM pois WHERE deleted_at IS NULL ORDER BY category ASC",
+        "refresh": 1,
+        "type": "query"
       },
       {
-        "name": "include_deleted_reservables",
-        "type": "custom",
-        "query": "false,true",
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "name": "poi_id",
+        "query": "WITH matches AS (SELECT id::text || ' - ' || name || ' [' || category || ']' AS __text, id::text AS __value, name, id FROM pois WHERE deleted_at IS NULL AND (${poi_name_search:sqlstring} = '' OR name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${poi_id_search:sqlstring} ELSE false END AND (${poi_category:sqlstring} IN ('', '__all') OR category IN (${poi_category:sqlstring})) ORDER BY name ASC, id ASC LIMIT 500) SELECT __text, __value FROM matches UNION ALL SELECT 'No matching POI' AS __text, '__none' AS __value WHERE NOT EXISTS (SELECT 1 FROM matches)",
+        "refresh": 1,
+        "type": "query"
+      },
+      {
         "current": {
           "text": "false",
           "value": "false"
-        }
+        },
+        "name": "include_deleted_reservables",
+        "query": "false,true",
+        "type": "custom"
       }
     ]
   },
