@@ -517,12 +517,10 @@
         "type": "query"
       },
       {
-        "allValue": "'__all'",
         "allowCustomValue": false,
         "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
+          "text": [],
+          "value": []
         },
         "multi": true,
         "datasource": {
@@ -530,7 +528,7 @@
           "uid": "roadtrip-postgres"
         },
         "definition": "SELECT id::text AS __text, id::text AS __value FROM availability_job WHERE '${watch_id:csv}' IN ('', '$__all') OR watch_id::text IN (${watch_id:sqlstring}) ORDER BY id DESC LIMIT 1000",
-        "includeAll": true,
+        "includeAll": false,
         "label": "job_id",
         "name": "job_id",
         "options": [],
@@ -539,12 +537,10 @@
         "type": "query"
       },
       {
-        "allValue": "'__all'",
         "allowCustomValue": false,
         "current": {
-          "selected": true,
-          "text": "All",
-          "value": "$__all"
+          "text": [],
+          "value": []
         },
         "multi": true,
         "datasource": {
@@ -552,7 +548,7 @@
           "uid": "roadtrip-postgres"
         },
         "definition": "SELECT jr.id::text AS __text, jr.id::text AS __value FROM availability_job_run jr JOIN availability_job j ON j.id = jr.job_id WHERE ('${watch_id:csv}' IN ('', '$__all') OR j.watch_id::text IN (${watch_id:sqlstring})) AND ('${job_id:csv}' IN ('', '$__all') OR jr.job_id::text IN (${job_id:sqlstring})) ORDER BY jr.id DESC LIMIT 1000",
-        "includeAll": true,
+        "includeAll": false,
         "label": "run_id",
         "name": "run_id",
         "options": [],
