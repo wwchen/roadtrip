@@ -206,6 +206,6 @@
   "timepicker": {},
   "timezone": "browser",
   "title": "Ingest & Catalog Freshness",
-  "uid": "roadtrip-ingest-catalog-freshness",
+  "uid": "ingest-catalog-freshness",
   "version": 1
 }

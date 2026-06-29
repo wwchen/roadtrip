@@ -327,7 +327,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Tesla Supercharger Detail",
-                    "url": "/d/roadtrip-tesla-supercharger-detail/roadtrip-tesla-supercharger-detail?var-supercharger_id=${__value.raw}"
+                    "url": "/d/tesla-supercharger-detail/roadtrip-tesla-supercharger-detail?var-supercharger_id=${__value.raw}"
                   }
                 ]
               }
@@ -602,6 +602,6 @@
   },
   "timezone": "browser",
   "title": "POI / Tesla Supercharger / Stats",
-  "uid": "roadtrip-tesla-supercharger-stats",
+  "uid": "tesla-supercharger-stats",
   "version": 1
 }
