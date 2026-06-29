@@ -622,6 +622,9 @@
               "type": "color-background"
             },
             "filterable": false,
+            "footer": {
+              "reducers": []
+            },
             "inspect": false,
             "minWidth": 90
           },
@@ -870,7 +873,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 42
       },
       "id": 8,
       "options": {
@@ -899,7 +902,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 51
+        "y": 53
       },
       "id": 9,
       "panels": [],
@@ -1010,7 +1013,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 52
+        "y": 54
       },
       "id": 12,
       "options": {
@@ -1067,7 +1070,7 @@
     "hidden": true
   },
   "timezone": "browser",
-  "title": "Availability Watch / Job Run Detail",
+  "title": "✔︎ Reservable Availability Watch / Job Run Detail",
   "uid": "roadtrip-watch-job-run-detail",
   "version": 1,
   "weekStart": ""

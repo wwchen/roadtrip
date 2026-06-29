@@ -9,6 +9,73 @@
   "liveNow": false,
   "panels": [
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "panels": [],
+      "title": "Supercharger",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Field"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 15,
+        "x": 0,
+        "y": 1
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  p.id,\n  p.name,\n  p.source_id,\n  p.source,\n  p.region,\n  p.country,\n  p.info_url,\n  p.fetched_at,\n  p.updated_at,\n  now() - p.updated_at AS catalog_age,\n  (p.properties->>'stall_count')::int AS stall_count,\n  (p.properties->>'max_power_kw')::int AS max_power_kw,\n  CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN jsonb_array_length(p.properties->'pricebooks') ELSE 0 END AS pricebook_count,\n  (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS detail_captured,\n  p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n  p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n  p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type,\n  p.properties#>>'{upstream,index,supercharger_function,open_to_non_tesla}' AS open_to_non_tesla,\n  p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "refId": "A"
+        }
+      ],
+      "title": "Supercharger properties",
+      "transformations": [
+        {
+          "id": "transpose",
+          "options": {}
+        }
+      ],
+      "type": "table"
+    },
+    {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
@@ -19,9 +86,9 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 0
+        "w": 9,
+        "x": 15,
+        "y": 1
       },
       "id": 1,
       "options": {
@@ -92,39 +159,17 @@
       "type": "geomap"
     },
     {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
+      "collapsed": false,
       "gridPos": {
-        "h": 8,
+        "h": 1,
         "w": 24,
         "x": 0,
-        "y": 10
+        "y": 11
       },
-      "id": 2,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  p.id,\n  p.name,\n  p.source_id,\n  p.source,\n  p.region,\n  p.country,\n  p.info_url,\n  p.fetched_at,\n  p.updated_at,\n  now() - p.updated_at AS catalog_age,\n  (p.properties->>'stall_count')::int AS stall_count,\n  (p.properties->>'max_power_kw')::int AS max_power_kw,\n  CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN jsonb_array_length(p.properties->'pricebooks') ELSE 0 END AS pricebook_count,\n  (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS detail_captured,\n  p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n  p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n  p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type,\n  p.properties#>>'{upstream,index,supercharger_function,open_to_non_tesla}' AS open_to_non_tesla,\n  p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
-          "refId": "A"
-        }
-      ],
-      "title": "Supercharger Header",
-      "type": "table"
+      "id": 101,
+      "panels": [],
+      "title": "Operations / Location",
+      "type": "row"
     },
     {
       "datasource": {
@@ -133,16 +178,48 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Field"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/[0-9]+/"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 8,
+        "h": 10,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 12
       },
       "id": 3,
       "options": {
+        "cellHeight": "md",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -158,8 +235,27 @@
           "refId": "A"
         }
       ],
-      "title": "Tesla Detail Fields",
+      "title": "Address & operational fields",
+      "transformations": [
+        {
+          "id": "transpose",
+          "options": {}
+        }
+      ],
       "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 102,
+      "panels": [],
+      "title": "Pricing",
+      "type": "row"
     },
     {
       "datasource": {
@@ -168,13 +264,28 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "raw_pricebook"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 26
+        "y": 23
       },
       "id": 4,
       "options": {
@@ -197,22 +308,67 @@
       "type": "table"
     },
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 103,
+      "panels": [],
+      "title": "Debug",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Field"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/[0-9]+/"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json-view"
+                }
+              },
+              {
+                "id": "custom.inspect",
+                "value": true
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 10,
+        "h": 12,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 34
       },
       "id": 5,
       "options": {
+        "cellHeight": "md",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -228,7 +384,13 @@
           "refId": "A"
         }
       ],
-      "title": "Raw Tesla Upstream Data",
+      "title": "Raw Tesla upstream data",
+      "transformations": [
+        {
+          "id": "transpose",
+          "options": {}
+        }
+      ],
       "type": "table"
     }
   ],
@@ -247,6 +409,7 @@
           "text": "",
           "value": ""
         },
+        "label": "Name contains",
         "name": "supercharger_name_search",
         "query": "",
         "type": "textbox"
@@ -256,6 +419,7 @@
           "text": "",
           "value": ""
         },
+        "label": "POI id",
         "name": "supercharger_id_search",
         "query": "",
         "type": "textbox"
@@ -265,6 +429,7 @@
           "text": "",
           "value": ""
         },
+        "label": "Tesla source id contains",
         "name": "supercharger_source_id_search",
         "query": "",
         "type": "textbox"
@@ -274,6 +439,7 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "label": "Supercharger",
         "name": "supercharger_id",
         "query": "WITH matches AS (\n  SELECT\n    id::text || ' - ' || name || COALESCE(' [' || NULLIF(region, '') || ']', '') AS __text,\n    id::text AS __value,\n    name,\n    id\n  FROM pois\n  WHERE deleted_at IS NULL\n    AND category = 'supercharger'\n    AND (${supercharger_name_search:sqlstring} = '' OR name ILIKE '%' || ${supercharger_name_search:sqlstring} || '%')\n    AND CASE\n      WHEN ${supercharger_id_search:sqlstring} = '' THEN true\n      WHEN ${supercharger_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${supercharger_id_search:sqlstring}\n      ELSE false\n    END\n    AND (${supercharger_source_id_search:sqlstring} = '' OR source_id ILIKE '%' || ${supercharger_source_id_search:sqlstring} || '%')\n  ORDER BY name ASC, id ASC\n  LIMIT 500\n)\nSELECT __text, __value FROM matches\nUNION ALL\nSELECT 'No matching Tesla supercharger' AS __text, '__none' AS __value\nWHERE NOT EXISTS (SELECT 1 FROM matches)",
         "refresh": 1,
@@ -285,7 +451,9 @@
     "from": "now-30d",
     "to": "now"
   },
-  "timepicker": {},
+  "timepicker": {
+    "hidden": true
+  },
   "timezone": "browser",
   "title": "POI / Tesla Supercharger / Detail",
   "uid": "roadtrip-tesla-supercharger-detail",
