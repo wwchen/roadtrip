@@ -648,6 +648,177 @@
       ],
       "title": "Installed extensions",
       "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      },
+      "id": 104,
+      "panels": [],
+      "title": "Schema",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "description": "All public tables: row estimate + total size. Click a row to focus the schema panel on the right.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total_bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "table_name"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Focus schema panel",
+                    "url": "/d/roadtrip-db-stats/db-stats?var-table_name=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 10,
+        "x": 0,
+        "y": 64
+      },
+      "id": 10,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "total_bytes"
+          }
+        ]
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  c.relname                            AS table_name,\n  obj_description(c.oid, 'pg_class')   AS comment,\n  coalesce(s.n_live_tup, 0)            AS live_rows,\n  pg_total_relation_size(c.oid)        AS total_bytes\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nLEFT JOIN pg_stat_user_tables s ON s.relid = c.oid\nWHERE c.relkind = 'r'\n  AND n.nspname = 'public'\nORDER BY c.relname ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Public tables",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "description": "Columns for the selected table. PK / FK / not-null / default surfaced inline.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "is_pk"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 60
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "is_fk"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 60
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "not_null"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "default_expr"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 220
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 14,
+        "w": 14,
+        "x": 10,
+        "y": 64
+      },
+      "id": 11,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH t AS (\n  SELECT c.oid, c.relname\n  FROM pg_class c\n  JOIN pg_namespace n ON n.oid = c.relnamespace\n  WHERE n.nspname = 'public'\n    AND c.relkind = 'r'\n    AND c.relname = ${table_name:sqlstring}\n),\npk_cols AS (\n  SELECT a.attname\n  FROM t\n  JOIN pg_index i ON i.indrelid = t.oid AND i.indisprimary\n  JOIN unnest(i.indkey) WITH ORDINALITY AS k(attnum, ord) ON true\n  JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = k.attnum\n),\nfk_cols AS (\n  SELECT DISTINCT a.attname,\n    cf.relname || '(' || af.attname || ')' AS references\n  FROM t\n  JOIN pg_constraint con ON con.conrelid = t.oid AND con.contype = 'f'\n  JOIN unnest(con.conkey) WITH ORDINALITY AS k(attnum, ord) ON true\n  JOIN unnest(con.confkey) WITH ORDINALITY AS kf(attnum, ord) ON kf.ord = k.ord\n  JOIN pg_attribute a  ON a.attrelid  = t.oid          AND a.attnum  = k.attnum\n  JOIN pg_class     cf ON cf.oid       = con.confrelid\n  JOIN pg_attribute af ON af.attrelid = con.confrelid AND af.attnum = kf.attnum\n)\nSELECT\n  a.attnum                                    AS ordinal,\n  a.attname                                   AS column_name,\n  format_type(a.atttypid, a.atttypmod)        AS data_type,\n  a.attnotnull                                AS not_null,\n  pg_get_expr(d.adbin, d.adrelid)             AS default_expr,\n  EXISTS (SELECT 1 FROM pk_cols WHERE attname = a.attname) AS is_pk,\n  EXISTS (SELECT 1 FROM fk_cols WHERE attname = a.attname) AS is_fk,\n  (SELECT references FROM fk_cols WHERE attname = a.attname LIMIT 1) AS references,\n  col_description(a.attrelid, a.attnum)       AS comment\nFROM t\nJOIN pg_attribute a ON a.attrelid = t.oid\nLEFT JOIN pg_attrdef d ON d.adrelid = t.oid AND d.adnum = a.attnum\nWHERE a.attnum > 0\n  AND NOT a.attisdropped\nORDER BY a.attnum;",
+          "refId": "A"
+        }
+      ],
+      "title": "Columns for ${table_name}",
+      "type": "table"
     }
   ],
   "refresh": "",
@@ -658,7 +829,20 @@
     "stats"
   ],
   "templating": {
-    "list": []
+    "list": [
+      {
+        "allowCustomValue": false,
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "label": "Table",
+        "name": "table_name",
+        "query": "SELECT c.relname AS __text, c.relname AS __value FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind = 'r' AND n.nspname = 'public' ORDER BY c.relname",
+        "refresh": 1,
+        "type": "query"
+      }
+    ]
   },
   "time": {
     "from": "now-30d",
