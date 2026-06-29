@@ -405,43 +405,14 @@
   "templating": {
     "list": [
       {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "label": "Name contains",
-        "name": "supercharger_name_search",
-        "query": "",
-        "type": "textbox"
-      },
-      {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "label": "POI id",
-        "name": "supercharger_id_search",
-        "query": "",
-        "type": "textbox"
-      },
-      {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "label": "Tesla source id contains",
-        "name": "supercharger_source_id_search",
-        "query": "",
-        "type": "textbox"
-      },
-      {
+        "allowCustomValue": false,
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
         "label": "Supercharger",
         "name": "supercharger_id",
-        "query": "WITH matches AS (\n  SELECT\n    id::text || ' - ' || name || COALESCE(' [' || NULLIF(region, '') || ']', '') AS __text,\n    id::text AS __value,\n    name,\n    id\n  FROM pois\n  WHERE deleted_at IS NULL\n    AND category = 'supercharger'\n    AND (${supercharger_name_search:sqlstring} = '' OR name ILIKE '%' || ${supercharger_name_search:sqlstring} || '%')\n    AND CASE\n      WHEN ${supercharger_id_search:sqlstring} = '' THEN true\n      WHEN ${supercharger_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${supercharger_id_search:sqlstring}\n      ELSE false\n    END\n    AND (${supercharger_source_id_search:sqlstring} = '' OR source_id ILIKE '%' || ${supercharger_source_id_search:sqlstring} || '%')\n  ORDER BY name ASC, id ASC\n  LIMIT 500\n)\nSELECT __text, __value FROM matches\nUNION ALL\nSELECT 'No matching Tesla supercharger' AS __text, '__none' AS __value\nWHERE NOT EXISTS (SELECT 1 FROM matches)",
+        "query": "SELECT\n  id::text || ' - ' || name || COALESCE(' [' || NULLIF(region, '') || ']', '') AS __text,\n  id::text AS __value\nFROM pois\nWHERE deleted_at IS NULL\n  AND category = 'supercharger'\nORDER BY name ASC, id ASC\nLIMIT 5000;",
         "refresh": 1,
         "type": "query"
       }
