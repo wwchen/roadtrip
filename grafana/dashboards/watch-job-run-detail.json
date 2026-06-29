@@ -896,6 +896,7 @@
       "id": 8,
       "options": {
         "cellHeight": "md",
+        "enablePagination": true,
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -1034,6 +1035,7 @@
       "id": 12,
       "options": {
         "cellHeight": "sm",
+        "enablePagination": true,
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
@@ -1043,10 +1045,28 @@
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.id AS run_id,\n  ajr.status,\n  ajr.snapshot_count,\n  ajr.duration_ms,\n  ajr.started_at,\n  ajr.completed_at,\n  ajr.error,\n  CASE WHEN ajr.id = (SELECT id FROM selected) THEN true ELSE false END AS selected\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nORDER BY ajr.started_at DESC, ajr.id DESC\nLIMIT 100;",
-          "refId": "A"
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.id AS run_id,\n  ajr.status,\n  ajr.snapshot_count,\n  ajr.duration_ms,\n  ajr.started_at,\n  ajr.completed_at,\n  ajr.error,\n  CASE WHEN ajr.id = (SELECT id FROM selected) THEN true ELSE false END AS selected\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nORDER BY ajr.started_at DESC, ajr.id DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Recent runs for this job",
