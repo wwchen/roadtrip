@@ -1,17 +1,15 @@
-package ca.floo.roadtrip.service.api
+package ca.floo.roadtrip.service.reservation.adapters.aspira
 
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraException
-import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
-import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
-import ca.floo.roadtrip.clients.cache.CachedResult
 import ca.floo.roadtrip.models.api.AvailabilityErrorDto
-import ca.floo.roadtrip.models.api.AvailabilityResponseDto
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
+import ca.floo.roadtrip.service.api.availabilityErrorDto
 import io.ktor.http.HttpStatusCode
 import java.time.Instant
 import java.time.LocalDate
@@ -19,8 +17,8 @@ import java.time.temporal.ChronoUnit
 
 // Provider-specific helpers for Aspira NextGen availability (Parks Canada,
 // BC Provincial, WA State). The HTTP surface lives in
-// AvailabilityRoutes.kt; this file just translates the cached
-// AspiraAvailability payload into the shared response shape.
+// AvailabilityRoutes.kt; this file just translates the AspiraAvailability
+// payload into the shared response shape.
 
 /**
  * Fetch + classify + render the unified response for an Aspira-backed
@@ -31,28 +29,22 @@ import java.time.temporal.ChronoUnit
  * execution, not public/provider availability.
  */
 internal suspend fun fetchAspiraAvailabilityObservations(
-    cache: CachedAspiraAvailability,
+    client: AspiraAvailabilityClient,
     host: String,
     mapId: Int,
     startDate: LocalDate,
     endDate: LocalDate,
-    force: Boolean,
     reservableVendor: String? = null,
 ): AvailabilityObservationBatch {
     val days = daysBetween(startDate, endDate)
-    val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
-    val cacheBlock =
-        AvailabilityCacheBlock(
-            hit = cached.hit,
-            ageSeconds = cached.ageSeconds,
-            ttlSeconds = cached.ttlSeconds,
-        )
+    val observedAt = Instant.now()
+    val data = client.fetch(host, mapId, startDate, endDate.minusDays(1))
     return AvailabilityObservationBatch(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
-        observations = observationsFromAspiraAvailability(cached.data, startDate, days, cached.observedAt, reservableVendor),
-        cacheBlock = cacheBlock,
+        observations = observationsFromAspiraAvailability(data, startDate, days, observedAt, reservableVendor),
+        cacheBlock = directFetchCacheBlock(),
         host = host,
         mapId = mapId.toString(),
     )
@@ -65,13 +57,12 @@ internal suspend fun fetchAspiraAvailabilityObservations(
  * per-reservable child map and classifies the actual resource ids.
  */
 internal suspend fun fetchAspiraCatalogObservations(
-    cache: CachedAspiraAvailability,
+    client: AspiraAvailabilityClient,
     host: String,
     parentMapId: Int,
     reservables: List<AspiraCatalogReservable>,
     startDate: LocalDate,
     endDate: LocalDate,
-    force: Boolean,
 ): AvailabilityObservationBatch {
     val days = daysBetween(startDate, endDate)
     val targets =
@@ -80,83 +71,47 @@ internal suspend fun fetchAspiraCatalogObservations(
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
         return fetchAspiraAvailabilityObservations(
-            cache = cache,
+            client = client,
             host = host,
             mapId = parentMapId,
             startDate = startDate,
             endDate = endDate,
-            force = force,
         )
     }
 
-    val cachedByMap = mutableMapOf<Int, CachedResult>()
+    val observedAt = Instant.now()
+    val dataByMap = mutableMapOf<Int, AspiraAvailability>()
     for (mapId in targets.map { it.mapId!! }.distinct()) {
-        cachedByMap[mapId] = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
+        dataByMap[mapId] = client.fetch(host, mapId, startDate, endDate.minusDays(1))
     }
 
     val resourceRows =
         targets.map { target ->
             CatalogResourceDays(
                 rid = target.rid,
-                days = cachedByMap[target.mapId]?.data?.byResource?.get(target.resourceId),
-                observedAt = cachedByMap[target.mapId]?.observedAt ?: Instant.EPOCH,
+                days = dataByMap[target.mapId]?.byResource?.get(target.resourceId),
+                observedAt = observedAt,
             )
         }
-    val cacheResults = cachedByMap.values
-    val cacheBlock =
-        AvailabilityCacheBlock(
-            hit = cacheResults.all { it.hit },
-            ageSeconds = cacheResults.maxOfOrNull { it.ageSeconds } ?: 0,
-            ttlSeconds = cacheResults.minOfOrNull { it.ttlSeconds } ?: 0,
-        )
     return AvailabilityObservationBatch(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
         observations = observationsFromLinkedResourceCatalog(resourceRows, startDate, days),
-        cacheBlock = cacheBlock,
+        cacheBlock = directFetchCacheBlock(),
         host = host,
         mapId = parentMapId.toString(),
     )
 }
 
-/**
- * Aspira's results list is driven by `/api/occupancy`, not the raw
- * `/api/availability/map` resource statuses. Query each date as a one-day
- * window so the response remains a set of independent per-day facts.
- */
-internal suspend fun fetchAndClassifyAspiraCatalogOccupancy(
-    cache: CachedAspiraOccupancy,
-    host: String,
-    parentMapId: Int,
-    resourceLocationId: Int,
-    reservables: List<AspiraCatalogReservable>,
-    today: LocalDate,
-    days: Int,
-    force: Boolean,
-): AvailabilityResponseDto =
-    availabilityResponseFromObservations(
-        fetchAspiraCatalogOccupancyObservations(
-            cache = cache,
-            host = host,
-            parentMapId = parentMapId,
-            resourceLocationId = resourceLocationId,
-            reservables = reservables,
-            today = today,
-            days = days,
-            force = force,
-        ),
-    )
-
 internal suspend fun fetchAspiraCatalogOccupancyObservations(
-    cache: CachedAspiraOccupancy,
+    client: AspiraAvailabilityClient,
     host: String,
     parentMapId: Int,
     resourceLocationId: Int,
     reservables: List<AspiraCatalogReservable>,
     today: LocalDate,
     days: Int,
-    force: Boolean,
 ): AvailabilityObservationBatch {
     val targets =
         reservables
@@ -168,68 +123,54 @@ internal suspend fun fetchAspiraCatalogOccupancyObservations(
             startDate = today,
             endDate = today.plusDays(days.toLong()),
             observations = emptyList(),
-            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
+            cacheBlock = directFetchCacheBlock(),
             host = host,
             mapId = parentMapId.toString(),
         )
     }
 
-    val cachedByDate = mutableListOf<CachedOccupancyDay>()
     val observations =
         (0 until days).flatMap { offset ->
             val arrival = today.plusDays(offset.toLong())
             val checkout = arrival.plusDays(1)
-            val cached = cache.get(host, resourceLocationId, arrival, checkout, force)
-            cachedByDate += CachedOccupancyDay(cached.hit, cached.ageSeconds, cached.ttlSeconds)
-            observationsFromOccupancyCatalogArrivalDay(targets, cached.data.resourceOccupancy, arrival, cached.observedAt)
+            val data = client.fetchOccupancy(host, resourceLocationId, arrival, checkout)
+            observationsFromOccupancyCatalogArrivalDay(targets, data.resourceOccupancy, arrival, Instant.now())
         }
-    val cacheBlock =
-        AvailabilityCacheBlock(
-            hit = cachedByDate.all { it.hit },
-            ageSeconds = cachedByDate.maxOfOrNull { it.ageSeconds } ?: 0,
-            ttlSeconds = cachedByDate.minOfOrNull { it.ttlSeconds } ?: 0,
-        )
     return AvailabilityObservationBatch(
         provider = "aspira",
         startDate = today,
         endDate = today.plusDays(days.toLong()),
         observations = observations,
-        cacheBlock = cacheBlock,
+        cacheBlock = directFetchCacheBlock(),
         host = host,
         mapId = parentMapId.toString(),
     )
 }
 
 /**
- * Same cached Aspira `/api/availability/map` response as the campground
- * rollup, narrowed to one `resourceAvailabilities` key.
+ * Same Aspira `/api/availability/map` response as the campground rollup,
+ * narrowed to one `resourceAvailabilities` key.
  */
 internal suspend fun fetchAspiraResourceObservations(
-    cache: CachedAspiraAvailability,
+    client: AspiraAvailabilityClient,
     host: String,
     mapId: Int,
     resourceId: String,
     reservableVendor: String,
     startDate: LocalDate,
     endDate: LocalDate,
-    force: Boolean,
 ): AvailabilityObservationBatch {
     val days = daysBetween(startDate, endDate)
-    val cached = cache.get(host, mapId, startDate, endDate.minusDays(1), force)
-    val resourceDays = cached.data.byResource[resourceId].orEmpty()
+    val observedAt = Instant.now()
+    val data = client.fetch(host, mapId, startDate, endDate.minusDays(1))
+    val resourceDays = data.byResource[resourceId].orEmpty()
     val reservableId = "site:$reservableVendor:$resourceId"
-    val cacheBlock =
-        AvailabilityCacheBlock(
-            hit = cached.hit,
-            ageSeconds = cached.ageSeconds,
-            ttlSeconds = cached.ttlSeconds,
-        )
     return AvailabilityObservationBatch(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
-        observations = observationsFromResourceDays(resourceDays, startDate, days, reservableId, cached.observedAt),
-        cacheBlock = cacheBlock,
+        observations = observationsFromResourceDays(resourceDays, startDate, days, reservableId, observedAt),
+        cacheBlock = directFetchCacheBlock(),
         host = host,
         mapId = mapId.toString(),
         reservableId = reservableId,
@@ -358,12 +299,6 @@ private data class CatalogResourceDays(
     val observedAt: Instant,
 )
 
-private data class CachedOccupancyDay(
-    val hit: Boolean,
-    val ageSeconds: Long,
-    val ttlSeconds: Long,
-)
-
 private const val ASPIRA_OCCUPANCY_AVAILABLE = 0
 
 private fun observationsFromIndexedStatusRows(
@@ -399,6 +334,8 @@ private fun daysBetween(
     startDate: LocalDate,
     endDate: LocalDate,
 ): Int = ChronoUnit.DAYS.between(startDate, endDate).toInt()
+
+private fun directFetchCacheBlock(): AvailabilityCacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)
 
 internal fun mapAspiraUpstreamError(e: AspiraException): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val status = e.httpStatus

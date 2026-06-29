@@ -1,23 +1,17 @@
-package ca.floo.roadtrip.service.api.recgov
+package ca.floo.roadtrip.service.reservation.adapters.recgov
 
-import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.boolean
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import java.time.Duration
 import java.time.LocalDate
 import java.time.ZoneOffset
-import java.util.concurrent.atomic.AtomicInteger
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -29,13 +23,10 @@ import kotlin.test.assertEquals
  *
  * Asserts:
  *   - state classification (success / zero_available / closed_for_season / empty)
- *   - JSON contract shape (provider field, top-level date window, availability array,
- *     cache block)
- *   - cache hit on second call within TTL
- *   - force=true bypasses cache
+ *   - JSON contract shape (provider field, top-level date window, availability array)
  *   - upstream errors propagate so the route layer can map to 503
  */
-class RecGovAvailabilityServiceTest {
+class RecGovObservationsTest {
     private val today: LocalDate = LocalDate.now(ZoneOffset.UTC)
 
     private fun campsiteWith(availabilities: Map<String, String>): Campsite =
@@ -52,25 +43,25 @@ class RecGovAvailabilityServiceTest {
     /** today + offset → "2026-MM-DDT00:00:00Z" — rec.gov's keying shape. */
     private fun futureKey(offsetDays: Long): String = today.plusDays(offsetDays).toString() + "T00:00:00Z"
 
-    private fun cacheReturning(map: Map<String, Campsite>): CachedRecGovAvailability =
-        CachedRecGovAvailability(
-            fetchMonth = { _, _ -> map },
-            ttl = Duration.ofMinutes(10),
-            scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-        )
+    private fun clientReturning(map: Map<String, Campsite>): AvailabilityClient =
+        object : AvailabilityClient {
+            override suspend fun fetchMonth(
+                campgroundId: String,
+                monthStart: String,
+            ): Map<String, Campsite> = map
+        }
 
     private fun parseJson(body: String): JsonObject = Json.parseToJsonElement(body).jsonObject
 
     private fun classify(
-        cache: CachedRecGovAvailability,
+        client: AvailabilityClient,
         recgovId: String = "232447",
         days: Int = 7,
-        force: Boolean = false,
     ): JsonObject {
         val body =
             encodeAvailabilityJson(
                 availabilityResponseFromObservations(
-                    runBlocking { fetchRecgovAvailabilityObservations(cache, recgovId, today, today.plusDays(days.toLong()), force) },
+                    runBlocking { fetchRecgovAvailabilityObservations(client, recgovId, today, today.plusDays(days.toLong())) },
                 ),
             )
         return parseJson(body)
@@ -89,33 +80,32 @@ class RecGovAvailabilityServiceTest {
                         ),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 7)
+        val body = classify(clientReturning(map), days = 7)
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
         assertEquals("recgov", body["provider"]!!.jsonPrimitive.content)
         assertEquals("232447", body["campground_id"]!!.jsonPrimitive.content)
         assertEquals(today.toString(), body["start_date"]!!.jsonPrimitive.content)
         assertEquals(today.plusDays(7).toString(), body["end_date"]!!.jsonPrimitive.content)
         assertEquals(7, body["availability"]!!.jsonArray.size)
-        assertEquals(false, body["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
     }
 
     @Test
     fun `zero_available state when all days are booked`() {
         val booked = (0..6L).associate { futureKey(it) to "Reserved" }
-        val body = classify(cacheReturning(mapOf("100" to campsiteWith(booked))), days = 7)
+        val body = classify(clientReturning(mapOf("100" to campsiteWith(booked))), days = 7)
         assertEquals("zero_available", body["state"]!!.jsonPrimitive.content)
     }
 
     @Test
     fun `closed_for_season state when all days are Closed`() {
         val closed = (0..6L).associate { futureKey(it) to "Closed" }
-        val body = classify(cacheReturning(mapOf("100" to campsiteWith(closed))), days = 7)
+        val body = classify(clientReturning(mapOf("100" to campsiteWith(closed))), days = 7)
         assertEquals("closed_for_season", body["state"]!!.jsonPrimitive.content)
     }
 
     @Test
     fun `empty state when no campsites returned`() {
-        val body = classify(cacheReturning(emptyMap()), days = 7)
+        val body = classify(clientReturning(emptyMap()), days = 7)
         assertEquals("empty", body["state"]!!.jsonPrimitive.content)
     }
 
@@ -128,7 +118,7 @@ class RecGovAvailabilityServiceTest {
                         mapOf(futureKey(0) to "Not Reservable"),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 1)
+        val body = classify(clientReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray.single().jsonObject
 
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
@@ -145,7 +135,7 @@ class RecGovAvailabilityServiceTest {
     @Test
     fun `missing date row maps to unknown rather than closed`() {
         val map = mapOf("100" to campsiteWith(emptyMap()))
-        val body = classify(cacheReturning(map), days = 1)
+        val body = classify(clientReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray.single().jsonObject
 
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
@@ -161,7 +151,7 @@ class RecGovAvailabilityServiceTest {
     @Test
     fun `null availability artifact maps to unknown rather than reserved`() {
         val map = mapOf("100" to campsiteWith(mapOf(futureKey(0) to "null")))
-        val body = classify(cacheReturning(map), days = 1)
+        val body = classify(clientReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray.single().jsonObject
 
         assertEquals("success", body["state"]!!.jsonPrimitive.content)
@@ -181,12 +171,11 @@ class RecGovAvailabilityServiceTest {
                 availabilityResponseFromObservations(
                     runBlocking {
                         fetchRecgovCatalogObservations(
-                            cache = cacheReturning(emptyMap()),
+                            client = clientReturning(emptyMap()),
                             recgovId = "232447",
                             campsiteIds = setOf("100", "200"),
                             startDate = today,
                             endDate = today.plusDays(1),
-                            force = false,
                         )
                     },
                 ),
@@ -217,12 +206,11 @@ class RecGovAvailabilityServiceTest {
                 availabilityResponseFromObservations(
                     runBlocking {
                         fetchRecgovReservableObservations(
-                            cache = cacheReturning(emptyMap()),
+                            client = clientReturning(emptyMap()),
                             recgovId = "232447",
                             campsiteId = "100",
                             startDate = today,
                             endDate = today.plusDays(1),
-                            force = false,
                         )
                     },
                 ),
@@ -244,15 +232,16 @@ class RecGovAvailabilityServiceTest {
 
     @Test
     fun `upstream error propagates so route layer can 503`() {
-        val cache =
-            CachedRecGovAvailability(
-                fetchMonth = { _, _ -> error("rec.gov 429 after 3 retries") },
-                ttl = Duration.ofMinutes(10),
-                scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-            )
+        val client =
+            object : AvailabilityClient {
+                override suspend fun fetchMonth(
+                    campgroundId: String,
+                    monthStart: String,
+                ): Map<String, Campsite> = error("rec.gov 429 after 3 retries")
+            }
         val ex =
             runCatching {
-                classify(cache, days = 1)
+                classify(client, days = 1)
             }.exceptionOrNull()
         require(ex != null) { "expected an upstream error to surface" }
         val (status, error) = mapRecgovUpstreamError(ex)
@@ -268,41 +257,6 @@ class RecGovAvailabilityServiceTest {
     }
 
     @Test
-    fun `cache hit on second call within TTL`() {
-        val calls = AtomicInteger(0)
-        val cache =
-            CachedRecGovAvailability(
-                fetchMonth = { _, _ ->
-                    calls.incrementAndGet()
-                    mapOf("100" to campsiteWith(mapOf(futureKey(0) to "Available")))
-                },
-                ttl = Duration.ofMinutes(10),
-                scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-            )
-        classify(cache, days = 1)
-        val second = classify(cache, days = 1)
-        assertEquals(true, second["cache"]!!.jsonObject["hit"]!!.jsonPrimitive.boolean)
-        assertEquals(1, calls.get(), "second hit should not refetch")
-    }
-
-    @Test
-    fun `force=true bypasses cache`() {
-        val calls = AtomicInteger(0)
-        val cache =
-            CachedRecGovAvailability(
-                fetchMonth = { _, _ ->
-                    calls.incrementAndGet()
-                    mapOf("100" to campsiteWith(mapOf(futureKey(0) to "Available")))
-                },
-                ttl = Duration.ofMinutes(10),
-                scope = CoroutineScope(SupervisorJob() + Dispatchers.IO),
-            )
-        classify(cache, days = 1)
-        classify(cache, days = 1, force = true)
-        assertEquals(2, calls.get())
-    }
-
-    @Test
     fun `per-day classification ignores following date status`() {
         val map =
             mapOf(
@@ -314,7 +268,7 @@ class RecGovAvailabilityServiceTest {
                         ),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 2)
+        val body = classify(clientReturning(map), days = 2)
         val avail = body["availability"]!!.jsonArray
         assertEquals("available", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
     }
@@ -331,7 +285,7 @@ class RecGovAvailabilityServiceTest {
                         ),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 1)
+        val body = classify(clientReturning(map), days = 1)
         val avail = body["availability"]!!.jsonArray
         assertEquals("available", avail[0].jsonObject["status"]!!.jsonPrimitive.content)
         assertEquals(
@@ -362,7 +316,7 @@ class RecGovAvailabilityServiceTest {
                         ),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 1)
+        val body = classify(clientReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray[0].jsonObject
         assertEquals("available", day["status"]!!.jsonPrimitive.content)
         assertEquals(2, day["available_reservable_ids"]!!.jsonArray.size)
@@ -388,7 +342,7 @@ class RecGovAvailabilityServiceTest {
                         ),
                     ),
             )
-        val body = classify(cacheReturning(map), days = 1)
+        val body = classify(clientReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray[0].jsonObject
         val ids =
             day["available_reservable_ids"]!!
@@ -407,7 +361,7 @@ class RecGovAvailabilityServiceTest {
                 futureKey(i.toLong()) to s
             }
         val map = mapOf("100" to campsiteWith(byDay))
-        val body = classify(cacheReturning(map), days = 1)
+        val body = classify(clientReturning(map), days = 1)
         val day = body["availability"]!!.jsonArray[0].jsonObject
         assertEquals("available", day["status"]!!.jsonPrimitive.content)
     }

@@ -1,12 +1,11 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
-import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
-import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
-import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
+import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.CachedReserveCaliforniaAvailability
+import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
@@ -16,7 +15,7 @@ import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmeri
 import ca.floo.roadtrip.service.reservation.adapters.reservecalifornia.ReserveCaliforniaReservationProvider
 
 /**
- * Builds a [ReservationProviderRegistry] from boot-time config + caches. One
+ * Builds a [ReservationProviderRegistry] from boot-time config + clients. One
  * place that knows the mapping from `pois.source` to [ReservationProvider];
  * keeps that knowledge out of [Main] (which would otherwise have to wire
  * each adapter manually) and out of routes.
@@ -28,24 +27,19 @@ import ca.floo.roadtrip.service.reservation.adapters.reservecalifornia.ReserveCa
 object ReservationProviderRegistryFactory {
     fun build(
         registry: PoiRegistry,
-        recgovCache: CachedRecGovAvailability,
-        aspiraCache: CachedAspiraAvailability,
-        aspiraOccupancyCache: CachedAspiraOccupancy? = null,
-        reserveAmericaCacheFactory: (ReserveAmericaTenant) -> CachedReserveAmericaAvailability = { tenant ->
-            CachedReserveAmericaAvailability(
-                client = HttpReserveAmericaAvailabilityClient(host = tenant.host),
-            )
+        recgovClient: AvailabilityClient,
+        aspiraClient: AspiraAvailabilityClient,
+        reserveAmericaClientFactory: (ReserveAmericaTenant) -> ReserveAmericaAvailabilityClient = { tenant ->
+            HttpReserveAmericaAvailabilityClient(host = tenant.host)
         },
-        reserveCaliforniaCacheFactory: () -> CachedReserveCaliforniaAvailability = {
-            CachedReserveCaliforniaAvailability(
-                client = HttpReserveCaliforniaAvailabilityClient(),
-            )
+        reserveCaliforniaClientFactory: () -> ReserveCaliforniaAvailabilityClient = {
+            HttpReserveCaliforniaAvailabilityClient()
         },
     ): ReservationProviderRegistry {
         val adaptersBySource = mutableMapOf<String, ReservationProvider>()
 
         // RecGov — single adapter instance shared across every recgov source.
-        val recgov = RecGovReservationProvider(cache = recgovCache)
+        val recgov = RecGovReservationProvider(client = recgovClient)
         for (source in registry.recgovSources()) {
             adaptersBySource[source] = recgov
         }
@@ -66,8 +60,7 @@ object ReservationProviderRegistryFactory {
                             )
                     AspiraReservationProvider(
                         tenant = tenant,
-                        cache = aspiraCache,
-                        occupancyCache = aspiraOccupancyCache,
+                        client = aspiraClient,
                     )
                 }
             adaptersBySource[source] = adapter
@@ -85,13 +78,13 @@ object ReservationProviderRegistryFactory {
             adaptersBySource[config.source] =
                 ReserveAmericaReservationProvider(
                     tenant = tenant,
-                    cache = reserveAmericaCacheFactory(tenant),
+                    client = reserveAmericaClientFactory(tenant),
                 )
         }
 
         val reserveCaliforniaSources = registry.reserveCaliforniaSources()
         if (reserveCaliforniaSources.isNotEmpty()) {
-            val reserveCalifornia = ReserveCaliforniaReservationProvider(cache = reserveCaliforniaCacheFactory())
+            val reserveCalifornia = ReserveCaliforniaReservationProvider(client = reserveCaliforniaClientFactory())
             for (source in reserveCaliforniaSources) {
                 adaptersBySource[source] = reserveCalifornia
             }

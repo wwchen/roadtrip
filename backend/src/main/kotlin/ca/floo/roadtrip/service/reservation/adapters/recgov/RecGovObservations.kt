@@ -1,7 +1,6 @@
-package ca.floo.roadtrip.service.api.recgov
+package ca.floo.roadtrip.service.reservation.adapters.recgov
 
-import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
-import ca.floo.roadtrip.clients.cache.CachedRecGovResult
+import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.models.api.AvailabilityErrorDto
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
@@ -47,107 +46,104 @@ internal fun monthsCovering(
 }
 
 /**
- * Fetch every relevant month from cache and translate upstream statuses into
- * atomic reservable-day observations. Throws on upstream failure — caller
- * maps to a 503.
+ * Fetch every relevant month and translate upstream statuses into atomic
+ * reservable-day observations. Throws on upstream failure — caller maps to a
+ * 503.
  *
  * The half-open window `[startDate, endDate)` is classified as independent
  * calendar days. Same-site stay-length matching belongs to alert execution,
  * not public/provider availability.
  */
 internal suspend fun fetchRecgovAvailabilityObservations(
-    cache: CachedRecGovAvailability,
+    client: AvailabilityClient,
     recgovId: String,
     startDate: LocalDate,
     endDate: LocalDate,
-    force: Boolean,
 ): AvailabilityObservationBatch =
     coroutineScope {
         val dates = datesInWindow(startDate, endDate)
         val months = monthsCovering(startDate, endDate.minusDays(1))
-        val results: List<CachedRecGovResult> =
+        val observedAt = Instant.now()
+        val payloads: List<Map<String, Campsite>> =
             months
-                .map { month -> async { cache.get("recgov", recgovId, month, force) } }
+                .map { month -> async { client.fetchMonth(recgovId, month) } }
                 .awaitAll()
 
         // Same campsite id may appear in both months; keep the union.
-        val merged: Map<String, Map<String, String>> = mergeCampsites(results.map { it.data })
-        val observedAtByDate = observedAtByDate(months, results, dates)
+        val merged: Map<String, Map<String, String>> = mergeCampsites(payloads)
+        val observedAtByDate = dates.associateWith { observedAt }
 
-        val cacheBlock = aggregateCacheBlock(results)
         AvailabilityObservationBatch(
             provider = "recgov",
             startDate = startDate,
             endDate = endDate,
             observations = observationsFromCampsites(merged, dates, observedAtByDate),
             seasonBlock = inferReopenDate(merged, startDate),
-            cacheBlock = cacheBlock,
+            cacheBlock = directFetchCacheBlock(),
             campgroundId = recgovId,
         )
     }
 
 /**
- * Same cached upstream fetch as [fetchRecgovAvailabilityObservations], narrowed to a linked
- * reservable catalog. This lets `/api/poi/{id}/availability?site_type=...`
+ * Same upstream fetch as [fetchRecgovAvailabilityObservations], narrowed to a
+ * linked reservable catalog. This lets `/api/poi/{id}/availability?site_type=...`
  * classify only the matching POI sites without a per-site upstream loop.
  */
 internal suspend fun fetchRecgovCatalogObservations(
-    cache: CachedRecGovAvailability,
+    client: AvailabilityClient,
     recgovId: String,
     campsiteIds: Set<String>,
     startDate: LocalDate,
     endDate: LocalDate,
-    force: Boolean,
 ): AvailabilityObservationBatch =
     coroutineScope {
         val dates = datesInWindow(startDate, endDate)
         val months = monthsCovering(startDate, endDate.minusDays(1))
-        val results: List<CachedRecGovResult> =
+        val observedAt = Instant.now()
+        val payloads: List<Map<String, Campsite>> =
             months
-                .map { month -> async { cache.get("recgov", recgovId, month, force) } }
+                .map { month -> async { client.fetchMonth(recgovId, month) } }
                 .awaitAll()
 
-        val merged = mergeCampsites(results.map { it.data })
+        val merged = mergeCampsites(payloads)
         val catalogSites = campsiteIds.associateWith { siteId -> merged[siteId].orEmpty() }
-        val observedAtByDate = observedAtByDate(months, results, dates)
+        val observedAtByDate = dates.associateWith { observedAt }
 
-        val cacheBlock = aggregateCacheBlock(results)
         AvailabilityObservationBatch(
             provider = "recgov",
             startDate = startDate,
             endDate = endDate,
             observations = observationsFromCampsites(catalogSites, dates, observedAtByDate),
             seasonBlock = inferReopenDate(catalogSites, startDate),
-            cacheBlock = cacheBlock,
+            cacheBlock = directFetchCacheBlock(),
             campgroundId = recgovId,
         )
     }
 
 /**
- * Same cached upstream fetch as [fetchRecgovAvailabilityObservations], narrowed to one
- * rec.gov campsite id. This powers `/api/reservable/{rid}/availability`.
+ * Same upstream fetch as [fetchRecgovAvailabilityObservations], narrowed to
+ * one rec.gov campsite id. This powers `/api/reservable/{rid}/availability`.
  */
 internal suspend fun fetchRecgovReservableObservations(
-    cache: CachedRecGovAvailability,
+    client: AvailabilityClient,
     recgovId: String,
     campsiteId: String,
     startDate: LocalDate,
     endDate: LocalDate,
-    force: Boolean,
 ): AvailabilityObservationBatch =
     coroutineScope {
         val dates = datesInWindow(startDate, endDate)
         val months = monthsCovering(startDate, endDate.minusDays(1))
-        val results: List<CachedRecGovResult> =
+        val observedAt = Instant.now()
+        val payloads: List<Map<String, Campsite>> =
             months
-                .map { month -> async { cache.get("recgov", recgovId, month, force) } }
+                .map { month -> async { client.fetchMonth(recgovId, month) } }
                 .awaitAll()
 
-        val merged = mergeCampsites(results.map { it.data })
+        val merged = mergeCampsites(payloads)
         val oneSite = mapOf(campsiteId to merged[campsiteId].orEmpty())
-        val observedAtByDate = observedAtByDate(months, results, dates)
+        val observedAtByDate = dates.associateWith { observedAt }
 
-        val cacheBlock = aggregateCacheBlock(results)
         val reservableId = "site:recgov:$campsiteId"
         AvailabilityObservationBatch(
             provider = "recgov",
@@ -155,7 +151,7 @@ internal suspend fun fetchRecgovReservableObservations(
             endDate = endDate,
             observations = observationsFromCampsites(oneSite, dates, observedAtByDate),
             seasonBlock = inferReopenDate(oneSite, startDate),
-            cacheBlock = cacheBlock,
+            cacheBlock = directFetchCacheBlock(),
             campgroundId = recgovId,
             reservableId = reservableId,
         )
@@ -201,20 +197,6 @@ private fun observationsFromCampsites(
 
 private fun recgovReservableId(siteId: String): String = "site:recgov:$siteId"
 
-private fun observedAtByDate(
-    months: List<String>,
-    results: List<CachedRecGovResult>,
-    dates: List<LocalDate>,
-): Map<LocalDate, Instant> {
-    val byMonth = months.zip(results).toMap()
-    val fallback = results.maxOfOrNull { it.observedAt } ?: Instant.EPOCH
-    return dates.associateWith { date ->
-        byMonth[monthKey(date)]?.observedAt ?: fallback
-    }
-}
-
-private fun monthKey(date: LocalDate): String = YearMonth.from(date).atDay(1).format(DateTimeFormatter.ISO_LOCAL_DATE)
-
 private fun classifyRecgovStatus(raw: String?): AvailabilityStatus {
     val status = raw?.trim()
     if (status.isNullOrEmpty()) return AvailabilityStatus.UNKNOWN
@@ -244,12 +226,7 @@ private fun inferReopenDate(
     return AvailabilitySeasonBlock(reopensOn = earliest.toString())
 }
 
-private fun aggregateCacheBlock(results: List<CachedRecGovResult>): AvailabilityCacheBlock =
-    AvailabilityCacheBlock(
-        hit = results.all { it.hit },
-        ageSeconds = results.maxOfOrNull { it.ageSeconds } ?: 0L,
-        ttlSeconds = results.firstOrNull()?.ttlSeconds ?: 7200L,
-    )
+private fun directFetchCacheBlock(): AvailabilityCacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L)
 
 internal fun mapRecgovUpstreamError(e: Throwable): Pair<HttpStatusCode, AvailabilityErrorDto> {
     val msg = e.message.orEmpty()

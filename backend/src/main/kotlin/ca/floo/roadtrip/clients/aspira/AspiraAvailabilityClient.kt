@@ -22,9 +22,11 @@ import java.time.Duration
 import java.time.LocalDate
 
 /**
- * Reads availability from Aspira NextGen's public `/api/availability/map`
- * endpoint. Same vendor as the deeplink builder ([web/aspira.js], RFC 0006);
- * powers reservation.pc.gc.ca, washington.goingtocamp.com, discovercamping.ca.
+ * Aspira availability + occupancy fetch surface. The HTTP-backed
+ * implementation ([HttpAspiraAvailabilityClient]) reads Aspira NextGen's
+ * public `/api/availability/map` endpoint. Same vendor as the deeplink
+ * builder ([web/aspira.js], RFC 0006); powers reservation.pc.gc.ca,
+ * washington.goingtocamp.com, discovercamping.ca. Tests pass fakes.
  *
  * Wire shape (verified by manual probe 2026-06-07):
  *
@@ -60,10 +62,26 @@ import java.time.LocalDate
  * HttpPlainText plugin auto-adds `Accept-Charset: UTF-8` and Aspira's WAF
  * rejects requests carrying that header (real browsers don't send it).
  */
-class AspiraAvailabilityClient(
+interface AspiraAvailabilityClient {
+    suspend fun fetch(
+        host: String,
+        mapId: Int,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AspiraAvailability
+
+    suspend fun fetchOccupancy(
+        host: String,
+        resourceLocationId: Int,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AspiraOccupancy
+}
+
+class HttpAspiraAvailabilityClient(
     private val client: HttpClient = defaultClient(),
     private val throttleMs: Long = 1_500,
-) {
+) : AspiraAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -73,7 +91,7 @@ class AspiraAvailabilityClient(
     private val mutex = Mutex()
     private var lastFetchAtMs = 0L
 
-    suspend fun fetch(
+    override suspend fun fetch(
         host: String,
         mapId: Int,
         startDate: LocalDate,
@@ -129,7 +147,7 @@ class AspiraAvailabilityClient(
             parse(body, mapId)
         }
 
-    suspend fun fetchOccupancy(
+    override suspend fun fetchOccupancy(
         host: String,
         resourceLocationId: Int,
         startDate: LocalDate,

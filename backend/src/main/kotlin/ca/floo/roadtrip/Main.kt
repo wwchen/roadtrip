@@ -1,17 +1,10 @@
 package ca.floo.roadtrip
 
-import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
-import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
-import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.aspira.HttpAspiraAvailabilityClient
 import ca.floo.roadtrip.clients.cache.RouteCache
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
-import ca.floo.roadtrip.clients.recgov.AvailabilityClient
-import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaAvailability
-import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.CachedReserveCaliforniaAvailability
-import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.clients.recgov.HttpAvailabilityClient
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
@@ -51,7 +44,6 @@ import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
-import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmericaTenant
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import io.github.smiley4.ktorswaggerui.SwaggerUI
@@ -96,14 +88,8 @@ fun Application.module() {
     migrate(ds)
     val ctx = dsl(ds)
     val persistentCache = ApiCacheRepo(ctx)
-    val recgovAvailabilityClient = AvailabilityClient()
+    val recgovAvailabilityClient = HttpAvailabilityClient()
     val recgovAvailabilityTtl = appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
-    val recgovAvailabilityCache =
-        CachedRecGovAvailability(
-            recgovAvailabilityClient,
-            ttl = recgovAvailabilityTtl,
-            persistentCache = persistentCache,
-        )
 
     // ROADTRIP_STATIC_DIR points at the repo checkout when running locally
     // (gradle run) or at /app/static inside the container (bind-mounted from
@@ -188,52 +174,22 @@ fun Application.module() {
     }
 
     // Aspira NextGen availability (Parks Canada / WA State / BC Discover Camping).
-    // Same pattern as rec.gov's CachedRecGovAvailability — process-wide singleton
-    // with config-driven TTL and a 1.5s mutex against Aspira's Azure WAF.
-    // See ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
-    val aspiraClient = AspiraAvailabilityClient()
+    // Process-wide singleton; the client owns the 1.5s mutex against Aspira's
+    // Azure WAF. See ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
+    val aspiraClient = HttpAspiraAvailabilityClient()
     val aspiraAvailabilityTtl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY)
-    val aspiraCache =
-        CachedAspiraAvailability(
-            aspiraClient,
-            ttl = aspiraAvailabilityTtl,
-            persistentCache = persistentCache,
-        )
-    val aspiraOccupancyCache =
-        CachedAspiraOccupancy(
-            aspiraClient,
-            ttl = aspiraAvailabilityTtl,
-            persistentCache = persistentCache,
-        )
     val reserveAmericaAvailabilityTtl =
         appConfig.cache.ttlFor(ApiCacheEntity.RESERVEAMERICA_AVAILABILITY)
-    val reserveAmericaCacheFactory: (ReserveAmericaTenant) -> CachedReserveAmericaAvailability =
-        { tenant ->
-            CachedReserveAmericaAvailability(
-                client = HttpReserveAmericaAvailabilityClient(host = tenant.host),
-                ttl = reserveAmericaAvailabilityTtl,
-            )
-        }
     val reserveCaliforniaAvailabilityTtl =
         appConfig.cache.ttlFor(ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY)
-    val reserveCaliforniaCacheFactory: () -> CachedReserveCaliforniaAvailability =
-        {
-            CachedReserveCaliforniaAvailability(
-                client = HttpReserveCaliforniaAvailabilityClient(),
-                ttl = reserveCaliforniaAvailabilityTtl,
-            )
-        }
     // Reservation-provider port registry: one adapter per upstream reservation
     // system, dispatched by `pois.source`. Routes consume the registry; they
     // never see vendor types. See docs/reservation-providers.md.
     val reservationProviderRegistry =
         ReservationProviderRegistryFactory.build(
             registry = poiRegistry,
-            recgovCache = recgovAvailabilityCache,
-            aspiraCache = aspiraCache,
-            aspiraOccupancyCache = aspiraOccupancyCache,
-            reserveAmericaCacheFactory = reserveAmericaCacheFactory,
-            reserveCaliforniaCacheFactory = reserveCaliforniaCacheFactory,
+            recgovClient = recgovAvailabilityClient,
+            aspiraClient = aspiraClient,
         )
 
     val reservablesRepo = ReservableRepo(ctx)

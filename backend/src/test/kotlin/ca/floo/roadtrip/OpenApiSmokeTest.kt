@@ -1,11 +1,9 @@
 package ca.floo.roadtrip
 
-import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
-import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.aspira.HttpAspiraAvailabilityClient
 import ca.floo.roadtrip.clients.cache.RouteCache
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
-import ca.floo.roadtrip.clients.recgov.AvailabilityClient
+import ca.floo.roadtrip.clients.recgov.HttpAvailabilityClient
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
@@ -89,12 +87,11 @@ class OpenApiSmokeTest {
                     healthRoutes()
                     poiRoutes(ctx, registry)
                     poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), registry)
-                    val aspiraClient = AspiraAvailabilityClient()
                     val reservationProviders =
                         ReservationProviderRegistryFactory.build(
                             registry = registry,
-                            recgovCache = CachedRecGovAvailability(AvailabilityClient()),
-                            aspiraCache = CachedAspiraAvailability(aspiraClient),
+                            recgovClient = HttpAvailabilityClient(),
+                            aspiraClient = HttpAspiraAvailabilityClient(),
                         )
                     availabilityRoutes(CampsiteProviderRepo(ctx), reservationProviders, ReservableRepo(ctx))
                 }

@@ -8,7 +8,7 @@ class AspiraAvailabilityClientTest {
     @Test
     fun `parse extracts resource availability object arrays`() {
         val parsed =
-            AspiraAvailabilityClient().parse(
+            HttpAspiraAvailabilityClient().parse(
                 body =
                     """
                     {

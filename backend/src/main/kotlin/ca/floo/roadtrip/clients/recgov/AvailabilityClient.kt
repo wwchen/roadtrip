@@ -20,22 +20,29 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 
 /**
- * Hits rec.gov's monthly availability endpoint with a global throttle and 429 backoff.
- *
- * Mirrors poller.js verbatim: 1.5s minimum gap between calls, 3s/6s/12s retries on 429.
- * The throttle is global — module-level in JS, instance-level mutex here.
+ * rec.gov availability fetch surface. The HTTP-backed implementation
+ * ([HttpAvailabilityClient]) hits the monthly availability endpoint with a
+ * global throttle and 429 backoff. Mirrors poller.js verbatim: 1.5s minimum
+ * gap between calls, 3s/6s/12s retries on 429. Tests pass fakes.
  */
-class AvailabilityClient(
+interface AvailabilityClient {
+    suspend fun fetchMonth(
+        campgroundId: String,
+        monthStart: String,
+    ): Map<String, Campsite>
+}
+
+class HttpAvailabilityClient(
     private val client: HttpClient = defaultClient(),
     private val minGapMs: Long = 1500,
     private val retryDelaysMs: List<Long> = listOf(3_000, 6_000, 12_000),
-) {
-    private val log = LoggerFactory.getLogger(AvailabilityClient::class.java)
+) : AvailabilityClient {
+    private val log = LoggerFactory.getLogger(HttpAvailabilityClient::class.java)
     private val mutex = Mutex()
 
     @Volatile private var lastCallAt: Long = 0
 
-    suspend fun fetchMonth(
+    override suspend fun fetchMonth(
         campgroundId: String,
         monthStart: String,
     ): Map<String, Campsite> {

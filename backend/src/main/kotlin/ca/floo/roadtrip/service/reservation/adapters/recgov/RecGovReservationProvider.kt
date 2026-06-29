@@ -1,11 +1,8 @@
 package ca.floo.roadtrip.service.reservation.adapters.recgov
 
-import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.api.recgov.fetchRecgovAvailabilityObservations
-import ca.floo.roadtrip.service.api.recgov.fetchRecgovCatalogObservations
-import ca.floo.roadtrip.service.api.recgov.fetchRecgovReservableObservations
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -15,11 +12,13 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 
 /**
- * rec.gov adapter. Wraps the per-month cache + classify pipeline. Vendor-
- * specific error translation lives here; routes only see [ReservationProviderError].
+ * rec.gov adapter. Vendor-specific error translation lives here; routes only
+ * see [ReservationProviderError]. Caching is handled above the adapter by
+ * [ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService] reading
+ * the `availability_snapshots` table.
  */
 class RecGovReservationProvider(
-    private val cache: CachedRecGovAvailability,
+    private val client: AvailabilityClient,
 ) : ReservationProvider {
     override val id: ReservationProviderId = ReservationProviderId.RECGOV
 
@@ -34,11 +33,10 @@ class RecGovReservationProvider(
         val recgovId = recgovIdOrThrow(req.ref)
         return runWithErrorMapping {
             fetchRecgovAvailabilityObservations(
-                cache = cache,
+                client = client,
                 recgovId = recgovId,
                 startDate = req.startDate,
                 endDate = req.endDate,
-                force = req.force,
             )
         }
     }
@@ -57,12 +55,11 @@ class RecGovReservationProvider(
         val recgovId = recgovIdOrThrow(req.ref)
         return runWithErrorMapping {
             fetchRecgovCatalogObservations(
-                cache = cache,
+                client = client,
                 recgovId = recgovId,
                 campsiteIds = req.reservables.map { it.vendorId }.toSet(),
                 startDate = req.startDate,
                 endDate = req.endDate,
-                force = req.force,
             )
         }
     }
@@ -71,12 +68,11 @@ class RecGovReservationProvider(
         val recgovId = recgovIdOrThrow(req.ref)
         return runWithErrorMapping {
             fetchRecgovReservableObservations(
-                cache = cache,
+                client = client,
                 recgovId = recgovId,
                 campsiteId = req.vendorId,
                 startDate = req.startDate,
                 endDate = req.endDate,
-                force = req.force,
             )
         }
     }

@@ -1,15 +1,9 @@
 package ca.floo.roadtrip.service.reservation.adapters.aspira
 
+import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraException
-import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
-import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.api.AspiraCatalogReservable
-import ca.floo.roadtrip.service.api.fetchAspiraAvailabilityObservations
-import ca.floo.roadtrip.service.api.fetchAspiraCatalogObservations
-import ca.floo.roadtrip.service.api.fetchAspiraCatalogOccupancyObservations
-import ca.floo.roadtrip.service.api.fetchAspiraResourceObservations
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -29,11 +23,20 @@ import java.time.temporal.ChronoUnit
  * the column type is `Long`. We narrow at the boundary and reject
  * out-of-range values to surface the truncation rather than silently
  * dropping the high bits.
+ *
+ * Caching is handled above the adapter by
+ * [ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService].
  */
 class AspiraReservationProvider(
     private val tenant: AspiraTenant,
-    private val cache: CachedAspiraAvailability,
-    private val occupancyCache: CachedAspiraOccupancy? = null,
+    private val client: AspiraAvailabilityClient,
+    /**
+     * When true, catalog availability with a known `resourceLocationId` uses
+     * the per-arrival-day `/api/occupancy` search; otherwise it reads the
+     * `/api/availability/map` resource statuses. Defaults to true; tests pin
+     * to the map path by passing `false`.
+     */
+    private val occupancyEnabled: Boolean = true,
 ) : ReservationProvider {
     override val id: ReservationProviderId = ReservationProviderId.ASPIRA
 
@@ -50,12 +53,11 @@ class AspiraReservationProvider(
         val mapId = mapIdOrThrow(req.ref)
         return runWithErrorMapping {
             fetchAspiraAvailabilityObservations(
-                cache = cache,
+                client = client,
                 host = tenant.host,
                 mapId = mapId,
                 startDate = req.startDate,
                 endDate = req.endDate,
-                force = req.force,
                 reservableVendor = tenant.vendorCode,
             )
         }
@@ -77,26 +79,24 @@ class AspiraReservationProvider(
             ref.resourceLocationId?.let { intOrThrow("resourceLocationId", it) }
                 ?: targets.mapNotNull { it.resourceLocationId }.distinct().singleOrNull()
         return runWithErrorMapping {
-            if (occupancyCache != null && resourceLocationId != null) {
+            if (occupancyEnabled && resourceLocationId != null) {
                 fetchAspiraCatalogOccupancyObservations(
-                    cache = occupancyCache,
+                    client = client,
                     host = tenant.host,
                     parentMapId = parentMapId,
                     resourceLocationId = resourceLocationId,
                     reservables = targets,
                     today = req.startDate,
                     days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt(),
-                    force = req.force,
                 )
             } else {
                 fetchAspiraCatalogObservations(
-                    cache = cache,
+                    client = client,
                     host = tenant.host,
                     parentMapId = parentMapId,
                     reservables = targets,
                     startDate = req.startDate,
                     endDate = req.endDate,
-                    force = req.force,
                 )
             }
         }
@@ -106,14 +106,13 @@ class AspiraReservationProvider(
         val mapId = mapIdOrThrow(req.ref)
         return runWithErrorMapping {
             fetchAspiraResourceObservations(
-                cache = cache,
+                client = client,
                 host = tenant.host,
                 mapId = mapId,
                 resourceId = req.vendorId,
                 reservableVendor = tenant.vendorCode,
                 startDate = req.startDate,
                 endDate = req.endDate,
-                force = req.force,
             )
         }
     }

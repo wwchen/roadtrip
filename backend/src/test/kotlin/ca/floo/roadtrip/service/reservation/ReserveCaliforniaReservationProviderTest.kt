@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.clients.reservecalifornia.CachedReserveCaliforniaAvailability
 import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.domain.ProviderRef
@@ -58,7 +57,7 @@ class ReserveCaliforniaReservationProviderTest {
             startServer()
 
             val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
-            val provider = ReserveCaliforniaReservationProvider(CachedReserveCaliforniaAvailability(client))
+            val provider = ReserveCaliforniaReservationProvider(client)
 
             val batch =
                 provider.catalogAvailability(
@@ -117,7 +116,7 @@ class ReserveCaliforniaReservationProviderTest {
             startServer(Executors.newFixedThreadPool(2))
 
             val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
-            val provider = ReserveCaliforniaReservationProvider(CachedReserveCaliforniaAvailability(client))
+            val provider = ReserveCaliforniaReservationProvider(client)
 
             provider.catalogAvailability(
                 CatalogAvailabilityRequest(
@@ -138,7 +137,7 @@ class ReserveCaliforniaReservationProviderTest {
             val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
             val provider =
                 ReserveCaliforniaReservationProvider(
-                    cache = CachedReserveCaliforniaAvailability(client),
+                    client = client,
                     clock = Clock.fixed(fixed, ZoneOffset.UTC),
                 )
 
