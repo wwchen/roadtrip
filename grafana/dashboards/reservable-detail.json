@@ -696,14 +696,6 @@
                         "color": "green",
                         "index": 0
                       },
-                      "first_come": {
-                        "color": "orange",
-                        "index": 1
-                      },
-                      "reserved": {
-                        "color": "red",
-                        "index": 2
-                      },
                       "booked": {
                         "color": "red",
                         "index": 3
@@ -711,6 +703,14 @@
                       "closed": {
                         "color": "dark-gray",
                         "index": 4
+                      },
+                      "first_come": {
+                        "color": "orange",
+                        "index": 1
+                      },
+                      "reserved": {
+                        "color": "red",
+                        "index": 2
                       }
                     },
                     "type": "value"
