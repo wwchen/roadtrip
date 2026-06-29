@@ -671,12 +671,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "reservable_id"
+              "options": "reservable_id / target_date"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 110
+                "value": 180
               },
               {
                 "id": "custom.cellOptions",
@@ -730,6 +730,13 @@
             "columnField": "target_date",
             "rowField": "reservable_id",
             "valueField": "status"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": ".*reservable_id.*target_date.*",
+            "renamePattern": "reservable_id / target_date"
           }
         }
       ],
