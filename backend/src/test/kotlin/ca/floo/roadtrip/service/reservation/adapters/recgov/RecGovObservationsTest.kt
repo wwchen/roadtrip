@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.api.recgov
+package ca.floo.roadtrip.service.reservation.adapters.recgov
 
 import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.recgov.Campsite
@@ -26,7 +26,7 @@ import kotlin.test.assertEquals
  *   - JSON contract shape (provider field, top-level date window, availability array)
  *   - upstream errors propagate so the route layer can map to 503
  */
-class RecGovAvailabilityServiceTest {
+class RecGovObservationsTest {
     private val today: LocalDate = LocalDate.now(ZoneOffset.UTC)
 
     private fun campsiteWith(availabilities: Map<String, String>): Campsite =

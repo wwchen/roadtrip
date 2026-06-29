@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.api.recgov
+package ca.floo.roadtrip.service.reservation.adapters.recgov
 
 import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.recgov.Campsite

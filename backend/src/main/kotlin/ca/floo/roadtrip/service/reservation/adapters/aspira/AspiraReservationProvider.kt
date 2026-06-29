@@ -4,11 +4,6 @@ import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.api.AspiraCatalogReservable
-import ca.floo.roadtrip.service.api.fetchAspiraAvailabilityObservations
-import ca.floo.roadtrip.service.api.fetchAspiraCatalogObservations
-import ca.floo.roadtrip.service.api.fetchAspiraCatalogOccupancyObservations
-import ca.floo.roadtrip.service.api.fetchAspiraResourceObservations
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest

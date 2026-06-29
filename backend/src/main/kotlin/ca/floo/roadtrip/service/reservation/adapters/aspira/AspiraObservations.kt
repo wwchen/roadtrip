@@ -1,4 +1,4 @@
-package ca.floo.roadtrip.service.api
+package ca.floo.roadtrip.service.reservation.adapters.aspira
 
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
 import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
@@ -9,6 +9,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
+import ca.floo.roadtrip.service.api.availabilityErrorDto
 import io.ktor.http.HttpStatusCode
 import java.time.Instant
 import java.time.LocalDate
