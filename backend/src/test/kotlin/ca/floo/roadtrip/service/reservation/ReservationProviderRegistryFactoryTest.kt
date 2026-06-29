@@ -1,9 +1,10 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
-import ca.floo.roadtrip.clients.cache.CachedRecGovAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
+import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
+import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.recgov.Campsite
-import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
@@ -48,26 +49,20 @@ class ReservationProviderRegistryFactoryTest {
                                 ),
                             ),
                     ),
-                recgovCache = CachedRecGovAvailability(fetchMonth = { _: String, _: String -> emptyMap<String, Campsite>() }),
-                aspiraCache =
-                    CachedAspiraAvailability(
-                        fetcher = { _: String, _: Int, _: LocalDate, _: LocalDate -> error("not used") },
-                    ),
-                reserveAmericaCacheFactory = { tenant ->
+                recgovClient = stubRecgovClient(),
+                aspiraClient = stubAspiraClient(),
+                reserveAmericaClientFactory = { tenant ->
                     createdTenants += tenant
-                    CachedReserveAmericaAvailability(
-                        client =
-                            ReserveAmericaAvailabilityClient { contractCode, parkId, startDate, endDate ->
-                                ReserveAmericaAvailability(
-                                    contractCode = contractCode,
-                                    parkId = parkId,
-                                    startDate = startDate,
-                                    endDate = endDate,
-                                    observedAt = Instant.EPOCH,
-                                    statuses = emptyMap(),
-                                )
-                            },
-                    )
+                    ReserveAmericaAvailabilityClient { contractCode, parkId, startDate, endDate ->
+                        ReserveAmericaAvailability(
+                            contractCode = contractCode,
+                            parkId = parkId,
+                            startDate = startDate,
+                            endDate = endDate,
+                            observedAt = Instant.EPOCH,
+                            statuses = emptyMap(),
+                        )
+                    }
                 },
             )
 
@@ -89,4 +84,29 @@ class ReservationProviderRegistryFactoryTest {
     }
 
     private fun row(source: String): CampsiteProviderRefRow = CampsiteProviderRefRow(poiId = 1L, source = source, providerRefJson = "{}")
+
+    private fun stubRecgovClient(): AvailabilityClient =
+        object : AvailabilityClient {
+            override suspend fun fetchMonth(
+                campgroundId: String,
+                monthStart: String,
+            ): Map<String, Campsite> = emptyMap()
+        }
+
+    private fun stubAspiraClient(): AspiraAvailabilityClient =
+        object : AspiraAvailabilityClient {
+            override suspend fun fetch(
+                host: String,
+                mapId: Int,
+                startDate: LocalDate,
+                endDate: LocalDate,
+            ): AspiraAvailability = error("not used")
+
+            override suspend fun fetchOccupancy(
+                host: String,
+                resourceLocationId: Int,
+                startDate: LocalDate,
+                endDate: LocalDate,
+            ): AspiraOccupancy = error("not used")
+        }
 }

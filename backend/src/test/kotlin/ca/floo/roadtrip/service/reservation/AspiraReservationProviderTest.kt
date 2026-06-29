@@ -1,10 +1,9 @@
 package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
-import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
-import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
@@ -20,16 +19,13 @@ class AspiraReservationProviderTest {
     fun `aspira catalog availability uses occupancy search when resource location is known`() =
         runBlocking {
             var mapFetches = 0
-            val mapCache =
-                CachedAspiraAvailability(
-                    fetcher = { _, _, _, _ ->
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, _, _, _ ->
                         mapFetches++
                         error("map availability should not be fetched when occupancy is available")
                     },
-                )
-            val occupancyCache =
-                CachedAspiraOccupancy(
-                    fetcher = { _, resourceLocationId, start, end ->
+                    onFetchOccupancy = { _, resourceLocationId, start, end ->
                         assertEquals(-2147483624, resourceLocationId)
                         assertEquals(LocalDate.parse("2026-06-17"), start)
                         assertEquals(LocalDate.parse("2026-06-18"), end)
@@ -51,8 +47,7 @@ class AspiraReservationProviderTest {
                             vendorCode = "aspira_pc",
                             bookingHorizonDays = 365,
                         ),
-                    cache = mapCache,
-                    occupancyCache = occupancyCache,
+                    client = client,
                 )
 
             val batch =
@@ -91,11 +86,11 @@ class AspiraReservationProviderTest {
         }
 
     @Test
-    fun `aspira catalog availability uses map resource status when resource location is known`() =
+    fun `aspira catalog availability uses map resource status when occupancy is disabled`() =
         runBlocking {
-            val mapCache =
-                CachedAspiraAvailability(
-                    fetcher = { _, mapId, _, _ ->
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
                         AspiraAvailability(
                             mapId = mapId,
                             parkRollup = emptyList(),
@@ -115,7 +110,8 @@ class AspiraReservationProviderTest {
                             vendorCode = "aspira_pc",
                             bookingHorizonDays = 365,
                         ),
-                    cache = mapCache,
+                    client = client,
+                    occupancyEnabled = false,
                 )
 
             val batch =
@@ -149,9 +145,9 @@ class AspiraReservationProviderTest {
     @Test
     fun `reservable availability stamps the tenant's vendor code on the reservable id`() =
         runBlocking {
-            val cache =
-                CachedAspiraAvailability(
-                    fetcher = { _, mapId, _, _ ->
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
                         AspiraAvailability(
                             mapId = mapId,
                             parkRollup = emptyList(),
@@ -174,7 +170,7 @@ class AspiraReservationProviderTest {
                         vendorCode = vendor,
                         bookingHorizonDays = 365,
                     )
-                val adapter = AspiraReservationProvider(tenant = tenant, cache = cache)
+                val adapter = AspiraReservationProvider(tenant = tenant, client = client)
                 val batch =
                     adapter.reservableAvailability(
                         ReservableAvailabilityRequest(
@@ -199,9 +195,9 @@ class AspiraReservationProviderTest {
     @Test
     fun `available dates returns per-day facts without requiring a same-sub-area stay`() =
         runBlocking {
-            val cache =
-                CachedAspiraAvailability(
-                    fetcher = { _, mapId, _, _ ->
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
                         AspiraAvailability(
                             mapId = mapId,
                             parkRollup = emptyList(),
@@ -222,7 +218,7 @@ class AspiraReservationProviderTest {
                             vendorCode = "aspira_pc",
                             bookingHorizonDays = 365,
                         ),
-                    cache = cache,
+                    client = client,
                 )
 
             val batch =
@@ -243,3 +239,27 @@ class AspiraReservationProviderTest {
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }
 }
+
+private fun fakeAspiraClient(
+    onFetch: (suspend (String, Int, LocalDate, LocalDate) -> AspiraAvailability)? = null,
+    onFetchOccupancy: (suspend (String, Int, LocalDate, LocalDate) -> AspiraOccupancy)? = null,
+): AspiraAvailabilityClient =
+    object : AspiraAvailabilityClient {
+        override suspend fun fetch(
+            host: String,
+            mapId: Int,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AspiraAvailability =
+            onFetch?.invoke(host, mapId, startDate, endDate)
+                ?: error("fakeAspiraClient.fetch not stubbed")
+
+        override suspend fun fetchOccupancy(
+            host: String,
+            resourceLocationId: Int,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AspiraOccupancy =
+            onFetchOccupancy?.invoke(host, resourceLocationId, startDate, endDate)
+                ?: error("fakeAspiraClient.fetchOccupancy not stubbed")
+    }

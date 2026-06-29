@@ -1,11 +1,10 @@
 package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.clients.aspira.AspiraAvailability
+import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
-import ca.floo.roadtrip.clients.cache.CachedAspiraAvailability
-import ca.floo.roadtrip.clients.cache.CachedAspiraOccupancy
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
@@ -235,9 +234,9 @@ class AvailabilityResponseTest {
     @Test
     fun `aspira resource availability narrows cached map response to one resource`() =
         runBlocking {
-            val cache =
-                CachedAspiraAvailability(
-                    fetcher = { _, mapId, _, _ ->
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
                         AspiraAvailability(
                             mapId = mapId,
                             parkRollup = emptyList(),
@@ -250,14 +249,13 @@ class AvailabilityResponseTest {
             val dto =
                 availabilityResponseFromObservations(
                     fetchAspiraResourceObservations(
-                        cache = cache,
+                        client = client,
                         host = "camping.bcparks.ca",
                         mapId = -2147483516,
                         resourceId = "-2147478966",
                         reservableVendor = "aspira_bc",
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-03"),
-                        force = false,
                     ),
                 )
 
@@ -269,9 +267,9 @@ class AvailabilityResponseTest {
     @Test
     fun `aspira campground availability emits available resource ids when resources are present`() =
         runBlocking {
-            val cache =
-                CachedAspiraAvailability(
-                    fetcher = { _, mapId, _, _ ->
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
                         AspiraAvailability(
                             mapId = mapId,
                             parkRollup = emptyList(),
@@ -288,12 +286,11 @@ class AvailabilityResponseTest {
             val dto =
                 availabilityResponseFromObservations(
                     fetchAspiraAvailabilityObservations(
-                        cache = cache,
+                        client = client,
                         host = "camping.bcparks.ca",
                         mapId = -2147483516,
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-02"),
-                        force = false,
                         reservableVendor = "aspira_bc",
                     ),
                 )
@@ -308,9 +305,9 @@ class AvailabilityResponseTest {
     @Test
     fun `aspira catalog availability aggregates linked resources across child maps`() =
         runBlocking {
-            val cache =
-                CachedAspiraAvailability(
-                    fetcher = { _, mapId, _, _ ->
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
                         when (mapId) {
                             -101 ->
                                 AspiraAvailability(
@@ -344,7 +341,7 @@ class AvailabilityResponseTest {
             val dto =
                 availabilityResponseFromObservations(
                     fetchAspiraCatalogObservations(
-                        cache = cache,
+                        client = client,
                         host = "washington.goingtocamp.com",
                         parentMapId = -999,
                         reservables =
@@ -356,7 +353,6 @@ class AvailabilityResponseTest {
                             ),
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-03"),
-                        force = false,
                     ),
                 )
 
@@ -372,9 +368,9 @@ class AvailabilityResponseTest {
     @Test
     fun `aspira catalog missing resource day is unknown with reservable status`() =
         runBlocking {
-            val cache =
-                CachedAspiraAvailability(
-                    fetcher = { _, mapId, _, _ ->
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
                         AspiraAvailability(
                             mapId = mapId,
                             parkRollup = emptyList(),
@@ -387,7 +383,7 @@ class AvailabilityResponseTest {
             val dto =
                 availabilityResponseFromObservations(
                     fetchAspiraCatalogObservations(
-                        cache = cache,
+                        client = client,
                         host = "reservation.pc.gc.ca",
                         parentMapId = -999,
                         reservables =
@@ -396,7 +392,6 @@ class AvailabilityResponseTest {
                             ),
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-02"),
-                        force = false,
                     ),
                 )
 
@@ -410,9 +405,9 @@ class AvailabilityResponseTest {
     @Test
     fun `aspira catalog availability uses occupancy search availability`() =
         runBlocking {
-            val cache =
-                CachedAspiraOccupancy(
-                    fetcher = { _, resourceLocationId, start, _ ->
+            val client =
+                fakeAspiraClient(
+                    onFetchOccupancy = { _, resourceLocationId, start, _ ->
                         val rows =
                             when (start) {
                                 LocalDate.parse("2026-06-17") ->
@@ -436,23 +431,48 @@ class AvailabilityResponseTest {
                 )
 
             val dto =
-                fetchAndClassifyAspiraCatalogOccupancy(
-                    cache = cache,
-                    host = "reservation.pc.gc.ca",
-                    parentMapId = -999,
-                    resourceLocationId = -123,
-                    reservables =
-                        listOf(
-                            AspiraCatalogReservable("site:aspira_pc:100", "100", -101),
-                            AspiraCatalogReservable("site:aspira_pc:200", "200", -101),
-                            AspiraCatalogReservable("site:aspira_pc:300", "300", -101),
-                        ),
-                    today = LocalDate.parse("2026-06-17"),
-                    days = 2,
-                    force = false,
+                availabilityResponseFromObservations(
+                    fetchAspiraCatalogOccupancyObservations(
+                        client = client,
+                        host = "reservation.pc.gc.ca",
+                        parentMapId = -999,
+                        resourceLocationId = -123,
+                        reservables =
+                            listOf(
+                                AspiraCatalogReservable("site:aspira_pc:100", "100", -101),
+                                AspiraCatalogReservable("site:aspira_pc:200", "200", -101),
+                                AspiraCatalogReservable("site:aspira_pc:300", "300", -101),
+                            ),
+                        today = LocalDate.parse("2026-06-17"),
+                        days = 2,
+                    ),
                 )
 
             assertEquals(listOf("site:aspira_pc:100"), dto.availability[0].availableReservableIds)
             assertEquals(AvailabilityStatus.RESERVED, dto.availability[1].status)
         }
 }
+
+private fun fakeAspiraClient(
+    onFetch: (suspend (String, Int, LocalDate, LocalDate) -> AspiraAvailability)? = null,
+    onFetchOccupancy: (suspend (String, Int, LocalDate, LocalDate) -> AspiraOccupancy)? = null,
+): AspiraAvailabilityClient =
+    object : AspiraAvailabilityClient {
+        override suspend fun fetch(
+            host: String,
+            mapId: Int,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AspiraAvailability =
+            onFetch?.invoke(host, mapId, startDate, endDate)
+                ?: error("fakeAspiraClient.fetch not stubbed")
+
+        override suspend fun fetchOccupancy(
+            host: String,
+            resourceLocationId: Int,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AspiraOccupancy =
+            onFetchOccupancy?.invoke(host, resourceLocationId, startDate, endDate)
+                ?: error("fakeAspiraClient.fetchOccupancy not stubbed")
+    }

@@ -72,7 +72,7 @@ drawer can hide affordances the provider doesn't support.
 
 | Action | Required interface | Notes |
 |---|---|---|
-| Per-day availability for a window | `ReservationProvider.availability(AvailabilityRequest)` | Drives provider-level availability. Per-month cache lives in the adapter. |
+| Per-day availability for a window | `ReservationProvider.availability(AvailabilityRequest)` | Drives provider-level availability. Adapters fetch upstream directly; caching is handled above the adapter by `SnapshotBackedAvailabilityService` reading the `availability_snapshots` table. |
 | Catalog availability for linked reservables | `ReservationProvider.catalogAvailability(CatalogAvailabilityRequest)` | POI/rids path uses this so the returned availability is narrowed to known catalog rows. |
 | Reservable availability | `ReservationProvider.reservableAvailability(ReservableAvailabilityRequest)` | Narrow projection for a single reservable when the adapter supports it. |
 | Capability probe | `ReservationProvider.capabilities` | Static per adapter; cheap. |

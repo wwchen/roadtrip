@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
@@ -17,33 +16,30 @@ class ReserveAmericaReservationProviderTest {
     @Test
     fun `catalog availability parses reserveamerica matrix and narrows to requested reservables`() =
         runBlocking {
-            val cache =
-                CachedReserveAmericaAvailability(
-                    client =
-                        ReserveAmericaAvailabilityClient { _, _, startDate, _ ->
-                            assertEquals(LocalDate.parse("2026-06-22"), startDate)
-                            ReserveAmericaAvailability(
-                                contractCode = "NY",
-                                parkId = "489",
-                                startDate = LocalDate.parse("2026-06-22"),
-                                endDate = LocalDate.parse("2026-06-24"),
-                                observedAt = Instant.parse("2026-06-22T12:00:00Z"),
-                                statuses =
+            val client =
+                ReserveAmericaAvailabilityClient { _, _, startDate, _ ->
+                    assertEquals(LocalDate.parse("2026-06-22"), startDate)
+                    ReserveAmericaAvailability(
+                        contractCode = "NY",
+                        parkId = "489",
+                        startDate = LocalDate.parse("2026-06-22"),
+                        endDate = LocalDate.parse("2026-06-24"),
+                        observedAt = Instant.parse("2026-06-22T12:00:00Z"),
+                        statuses =
+                            mapOf(
+                                "253481" to
                                     mapOf(
-                                        "253481" to
-                                            mapOf(
-                                                LocalDate.parse("2026-06-22") to AvailabilityStatus.AVAILABLE,
-                                                LocalDate.parse("2026-06-23") to AvailabilityStatus.RESERVED,
-                                            ),
-                                        "253488" to
-                                            mapOf(
-                                                LocalDate.parse("2026-06-22") to AvailabilityStatus.RESERVED,
-                                                LocalDate.parse("2026-06-23") to AvailabilityStatus.AVAILABLE,
-                                            ),
+                                        LocalDate.parse("2026-06-22") to AvailabilityStatus.AVAILABLE,
+                                        LocalDate.parse("2026-06-23") to AvailabilityStatus.RESERVED,
                                     ),
-                            )
-                        },
-                )
+                                "253488" to
+                                    mapOf(
+                                        LocalDate.parse("2026-06-22") to AvailabilityStatus.RESERVED,
+                                        LocalDate.parse("2026-06-23") to AvailabilityStatus.AVAILABLE,
+                                    ),
+                            ),
+                    )
+                }
             val adapter =
                 ReserveAmericaReservationProvider(
                     tenant =
@@ -53,7 +49,7 @@ class ReserveAmericaReservationProviderTest {
                             contractCode = "NY",
                             bookingHorizonDays = 270,
                         ),
-                    cache = cache,
+                    client = client,
                 )
 
             val batch =

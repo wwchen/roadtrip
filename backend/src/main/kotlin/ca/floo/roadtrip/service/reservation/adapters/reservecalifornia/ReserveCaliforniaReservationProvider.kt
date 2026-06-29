@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.reservation.adapters.reservecalifornia
 
-import ca.floo.roadtrip.clients.reservecalifornia.CachedReserveCaliforniaAvailability
-import ca.floo.roadtrip.clients.reservecalifornia.CachedReserveCaliforniaGridResult
+import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaException
+import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
@@ -26,7 +26,7 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 class ReserveCaliforniaReservationProvider(
-    private val cache: CachedReserveCaliforniaAvailability,
+    private val client: ReserveCaliforniaAvailabilityClient,
     private val clock: Clock = Clock.systemUTC(),
 ) : ReservationProvider {
     override val id: ReservationProviderId = ReservationProviderId.RESERVECALIFORNIA
@@ -40,28 +40,28 @@ class ReserveCaliforniaReservationProvider(
 
     override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
         val ref = reserveCaliforniaRefOrThrow(req.ref)
-        val results = fetchFacilities(ref, req.startDate, req.endDate, req.force)
+        val grids = fetchFacilities(ref, req.startDate, req.endDate)
         val dates = dates(req.startDate, req.endDate)
         val observations =
-            results.flatMap { result ->
-                result.data.statuses.flatMap { (unitId, byDate) ->
+            grids.flatMap { grid ->
+                grid.statuses.flatMap { (unitId, byDate) ->
                     observationsForReservable(
                         rid = rid(unitId),
                         byDate = byDate,
                         dates = dates,
-                        observedAt = result.data.observedAt,
+                        observedAt = grid.observedAt,
                     )
                 }
             }
-        return batch(ref, req.startDate, req.endDate, results, observations)
+        return batch(ref, req.startDate, req.endDate, observations)
     }
 
     override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
         val ref = reserveCaliforniaRefOrThrow(req.ref)
-        val results = fetchFacilities(ref, req.startDate, req.endDate, req.force)
+        val grids = fetchFacilities(ref, req.startDate, req.endDate)
         val byUnit =
-            results
-                .flatMap { result -> result.data.statuses.map { (unitId, byDate) -> unitId to (result.data.observedAt to byDate) } }
+            grids
+                .flatMap { grid -> grid.statuses.map { (unitId, byDate) -> unitId to (grid.observedAt to byDate) } }
                 .toMap()
         val dates = dates(req.startDate, req.endDate)
         val observations =
@@ -71,10 +71,10 @@ class ReserveCaliforniaReservationProvider(
                     rid = reservable.rid,
                     byDate = found?.second.orEmpty(),
                     dates = dates,
-                    observedAt = found?.first ?: observedAt(results),
+                    observedAt = found?.first ?: observedAt(grids),
                 )
             }
-        return batch(ref, req.startDate, req.endDate, results, observations)
+        return batch(ref, req.startDate, req.endDate, observations)
     }
 
     override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
@@ -96,20 +96,18 @@ class ReserveCaliforniaReservationProvider(
         ref: ProviderRef.ReserveCalifornia,
         startDate: LocalDate,
         endDate: LocalDate,
-        force: Boolean,
-    ): List<CachedReserveCaliforniaGridResult> =
+    ): List<ReserveCaliforniaGridAvailability> =
         runWithErrorMapping {
             coroutineScope {
                 ref.facilityIds
                     .map { facilityId ->
                         async {
-                            cache.getGrid(
+                            client.fetchGrid(
                                 facilityId = facilityId,
                                 startDate = startDate,
                                 endDate = endDate,
                                 minDate = startDate,
                                 maxDate = startDate.plusDays(BOOKING_HORIZON_DAYS.toLong()),
-                                force = force,
                             )
                         }
                     }.awaitAll()
@@ -135,7 +133,6 @@ class ReserveCaliforniaReservationProvider(
         ref: ProviderRef.ReserveCalifornia,
         startDate: LocalDate,
         endDate: LocalDate,
-        results: List<CachedReserveCaliforniaGridResult>,
         observations: List<ReservableDayObservation>,
     ): AvailabilityObservationBatch =
         AvailabilityObservationBatch(
@@ -143,12 +140,7 @@ class ReserveCaliforniaReservationProvider(
             startDate = startDate,
             endDate = endDate,
             observations = observations,
-            cacheBlock =
-                AvailabilityCacheBlock(
-                    hit = results.isNotEmpty() && results.all { it.hit },
-                    ageSeconds = results.maxOfOrNull { it.ageSeconds } ?: 0,
-                    ttlSeconds = results.minOfOrNull { it.ttlSeconds } ?: 0,
-                ),
+            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
             campgroundId = ref.placeId.toString(),
             host = "reservecalifornia.com",
             mapId = ref.facilityIds.joinToString(","),
@@ -158,8 +150,8 @@ class ReserveCaliforniaReservationProvider(
         (ref as? ProviderRef.ReserveCalifornia)
             ?: throw ReservationProviderError.WrongRefType(id, ref::class.simpleName ?: "unknown")
 
-    private fun observedAt(results: List<CachedReserveCaliforniaGridResult>): Instant =
-        results.firstOrNull()?.data?.observedAt ?: Instant.now(clock)
+    private fun observedAt(grids: List<ReserveCaliforniaGridAvailability>): Instant =
+        grids.firstOrNull()?.observedAt ?: Instant.now(clock)
 
     private suspend fun <T> runWithErrorMapping(block: suspend () -> T): T =
         try {

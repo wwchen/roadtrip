@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.reservation.adapters.reserveamerica
 
-import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaAvailability
-import ca.floo.roadtrip.clients.reserveamerica.CachedReserveAmericaResult
+import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
+import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
@@ -30,7 +30,7 @@ data class ReserveAmericaTenant(
 
 class ReserveAmericaReservationProvider(
     private val tenant: ReserveAmericaTenant,
-    private val cache: CachedReserveAmericaAvailability,
+    private val client: ReserveAmericaAvailabilityClient,
 ) : ReservationProvider {
     override val id: ReservationProviderId = ReservationProviderId.RESERVEAMERICA
 
@@ -46,16 +46,16 @@ class ReserveAmericaReservationProvider(
     override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
         val ref = reserveAmericaRefOrThrow(req.ref)
         val contractCode = contractCode(ref)
-        val result = fetch(contractCode, ref.parkId, req.startDate, req.endDate, req.force)
+        val data = fetch(contractCode, ref.parkId, req.startDate, req.endDate)
         val observations =
-            result.data.statuses.flatMap { (siteId, byDate) ->
+            data.statuses.flatMap { (siteId, byDate) ->
                 // Dense fill is intentional for the campground-level matrix:
                 // catalog-less callers still need every visible site/date cell.
                 dates(req.startDate, req.endDate).map { date ->
                     ReservableDayObservation(
                         reservableId = rid(contractCode, siteId),
                         date = date,
-                        observedAt = result.data.observedAt,
+                        observedAt = data.observedAt,
                         status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
                     )
                 }
@@ -65,25 +65,21 @@ class ReserveAmericaReservationProvider(
             parkId = ref.parkId,
             startDate = req.startDate,
             endDate = req.endDate,
-            observedAt = result.data.observedAt,
             observations = observations,
-            hit = result.hit,
-            ageSeconds = result.ageSeconds,
-            ttlSeconds = result.ttlSeconds,
         )
     }
 
     override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
         val ref = reserveAmericaRefOrThrow(req.ref)
         val contractCode = contractCode(ref)
-        val result = fetch(contractCode, ref.parkId, req.startDate, req.endDate, req.force)
+        val data = fetch(contractCode, ref.parkId, req.startDate, req.endDate)
         val observations =
             req.reservables.flatMap { reservable ->
                 observationsForReservable(
                     reservable = reservable,
-                    byDate = result.data.statuses[reservable.vendorId].orEmpty(),
+                    byDate = data.statuses[reservable.vendorId].orEmpty(),
                     dates = dates(req.startDate, req.endDate),
-                    observedAt = result.data.observedAt,
+                    observedAt = data.observedAt,
                 )
             }
         return batch(
@@ -91,36 +87,28 @@ class ReserveAmericaReservationProvider(
             parkId = ref.parkId,
             startDate = req.startDate,
             endDate = req.endDate,
-            observedAt = result.data.observedAt,
             observations = observations,
-            hit = result.hit,
-            ageSeconds = result.ageSeconds,
-            ttlSeconds = result.ttlSeconds,
         )
     }
 
     override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
         val ref = reserveAmericaRefOrThrow(req.ref)
         val contractCode = contractCode(ref)
-        val result = fetch(contractCode, ref.parkId, req.startDate, req.endDate, req.force)
+        val data = fetch(contractCode, ref.parkId, req.startDate, req.endDate)
         val target = CatalogReservableRef(rid = rid(contractCode, req.vendorId), vendorId = req.vendorId)
         val observations =
             observationsForReservable(
                 reservable = target,
-                byDate = result.data.statuses[req.vendorId].orEmpty(),
+                byDate = data.statuses[req.vendorId].orEmpty(),
                 dates = dates(req.startDate, req.endDate),
-                observedAt = result.data.observedAt,
+                observedAt = data.observedAt,
             )
         return batch(
             contractCode = contractCode,
             parkId = ref.parkId,
             startDate = req.startDate,
             endDate = req.endDate,
-            observedAt = result.data.observedAt,
             observations = observations,
-            hit = result.hit,
-            ageSeconds = result.ageSeconds,
-            ttlSeconds = result.ttlSeconds,
             reservableId = target.rid,
         )
     }
@@ -130,15 +118,13 @@ class ReserveAmericaReservationProvider(
         parkId: String,
         startDate: LocalDate,
         endDate: LocalDate,
-        force: Boolean,
-    ): CachedReserveAmericaResult =
+    ): ReserveAmericaAvailability =
         runWithErrorMapping {
-            cache.get(
+            client.fetch(
                 contractCode = contractCode,
                 parkId = parkId,
                 startDate = startDate,
                 endDate = endDate,
-                force = force,
             )
         }
 
@@ -162,11 +148,7 @@ class ReserveAmericaReservationProvider(
         parkId: String,
         startDate: LocalDate,
         endDate: LocalDate,
-        observedAt: Instant,
         observations: List<ReservableDayObservation>,
-        hit: Boolean,
-        ageSeconds: Long,
-        ttlSeconds: Long,
         reservableId: String? = null,
     ): AvailabilityObservationBatch =
         AvailabilityObservationBatch(
@@ -174,12 +156,7 @@ class ReserveAmericaReservationProvider(
             startDate = startDate,
             endDate = endDate,
             observations = observations,
-            cacheBlock =
-                AvailabilityCacheBlock(
-                    hit = hit,
-                    ageSeconds = ageSeconds,
-                    ttlSeconds = ttlSeconds,
-                ),
+            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0L, ttlSeconds = 0L),
             campgroundId = parkId,
             host = tenant.host,
             mapId = contractCode,

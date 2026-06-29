@@ -60,10 +60,30 @@ import java.time.LocalDate
  * HttpPlainText plugin auto-adds `Accept-Charset: UTF-8` and Aspira's WAF
  * rejects requests carrying that header (real browsers don't send it).
  */
-class AspiraAvailabilityClient(
+/**
+ * Aspira availability + occupancy fetch surface. The HTTP-backed
+ * implementation is [HttpAspiraAvailabilityClient]; tests pass fakes.
+ */
+interface AspiraAvailabilityClient {
+    suspend fun fetch(
+        host: String,
+        mapId: Int,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AspiraAvailability
+
+    suspend fun fetchOccupancy(
+        host: String,
+        resourceLocationId: Int,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AspiraOccupancy
+}
+
+class HttpAspiraAvailabilityClient(
     private val client: HttpClient = defaultClient(),
     private val throttleMs: Long = 1_500,
-) {
+) : AspiraAvailabilityClient {
     private val log = LoggerFactory.getLogger(javaClass)
     private val json = Json { ignoreUnknownKeys = true }
 
@@ -73,7 +93,7 @@ class AspiraAvailabilityClient(
     private val mutex = Mutex()
     private var lastFetchAtMs = 0L
 
-    suspend fun fetch(
+    override suspend fun fetch(
         host: String,
         mapId: Int,
         startDate: LocalDate,
@@ -129,7 +149,7 @@ class AspiraAvailabilityClient(
             parse(body, mapId)
         }
 
-    suspend fun fetchOccupancy(
+    override suspend fun fetchOccupancy(
         host: String,
         resourceLocationId: Int,
         startDate: LocalDate,

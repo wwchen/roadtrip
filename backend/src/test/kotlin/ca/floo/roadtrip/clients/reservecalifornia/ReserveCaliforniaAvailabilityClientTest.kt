@@ -11,7 +11,6 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import java.net.InetSocketAddress
-import java.time.Duration
 import java.time.LocalDate
 import kotlin.test.AfterTest
 import kotlin.test.Test
@@ -77,36 +76,6 @@ class ReserveCaliforniaAvailabilityClientTest {
                 grid.statuses["43794"],
                 "unit-level booking flags must prevent free slices from becoming bookable",
             )
-        }
-
-    @Test
-    fun `cache keys include booking window bounds sent upstream`() =
-        runBlocking {
-            val bodies = mutableListOf<String>()
-            server.createContext("/rdr/search/grid") { exchange ->
-                bodies += exchange.requestBody.bufferedReader().use { it.readText() }
-                respondJson(exchange, gridJson())
-            }
-            server.start()
-
-            val client = HttpReserveCaliforniaAvailabilityClient(rdrBaseUrl = "$baseUrl/rdr")
-            val cache = CachedReserveCaliforniaAvailability(client = client, ttl = Duration.ofHours(1))
-            cache.getGrid(
-                facilityId = 612,
-                startDate = LocalDate.parse("2026-12-15"),
-                endDate = LocalDate.parse("2026-12-19"),
-                minDate = LocalDate.parse("2026-06-22"),
-                maxDate = LocalDate.parse("2026-12-22"),
-            )
-            cache.getGrid(
-                facilityId = 612,
-                startDate = LocalDate.parse("2026-12-15"),
-                endDate = LocalDate.parse("2026-12-19"),
-                minDate = LocalDate.parse("2026-06-22"),
-                maxDate = LocalDate.parse("2027-01-22"),
-            )
-
-            assertEquals(2, bodies.size)
         }
 
     private fun respondJson(
