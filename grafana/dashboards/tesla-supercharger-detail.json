@@ -308,12 +308,83 @@
       "type": "table"
     },
     {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "description": "TSLA TOU charging rates by hour of day. Empty if the site has no time-of-use pricebooks.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 1
+          },
+          "decimals": 3,
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "currencyUSD"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 33
+      },
+      "id": 6,
+      "options": {
+        "barWidth": 0.6,
+        "groupWidth": 0.7,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "orientation": "auto",
+        "showValue": "auto",
+        "stacking": "none",
+        "tooltip": {
+          "mode": "single",
+          "sort": "none"
+        },
+        "xField": "hour",
+        "xTickLabelRotation": 0,
+        "xTickLabelSpacing": 0
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH tou AS (\n  SELECT\n    NULLIF(e.pricebook->>'rateBase','')::numeric AS rate_base,\n    split_part(e.pricebook->>'startTime', ':', 1)::int AS start_hour,\n    split_part(e.pricebook->>'endTime',   ':', 1)::int AS end_hour\n  FROM pois p\n  CROSS JOIN LATERAL jsonb_array_elements(\n    CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n  ) AS e(pricebook)\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n    AND p.id::text = ${supercharger_id:sqlstring}\n    AND (e.pricebook->>'isTou')::bool = true\n    AND e.pricebook->>'feeType' = 'CHARGING'\n    AND e.pricebook->>'uom' = 'kwh'\n    AND e.pricebook->>'vehicleMakeType' = 'TSLA'\n    AND NULLIF(e.pricebook->>'startTime','') IS NOT NULL\n    AND NULLIF(e.pricebook->>'endTime','')   IS NOT NULL\n)\nSELECT\n  hour,\n  avg(t.rate_base) AS rate_base\nFROM generate_series(0, 23) AS hour\nLEFT JOIN tou t\n  ON CASE\n       WHEN t.start_hour <= t.end_hour\n         THEN hour >= t.start_hour AND hour < t.end_hour\n       ELSE hour >= t.start_hour OR  hour < t.end_hour\n     END\nGROUP BY hour\nORDER BY hour;",
+          "refId": "A"
+        }
+      ],
+      "title": "Charging rates by occupancy band",
+      "type": "barchart"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 43
       },
       "id": 103,
       "panels": [],
@@ -364,7 +435,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 34
+        "y": 44
       },
       "id": 5,
       "options": {
