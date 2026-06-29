@@ -115,7 +115,7 @@
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
-      "description": "User tables only. data + indexes + toast. bloat_pct = dead tuples / live tuples.",
+      "description": "Public user tables. data + indexes + toast. live_rows/dead_rows are Postgres estimates from pg_stat_user_tables (updated by ANALYZE/autovacuum) — small or never-analyzed tables can show 0. bloat_pct = dead/live.",
       "fieldConfig": {
         "defaults": {},
         "overrides": [
