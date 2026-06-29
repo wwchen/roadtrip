@@ -16,7 +16,7 @@
       "id": 6,
       "options": {
         "mode": "markdown",
-        "content": "### watch → job → run → snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** — POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_job` | **Scheduler state** — `next_run_at`, claim token, frozen `intent_payload`. **1:1 with watch.** | Service writes/updates this when a watch is created or edited. |\n| `availability_job_run` | **Append-only execution log** — one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed job. |\n| `availability_snapshot` | **Observed availability** — per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each job run. |\n\n### How to drill\n\nClick a **watch_id** / **job_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Watch / Job Run Detail](/d/watch-job-run-detail)** — drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/poi-detail)**. |\n| Fleet-wide fetch performance (latency, batch sizes, vendor splits). | **[Reservable / Availability Fetches](/d/reservable-availability-fetches)**. |\n"
+        "content": "### watch → job → run → snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** — POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_job` | **Scheduler state** — `next_run_at`, claim token, frozen `intent_payload`. **1:1 with watch.** | Service writes/updates this when a watch is created or edited. |\n| `availability_job_run` | **Append-only execution log** — one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed job. |\n| `availability_snapshot` | **Observed availability** — per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each job run. |\n\n### How to drill\n\nClick a **watch_id** / **job_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Watch / Job Run Detail](/d/watch-job-run-detail)** — drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/poi-detail)**. |\n"
       },
       "title": "About this dashboard",
       "type": "text"
@@ -55,6 +55,150 @@
       ],
       "title": "Queue Summary",
       "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            }
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroup(jr.started_at, '$__interval') AS time,\n  jr.status AS metric,\n  count(*)::double precision AS value\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(jr.started_at)\n  AND ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' = '' OR jr.id::text IN (${run_id:sqlstring}))\nGROUP BY 1, 2\nORDER BY 1, 2;",
+          "refId": "A"
+        }
+      ],
+      "title": "Runs By Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 8,
+      "options": {
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroup(jr.started_at, '$__interval') AS time,\n  'avg_duration_ms' AS metric,\n  avg(jr.duration_ms)::double precision AS value\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(jr.started_at)\n  AND jr.duration_ms IS NOT NULL\n  AND ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' = '' OR jr.id::text IN (${run_id:sqlstring}))\nGROUP BY 1\nORDER BY 1;",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroup(s.observed_at, '$__interval') AS time,\n  'snapshot_rows' AS metric,\n  count(*)::double precision AS value\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(s.observed_at)\n  AND ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' = '' OR s.run_id::text IN (${run_id:sqlstring}))\nGROUP BY 1\nORDER BY 1;",
+          "refId": "B"
+        }
+      ],
+      "title": "Duration And Snapshot Throughput",
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -110,7 +254,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 24
       },
       "id": 2,
       "options": {
@@ -209,7 +353,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 36
       },
       "id": 3,
       "options": {
@@ -321,7 +465,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 46
       },
       "id": 5,
       "options": {
