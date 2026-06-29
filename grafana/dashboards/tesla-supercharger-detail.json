@@ -334,7 +334,40 @@
           },
           "unit": "currencyUSD"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "hour"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "none"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "displayName",
+                "value": "Hour"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "rate_base"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Rate / kWh"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 10,
@@ -375,7 +408,7 @@
           "refId": "A"
         }
       ],
-      "title": "Charging rates by occupancy band",
+      "title": "Charging rates by hour of day",
       "type": "barchart"
     },
     {
