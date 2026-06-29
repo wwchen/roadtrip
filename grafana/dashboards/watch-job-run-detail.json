@@ -1,12 +1,24 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
   "links": [],
-  "liveNow": false,
   "panels": [
     {
       "collapsed": false,
@@ -27,7 +39,32 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -51,6 +88,7 @@
       },
       "id": 2,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -69,6 +107,24 @@
       "title": "Run properties",
       "transformations": [
         {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "dateFormat": "",
+                "destinationType": "string",
+                "targetField": "started_at"
+              },
+              {
+                "dateFormat": "",
+                "destinationType": "string",
+                "targetField": "completed_at"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
           "id": "transpose",
           "options": {}
         }
@@ -81,7 +137,32 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -167,7 +248,32 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -214,17 +320,30 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Field"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 148
+              }
+            ]
           }
         ]
       },
       "gridPos": {
-        "h": 7,
-        "w": 24,
+        "h": 16,
+        "w": 12,
         "x": 0,
         "y": 13
       },
       "id": 5,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -234,13 +353,246 @@
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  j.id   AS job_id,\n  w.id   AS watch_id,\n  w.status AS watch_status,\n  j.status AS job_status,\n  w.cadence_sec,\n  w.start_date,\n  w.end_date,\n  w.trigger_kinds,\n  w.stop_when_triggered,\n  w.poi_id,\n  w.reservable_id,\n  r.name AS reservable_name,\n  j.next_run_at,\n  j.last_run_at,\n  w.created_at AS watch_created_at\nFROM availability_job_run sr\nJOIN availability_job   j ON j.id = sr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables   r ON r.id = w.reservable_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
-          "refId": "A"
+          "rawSql": "SELECT\n  j.*\n  -- j.id   AS job_id,\n  -- w.id   AS watch_id,\n  -- w.status AS watch_status,\n  -- j.status AS job_status,\n  -- w.cadence_sec,\n  -- w.start_date,\n  -- w.end_date,\n  -- w.trigger_kinds,\n  -- w.stop_when_triggered,\n  -- w.poi_id,\n  -- w.reservable_id,\n  -- r.name AS reservable_name,\n  -- j.next_run_at,\n  -- j.last_run_at,\n  -- w.created_at AS watch_created_at\nFROM availability_job_run sr\nJOIN availability_job   j ON j.id = sr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables   r ON r.id = w.reservable_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
-      "title": "Parent job & watch",
+      "title": "Parent job",
+      "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "destinationType": "string",
+                "targetField": "next_run_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "last_run_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "created_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "updated_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "start_date"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "end_date"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
+          "id": "transpose",
+          "options": {}
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "watch_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reservable_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Reservable Detail",
+                    "url": "/d/roadtrip-reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Field"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 162
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 16,
+        "w": 12,
+        "x": 12,
+        "y": 13
+      },
+      "id": 13,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": []
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  w.*\n  -- j.id   AS job_id,\n  -- w.id   AS watch_id,\n  -- w.status AS watch_status,\n  -- j.status AS job_status,\n  -- w.cadence_sec,\n  -- w.start_date,\n  -- w.end_date,\n  -- w.trigger_kinds,\n  -- w.stop_when_triggered,\n  -- w.poi_id,\n  -- w.reservable_id,\n  -- r.name AS reservable_name,\n  -- j.next_run_at,\n  -- j.last_run_at,\n  -- w.created_at AS watch_created_at\nFROM availability_job_run sr\nJOIN availability_job   j ON j.id = sr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables   r ON r.id = w.reservable_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Parent watch",
+      "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "destinationType": "string",
+                "targetField": "next_run_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "last_run_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "created_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "updated_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "start_date"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "end_date"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
+          "id": "transpose",
+          "options": {}
+        }
+      ],
       "type": "table"
     },
     {
@@ -249,7 +601,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 29
       },
       "id": 6,
       "panels": [],
@@ -261,16 +613,17 @@
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
-      "description": "Each row is one reservable polled by this run; cell shows status per target_date.",
+      "description": "Each row is one reservable polled by this run; one column per target_date, cell colored by status.",
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
           "custom": {
-            "fillOpacity": 80,
-            "lineWidth": 0,
-            "spanNulls": false
+            "align": "center",
+            "cellOptions": {
+              "type": "color-background"
+            },
+            "filterable": false,
+            "inspect": false,
+            "minWidth": 90
           },
           "mappings": [
             {
@@ -309,34 +662,52 @@
             "steps": [
               {
                 "color": "gray",
-                "value": null
+                "value": 0
               }
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reservable_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Reservable Detail",
+                    "url": "/d/roadtrip-reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 10,
+        "h": 12,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 30
       },
       "id": 7,
       "options": {
-        "alignValue": "left",
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "mergeValues": false,
-        "rowHeight": 0.9,
-        "showValue": "auto",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
+        "cellHeight": "sm",
+        "showHeader": true
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -345,28 +716,24 @@
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
-          "format": "time_series",
+          "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.target_date::timestamptz AS \"time\",\n  s.reservable_id::text       AS metric,\n  s.status::text              AS value\nFROM availability_snapshot s\nWHERE s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.reservable_id ASC, s.target_date ASC;",
+          "rawSql": "SELECT\n  s.reservable_id,\n  to_char(s.target_date, 'YYYY-MM-DD') AS target_date,\n  s.status::text AS status\nFROM availability_snapshot s\nWHERE s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.reservable_id, s.target_date;",
           "refId": "A"
         }
       ],
       "title": "Run snapshots — status by target date",
       "transformations": [
         {
-          "id": "partitionByValues",
+          "id": "groupingToMatrix",
           "options": {
-            "fields": [
-              "metric"
-            ],
-            "keepFields": false,
-            "naming": {
-              "asLabels": false
-            }
+            "columnField": "target_date",
+            "rowField": "reservable_id",
+            "valueField": "status"
           }
         }
       ],
-      "type": "state-timeline"
+      "type": "table"
     },
     {
       "datasource": {
@@ -374,7 +741,32 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -471,7 +863,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 31
+        "y": 40
       },
       "id": 8,
       "options": {
@@ -500,7 +892,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 51
       },
       "id": 9,
       "panels": [],
@@ -519,8 +911,16 @@
             "mode": "thresholds"
           },
           "custom": {
+            "axisPlacement": "auto",
             "fillOpacity": 80,
-            "lineWidth": 0
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineWidth": 0,
+            "spanNulls": false
           },
           "mappings": [
             {
@@ -549,7 +949,7 @@
             "steps": [
               {
                 "color": "gray",
-                "value": null
+                "value": 0
               }
             ]
           }
@@ -560,7 +960,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 43
+        "y": 52
       },
       "id": 10,
       "options": {
@@ -570,9 +970,11 @@
           "placement": "bottom",
           "showLegend": true
         },
+        "mergeValues": true,
         "rowHeight": 0.9,
         "showValue": "auto",
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
@@ -586,7 +988,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.started_at AS \"time\",\n  'job ' || ajr.job_id::text AS metric,\n  ajr.status AS value\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nWHERE $__timeFilter(ajr.started_at)\nORDER BY ajr.started_at ASC;",
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n),\nrecent AS (\n  SELECT ajr.*\n  FROM availability_job_run ajr\n  JOIN selected sr ON sr.job_id = ajr.job_id\n  ORDER BY ajr.started_at DESC\n  LIMIT 100\n)\nSELECT\n  started_at AS \"time\",\n  'job ' || job_id::text AS metric,\n  status AS value\nFROM recent\nORDER BY started_at ASC;",
           "refId": "A"
         }
       ],
@@ -619,7 +1021,13 @@
             "mode": "thresholds"
           },
           "custom": {
+            "axisPlacement": "auto",
             "fillOpacity": 70,
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
             "lineWidth": 1
           },
           "mappings": [],
@@ -628,7 +1036,7 @@
             "steps": [
               {
                 "color": "green",
-                "value": null
+                "value": 0
               }
             ]
           },
@@ -640,11 +1048,12 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 58
       },
       "id": 11,
       "options": {
         "alignValue": "left",
+        "colWidth": 0.9,
         "legend": {
           "displayMode": "list",
           "placement": "bottom",
@@ -653,6 +1062,7 @@
         "rowHeight": 0.9,
         "showValue": "auto",
         "tooltip": {
+          "hideZeros": false,
           "mode": "single",
           "sort": "none"
         }
@@ -666,7 +1076,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.started_at AS \"time\",\n  'snapshot_count' AS metric,\n  ajr.snapshot_count::double precision AS value\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nWHERE $__timeFilter(ajr.started_at)\nORDER BY ajr.started_at ASC;",
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n),\nrecent AS (\n  SELECT ajr.*\n  FROM availability_job_run ajr\n  JOIN selected sr ON sr.job_id = ajr.job_id\n  ORDER BY ajr.started_at DESC\n  LIMIT 100\n)\nSELECT\n  started_at AS \"time\",\n  'snapshot_count' AS metric,\n  snapshot_count::double precision AS value\nFROM recent\nORDER BY started_at ASC;",
           "refId": "A"
         }
       ],
@@ -679,7 +1089,32 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
         "overrides": [
           {
             "matcher": {
@@ -752,10 +1187,11 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 65
       },
       "id": 12,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "12.4.4",
@@ -767,7 +1203,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.id AS run_id,\n  ajr.status,\n  ajr.snapshot_count,\n  ajr.duration_ms,\n  ajr.started_at,\n  ajr.completed_at,\n  ajr.error,\n  CASE WHEN ajr.id = (SELECT id FROM selected) THEN true ELSE false END AS selected\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nWHERE $__timeFilter(ajr.started_at)\nORDER BY ajr.started_at DESC, ajr.id DESC;",
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.id AS run_id,\n  ajr.status,\n  ajr.snapshot_count,\n  ajr.duration_ms,\n  ajr.started_at,\n  ajr.completed_at,\n  ajr.error,\n  CASE WHEN ajr.id = (SELECT id FROM selected) THEN true ELSE false END AS selected\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nORDER BY ajr.started_at DESC, ajr.id DESC\nLIMIT 100;",
           "refId": "A"
         }
       ],
@@ -775,8 +1211,9 @@
       "type": "table"
     }
   ],
+  "preload": false,
   "refresh": "",
-  "schemaVersion": 39,
+  "schemaVersion": 42,
   "tags": [
     "roadtrip",
     "availability",
@@ -791,9 +1228,10 @@
         },
         "label": "Run ID",
         "name": "run_id",
+        "options": [],
         "query": "SELECT ajr.id::text AS __text, ajr.id::text AS __value FROM availability_job_run ajr ORDER BY ajr.started_at DESC, ajr.id DESC LIMIT 500",
         "refresh": 1,
-        "sort": 0,
+        "regexApplyTo": "value",
         "type": "query"
       }
     ]
@@ -802,8 +1240,12 @@
     "from": "now-7d",
     "to": "now"
   },
+  "timepicker": {
+    "hidden": true
+  },
   "timezone": "browser",
   "title": "Availability Watch / Job Run Detail",
   "uid": "roadtrip-watch-job-run-detail",
-  "version": 1
+  "version": 1,
+  "weekStart": ""
 }
