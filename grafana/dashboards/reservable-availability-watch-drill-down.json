@@ -80,7 +80,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this watch_id",
-                    "url": "/d/roadtrip-reservable-availability-watch-drill-down/reservable-availability-watch-drill-down?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
+                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
                   }
                 ]
               }
@@ -98,7 +98,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this job_id",
-                    "url": "/d/roadtrip-reservable-availability-watch-drill-down/reservable-availability-watch-drill-down?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
+                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
                   }
                 ]
               }
@@ -156,7 +156,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this watch_id",
-                    "url": "/d/roadtrip-reservable-availability-watch-drill-down/reservable-availability-watch-drill-down?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
+                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
                   }
                 ]
               }
@@ -174,7 +174,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this job_id",
-                    "url": "/d/roadtrip-reservable-availability-watch-drill-down/reservable-availability-watch-drill-down?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
+                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
                   }
                 ]
               }
@@ -192,7 +192,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this run_id",
-                    "url": "/d/roadtrip-reservable-availability-watch-drill-down/reservable-availability-watch-drill-down?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
+                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
                   },
                   {
                     "targetBlank": false,
@@ -255,7 +255,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this watch_id",
-                    "url": "/d/roadtrip-reservable-availability-watch-drill-down/reservable-availability-watch-drill-down?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
+                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
                   }
                 ]
               }
@@ -273,7 +273,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this job_id",
-                    "url": "/d/roadtrip-reservable-availability-watch-drill-down/reservable-availability-watch-drill-down?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
+                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
                   }
                 ]
               }
@@ -291,7 +291,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this run_id",
-                    "url": "/d/roadtrip-reservable-availability-watch-drill-down/reservable-availability-watch-drill-down?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
+                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
                   }
                 ]
               }
@@ -427,6 +427,6 @@
   "timepicker": {},
   "timezone": "browser",
   "title": "✔︎ Reservable Availability Watch drill down",
-  "uid": "roadtrip-reservable-availability-watch-drill-down",
+  "uid": "roadtrip-reservable-watch-drill",
   "version": 1
 }
