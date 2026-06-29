@@ -7,6 +7,21 @@
   "links": [],
   "panels": [
     {
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "mode": "markdown",
+        "content": "### watch → job → run → snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** — POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_job` | **Scheduler state** — `next_run_at`, claim token, frozen `intent_payload`. **1:1 with watch.** | Service writes/updates this when a watch is created or edited. |\n| `availability_job_run` | **Append-only execution log** — one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed job. |\n| `availability_snapshot` | **Observed availability** — per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each job run. |\n\n### How to drill\n\nClick a **watch_id** / **job_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Watch / Job Run Detail](/d/roadtrip-watch-job-run-detail)** — drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/roadtrip-reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/roadtrip-poi-detail)**. |\n| Fleet-wide fetch performance (latency, batch sizes, vendor splits). | **[Reservable / Availability Fetches](/d/roadtrip-reservable-availability-fetches)**. |\n"
+      },
+      "title": "About this dashboard",
+      "type": "text"
+    },
+    {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
@@ -19,7 +34,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 0
+        "y": 9
       },
       "id": 1,
       "options": {
@@ -47,14 +62,55 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "watch_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this watch_id",
+                    "url": "/d/roadtrip-watch-scheduler-health/watch-job-run-health?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=0&var-run_id=0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this job_id",
+                    "url": "/d/roadtrip-watch-scheduler-health/watch-job-run-health?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=0"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 7
+        "y": 16
       },
       "id": 2,
       "options": {
@@ -69,11 +125,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  w.id AS watch_id,\n  CASE\n    WHEN w.poi_id IS NOT NULL THEN 'poi'\n    ELSE 'reservable'\n  END AS scope,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.reservable_filters,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec AS watch_cadence_sec,\n  w.trigger_kinds,\n  w.trigger_config,\n  w.stop_when_triggered,\n  w.status AS watch_status,\n  j.id AS job_id,\n  j.status AS job_status,\n  j.next_run_at,\n  j.claimed_until,\n  j.last_run_at,\n  j.updated_at AS job_updated_at\nFROM availability_watch w\nLEFT JOIN availability_job j ON j.watch_id = w.id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE (${watch_status:sqlstring} = '' OR w.status = ${watch_status:sqlstring})\n  AND (${job_status:sqlstring} = '' OR j.status = ${job_status:sqlstring})\n  AND (${poi_id:sqlstring} IN ('', '__all') OR w.poi_id = NULLIF(${poi_id:sqlstring}, '')::bigint)\n  AND (\n    ${reservable_rid:sqlstring} IN ('', '__all')\n    OR r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\n  )\nORDER BY\n  j.next_run_at ASC NULLS LAST,\n  w.created_at DESC,\n  w.id DESC;",
+          "rawSql": "SELECT\n  w.id AS watch_id,\n  w.status AS watch_status,\n  j.id AS job_id,\n  j.status AS job_status,\n  CASE\n    WHEN w.poi_id IS NOT NULL THEN 'poi'\n    ELSE 'reservable'\n  END AS scope,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.reservable_filters,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec AS watch_cadence_sec,\n  w.trigger_kinds,\n  w.trigger_config,\n  w.stop_when_triggered,\n  j.next_run_at,\n  j.claimed_until,\n  j.last_run_at,\n  j.updated_at AS job_updated_at\nFROM availability_watch w\nLEFT JOIN availability_job j ON j.watch_id = w.id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE (${watch_id} = 0 OR w.id = ${watch_id})\n  AND (${job_id} = 0 OR j.id = ${job_id})\nORDER BY\n  j.next_run_at ASC NULLS LAST,\n  w.created_at DESC,\n  w.id DESC;",
           "refId": "A"
         }
       ],
-      "title": "Watch And Job Table",
+      "title": "Watches & Jobs",
       "type": "table"
     },
     {
@@ -82,14 +138,78 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "watch_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this watch_id",
+                    "url": "/d/roadtrip-watch-scheduler-health/watch-job-run-health?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=0&var-run_id=0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this job_id",
+                    "url": "/d/roadtrip-watch-scheduler-health/watch-job-run-health?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this run_id",
+                    "url": "/d/roadtrip-watch-scheduler-health/watch-job-run-health?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
+                  },
+                  {
+                    "targetBlank": false,
+                    "title": "Open Watch / Job Run Detail",
+                    "url": "/d/roadtrip-watch-job-run-detail/watch-job-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 28
       },
       "id": 3,
       "options": {
@@ -104,11 +224,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  jr.id AS run_id,\n  jr.job_id,\n  j.watch_id,\n  jr.status AS run_status,\n  j.status AS job_status,\n  w.status AS watch_status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE jr.started_at >= now() - (${days_back:sqlstring} || ' days')::interval\n  AND (${run_status:sqlstring} = '' OR jr.status = ${run_status:sqlstring})\n  AND (${job_status:sqlstring} = '' OR j.status = ${job_status:sqlstring})\n  AND (${watch_status:sqlstring} = '' OR w.status = ${watch_status:sqlstring})\n  AND (${poi_id:sqlstring} IN ('', '__all') OR w.poi_id = NULLIF(${poi_id:sqlstring}, '')::bigint)\n  AND (\n    ${reservable_rid:sqlstring} IN ('', '__all')\n    OR r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\n  )\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
+          "rawSql": "SELECT\n  j.watch_id,\n  jr.job_id,\n  jr.id AS run_id,\n  jr.status AS run_status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE $__timeFilter(jr.started_at)\n  AND (${watch_id} = 0 OR j.watch_id = ${watch_id})\n  AND (${job_id} = 0 OR jr.job_id = ${job_id})\n  AND (${run_id} = 0 OR jr.id = ${run_id})\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
           "refId": "A"
         }
       ],
-      "title": "Recent Runs",
+      "title": "Recent Job Runs",
       "type": "table"
     },
     {
@@ -117,16 +237,93 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "filterable": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "watch_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this watch_id",
+                    "url": "/d/roadtrip-watch-scheduler-health/watch-job-run-health?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=0&var-run_id=0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this job_id",
+                    "url": "/d/roadtrip-watch-scheduler-health/watch-job-run-health?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=0"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this run_id",
+                    "url": "/d/roadtrip-watch-scheduler-health/watch-job-run-health?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "snapshot_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Reservable / Detail",
+                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?${__url_time_range}&var-reservable_id=${__data.fields.reservable_id}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 9,
+        "h": 10,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 38
       },
-      "id": 4,
+      "id": 5,
       "options": {
         "showHeader": true
       },
@@ -139,11 +336,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  jr.id AS run_id,\n  jr.job_id,\n  jr.status AS run_status,\n  jr.snapshot_count AS recorded_snapshot_count,\n  count(s.id) AS actual_snapshot_rows,\n  min(s.target_date) AS first_target_date,\n  max(s.target_date) AS last_target_date,\n  min(s.observed_at) AS first_observed_at,\n  max(s.observed_at) AS last_observed_at\nFROM availability_job_run jr\nLEFT JOIN availability_snapshot s ON s.run_id = jr.id\nWHERE jr.started_at >= now() - (${days_back:sqlstring} || ' days')::interval\nGROUP BY jr.id\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
+          "rawSql": "SELECT\n  j.watch_id,\n  jr.job_id,\n  s.run_id,\n  jr.status AS run_status,\n  s.id AS snapshot_id,\n  s.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.poi_id,\n  p.name AS poi_name,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.observed_at\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\nLEFT JOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables r ON r.id = s.reservable_id\nLEFT JOIN pois p ON p.id = w.poi_id\nWHERE $__timeFilter(s.observed_at)\n  AND (${watch_id} = 0 OR j.watch_id = ${watch_id})\n  AND (${job_id} = 0 OR jr.job_id = ${job_id})\n  AND (${run_id} = 0 OR s.run_id = ${run_id})\nORDER BY s.observed_at DESC, s.id DESC\nLIMIT 300;",
           "refId": "A"
         }
       ],
-      "title": "Snapshots Produced By Runs",
+      "title": "Recent Snapshots",
       "type": "table"
     }
   ],
@@ -157,72 +354,69 @@
   "templating": {
     "list": [
       {
+        "allValue": "0",
+        "allowCustomValue": false,
         "current": {
-          "text": "",
-          "value": ""
+          "selected": true,
+          "text": "All",
+          "value": "0"
         },
-        "name": "watch_status",
-        "query": ",active,paused,done",
-        "type": "custom"
-      },
-      {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "name": "job_status",
-        "query": ",active,paused,done",
-        "type": "custom"
-      },
-      {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "name": "run_status",
-        "query": ",started,completed,failed",
-        "type": "custom"
-      },
-      {
-        "allValue": "'__all'",
-        "current": {
-          "text": "",
-          "value": ""
-        },
+        "multi": false,
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
         "includeAll": true,
-        "name": "poi_id",
-        "query": "SELECT id::text || ' - ' || name AS __text, id AS __value FROM pois WHERE deleted_at IS NULL ORDER BY name ASC LIMIT 500",
+        "label": "watch_id",
+        "name": "watch_id",
+        "options": [],
+        "query": "SELECT id::text AS __text, id::text AS __value FROM availability_watch ORDER BY id DESC LIMIT 1000",
         "refresh": 1,
         "type": "query"
       },
       {
-        "allValue": "'__all'",
+        "allValue": "0",
+        "allowCustomValue": false,
         "current": {
-          "text": "",
-          "value": ""
+          "selected": true,
+          "text": "All",
+          "value": "0"
         },
+        "multi": false,
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "definition": "SELECT id::text AS __text, id::text AS __value FROM availability_job WHERE ${watch_id} = 0 OR watch_id = ${watch_id} ORDER BY id DESC LIMIT 1000",
         "includeAll": true,
-        "name": "reservable_rid",
-        "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
+        "label": "job_id",
+        "name": "job_id",
+        "options": [],
+        "query": "SELECT id::text AS __text, id::text AS __value FROM availability_job WHERE ${watch_id} = 0 OR watch_id = ${watch_id} ORDER BY id DESC LIMIT 1000",
         "refresh": 1,
         "type": "query"
       },
       {
+        "allValue": "0",
+        "allowCustomValue": false,
         "current": {
-          "text": "14",
-          "value": "14"
+          "selected": true,
+          "text": "All",
+          "value": "0"
         },
-        "name": "days_back",
-        "query": "7,14,30,90",
-        "type": "custom"
+        "multi": false,
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "definition": "SELECT jr.id::text AS __text, jr.id::text AS __value FROM availability_job_run jr JOIN availability_job j ON j.id = jr.job_id WHERE (${watch_id} = 0 OR j.watch_id = ${watch_id}) AND (${job_id} = 0 OR jr.job_id = ${job_id}) ORDER BY jr.id DESC LIMIT 1000",
+        "includeAll": true,
+        "label": "run_id",
+        "name": "run_id",
+        "options": [],
+        "query": "SELECT jr.id::text AS __text, jr.id::text AS __value FROM availability_job_run jr JOIN availability_job j ON j.id = jr.job_id WHERE (${watch_id} = 0 OR j.watch_id = ${watch_id}) AND (${job_id} = 0 OR jr.job_id = ${job_id}) ORDER BY jr.id DESC LIMIT 1000",
+        "refresh": 1,
+        "type": "query"
       }
     ]
   },
@@ -232,7 +426,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Watch & Scheduler Health",
+  "title": "Watch / Job / Run health",
   "uid": "roadtrip-watch-scheduler-health",
   "version": 1
 }
