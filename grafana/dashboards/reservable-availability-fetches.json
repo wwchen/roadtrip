@@ -212,7 +212,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable / Detail",
-                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-rid=${__value.raw}"
+                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.direct_reservable_id}"
                   }
                 ]
               }
@@ -239,7 +239,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped_snapshots AS (SELECT s.*, r.id AS scoped_reservable_id, r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid, r.vendor, jr.status AS run_status, jr.snapshot_count AS recorded_snapshot_count, jr.duration_ms, jr.error, jr.started_at AS run_started_at, jr.completed_at AS run_completed_at, j.status AS job_status, j.id AS job_id, w.id AS watch_id, w.poi_id, p.name AS poi_name FROM availability_snapshot s JOIN reservables r ON r.id = s.reservable_id LEFT JOIN availability_job_run jr ON jr.id = s.run_id LEFT JOIN availability_job j ON j.id = jr.job_id LEFT JOIN availability_watch w ON w.id = j.watch_id LEFT JOIN pois p ON p.id = w.poi_id WHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval AND (${run_status:sqlstring} IN ('', 'all') OR jr.status = ${run_status:sqlstring}) AND (${job_status:sqlstring} IN ('', 'all') OR j.status = ${job_status:sqlstring}) AND (${poi_name_search:sqlstring} = '' OR p.name ILIKE '%' || ${poi_name_search:sqlstring} || '%' OR EXISTS (SELECT 1 FROM reservable_pois rp JOIN pois lp ON lp.id = rp.poi_id WHERE rp.reservable_id = r.id AND lp.name ILIKE '%' || ${poi_name_search:sqlstring} || '%')) AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring})) AND (${rid_search:sqlstring} = '' OR r.type || ':' || r.vendor || ':' || r.vendor_id ILIKE '%' || ${rid_search:sqlstring} || '%')), fetch_batches AS (SELECT coalesce('run:' || run_id::text, 'observed:' || observed_at::text) AS fetch_key, max(run_id) AS run_id, max(job_id) AS job_id, max(watch_id) AS watch_id, CASE WHEN max(run_id) IS NULL THEN 'ad_hoc_snapshot_batch' WHEN max(poi_id) IS NOT NULL THEN 'poi' ELSE 'reservable' END AS watch_scope, max(poi_id) AS poi_id, max(poi_name) AS poi_name, min(reservable_rid) AS direct_reservable_rid, coalesce(max(run_status), 'ad_hoc') AS run_status, max(job_status) AS job_status, max(recorded_snapshot_count) AS recorded_snapshot_count, count(*) AS actual_snapshot_rows, count(DISTINCT reservable_id) AS observed_reservables, min(target_date) AS first_target_date, max(target_date) AS last_target_date, min(observed_at) AS first_observed_at, max(observed_at) AS last_observed_at, max(duration_ms) AS duration_ms, max(error) AS error, min(coalesce(run_started_at, observed_at)) AS started_at, max(run_completed_at) AS completed_at FROM scoped_snapshots GROUP BY 1) SELECT run_id, job_id, watch_id, watch_scope, poi_id, poi_name, direct_reservable_rid, run_status, job_status, recorded_snapshot_count, actual_snapshot_rows, observed_reservables, first_target_date, last_target_date, first_observed_at, last_observed_at, duration_ms, error, started_at, completed_at FROM fetch_batches ORDER BY last_observed_at DESC, fetch_key DESC LIMIT 200;",
+          "rawSql": "WITH scoped_snapshots AS (SELECT s.*, r.id AS scoped_reservable_id, r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid, r.vendor, jr.status AS run_status, jr.snapshot_count AS recorded_snapshot_count, jr.duration_ms, jr.error, jr.started_at AS run_started_at, jr.completed_at AS run_completed_at, j.status AS job_status, j.id AS job_id, w.id AS watch_id, w.poi_id, p.name AS poi_name FROM availability_snapshot s JOIN reservables r ON r.id = s.reservable_id LEFT JOIN availability_job_run jr ON jr.id = s.run_id LEFT JOIN availability_job j ON j.id = jr.job_id LEFT JOIN availability_watch w ON w.id = j.watch_id LEFT JOIN pois p ON p.id = w.poi_id WHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval AND (${run_status:sqlstring} IN ('', 'all') OR jr.status = ${run_status:sqlstring}) AND (${job_status:sqlstring} IN ('', 'all') OR j.status = ${job_status:sqlstring}) AND (${poi_name_search:sqlstring} = '' OR p.name ILIKE '%' || ${poi_name_search:sqlstring} || '%' OR EXISTS (SELECT 1 FROM reservable_pois rp JOIN pois lp ON lp.id = rp.poi_id WHERE rp.reservable_id = r.id AND lp.name ILIKE '%' || ${poi_name_search:sqlstring} || '%')) AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring})) AND (${rid_search:sqlstring} = '' OR r.type || ':' || r.vendor || ':' || r.vendor_id ILIKE '%' || ${rid_search:sqlstring} || '%')), fetch_batches AS (SELECT coalesce('run:' || run_id::text, 'observed:' || observed_at::text) AS fetch_key, max(run_id) AS run_id, max(job_id) AS job_id, max(watch_id) AS watch_id, CASE WHEN max(run_id) IS NULL THEN 'ad_hoc_snapshot_batch' WHEN max(poi_id) IS NOT NULL THEN 'poi' ELSE 'reservable' END AS watch_scope, max(poi_id) AS poi_id, max(poi_name) AS poi_name, min(reservable_rid) AS direct_reservable_rid, min(scoped_reservable_id) AS direct_reservable_id, coalesce(max(run_status), 'ad_hoc') AS run_status, max(job_status) AS job_status, max(recorded_snapshot_count) AS recorded_snapshot_count, count(*) AS actual_snapshot_rows, count(DISTINCT reservable_id) AS observed_reservables, min(target_date) AS first_target_date, max(target_date) AS last_target_date, min(observed_at) AS first_observed_at, max(observed_at) AS last_observed_at, max(duration_ms) AS duration_ms, max(error) AS error, min(coalesce(run_started_at, observed_at)) AS started_at, max(run_completed_at) AS completed_at FROM scoped_snapshots GROUP BY 1) SELECT run_id, job_id, watch_id, watch_scope, poi_id, poi_name, direct_reservable_id, direct_reservable_rid, run_status, job_status, recorded_snapshot_count, actual_snapshot_rows, observed_reservables, first_target_date, last_target_date, first_observed_at, last_observed_at, duration_ms, error, started_at, completed_at FROM fetch_batches ORDER BY last_observed_at DESC, fetch_key DESC LIMIT 200;",
           "refId": "A"
         }
       ],
@@ -301,7 +301,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable / Detail",
-                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-rid=${__value.raw}"
+                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
                   }
                 ]
               }
@@ -355,7 +355,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable / Detail",
-                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-rid=${__value.raw}"
+                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
                   }
                 ]
               }
@@ -382,7 +382,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT s.id AS snapshot_id, s.run_id, jr.status AS run_status, r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid, r.name, r.vendor, r.source, s.observed_at, s.target_date, s.status AS observed_status, s.available, jsonb_pretty(s.day_payload) AS day_payload FROM availability_snapshot s JOIN reservables r ON r.id = s.reservable_id LEFT JOIN availability_job_run jr ON jr.id = s.run_id WHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval AND (${run_status:sqlstring} IN ('', 'all') OR jr.status = ${run_status:sqlstring}) AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring})) AND (${rid_search:sqlstring} = '' OR r.type || ':' || r.vendor || ':' || r.vendor_id ILIKE '%' || ${rid_search:sqlstring} || '%') ORDER BY s.observed_at DESC, s.id DESC LIMIT 200;",
+          "rawSql": "SELECT s.id AS snapshot_id, s.run_id, jr.status AS run_status, s.reservable_id, r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid, r.name, r.vendor, r.source, s.observed_at, s.target_date, s.status AS observed_status, s.available, jsonb_pretty(s.day_payload) AS day_payload FROM availability_snapshot s JOIN reservables r ON r.id = s.reservable_id LEFT JOIN availability_job_run jr ON jr.id = s.run_id WHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval AND (${run_status:sqlstring} IN ('', 'all') OR jr.status = ${run_status:sqlstring}) AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring})) AND (${rid_search:sqlstring} = '' OR r.type || ':' || r.vendor || ':' || r.vendor_id ILIKE '%' || ${rid_search:sqlstring} || '%') ORDER BY s.observed_at DESC, s.id DESC LIMIT 200;",
           "refId": "A"
         }
       ],
