@@ -16,7 +16,7 @@
       "title": "POI Detail",
       "tooltip": "Open selected POI detail dashboard",
       "type": "link",
-      "url": "/d/roadtrip-poi-detail/roadtrip-poi-detail"
+      "url": "/d/poi-detail/roadtrip-poi-detail"
     },
     {
       "asDropdown": false,
@@ -28,7 +28,7 @@
       "title": "Reservable Detail",
       "tooltip": "Open selected reservable detail dashboard",
       "type": "link",
-      "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail"
+      "url": "/d/reservable-detail/roadtrip-reservable-detail"
     }
   ],
   "liveNow": false,
@@ -169,12 +169,12 @@
                   {
                     "targetBlank": false,
                     "title": "Select POI Here",
-                    "url": "/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer?var-poi_id=${__value.raw}"
+                    "url": "/d/catalog-explorer/roadtrip-catalog-explorer?var-poi_id=${__value.raw}"
                   },
                   {
                     "targetBlank": false,
                     "title": "Open POI Detail",
-                    "url": "/d/roadtrip-poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
+                    "url": "/d/poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
                   }
                 ]
               }
@@ -261,12 +261,12 @@
                   {
                     "targetBlank": false,
                     "title": "Select Reservable Here",
-                    "url": "/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer?var-reservable_rid=${__value.raw}"
+                    "url": "/d/catalog-explorer/roadtrip-catalog-explorer?var-reservable_rid=${__value.raw}"
                   },
                   {
                     "targetBlank": false,
                     "title": "Open Reservable Detail",
-                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
+                    "url": "/d/reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
                   }
                 ]
               }
@@ -319,12 +319,12 @@
                   {
                     "targetBlank": false,
                     "title": "Select Reservable Here",
-                    "url": "/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer?var-reservable_rid=${__value.raw}&var-rid_scope=all"
+                    "url": "/d/catalog-explorer/roadtrip-catalog-explorer?var-reservable_rid=${__value.raw}&var-rid_scope=all"
                   },
                   {
                     "targetBlank": false,
                     "title": "Open Reservable Detail",
-                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
+                    "url": "/d/reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
                   }
                 ]
               }
@@ -377,7 +377,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open POI Detail",
-                    "url": "/d/roadtrip-poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
+                    "url": "/d/poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
                   }
                 ]
               }
@@ -578,12 +578,12 @@
                   {
                     "targetBlank": false,
                     "title": "Select Reservable Here",
-                    "url": "/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer?var-reservable_rid=${__value.raw}"
+                    "url": "/d/catalog-explorer/roadtrip-catalog-explorer?var-reservable_rid=${__value.raw}"
                   },
                   {
                     "targetBlank": false,
                     "title": "Open Reservable Detail",
-                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
+                    "url": "/d/reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
                   }
                 ]
               }
@@ -846,6 +846,6 @@
   },
   "timezone": "browser",
   "title": "Catalog / POIs, Reservables, Availability",
-  "uid": "roadtrip-catalog-explorer",
+  "uid": "catalog-explorer",
   "version": 1
 }

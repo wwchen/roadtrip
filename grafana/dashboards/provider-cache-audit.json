@@ -180,6 +180,6 @@
   "timepicker": {},
   "timezone": "browser",
   "title": "Provider Cache Audit",
-  "uid": "roadtrip-provider-cache-audit",
+  "uid": "provider-cache-audit",
   "version": 1
 }

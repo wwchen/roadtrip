@@ -464,7 +464,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open POI Detail",
-                    "url": "/d/roadtrip-poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
+                    "url": "/d/poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
                   }
                 ]
               }
@@ -609,6 +609,6 @@
   "timepicker": {},
   "timezone": "browser",
   "title": "Reservable / Stats",
-  "uid": "roadtrip-reservable-stats",
+  "uid": "reservable-stats",
   "version": 1
 }

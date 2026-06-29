@@ -695,7 +695,7 @@
                   {
                     "targetBlank": false,
                     "title": "Focus schema panel",
-                    "url": "/d/roadtrip-db-stats/db-stats?var-table_name=${__value.raw}"
+                    "url": "/d/db-stats/db-stats?var-table_name=${__value.raw}"
                   }
                 ]
               }
@@ -852,7 +852,7 @@
     "hidden": true
   },
   "timezone": "browser",
-  "title": "DB Stats",
-  "uid": "roadtrip-db-stats",
+  "title": "✔︎ DB Stats",
+  "uid": "db-stats",
   "version": 1
 }

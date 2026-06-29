@@ -1,10 +1,24 @@
 {
   "annotations": {
-    "list": []
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
   },
   "editable": true,
+  "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "links": [],
+  "liveNow": false,
   "panels": [
     {
       "gridPos": {
@@ -15,9 +29,16 @@
       },
       "id": 6,
       "options": {
-        "mode": "markdown",
-        "content": "### watch → job → run → snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** — POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_job` | **Scheduler state** — `next_run_at`, claim token, frozen `intent_payload`. **1:1 with watch.** | Service writes/updates this when a watch is created or edited. |\n| `availability_job_run` | **Append-only execution log** — one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed job. |\n| `availability_snapshot` | **Observed availability** — per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each job run. |\n\n### How to drill\n\nClick a **watch_id** / **job_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Watch / Job Run Detail](/d/roadtrip-watch-job-run-detail)** — drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/roadtrip-reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/roadtrip-poi-detail)**. |\n| Fleet-wide fetch performance (latency, batch sizes, vendor splits). | **[Reservable / Availability Fetches](/d/roadtrip-reservable-availability-fetches)**. |\n"
+        "code": {
+          "language": "plaintext",
+          "showLineNumbers": false,
+          "showMiniMap": false
+        },
+        "content": "### watch → job → run → snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** — POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_job` | **Scheduler state** — `next_run_at`, claim token, frozen `intent_payload`. **1:1 with watch.** | Service writes/updates this when a watch is created or edited. |\n| `availability_job_run` | **Append-only execution log** — one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed job. |\n| `availability_snapshot` | **Observed availability** — per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each job run. |\n\n### How to drill\n\nClick a **watch_id** / **job_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Watch / Job Run Detail](/d/watch-job-run-detail)** — drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/poi-detail)**. |\n",
+        "mode": "markdown"
       },
+      "pluginVersion": "13.1.0",
+      "targets": [],
       "title": "About this dashboard",
       "type": "text"
     },
@@ -27,8 +48,31 @@
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {},
-        "overrides": []
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        }
       },
       "gridPos": {
         "h": 7,
@@ -38,9 +82,10 @@
       },
       "id": 1,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -63,8 +108,260 @@
       },
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
-            "filterable": true
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "bars",
+            "fillOpacity": 40,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 7,
+      "options": {
+        "annotations": {
+          "clustering": -1,
+          "multiLane": false
+        },
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "enableFacetedFilter": false,
+          "overflow": "ellipsis",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroup(jr.started_at, '$__interval') AS time,\n  jr.status AS metric,\n  count(*)::double precision AS value\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(jr.started_at)\n  AND (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND (${run_id:sqlstring} IN ('', '__all') OR jr.id::text IN (${run_id:sqlstring}))\nGROUP BY 1, 2\nORDER BY 1, 2;",
+          "refId": "A"
+        }
+      ],
+      "title": "Runs By Status",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "avg_duration_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 8,
+      "options": {
+        "annotations": {
+          "clustering": -1,
+          "multiLane": false
+        },
+        "legend": {
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ],
+          "displayMode": "table",
+          "enableFacetedFilter": false,
+          "overflow": "ellipsis",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroup(jr.started_at, '$__interval') AS time,\n  'avg_duration_ms' AS metric,\n  avg(jr.duration_ms)::double precision AS value\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(jr.started_at)\n  AND jr.duration_ms IS NOT NULL\n  AND (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND (${run_id:sqlstring} IN ('', '__all') OR jr.id::text IN (${run_id:sqlstring}))\nGROUP BY 1\nORDER BY 1;",
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  $__timeGroup(s.observed_at, '$__interval') AS time,\n  'snapshot_rows' AS metric,\n  count(*)::double precision AS value\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(s.observed_at)\n  AND (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND (${run_id:sqlstring} IN ('', '__all') OR s.run_id::text IN (${run_id:sqlstring}))\nGROUP BY 1\nORDER BY 1;",
+          "refId": "B"
+        }
+      ],
+      "title": "Duration And Snapshot Throughput",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           }
         },
         "overrides": [
@@ -80,7 +377,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this watch_id",
-                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
                   }
                 ]
               }
@@ -98,7 +395,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this job_id",
-                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
                   }
                 ]
               }
@@ -110,13 +407,14 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 24
       },
       "id": 2,
       "options": {
+        "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -140,7 +438,28 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "filterable": true
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           }
         },
         "overrides": [
@@ -156,7 +475,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this watch_id",
-                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
                   }
                 ]
               }
@@ -174,7 +493,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this job_id",
-                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
                   }
                 ]
               }
@@ -192,12 +511,12 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this run_id",
-                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
                   },
                   {
                     "targetBlank": false,
                     "title": "Open Watch / Job Run Detail",
-                    "url": "/d/roadtrip-watch-job-run-detail/watch-job-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
+                    "url": "/d/watch-job-run-detail/watch-job-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
                   }
                 ]
               }
@@ -209,23 +528,43 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 36
       },
       "id": 3,
       "options": {
+        "cellHeight": "sm",
+        "enablePagination": true,
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  j.watch_id,\n  jr.job_id,\n  jr.id AS run_id,\n  jr.status AS run_status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE $__timeFilter(jr.started_at)\n  AND (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND (${run_id:sqlstring} IN ('', '__all') OR jr.id::text IN (${run_id:sqlstring}))\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
-          "refId": "A"
+          "rawSql": "SELECT\n  j.watch_id,\n  jr.job_id,\n  jr.id AS run_id,\n  jr.status AS run_status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE $__timeFilter(jr.started_at)\n  AND (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND (${run_id:sqlstring} IN ('', '__all') OR jr.id::text IN (${run_id:sqlstring}))\nORDER BY jr.started_at DESC, jr.id DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Recent Job Runs",
@@ -239,7 +578,28 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "filterable": true
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
           }
         },
         "overrides": [
@@ -255,7 +615,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this watch_id",
-                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
                   }
                 ]
               }
@@ -273,7 +633,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this job_id",
-                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
                   }
                 ]
               }
@@ -291,7 +651,7 @@
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this run_id",
-                    "url": "/d/roadtrip-reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
                   }
                 ]
               }
@@ -309,7 +669,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable / Detail",
-                    "url": "/d/roadtrip-reservable-detail/roadtrip-reservable-detail?${__url_time_range}&var-reservable_id=${__data.fields.reservable_id}"
+                    "url": "/d/reservable-detail/roadtrip-reservable-detail?${__url_time_range}&var-reservable_id=${__data.fields.reservable_id}"
                   }
                 ]
               }
@@ -321,31 +681,52 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 38
+        "y": 46
       },
       "id": 5,
       "options": {
+        "cellHeight": "sm",
+        "enablePagination": true,
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  j.watch_id,\n  jr.job_id,\n  s.run_id,\n  jr.status AS run_status,\n  s.id AS snapshot_id,\n  s.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.poi_id,\n  p.name AS poi_name,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.observed_at\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\nLEFT JOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables r ON r.id = s.reservable_id\nLEFT JOIN pois p ON p.id = w.poi_id\nWHERE $__timeFilter(s.observed_at)\n  AND (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND (${run_id:sqlstring} IN ('', '__all') OR s.run_id::text IN (${run_id:sqlstring}))\nORDER BY s.observed_at DESC, s.id DESC\nLIMIT 300;",
-          "refId": "A"
+          "rawSql": "SELECT\n  s.*\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\n-- LEFT JOIN availability_watch w ON w.id = j.watch_id\n-- LEFT JOIN reservables r ON r.id = s.reservable_id\n-- LEFT JOIN pois p ON p.id = w.poi_id\nWHERE $__timeFilter(s.observed_at)\n  AND (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND (${run_id:sqlstring} IN ('', '__all') OR s.run_id::text IN (${run_id:sqlstring}))\nORDER BY s.observed_at DESC, s.id DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Recent Snapshots",
       "type": "table"
     }
   ],
+  "preload": false,
   "refresh": "",
-  "schemaVersion": 39,
+  "schemaVersion": 42,
   "tags": [
     "roadtrip",
     "availability",
@@ -357,65 +738,77 @@
         "allValue": "'__all'",
         "allowCustomValue": false,
         "current": {
-          "selected": true,
           "text": "All",
           "value": "$__all"
         },
-        "multi": true,
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "hide": 0,
         "includeAll": true,
         "label": "watch_id",
+        "multi": true,
         "name": "watch_id",
         "options": [],
         "query": "SELECT id::text AS __text, id::text AS __value FROM availability_watch ORDER BY id DESC LIMIT 1000",
         "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
         "type": "query"
       },
       {
         "allValue": "'__all'",
         "allowCustomValue": false,
         "current": {
-          "selected": true,
           "text": "All",
           "value": "$__all"
         },
-        "multi": true,
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
         "definition": "SELECT id::text AS __text, id::text AS __value FROM availability_job WHERE ${watch_id:sqlstring} IN ('', '__all') OR watch_id::text IN (${watch_id:sqlstring}) ORDER BY id DESC LIMIT 1000",
+        "hide": 0,
         "includeAll": true,
         "label": "job_id",
+        "multi": true,
         "name": "job_id",
         "options": [],
         "query": "SELECT id::text AS __text, id::text AS __value FROM availability_job WHERE ${watch_id:sqlstring} IN ('', '__all') OR watch_id::text IN (${watch_id:sqlstring}) ORDER BY id DESC LIMIT 1000",
         "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
         "type": "query"
       },
       {
         "allValue": "'__all'",
         "allowCustomValue": false,
         "current": {
-          "selected": true,
           "text": "All",
           "value": "$__all"
         },
-        "multi": true,
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
         "definition": "SELECT jr.id::text AS __text, jr.id::text AS __value FROM availability_job_run jr JOIN availability_job j ON j.id = jr.job_id WHERE (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring})) AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring})) ORDER BY jr.id DESC LIMIT 1000",
+        "hide": 0,
         "includeAll": true,
         "label": "run_id",
+        "multi": true,
         "name": "run_id",
         "options": [],
         "query": "SELECT jr.id::text AS __text, jr.id::text AS __value FROM availability_job_run jr JOIN availability_job j ON j.id = jr.job_id WHERE (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring})) AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring})) ORDER BY jr.id DESC LIMIT 1000",
         "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
         "type": "query"
       }
     ]
@@ -424,9 +817,22 @@
     "from": "now-30d",
     "to": "now"
   },
-  "timepicker": {},
+  "timepicker": {
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ]
+  },
   "timezone": "browser",
   "title": "✔︎ Reservable Availability Watch drill down",
-  "uid": "roadtrip-reservable-watch-drill",
+  "uid": "reservable-watch-drill",
   "version": 1
 }
