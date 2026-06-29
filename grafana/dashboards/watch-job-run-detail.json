@@ -336,7 +336,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable Detail",
-                    "url": "/d/roadtrip-reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
+                    "url": "/d/reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
                   }
                 ]
               }
@@ -511,7 +511,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable Detail",
-                    "url": "/d/roadtrip-reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
+                    "url": "/d/reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
                   }
                 ]
               }
@@ -712,7 +712,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable Detail",
-                    "url": "/d/roadtrip-reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
+                    "url": "/d/reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
                   }
                 ]
               }
@@ -812,7 +812,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Reservable Detail",
-                    "url": "/d/roadtrip-reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
+                    "url": "/d/reservable-detail/reservable-detail?var-reservable_id=${__value.raw}"
                   }
                 ]
               }
@@ -974,7 +974,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Run Detail",
-                    "url": "/d/roadtrip-watch-job-run-detail/roadtrip-watch-job-run-detail?var-run_id=${__value.raw}"
+                    "url": "/d/watch-job-run-detail/roadtrip-watch-job-run-detail?var-run_id=${__value.raw}"
                   }
                 ]
               }
@@ -1110,6 +1110,6 @@
   },
   "timezone": "browser",
   "title": "✔︎ Reservable Availability Watch / Job Run Detail",
-  "uid": "roadtrip-watch-job-run-detail",
+  "uid": "watch-job-run-detail",
   "version": 1
 }
