@@ -110,7 +110,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  $__timeGroup(jr.started_at, '$__interval') AS time,\n  jr.status AS metric,\n  count(*)::double precision AS value\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(jr.started_at)\n  AND ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' = '' OR jr.id::text IN (${run_id:sqlstring}))\nGROUP BY 1, 2\nORDER BY 1, 2;",
+          "rawSql": "SELECT\n  $__timeGroup(jr.started_at, '$__interval') AS time,\n  jr.status AS metric,\n  count(*)::double precision AS value\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(jr.started_at)\n  AND ('${watch_id:csv}' IN ('', '$__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' IN ('', '$__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' IN ('', '$__all') OR jr.id::text IN (${run_id:sqlstring}))\nGROUP BY 1, 2\nORDER BY 1, 2;",
           "refId": "A"
         }
       ],
@@ -183,7 +183,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  $__timeGroup(jr.started_at, '$__interval') AS time,\n  'avg_duration_ms' AS metric,\n  avg(jr.duration_ms)::double precision AS value\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(jr.started_at)\n  AND jr.duration_ms IS NOT NULL\n  AND ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' = '' OR jr.id::text IN (${run_id:sqlstring}))\nGROUP BY 1\nORDER BY 1;",
+          "rawSql": "SELECT\n  $__timeGroup(jr.started_at, '$__interval') AS time,\n  'avg_duration_ms' AS metric,\n  avg(jr.duration_ms)::double precision AS value\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(jr.started_at)\n  AND jr.duration_ms IS NOT NULL\n  AND ('${watch_id:csv}' IN ('', '$__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' IN ('', '$__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' IN ('', '$__all') OR jr.id::text IN (${run_id:sqlstring}))\nGROUP BY 1\nORDER BY 1;",
           "refId": "A"
         },
         {
@@ -193,7 +193,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  $__timeGroup(s.observed_at, '$__interval') AS time,\n  'snapshot_rows' AS metric,\n  count(*)::double precision AS value\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(s.observed_at)\n  AND ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' = '' OR s.run_id::text IN (${run_id:sqlstring}))\nGROUP BY 1\nORDER BY 1;",
+          "rawSql": "SELECT\n  $__timeGroup(s.observed_at, '$__interval') AS time,\n  'snapshot_rows' AS metric,\n  count(*)::double precision AS value\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\nWHERE $__timeFilter(s.observed_at)\n  AND ('${watch_id:csv}' IN ('', '$__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' IN ('', '$__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' IN ('', '$__all') OR s.run_id::text IN (${run_id:sqlstring}))\nGROUP BY 1\nORDER BY 1;",
           "refId": "B"
         }
       ],
@@ -269,7 +269,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  w.id AS watch_id,\n  w.status AS watch_status,\n  j.id AS job_id,\n  j.status AS job_status,\n  CASE\n    WHEN w.poi_id IS NOT NULL THEN 'poi'\n    ELSE 'reservable'\n  END AS scope,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.reservable_filters,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec AS watch_cadence_sec,\n  w.trigger_kinds,\n  w.trigger_config,\n  w.stop_when_triggered,\n  j.next_run_at,\n  j.claimed_until,\n  j.last_run_at,\n  j.updated_at AS job_updated_at\nFROM availability_watch w\nLEFT JOIN availability_job j ON j.watch_id = w.id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE ('${watch_id:csv}' = '' OR w.id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' = '' OR j.id::text IN (${job_id:sqlstring}))\nORDER BY\n  j.next_run_at ASC NULLS LAST,\n  w.created_at DESC,\n  w.id DESC;",
+          "rawSql": "SELECT\n  w.id AS watch_id,\n  w.status AS watch_status,\n  j.id AS job_id,\n  j.status AS job_status,\n  CASE\n    WHEN w.poi_id IS NOT NULL THEN 'poi'\n    ELSE 'reservable'\n  END AS scope,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.reservable_filters,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec AS watch_cadence_sec,\n  w.trigger_kinds,\n  w.trigger_config,\n  w.stop_when_triggered,\n  j.next_run_at,\n  j.claimed_until,\n  j.last_run_at,\n  j.updated_at AS job_updated_at\nFROM availability_watch w\nLEFT JOIN availability_job j ON j.watch_id = w.id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE ('${watch_id:csv}' IN ('', '$__all') OR w.id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' IN ('', '$__all') OR j.id::text IN (${job_id:sqlstring}))\nORDER BY\n  j.next_run_at ASC NULLS LAST,\n  w.created_at DESC,\n  w.id DESC;",
           "refId": "A"
         }
       ],
@@ -368,7 +368,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  j.watch_id,\n  jr.job_id,\n  jr.id AS run_id,\n  jr.status AS run_status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE $__timeFilter(jr.started_at)\n  AND ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' = '' OR jr.id::text IN (${run_id:sqlstring}))\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
+          "rawSql": "SELECT\n  j.watch_id,\n  jr.job_id,\n  jr.id AS run_id,\n  jr.status AS run_status,\n  jr.snapshot_count,\n  jr.duration_ms,\n  jr.error,\n  jr.started_at,\n  jr.completed_at,\n  w.poi_id,\n  p.name AS poi_name,\n  w.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid\nFROM availability_job_run jr\nJOIN availability_job j ON j.id = jr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN pois p ON p.id = w.poi_id\nLEFT JOIN reservables r ON r.id = w.reservable_id\nWHERE $__timeFilter(jr.started_at)\n  AND ('${watch_id:csv}' IN ('', '$__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' IN ('', '$__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' IN ('', '$__all') OR jr.id::text IN (${run_id:sqlstring}))\nORDER BY jr.started_at DESC, jr.id DESC\nLIMIT 200;",
           "refId": "A"
         }
       ],
@@ -480,7 +480,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  j.watch_id,\n  jr.job_id,\n  s.run_id,\n  jr.status AS run_status,\n  s.id AS snapshot_id,\n  s.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.poi_id,\n  p.name AS poi_name,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.observed_at\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\nLEFT JOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables r ON r.id = s.reservable_id\nLEFT JOIN pois p ON p.id = w.poi_id\nWHERE $__timeFilter(s.observed_at)\n  AND ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' = '' OR s.run_id::text IN (${run_id:sqlstring}))\nORDER BY s.observed_at DESC, s.id DESC\nLIMIT 300;",
+          "rawSql": "SELECT\n  j.watch_id,\n  jr.job_id,\n  s.run_id,\n  jr.status AS run_status,\n  s.id AS snapshot_id,\n  s.reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  w.poi_id,\n  p.name AS poi_name,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.observed_at\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\nLEFT JOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables r ON r.id = s.reservable_id\nLEFT JOIN pois p ON p.id = w.poi_id\nWHERE $__timeFilter(s.observed_at)\n  AND ('${watch_id:csv}' IN ('', '$__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND ('${job_id:csv}' IN ('', '$__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND ('${run_id:csv}' IN ('', '$__all') OR s.run_id::text IN (${run_id:sqlstring}))\nORDER BY s.observed_at DESC, s.id DESC\nLIMIT 300;",
           "refId": "A"
         }
       ],
@@ -529,12 +529,12 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "definition": "SELECT id::text AS __text, id::text AS __value FROM availability_job WHERE '${watch_id:csv}' = '' OR watch_id::text IN (${watch_id:sqlstring}) ORDER BY id DESC LIMIT 1000",
+        "definition": "SELECT id::text AS __text, id::text AS __value FROM availability_job WHERE '${watch_id:csv}' IN ('', '$__all') OR watch_id::text IN (${watch_id:sqlstring}) ORDER BY id DESC LIMIT 1000",
         "includeAll": true,
         "label": "job_id",
         "name": "job_id",
         "options": [],
-        "query": "SELECT id::text AS __text, id::text AS __value FROM availability_job WHERE '${watch_id:csv}' = '' OR watch_id::text IN (${watch_id:sqlstring}) ORDER BY id DESC LIMIT 1000",
+        "query": "SELECT id::text AS __text, id::text AS __value FROM availability_job WHERE '${watch_id:csv}' IN ('', '$__all') OR watch_id::text IN (${watch_id:sqlstring}) ORDER BY id DESC LIMIT 1000",
         "refresh": 1,
         "type": "query"
       },
@@ -551,12 +551,12 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "definition": "SELECT jr.id::text AS __text, jr.id::text AS __value FROM availability_job_run jr JOIN availability_job j ON j.id = jr.job_id WHERE ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring})) AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring})) ORDER BY jr.id DESC LIMIT 1000",
+        "definition": "SELECT jr.id::text AS __text, jr.id::text AS __value FROM availability_job_run jr JOIN availability_job j ON j.id = jr.job_id WHERE ('${watch_id:csv}' IN ('', '$__all') OR j.watch_id::text IN (${watch_id:sqlstring})) AND ('${job_id:csv}' IN ('', '$__all') OR jr.job_id::text IN (${job_id:sqlstring})) ORDER BY jr.id DESC LIMIT 1000",
         "includeAll": true,
         "label": "run_id",
         "name": "run_id",
         "options": [],
-        "query": "SELECT jr.id::text AS __text, jr.id::text AS __value FROM availability_job_run jr JOIN availability_job j ON j.id = jr.job_id WHERE ('${watch_id:csv}' = '' OR j.watch_id::text IN (${watch_id:sqlstring})) AND ('${job_id:csv}' = '' OR jr.job_id::text IN (${job_id:sqlstring})) ORDER BY jr.id DESC LIMIT 1000",
+        "query": "SELECT jr.id::text AS __text, jr.id::text AS __value FROM availability_job_run jr JOIN availability_job j ON j.id = jr.job_id WHERE ('${watch_id:csv}' IN ('', '$__all') OR j.watch_id::text IN (${watch_id:sqlstring})) AND ('${job_id:csv}' IN ('', '$__all') OR jr.job_id::text IN (${job_id:sqlstring})) ORDER BY jr.id DESC LIMIT 1000",
         "refresh": 1,
         "type": "query"
       }
