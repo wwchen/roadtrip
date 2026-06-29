@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "links": [],
+  "liveNow": false,
   "panels": [
     {
       "datasource": {
@@ -37,7 +37,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -96,7 +95,7 @@
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -153,7 +152,6 @@
               "viz": false
             }
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -167,8 +165,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 7,
@@ -244,6 +241,7 @@
         },
         "view": {
           "allLayers": true,
+          "dashboardVariable": false,
           "id": "fit",
           "lastOnly": false,
           "lat": 0,
@@ -254,7 +252,7 @@
           "zoom": 10
         }
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "dataset": "roadtrip",
@@ -305,7 +303,6 @@
               "url": "/d/poi-reservables/poi-with-reservables-details?var-poi_id=${__data.fields.poi_id}&var-poi_name=${__data.fields.name}"
             }
           ],
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -368,7 +365,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -412,7 +409,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -422,8 +418,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -449,7 +444,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "dataset": "roadtrip",
@@ -492,8 +487,7 @@
         "x": 0,
         "y": 17
       },
-      "id": 4,
-      "panels": [],
+      "id": 21,
       "title": "Relationships",
       "type": "row"
     },
@@ -516,7 +510,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -563,7 +556,7 @@
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -605,8 +598,7 @@
         "x": 0,
         "y": 28
       },
-      "id": 7,
-      "panels": [],
+      "id": 22,
       "title": "Availability History",
       "type": "row"
     },
@@ -622,12 +614,12 @@
             "cellOptions": {
               "type": "auto"
             },
+            "filterable": true,
             "footer": {
               "reducers": []
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -679,7 +671,7 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 130
+                "value": 155
               },
               {
                 "id": "custom.cellOptions",
@@ -778,10 +770,16 @@
       "id": 16,
       "options": {
         "cellHeight": "sm",
+        "enablePagination": true,
         "showHeader": true,
-        "sortBy": []
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "available"
+          }
+        ]
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -791,7 +789,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.observed_at,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.run_id,\n  jr.status AS run_status,\n  jsonb_pretty(s.day_payload) AS day_payload\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n  AND $__timeFilter(s.observed_at)\nORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC\nLIMIT 500;",
+          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.observed_at,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.run_id,\n  jr.status AS run_status,\n  jsonb_pretty(s.day_payload) AS day_payload\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n  AND $__timeFilter(s.observed_at)\nORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -837,7 +835,6 @@
             "lineWidth": 0,
             "spanNulls": false
           },
-          "fieldMinMax": false,
           "mappings": [
             {
               "options": {
@@ -870,8 +867,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 10,
@@ -882,8 +878,13 @@
       "id": 17,
       "options": {
         "alignValue": "left",
+        "annotations": {
+          "clustering": -1,
+          "multiLane": false
+        },
         "legend": {
           "displayMode": "list",
+          "overflow": "ellipsis",
           "placement": "bottom",
           "showLegend": true
         },
@@ -896,7 +897,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -961,7 +962,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1002,7 +1002,7 @@
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1026,8 +1026,7 @@
         "x": 0,
         "y": 61
       },
-      "id": 9,
-      "panels": [],
+      "id": 23,
       "title": "Availability Watches",
       "type": "row"
     },
@@ -1048,7 +1047,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1101,7 +1099,7 @@
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1125,8 +1123,7 @@
         "x": 0,
         "y": 71
       },
-      "id": 11,
-      "panels": [],
+      "id": 24,
       "title": "Recency",
       "type": "row"
     },
@@ -1140,7 +1137,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1151,8 +1147,7 @@
             ]
           },
           "unit": "dateTimeAsIso"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1178,7 +1173,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1204,7 +1199,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1215,8 +1209,7 @@
             ]
           },
           "unit": "dateTimeAsIso"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1242,7 +1235,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1268,7 +1261,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1279,8 +1271,7 @@
             ]
           },
           "unit": "dateTimeAsIso"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
@@ -1306,7 +1297,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1339,7 +1330,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1380,7 +1370,7 @@
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1400,10 +1390,10 @@
   "preload": false,
   "refresh": "",
   "schemaVersion": 42,
-  "tags": [],
   "templating": {
     "list": [
       {
+        "allowCustomValue": true,
         "current": {
           "text": "116385",
           "value": "116385"
@@ -1412,23 +1402,34 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "hide": 0,
+        "includeAll": false,
         "label": "ID",
+        "multi": false,
         "name": "reservable_id",
         "options": [],
         "query": "SELECT id::text AS __text, id::text AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY id ASC LIMIT 1000",
         "refresh": 1,
+        "regex": "",
         "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
         "type": "query"
       },
       {
+        "allowCustomValue": true,
         "current": {
           "text": "false",
           "value": "false"
         },
+        "hide": 0,
+        "includeAll": false,
         "label": "Include deleted siblings",
+        "multi": false,
         "name": "include_deleted_siblings",
         "options": [],
         "query": "false,true",
+        "skipUrlSync": false,
         "type": "custom",
         "valuesFormat": "csv"
       }
@@ -1439,11 +1440,22 @@
     "to": "now"
   },
   "timepicker": {
-    "hidden": true
+    "hidden": true,
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ]
   },
   "timezone": "browser",
   "title": "✔︎ Reservable / Detail",
   "uid": "reservable-detail",
-  "version": 1,
-  "weekStart": ""
+  "version": 1
 }
