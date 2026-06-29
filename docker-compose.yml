@@ -120,7 +120,7 @@ services:
 
   grafana:
     profiles: [pois]
-    image: grafana/grafana:13.1.0
+    image: grafana/grafana:12.4.4
     restart: unless-stopped
     hostname: grafana
     environment:

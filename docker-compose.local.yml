@@ -18,6 +18,7 @@ services:
     restart: "no"
     environment:
       GF_SERVER_ROOT_URL: "http://localhost:3000/dash/"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Editor
       GRAFANA_DASHBOARD_ALLOW_UI_UPDATES: "true"
     ports:
       - "127.0.0.1:3000:3000"
