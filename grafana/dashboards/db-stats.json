@@ -9,10 +9,24 @@
   "liveNow": false,
   "panels": [
     {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "panels": [],
+      "title": "Summary",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
+      "description": "Cluster-wide totals after applying deleted_at filters where relevant.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -29,13 +43,26 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "db_size"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
+        "h": 5,
+        "w": 24,
         "x": 0,
-        "y": 0
+        "y": 1
       },
       "id": 1,
       "options": {
@@ -51,7 +78,7 @@
           "values": false
         },
         "showPercentChange": false,
-        "textMode": "auto",
+        "textMode": "value_and_name",
         "wideLayout": true
       },
       "pluginVersion": "12.4.4",
@@ -63,59 +90,131 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT regexp_replace(version(), 'PostgreSQL ([^ ]+) .*', '\\1') AS version;",
+          "rawSql": "SELECT\n  regexp_replace(version(), 'PostgreSQL ([^ ]+) .*', '\\1') AS pg_version,\n  pg_database_size(current_database())                  AS db_size,\n  (SELECT count(*) FROM pois        WHERE deleted_at IS NULL) AS active_pois,\n  (SELECT count(*) FROM reservables WHERE deleted_at IS NULL) AS active_reservables,\n  (SELECT count(*) FROM availability_snapshot)               AS availability_snapshots,\n  (SELECT count(*) FROM availability_watch WHERE status = 'active') AS active_watches;",
           "refId": "A"
         }
       ],
-      "title": "PostgreSQL Version",
+      "title": "Cluster summary",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 6
+      },
+      "id": 101,
+      "panels": [],
+      "title": "Storage",
+      "type": "row"
     },
     {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
+      "description": "User tables only. data + indexes + toast. bloat_pct = dead tuples / live tuples.",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "data_bytes"
+            },
+            "properties": [
               {
-                "color": "green",
-                "value": null
+                "id": "unit",
+                "value": "bytes"
               }
             ]
           },
-          "unit": "bytes"
-        },
-        "overrides": []
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "index_bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "total_bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "bloat_pct"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 10
+                    },
+                    {
+                      "color": "red",
+                      "value": 25
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 6,
-        "y": 0
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 7
       },
       "id": 2,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "total_bytes"
+          }
+        ]
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -126,58 +225,45 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT pg_database_size(current_database()) AS size;",
+          "rawSql": "SELECT\n  c.relname                            AS table_name,\n  pg_relation_size(c.oid)              AS data_bytes,\n  pg_indexes_size(c.oid)               AS index_bytes,\n  pg_total_relation_size(c.oid)        AS total_bytes,\n  s.n_live_tup                         AS live_rows,\n  s.n_dead_tup                         AS dead_rows,\n  CASE WHEN s.n_live_tup > 0\n       THEN round(100.0 * s.n_dead_tup / s.n_live_tup, 1)\n       ELSE 0\n  END                                  AS bloat_pct\nFROM pg_class c\nJOIN pg_namespace n ON n.oid = c.relnamespace\nLEFT JOIN pg_stat_user_tables s ON s.relid = c.oid\nWHERE c.relkind = 'r'\n  AND n.nspname = 'public'\nORDER BY pg_total_relation_size(c.oid) DESC;",
           "refId": "A"
         }
       ],
-      "title": "Database Size",
-      "type": "stat"
+      "title": "Table storage",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 19
+      },
+      "id": 102,
+      "panels": [],
+      "title": "Activity / Hotspots",
+      "type": "row"
     },
     {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
+      "description": "Tables where seq scans dominate index scans (potential missing index). Filters to tables > 1k live rows.",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
+        "defaults": {},
         "overrides": []
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 12,
-        "y": 0
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 20
       },
       "id": 3,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "showHeader": true
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -188,58 +274,51 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT count(*) AS active_pois FROM pois WHERE deleted_at IS NULL;",
+          "rawSql": "SELECT\n  relname                              AS table_name,\n  n_live_tup                           AS live_rows,\n  seq_scan,\n  idx_scan,\n  round(seq_scan::numeric / NULLIF(idx_scan + seq_scan, 0), 3) AS seq_scan_share,\n  seq_tup_read                         AS seq_tuples_read\nFROM pg_stat_user_tables\nWHERE n_live_tup > 1000\n  AND seq_scan > 10 * idx_scan\nORDER BY seq_scan DESC;",
           "refId": "A"
         }
       ],
-      "title": "Active POIs",
-      "type": "stat"
+      "title": "Missing-index suspects (seq scans dominate)",
+      "type": "table"
     },
     {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
+      "description": "Indexes that have never been scanned and waste > 1MB. Candidates for removal.",
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "index_bytes"
+            },
+            "properties": [
               {
-                "color": "green",
-                "value": null
+                "id": "unit",
+                "value": "bytes"
               }
             ]
           }
-        },
-        "overrides": []
+        ]
       },
       "gridPos": {
-        "h": 4,
-        "w": 6,
-        "x": 18,
-        "y": 0
+        "h": 10,
+        "w": 12,
+        "x": 12,
+        "y": 20
       },
       "id": 4,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "index_bytes"
+          }
+        ]
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -250,18 +329,153 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT count(*) AS active_reservables FROM reservables WHERE deleted_at IS NULL;",
+          "rawSql": "SELECT\n  s.relname                            AS table_name,\n  s.indexrelname                       AS index_name,\n  pg_relation_size(s.indexrelid)       AS index_bytes,\n  i.indisunique                        AS is_unique,\n  i.indisprimary                       AS is_primary\nFROM pg_stat_user_indexes s\nJOIN pg_index i ON i.indexrelid = s.indexrelid\nWHERE s.idx_scan = 0\n  AND pg_relation_size(s.indexrelid) > 1024 * 1024\n  AND NOT i.indisunique\n  AND NOT i.indisprimary\nORDER BY pg_relation_size(s.indexrelid) DESC;",
           "refId": "A"
         }
       ],
-      "title": "Active Reservables",
-      "type": "stat"
+      "title": "Unused indexes (idx_scan = 0, > 1MB)",
+      "type": "table"
     },
     {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
+      "description": "Age since last vacuum or autovacuum. Red > 7 days, yellow > 1 day.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vacuum_age_sec"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 86400
+                    },
+                    {
+                      "color": "red",
+                      "value": 604800
+                    }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "analyze_age_sec"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "gradient",
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 86400
+                    },
+                    {
+                      "color": "red",
+                      "value": 604800
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 5,
+      "options": {
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "vacuum_age_sec"
+          }
+        ]
+      },
+      "pluginVersion": "12.4.4",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  relname                                    AS table_name,\n  n_live_tup                                 AS live_rows,\n  n_dead_tup                                 AS dead_rows,\n  EXTRACT(EPOCH FROM now() - GREATEST(last_vacuum, last_autovacuum))   AS vacuum_age_sec,\n  EXTRACT(EPOCH FROM now() - GREATEST(last_analyze, last_autoanalyze)) AS analyze_age_sec,\n  GREATEST(last_vacuum, last_autovacuum)     AS last_vacuum,\n  GREATEST(last_analyze, last_autoanalyze)   AS last_analyze\nFROM pg_stat_user_tables\nWHERE n_live_tup > 0\nORDER BY GREATEST(last_vacuum, last_autovacuum) ASC NULLS FIRST;",
+          "refId": "A"
+        }
+      ],
+      "title": "Vacuum / analyze freshness",
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 42
+      },
+      "id": 103,
+      "panels": [],
+      "title": "Reference",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "description": "Hardcoded list — keep in sync with new core tables.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -270,11 +484,17 @@
         "h": 12,
         "w": 8,
         "x": 0,
-        "y": 4
+        "y": 43
       },
-      "id": 5,
+      "id": 6,
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "exact_rows"
+          }
+        ]
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -285,11 +505,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT *\nFROM (\n  VALUES\n    ('pois', (SELECT count(*)::bigint FROM pois)),\n    ('active_pois', (SELECT count(*)::bigint FROM pois WHERE deleted_at IS NULL)),\n    ('reservables', (SELECT count(*)::bigint FROM reservables)),\n    ('active_reservables', (SELECT count(*)::bigint FROM reservables WHERE deleted_at IS NULL)),\n    ('reservable_pois', (SELECT count(*)::bigint FROM reservable_pois)),\n    ('availability_snapshot', (SELECT count(*)::bigint FROM availability_snapshot)),\n    ('availability_watch', (SELECT count(*)::bigint FROM availability_watch)),\n    ('availability_job', (SELECT count(*)::bigint FROM availability_job)),\n    ('availability_job_run', (SELECT count(*)::bigint FROM availability_job_run)),\n    ('ingest_runs', (SELECT count(*)::bigint FROM ingest_runs)),\n    ('import_runs', (SELECT count(*)::bigint FROM import_runs)),\n    ('api_cache_metadata', (SELECT count(*)::bigint FROM grafana_api_cache_metadata))\n) AS counts(table_name, exact_rows)\nORDER BY exact_rows DESC;",
+          "rawSql": "SELECT *\nFROM (\n  VALUES\n    ('pois',                  (SELECT count(*)::bigint FROM pois)),\n    ('active_pois',           (SELECT count(*)::bigint FROM pois WHERE deleted_at IS NULL)),\n    ('reservables',           (SELECT count(*)::bigint FROM reservables)),\n    ('active_reservables',    (SELECT count(*)::bigint FROM reservables WHERE deleted_at IS NULL)),\n    ('reservable_pois',       (SELECT count(*)::bigint FROM reservable_pois)),\n    ('availability_snapshot', (SELECT count(*)::bigint FROM availability_snapshot)),\n    ('availability_watch',    (SELECT count(*)::bigint FROM availability_watch)),\n    ('availability_job',      (SELECT count(*)::bigint FROM availability_job)),\n    ('availability_job_run',  (SELECT count(*)::bigint FROM availability_job_run)),\n    ('ingest_runs',           (SELECT count(*)::bigint FROM ingest_runs)),\n    ('import_runs',           (SELECT count(*)::bigint FROM import_runs)),\n    ('api_cache_metadata',    (SELECT count(*)::bigint FROM grafana_api_cache_metadata))\n) AS counts(table_name, exact_rows)\nORDER BY exact_rows DESC;",
           "refId": "A"
         }
       ],
-      "title": "Exact Core Row Counts",
+      "title": "Exact core row counts",
       "type": "table"
     },
     {
@@ -299,48 +519,26 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latest_update_age"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "s"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 12,
         "w": 8,
         "x": 8,
-        "y": 4
-      },
-      "id": 6,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  relname AS table_name,\n  pg_relation_size(relid) AS data_bytes,\n  pg_indexes_size(relid) AS index_bytes,\n  pg_total_relation_size(relid) AS total_bytes,\n  pg_size_pretty(pg_total_relation_size(relid)) AS total_size\nFROM pg_catalog.pg_statio_user_tables\nORDER BY pg_total_relation_size(relid) DESC;",
-          "refId": "A"
-        }
-      ],
-      "title": "Table Storage",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 8,
-        "x": 16,
-        "y": 4
+        "y": 43
       },
       "id": 7,
       "options": {
@@ -355,11 +553,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  relname AS table_name,\n  n_live_tup,\n  n_dead_tup,\n  seq_scan,\n  idx_scan,\n  last_vacuum,\n  last_autovacuum,\n  last_analyze,\n  last_autoanalyze\nFROM pg_stat_user_tables\nORDER BY n_live_tup DESC;",
+          "rawSql": "SELECT 'pois'                  AS table_name, max(updated_at)::timestamptz   AS latest_at, EXTRACT(EPOCH FROM now() - max(updated_at))   AS latest_update_age FROM pois\nUNION ALL\nSELECT 'reservables',                       max(updated_at),                              EXTRACT(EPOCH FROM now() - max(updated_at))   FROM reservables\nUNION ALL\nSELECT 'availability_snapshot',             max(observed_at),                             EXTRACT(EPOCH FROM now() - max(observed_at))  FROM availability_snapshot\nUNION ALL\nSELECT 'ingest_runs',                       max(completed_at),                            EXTRACT(EPOCH FROM now() - max(completed_at)) FROM ingest_runs\nUNION ALL\nSELECT 'import_runs',                       max(completed_at),                            EXTRACT(EPOCH FROM now() - max(completed_at)) FROM import_runs\nORDER BY latest_update_age DESC NULLS LAST;",
           "refId": "A"
         }
       ],
-      "title": "Table Estimates And Activity",
+      "title": "Catalog freshness",
       "type": "table"
     },
     {
@@ -369,17 +567,36 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "payload_bytes"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "bytes"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 12,
-        "w": 12,
-        "x": 0,
-        "y": 16
+        "w": 8,
+        "x": 16,
+        "y": 43
       },
       "id": 8,
       "options": {
-        "showHeader": true
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "rows"
+          }
+        ]
       },
       "pluginVersion": "12.4.4",
       "targets": [
@@ -390,11 +607,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  relname AS table_name,\n  indexrelname AS index_name,\n  idx_scan AS index_scans,\n  idx_tup_read AS tuples_read,\n  idx_tup_fetch AS tuples_fetched,\n  pg_relation_size(indexrelid) AS index_bytes\nFROM pg_stat_all_indexes\nWHERE schemaname NOT LIKE 'pg_%'\n  AND indexrelname IS NOT NULL\nORDER BY idx_scan DESC, index_bytes DESC\nLIMIT 300;",
+          "rawSql": "SELECT\n  namespace,\n  count(*)                                        AS rows,\n  count(*) FILTER (WHERE expires_at <= now())     AS expired_rows,\n  sum(payload_bytes)::bigint                      AS payload_bytes,\n  min(created_at)                                 AS oldest_created_at,\n  max(created_at)                                 AS newest_created_at\nFROM grafana_api_cache_metadata\nGROUP BY namespace\nORDER BY rows DESC;",
           "refId": "A"
         }
       ],
-      "title": "Index Usage",
+      "title": "API cache by namespace",
       "type": "table"
     },
     {
@@ -407,47 +624,12 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
-        "w": 12,
-        "x": 12,
-        "y": 16
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 55
       },
       "id": 9,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  'pois' AS table_name,\n  max(updated_at) AS latest_updated_at,\n  max(fetched_at) AS latest_fetched_at,\n  now() - max(updated_at) AS latest_update_age\nFROM pois\nUNION ALL\nSELECT\n  'reservables' AS table_name,\n  max(updated_at) AS latest_updated_at,\n  NULL::timestamptz AS latest_fetched_at,\n  now() - max(updated_at) AS latest_update_age\nFROM reservables\nUNION ALL\nSELECT\n  'availability_snapshot' AS table_name,\n  max(observed_at) AS latest_updated_at,\n  NULL::timestamptz AS latest_fetched_at,\n  now() - max(observed_at) AS latest_update_age\nFROM availability_snapshot\nUNION ALL\nSELECT\n  'ingest_runs' AS table_name,\n  max(completed_at) AS latest_updated_at,\n  NULL::timestamptz AS latest_fetched_at,\n  now() - max(completed_at) AS latest_update_age\nFROM ingest_runs\nUNION ALL\nSELECT\n  'import_runs' AS table_name,\n  max(completed_at) AS latest_updated_at,\n  NULL::timestamptz AS latest_fetched_at,\n  now() - max(completed_at) AS latest_update_age\nFROM import_runs\nORDER BY latest_update_age DESC NULLS LAST;",
-          "refId": "A"
-        }
-      ],
-      "title": "Catalog Freshness",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 0,
-        "y": 28
-      },
-      "id": 10,
       "options": {
         "showHeader": true
       },
@@ -464,42 +646,7 @@
           "refId": "A"
         }
       ],
-      "title": "Installed Extensions",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 12,
-        "x": 12,
-        "y": 28
-      },
-      "id": 11,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  namespace,\n  count(*) AS rows,\n  count(*) FILTER (WHERE expires_at <= now()) AS expired_rows,\n  pg_size_pretty(sum(payload_bytes)::bigint) AS payload_size,\n  min(created_at) AS oldest_created_at,\n  max(created_at) AS newest_created_at\nFROM grafana_api_cache_metadata\nGROUP BY namespace\nORDER BY rows DESC;",
-          "refId": "A"
-        }
-      ],
-      "title": "Cache Metadata Summary",
+      "title": "Installed extensions",
       "type": "table"
     }
   ],
@@ -517,7 +664,9 @@
     "from": "now-30d",
     "to": "now"
   },
-  "timepicker": {},
+  "timepicker": {
+    "hidden": true
+  },
   "timezone": "browser",
   "title": "DB Stats",
   "uid": "roadtrip-db-stats",
