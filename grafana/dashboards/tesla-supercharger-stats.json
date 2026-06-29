@@ -198,7 +198,7 @@
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
-      "description": "Marker size = number of priced superchargers in region. Marker color = average kWh price (green = cheaper, red = more expensive).",
+      "description": "One marker per supercharger. Color = site avg kWh price (green = cheaper, red = more expensive).",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -210,30 +210,6 @@
             "matcher": {
               "id": "byName",
               "options": "avg_price_per_kwh"
-            },
-            "properties": [
-              {
-                "id": "decimals",
-                "value": 3
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "min_price_per_kwh"
-            },
-            "properties": [
-              {
-                "id": "decimals",
-                "value": 3
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "max_price_per_kwh"
             },
             "properties": [
               {
@@ -275,10 +251,9 @@
                 },
                 "opacity": 0.85,
                 "size": {
-                  "field": "priced_superchargers",
-                  "fixed": 9,
-                  "max": 24,
-                  "min": 4
+                  "fixed": 6,
+                  "max": 18,
+                  "min": 2
                 }
               }
             },
@@ -287,7 +262,7 @@
               "longitude": "lng",
               "mode": "coords"
             },
-            "name": "Average TSLA kWh price by region",
+            "name": "TSLA kWh price (per supercharger)",
             "tooltip": true,
             "type": "markers"
           }
@@ -312,11 +287,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH filtered AS (\n  SELECT\n    p.*,\n    (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS has_detail,\n    (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0) AS has_pricebooks,\n    p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility\n  FROM pois p\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n    AND (${region:sqlstring} IN ('', '__all') OR p.region IN (${region:sqlstring}))\n    AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n), scoped AS (\n  SELECT *\n  FROM filtered\n  WHERE ${detail_state:sqlstring} = 'all'\n     OR (${detail_state:sqlstring} = 'with_detail' AND has_detail)\n     OR (${detail_state:sqlstring} = 'missing_detail' AND NOT has_detail)\n     OR (${detail_state:sqlstring} = 'with_pricebooks' AND has_pricebooks)\n     OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT has_pricebooks)\n), pricebook_rows AS (\n  SELECT\n    p.id,\n    coalesce(nullif(p.country::text, ''), '(unknown)') AS country,\n    coalesce(nullif(p.region, ''), '(unknown)') AS region,\n    NULLIF(pricebook->>'currencyCode', '') AS currency,\n    NULLIF(pricebook->>'rateBase', '')::numeric AS rate_base,\n    ST_X(ST_Centroid(p.geom)) AS lng,\n    ST_Y(ST_Centroid(p.geom)) AS lat\n  FROM scoped p\n  CROSS JOIN LATERAL jsonb_array_elements(\n    CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n  ) AS e(pricebook)\n  WHERE pricebook->>'feeType' = 'CHARGING'\n    AND pricebook->>'uom' = 'kwh'\n    AND pricebook->>'vehicleMakeType' = 'TSLA'\n    AND NULLIF(pricebook->>'currencyCode', '') IS NOT NULL\n    AND NULLIF(pricebook->>'rateBase', '') IS NOT NULL\n), site_prices AS (\n  SELECT\n    id,\n    country,\n    region,\n    currency,\n    avg(rate_base) AS site_avg_price_per_kwh,\n    min(rate_base) AS site_min_price_per_kwh,\n    max(rate_base) AS site_max_price_per_kwh,\n    max(lng) AS lng,\n    max(lat) AS lat\n  FROM pricebook_rows\n  GROUP BY id, country, region, currency\n)\nSELECT\n  country,\n  region,\n  currency,\n  round(avg(site_avg_price_per_kwh), 3) AS avg_price_per_kwh,\n  count(*) AS priced_superchargers,\n  round(min(site_min_price_per_kwh), 3) AS min_price_per_kwh,\n  round(max(site_max_price_per_kwh), 3) AS max_price_per_kwh,\n  avg(lng) AS lng,\n  avg(lat) AS lat\nFROM site_prices\nGROUP BY country, region, currency\nORDER BY avg_price_per_kwh DESC, priced_superchargers DESC, country ASC, region ASC;",
+          "rawSql": "SELECT\n  p.id,\n  p.name,\n  p.country,\n  p.region,\n  e.pricebook->>'currencyCode' AS currency,\n  round(avg(NULLIF(e.pricebook->>'rateBase', '')::numeric), 3) AS avg_price_per_kwh,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat\nFROM pois p\nCROSS JOIN LATERAL jsonb_array_elements(\n  CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n) AS e(pricebook)\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND e.pricebook->>'feeType' = 'CHARGING'\n  AND e.pricebook->>'uom' = 'kwh'\n  AND e.pricebook->>'vehicleMakeType' = 'TSLA'\n  AND NULLIF(e.pricebook->>'rateBase', '') IS NOT NULL\n  AND (${country:sqlstring} IN ('', '__all') OR p.country::text IN (${country:sqlstring}))\n  AND (${region:sqlstring} IN ('', '__all') OR p.region IN (${region:sqlstring}))\n  AND (${accessibility:sqlstring} IN ('', '__all') OR p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' IN (${accessibility:sqlstring}))\n  AND (\n    ${detail_state:sqlstring} = 'all'\n    OR (${detail_state:sqlstring} = 'with_detail'        AND p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb)\n    OR (${detail_state:sqlstring} = 'missing_detail'     AND NOT (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb))\n    OR (${detail_state:sqlstring} = 'with_pricebooks'    AND jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0)\n    OR (${detail_state:sqlstring} = 'missing_pricebooks' AND NOT (jsonb_typeof(p.properties->'pricebooks') = 'array' AND jsonb_array_length(p.properties->'pricebooks') > 0))\n  )\nGROUP BY p.id, p.country, p.region, currency\nORDER BY avg_price_per_kwh DESC;",
           "refId": "A"
         }
       ],
-      "title": "Average Charging Price By Region",
+      "title": "Charging price per supercharger",
       "type": "geomap"
     },
     {
