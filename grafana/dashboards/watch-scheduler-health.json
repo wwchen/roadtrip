@@ -426,7 +426,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Watch / Job / Run health",
+  "title": "✔︎ Availability Watch drill down",
   "uid": "roadtrip-watch-scheduler-health",
   "version": 1
 }
