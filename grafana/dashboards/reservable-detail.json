@@ -85,7 +85,7 @@
         ]
       },
       "gridPos": {
-        "h": 17,
+        "h": 18,
         "w": 15,
         "x": 0,
         "y": 0
@@ -128,6 +128,22 @@
       ],
       "title": "Reservable properties",
       "transformations": [
+        {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "destinationType": "string",
+                "targetField": "created_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "updated_at"
+              }
+            ],
+            "fields": {}
+          }
+        },
         {
           "id": "transpose",
           "options": {}
@@ -223,7 +239,7 @@
                   "mode": "field"
                 },
                 "textConfig": {
-                  "fontSize": 12,
+                  "fontSize": 20,
                   "offsetX": 0,
                   "offsetY": 20,
                   "textAlign": "center",
@@ -300,46 +316,19 @@
           "links": [
             {
               "title": "Details",
-              "url": "/d/poi-reservables/poi-with-reservables-details?var-poi_id=${__data.fields.poi_id}&var-poi_name=${__data.fields.name}"
+              "url": "/d/poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
             }
           ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": 0
               }
             ]
           }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "poi_id"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Open POI Detail",
-                    "url": "/d/poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "poi_id"
-            },
-            "properties": []
-          }
-        ]
+        }
       },
       "gridPos": {
         "h": 4,
@@ -350,18 +339,19 @@
       "id": 19,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "/^name$/",
-          "values": false
+          "fields": "/.*/",
+          "values": true
         },
         "showPercentChange": false,
+        "text": {},
         "textMode": "auto",
         "wideLayout": true
       },
@@ -375,7 +365,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n),\nparent_poi AS (\n  SELECT p.*\n  FROM selected r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  JOIN pois p ON p.id = rp.poi_id\n  ORDER BY rp.created_at ASC, p.id ASC\n  LIMIT 1\n)\nSELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.subcategory,\n  p.agency,\n  p.source,\n  p.source_id,\n  p.region,\n  p.country,\n  ST_Y(ST_PointOnSurface(p.geom)) AS latitude,\n  ST_X(ST_PointOnSurface(p.geom)) AS longitude,\n  p.unit_name,\n  p.phone,\n  coalesce(jsonb_pretty(p.address), '') AS address,\n  p.info_url,\n  p.fetched_at,\n  p.updated_at\nFROM parent_poi p;",
+          "rawSql": "SELECT\n  r.loop || ' / ' || r.name as loop_name\nFROM\n  reservables r\nwhere\n  r.id = $reservable_id",
           "refId": "A",
           "sql": {
             "columns": [
@@ -396,8 +386,20 @@
           }
         }
       ],
-      "title": "Parent POI",
+      "title": "Loop Name",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 21,
+      "title": "Relationships",
+      "type": "row"
     },
     {
       "datasource": {
@@ -406,8 +408,16 @@
       },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
           },
           "thresholds": {
             "mode": "absolute",
@@ -415,34 +425,31 @@
               {
                 "color": "green",
                 "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
               }
             ]
           }
         }
       },
       "gridPos": {
-        "h": 4,
-        "w": 5,
-        "x": 15,
-        "y": 11
+        "h": 7,
+        "w": 9,
+        "x": 0,
+        "y": 19
       },
       "id": 18,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "sibling_count"
+          }
+        ]
       },
       "pluginVersion": "13.1.0",
       "targets": [
@@ -455,7 +462,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  count(DISTINCT sib.reservable_id) :: int AS sibling_count\nFROM\n  reservable_pois rp\n  JOIN reservable_pois sib ON sib.poi_id = rp.poi_id\n  JOIN reservables r ON r.id = sib.reservable_id\nWHERE\n  rp.reservable_id = NULLIF(${reservable_id:sqlstring}, '') :: bigint\n  AND sib.reservable_id <> rp.reservable_id\n  AND (\n    ${include_deleted_siblings}\n    OR r.deleted_at IS NULL\n  );",
+          "rawSql": "  SELECT\n    coalesce(r.loop, '(no loop)') AS loop,\n    count(*)::int                  AS sibling_count\n  FROM reservable_pois rp\n  JOIN reservable_pois sib ON sib.poi_id = rp.poi_id\n  JOIN reservables r       ON r.id = sib.reservable_id\n  WHERE rp.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n    AND sib.reservable_id <> rp.reservable_id\n    AND (${include_deleted_siblings} OR r.deleted_at IS NULL)\n  GROUP BY r.loop\n  ORDER BY r.loop NULLS LAST;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -476,20 +483,8 @@
           }
         }
       ],
-      "title": "Sibling reservables",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 17
-      },
-      "id": 21,
-      "title": "Relationships",
-      "type": "row"
+      "title": "Sibling reservables by loop",
+      "type": "table"
     },
     {
       "datasource": {
@@ -549,7 +544,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 26
       },
       "id": 6,
       "options": {
@@ -596,7 +591,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 36
       },
       "id": 22,
       "title": "Availability History",
@@ -765,7 +760,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 37
       },
       "id": 16,
       "options": {
@@ -873,7 +868,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 47
       },
       "id": 17,
       "options": {
@@ -995,7 +990,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 57
       },
       "id": 8,
       "options": {
@@ -1024,7 +1019,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 69
       },
       "id": 23,
       "title": "Availability Watches",
@@ -1092,7 +1087,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 70
       },
       "id": 10,
       "options": {
@@ -1121,7 +1116,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 79
       },
       "id": 24,
       "title": "Recency",
@@ -1153,7 +1148,7 @@
         "h": 4,
         "w": 8,
         "x": 0,
-        "y": 72
+        "y": 80
       },
       "id": 12,
       "options": {
@@ -1215,7 +1210,7 @@
         "h": 4,
         "w": 8,
         "x": 8,
-        "y": 72
+        "y": 80
       },
       "id": 13,
       "options": {
@@ -1277,7 +1272,7 @@
         "h": 4,
         "w": 8,
         "x": 16,
-        "y": 72
+        "y": 80
       },
       "id": 14,
       "options": {
@@ -1363,7 +1358,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 84
       },
       "id": 15,
       "options": {
