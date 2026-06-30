@@ -409,7 +409,7 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
-            "align": "auto",
+            "align": "left",
             "cellOptions": {
               "type": "auto"
             },
@@ -432,11 +432,26 @@
               }
             ]
           }
-        }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "loop",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 106
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 7,
-        "w": 9,
+        "w": 5,
         "x": 0,
         "y": 19
       },
@@ -462,7 +477,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "  SELECT\n    coalesce(r.loop, '(no loop)') AS loop,\n    count(*)::int                  AS sibling_count\n  FROM reservable_pois rp\n  JOIN reservable_pois sib ON sib.poi_id = rp.poi_id\n  JOIN reservables r       ON r.id = sib.reservable_id\n  WHERE rp.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n    AND sib.reservable_id <> rp.reservable_id\n    AND (${include_deleted_siblings} OR r.deleted_at IS NULL)\n  GROUP BY r.loop\n  ORDER BY r.loop NULLS LAST;",
+          "rawSql": "  SELECT\n    coalesce(r.loop, '(no loop)') AS loop,\n    count(*)::int                  AS count\n  FROM reservable_pois rp\n  JOIN reservable_pois sib ON sib.poi_id = rp.poi_id\n  JOIN reservables r       ON r.id = sib.reservable_id\n  WHERE rp.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n    AND sib.reservable_id <> rp.reservable_id\n    AND (${include_deleted_siblings} OR r.deleted_at IS NULL)\n  GROUP BY r.loop\n  ORDER BY r.loop NULLS LAST;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -498,6 +513,7 @@
             "cellOptions": {
               "type": "auto"
             },
+            "filterable": true,
             "footer": {
               "reducers": [
                 "countAll"
@@ -535,6 +551,49 @@
                     "url": "/d/reservable-detail/reservable-detail?var-reservable_id=${__data.fields.id}"
                   }
                 ]
+              },
+              {
+                "id": "custom.width",
+                "value": 88
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 63
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vendor",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vendor_id",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
               }
             ]
           }
@@ -542,9 +601,9 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 26
+        "w": 19,
+        "x": 5,
+        "y": 19
       },
       "id": 6,
       "options": {
@@ -591,7 +650,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 29
       },
       "id": 22,
       "title": "Availability History",
@@ -760,7 +819,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 37
+        "y": 30
       },
       "id": 16,
       "options": {
@@ -868,7 +927,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 47
+        "y": 40
       },
       "id": 17,
       "options": {
@@ -990,7 +1049,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 57
+        "y": 50
       },
       "id": 8,
       "options": {
@@ -1004,10 +1063,28 @@
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
           "rawSql": "SELECT\n  s.target_date,\n  (array_agg(s.status::text ORDER BY s.observed_at DESC, s.id DESC))[1] AS latest_status,\n  (array_agg(s.available ORDER BY s.observed_at DESC, s.id DESC))[1] AS latest_available,\n  max(s.observed_at) AS last_observed_at,\n  count(*) AS observation_count,\n  max(s.observed_at) FILTER (WHERE s.status = 'available') AS last_available_observed_at,\n  max(s.observed_at) FILTER (WHERE s.available) AS last_available_flag_observed_at\nFROM availability_snapshot s\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\nGROUP BY s.target_date\nORDER BY s.target_date ASC;",
-          "refId": "A"
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Availability target-date audit",
@@ -1019,7 +1096,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 69
+        "y": 62
       },
       "id": 23,
       "title": "Availability Watches",
@@ -1087,7 +1164,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 70
+        "y": 63
       },
       "id": 10,
       "options": {
@@ -1116,7 +1193,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 79
+        "y": 72
       },
       "id": 24,
       "title": "Recency",
@@ -1148,7 +1225,7 @@
         "h": 4,
         "w": 8,
         "x": 0,
-        "y": 80
+        "y": 73
       },
       "id": 12,
       "options": {
@@ -1210,7 +1287,7 @@
         "h": 4,
         "w": 8,
         "x": 8,
-        "y": 80
+        "y": 73
       },
       "id": 13,
       "options": {
@@ -1272,7 +1349,7 @@
         "h": 4,
         "w": 8,
         "x": 16,
-        "y": 80
+        "y": 73
       },
       "id": 14,
       "options": {
@@ -1358,7 +1435,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 84
+        "y": 77
       },
       "id": 15,
       "options": {
