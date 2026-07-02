@@ -694,6 +694,18 @@
           {
             "matcher": {
               "id": "byName",
+              "options": "reservable_id"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
               "options": "site"
             },
             "properties": [
@@ -710,6 +722,34 @@
               {
                 "id": "custom.width",
                 "value": 220
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Reservable / Detail",
+                    "url": "/d/reservable-detail/reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^\\d{2}-\\d{2}"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Reservable / Detail",
+                    "url": "/d/reservable-detail/reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
+                  }
+                ]
               }
             ]
           }
@@ -743,7 +783,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.id AS reservable_id,\n         coalesce(r.loop || ' / ', '') || coalesce(r.name, r.vendor_id) AS label\n  FROM reservables r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n),\nlatest_per_day AS (\n  SELECT DISTINCT ON (s.reservable_id, s.target_date)\n         s.reservable_id,\n         s.target_date,\n         s.status::text AS observed_status\n  FROM availability_snapshot s\n  JOIN scoped sc ON sc.reservable_id = s.reservable_id\n  WHERE s.target_date >= current_date\n    AND s.target_date <  current_date + interval '30 days'\n  ORDER BY s.reservable_id, s.target_date, s.observed_at DESC, s.id DESC\n)\nSELECT\n  sc.label                            AS site,\n  to_char(l.target_date, 'MM-DD Dy')  AS day,\n  l.observed_status                   AS status\nFROM latest_per_day l\nJOIN scoped sc ON sc.reservable_id = l.reservable_id\nORDER BY sc.label, l.target_date;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.id AS reservable_id,\n         coalesce(r.loop || ' / ', '') || coalesce(r.name, r.vendor_id) AS label\n  FROM reservables r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n),\nlatest_per_day AS (\n  SELECT DISTINCT ON (s.reservable_id, s.target_date)\n         s.reservable_id,\n         s.target_date,\n         s.status::text AS observed_status\n  FROM availability_snapshot s\n  JOIN scoped sc ON sc.reservable_id = s.reservable_id\n  WHERE s.target_date >= current_date\n    AND s.target_date <  current_date + interval '30 days'\n  ORDER BY s.reservable_id, s.target_date, s.observed_at DESC, s.id DESC\n)\nSELECT\n  format('[%s] %s', sc.reservable_id, sc.label) AS site,\n  to_char(l.target_date, 'MM-DD Dy')             AS day,\n  l.observed_status                              AS status\nFROM latest_per_day l\nJOIN scoped sc ON sc.reservable_id = l.reservable_id\nORDER BY sc.label, l.target_date;",
           "refId": "A"
         }
       ],
@@ -755,6 +795,28 @@
             "columnField": "day",
             "rowField": "site",
             "valueField": "status"
+          }
+        },
+        {
+          "id": "extractFields",
+          "options": {
+            "format": "regex",
+            "keepSourceField": false,
+            "regex": "^\\[(?<reservable_id>\\d+)\\] (?<site>.+)$",
+            "source": "site\\day"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "indexByName": {
+              "reservable_id": 0,
+              "site": 1
+            },
+            "renameByName": {
+              "site": "site / day"
+            }
           }
         }
       ],
