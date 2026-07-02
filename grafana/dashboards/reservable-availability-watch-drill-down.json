@@ -530,6 +530,146 @@
         "x": 0,
         "y": 36
       },
+      "id": 10,
+      "options": {
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "\n  WITH watch_poi AS (\n    SELECT w.id AS watch_id, w.poi_id\n    FROM availability_watch w\n    WHERE w.poi_id IS NOT NULL\n    UNION\n    SELECT w.id AS watch_id, rp.poi_id\n    FROM availability_watch w\n    JOIN reservable_pois rp ON rp.reservable_id = w.reservable_id\n    WHERE w.reservable_id IS NOT NULL\n  )\n  SELECT\n    p.id AS poi_id,\n    p.name AS poi_name,\n    max(jr.started_at) AS last_refreshed_at,\n    count(DISTINCT s.reservable_id) AS total_reservable,\n    count(DISTINCT jr.id) AS job_runs,\n    count(DISTINCT j.id) AS jobs,\n    count(DISTINCT wp.watch_id) AS watches\n  FROM watch_poi wp\n  JOIN pois p ON p.id = wp.poi_id\n  JOIN availability_job j ON j.watch_id = wp.watch_id\n  LEFT JOIN availability_job_run jr\n    ON jr.job_id = j.id\n   AND $__timeFilter(jr.started_at)\n  LEFT JOIN availability_snapshot s ON s.run_id = jr.id\n  WHERE (${watch_id:sqlstring} IN ('', '__all') OR wp.watch_id::text IN (${watch_id:sqlstring}))\n    AND (${job_id:sqlstring} IN ('', '__all') OR j.id::text IN (${job_id:sqlstring}))\n    AND (${run_id:sqlstring} IN ('', '__all') OR jr.id::text IN (${run_id:sqlstring}))\n  GROUP BY p.id, p.name\n  ORDER BY last_refreshed_at DESC NULLS LAST, p.name;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Recent Campground Refreshes",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "watch_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this watch_id",
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this job_id",
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "run_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this run_id",
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=${__data.fields.run_id}"
+                  },
+                  {
+                    "targetBlank": false,
+                    "title": "Open Watch / Job Run Detail",
+                    "url": "/d/watch-job-run-detail/watch-job-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 46
+      },
       "id": 3,
       "options": {
         "cellHeight": "sm",
@@ -681,9 +821,9 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 56
       },
-      "id": 5,
+      "id": 9,
       "options": {
         "cellHeight": "sm",
         "enablePagination": true,
@@ -699,7 +839,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.*\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\n-- LEFT JOIN availability_watch w ON w.id = j.watch_id\n-- LEFT JOIN reservables r ON r.id = s.reservable_id\n-- LEFT JOIN pois p ON p.id = w.poi_id\nWHERE $__timeFilter(s.observed_at)\n  AND (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND (${run_id:sqlstring} IN ('', '__all') OR s.run_id::text IN (${run_id:sqlstring}))\nORDER BY s.observed_at DESC, s.id DESC;",
+          "rawSql": "SELECT\n  s.*\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nLEFT JOIN availability_job j ON j.id = jr.job_id\n-- LEFT JOIN availability_watch w ON w.id = j.watch_id\n-- LEFT JOIN reservables r ON r.id = s.reservable_id\n-- LEFT JOIN pois p ON p.id = w.poi_id\nWHERE $__timeFilter(s.observed_at)\n  AND (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\n  AND (${job_id:sqlstring} IN ('', '__all') OR jr.job_id::text IN (${job_id:sqlstring}))\n  AND (${run_id:sqlstring} IN ('', '__all') OR s.run_id::text IN (${run_id:sqlstring}))\nORDER BY s.observed_at DESC, s.id DESC\nlimit 5000;",
           "refId": "A",
           "sql": {
             "columns": [

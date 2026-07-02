@@ -18,7 +18,7 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "links": [],
+  "liveNow": false,
   "panels": [
     {
       "datasource": {
@@ -37,7 +37,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -86,7 +85,7 @@
         ]
       },
       "gridPos": {
-        "h": 17,
+        "h": 18,
         "w": 15,
         "x": 0,
         "y": 0
@@ -96,7 +95,7 @@
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -130,6 +129,22 @@
       "title": "Reservable properties",
       "transformations": [
         {
+          "id": "convertFieldType",
+          "options": {
+            "conversions": [
+              {
+                "destinationType": "string",
+                "targetField": "created_at"
+              },
+              {
+                "destinationType": "string",
+                "targetField": "updated_at"
+              }
+            ],
+            "fields": {}
+          }
+        },
+        {
           "id": "transpose",
           "options": {}
         }
@@ -153,7 +168,6 @@
               "viz": false
             }
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -167,8 +181,7 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 7,
@@ -226,7 +239,7 @@
                   "mode": "field"
                 },
                 "textConfig": {
-                  "fontSize": 12,
+                  "fontSize": 20,
                   "offsetX": 0,
                   "offsetY": 20,
                   "textAlign": "center",
@@ -244,6 +257,7 @@
         },
         "view": {
           "allLayers": true,
+          "dashboardVariable": false,
           "id": "fit",
           "lastOnly": false,
           "lat": 0,
@@ -254,7 +268,7 @@
           "zoom": 10
         }
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "dataset": "roadtrip",
@@ -302,47 +316,19 @@
           "links": [
             {
               "title": "Details",
-              "url": "/d/poi-reservables/poi-with-reservables-details?var-poi_id=${__data.fields.poi_id}&var-poi_name=${__data.fields.name}"
+              "url": "/d/poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
             }
           ],
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
+                "color": "text",
                 "value": 0
               }
             ]
           }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "poi_id"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Open POI Detail",
-                    "url": "/d/poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "poi_id"
-            },
-            "properties": []
-          }
-        ]
+        }
       },
       "gridPos": {
         "h": 4,
@@ -353,22 +339,23 @@
       "id": 19,
       "options": {
         "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
+        "graphMode": "none",
+        "justifyMode": "center",
         "orientation": "auto",
         "percentChangeColorMode": "standard",
         "reduceOptions": {
           "calcs": [
             "lastNotNull"
           ],
-          "fields": "/^name$/",
-          "values": false
+          "fields": "/.*/",
+          "values": true
         },
         "showPercentChange": false,
+        "text": {},
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -378,7 +365,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n),\nparent_poi AS (\n  SELECT p.*\n  FROM selected r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  JOIN pois p ON p.id = rp.poi_id\n  ORDER BY rp.created_at ASC, p.id ASC\n  LIMIT 1\n)\nSELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.subcategory,\n  p.agency,\n  p.source,\n  p.source_id,\n  p.region,\n  p.country,\n  ST_Y(ST_PointOnSurface(p.geom)) AS latitude,\n  ST_X(ST_PointOnSurface(p.geom)) AS longitude,\n  p.unit_name,\n  p.phone,\n  coalesce(jsonb_pretty(p.address), '') AS address,\n  p.info_url,\n  p.fetched_at,\n  p.updated_at\nFROM parent_poi p;",
+          "rawSql": "SELECT\n  r.loop || ' / ' || r.name as loop_name\nFROM\n  reservables r\nwhere\n  r.id = $reservable_id",
           "refId": "A",
           "sql": {
             "columns": [
@@ -399,8 +386,20 @@
           }
         }
       ],
-      "title": "Parent POI",
+      "title": "Loop Name",
       "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 21,
+      "title": "Relationships",
+      "type": "row"
     },
     {
       "datasource": {
@@ -409,47 +408,65 @@
       },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "thresholds"
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
                 "color": "green",
                 "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
               }
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "loop",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 106
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
-        "h": 4,
+        "h": 7,
         "w": 5,
-        "x": 15,
-        "y": 11
+        "x": 0,
+        "y": 19
       },
       "id": 18,
       "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "auto",
-        "wideLayout": true
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "sibling_count"
+          }
+        ]
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "dataset": "roadtrip",
@@ -460,7 +477,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  count(DISTINCT sib.reservable_id) :: int AS sibling_count\nFROM\n  reservable_pois rp\n  JOIN reservable_pois sib ON sib.poi_id = rp.poi_id\n  JOIN reservables r ON r.id = sib.reservable_id\nWHERE\n  rp.reservable_id = NULLIF(${reservable_id:sqlstring}, '') :: bigint\n  AND sib.reservable_id <> rp.reservable_id\n  AND (\n    ${include_deleted_siblings}\n    OR r.deleted_at IS NULL\n  );",
+          "rawSql": "  SELECT\n    coalesce(r.loop, '(no loop)') AS loop,\n    count(*)::int                  AS count\n  FROM reservable_pois rp\n  JOIN reservable_pois sib ON sib.poi_id = rp.poi_id\n  JOIN reservables r       ON r.id = sib.reservable_id\n  WHERE rp.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n    AND sib.reservable_id <> rp.reservable_id\n    AND (${include_deleted_siblings} OR r.deleted_at IS NULL)\n  GROUP BY r.loop\n  ORDER BY r.loop NULLS LAST;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -481,21 +498,8 @@
           }
         }
       ],
-      "title": "Sibling reservables",
-      "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 17
-      },
-      "id": 4,
-      "panels": [],
-      "title": "Relationships",
-      "type": "row"
+      "title": "Sibling reservables by loop",
+      "type": "table"
     },
     {
       "datasource": {
@@ -509,6 +513,7 @@
             "cellOptions": {
               "type": "auto"
             },
+            "filterable": true,
             "footer": {
               "reducers": [
                 "countAll"
@@ -516,7 +521,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -547,6 +551,49 @@
                     "url": "/d/reservable-detail/reservable-detail?var-reservable_id=${__data.fields.id}"
                   }
                 ]
+              },
+              {
+                "id": "custom.width",
+                "value": 88
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "type",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 63
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vendor",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vendor_id",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 100
               }
             ]
           }
@@ -554,16 +601,16 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 18
+        "w": 19,
+        "x": 5,
+        "y": 19
       },
       "id": 6,
       "options": {
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -603,10 +650,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 28
+        "y": 29
       },
-      "id": 7,
-      "panels": [],
+      "id": 22,
       "title": "Availability History",
       "type": "row"
     },
@@ -622,12 +668,12 @@
             "cellOptions": {
               "type": "auto"
             },
+            "filterable": true,
             "footer": {
               "reducers": []
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -679,7 +725,7 @@
             "properties": [
               {
                 "id": "custom.width",
-                "value": 130
+                "value": 155
               },
               {
                 "id": "custom.cellOptions",
@@ -773,15 +819,21 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 30
       },
       "id": 16,
       "options": {
         "cellHeight": "sm",
+        "enablePagination": true,
         "showHeader": true,
-        "sortBy": []
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "available"
+          }
+        ]
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -791,7 +843,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.observed_at,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.run_id,\n  jr.status AS run_status,\n  jsonb_pretty(s.day_payload) AS day_payload\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n  AND $__timeFilter(s.observed_at)\nORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC\nLIMIT 500;",
+          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.observed_at,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.run_id,\n  jr.status AS run_status,\n  jsonb_pretty(s.day_payload) AS day_payload\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n  AND $__timeFilter(s.observed_at)\nORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -837,7 +889,6 @@
             "lineWidth": 0,
             "spanNulls": false
           },
-          "fieldMinMax": false,
           "mappings": [
             {
               "options": {
@@ -870,20 +921,24 @@
               }
             ]
           }
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 40
       },
       "id": 17,
       "options": {
         "alignValue": "left",
+        "annotations": {
+          "clustering": -1,
+          "multiLane": false
+        },
         "legend": {
           "displayMode": "list",
+          "overflow": "ellipsis",
           "placement": "bottom",
           "showLegend": true
         },
@@ -896,7 +951,7 @@
           "sort": "none"
         }
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -961,7 +1016,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -995,24 +1049,42 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 50
       },
       "id": 8,
       "options": {
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
           "rawSql": "SELECT\n  s.target_date,\n  (array_agg(s.status::text ORDER BY s.observed_at DESC, s.id DESC))[1] AS latest_status,\n  (array_agg(s.available ORDER BY s.observed_at DESC, s.id DESC))[1] AS latest_available,\n  max(s.observed_at) AS last_observed_at,\n  count(*) AS observation_count,\n  max(s.observed_at) FILTER (WHERE s.status = 'available') AS last_available_observed_at,\n  max(s.observed_at) FILTER (WHERE s.available) AS last_available_flag_observed_at\nFROM availability_snapshot s\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\nGROUP BY s.target_date\nORDER BY s.target_date ASC;",
-          "refId": "A"
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
       "title": "Availability target-date audit",
@@ -1024,10 +1096,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 61
+        "y": 62
       },
-      "id": 9,
-      "panels": [],
+      "id": 23,
       "title": "Availability Watches",
       "type": "row"
     },
@@ -1048,7 +1119,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1094,14 +1164,14 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 63
       },
       "id": 10,
       "options": {
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1123,10 +1193,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 71
+        "y": 72
       },
-      "id": 11,
-      "panels": [],
+      "id": 24,
       "title": "Recency",
       "type": "row"
     },
@@ -1140,7 +1209,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1151,14 +1219,13 @@
             ]
           },
           "unit": "dateTimeAsIso"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
         "w": 8,
         "x": 0,
-        "y": 72
+        "y": 73
       },
       "id": 12,
       "options": {
@@ -1178,7 +1245,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1204,7 +1271,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1215,14 +1281,13 @@
             ]
           },
           "unit": "dateTimeAsIso"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
         "w": 8,
         "x": 8,
-        "y": 72
+        "y": 73
       },
       "id": 13,
       "options": {
@@ -1242,7 +1307,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1268,7 +1333,6 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1279,14 +1343,13 @@
             ]
           },
           "unit": "dateTimeAsIso"
-        },
-        "overrides": []
+        }
       },
       "gridPos": {
         "h": 4,
         "w": 8,
         "x": 16,
-        "y": 72
+        "y": 73
       },
       "id": 14,
       "options": {
@@ -1306,7 +1369,7 @@
         "textMode": "auto",
         "wideLayout": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1339,7 +1402,6 @@
             },
             "inspect": false
           },
-          "mappings": [],
           "thresholds": {
             "mode": "absolute",
             "steps": [
@@ -1373,14 +1435,14 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 77
       },
       "id": 15,
       "options": {
         "cellHeight": "sm",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
@@ -1400,10 +1462,10 @@
   "preload": false,
   "refresh": "",
   "schemaVersion": 42,
-  "tags": [],
   "templating": {
     "list": [
       {
+        "allowCustomValue": true,
         "current": {
           "text": "116385",
           "value": "116385"
@@ -1412,23 +1474,34 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "hide": 0,
+        "includeAll": false,
         "label": "ID",
+        "multi": false,
         "name": "reservable_id",
         "options": [],
         "query": "SELECT id::text AS __text, id::text AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY id ASC LIMIT 1000",
         "refresh": 1,
+        "regex": "",
         "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
         "type": "query"
       },
       {
+        "allowCustomValue": true,
         "current": {
           "text": "false",
           "value": "false"
         },
+        "hide": 0,
+        "includeAll": false,
         "label": "Include deleted siblings",
+        "multi": false,
         "name": "include_deleted_siblings",
         "options": [],
         "query": "false,true",
+        "skipUrlSync": false,
         "type": "custom",
         "valuesFormat": "csv"
       }
@@ -1439,11 +1512,22 @@
     "to": "now"
   },
   "timepicker": {
-    "hidden": true
+    "hidden": true,
+    "refresh_intervals": [
+      "5s",
+      "10s",
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "30m",
+      "1h",
+      "2h",
+      "1d"
+    ]
   },
   "timezone": "browser",
   "title": "✔︎ Reservable / Detail",
   "uid": "reservable-detail",
-  "version": 1,
-  "weekStart": ""
+  "version": 1
 }
