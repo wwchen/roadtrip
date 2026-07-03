@@ -5,16 +5,18 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
-import ca.floo.roadtrip.repo.AvailabilityJobRepo
-import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
+import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
-import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -26,7 +28,6 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.json.JsonObject
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
@@ -40,6 +41,7 @@ import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import java.time.Duration
 import java.time.Instant
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
@@ -84,8 +86,9 @@ class AvailabilityPollExecutorTest {
     fun cleanup() {
         ctx.execute("DELETE FROM availability_snapshot")
         ctx.execute("DELETE FROM availability_fetch_call")
-        ctx.execute("DELETE FROM availability_job_run")
-        ctx.execute("DELETE FROM availability_job")
+        ctx.execute("DELETE FROM availability_run")
+        ctx.execute("DELETE FROM availability_watch_poller")
+        ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
@@ -138,52 +141,85 @@ class AvailabilityPollExecutorTest {
         return reservableId
     }
 
-    private fun seedPoiJob(
+    /** Seeds an ACTIVE poi-scoped watch. Returns its id. */
+    private fun seedWatch(
         poiId: Long,
         startDate: String,
         endDate: String,
         cadenceSec: Int = 60,
-    ): Long {
-        val watchId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO availability_watch (
-                        poi_id, start_date, end_date, cadence_sec, trigger_kinds
-                    ) VALUES (
-                        ?, ?::date, ?::date, ?, ARRAY['atc']
-                    ) RETURNING id
-                    """.trimIndent(),
-                    poiId,
-                    startDate,
-                    endDate,
-                    cadenceSec,
-                )!!
-                .get("id", Long::class.java)
-        val intent: JsonObject =
-            AvailabilityJobIntent
-                .Poi(
-                    poiId = poiId,
-                    startDate = startDate,
-                    endDate = endDate,
-                ).toJsonObject()
-        return AvailabilityJobRepo(ctx)
-            .upsertForWatch(
-                watchId = watchId,
-                intentPayload = intent,
-                cadenceSec = cadenceSec,
-                status = WatchStatus.ACTIVE,
-                nextRunAt = now(),
-            ).id
+    ): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO availability_watch (
+                    poi_id, start_date, end_date, cadence_sec, trigger_kinds
+                ) VALUES (
+                    ?, ?::date, ?::date, ?, ARRAY['atc']
+                ) RETURNING id
+                """.trimIndent(),
+                poiId,
+                startDate,
+                endDate,
+                cadenceSec,
+            )!!
+            .get("id", Long::class.java)
+
+    private fun membershipFor(provider: ReservationProvider): AvailabilityPollerMembership {
+        val reservablesRepo = ReservableRepo(ctx)
+        val registry = ReservationProviderRegistry(mapOf("test" to provider))
+        val targets =
+            DbAvailabilityTargetResolver(
+                providerRefs = CampsiteProviderRepo(ctx),
+                reservablesRepo = reservablesRepo,
+                reservationProviders = registry,
+                dateResolver = AvailabilityDateResolver(),
+            )
+        return AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), targets)
     }
 
-    /** Fake provider that counts catalogAvailability invocations and returns one
-     *  observation per requested reservable/day. */
+    /** Links [watchId] onto its (provider, parentRef) poller via the production
+     *  membership path, then returns the single resulting poller. */
+    private fun linkWatch(
+        provider: ReservationProvider,
+        watchId: Long,
+    ): AvailabilityPollerRepo.Poller {
+        val watch = AvailabilityWatchRepo(ctx).findById(watchId)!!
+        val pollers = AvailabilityPollerRepo(ctx)
+        membershipFor(provider).sync(watch, pollers, tighterCadencePull = now())
+        val pollerId = pollers.pollerIdsForWatch(watchId).single()
+        return pollers.findById(pollerId)!!
+    }
+
+    private fun executorFor(provider: ReservationProvider): AvailabilityPollExecutor {
+        val reservablesRepo = ReservableRepo(ctx)
+        val registry = ReservationProviderRegistry(mapOf("test" to provider))
+        val dateResolver = AvailabilityDateResolver()
+        val targets =
+            DbAvailabilityTargetResolver(
+                providerRefs = CampsiteProviderRepo(ctx),
+                reservablesRepo = reservablesRepo,
+                reservationProviders = registry,
+                dateResolver = dateResolver,
+            )
+        return AvailabilityPollExecutor(
+            pollers = AvailabilityPollerRepo(ctx),
+            reservablesRepo = reservablesRepo,
+            batcher = CatalogAvailabilityBatcher(),
+            snapshots = AvailabilitySnapshotRepo(ctx),
+            runs = AvailabilityRunRepo(ctx),
+            dateResolver = dateResolver,
+            targets = targets,
+            fetchCalls = AvailabilityFetchCallRepo(ctx),
+        )
+    }
+
+    /** Fake provider that records each catalogAvailability call's window and
+     *  returns one observation per requested reservable/day. */
     private class CountingRecgovProvider : ReservationProvider {
         var calls: Int = 0
-
-        /** Captures the MDC `run_id` seen inside the upstream call, proving it
-         *  propagated across the coroutine dispatch from [AvailabilityPollExecutor]. */
+        var lastStart: LocalDate? = null
+        var lastEnd: LocalDate? = null
+        var lastReservableCount: Int = 0
         var mdcRunIdDuringCall: String? = null
 
         override val id: ReservationProviderId = ReservationProviderId.RECGOV
@@ -191,7 +227,7 @@ class AvailabilityPollExecutorTest {
             ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
-                bookingHorizonDays = 180,
+                bookingHorizonDays = 3650,
             )
 
         override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =
@@ -199,6 +235,9 @@ class AvailabilityPollExecutorTest {
 
         override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
             calls++
+            lastStart = req.startDate
+            lastEnd = req.endDate
+            lastReservableCount = req.reservables.size
             mdcRunIdDuringCall = MDC.get("run_id")
             val observedAt = Instant.now()
             val observations =
@@ -229,7 +268,7 @@ class AvailabilityPollExecutorTest {
             ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
-                bookingHorizonDays = 180,
+                bookingHorizonDays = 3650,
             )
 
         override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =
@@ -242,125 +281,144 @@ class AvailabilityPollExecutorTest {
             throw UnsupportedOperationException("not used")
     }
 
-    private fun executorFor(provider: ReservationProvider): AvailabilityPollExecutor {
-        val reservablesRepo = ReservableRepo(ctx)
-        val registry = ReservationProviderRegistry(mapOf("test" to provider))
-        val dateResolver = AvailabilityDateResolver()
-        val targets =
-            DbAvailabilityTargetResolver(
-                providerRefs = CampsiteProviderRepo(ctx),
-                reservablesRepo = reservablesRepo,
-                reservationProviders = registry,
-                dateResolver = dateResolver,
-            )
-        return AvailabilityPollExecutor(
-            reservablesRepo = reservablesRepo,
-            batcher = CatalogAvailabilityBatcher(),
-            snapshots = AvailabilitySnapshotRepo(ctx),
-            runs = AvailabilityJobRunRepo(ctx),
-            dateResolver = dateResolver,
-            targets = targets,
-            fetchCalls = AvailabilityFetchCallRepo(ctx),
-        )
-    }
+    // A window well in the future so both watches are fully live under the
+    // target-local clamp; provider bookingHorizonDays is set high enough to cover it.
+    private val farStart = LocalDate.now(ZoneOffset.UTC).plusYears(1)
 
     @Test
-    fun `poi over N same-campground sites makes one upstream call`() =
+    fun `two live watches on one poller makes one fetch over the union window`() =
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
             listOf("100", "101", "102").forEach { seedReservable(poiId, it) }
-            val jobId = seedPoiJob(poiId, "2026-07-17", "2026-07-31")
-            val job = AvailabilityJobRepo(ctx).findById(jobId)!!
+            // watchA: [+1y+5, +1y+7]; watchB: [+1y, +1y+2]. Union = [+1y, +1y+7].
+            val watchA = seedWatch(poiId, farStart.plusDays(5).toString(), farStart.plusDays(7).toString())
+            val watchB = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchA)
+            // watchB coalesces onto the same poller.
+            AvailabilityWatchRepo(ctx).findById(watchB)!!.let { w ->
+                membershipFor(provider).sync(w, AvailabilityPollerRepo(ctx), tighterCadencePull = now())
+            }
 
-            val executor = executorFor(provider)
-            executor.handle(job)
+            executorFor(provider).handle(poller)
 
+            // ONE upstream call covering the union window and all 3 sites once each.
             assertEquals(1, provider.calls)
+            assertEquals(farStart, provider.lastStart)
+            assertEquals(farStart.plusDays(7), provider.lastEnd)
 
-            val runs = AvailabilityJobRunRepo(ctx).listForJob(jobId, limit = 10)
+            val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
             assertEquals(1, runs.size)
             assertEquals("completed", runs[0].status)
-            assertTrue(runs[0].snapshotCount > 0)
-
-            val snapshots = AvailabilitySnapshotRepo(ctx).listForRun(runs[0].id, limit = 100)
-            assertTrue(snapshots.isNotEmpty())
-            assertTrue(snapshots.all { it.runId == runs[0].id })
 
             val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
             assertEquals(1, fetchCalls.size)
             assertEquals("ok", fetchCalls[0].outcome)
             assertEquals(3, fetchCalls[0].reservableCount)
             assertEquals("232447", fetchCalls[0].parentRef)
-
-            // The upstream client call happened with run_id in the MDC, so its log
-            // lines (e.g. "Poller: GET availability ...") are correlatable to this run.
-            assertEquals(runs[0].id.toString(), provider.mdcRunIdDuringCall)
-            assertNull(MDC.get("run_id"), "MDC should be cleared on this thread after handle() returns")
         }
 
     @Test
-    fun `rate limited group fails the run with the outcome string`() =
+    fun `cadence is the min over live watches`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchSlow = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 300)
+            val watchFast = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 30)
+            val poller = linkWatch(provider, watchSlow)
+            AvailabilityWatchRepo(ctx).findById(watchFast)!!.let { w ->
+                membershipFor(provider).sync(w, AvailabilityPollerRepo(ctx), tighterCadencePull = now())
+            }
+
+            val before = OffsetDateTime.now()
+            val result = executorFor(provider).handle(poller)
+
+            // min(300, 30) = 30s on success.
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertEquals(30L, delaySec)
+        }
+
+    @Test
+    fun `empty window retires the poller and does not fetch`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            // A watch whose window is entirely in the past.
+            val watchId = seedWatch(poiId, "2020-01-01", "2020-01-05")
+            // Link it directly (membership's liveness is based on ACTIVE + end>=today,
+            // and this end_date is in the past, so link manually to exercise the reaper).
+            val pollers = AvailabilityPollerRepo(ctx)
+            val pollerId =
+                pollers.upsertActive(provider = "recgov", parentRef = "232447", poiId = poiId, pullNextRunAt = now())
+            pollers.linkWatch(watchId, pollerId)
+            val poller = pollers.findById(pollerId)!!
+
+            executorFor(provider).handle(poller)
+
+            // No upstream call, no run row.
+            assertEquals(0, provider.calls)
+            assertEquals(0, AvailabilityRunRepo(ctx).listForPoller(pollerId, limit = 10).size)
+            // Poller retired: deactivated, links dropped, watch marked done.
+            assertEquals(false, pollers.findById(pollerId)!!.active)
+            assertTrue(pollers.watchIdsForPoller(pollerId).isEmpty())
+            val watchStatus =
+                ctx
+                    .fetchOne("SELECT status FROM availability_watch WHERE id = ?", watchId)!!
+                    .get("status", String::class.java)
+            assertEquals("done", watchStatus)
+        }
+
+    @Test
+    fun `failure backs off using derived cadence and consecutive failures`() =
         runBlocking {
             val provider = RateLimitedProvider()
             val poiId = seedPoi("232447")
             seedReservable(poiId, "100")
-            val jobId = seedPoiJob(poiId, "2026-07-17", "2026-07-31")
-            val job = AvailabilityJobRepo(ctx).findById(jobId)!!
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 120)
+            val poller = linkWatch(provider, watchId)
+            val runsRepo = AvailabilityRunRepo(ctx)
 
-            val executor = executorFor(provider)
-            executor.handle(job)
+            // Seed one prior failed run so this run's failure is the 2nd consecutive.
+            val priorRunId = runsRepo.start(poller.id, now().minusMinutes(5))
+            runsRepo.fail(priorRunId, error = "rate_limited", completedAt = now().minusMinutes(4), durationMs = 0)
 
-            val runs = AvailabilityJobRunRepo(ctx).listForJob(jobId, limit = 10)
-            assertEquals(1, runs.size)
+            val before = OffsetDateTime.now()
+            val result = executorFor(provider).handle(poller)
+
+            val runs = runsRepo.listForPoller(poller.id, limit = 10)
             assertEquals("failed", runs[0].status)
             assertEquals("rate_limited", runs[0].error)
 
-            val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
-            assertEquals(1, fetchCalls.size)
-            assertEquals("rate_limited", fetchCalls[0].outcome)
-            assertEquals(1, fetchCalls[0].reservableCount)
-            assertEquals("232447", fetchCalls[0].parentRef)
-        }
-
-    @Test
-    fun `rate limited run backs off beyond flat cadence`() =
-        runBlocking {
-            val provider = RateLimitedProvider()
-            val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
-            val jobId = seedPoiJob(poiId, "2026-07-17", "2026-07-31", cadenceSec = 120)
-            val job = AvailabilityJobRepo(ctx).findById(jobId)!!
-            val runsRepo = AvailabilityJobRunRepo(ctx)
-
-            // Seed one prior failed run so this run's failure is the 2nd consecutive.
-            val priorRunId = runsRepo.start(jobId, now().minusMinutes(5))
-            runsRepo.fail(priorRunId, error = "rate_limited", completedAt = now().minusMinutes(4), durationMs = 0)
-
-            val executor = executorFor(provider)
-            val before = OffsetDateTime.now()
-            val result = executor.handle(job)
-
-            // 2 consecutive failures -> 120 * 2^2 = 480s, well above the flat 120s cadence,
+            // 2 consecutive failures -> 120 * 2^2 = 480s, above the flat 120s cadence,
             // and comfortably under BACKOFF_CEILING_SEC (3600s).
             val delaySec = Duration.between(before, result.nextRunAt).seconds
             assertTrue(delaySec in 400..3_600L)
         }
 
     @Test
-    fun `successful run schedules at flat cadence`() =
+    fun `snapshot writing is unchanged (one row per observation)`() =
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
-            val jobId = seedPoiJob(poiId, "2026-07-17", "2026-07-31", cadenceSec = 120)
-            val job = AvailabilityJobRepo(ctx).findById(jobId)!!
+            listOf("100", "101").forEach { seedReservable(poiId, it) }
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
 
-            val executor = executorFor(provider)
-            val before = OffsetDateTime.now()
-            val result = executor.handle(job)
+            executorFor(provider).handle(poller)
 
-            val delaySec = Duration.between(before, result.nextRunAt).seconds
-            assertEquals(120L, delaySec)
+            val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
+            assertEquals("completed", runs[0].status)
+            assertTrue(runs[0].snapshotCount > 0)
+
+            val snapshots = AvailabilitySnapshotRepo(ctx).listForRun(runs[0].id, limit = 100)
+            // Provider returns one observation per reservable (2 sites) for the window start.
+            assertEquals(2, snapshots.size)
+            assertTrue(snapshots.all { it.runId == runs[0].id })
+
+            // MDC run_id propagated across the coroutine dispatch and cleared after.
+            assertEquals(runs[0].id.toString(), provider.mdcRunIdDuringCall)
+            assertNull(MDC.get("run_id"), "MDC should be cleared on this thread after handle() returns")
         }
 }

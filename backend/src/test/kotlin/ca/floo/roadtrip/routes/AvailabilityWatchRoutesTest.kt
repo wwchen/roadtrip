@@ -1,7 +1,13 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
-import ca.floo.roadtrip.service.availability.WatchStatus
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityWatchService
+import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import io.ktor.client.request.delete
@@ -32,7 +38,6 @@ import org.junit.jupiter.api.TestInstance
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
-import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -71,11 +76,50 @@ class AvailabilityWatchRoutesTest {
 
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability_job")
+        ctx.execute("DELETE FROM availability_watch_poller")
+        ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
         ctx.execute("DELETE FROM pois")
+    }
+
+    /**
+     * Builds the watch service the routes take. The target resolver is real
+     * but backed by an empty provider registry, so POIs without a resolvable
+     * reservation provider produce no poller links — which is fine for the
+     * CRUD assertions here (poller membership is exercised in the membership
+     * and executor tests).
+     */
+    private fun watchService(): AvailabilityWatchService {
+        val reservablesRepo = ReservableRepo(ctx)
+        val targets =
+            DbAvailabilityTargetResolver(
+                providerRefs = CampsiteProviderRepo(ctx),
+                reservablesRepo = reservablesRepo,
+                reservationProviders = ReservationProviderRegistry(emptyMap()),
+                dateResolver = AvailabilityDateResolver(),
+            )
+        return AvailabilityWatchService(ctx, reservablesRepo, targets)
+    }
+
+    /**
+     * Watch service whose registry maps the test POI source ('test') to a
+     * recgov adapter, so a POI with a `{"recgov_id": ...}` provider_ref
+     * resolves to a real (recgov, parentRef) poller. Used to exercise poller
+     * membership on watch mutation.
+     */
+    private fun watchServiceWithRecgov(): AvailabilityWatchService {
+        val reservablesRepo = ReservableRepo(ctx)
+        val registry = ReservationProviderRegistry(mapOf("test" to FakeRecgovProvider))
+        val targets =
+            DbAvailabilityTargetResolver(
+                providerRefs = CampsiteProviderRepo(ctx),
+                reservablesRepo = reservablesRepo,
+                reservationProviders = registry,
+                dateResolver = AvailabilityDateResolver(),
+            )
+        return AvailabilityWatchService(ctx, reservablesRepo, targets)
     }
 
     @Test
@@ -85,11 +129,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -127,11 +167,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -157,11 +193,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -197,11 +229,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -226,11 +254,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -258,11 +282,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -299,11 +319,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -360,11 +376,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -404,11 +416,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -435,21 +443,17 @@ class AvailabilityWatchRoutesTest {
         }
 
     @Test
-    fun `POST creates a job and PATCH paused parks it`() =
+    fun `POST links a poller and PATCH paused drops the link and deactivates it`() =
         testApplication {
             application {
                 routing {
-                    availabilityWatchRoutes(
-                        ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
-                    )
+                    availabilityWatchRoutes(ctx, watchServiceWithRecgov())
                 }
             }
-            val poiId = seedPoi(sourceId = "p99", name = "Atomic")
+            // POI with a resolvable recgov provider_ref + a child reservable so the
+            // watch resolves to exactly one (recgov, 232447) poller.
+            val poiId = seedPoi(sourceId = "p99", name = "Atomic", providerRefJson = """{"recgov_id": "232447"}""")
+            linkReservableToPoi(seedReservable(vendorId = "100"), poiId)
             val createBody =
                 """
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
@@ -466,13 +470,11 @@ class AvailabilityWatchRoutesTest {
                     .jsonObject["id"]!!
                     .jsonPrimitive.long
 
-            val jobs =
-                ca.floo.roadtrip.repo
-                    .AvailabilityJobRepo(ctx)
-            val job = jobs.findByWatchId(watchId)
-            assertNotNull(job)
-            assertEquals(60, job.cadenceSec)
-            assertEquals(WatchStatus.ACTIVE, job.status)
+            val pollers = AvailabilityPollerRepo(ctx)
+            // An active watch is linked to exactly one active poller.
+            val linked = pollers.pollerIdsForWatch(watchId)
+            assertEquals(1, linked.size)
+            assertTrue(pollers.findById(linked.single())!!.active)
 
             val paused =
                 client.patch("/api/availability/watches/$watchId") {
@@ -480,9 +482,10 @@ class AvailabilityWatchRoutesTest {
                     setBody("""{"status": "paused"}""")
                 }
             assertEquals(HttpStatusCode.OK, paused.status)
-            val pausedJob = jobs.findByWatchId(watchId)!!
-            assertEquals(WatchStatus.PAUSED, pausedJob.status)
-            assertTrue(pausedJob.nextRunAt.year >= 9990, "nextRunAt should be parked in far future, got ${pausedJob.nextRunAt}")
+
+            // Pausing drops the watch's poller links; the now-orphaned poller goes dormant.
+            assertTrue(pollers.pollerIdsForWatch(watchId).isEmpty())
+            assertEquals(false, pollers.findById(linked.single())!!.active)
         }
 
     private fun seedPoi(
@@ -569,11 +572,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -588,11 +587,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -643,11 +638,7 @@ class AvailabilityWatchRoutesTest {
                 routing {
                     availabilityWatchRoutes(
                         ctx,
-                        ca.floo.roadtrip.service.availability.AvailabilityWatchService(
-                            ctx,
-                            ca.floo.roadtrip.repo
-                                .ReservableRepo(ctx),
-                        ),
+                        watchService(),
                     )
                 }
             }
@@ -688,4 +679,31 @@ class AvailabilityWatchRoutesTest {
             assertEquals(true, ridsInResponse.contains("site:recgov:202"))
             assertEquals(false, ridsInResponse.contains("site:recgov:203"))
         }
+}
+
+/**
+ * Minimal recgov adapter for membership resolution in these route tests. It
+ * never fetches (the watch service only resolves targets, it does not poll),
+ * so the availability methods are unsupported.
+ */
+private object FakeRecgovProvider : ca.floo.roadtrip.service.reservation.ReservationProvider {
+    override val id = ca.floo.roadtrip.service.reservation.ReservationProviderId.RECGOV
+    override val capabilities =
+        ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities(
+            supportsAvailability = true,
+            supportsAlerts = true,
+            bookingHorizonDays = 180,
+        )
+
+    override suspend fun availability(
+        req: ca.floo.roadtrip.service.reservation.AvailabilityRequest,
+    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+
+    override suspend fun catalogAvailability(
+        req: ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest,
+    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+
+    override suspend fun reservableAvailability(
+        req: ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest,
+    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 }

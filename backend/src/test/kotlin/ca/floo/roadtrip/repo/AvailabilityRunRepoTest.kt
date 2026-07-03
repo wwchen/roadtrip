@@ -1,11 +1,7 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.service.availability.WatchStatus
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
@@ -25,7 +21,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class AvailabilityJobRunRepoTest {
+class AvailabilityRunRepoTest {
     private lateinit var pg: PostgreSQLContainer<Nothing>
     private lateinit var ds: HikariDataSource
     private lateinit var ctx: DSLContext
@@ -60,8 +56,9 @@ class AvailabilityJobRunRepoTest {
 
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability_job_run")
-        ctx.execute("DELETE FROM availability_job")
+        ctx.execute("DELETE FROM availability_run")
+        ctx.execute("DELETE FROM availability_watch_poller")
+        ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
@@ -84,46 +81,26 @@ class AvailabilityJobRunRepoTest {
             )!!
             .get("id", Long::class.java)
 
-    private fun seedJob(poiId: Long): Long {
-        val watchId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO availability_watch (
-                        poi_id, start_date, end_date, cadence_sec, trigger_kinds
-                    ) VALUES (
-                        ?, '2026-07-04'::date, '2026-07-05'::date, 60, ARRAY['atc']
-                    ) RETURNING id
-                    """.trimIndent(),
-                    poiId,
-                )!!
-                .get("id", Long::class.java)
-        val intent: JsonObject =
-            buildJsonObject {
-                put("kind", JsonPrimitive("reservable"))
-                put("reservable_id", JsonPrimitive(0))
-            }
-        return AvailabilityJobRepo(ctx)
-            .upsertForWatch(
-                watchId = watchId,
-                intentPayload = intent,
-                cadenceSec = 60,
-                status = WatchStatus.ACTIVE,
-                nextRunAt = now(),
-            ).id
-    }
+    /** Seeds a poller for (recgov, 232447) rooted at a fresh poi. Returns its id. */
+    private fun seedPoller(): Long =
+        AvailabilityPollerRepo(ctx).upsertActive(
+            provider = "recgov",
+            parentRef = "232447",
+            poiId = seedPoi(),
+            pullNextRunAt = null,
+        )
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
     @Test
     fun `start creates a row in 'started' state`() {
-        val jobId = seedJob(seedPoi())
-        val repo = AvailabilityJobRunRepo(ctx)
+        val pollerId = seedPoller()
+        val repo = AvailabilityRunRepo(ctx)
         val started = now()
-        val runId = repo.start(jobId, started)
+        val runId = repo.start(pollerId, started)
         val row = repo.findById(runId)
         assertNotNull(row)
-        assertEquals(jobId, row.jobId)
+        assertEquals(pollerId, row.pollerId)
         assertEquals("started", row.status)
         assertEquals(0, row.snapshotCount)
         assertNull(row.durationMs)
@@ -134,9 +111,9 @@ class AvailabilityJobRunRepoTest {
 
     @Test
     fun `complete updates a started row and returns true`() {
-        val jobId = seedJob(seedPoi())
-        val repo = AvailabilityJobRunRepo(ctx)
-        val runId = repo.start(jobId, now().minusSeconds(2))
+        val pollerId = seedPoller()
+        val repo = AvailabilityRunRepo(ctx)
+        val runId = repo.start(pollerId, now().minusSeconds(2))
         val ok = repo.complete(runId, snapshotCount = 7, completedAt = now(), durationMs = 1234)
         assertTrue(ok)
         val row = repo.findById(runId)!!
@@ -149,9 +126,9 @@ class AvailabilityJobRunRepoTest {
 
     @Test
     fun `complete is idempotent — second call returns false`() {
-        val jobId = seedJob(seedPoi())
-        val repo = AvailabilityJobRunRepo(ctx)
-        val runId = repo.start(jobId, now().minusSeconds(2))
+        val pollerId = seedPoller()
+        val repo = AvailabilityRunRepo(ctx)
+        val runId = repo.start(pollerId, now().minusSeconds(2))
         assertTrue(repo.complete(runId, snapshotCount = 1, completedAt = now(), durationMs = 100))
         // Second call: row is no longer 'started', so update returns 0 rows.
         assertFalse(repo.complete(runId, snapshotCount = 99, completedAt = now(), durationMs = 999))
@@ -163,9 +140,9 @@ class AvailabilityJobRunRepoTest {
 
     @Test
     fun `fail updates a started row with error and returns true`() {
-        val jobId = seedJob(seedPoi())
-        val repo = AvailabilityJobRunRepo(ctx)
-        val runId = repo.start(jobId, now().minusSeconds(2))
+        val pollerId = seedPoller()
+        val repo = AvailabilityRunRepo(ctx)
+        val runId = repo.start(pollerId, now().minusSeconds(2))
         val ok = repo.fail(runId, error = "upstream 503", completedAt = now(), durationMs = 5000)
         assertTrue(ok)
         val row = repo.findById(runId)!!
@@ -176,14 +153,14 @@ class AvailabilityJobRunRepoTest {
     }
 
     @Test
-    fun `listForJob returns runs newest-first`() {
-        val jobId = seedJob(seedPoi())
-        val repo = AvailabilityJobRunRepo(ctx)
-        val r1 = repo.start(jobId, now().minusMinutes(3))
+    fun `listForPoller returns runs newest-first`() {
+        val pollerId = seedPoller()
+        val repo = AvailabilityRunRepo(ctx)
+        val r1 = repo.start(pollerId, now().minusMinutes(3))
         repo.complete(r1, 1, now().minusMinutes(2), 100)
-        val r2 = repo.start(jobId, now().minusMinutes(1))
+        val r2 = repo.start(pollerId, now().minusMinutes(1))
         repo.complete(r2, 2, now(), 100)
-        val rows = repo.listForJob(jobId, limit = 10)
+        val rows = repo.listForPoller(pollerId, limit = 10)
         assertEquals(2, rows.size)
         assertEquals(r2, rows[0].id)
         assertEquals(r1, rows[1].id)
@@ -191,29 +168,29 @@ class AvailabilityJobRunRepoTest {
 
     @Test
     fun `countConsecutiveFailures counts leading failed runs`() {
-        val jobId = seedJob(seedPoi())
-        val repo = AvailabilityJobRunRepo(ctx)
+        val pollerId = seedPoller()
+        val repo = AvailabilityRunRepo(ctx)
         // oldest → newest: completed, failed, failed
-        repo.start(jobId, now().minusMinutes(3)).also { repo.complete(it, 1, now().minusMinutes(3), 10) }
-        repo.start(jobId, now().minusMinutes(2)).also { repo.fail(it, "rate_limited", now().minusMinutes(2), 10) }
-        repo.start(jobId, now().minusMinutes(1)).also { repo.fail(it, "rate_limited", now().minusMinutes(1), 10) }
-        assertEquals(2, repo.countConsecutiveFailures(jobId))
+        repo.start(pollerId, now().minusMinutes(3)).also { repo.complete(it, 1, now().minusMinutes(3), 10) }
+        repo.start(pollerId, now().minusMinutes(2)).also { repo.fail(it, "rate_limited", now().minusMinutes(2), 10) }
+        repo.start(pollerId, now().minusMinutes(1)).also { repo.fail(it, "rate_limited", now().minusMinutes(1), 10) }
+        assertEquals(2, repo.countConsecutiveFailures(pollerId))
     }
 
     @Test
     fun `countConsecutiveFailures is zero when newest run completed`() {
-        val jobId = seedJob(seedPoi())
-        val repo = AvailabilityJobRunRepo(ctx)
-        repo.start(jobId, now().minusMinutes(1)).also { repo.fail(it, "x", now().minusMinutes(1), 10) }
-        repo.start(jobId, now()).also { repo.complete(it, 1, now(), 10) }
-        assertEquals(0, repo.countConsecutiveFailures(jobId))
+        val pollerId = seedPoller()
+        val repo = AvailabilityRunRepo(ctx)
+        repo.start(pollerId, now().minusMinutes(1)).also { repo.fail(it, "x", now().minusMinutes(1), 10) }
+        repo.start(pollerId, now()).also { repo.complete(it, 1, now(), 10) }
+        assertEquals(0, repo.countConsecutiveFailures(pollerId))
     }
 
     @Test
     fun `countConsecutiveFailures is zero when there are no terminal runs`() {
-        val jobId = seedJob(seedPoi())
-        val repo = AvailabilityJobRunRepo(ctx)
-        repo.start(jobId, now())
-        assertEquals(0, repo.countConsecutiveFailures(jobId))
+        val pollerId = seedPoller()
+        val repo = AvailabilityRunRepo(ctx)
+        repo.start(pollerId, now())
+        assertEquals(0, repo.countConsecutiveFailures(pollerId))
     }
 }

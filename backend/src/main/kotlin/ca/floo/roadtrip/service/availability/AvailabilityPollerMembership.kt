@@ -48,7 +48,9 @@ internal class AvailabilityPollerMembership(
         // the first target seen for a key wins deterministically.
         val keyToPoi = LinkedHashMap<Pair<String, String>, Long>()
         for (target in resolved) {
-            val key = target.provider.id.name.lowercase() to parentRefKey(target.parentRef)
+            val key =
+                target.provider.id.name
+                    .lowercase() to parentRefKey(target.parentRef)
             keyToPoi.putIfAbsent(key, target.parentPoiId)
         }
 

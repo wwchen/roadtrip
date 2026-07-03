@@ -71,9 +71,9 @@ class AvailabilityPollerMembershipTest {
 
     @BeforeEach
     fun cleanup() {
+        ctx.execute("DELETE FROM availability_run")
         ctx.execute("DELETE FROM availability_watch_poller")
         ctx.execute("DELETE FROM availability_poller")
-        ctx.execute("DELETE FROM availability_job")
         ctx.execute("DELETE FROM availability_watch")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")

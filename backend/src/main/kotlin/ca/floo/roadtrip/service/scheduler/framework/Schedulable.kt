@@ -7,8 +7,8 @@ import java.time.OffsetDateTime
  * Contract a scheduled-work table must satisfy. Each row is a unit of
  * work the scheduler can claim, hand to a handler, and re-schedule.
  *
- * Implementations live in `repo/` (for example, [AvailabilityJobRepo]
- * fronts `availability_job`).
+ * Implementations live in `repo/` (for example,
+ * [ca.floo.roadtrip.repo.AvailabilityPollerRepo] fronts `availability_poller`).
  */
 interface SchedulableRepo<T> {
     /**

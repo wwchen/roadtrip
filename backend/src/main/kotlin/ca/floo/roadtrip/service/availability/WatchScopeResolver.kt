@@ -4,7 +4,6 @@ import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityJobIntent
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -12,14 +11,6 @@ import kotlinx.serialization.json.JsonPrimitive
 class WatchScopeResolver(
     private val reservablesRepo: ReservableRepo,
 ) {
-    fun resolve(intent: AvailabilityJobIntent): List<Reservable> =
-        when (intent) {
-            is AvailabilityJobIntent.Reservable ->
-                reservablesRepo.findById(intent.reservableId)?.let(::listOf) ?: emptyList()
-            is AvailabilityJobIntent.Poi ->
-                resolvePoi(intent.poiId, intent.reservableFilters)
-        }
-
     fun resolve(watch: AvailabilityWatchRepo.Watch): List<Reservable> {
         watch.reservableId?.let { id ->
             return reservablesRepo.findById(id)?.let(::listOf) ?: emptyList()

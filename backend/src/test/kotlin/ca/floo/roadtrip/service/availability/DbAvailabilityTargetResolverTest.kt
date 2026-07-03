@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
@@ -130,11 +129,9 @@ class DbAvailabilityTargetResolverTest {
 
         override suspend fun availability(req: AvailabilityRequest) = throw UnsupportedOperationException("not used")
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest) =
-            throw UnsupportedOperationException("not used")
+        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest) = throw UnsupportedOperationException("not used")
 
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest) =
-            throw UnsupportedOperationException("not used")
+        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest) = throw UnsupportedOperationException("not used")
     }
 
     private fun resolverFor(reservablesRepo: ReservableRepo): DbAvailabilityTargetResolver =

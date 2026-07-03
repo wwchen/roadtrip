@@ -1,11 +1,7 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.service.availability.WatchStatus
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.buildJsonObject
 import org.jooq.DSLContext
 import org.jooq.SQLDialect
 import org.jooq.exception.DataAccessException
@@ -60,8 +56,9 @@ class AvailabilityFetchCallRepoTest {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_fetch_call")
-        ctx.execute("DELETE FROM availability_job_run")
-        ctx.execute("DELETE FROM availability_job")
+        ctx.execute("DELETE FROM availability_run")
+        ctx.execute("DELETE FROM availability_watch_poller")
+        ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
@@ -84,41 +81,21 @@ class AvailabilityFetchCallRepoTest {
             )!!
             .get("id", Long::class.java)
 
-    private fun seedJob(poiId: Long): Long {
-        val watchId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO availability_watch (
-                        poi_id, start_date, end_date, cadence_sec, trigger_kinds
-                    ) VALUES (
-                        ?, '2026-07-04'::date, '2026-07-05'::date, 60, ARRAY['atc']
-                    ) RETURNING id
-                    """.trimIndent(),
-                    poiId,
-                )!!
-                .get("id", Long::class.java)
-        val intent: JsonObject =
-            buildJsonObject {
-                put("kind", JsonPrimitive("reservable"))
-                put("reservable_id", JsonPrimitive(0))
-            }
-        return AvailabilityJobRepo(ctx)
-            .upsertForWatch(
-                watchId = watchId,
-                intentPayload = intent,
-                cadenceSec = 60,
-                status = WatchStatus.ACTIVE,
-                nextRunAt = now(),
-            ).id
-    }
+    /** Seeds a poller for (recgov, 232447) rooted at [poiId]. Returns its id. */
+    private fun seedPoller(poiId: Long): Long =
+        AvailabilityPollerRepo(ctx).upsertActive(
+            provider = "recgov",
+            parentRef = "232447",
+            poiId = poiId,
+            pullNextRunAt = null,
+        )
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
     @Test
     fun `record inserts a fetch call row tied to the run`() {
-        val jobId = seedJob(seedPoi())
-        val runId = AvailabilityJobRunRepo(ctx).start(jobId, now())
+        val pollerId = seedPoller(seedPoi())
+        val runId = AvailabilityRunRepo(ctx).start(pollerId, now())
         val repo = AvailabilityFetchCallRepo(ctx)
         repo.record(
             AvailabilityFetchCallRepo.NewCall(
@@ -148,8 +125,8 @@ class AvailabilityFetchCallRepoTest {
 
     @Test
     fun `record rejects an invalid outcome value`() {
-        val jobId = seedJob(seedPoi())
-        val runId = AvailabilityJobRunRepo(ctx).start(jobId, now())
+        val pollerId = seedPoller(seedPoi())
+        val runId = AvailabilityRunRepo(ctx).start(pollerId, now())
         val repo = AvailabilityFetchCallRepo(ctx)
         assertFailsWith<DataAccessException> {
             repo.record(

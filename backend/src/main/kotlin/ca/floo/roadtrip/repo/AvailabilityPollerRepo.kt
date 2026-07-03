@@ -22,11 +22,14 @@ import java.util.UUID
  * rows can share one poller via `availability_watch_poller`; the
  * scheduler only ever claims/leases pollers.
  *
- * Claim/release/reclaim mirror [AvailabilityJobRepo] verbatim (same
- * `FOR UPDATE SKIP LOCKED` two-step claim), swapped onto the
- * `active` boolean gate instead of a `status` enum column — pollers
- * don't have a paused state, only active/dormant.
+ * Claim/release/reclaim use the same `FOR UPDATE SKIP LOCKED` two-step
+ * claim as the scheduler framework expects, swapped onto the `active`
+ * boolean gate instead of a `status` enum column — pollers don't have a
+ * paused state, only active/dormant.
  */
+private const val DEFAULT_LIST_LIMIT = 100
+private const val MAX_LIST_LIMIT = 500
+
 class AvailabilityPollerRepo(
     private val ctx: DSLContext,
 ) : SchedulableRepo<AvailabilityPollerRepo.Poller> {
@@ -97,6 +100,100 @@ class AvailabilityPollerRepo(
             .where(AVAILABILITY_POLLER.ID.eq(id))
             .fetchOne()
             ?.let(::fromRecord)
+
+    /** A poller plus its current attached-watch count, for the dashboard list. */
+    data class PollerListItem(
+        val poller: Poller,
+        val attachedWatches: Int,
+    )
+
+    /**
+     * Filtered list of pollers newest-first by created_at, each carrying its
+     * attached-watch count (a correlated COUNT over `availability_watch_poller`).
+     * Used by the /availability dashboard's Pollers tab. [active] filters to
+     * active (true) or dormant (false) pollers; null returns both.
+     */
+    fun list(
+        active: Boolean? = null,
+        limit: Int = DEFAULT_LIST_LIMIT,
+        offset: Int = 0,
+    ): List<PollerListItem> {
+        val effectiveLimit = limit.coerceIn(1, MAX_LIST_LIMIT)
+        val attachedWatches =
+            DSL
+                .selectCount()
+                .from(AVAILABILITY_WATCH_POLLER)
+                .where(AVAILABILITY_WATCH_POLLER.POLLER_ID.eq(AVAILABILITY_POLLER.ID))
+                .asField<Int>("attached_watches")
+        return ctx
+            .select(AVAILABILITY_POLLER.asterisk(), attachedWatches)
+            .from(AVAILABILITY_POLLER)
+            .where(if (active == null) DSL.noCondition() else AVAILABILITY_POLLER.ACTIVE.eq(active))
+            .orderBy(AVAILABILITY_POLLER.CREATED_AT.desc(), AVAILABILITY_POLLER.ID.desc())
+            .limit(effectiveLimit)
+            .offset(offset.coerceAtLeast(0))
+            .fetch { PollerListItem(fromRecord(it), it.get(attachedWatches)) }
+    }
+
+    fun count(active: Boolean? = null): Int =
+        ctx
+            .selectCount()
+            .from(AVAILABILITY_POLLER)
+            .where(if (active == null) DSL.noCondition() else AVAILABILITY_POLLER.ACTIVE.eq(active))
+            .fetchOne(0, Int::class.java) ?: 0
+
+    /**
+     * Header counters for the dashboard. `active`/`dormant` split on the
+     * `active` flag; `dueNow` = active && next_run_at <= now && not currently
+     * leased; `claimed` = a live lease (claimed_until in the future). One DB
+     * round-trip via conditional aggregates.
+     */
+    data class Summary(
+        val active: Int,
+        val dormant: Int,
+        val dueNow: Int,
+        val claimed: Int,
+    )
+
+    fun summary(now: OffsetDateTime): Summary {
+        val record =
+            ctx
+                .select(
+                    DSL.count(DSL.case_().`when`(AVAILABILITY_POLLER.ACTIVE.isTrue, 1)).`as`("active"),
+                    DSL.count(DSL.case_().`when`(AVAILABILITY_POLLER.ACTIVE.isFalse, 1)).`as`("dormant"),
+                    DSL
+                        .count(
+                            DSL
+                                .case_()
+                                .`when`(
+                                    AVAILABILITY_POLLER.ACTIVE.isTrue
+                                        .and(AVAILABILITY_POLLER.NEXT_RUN_AT.le(now))
+                                        .and(
+                                            AVAILABILITY_POLLER.CLAIMED_UNTIL.isNull
+                                                .or(AVAILABILITY_POLLER.CLAIMED_UNTIL.lt(now)),
+                                        ),
+                                    1,
+                                ),
+                        ).`as`("due_now"),
+                    DSL
+                        .count(
+                            DSL
+                                .case_()
+                                .`when`(
+                                    AVAILABILITY_POLLER.CLAIMED_UNTIL.isNotNull
+                                        .and(AVAILABILITY_POLLER.CLAIMED_UNTIL.ge(now)),
+                                    1,
+                                ),
+                        ).`as`("claimed"),
+                ).from(AVAILABILITY_POLLER)
+                .fetchOne()!!
+        return Summary(
+            active = record.get("active", Int::class.java),
+            dormant = record.get("dormant", Int::class.java),
+            dueNow = record.get("due_now", Int::class.java),
+            claimed = record.get("claimed", Int::class.java),
+        )
+    }
 
     /** All poller ids currently linked to [watchId]. */
     fun pollerIdsForWatch(watchId: Long): List<Long> =

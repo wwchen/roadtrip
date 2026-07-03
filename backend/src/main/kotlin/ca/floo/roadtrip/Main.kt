@@ -11,8 +11,8 @@ import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
-import ca.floo.roadtrip.repo.AvailabilityJobRepo
-import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
@@ -31,12 +31,14 @@ import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityQueryServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
@@ -45,6 +47,7 @@ import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
+import ca.floo.roadtrip.service.scheduler.PollerBackfill
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import io.github.smiley4.ktorswaggerui.SwaggerUI
@@ -228,26 +231,33 @@ fun Application.module() {
             dateResolver = availabilityDateResolver,
             reservationProviders = reservationProviderRegistry,
         )
-    val availabilityWatchService = AvailabilityWatchService(ctx, reservablesRepo)
+    val availabilityWatchService = AvailabilityWatchService(ctx, reservablesRepo, availabilityTargets)
 
-    // Availability poller. One Scheduler<AvailabilityJob> ticks every few
-    // seconds, claims due jobs, calls AvailabilityPollExecutor, and writes
-    // snapshot rows. Cancelled on app shutdown so tests don't leak threads.
+    // Availability poller. One Scheduler<Poller> ticks every few seconds,
+    // claims due pollers, calls AvailabilityPollExecutor (which derives the
+    // window/cadence from each poller's live watches), and writes snapshot
+    // rows. Cancelled on app shutdown so tests don't leak threads.
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    val availabilityJobs = AvailabilityJobRepo(ctx)
+    val availabilityPollers = AvailabilityPollerRepo(ctx)
+    val pollerMembership = AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), availabilityTargets)
+    // Boot backfill: link any active watch left without poller membership by
+    // the V28 cutover. Idempotent — a no-op once everything is linked. Runs
+    // after Flyway (migrate(ds), above) and before the scheduler starts.
+    PollerBackfill(ctx, pollerMembership).run()
     val pollExecutor =
         AvailabilityPollExecutor(
+            pollers = availabilityPollers,
             reservablesRepo = reservablesRepo,
             batcher = CatalogAvailabilityBatcher(),
             snapshots = availabilitySnapshots,
-            runs = AvailabilityJobRunRepo(ctx),
+            runs = AvailabilityRunRepo(ctx),
             dateResolver = availabilityDateResolver,
             targets = availabilityTargets,
             fetchCalls = AvailabilityFetchCallRepo(ctx),
         )
     val availabilityScheduler =
         Scheduler(
-            repo = availabilityJobs,
+            repo = availabilityPollers,
             handler = pollExecutor::handle,
             name = "availability",
         )

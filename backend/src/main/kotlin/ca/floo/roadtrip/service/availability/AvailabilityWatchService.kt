@@ -1,42 +1,41 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.repo.AvailabilityJobRepo
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityJobIntent
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import java.time.OffsetDateTime
 
 /**
- * Mutates watches and keeps their backing job in sync. Single seam for
- * routes; routes never touch [AvailabilityWatchRepo] or
- * [AvailabilityJobRepo] for writes.
+ * Mutates watches and keeps their poller membership in sync. Single seam
+ * for routes; routes never touch [AvailabilityWatchRepo] or
+ * [AvailabilityPollerRepo] for writes.
  *
- * All mutations transact across both tables so a watch is never visible
- * without its job.
+ * A watch is user intent; a poller is the physical, coalesced
+ * per-(provider, parent_ref) unit of scheduled work. Every watch mutation
+ * transacts across `availability_watch` and its `availability_watch_poller`
+ * links so a watch is never visible without its poller membership resolved.
+ *
+ * Internal because it composes [AvailabilityPollerMembership] and
+ * [AvailabilityTargetResolver], both module-internal; everything is one
+ * Gradle module (routes included), so `internal` costs nothing and keeps
+ * upstream-vendor shape from leaking through a public API.
  */
-class AvailabilityWatchService(
+internal class AvailabilityWatchService(
     private val ctx: DSLContext,
     private val reservablesRepo: ReservableRepo,
+    private val targets: AvailabilityTargetResolver,
 ) {
-    private val parkedFar: OffsetDateTime = OffsetDateTime.parse("9999-01-01T00:00:00Z")
+    private fun membershipFor(txn: DSLContext): AvailabilityPollerMembership =
+        AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), targets)
 
     fun create(input: AvailabilityWatchRepo.CreateInput): Watch =
         ctx.transactionResult { config ->
-            val watchRepo = AvailabilityWatchRepo(DSL.using(config))
-            val jobRepo = AvailabilityJobRepo(DSL.using(config))
-            val watch = watchRepo.create(input)
-            val intent = buildIntent(watch)
-            val nextRun = if (watch.status == WatchStatus.ACTIVE) OffsetDateTime.now() else parkedFar
-            jobRepo.upsertForWatch(
-                watchId = watch.id,
-                intentPayload = intent.toJsonObject(),
-                cadenceSec = watch.cadenceSec,
-                status = watch.status,
-                nextRunAt = nextRun,
-            )
+            val txn = DSL.using(config)
+            val watch = AvailabilityWatchRepo(txn).create(input)
+            membershipFor(txn).sync(watch, AvailabilityPollerRepo(txn), tighterCadencePull = OffsetDateTime.now())
             watch
         }
 
@@ -45,62 +44,23 @@ class AvailabilityWatchService(
         input: AvailabilityWatchRepo.UpdateInput,
     ): Watch? =
         ctx.transactionResult { config ->
-            val watchRepo = AvailabilityWatchRepo(DSL.using(config))
-            val jobRepo = AvailabilityJobRepo(DSL.using(config))
-            val updated = watchRepo.update(id, input) ?: return@transactionResult null
-            val intent = buildIntent(updated)
-            val nextRun =
-                when (updated.status) {
-                    WatchStatus.ACTIVE -> {
-                        // If the watch was just resumed, kick the next run
-                        // to "now" so polling restarts on the next tick.
-                        // For an in-place edit (already active), keep the
-                        // existing schedule by reusing the job's nextRunAt
-                        // when present; otherwise default to now.
-                        val existing = jobRepo.findByWatchId(updated.id)
-                        if (existing == null || existing.status != WatchStatus.ACTIVE || existing.nextRunAt == parkedFar) {
-                            OffsetDateTime.now()
-                        } else {
-                            existing.nextRunAt
-                        }
-                    }
-                    WatchStatus.PAUSED -> parkedFar
-                    WatchStatus.DONE -> parkedFar
-                }
-            jobRepo.upsertForWatch(
-                watchId = updated.id,
-                intentPayload = intent.toJsonObject(),
-                cadenceSec = updated.cadenceSec,
-                status = updated.status,
-                nextRunAt = nextRun,
-            )
+            val txn = DSL.using(config)
+            val updated = AvailabilityWatchRepo(txn).update(id, input) ?: return@transactionResult null
+            // A cadence tighten (or a resume) should pull next_run_at earlier; simplest
+            // correct behavior is to allow a pull to now whenever the watch is active.
+            // Membership.sync forwards this only as an earlier-pull; it never pushes
+            // next_run_at later. A non-active watch drops its links and pulls nothing.
+            val pull = if (updated.status == WatchStatus.ACTIVE) OffsetDateTime.now() else null
+            membershipFor(txn).sync(updated, AvailabilityPollerRepo(txn), tighterCadencePull = pull)
             updated
         }
 
     fun delete(id: Long): Boolean =
         ctx.transactionResult { config ->
-            val watchRepo = AvailabilityWatchRepo(DSL.using(config))
-            // FK cascade deletes the matching availability_job row.
-            watchRepo.delete(id)
-        }
-
-    private fun buildIntent(watch: Watch): AvailabilityJobIntent =
-        if (watch.reservableId != null) {
-            val r =
-                reservablesRepo.findById(watch.reservableId)
-                    ?: error("watch ${watch.id} references missing reservable ${watch.reservableId}")
-            AvailabilityJobIntent.Reservable(
-                reservableId = r.id,
-                reservableRid = r.rid.encode(),
-                startDate = watch.startDate.toString(),
-                endDate = watch.endDate.toString(),
-            )
-        } else {
-            AvailabilityJobIntent.Poi(
-                poiId = watch.poiId!!,
-                reservableFilters = watch.reservableFilters,
-                startDate = watch.startDate.toString(),
-                endDate = watch.endDate.toString(),
-            )
+            val txn = DSL.using(config)
+            // FK cascade drops the watch's availability_watch_poller links.
+            val deleted = AvailabilityWatchRepo(txn).delete(id)
+            AvailabilityPollerRepo(txn).deactivatePollersWithNoLinks()
+            deleted
         }
 }
