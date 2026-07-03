@@ -11,11 +11,24 @@ import kotlinx.serialization.json.JsonPrimitive
 class WatchScopeResolver(
     private val reservablesRepo: ReservableRepo,
 ) {
+    /**
+     * Resolves a watch's full target SET to the flat, de-duplicated list of
+     * reservables it covers. A reservable target resolves to itself; a POI
+     * target expands to that POI's site-type children, filtered by the
+     * watch's shared `reservableFilters`. Union across all targets,
+     * first-seen order preserved — this is the entire seam
+     * [AvailabilityPollerMembership.sync] depends on, unchanged since PR1.
+     */
     fun resolve(watch: AvailabilityWatchRepo.Watch): List<Reservable> {
-        watch.reservableId?.let { id ->
-            return reservablesRepo.findById(id)?.let(::listOf) ?: emptyList()
+        val seen = LinkedHashMap<Long, Reservable>()
+        for (target in watch.targets) {
+            val resolved =
+                target.reservableId?.let { id -> reservablesRepo.findById(id)?.let(::listOf) ?: emptyList() }
+                    ?: target.poiId?.let { poiId -> resolvePoi(poiId, watch.reservableFilters) }
+                    ?: emptyList()
+            for (r in resolved) seen.putIfAbsent(r.id, r)
         }
-        return resolvePoi(watch.poiId ?: return emptyList(), watch.reservableFilters)
+        return seen.values.toList()
     }
 
     private fun resolvePoi(

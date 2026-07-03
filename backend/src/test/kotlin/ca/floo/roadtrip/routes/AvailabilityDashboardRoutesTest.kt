@@ -26,6 +26,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     fun cleanup() {
         ctx.execute("DELETE FROM availability_snapshot")
         ctx.execute("DELETE FROM availability_run")
+        ctx.execute("DELETE FROM availability_watch_target")
         ctx.execute("DELETE FROM availability_watch_poller")
         ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch")
@@ -59,14 +60,14 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        poi_id, start_date, end_date, cadence_sec, trigger_kinds
+                        start_date, end_date, cadence_sec, trigger_kinds
                     ) VALUES (
-                        ?, '2026-07-04'::date, '2026-07-05'::date, 60, ARRAY['atc']
+                        '2026-07-04'::date, '2026-07-05'::date, 60, ARRAY['atc']
                     ) RETURNING id
                     """.trimIndent(),
-                    poiId,
                 )!!
                 .get("id", Long::class.java)
+        ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)
         val pollers = AvailabilityPollerRepo(ctx)
         val pollerId =
             pollers.upsertActive(provider = "recgov", parentRef = parentRef, poiId = poiId, pullNextRunAt = null)

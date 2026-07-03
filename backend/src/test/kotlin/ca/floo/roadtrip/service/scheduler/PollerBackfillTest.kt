@@ -24,6 +24,7 @@ import kotlin.test.assertTrue
 class PollerBackfillTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
+        ctx.execute("DELETE FROM availability_watch_target")
         ctx.execute("DELETE FROM availability_watch_poller")
         ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch")
@@ -70,17 +71,20 @@ class PollerBackfillTest : SharedDbTest() {
         return id
     }
 
-    private fun seedActiveWatch(poiId: Long): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO availability_watch (poi_id, start_date, end_date, cadence_sec, trigger_kinds)
-                VALUES (?, '2026-07-04'::date, '2026-07-06'::date, 60, ARRAY['atc'])
-                RETURNING id
-                """.trimIndent(),
-                poiId,
-            )!!
-            .get("id", Long::class.java)
+    private fun seedActiveWatch(poiId: Long): Long {
+        val watchId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO availability_watch (start_date, end_date, cadence_sec, trigger_kinds)
+                    VALUES ('2026-07-04'::date, '2026-07-06'::date, 60, ARRAY['atc'])
+                    RETURNING id
+                    """.trimIndent(),
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)
+        return watchId
+    }
 
     private fun membership(): AvailabilityPollerMembership {
         val reservablesRepo = ReservableRepo(ctx)

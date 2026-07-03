@@ -202,6 +202,7 @@ jooq {
                                 "availability_status",
                                 "availability_watch",
                                 "availability_watch_poller",
+                                "availability_watch_target",
                                 "booking_provider",
                                 "governing_body",
                                 "import_runs",

@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -23,6 +24,7 @@ import kotlin.test.assertTrue
 class AvailabilityWatchServiceTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
+        ctx.execute("DELETE FROM availability_watch_target")
         ctx.execute("DELETE FROM availability_watch_poller")
         ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch")
@@ -84,8 +86,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
     private fun poiInput(poiId: Long): AvailabilityWatchRepo.CreateInput =
         AvailabilityWatchRepo.CreateInput(
-            poiId = poiId,
-            reservableId = null,
+            targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, reservableId = null)),
             reservableFilters = JsonObject(emptyMap()),
             startDate = LocalDate.parse("2026-07-04"),
             endDate = LocalDate.parse("2026-07-06"),
@@ -94,6 +95,39 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             triggerConfig = JsonObject(emptyMap()),
             stopWhenTriggered = false,
         )
+
+    @Test
+    fun `a watch spanning two campgrounds links to two pollers`() {
+        val poiA = seedPoi("232447")
+        seedReservable(poiA, "100")
+        val poiB = seedPoi("232999")
+        seedReservable(poiB, "200")
+
+        val svc = service()
+        val watch =
+            svc.create(
+                AvailabilityWatchRepo.CreateInput(
+                    targets =
+                        listOf(
+                            AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, reservableId = null),
+                            AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null),
+                        ),
+                    reservableFilters = JsonObject(emptyMap()),
+                    startDate = LocalDate.parse("2026-07-04"),
+                    endDate = LocalDate.parse("2026-07-06"),
+                    cadenceSec = 60,
+                    triggerKinds = listOf("atc"),
+                    triggerConfig = JsonObject(emptyMap()),
+                    stopWhenTriggered = false,
+                ),
+            )
+
+        val pollers = AvailabilityPollerRepo(ctx)
+        val linked = pollers.pollerIdsForWatch(watch.id)
+        assertEquals(2, linked.size)
+        val parentRefs = linked.map { pollers.findById(it)!!.parentRef }.toSet()
+        assertEquals(setOf("232447", "232999"), parentRefs)
+    }
 
     @Test
     fun `create links an active watch to one poller`() {

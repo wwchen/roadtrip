@@ -44,6 +44,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         ctx.execute("DELETE FROM availability_snapshot")
         ctx.execute("DELETE FROM availability_fetch_call")
         ctx.execute("DELETE FROM availability_run")
+        ctx.execute("DELETE FROM availability_watch_target")
         ctx.execute("DELETE FROM availability_watch_poller")
         ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch")
@@ -104,22 +105,25 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         startDate: String,
         endDate: String,
         cadenceSec: Int = 60,
-    ): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO availability_watch (
-                    poi_id, start_date, end_date, cadence_sec, trigger_kinds
-                ) VALUES (
-                    ?, ?::date, ?::date, ?, ARRAY['atc']
-                ) RETURNING id
-                """.trimIndent(),
-                poiId,
-                startDate,
-                endDate,
-                cadenceSec,
-            )!!
-            .get("id", Long::class.java)
+    ): Long {
+        val watchId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO availability_watch (
+                        start_date, end_date, cadence_sec, trigger_kinds
+                    ) VALUES (
+                        ?::date, ?::date, ?, ARRAY['atc']
+                    ) RETURNING id
+                    """.trimIndent(),
+                    startDate,
+                    endDate,
+                    cadenceSec,
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)
+        return watchId
+    }
 
     private fun membershipFor(provider: ReservationProvider): AvailabilityPollerMembership {
         val reservablesRepo = ReservableRepo(ctx)

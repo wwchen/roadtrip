@@ -1,8 +1,7 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
-import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
-import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchTarget.Companion.AVAILABILITY_WATCH_TARGET
 import ca.floo.roadtrip.service.availability.WatchStatus
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -21,12 +20,11 @@ private const val MAX_LIST_LIMIT = 500
 class AvailabilityWatchRepo(
     private val ctx: DSLContext,
 ) {
-    private val reservablesRepo = ReservableRepo(ctx)
+    private val targetsRepo = AvailabilityWatchTargetRepo(ctx)
     private val json = Json
 
     data class CreateInput(
-        val poiId: Long?,
-        val reservableId: Long?,
+        val targets: List<AvailabilityWatchTargetRepo.TargetInput>,
         val reservableFilters: JsonObject,
         val startDate: LocalDate,
         val endDate: LocalDate,
@@ -37,6 +35,7 @@ class AvailabilityWatchRepo(
     )
 
     data class UpdateInput(
+        val targets: List<AvailabilityWatchTargetRepo.TargetInput>? = null,
         val reservableFilters: JsonObject? = null,
         val startDate: LocalDate? = null,
         val endDate: LocalDate? = null,
@@ -49,9 +48,7 @@ class AvailabilityWatchRepo(
 
     data class Watch(
         val id: Long,
-        val poiId: Long?,
-        val reservableId: Long?,
-        val reservable: Reservable?,
+        val targets: List<AvailabilityWatchTargetRepo.WatchTarget>,
         val reservableFilters: JsonObject,
         val startDate: LocalDate,
         val endDate: LocalDate,
@@ -65,14 +62,10 @@ class AvailabilityWatchRepo(
     )
 
     fun create(input: CreateInput): Watch {
-        require((input.poiId == null) xor (input.reservableId == null)) {
-            "exactly one of poiId/reservableId must be set"
-        }
+        require(input.targets.isNotEmpty()) { "a watch must have at least one target" }
         val id =
             ctx
                 .insertInto(AVAILABILITY_WATCH)
-                .set(AVAILABILITY_WATCH.POI_ID, input.poiId)
-                .set(AVAILABILITY_WATCH.RESERVABLE_ID, input.reservableId)
                 .set(
                     AVAILABILITY_WATCH.RESERVABLE_FILTERS,
                     JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)),
@@ -85,6 +78,7 @@ class AvailabilityWatchRepo(
                 .returningResult(AVAILABILITY_WATCH.ID)
                 .fetchOne()!!
                 .value1()!!
+        targetsRepo.replaceForWatch(id, input.targets)
         return findById(id)!!
     }
 
@@ -98,12 +92,8 @@ class AvailabilityWatchRepo(
         offset: Int = 0,
     ): List<Watch> {
         val effectiveLimit = limit.coerceIn(1, MAX_LIST_LIMIT)
-        val conds = mutableListOf<org.jooq.Condition>()
-        if (status != null) conds += AVAILABILITY_WATCH.STATUS.eq(status.wireValue)
-        if (poiId != null) conds += AVAILABILITY_WATCH.POI_ID.eq(poiId)
-        if (reservableId != null) conds += AVAILABILITY_WATCH.RESERVABLE_ID.eq(reservableId)
         return baseSelect()
-            .where(if (conds.isEmpty()) DSL.noCondition() else DSL.and(conds))
+            .where(scopeConditions(status, poiId, reservableId))
             .orderBy(AVAILABILITY_WATCH.CREATED_AT.desc(), AVAILABILITY_WATCH.ID.desc())
             .limit(effectiveLimit)
             .offset(offset)
@@ -114,16 +104,48 @@ class AvailabilityWatchRepo(
         status: WatchStatus? = null,
         poiId: Long? = null,
         reservableId: Long? = null,
-    ): Int {
-        val conds = mutableListOf<org.jooq.Condition>()
-        if (status != null) conds += AVAILABILITY_WATCH.STATUS.eq(status.wireValue)
-        if (poiId != null) conds += AVAILABILITY_WATCH.POI_ID.eq(poiId)
-        if (reservableId != null) conds += AVAILABILITY_WATCH.RESERVABLE_ID.eq(reservableId)
-        return ctx
+    ): Int =
+        ctx
             .selectCount()
             .from(AVAILABILITY_WATCH)
-            .where(if (conds.isEmpty()) DSL.noCondition() else DSL.and(conds))
+            .where(scopeConditions(status, poiId, reservableId))
             .fetchOne(0, Int::class.java) ?: 0
+
+    /**
+     * `poiId`/`reservableId` filters now match "watch's target set contains
+     * this poi/reservable" rather than a single-column equality, since a
+     * watch can have multiple targets. Modeled as an EXISTS subquery against
+     * `availability_watch_target` rather than a join, so filtering never
+     * duplicates a watch row when it has multiple matching targets.
+     */
+    private fun scopeConditions(
+        status: WatchStatus?,
+        poiId: Long?,
+        reservableId: Long?,
+    ): org.jooq.Condition {
+        val conds = mutableListOf<org.jooq.Condition>()
+        if (status != null) conds += AVAILABILITY_WATCH.STATUS.eq(status.wireValue)
+        if (poiId != null) {
+            conds +=
+                DSL.exists(
+                    DSL
+                        .selectOne()
+                        .from(AVAILABILITY_WATCH_TARGET)
+                        .where(AVAILABILITY_WATCH_TARGET.WATCH_ID.eq(AVAILABILITY_WATCH.ID))
+                        .and(AVAILABILITY_WATCH_TARGET.POI_ID.eq(poiId)),
+                )
+        }
+        if (reservableId != null) {
+            conds +=
+                DSL.exists(
+                    DSL
+                        .selectOne()
+                        .from(AVAILABILITY_WATCH_TARGET)
+                        .where(AVAILABILITY_WATCH_TARGET.WATCH_ID.eq(AVAILABILITY_WATCH.ID))
+                        .and(AVAILABILITY_WATCH_TARGET.RESERVABLE_ID.eq(reservableId)),
+                )
+        }
+        return if (conds.isEmpty()) DSL.noCondition() else DSL.and(conds)
     }
 
     fun update(
@@ -150,37 +172,29 @@ class AvailabilityWatchRepo(
                 )
         }
         if (input.stopWhenTriggered != null) query = query.set(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED, input.stopWhenTriggered)
-        if (input.status != null) {
-            query = query.set(AVAILABILITY_WATCH.STATUS, input.status.wireValue)
-        }
+        if (input.status != null) query = query.set(AVAILABILITY_WATCH.STATUS, input.status.wireValue)
         val rows = query.where(AVAILABILITY_WATCH.ID.eq(id)).execute()
         if (rows == 0) return null
+        if (input.targets != null) targetsRepo.replaceForWatch(id, input.targets)
         return findById(id)
     }
 
     fun delete(id: Long): Boolean = ctx.deleteFrom(AVAILABILITY_WATCH).where(AVAILABILITY_WATCH.ID.eq(id)).execute() > 0
 
-    private fun baseSelect() =
-        ctx
-            .select(AVAILABILITY_WATCH.fields().toList() + RESERVABLES.fields().toList())
-            .from(AVAILABILITY_WATCH)
-            .leftJoin(RESERVABLES)
-            .on(RESERVABLES.ID.eq(AVAILABILITY_WATCH.RESERVABLE_ID))
+    private fun baseSelect() = ctx.select(AVAILABILITY_WATCH.fields().toList()).from(AVAILABILITY_WATCH)
 
     /**
      * Exposed so sibling repos (e.g. [AvailabilityPollerRepo]) can extend
-     * this join with their own conditions rather than re-deriving the
-     * watch+reservable mapping.
+     * this select with their own conditions rather than re-deriving the
+     * watch row mapping. Targets are no longer part of the base select (they
+     * are N rows per watch); [fromRecord] loads them via a second query.
      */
-    internal fun baseSelectFields(): List<SelectField<*>> = AVAILABILITY_WATCH.fields().toList() + RESERVABLES.fields().toList()
+    internal fun baseSelectFields(): List<SelectField<*>> = AVAILABILITY_WATCH.fields().toList()
 
-    internal fun fromRecord(r: Record): Watch {
-        val reservableId = r.get(AVAILABILITY_WATCH.RESERVABLE_ID)
-        return Watch(
+    internal fun fromRecord(r: Record): Watch =
+        Watch(
             id = r.get(AVAILABILITY_WATCH.ID)!!,
-            poiId = r.get(AVAILABILITY_WATCH.POI_ID),
-            reservableId = reservableId,
-            reservable = if (reservableId != null) reservablesRepo.fromRecord(r) else null,
+            targets = targetsRepo.listForWatch(r.get(AVAILABILITY_WATCH.ID)!!),
             reservableFilters = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.RESERVABLE_FILTERS)!!.data()).jsonObject,
             startDate = r.get(AVAILABILITY_WATCH.START_DATE)!!,
             endDate = r.get(AVAILABILITY_WATCH.END_DATE)!!,
@@ -192,5 +206,4 @@ class AvailabilityWatchRepo(
             createdAt = r.get(AVAILABILITY_WATCH.CREATED_AT)!!,
             updatedAt = r.get(AVAILABILITY_WATCH.UPDATED_AT)!!,
         )
-    }
 }
