@@ -3,7 +3,7 @@
 // watches share one. Provenance: clicking a poller's id navigates to
 // /availability?tab=runs&poller_id={id}.
 
-import { listPollers, getPollersSummary } from '/web/api/availability-dashboard-api.js';
+import { listPollers, getPollersSummary, forcePoller } from '/web/api/availability-dashboard-api.js';
 
 export async function mount(rootEl, { onTabSwitch }) {
   rootEl.innerHTML = `
@@ -51,8 +51,39 @@ export async function mount(rootEl, { onTabSwitch }) {
     if (action === 'goto-runs-for-poller') {
       e.preventDefault();
       onTabSwitch('runs', { poller_id: link.dataset.pollerId });
+    } else if (action === 'check-now') {
+      e.preventDefault();
+      checkNow(link);
     }
   });
+
+  async function checkNow(button) {
+    const pollerId = button.dataset.pollerId;
+    const feedbackEl = resultsEl.querySelector(`[data-feedback-for="${pollerId}"]`);
+    button.disabled = true;
+    if (feedbackEl) feedbackEl.textContent = 'checking…';
+    try {
+      const { status, ok, body } = await forcePoller(pollerId);
+      if (ok) {
+        if (feedbackEl) feedbackEl.textContent = 'queued';
+        // next_run_at moved to ~now; refresh the row's scheduling columns.
+        refresh();
+      } else if (status === 429) {
+        const retry = body && body.retry_after_sec != null ? body.retry_after_sec : '?';
+        if (feedbackEl) feedbackEl.textContent = `try again in ${retry}s`;
+        button.disabled = false;
+      } else if (status === 404) {
+        // Row is stale — the poller is gone. Reload the list.
+        refresh();
+      } else {
+        if (feedbackEl) feedbackEl.textContent = `error (${status})`;
+        button.disabled = false;
+      }
+    } catch (err) {
+      if (feedbackEl) feedbackEl.textContent = `error: ${err.message}`;
+      button.disabled = false;
+    }
+  }
 
   await Promise.all([refreshSummary(), refresh()]);
 
@@ -95,7 +126,7 @@ export async function mount(rootEl, { onTabSwitch }) {
       <table class="data-table">
         <thead><tr>
           <th>id</th><th>provider</th><th>parent ref</th><th>status</th>
-          <th>watches</th><th>next run</th><th>last run</th><th>claimed</th>
+          <th>watches</th><th>next run</th><th>last run</th><th>claimed</th><th>actions</th>
         </tr></thead>
         <tbody>
           ${pollers.map(renderRow).join('')}
@@ -117,6 +148,10 @@ export async function mount(rootEl, { onTabSwitch }) {
         <td>${escapeHtml(formatTimestamp(p.next_run_at))}</td>
         <td>${escapeHtml(p.last_run_at ? formatTimestamp(p.last_run_at) : '—')}</td>
         <td>${p.claimed_until ? escapeHtml(formatTimestamp(p.claimed_until)) : '—'}</td>
+        <td class="row-actions">
+          <button type="button" data-action="check-now" data-poller-id="${escapeHtml(p.id)}"${p.active ? '' : ' disabled'}>check now</button>
+          <span class="feedback" data-feedback-for="${escapeHtml(p.id)}"></span>
+        </td>
       </tr>
     `;
   }

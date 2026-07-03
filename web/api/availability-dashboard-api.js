@@ -1,7 +1,7 @@
-// Client for /api/availability/pollers|runs|snapshots GETs.
-// Read-only — no mutations from the dashboard.
+// Client for /api/availability/pollers|runs|snapshots GETs, plus the
+// "check now" force-pull POST.
 
-import { jsonGetOk } from './http.js';
+import { jsonGetOk, jsonPost } from './http.js';
 
 export function listPollers({ active, limit, offset, signal } = {}) {
   const qs = new URLSearchParams();
@@ -14,6 +14,16 @@ export function listPollers({ active, limit, offset, signal } = {}) {
 
 export function getPollersSummary({ signal } = {}) {
   return jsonGetOk('/api/availability/pollers/summary', { signal });
+}
+
+// Force a poller due now ("check now"). Unlike the GET wrappers this does not
+// throw on non-2xx — the caller inspects `status` to distinguish 200 (accepted),
+// 429 (cooldown active, body has retry_after_sec), and 404 (poller gone).
+export async function forcePoller(pollerId, { signal } = {}) {
+  const url = `/api/availability/pollers/${encodeURIComponent(pollerId)}/force`;
+  const response = await jsonPost(url, {}, { signal });
+  const body = await response.json().catch(() => null);
+  return { status: response.status, ok: response.ok, body };
 }
 
 export function listRunsForPoller(pollerId, { limit, signal } = {}) {
