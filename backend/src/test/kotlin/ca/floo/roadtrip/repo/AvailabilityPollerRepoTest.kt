@@ -15,6 +15,7 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_run")
+        ctx.execute("DELETE FROM availability_watch_target")
         ctx.execute("DELETE FROM availability_watch_poller")
         ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch")
@@ -46,42 +47,48 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
         poiId: Long,
         startDate: String = "2026-07-04",
         endDate: String = "2026-12-31",
-    ): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO availability_watch (
-                    poi_id, start_date, end_date, cadence_sec, trigger_kinds
-                ) VALUES (
-                    ?, ?::date, ?::date, 60, ARRAY['atc']
-                ) RETURNING id
-                """.trimIndent(),
-                poiId,
-                startDate,
-                endDate,
-            )!!
-            .get("id", Long::class.java)
+    ): Long {
+        val watchId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO availability_watch (
+                        start_date, end_date, cadence_sec, trigger_kinds
+                    ) VALUES (
+                        ?::date, ?::date, 60, ARRAY['atc']
+                    ) RETURNING id
+                    """.trimIndent(),
+                    startDate,
+                    endDate,
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)
+        return watchId
+    }
 
     /** Inserts a paused watch (excluded from `liveWatchesForPoller`). */
     private fun insertPausedWatch(
         poiId: Long,
         startDate: String = "2026-07-04",
         endDate: String = "2026-12-31",
-    ): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO availability_watch (
-                    poi_id, start_date, end_date, cadence_sec, trigger_kinds, status
-                ) VALUES (
-                    ?, ?::date, ?::date, 60, ARRAY['atc'], 'paused'
-                ) RETURNING id
-                """.trimIndent(),
-                poiId,
-                startDate,
-                endDate,
-            )!!
-            .get("id", Long::class.java)
+    ): Long {
+        val watchId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO availability_watch (
+                        start_date, end_date, cadence_sec, trigger_kinds, status
+                    ) VALUES (
+                        ?::date, ?::date, 60, ARRAY['atc'], 'paused'
+                    ) RETURNING id
+                    """.trimIndent(),
+                    startDate,
+                    endDate,
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)
+        return watchId
+    }
 
     /** Inserts an active watch whose end_date is already in the past (elapsed). */
     private fun insertElapsedWatch(poiId: Long): Long = insertActiveWatch(poiId, startDate = "2020-01-01", endDate = "2020-01-02")

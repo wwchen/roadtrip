@@ -3,7 +3,6 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.db.generated.tables.AvailabilityPoller.Companion.AVAILABILITY_POLLER
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchPoller.Companion.AVAILABILITY_WATCH_POLLER
-import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.scheduler.framework.Schedulable
 import ca.floo.roadtrip.service.scheduler.framework.SchedulableRepo
@@ -274,8 +273,11 @@ class AvailabilityPollerRepo(
      * passes here but has already elapsed in target-local time is a no-op
      * for that run, not a correctness bug.
      *
-     * Delegates the watch+reservable row mapping to [AvailabilityWatchRepo]
-     * rather than re-deriving it, so the two repos can't drift on shape.
+     * Delegates the watch row mapping to [AvailabilityWatchRepo] rather than
+     * re-deriving it, so the two repos can't drift on shape. PR2 dropped the
+     * single-scope `reservable_id` column, so this select no longer joins
+     * `reservables` directly — [AvailabilityWatchRepo.fromRecord] loads each
+     * watch's target set (POIs and/or reservables) itself.
      */
     fun liveWatchesForPoller(pollerId: Long): List<AvailabilityWatchRepo.Watch> =
         ctx
@@ -283,8 +285,6 @@ class AvailabilityPollerRepo(
             .from(AVAILABILITY_WATCH)
             .join(AVAILABILITY_WATCH_POLLER)
             .on(AVAILABILITY_WATCH_POLLER.WATCH_ID.eq(AVAILABILITY_WATCH.ID))
-            .leftJoin(RESERVABLES)
-            .on(RESERVABLES.ID.eq(AVAILABILITY_WATCH.RESERVABLE_ID))
             .where(AVAILABILITY_WATCH_POLLER.POLLER_ID.eq(pollerId))
             .and(AVAILABILITY_WATCH.STATUS.eq(WatchStatus.ACTIVE.wireValue))
             .and(AVAILABILITY_WATCH.END_DATE.ge(LocalDate.now(ZoneOffset.UTC)))
