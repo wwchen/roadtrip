@@ -376,7 +376,9 @@ private fun resolveCreateScope(
  */
 private fun resolveUpdateScope(req: AvailabilityWatchUpdateRequest): ResolveResult.Ok? {
     if (req.targets != null) {
-        return ResolveResult.Ok(req.targets.map { AvailabilityWatchTargetRepo.TargetInput(poiId = it.poiId, reservableId = it.reservableId) })
+        return ResolveResult.Ok(
+            req.targets.map { AvailabilityWatchTargetRepo.TargetInput(poiId = it.poiId, reservableId = it.reservableId) },
+        )
     }
     return null
 }

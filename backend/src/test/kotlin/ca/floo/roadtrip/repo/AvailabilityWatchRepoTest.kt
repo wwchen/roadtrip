@@ -93,7 +93,9 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
         val updated =
             repo.update(
                 created.id,
-                AvailabilityWatchRepo.UpdateInput(targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null))),
+                AvailabilityWatchRepo.UpdateInput(
+                    targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null)),
+                ),
             )!!
 
         assertEquals(1, updated.targets.size)
