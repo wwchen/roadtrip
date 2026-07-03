@@ -136,6 +136,7 @@ services:
       - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
       - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
       - GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=${GRAFANA_DASHBOARD_ALLOW_UI_UPDATES:-false}
+      - GRAFANA_SLACK_WEBHOOK_URL=${GRAFANA_SLACK_WEBHOOK_URL:-}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/etc/grafana/dashboards:ro

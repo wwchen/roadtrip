@@ -34,7 +34,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "### watch → job → run → snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** — POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_job` | **Scheduler state** — `next_run_at`, claim token, frozen `intent_payload`. **1:1 with watch.** | Service writes/updates this when a watch is created or edited. |\n| `availability_job_run` | **Append-only execution log** — one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed job. |\n| `availability_snapshot` | **Observed availability** — per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each job run. |\n\n### How to drill\n\nClick a **watch_id** / **job_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Watch / Job Run Detail](/d/watch-job-run-detail)** — drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/poi-detail)**. |\n",
+        "content": "### watch \u2192 job \u2192 run \u2192 snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** \u2014 POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_job` | **Scheduler state** \u2014 `next_run_at`, claim token, frozen `intent_payload`. **1:1 with watch.** | Service writes/updates this when a watch is created or edited. |\n| `availability_job_run` | **Append-only execution log** \u2014 one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed job. |\n| `availability_snapshot` | **Observed availability** \u2014 per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each job run. |\n\n### How to drill\n\nClick a **watch_id** / **job_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Watch / Job Run Detail](/d/watch-job-run-detail)** \u2014 drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/poi-detail)**. |\n",
         "mode": "markdown"
       },
       "pluginVersion": "13.1.0",
@@ -1080,6 +1080,225 @@
       ],
       "title": "Backend logs",
       "type": "logs"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "watch_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this watch_id",
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=$__all&var-run_id=$__all"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "job_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Scope dashboard to this job_id",
+                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-job_id=${__data.fields.job_id}&var-run_id=$__all"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 84
+      },
+      "id": 13,
+      "options": {
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  j.watch_id,\n  j.id AS job_id,\n  j.status,\n  j.cadence_sec,\n  j.last_run_at,\n  j.next_run_at,\n  EXTRACT(EPOCH FROM (j.next_run_at - j.last_run_at))::int AS interval_sec,\n  (j.last_run_at IS NOT NULL\n     AND EXTRACT(EPOCH FROM (j.next_run_at - j.last_run_at)) > j.cadence_sec) AS backed_off,\n  (SELECT count(*) FROM availability_job_run r\n     WHERE r.job_id = j.id AND r.status = 'failed'\n       AND r.started_at > COALESCE(\n         (SELECT max(r2.started_at) FROM availability_job_run r2\n            WHERE r2.job_id = j.id AND r2.status = 'completed'), '-infinity')\n  ) AS consecutive_failures\nFROM availability_job j\nWHERE (${watch_id:sqlstring} IN ('', '__all') OR j.watch_id::text IN (${watch_id:sqlstring}))\nORDER BY interval_sec DESC NULLS LAST, j.id DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Watch backoff state",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          },
+          "unit": "s"
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 94
+      },
+      "id": 14,
+      "options": {
+        "annotations": {
+          "clustering": -1,
+          "multiLane": false
+        },
+        "legend": {
+          "calcs": [],
+          "displayMode": "list",
+          "enableFacetedFilter": false,
+          "overflow": "ellipsis",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT started_at AS time,\n       ('job ' || job_id) AS metric,\n       EXTRACT(EPOCH FROM (started_at - lag(started_at) OVER (PARTITION BY job_id ORDER BY started_at)))::double precision AS value\nFROM availability_job_run\nWHERE $__timeFilter(started_at)\nORDER BY started_at;",
+          "refId": "A"
+        }
+      ],
+      "title": "Effective poll interval over time",
+      "type": "timeseries"
     }
   ],
   "preload": false,
@@ -1190,7 +1409,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "✔︎ Reservable Availability Watch drill down",
+  "title": "\u2714\ufe0e Reservable Availability Watch drill down",
   "uid": "reservable-watch-drill",
   "version": 1
 }
