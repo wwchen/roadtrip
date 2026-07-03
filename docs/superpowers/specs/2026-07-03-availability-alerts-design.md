@@ -104,10 +104,13 @@ class SlackNotifier(
 - Posts to `https://slack.com/api/chat.postMessage` with
   `Authorization: Bearer <botToken>`; parses `ok`; on `ok:false` logs the Slack
   `error` and returns false.
-- Message content: the site(s) + date(s) that opened, as provider-neutral
-  lines (site label from the reservable's name / composite id, loop, date). No
-  booking deep links in v1 — a deep link is vendor-specific and must not live in
-  this provider-neutral service; see out-of-scope.
+- Message content: the site(s) + date(s) that opened (site label from the
+  reservable's name / composite id, loop, date), plus a booking deep link **when
+  the reservable's provider supplies one**. The link comes from
+  `ReservationProvider.bookingUrl(rid, date)` — the URL scheme is vendor-specific
+  and lives in the adapter (rec.gov implements it; other adapters default to
+  null → a plain line). The dispatcher never hardcodes a vendor URL; it asks the
+  resolved provider via `AvailabilityTargetResolver`.
 
 ### `service/availability/WatchAlertDispatcher.kt` (business logic)
 
@@ -227,9 +230,10 @@ Two layers, both existing:
 - `atc` / cart automation (product-excluded).
 - Browser push, email, any non-Slack channel.
 - Block Kit / rich Slack formatting (text-only v1).
-- Booking deep links. A URL scheme is vendor-specific, so it belongs behind the
-  `ReservationProvider` port (e.g. a `bookingUrl(reservable, date)` capability),
-  not in this dispatcher. Deferred to that follow-up; v1 posts plain lines.
+- Booking deep links for providers other than rec.gov. The port method
+  (`ReservationProvider.bookingUrl`) exists and rec.gov implements it; other
+  adapters default to null (plain line) until each vendor's URL scheme is added
+  in its own adapter.
 - A settings UI / runtime token rotation (env config only; redeploy to change).
 - Rate-limiting or digesting alerts (edge dedup + `stop_when_triggered` are the
   only throttles in v1).

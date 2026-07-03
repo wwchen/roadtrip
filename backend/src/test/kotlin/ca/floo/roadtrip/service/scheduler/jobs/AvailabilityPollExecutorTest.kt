@@ -6,6 +6,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -207,17 +208,34 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
     }
 
+    private fun targetsFor(provider: ReservationProvider): DbAvailabilityTargetResolver =
+        DbAvailabilityTargetResolver(
+            providerRefs = CampsiteProviderRepo(ctx),
+            reservablesRepo = ReservableRepo(ctx),
+            reservationProviders = ReservationProviderRegistry(mapOf("test" to provider)),
+            dateResolver = AvailabilityDateResolver(),
+        )
+
     /** Dispatcher with Slack disabled (notifier null) — the alert path no-ops.
-     *  Default for tests that don't exercise alerting. */
+     *  Default for tests that don't exercise alerting; its targets resolver is
+     *  never reached because a null notifier returns early. */
     private fun disabledDispatcher(): WatchAlertDispatcher =
         WatchAlertDispatcher(
             notifier = null,
             scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
+            targets =
+                DbAvailabilityTargetResolver(
+                    providerRefs = CampsiteProviderRepo(ctx),
+                    reservablesRepo = ReservableRepo(ctx),
+                    reservationProviders = ReservationProviderRegistry(emptyMap()),
+                    dateResolver = AvailabilityDateResolver(),
+                ),
             defaultChannel = null,
         )
 
     private fun dispatcherWith(
+        provider: ReservationProvider,
         notifier: SlackNotifier?,
         defaultChannel: String? = "#camping",
     ): WatchAlertDispatcher =
@@ -225,6 +243,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             notifier = notifier,
             scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
+            targets = targetsFor(provider),
             defaultChannel = defaultChannel,
         )
 
@@ -355,6 +374,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
             throw UnsupportedOperationException("not used")
+
+        override fun bookingUrl(
+            rid: ReservableId,
+            date: LocalDate,
+        ): String = "https://example.test/book/${rid.vendorId}?d=$date"
     }
 
     private class RateLimitedProvider : ReservationProvider {
@@ -433,7 +457,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 )
             val poller = linkWatch(provider, watchId)
             val notifier = RecordingSlackNotifier()
-            val executor = executorFor(provider, alertDispatcher = dispatcherWith(notifier))
+            val executor = executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier))
 
             // First poll: RESERVED — a change (first observation) but not bookable, so no alert.
             executor.handle(poller)
@@ -450,6 +474,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     .single()
                     .second
                     .contains("Site 100"),
+            )
+            // The booking link comes from the provider (adapter), not the dispatcher.
+            assertTrue(
+                notifier.posts
+                    .single()
+                    .second
+                    .contains("https://example.test/book/100"),
             )
         }
 
@@ -471,7 +502,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val notifier = RecordingSlackNotifier()
 
             // First observation of an already-open site alerts (chosen behavior).
-            executorFor(provider, alertDispatcher = dispatcherWith(notifier)).handle(poller)
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
 
             assertEquals(1, notifier.posts.size)
             assertEquals("#custom", notifier.posts.single().first)
@@ -493,7 +524,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 )
             val poller = linkWatch(provider, watchId)
 
-            executorFor(provider, alertDispatcher = dispatcherWith(RecordingSlackNotifier(result = true))).handle(poller)
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, RecordingSlackNotifier(result = true))).handle(poller)
 
             assertEquals("done", watchStatus(watchId))
         }
@@ -514,7 +545,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 )
             val poller = linkWatch(provider, watchId)
 
-            executorFor(provider, alertDispatcher = dispatcherWith(RecordingSlackNotifier(result = false))).handle(poller)
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, RecordingSlackNotifier(result = false))).handle(poller)
 
             assertEquals("active", watchStatus(watchId))
         }
@@ -530,7 +561,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val poller = linkWatch(provider, watchId)
             val notifier = RecordingSlackNotifier()
 
-            executorFor(provider, alertDispatcher = dispatcherWith(notifier)).handle(poller)
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
 
             assertTrue(notifier.posts.isEmpty())
         }

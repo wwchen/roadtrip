@@ -29,10 +29,11 @@ private const val MAX_SITES_IN_MESSAGE = 10
  * Nothing here throws into the caller: the notifier swallows its own failures
  * and the executor wraps this call best-effort.
  */
-class WatchAlertDispatcher(
+internal class WatchAlertDispatcher(
     private val notifier: SlackNotifier?,
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
+    private val targets: AvailabilityTargetResolver,
     private val defaultChannel: String?,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -76,7 +77,10 @@ class WatchAlertDispatcher(
                 val r = reservablesById[t.reservableId]
                 val label = r?.name ?: r?.rid?.encode() ?: "site ${t.reservableId}"
                 val loop = r?.loop?.let { " ($it)" }.orEmpty()
-                "• *$label*$loop — ${t.targetDate}"
+                // Booking link, if the reservable's provider exposes one — the
+                // URL scheme is the adapter's, never this dispatcher's.
+                val url = r?.let { targets.resolve(it)?.provider?.bookingUrl(it.rid, t.targetDate) }
+                if (url != null) "• *$label*$loop — ${t.targetDate} <$url|book>" else "• *$label*$loop — ${t.targetDate}"
             }
         val count = ordered.size
         val header = "⛺ $count campsite opening${if (count == 1) "" else "s"} available"

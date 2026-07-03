@@ -263,6 +263,7 @@ fun Application.module() {
             notifier = slackNotifier,
             scopeResolver = WatchScopeResolver(reservablesRepo),
             watches = AvailabilityWatchRepo(ctx),
+            targets = availabilityTargets,
             defaultChannel = appConfig.slack?.defaultChannel,
         )
     val pollExecutor =
