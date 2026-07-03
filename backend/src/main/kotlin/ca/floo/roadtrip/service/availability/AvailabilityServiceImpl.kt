@@ -80,6 +80,12 @@ internal class AvailabilityServiceImpl(
                     }
                 },
             )
+        // A group's provider error is swallowed-and-classified by the batcher so the
+        // poller can record the failed run. On this live read path that classification
+        // must not silently degrade into AvailabilityServiceError.NotFound (404, "stop
+        // retrying") — rethrow so the route maps it to 503 (retryable), matching
+        // pre-batching behavior.
+        results.firstOrNull { it.providerError != null }?.let { throw it.providerError!! }
         results.forEach { result ->
             val batch = result.batch ?: return@forEach
             result.reservables.forEach { reservable ->

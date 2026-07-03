@@ -15,6 +15,7 @@ import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
+import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import kotlinx.coroutines.runBlocking
 import java.time.Duration
@@ -136,6 +137,24 @@ class AvailabilityServiceImplTest {
                     service.getByRids(listOf(ReservableId.parse("site:recgov:100")!!), null, null, force = false)
                 }
             assertEquals(AvailabilityServiceError.UnknownCampground, error)
+        }
+
+    @Test
+    fun `provider rate limit on live path rethrows instead of surfacing NotFound`() =
+        runBlocking {
+            // Regression test: PR 1's CatalogAvailabilityBatcher swallows
+            // ReservationProviderError into a classified GroupFetchResult with a
+            // null batch. On the live read path that must NOT become a 404 —
+            // the old behavior (provider error propagates out of getByRids so the
+            // route maps it to 503) must be preserved.
+            val provider = fakeProvider { throw ReservationProviderError.RateLimited(RuntimeException("429")) }
+            val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
+            val service = service(listOf(target), FakeSnapshotStore())
+
+            assertFailsWith<ReservationProviderError.RateLimited> {
+                service.getByRids(listOf(target.rid()), null, null, force = true)
+            }
+            assertEquals(1, provider.catalogCalls, "provider should be called exactly once before the error propagates")
         }
 
     @Test

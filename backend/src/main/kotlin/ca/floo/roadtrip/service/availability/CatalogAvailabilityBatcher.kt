@@ -30,6 +30,7 @@ internal data class GroupFetchResult(
     val outcome: FetchOutcome,
     val durationMs: Int,
     val error: String?,
+    val providerError: ReservationProviderError? = null,
 )
 
 internal fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
@@ -110,6 +111,7 @@ internal class CatalogAvailabilityBatcher {
                         outcome = e.toFetchOutcome(),
                         durationMs = elapsedMs(startedNanos),
                         error = e.message ?: e::class.simpleName,
+                        providerError = e,
                     )
                 }
             }

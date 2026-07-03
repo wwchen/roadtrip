@@ -19,7 +19,9 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class CatalogAvailabilityBatcherTest {
     private val window = ResolvedDateWindow(LocalDate.parse("2026-07-17"), LocalDate.parse("2026-07-31"))
@@ -74,14 +76,18 @@ class CatalogAvailabilityBatcherTest {
         runBlocking {
             val provider = fakeProvider()
             val targets = listOf(resolvedTarget("site:recgov:1", provider, ProviderRef.RecGov("100")))
+            val thrown = ReservationProviderError.RateLimited(RuntimeException("429"))
             val results =
                 CatalogAvailabilityBatcher().fetchByGroup(
                     targets,
                     { _, _ -> window },
-                    { _, _, _, _ -> throw ReservationProviderError.RateLimited(RuntimeException("429")) },
+                    { _, _, _, _ -> throw thrown },
                 )
             assertEquals(FetchOutcome.RATE_LIMITED, results[0].outcome)
             assertNull(results[0].batch)
+            assertNotNull(results[0].providerError)
+            assertTrue(results[0].providerError is ReservationProviderError.RateLimited)
+            assertEquals(thrown, results[0].providerError)
         }
 
     @Test
