@@ -8,22 +8,13 @@ import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
-import org.jooq.DSLContext
-import org.jooq.SQLDialect
-import org.jooq.impl.DSL
-import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
@@ -31,42 +22,14 @@ import java.time.ZoneOffset
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class AvailabilityPollerMembershipTest {
-    private lateinit var pg: PostgreSQLContainer<Nothing>
-    private lateinit var ds: HikariDataSource
-    private lateinit var ctx: DSLContext
+class AvailabilityPollerMembershipTest : SharedDbTest() {
     private lateinit var reservableRepo: ReservableRepo
     private lateinit var scopeResolver: WatchScopeResolver
 
     @BeforeAll
-    fun start() {
-        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
-        pg =
-            PostgreSQLContainer<Nothing>(image).apply {
-                withDatabaseName("roadtrip_test")
-                withUsername("test")
-                withPassword("test")
-            }
-        pg.start()
-        val cfg =
-            HikariConfig().apply {
-                jdbcUrl = pg.jdbcUrl
-                username = pg.username
-                password = pg.password
-                maximumPoolSize = 2
-            }
-        ds = HikariDataSource(cfg)
-        migrate(ds)
-        ctx = DSL.using(ds, SQLDialect.POSTGRES)
+    fun setUp() {
         reservableRepo = ReservableRepo(ctx)
         scopeResolver = WatchScopeResolver(reservableRepo)
-    }
-
-    @AfterAll
-    fun stop() {
-        ds.close()
-        pg.stop()
     }
 
     @BeforeEach

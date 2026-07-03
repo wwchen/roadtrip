@@ -3,21 +3,12 @@ package ca.floo.roadtrip.service.etl.vendors.aspira
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
-import org.jooq.SQLDialect
-import org.jooq.impl.DSL
-import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
 
 /**
@@ -29,39 +20,14 @@ import kotlin.test.assertEquals
  * One adapter spans every Aspira tenant — the test exercises all three
  * vendors (aspira_wa / aspira_bc / aspira_pc) plus negative cases.
  */
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class AspiraPoiReservableJoinerTest {
-    private lateinit var pg: PostgreSQLContainer<*>
-    private lateinit var ds: HikariDataSource
-    private lateinit var ctx: DSLContext
+class AspiraPoiReservableJoinerTest : SharedDbTest() {
     private lateinit var reservablesRepo: ReservableRepo
     private lateinit var joiner: AspiraPoiReservableJoiner
 
     @BeforeAll
     fun setUp() {
-        pg = PostgreSQLContainer(DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres"))
-        pg
-            .withDatabaseName("roadtrip")
-            .withUsername("test")
-            .withPassword("test")
-            .start()
-        val cfg =
-            HikariConfig().apply {
-                jdbcUrl = pg.jdbcUrl
-                username = pg.username
-                password = pg.password
-            }
-        ds = HikariDataSource(cfg)
-        migrate(ds)
-        ctx = DSL.using(ds, SQLDialect.POSTGRES)
         reservablesRepo = ReservableRepo(ctx)
         joiner = AspiraPoiReservableJoiner()
-    }
-
-    @AfterAll
-    fun tearDown() {
-        ds.close()
-        pg.stop()
     }
 
     @BeforeEach

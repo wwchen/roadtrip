@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -10,60 +10,17 @@ import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
 import kotlinx.coroutines.runBlocking
-import org.jooq.DSLContext
-import org.jooq.SQLDialect
-import org.jooq.impl.DSL
-import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
 
 /**
- * Testcontainers-backed tests for [DbAvailabilityTargetResolver.resolve], which
+ * DB-backed tests for [DbAvailabilityTargetResolver.resolve], which
  * picks the winning provider_ref among a reservable's linked POIs. Mirrors the
  * DB setup helpers in [ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutorTest].
  */
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class DbAvailabilityTargetResolverTest {
-    private lateinit var pg: PostgreSQLContainer<Nothing>
-    private lateinit var ds: HikariDataSource
-    private lateinit var ctx: DSLContext
-
-    @BeforeAll
-    fun start() {
-        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
-        pg =
-            PostgreSQLContainer<Nothing>(image).apply {
-                withDatabaseName("roadtrip_test")
-                withUsername("test")
-                withPassword("test")
-            }
-        pg.start()
-        val cfg =
-            HikariConfig().apply {
-                jdbcUrl = pg.jdbcUrl
-                username = pg.username
-                password = pg.password
-                maximumPoolSize = 2
-            }
-        ds = HikariDataSource(cfg)
-        migrate(ds)
-        ctx = DSL.using(ds, SQLDialect.POSTGRES)
-    }
-
-    @AfterAll
-    fun stop() {
-        ds.close()
-        pg.stop()
-    }
-
+class DbAvailabilityTargetResolverTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM reservable_pois")

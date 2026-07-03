@@ -5,57 +5,30 @@ import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
-import org.jooq.DSLContext
-import org.jooq.SQLDialect
-import org.jooq.impl.DSL
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import java.io.File
 import java.nio.file.Files
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class ReserveCaliforniaEtlTest {
-    private lateinit var pg: PostgreSQLContainer<*>
-    private lateinit var ds: HikariDataSource
-    private lateinit var ctx: DSLContext
+class ReserveCaliforniaEtlTest : SharedDbTest() {
     private lateinit var reservablesRepo: ReservableRepo
     private lateinit var rawDir: File
     private lateinit var poiRegistry: PoiRegistry
 
     @BeforeAll
     fun setUp() {
-        pg = PostgreSQLContainer(DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres"))
-        pg
-            .withDatabaseName("roadtrip")
-            .withUsername("test")
-            .withPassword("test")
-            .start()
-        val cfg =
-            HikariConfig().apply {
-                jdbcUrl = pg.jdbcUrl
-                username = pg.username
-                password = pg.password
-            }
-        ds = HikariDataSource(cfg)
-        migrate(ds)
-        ctx = DSL.using(ds, SQLDialect.POSTGRES)
         reservablesRepo = ReservableRepo(ctx)
 
         rawDir = Files.createTempDirectory("etl-reservecalifornia-").toFile()
@@ -75,8 +48,6 @@ class ReserveCaliforniaEtlTest {
 
     @AfterAll
     fun tearDown() {
-        ds.close()
-        pg.stop()
         rawDir.deleteRecursively()
     }
 
