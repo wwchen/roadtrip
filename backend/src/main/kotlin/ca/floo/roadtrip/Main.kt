@@ -45,6 +45,8 @@ import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
+import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
@@ -245,6 +247,10 @@ fun Application.module() {
     // the V28 cutover. Idempotent — a no-op once everything is linked. Runs
     // after Flyway (migrate(ds), above) and before the scheduler starts.
     PollerBackfill(ctx, pollerMembership).run()
+    // Durable, Postgres-backed per-vendor fetch governor. Per-vendor bucket
+    // capacity/refill come from the env (ROADTRIP_VENDOR_RATELIMIT_*), defaulting
+    // to a conservative code-level bucket for unconfigured vendors.
+    val vendorRateLimiter = VendorRateLimiter(VendorRateLimitConfig.fromEnv(), ds)
     val pollExecutor =
         AvailabilityPollExecutor(
             ctx = ctx,
@@ -256,6 +262,7 @@ fun Application.module() {
             dateResolver = availabilityDateResolver,
             targets = availabilityTargets,
             fetchCalls = AvailabilityFetchCallRepo(ctx),
+            limiter = vendorRateLimiter,
         )
     val availabilityScheduler =
         Scheduler(

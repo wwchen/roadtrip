@@ -18,6 +18,8 @@ import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
+import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -162,7 +164,26 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         return pollers.findById(pollerId)!!
     }
 
-    private fun executorFor(provider: ReservationProvider): AvailabilityPollExecutor {
+    /** A limiter double that always grants or always denies, recording every
+     *  acquire request so tests can assert the token count. */
+    private inner class RecordingLimiter(
+        private val grant: Boolean,
+    ) : VendorRateLimiter(VendorRateLimitConfig(), ds) {
+        val requests = mutableListOf<Pair<String, Long>>()
+
+        override fun tryAcquire(
+            provider: String,
+            tokens: Long,
+        ): Boolean {
+            requests += provider to tokens
+            return grant
+        }
+    }
+
+    private fun executorFor(
+        provider: ReservationProvider,
+        limiter: VendorRateLimiter = RecordingLimiter(grant = true),
+    ): AvailabilityPollExecutor {
         val reservablesRepo = ReservableRepo(ctx)
         val registry = ReservationProviderRegistry(mapOf("test" to provider))
         val dateResolver = AvailabilityDateResolver()
@@ -183,6 +204,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             dateResolver = dateResolver,
             targets = targets,
             fetchCalls = AvailabilityFetchCallRepo(ctx),
+            limiter = limiter,
         )
     }
 
@@ -431,6 +453,53 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // min(300, 30) = 30s on success.
             val delaySec = Duration.between(before, result.nextRunAt).seconds
             assertEquals(30L, delaySec)
+        }
+
+    @Test
+    fun `governor starvation skips the fetch and reschedules soon without failing the run`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+            val denyingLimiter = RecordingLimiter(grant = false)
+
+            val before = OffsetDateTime.now()
+            val result = executorFor(provider, limiter = denyingLimiter).handle(poller)
+
+            // No upstream call was made.
+            assertEquals(0, provider.calls)
+            // Exactly one acquire request, for this poller's provider.
+            assertEquals(1, denyingLimiter.requests.size)
+            assertEquals("recgov", denyingLimiter.requests.single().first)
+            // Rescheduled soon (governor-starved), not on the 60s success cadence.
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertTrue(delaySec in 1..30, "expected a short starved retry, got ${delaySec}s")
+            // No run row — a starved tick is a non-event, not a failure.
+            assertEquals(0, AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10).size)
+        }
+
+    @Test
+    fun `governor success proceeds to fetch and consumes one token per bucket`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            listOf("100", "101").forEach { seedReservable(poiId, it) }
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+            val grantingLimiter = RecordingLimiter(grant = true)
+
+            executorFor(provider, limiter = grantingLimiter).handle(poller)
+
+            // Single-provider, single-parentRef, single-dateContext poller -> K = 1 bucket.
+            assertEquals(1, provider.calls)
+            assertEquals(1, grantingLimiter.requests.size)
+            assertEquals("recgov" to 1L, grantingLimiter.requests.single())
+            // A granted tick fetches and writes a completed run row as normal.
+            val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
+            assertEquals(1, runs.size)
+            assertEquals("completed", runs[0].status)
         }
 
     @Test

@@ -23,7 +23,7 @@ private const val BUCKET_STATE_COLUMN = "state"
  * The Bucket4j types stay inside this wrapper: callers (the executor) see only
  * [tryAcquire], keeping the dependency swappable and the abstraction non-leaky.
  */
-class VendorRateLimiter(
+open class VendorRateLimiter(
     private val config: VendorRateLimitConfig,
     dataSource: DataSource,
 ) {
@@ -43,7 +43,7 @@ class VendorRateLimiter(
      * false if insufficient tokens are available right now (no partial
      * consumption on failure). Non-blocking -- never waits for refill.
      */
-    fun tryAcquire(
+    open fun tryAcquire(
         provider: String,
         tokens: Long,
     ): Boolean {

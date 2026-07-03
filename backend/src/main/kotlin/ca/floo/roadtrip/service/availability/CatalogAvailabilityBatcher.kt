@@ -58,6 +58,20 @@ internal class CatalogAvailabilityBatcher {
         val dateContext: PoiDateContext,
     )
 
+    /**
+     * How many distinct (provider, parentRef, dateContext) groups [targets]
+     * would produce — i.e. how many upstream calls a [fetchByGroup] over the
+     * same targets would attempt. The governor consumes one vendor token per
+     * group, so this is the token count the executor must acquire before
+     * fetching. Uses the same [GroupKey] as [fetchByGroup] so the two never
+     * drift on the grouping key.
+     */
+    fun countGroups(targets: List<ResolvedAvailabilityTarget>): Int =
+        targets
+            .map { GroupKey(it.provider, it.parentRef, it.dateContext) }
+            .distinct()
+            .size
+
     suspend fun fetchByGroup(
         targets: List<ResolvedAvailabilityTarget>,
         windowFor: (PoiDateContext, ReservationProviderCapabilities) -> ResolvedDateWindow?,
