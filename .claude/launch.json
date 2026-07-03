@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "app",
+      "runtimeExecutable": "tilt",
+      "runtimeArgs": ["up"],
+      "port": 8765
+    }
+  ]
+}
