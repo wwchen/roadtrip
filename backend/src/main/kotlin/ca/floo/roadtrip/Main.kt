@@ -10,6 +10,7 @@ import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
+import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
@@ -242,6 +243,7 @@ fun Application.module() {
             runs = AvailabilityJobRunRepo(ctx),
             dateResolver = availabilityDateResolver,
             targets = availabilityTargets,
+            fetchCalls = AvailabilityFetchCallRepo(ctx),
         )
     val availabilityScheduler =
         Scheduler(

@@ -4,6 +4,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
@@ -79,6 +80,7 @@ class AvailabilityPollExecutorTest {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability_fetch_call")
         ctx.execute("DELETE FROM availability_job_run")
         ctx.execute("DELETE FROM availability_job")
         ctx.execute("DELETE FROM availability_watch")
@@ -248,6 +250,7 @@ class AvailabilityPollExecutorTest {
             runs = AvailabilityJobRunRepo(ctx),
             dateResolver = dateResolver,
             targets = targets,
+            fetchCalls = AvailabilityFetchCallRepo(ctx),
         )
     }
 
@@ -273,6 +276,12 @@ class AvailabilityPollExecutorTest {
             val snapshots = AvailabilitySnapshotRepo(ctx).listForRun(runs[0].id, limit = 100)
             assertTrue(snapshots.isNotEmpty())
             assertTrue(snapshots.all { it.runId == runs[0].id })
+
+            val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
+            assertEquals(1, fetchCalls.size)
+            assertEquals("ok", fetchCalls[0].outcome)
+            assertEquals(3, fetchCalls[0].reservableCount)
+            assertEquals("232447", fetchCalls[0].parentRef)
         }
 
     @Test
@@ -291,5 +300,11 @@ class AvailabilityPollExecutorTest {
             assertEquals(1, runs.size)
             assertEquals("failed", runs[0].status)
             assertEquals("rate_limited", runs[0].error)
+
+            val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
+            assertEquals(1, fetchCalls.size)
+            assertEquals("rate_limited", fetchCalls[0].outcome)
+            assertEquals(1, fetchCalls[0].reservableCount)
+            assertEquals("232447", fetchCalls[0].parentRef)
         }
 }

@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
+import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
@@ -47,6 +49,7 @@ internal class AvailabilityPollExecutor(
     private val runs: AvailabilityJobRunRepo,
     private val dateResolver: AvailabilityDateResolver,
     private val targets: AvailabilityTargetResolver,
+    private val fetchCalls: AvailabilityFetchCallRepo,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scopeResolver = WatchScopeResolver(reservablesRepo)
@@ -83,6 +86,7 @@ internal class AvailabilityPollExecutor(
                 )
             val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
             val snapshotCount = results.sumOf { appendSnapshots(it, runId) }
+            recordFetchCalls(results, runId)
             val completedAt = OffsetDateTime.now()
             val durationMs = durationMs(startedAt, completedAt)
             if (failure != null) {
@@ -141,6 +145,43 @@ internal class AvailabilityPollExecutor(
             AvailabilitySnapshotRepo.SnapshotObservationBatch(runId = runId, observations = observations),
         )
     }
+
+    /** Write one trace row per group that made a real upstream call (window
+     *  != null). Null-window groups were skipped by the batcher and made no
+     *  call, so they leave no trace. Written for every outcome — a rate
+     *  limited or failed group still produced a call worth tracing. */
+    private fun recordFetchCalls(
+        results: List<GroupFetchResult>,
+        runId: Long,
+    ) {
+        results.filter { it.window != null }.forEach { r ->
+            val providerId = r.provider.id.name
+            fetchCalls.record(
+                AvailabilityFetchCallRepo.NewCall(
+                    runId = runId,
+                    provider = providerId.lowercase(),
+                    parentRef = parentRefKey(r.parentRef),
+                    reservableCount = r.reservables.size,
+                    windowStart = r.window!!.startDate,
+                    windowEnd = r.window.endDate,
+                    outcome = r.outcome.name.lowercase(),
+                    durationMs = r.durationMs,
+                    error = r.error,
+                ),
+            )
+        }
+    }
+
+    /** Renders a vendor's call-unit id as text for observability. Not
+     *  provider dispatch — just formatting a value already picked by the
+     *  batcher's grouping key, so this `when` is not a capability leak. */
+    private fun parentRefKey(ref: ProviderRef): String =
+        when (ref) {
+            is ProviderRef.RecGov -> ref.recgovId
+            is ProviderRef.Aspira -> ref.mapId.toString()
+            is ProviderRef.ReserveAmerica -> ref.parkId
+            is ProviderRef.ReserveCalifornia -> ref.facilityIds.joinToString(",")
+        }
 
     private fun durationMs(
         start: OffsetDateTime,
