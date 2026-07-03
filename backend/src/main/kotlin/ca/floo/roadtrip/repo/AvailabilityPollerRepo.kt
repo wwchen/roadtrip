@@ -291,11 +291,27 @@ class AvailabilityPollerRepo(
             .fetch { watchRepo.fromRecord(it) }
 
     /**
-     * Retires a poller: marks [elapsedWatchIds] `done` (their windows have
-     * fully elapsed), drops every watch->poller link for [pollerId], and
-     * deactivates the poller. Runs in one transaction so a crash mid-retire
-     * can't leave a `done` watch still linked, or an active link to a
-     * dormant poller.
+     * Retires a poller whose window the executor believes has fully elapsed.
+     * [elapsedWatchIds] is the executor's *candidate* set, computed from a
+     * prior read; a concurrent [AvailabilityPollerMembership.sync] (watch
+     * create/edit) can revive+link this poller or extend a watch's window
+     * between that read and this call. So retire re-verifies everything in
+     * one transaction and only ever touches watches it can *still* prove are
+     * elapsed:
+     *
+     * 1. Among [elapsedWatchIds], mark `done` and drop links only for watches
+     *    that are still `active` AND `end_date < CURRENT_DATE` — the window
+     *    has ended in every timezone. A watch extended to `end_date >=
+     *    CURRENT_DATE` in the meantime might still be live somewhere, so it is
+     *    left alone.
+     * 2. Delete `availability_watch_poller` links only for those proven-elapsed
+     *    watch ids — never a blanket delete, so a concurrently-added live link
+     *    survives.
+     * 3. Deactivate the poller only if it now has zero remaining links. If a
+     *    concurrent sync linked a fresh watch, the poller stays active.
+     *
+     * One transaction so a crash mid-retire can't leave a `done` watch still
+     * linked, or an active link to a dormant poller.
      */
     fun retire(
         pollerId: Long,
@@ -303,24 +319,43 @@ class AvailabilityPollerRepo(
     ) {
         ctx.transaction { config ->
             val txn = DSL.using(config)
-            if (elapsedWatchIds.isNotEmpty()) {
+            val provenElapsed: List<Long> =
+                if (elapsedWatchIds.isEmpty()) {
+                    emptyList()
+                } else {
+                    txn
+                        .select(AVAILABILITY_WATCH.ID)
+                        .from(AVAILABILITY_WATCH)
+                        .where(AVAILABILITY_WATCH.ID.`in`(elapsedWatchIds))
+                        .and(AVAILABILITY_WATCH.STATUS.eq(WatchStatus.ACTIVE.wireValue))
+                        .and(AVAILABILITY_WATCH.END_DATE.lt(DSL.currentLocalDate()))
+                        .fetch(AVAILABILITY_WATCH.ID)
+                        .filterNotNull()
+                }
+            if (provenElapsed.isNotEmpty()) {
                 txn
                     .update(AVAILABILITY_WATCH)
                     .set(AVAILABILITY_WATCH.STATUS, WatchStatus.DONE.wireValue)
                     .set(AVAILABILITY_WATCH.UPDATED_AT, OffsetDateTime.now())
-                    .where(AVAILABILITY_WATCH.ID.`in`(elapsedWatchIds))
+                    .where(AVAILABILITY_WATCH.ID.`in`(provenElapsed))
+                    .execute()
+                txn
+                    .deleteFrom(AVAILABILITY_WATCH_POLLER)
+                    .where(AVAILABILITY_WATCH_POLLER.POLLER_ID.eq(pollerId))
+                    .and(AVAILABILITY_WATCH_POLLER.WATCH_ID.`in`(provenElapsed))
                     .execute()
             }
-            txn
-                .deleteFrom(AVAILABILITY_WATCH_POLLER)
-                .where(AVAILABILITY_WATCH_POLLER.POLLER_ID.eq(pollerId))
-                .execute()
             txn
                 .update(AVAILABILITY_POLLER)
                 .set(AVAILABILITY_POLLER.ACTIVE, false)
                 .set(AVAILABILITY_POLLER.UPDATED_AT, OffsetDateTime.now())
                 .where(AVAILABILITY_POLLER.ID.eq(pollerId))
-                .execute()
+                .andNotExists(
+                    txn
+                        .selectOne()
+                        .from(AVAILABILITY_WATCH_POLLER)
+                        .where(AVAILABILITY_WATCH_POLLER.POLLER_ID.eq(pollerId)),
+                ).execute()
         }
     }
 

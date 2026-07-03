@@ -130,13 +130,74 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
     fun `retire marks watches done, drops links, deactivates poller`() {
         val repo = AvailabilityPollerRepo(ctx)
         val poi = insertPoi()
-        val watch = insertActiveWatch(poiId = poi) // helper inserts availability_watch row
+        val watch = insertElapsedWatch(poiId = poi) // proven-elapsed: end_date < today
         val poller = repo.upsertActive("recgov", "A", poi, null)
         repo.linkWatch(watch, poller)
         repo.retire(poller, elapsedWatchIds = listOf(watch))
         assertFalse(repo.findById(poller)!!.active)
         assertTrue(repo.pollerIdsForWatch(watch).isEmpty())
         assertEquals("done", watchStatus(watch)) // helper reads availability_watch.status
+    }
+
+    @Test
+    fun `retire only retires proven-elapsed watches and keeps a live watch linked`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val poller = repo.upsertActive("recgov", "A", poi, null)
+        val elapsed = insertElapsedWatch(poiId = poi) // end_date < today
+        val live = insertActiveWatch(poiId = poi) // end_date far future
+        repo.linkWatch(elapsed, poller)
+        repo.linkWatch(live, poller)
+
+        // Executor computed "both elapsed" from a stale read, but `live` is now future.
+        repo.retire(poller, elapsedWatchIds = listOf(elapsed, live))
+
+        assertEquals("done", watchStatus(elapsed))
+        assertTrue(repo.pollerIdsForWatch(elapsed).isEmpty()) // elapsed link dropped
+        assertEquals("active", watchStatus(live)) // NOT marked done: end_date >= today
+        assertEquals(listOf(poller), repo.pollerIdsForWatch(live)) // live link kept
+        assertTrue(repo.findById(poller)!!.active) // poller stays active (link remains)
+    }
+
+    @Test
+    fun `retire deactivates poller and drops all links when every watch is elapsed`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val poller = repo.upsertActive("recgov", "A", poi, null)
+        val e1 = insertElapsedWatch(poiId = poi)
+        val e2 = insertElapsedWatch(poiId = poi)
+        repo.linkWatch(e1, poller)
+        repo.linkWatch(e2, poller)
+
+        repo.retire(poller, elapsedWatchIds = listOf(e1, e2))
+
+        assertEquals("done", watchStatus(e1))
+        assertEquals("done", watchStatus(e2))
+        assertTrue(repo.pollerIdsForWatch(e1).isEmpty())
+        assertTrue(repo.pollerIdsForWatch(e2).isEmpty())
+        assertFalse(repo.findById(poller)!!.active) // zero links -> dormant
+    }
+
+    @Test
+    fun `retire leaves a concurrently-linked live watch untouched (sync race)`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val poller = repo.upsertActive("recgov", "A", poi, null)
+        val elapsed = insertElapsedWatch(poiId = poi)
+        repo.linkWatch(elapsed, poller)
+        // A concurrent sync() revived+linked a fresh live watch AFTER the
+        // executor computed elapsedWatchIds, so it is NOT in the list.
+        val concurrent = insertActiveWatch(poiId = poi)
+        repo.linkWatch(concurrent, poller)
+
+        repo.retire(poller, elapsedWatchIds = listOf(elapsed))
+
+        assertEquals("done", watchStatus(elapsed))
+        assertTrue(repo.pollerIdsForWatch(elapsed).isEmpty())
+        // The concurrently-added watch's link and the poller survive.
+        assertEquals("active", watchStatus(concurrent))
+        assertEquals(listOf(poller), repo.pollerIdsForWatch(concurrent))
+        assertTrue(repo.findById(poller)!!.active)
     }
 
     @Test
