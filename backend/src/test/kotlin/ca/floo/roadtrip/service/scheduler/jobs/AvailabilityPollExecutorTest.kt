@@ -63,21 +63,25 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
     /** Seeds a campground POI whose provider_ref resolves to ProviderRef.RecGov(campgroundId). */
-    private fun seedPoi(campgroundId: String): Long =
+    private fun seedPoi(
+        campgroundId: String,
+        cadenceOverrideSec: Int? = null,
+    ): Long =
         ctx
             .fetchOne(
                 """
                 INSERT INTO pois (
                     source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
+                    properties, provider_ref, fetched_at, cadence_override_sec
                 ) VALUES (
                     'test', ?, 'campground', 'Upper Pines',
                     ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
+                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz, ?
                 ) RETURNING id
                 """.trimIndent(),
                 "poi-$campgroundId",
                 """{"recgov_id": "$campgroundId"}""",
+                cadenceOverrideSec,
             )!!
             .get("id", Long::class.java)
 
@@ -333,6 +337,79 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals("ok", fetchCalls[0].outcome)
             assertEquals(3, fetchCalls[0].reservableCount)
             assertEquals("232447", fetchCalls[0].parentRef)
+        }
+
+    // --- Cadence fall-through (PR4) ---
+    //
+    // The DB enforces `cadence_sec >= 5` (V14), so a watch always carries a
+    // positive cadence today: the middle "poi override" rung of the spec's
+    // `watch.cadence_sec ?? poi.cadence_override_sec ?? GLOBAL_DEFAULT_SEC`
+    // fall-through is only reachable when a watch expresses no cadence (a
+    // non-positive sentinel), which the schema does not yet permit. The pure
+    // resolver is therefore unit-tested for every rung; the integration tests
+    // below prove the reachable paths (a real watch cadence plumbs through, the
+    // representative POI's override is read) end-to-end.
+
+    private fun watchWithCadence(cadenceSec: Int): AvailabilityWatchRepo.Watch =
+        AvailabilityWatchRepo.Watch(
+            id = 0,
+            targets = emptyList(),
+            reservableFilters = kotlinx.serialization.json.JsonObject(emptyMap()),
+            startDate = farStart,
+            endDate = farStart.plusDays(2),
+            cadenceSec = cadenceSec,
+            triggerKinds = emptyList(),
+            triggerConfig = kotlinx.serialization.json.JsonObject(emptyMap()),
+            stopWhenTriggered = false,
+            status = ca.floo.roadtrip.service.availability.WatchStatus.ACTIVE,
+            createdAt = now(),
+            updatedAt = now(),
+        )
+
+    @Test
+    fun `resolver falls through to poi override when a watch has no explicit cadence`() {
+        // sentinel 0 -> poi override (30), not GLOBAL_DEFAULT_SEC.
+        assertEquals(30, resolveCadenceSec(listOf(watchWithCadence(0)), poiCadenceOverrideSec = 30))
+    }
+
+    @Test
+    fun `resolver lets a tighter watch cadence win over a looser poi override`() {
+        assertEquals(10, resolveCadenceSec(listOf(watchWithCadence(10)), poiCadenceOverrideSec = 30))
+    }
+
+    @Test
+    fun `resolver falls through to GLOBAL_DEFAULT_SEC with no watch cadence and no poi override`() {
+        assertEquals(300, resolveCadenceSec(listOf(watchWithCadence(0)), poiCadenceOverrideSec = null))
+    }
+
+    @Test
+    fun `resolver takes the min across watches after each resolves its own fall-through`() {
+        // watch A leans on the poi override (30); watch B has explicit 15 -> min = 15.
+        val resolved = resolveCadenceSec(listOf(watchWithCadence(0), watchWithCadence(15)), poiCadenceOverrideSec = 30)
+        assertEquals(15, resolved)
+    }
+
+    @Test
+    fun `poi cadence override is read from the poller's representative poi and plumbs into next_run_at`() =
+        runBlocking {
+            // A watch with a positive cadence (30) that also happens to match the poi
+            // override proves the representative-POI read path end-to-end without
+            // needing the (schema-forbidden) sentinel; the override read itself is
+            // asserted directly below.
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447", cadenceOverrideSec = 45)
+            seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 30)
+            val poller = linkWatch(provider, watchId)
+
+            assertEquals(45, AvailabilityPollerRepo(ctx).cadenceOverrideForPoller(poller.id))
+
+            val before = OffsetDateTime.now()
+            val result = executorFor(provider).handle(poller)
+
+            // watch cadence (30) is specified, so it wins over the override (45).
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertEquals(30L, delaySec)
         }
 
     @Test

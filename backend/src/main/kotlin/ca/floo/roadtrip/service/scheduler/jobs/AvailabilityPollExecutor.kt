@@ -86,12 +86,13 @@ internal class AvailabilityPollExecutor(
             return HandlerResult(nextRunAt = OffsetDateTime.now()) // inert; poller now inactive
         }
 
-        // Cadence = tightest (min) over live watches. cadence_sec is NOT NULL so the min
-        // is well-defined; the GLOBAL_DEFAULT_SEC fall-through guards a non-positive value.
-        val cadenceSec =
-            liveWatches.minOf { it.cadenceSec }.let {
-                if (it <= 0) GLOBAL_DEFAULT_SEC else it
-            }
+        // Cadence = tightest (min) over live watches, each watch resolving its own
+        // three-level fall-through: watch.cadence_sec ?? poi.cadence_override_sec ??
+        // GLOBAL_DEFAULT_SEC. The poi override is resolved once against the poller's
+        // *representative* poi_id (a poller has one cadence and one representative POI),
+        // not per watch-target — see AvailabilityPollerRepo.cadenceOverrideForPoller.
+        val poiCadenceOverrideSec = pollers.cadenceOverrideForPoller(poller.id)
+        val cadenceSec = resolveCadenceSec(liveWatches, poiCadenceOverrideSec)
 
         val startedAt = OffsetDateTime.now()
         val runId = runs.start(poller.id, startedAt)
@@ -269,6 +270,32 @@ internal class AvailabilityPollExecutor(
             .toMillis()
             .toInt()
             .coerceAtLeast(0)
+}
+
+/**
+ * Resolves the poller's cadence as the tightest (min) over live watches, where
+ * each watch resolves the spec's three-level fall-through:
+ * `watch.cadence_sec ?? poi.cadence_override_sec ?? GLOBAL_DEFAULT_SEC`.
+ *
+ * A watch's `cadence_sec` is treated as "specified" only when positive; a
+ * non-positive value (the "no explicit preference" representation) falls through
+ * to the POI override, then the global default. [poiCadenceOverrideSec] is the
+ * override of the poller's *representative* POI — a poller has one cadence and one
+ * representative POI, so the override is a single per-poller rung rather than a
+ * per-watch-target lookup.
+ */
+internal fun resolveCadenceSec(
+    liveWatches: List<ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch>,
+    poiCadenceOverrideSec: Int?,
+): Int {
+    val poiOverride = poiCadenceOverrideSec?.takeIf { it > 0 }
+    val resolved =
+        liveWatches.map { w ->
+            w.cadenceSec.takeIf { it > 0 }
+                ?: poiOverride
+                ?: GLOBAL_DEFAULT_SEC
+        }
+    return resolved.minOrNull() ?: GLOBAL_DEFAULT_SEC
 }
 
 private const val MAX_POLL_WINDOW_DAYS = 60
