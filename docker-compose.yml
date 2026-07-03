@@ -136,6 +136,10 @@ services:
       - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
       - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
       - GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=${GRAFANA_DASHBOARD_ALLOW_UI_UPDATES:-false}
+      # Must be non-empty or Grafana treats the Slack contact point as chat-API
+      # mode and fails provisioning at boot. Default is an obvious placeholder
+      # (webhook mode → Grafana boots); set to a real webhook to deliver alerts.
+      - GRAFANA_SLACK_WEBHOOK_URL=${GRAFANA_SLACK_WEBHOOK_URL:-https://hooks.slack.com/services/PLACEHOLDER-SET-GRAFANA_SLACK_WEBHOOK_URL}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/etc/grafana/dashboards:ro
