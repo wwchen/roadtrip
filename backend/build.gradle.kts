@@ -73,7 +73,7 @@ tasks.register<JavaExec>("installPlaywrightBrowsers") {
     group = "verification"
     description = "Download Chromium for the Playwright-driven SmokeTest."
     mainClass.set("com.microsoft.playwright.CLI")
-    classpath = sourceSets["test"].runtimeClasspath
+    classpath = sourceSets["smokeTest"].runtimeClasspath
     args = listOf("install", "chromium")
 }
 
@@ -87,6 +87,20 @@ val postgresVersion = "42.7.4"
 val flywayVersion = "10.20.1"
 val testcontainersVersion = "1.21.4"
 val timeshapeVersion = "2025b.26"
+val junitVersion = "5.11.3"
+val playwrightVersion = "1.50.0"
+
+// Isolated source set (src/smokeTest/kotlin) for the Playwright-driven
+// SmokeTest. It compiles against main output only — not the ~60-class `test`
+// source set — so the CI smoke job compiles two classes instead of everything
+// just to launch a browser. Declared before `dependencies` so the generated
+// smokeTestImplementation / smokeTestRuntimeOnly configurations exist.
+sourceSets {
+    create("smokeTest") {
+        compileClasspath += sourceSets["main"].output
+        runtimeClasspath += sourceSets["main"].output
+    }
+}
 
 dependencies {
     implementation("io.ktor:ktor-server-core:$ktorVersion")
@@ -137,11 +151,16 @@ dependencies {
     testImplementation("io.ktor:ktor-client-mock:$ktorVersion")
     testImplementation("org.testcontainers:postgresql:$testcontainersVersion")
     testImplementation("org.testcontainers:junit-jupiter:$testcontainersVersion")
-    testImplementation("org.junit.jupiter:junit-jupiter:5.11.3")
+    testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testRuntimeOnly("org.junit.platform:junit-platform-launcher")
-    // Playwright JVM drives a real Chromium for SmokeTest. Gated on
-    // QA_BASE_URL so normal `gradle test` runs don't pull Chromium.
-    testImplementation("com.microsoft.playwright:playwright:1.50.0")
+
+    // Playwright-driven SmokeTest lives in its own `smokeTest` source set (see
+    // below), so the main `test` compile + classpath stay free of Playwright
+    // and the CI smoke job compiles two classes instead of the whole suite.
+    "smokeTestImplementation"(kotlin("test"))
+    "smokeTestImplementation"("org.junit.jupiter:junit-jupiter:$junitVersion")
+    "smokeTestImplementation"("com.microsoft.playwright:playwright:$playwrightVersion")
+    "smokeTestRuntimeOnly"("org.junit.platform:junit-platform-launcher")
 }
 
 kotlin {
@@ -315,11 +334,31 @@ tasks.test {
         exceptionFormat = TestExceptionFormat.FULL
         showStandardStreams = false
     }
-    // Pass through QA_BASE_URL so SmokeTest's @EnabledIfEnvironmentVariable
-    // sees it inside the Gradle test worker JVM. Without this Gradle scrubs
-    // env vars and the test silently skips.
+    // Headroom for the parallel test workers (classes run concurrently in one
+    // JVM — see src/test/resources/junit-platform.properties).
+    maxHeapSize = "4g"
+}
+
+// Playwright-driven end-to-end smoke against an already-running backend. Opt-in
+// (not wired into `check`) — it needs QA_BASE_URL pointing at a live server, and
+// runs the small `smokeTest` source set rather than the full `test` suite.
+val smokeTest by tasks.registering(Test::class) {
+    group = "verification"
+    description = "Playwright smoke test against a running backend (set QA_BASE_URL)."
+    testClassesDirs = sourceSets["smokeTest"].output.classesDirs
+    classpath = sourceSets["smokeTest"].runtimeClasspath
+    useJUnitPlatform()
+    shouldRunAfter(tasks.test)
+    testLogging {
+        events(TestLogEvent.PASSED, TestLogEvent.FAILED, TestLogEvent.SKIPPED)
+        exceptionFormat = TestExceptionFormat.FULL
+        showStandardStreams = false
+    }
+    // Pass through QA_BASE_URL so SmokeTest's @EnabledIfEnvironmentVariable sees
+    // it inside the Gradle test worker JVM; without this Gradle scrubs env vars
+    // and the test silently skips.
     System.getenv("QA_BASE_URL")?.let { environment("QA_BASE_URL", it) }
-    // Playwright's JSON reader thread parses large evaluate() / page-event
+    // Playwright's JSON reader thread parses large evaluate()/page-event
     // payloads in the worker JVM; default 512m OOMs once the map state grows.
     maxHeapSize = "4g"
 }
