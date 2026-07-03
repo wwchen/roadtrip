@@ -104,10 +104,10 @@ class SlackNotifier(
 - Posts to `https://slack.com/api/chat.postMessage` with
   `Authorization: Bearer <botToken>`; parses `ok`; on `ok:false` logs the Slack
   `error` and returns false.
-- Message content: campground/POI name, the site(s) + date(s) that opened, and
-  a `recreation.gov` deep link (reuse the legacy `matchUrl` shape for rec.gov;
-  other providers get a plain campground line — no per-vendor deep-link work in
-  v1).
+- Message content: the site(s) + date(s) that opened, as provider-neutral
+  lines (site label from the reservable's name / composite id, loop, date). No
+  booking deep links in v1 — a deep link is vendor-specific and must not live in
+  this provider-neutral service; see out-of-scope.
 
 ### `service/availability/WatchAlertDispatcher.kt` (business logic)
 
@@ -227,7 +227,9 @@ Two layers, both existing:
 - `atc` / cart automation (product-excluded).
 - Browser push, email, any non-Slack channel.
 - Block Kit / rich Slack formatting (text-only v1).
-- Per-vendor booking deep links beyond rec.gov (others get a plain line).
+- Booking deep links. A URL scheme is vendor-specific, so it belongs behind the
+  `ReservationProvider` port (e.g. a `bookingUrl(reservable, date)` capability),
+  not in this dispatcher. Deferred to that follow-up; v1 posts plain lines.
 - A settings UI / runtime token rotation (env config only; redeploy to change).
 - Rate-limiting or digesting alerts (edge dedup + `stop_when_triggered` are the
   only throttles in v1).

@@ -13,7 +13,6 @@ import java.time.LocalDate
 const val SLACK_NOTIFY_KIND = "slack_notify"
 
 private const val MAX_SITES_IN_MESSAGE = 10
-private const val RECGOV_VENDOR = "recgov"
 
 /**
  * Turns cube edges into Slack alerts. Called once per poller run, after the
@@ -77,8 +76,7 @@ class WatchAlertDispatcher(
                 val r = reservablesById[t.reservableId]
                 val label = r?.name ?: r?.rid?.encode() ?: "site ${t.reservableId}"
                 val loop = r?.loop?.let { " ($it)" }.orEmpty()
-                val url = r?.let(::bookingUrl)?.let { "$it&startDate=${t.targetDate}&endDate=${t.targetDate.plusDays(1)}" }
-                if (url != null) "• *$label*$loop — ${t.targetDate} <$url|book>" else "• *$label*$loop — ${t.targetDate}"
+                "• *$label*$loop — ${t.targetDate}"
             }
         val count = ordered.size
         val header = "⛺ $count campsite opening${if (count == 1) "" else "s"} available"
@@ -94,8 +92,3 @@ private fun AvailabilityWatchRepo.Watch.channelOverride(): String? =
         ?.takeIf { it.isString }
         ?.content
         ?.takeIf { it.isNotBlank() }
-
-/** rec.gov campsite booking base URL, or null for providers without a deep
- *  link yet (they get a plain line). Dates are appended by the caller. */
-private fun bookingUrl(r: Reservable): String? =
-    if (r.rid.vendor == RECGOV_VENDOR) "https://www.recreation.gov/camping/campsites/${r.rid.vendorId}?" else null
