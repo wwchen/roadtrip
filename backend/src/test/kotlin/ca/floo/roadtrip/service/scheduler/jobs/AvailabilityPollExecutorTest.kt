@@ -35,12 +35,14 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.slf4j.MDC
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -177,6 +179,10 @@ class AvailabilityPollExecutorTest {
     private class CountingRecgovProvider : ReservationProvider {
         var calls: Int = 0
 
+        /** Captures the MDC `run_id` seen inside the upstream call, proving it
+         *  propagated across the coroutine dispatch from [AvailabilityPollExecutor]. */
+        var mdcRunIdDuringCall: String? = null
+
         override val id: ReservationProviderId = ReservationProviderId.RECGOV
         override val capabilities: ReservationProviderCapabilities =
             ReservationProviderCapabilities(
@@ -190,6 +196,7 @@ class AvailabilityPollExecutorTest {
 
         override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
             calls++
+            mdcRunIdDuringCall = MDC.get("run_id")
             val observedAt = Instant.now()
             val observations =
                 req.reservables.map { ref ->
@@ -282,6 +289,11 @@ class AvailabilityPollExecutorTest {
             assertEquals("ok", fetchCalls[0].outcome)
             assertEquals(3, fetchCalls[0].reservableCount)
             assertEquals("232447", fetchCalls[0].parentRef)
+
+            // The upstream client call happened with run_id in the MDC, so its log
+            // lines (e.g. "Poller: GET availability ...") are correlatable to this run.
+            assertEquals(runs[0].id.toString(), provider.mdcRunIdDuringCall)
+            assertNull(MDC.get("run_id"), "MDC should be cleared on this thread after handle() returns")
         }
 
     @Test

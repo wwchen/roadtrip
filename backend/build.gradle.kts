@@ -120,6 +120,7 @@ dependencies {
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-slf4j:1.9.0")
     // YAML reader for config/poi-registry.yaml (kotlinx.serialization-shaped).
     implementation("com.charleskorn.kaml:kaml:0.74.0")
     // Coordinate -> IANA ZoneId lookup from timezone-boundary-builder data.

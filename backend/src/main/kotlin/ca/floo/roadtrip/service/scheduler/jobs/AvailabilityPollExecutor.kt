@@ -16,6 +16,8 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.toCatalogReservableRef
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
+import kotlinx.coroutines.slf4j.MDCContext
+import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.time.Duration
 import java.time.LocalDate
@@ -58,41 +60,43 @@ internal class AvailabilityPollExecutor(
         val startedAt = OffsetDateTime.now()
         val runId = runs.start(job.id, startedAt)
         try {
-            val intent = AvailabilityJobIntent.fromJsonObject(job.intentPayload)
-            val resolved = resolveTargets(intent)
-            val results =
-                batcher.fetchByGroup(
-                    targets = resolved,
-                    windowFor = { context, caps ->
-                        dateResolver.resolvePollingWindow(
-                            startDate = LocalDate.parse(intent.startDate),
-                            endDate = LocalDate.parse(intent.endDate),
-                            context = context,
-                            bookingHorizonDays = caps.bookingHorizonDays,
-                            maxDays = MAX_POLL_WINDOW_DAYS,
-                        )
-                    },
-                    fetch = { parentRef, provider, rows, window ->
-                        provider.catalogAvailability(
-                            CatalogAvailabilityRequest(
-                                ref = parentRef,
-                                reservables = rows.map { it.toCatalogReservableRef() },
-                                startDate = window.startDate,
-                                endDate = window.endDate,
-                                force = true,
-                            ),
-                        )
-                    },
-                )
-            val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
-            val snapshotCount = results.sumOf { appendSnapshots(it, runId) }
-            recordFetchCalls(results, runId)
-            val completedAt = OffsetDateTime.now()
-            val durationMs = durationMs(startedAt, completedAt)
-            if (failure != null) {
-                runs.fail(runId, error = failure.outcome.name.lowercase(), completedAt = completedAt, durationMs = durationMs)
-            } else {
-                runs.complete(runId, snapshotCount, completedAt, durationMs)
+            withContext(MDCContext(mapOf("run_id" to runId.toString()))) {
+                val intent = AvailabilityJobIntent.fromJsonObject(job.intentPayload)
+                val resolved = resolveTargets(intent)
+                val results =
+                    batcher.fetchByGroup(
+                        targets = resolved,
+                        windowFor = { context, caps ->
+                            dateResolver.resolvePollingWindow(
+                                startDate = LocalDate.parse(intent.startDate),
+                                endDate = LocalDate.parse(intent.endDate),
+                                context = context,
+                                bookingHorizonDays = caps.bookingHorizonDays,
+                                maxDays = MAX_POLL_WINDOW_DAYS,
+                            )
+                        },
+                        fetch = { parentRef, provider, rows, window ->
+                            provider.catalogAvailability(
+                                CatalogAvailabilityRequest(
+                                    ref = parentRef,
+                                    reservables = rows.map { it.toCatalogReservableRef() },
+                                    startDate = window.startDate,
+                                    endDate = window.endDate,
+                                    force = true,
+                                ),
+                            )
+                        },
+                    )
+                val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
+                val snapshotCount = results.sumOf { appendSnapshots(it, runId) }
+                recordFetchCalls(results, runId)
+                val completedAt = OffsetDateTime.now()
+                val durationMs = durationMs(startedAt, completedAt)
+                if (failure != null) {
+                    runs.fail(runId, error = failure.outcome.name.lowercase(), completedAt = completedAt, durationMs = durationMs)
+                } else {
+                    runs.complete(runId, snapshotCount, completedAt, durationMs)
+                }
             }
         } catch (e: Exception) {
             log.warn("job {} run {} failed: {}", job.id, runId, e.message)
