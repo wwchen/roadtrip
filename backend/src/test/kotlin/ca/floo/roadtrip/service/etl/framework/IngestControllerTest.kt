@@ -5,9 +5,7 @@ import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.models.metadata.ingest.Phase
 import ca.floo.roadtrip.models.metadata.ingest.RunKind
 import ca.floo.roadtrip.models.metadata.ingest.Target
-import ca.floo.roadtrip.repo.migrate
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
+import ca.floo.roadtrip.repo.SharedDbTest
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
@@ -15,17 +13,9 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import org.jooq.DSLContext
-import org.jooq.SQLDialect
-import org.jooq.impl.DSL
-import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
 import org.junit.jupiter.api.assertThrows
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import java.io.ByteArrayInputStream
 import java.io.File
 import java.io.InputStream
@@ -37,41 +27,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class IngestControllerTest {
-    private lateinit var pg: PostgreSQLContainer<Nothing>
-    private lateinit var ds: HikariDataSource
-    private lateinit var ctx: DSLContext
-
-    @BeforeAll
-    fun startPg() {
-        System.setProperty("api.version", "1.44")
-        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
-        pg =
-            PostgreSQLContainer<Nothing>(image).apply {
-                withDatabaseName("ingest_test")
-                withUsername("test")
-                withPassword("test")
-            }
-        pg.start()
-        val cfg =
-            HikariConfig().apply {
-                jdbcUrl = pg.jdbcUrl
-                username = pg.username
-                password = pg.password
-                maximumPoolSize = 4
-            }
-        ds = HikariDataSource(cfg)
-        migrate(ds)
-        ctx = DSL.using(ds, SQLDialect.POSTGRES)
-    }
-
-    @AfterAll
-    fun stopPg() {
-        ds.close()
-        pg.stop()
-    }
-
+class IngestControllerTest : SharedDbTest() {
     @BeforeEach
     fun reset() {
         // Children first — FK from phase rows to parent rows.

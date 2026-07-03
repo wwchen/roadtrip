@@ -1,20 +1,12 @@
 package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.references.API_CACHE
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
-import org.jooq.DSLContext
-import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -22,12 +14,7 @@ import java.time.ZoneId
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class ApiCacheRepoTest {
-    private lateinit var pg: PostgreSQLContainer<Nothing>
-    private lateinit var ds: HikariDataSource
-    private lateinit var ctx: DSLContext
-
+class ApiCacheRepoTest : SharedDbTest() {
     private class TestClock(
         private var instant: Instant,
     ) : Clock() {
@@ -40,35 +27,6 @@ class ApiCacheRepoTest {
         fun advance(duration: Duration) {
             instant = instant.plus(duration)
         }
-    }
-
-    @BeforeAll
-    fun start() {
-        System.setProperty("api.version", "1.44")
-        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
-        pg =
-            PostgreSQLContainer<Nothing>(image).apply {
-                withDatabaseName("roadtrip_api_cache")
-                withUsername("test")
-                withPassword("test")
-            }
-        pg.start()
-        val cfg =
-            HikariConfig().apply {
-                jdbcUrl = pg.jdbcUrl
-                username = pg.username
-                password = pg.password
-                maximumPoolSize = 2
-            }
-        ds = HikariDataSource(cfg)
-        migrate(ds)
-        ctx = dsl(ds)
-    }
-
-    @AfterAll
-    fun stop() {
-        ds.close()
-        pg.stop()
     }
 
     @BeforeEach

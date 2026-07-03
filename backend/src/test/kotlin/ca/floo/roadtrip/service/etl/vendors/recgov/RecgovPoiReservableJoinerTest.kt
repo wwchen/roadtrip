@@ -3,21 +3,12 @@ package ca.floo.roadtrip.service.etl.vendors.recgov
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
-import org.jooq.SQLDialect
-import org.jooq.impl.DSL
-import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -30,39 +21,14 @@ import kotlin.test.assertTrue
  * Doesn't use Upsert / EtlOrchestrator — writes the rows directly via SQL
  * so the test pins the joiner's match rule, not the upstream wiring.
  */
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class RecgovPoiReservableJoinerTest {
-    private lateinit var pg: PostgreSQLContainer<*>
-    private lateinit var ds: HikariDataSource
-    private lateinit var ctx: DSLContext
+class RecgovPoiReservableJoinerTest : SharedDbTest() {
     private lateinit var reservablesRepo: ReservableRepo
     private lateinit var joiner: RecgovPoiReservableJoiner
 
     @BeforeAll
     fun setUp() {
-        pg = PostgreSQLContainer(DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres"))
-        pg
-            .withDatabaseName("roadtrip")
-            .withUsername("test")
-            .withPassword("test")
-            .start()
-        val cfg =
-            HikariConfig().apply {
-                jdbcUrl = pg.jdbcUrl
-                username = pg.username
-                password = pg.password
-            }
-        ds = HikariDataSource(cfg)
-        migrate(ds)
-        ctx = DSL.using(ds, SQLDialect.POSTGRES)
         reservablesRepo = ReservableRepo(ctx)
         joiner = RecgovPoiReservableJoiner()
-    }
-
-    @AfterAll
-    fun tearDown() {
-        ds.close()
-        pg.stop()
     }
 
     @BeforeEach
