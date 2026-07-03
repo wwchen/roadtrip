@@ -187,11 +187,15 @@ jobs:
           key: ${{ runner.os }}-playwright-${{ hashFiles('backend/build.gradle.kts') }}
           restore-keys: ${{ runner.os }}-playwright-
 
+      # -x generateJooq: the fat-jar step above already compiled main, so the
+      # generated jOOQ sources exist and codegen's build-time Postgres isn't
+      # needed again here (installing the browser only needs the smokeTest
+      # classpath, which compiles the single SmokeTest class).
       - name: Install Playwright Chromium
-        run: ./gradlew :backend:installPlaywrightBrowsers
+        run: ./gradlew :backend:installPlaywrightBrowsers -x :backend:generateJooq
 
       - name: Run smoke
-        run: QA_BASE_URL=http://127.0.0.1:8765 ./gradlew :backend:test --tests ca.floo.roadtrip.SmokeTest --tests ca.floo.campsite.CampsiteSmokeTest --rerun -x :backend:generateJooq
+        run: QA_BASE_URL=http://127.0.0.1:8765 ./gradlew :backend:smokeTest --rerun -x :backend:generateJooq
 
       - name: Upload test reports on failure
         if: failure()

@@ -97,12 +97,11 @@ reset-db:
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
-# (e.g. `make run`). Driven by Playwright JVM in the backend test suite;
-# QA_BASE_URL gates the SmokeTest so `gradle test` alone stays fast and
-# doesn't pull Chromium.
+# (e.g. `make run`). Runs the dedicated `smokeTest` source set (Playwright JVM);
+# QA_BASE_URL gates SmokeTest so it skips when the server isn't up.
 qa:
 	./gradlew :backend:installPlaywrightBrowsers
-	QA_BASE_URL=http://127.0.0.1:$(PORT) ./gradlew :backend:test --tests ca.floo.roadtrip.SmokeTest --tests ca.floo.campsite.CampsiteSmokeTest --rerun -x :backend:generateJooq
+	QA_BASE_URL=http://127.0.0.1:$(PORT) ./gradlew :backend:smokeTest --rerun -x :backend:generateJooq
 
 # Point this clone's git at .githooks/ so .githooks/pre-commit runs ktlint on
 # staged backend Kotlin files. Per-clone (core.hooksPath isn't tracked in the
