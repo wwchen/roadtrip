@@ -13,6 +13,7 @@ class AvailabilityHeatmapRepoTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability_cell")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
     }
@@ -31,24 +32,25 @@ class AvailabilityHeatmapRepoTest : SharedDbTest() {
             )!!
             .get("id", Long::class.java)
 
-    private fun insertSnapshot(
+    /** Inserts a cube cell directly (no snapshot log row) so tests prove the
+     *  heatmap now reads the cell, not the append log. */
+    private fun insertCell(
         reservableId: Long,
         targetDate: LocalDate,
-        observedAt: OffsetDateTime,
-        available: Boolean,
-        status: String = if (available) "available" else "reserved",
+        status: String,
+        observedAt: OffsetDateTime = now(),
     ) {
         ctx.execute(
             """
-            INSERT INTO availability_snapshot (
-                reservable_id, observed_at, target_date, status, available, day_payload
-            ) VALUES (?::bigint, ?::timestamptz, ?::date, ?::availability_status, ?::boolean, '{}'::jsonb)
+            INSERT INTO availability_cell (
+                reservable_id, target_date, status, last_observed_at, last_changed_at
+            ) VALUES (?::bigint, ?::date, ?::availability_status, ?::timestamptz, ?::timestamptz)
             """.trimIndent(),
             reservableId,
-            observedAt.toString(),
             targetDate.toString(),
             status,
-            available,
+            observedAt.toString(),
+            observedAt.toString(),
         )
     }
 
@@ -62,10 +64,12 @@ class AvailabilityHeatmapRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `single reservable single date returns one row`() {
+    fun `reads the cell even with zero snapshot rows for the key`() {
         val rid = seedReservable("100")
         val date = LocalDate.parse("2026-07-04")
-        insertSnapshot(rid, date, now().minusMinutes(1), available = true)
+        // Only a cell row -- no availability_snapshot row. The old DISTINCT ON
+        // query returned nothing here; the cube-backed query returns the cell.
+        insertCell(rid, date, status = "available")
         val repo = AvailabilityHeatmapRepo(ctx)
         val cells = repo.loadHeatmap(listOf(rid), listOf(date))
         assertEquals(1, cells.size)
@@ -76,33 +80,14 @@ class AvailabilityHeatmapRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `latest snapshot wins for same pair`() {
+    fun `available is derived from status isOnlineBookable`() {
         val rid = seedReservable("100")
         val date = LocalDate.parse("2026-07-04")
-        insertSnapshot(rid, date, now().minusMinutes(5), available = false)
-        insertSnapshot(rid, date, now().minusMinutes(2), available = true)
-        insertSnapshot(rid, date, now().minusMinutes(1), available = false, status = "reserved")
+        insertCell(rid, date, status = "reserved")
         val repo = AvailabilityHeatmapRepo(ctx)
-        val cells = repo.loadHeatmap(listOf(rid), listOf(date))
-        assertEquals(1, cells.size)
-        assertEquals(false, cells[0].available)
-        assertEquals(AvailabilityStatus.RESERVED, cells[0].status)
-    }
-
-    @Test
-    fun `latest snapshot uses id tie breaker for identical observed_at`() {
-        val rid = seedReservable("100")
-        val date = LocalDate.parse("2026-07-04")
-        val observedAt = now()
-        insertSnapshot(rid, date, observedAt, available = false)
-        insertSnapshot(rid, date, observedAt, available = true)
-
-        val repo = AvailabilityHeatmapRepo(ctx)
-        val cells = repo.loadHeatmap(listOf(rid), listOf(date))
-
-        assertEquals(1, cells.size)
-        assertEquals(true, cells[0].available)
-        assertEquals(AvailabilityStatus.AVAILABLE, cells[0].status)
+        val cell = repo.loadHeatmap(listOf(rid), listOf(date)).single()
+        assertEquals(false, cell.available)
+        assertEquals(AvailabilityStatus.RESERVED, cell.status)
     }
 
     @Test
@@ -111,9 +96,9 @@ class AvailabilityHeatmapRepoTest : SharedDbTest() {
         val r2 = seedReservable("200")
         val d1 = LocalDate.parse("2026-07-04")
         val d2 = LocalDate.parse("2026-07-05")
-        insertSnapshot(r1, d1, now().minusMinutes(1), available = true)
-        insertSnapshot(r1, d2, now().minusMinutes(1), available = false, status = "reserved")
-        insertSnapshot(r2, d1, now().minusMinutes(1), available = false, status = "closed")
+        insertCell(r1, d1, status = "available")
+        insertCell(r1, d2, status = "reserved")
+        insertCell(r2, d1, status = "closed")
         val repo = AvailabilityHeatmapRepo(ctx)
         val cells = repo.loadHeatmap(listOf(r1, r2), listOf(d1, d2))
         assertEquals(3, cells.size)
@@ -125,18 +110,21 @@ class AvailabilityHeatmapRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `heatmap preserves first come and unknown enum statuses`() {
+    fun `heatmap preserves first come and unknown and past enum statuses`() {
         val r1 = seedReservable("100")
         val r2 = seedReservable("200")
+        val r3 = seedReservable("300")
         val date = LocalDate.parse("2026-07-04")
-        insertSnapshot(r1, date, now().minusMinutes(1), available = false, status = "first_come")
-        insertSnapshot(r2, date, now().minusMinutes(1), available = false, status = "unknown")
+        insertCell(r1, date, status = "first_come")
+        insertCell(r2, date, status = "unknown")
+        insertCell(r3, date, status = "past")
         val repo = AvailabilityHeatmapRepo(ctx)
 
-        val cells = repo.loadHeatmap(listOf(r1, r2), listOf(date))
+        val cells = repo.loadHeatmap(listOf(r1, r2, r3), listOf(date))
 
         val byReservable = cells.associateBy { it.reservableId }
         assertEquals(AvailabilityStatus.FIRST_COME, byReservable[r1]!!.status)
         assertEquals(AvailabilityStatus.UNKNOWN, byReservable[r2]!!.status)
+        assertEquals(AvailabilityStatus.PAST, byReservable[r3]!!.status)
     }
 }
