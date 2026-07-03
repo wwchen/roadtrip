@@ -1,8 +1,9 @@
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
-        <encoder>
-            <pattern>%d{HH:mm:ss.SSS} %-5level %logger{20} - %msg%n</pattern>
-        </encoder>
+        <!-- JSON lines so Alloy/Loki can parse fields (incl. MDC run_id) with `| json`.
+             Trades away human-friendly local `docker logs`/Tilt output; an
+             env-conditional dev-vs-prod encoder is a possible follow-up. -->
+        <encoder class="ch.qos.logback.classic.encoder.JsonEncoder"/>
     </appender>
     <root level="INFO">
         <appender-ref ref="STDOUT"/>
