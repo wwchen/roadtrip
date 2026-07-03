@@ -267,6 +267,73 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
     }
 
     @Test
+    fun `forcePull sets next_run_at to now and stamps last_force_pull_at when outside cooldown`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val pollerId = repo.upsertActive("recgov", "A", poi, pullNextRunAt = now().plusHours(1))
+        val forceAt = now().truncatedTo(java.time.temporal.ChronoUnit.MICROS)
+        val result = repo.forcePull(pollerId, forceAt, cooldown = Duration.ofSeconds(30))
+        assertTrue(result is AvailabilityPollerRepo.ForcePullResult.Accepted)
+        // isEqual compares the instant, not the offset — the Postgres round-trip
+        // comes back at the JVM's local offset while forceAt is UTC.
+        assertTrue(forceAt.isEqual(repo.findById(pollerId)!!.nextRunAt))
+        assertTrue(forceAt.isEqual(repo.findById(pollerId)!!.lastForcePullAt!!))
+    }
+
+    @Test
+    fun `forcePull rejects a second call inside the cooldown window`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val pollerId = repo.upsertActive("recgov", "A", poi, pullNextRunAt = null)
+        val forceAt = now().truncatedTo(java.time.temporal.ChronoUnit.MICROS)
+        repo.forcePull(pollerId, forceAt, cooldown = Duration.ofSeconds(30))
+        val second = repo.forcePull(pollerId, forceAt.plusSeconds(5), cooldown = Duration.ofSeconds(30))
+        assertTrue(second is AvailabilityPollerRepo.ForcePullResult.Cooldown)
+        val remaining = (second as AvailabilityPollerRepo.ForcePullResult.Cooldown).retryAfterSec
+        assertEquals(25L, remaining) // 30s cooldown - 5s elapsed
+    }
+
+    @Test
+    fun `forcePull succeeds again once the cooldown has elapsed`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val pollerId = repo.upsertActive("recgov", "A", poi, pullNextRunAt = null)
+        val forceAt = now().truncatedTo(java.time.temporal.ChronoUnit.MICROS)
+        repo.forcePull(pollerId, forceAt, cooldown = Duration.ofSeconds(30))
+        val later = repo.forcePull(pollerId, forceAt.plusSeconds(31), cooldown = Duration.ofSeconds(30))
+        assertTrue(later is AvailabilityPollerRepo.ForcePullResult.Accepted)
+    }
+
+    @Test
+    fun `forcePull on an unknown poller id returns NotFound`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val result = repo.forcePull(pollerId = 999_999L, now = now(), cooldown = Duration.ofSeconds(30))
+        assertEquals(AvailabilityPollerRepo.ForcePullResult.NotFound, result)
+    }
+
+    @Test
+    fun `concurrent force-pull calls inside the cooldown only one wins`() {
+        val repo = AvailabilityPollerRepo(ctx)
+        val poi = insertPoi()
+        val pollerId = repo.upsertActive("recgov", "A", poi, pullNextRunAt = null)
+        val forceAt = now().truncatedTo(java.time.temporal.ChronoUnit.MICROS)
+        val threads = 8
+        val results = java.util.Collections.synchronizedList(mutableListOf<AvailabilityPollerRepo.ForcePullResult>())
+        val barrier = java.util.concurrent.CyclicBarrier(threads)
+        val workers =
+            (1..threads).map {
+                Thread {
+                    barrier.await()
+                    results.add(repo.forcePull(pollerId, forceAt, cooldown = Duration.ofSeconds(30)))
+                }
+            }
+        workers.forEach { it.start() }
+        workers.forEach { it.join() }
+        val accepted = results.count { it is AvailabilityPollerRepo.ForcePullResult.Accepted }
+        assertEquals(1, accepted) // WHERE-embedded cooldown check: exactly one winner
+    }
+
+    @Test
     fun `pollerIdsForWatch reflects linkWatch and replaceLinksForWatch`() {
         val repo = AvailabilityPollerRepo(ctx)
         val poi = insertPoi()
