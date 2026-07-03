@@ -399,7 +399,9 @@ private fun resolveUpdateScope(req: AvailabilityWatchUpdateRequest): ResolveResu
 }
 
 private fun validateCreateBody(req: AvailabilityWatchCreateRequest): Pair<String, String?>? {
-    if (req.cadenceSec < 5) return "invalid_cadence" to "cadence_sec must be >= 5"
+    // NULL cadence is valid: "no watch-level override, fall through". Only a
+    // present-but-sub-5 value is rejected (mirrors the DB CHECK).
+    if (req.cadenceSec != null && req.cadenceSec < 5) return "invalid_cadence" to "cadence_sec must be >= 5"
     if (req.triggerKinds.isEmpty()) return "invalid_triggers" to "trigger_kinds must be non-empty"
     return null
 }

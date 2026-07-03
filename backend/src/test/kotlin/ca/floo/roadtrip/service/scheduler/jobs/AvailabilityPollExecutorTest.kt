@@ -18,6 +18,8 @@ import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
+import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -63,21 +65,25 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
     /** Seeds a campground POI whose provider_ref resolves to ProviderRef.RecGov(campgroundId). */
-    private fun seedPoi(campgroundId: String): Long =
+    private fun seedPoi(
+        campgroundId: String,
+        cadenceOverrideSec: Int? = null,
+    ): Long =
         ctx
             .fetchOne(
                 """
                 INSERT INTO pois (
                     source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
+                    properties, provider_ref, fetched_at, cadence_override_sec
                 ) VALUES (
                     'test', ?, 'campground', 'Upper Pines',
                     ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
+                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz, ?
                 ) RETURNING id
                 """.trimIndent(),
                 "poi-$campgroundId",
                 """{"recgov_id": "$campgroundId"}""",
+                cadenceOverrideSec,
             )!!
             .get("id", Long::class.java)
 
@@ -106,12 +112,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         return reservableId
     }
 
-    /** Seeds an ACTIVE poi-scoped watch. Returns its id. */
+    /** Seeds an ACTIVE poi-scoped watch. Returns its id. A NULL [cadenceSec]
+     *  means "no watch-level cadence override" (V34), exercising the fall-through
+     *  to the POI override / global default. */
     private fun seedWatch(
         poiId: Long,
         startDate: String,
         endDate: String,
-        cadenceSec: Int = 60,
+        cadenceSec: Int? = 60,
     ): Long {
         val watchId =
             ctx
@@ -120,7 +128,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     INSERT INTO availability_watch (
                         start_date, end_date, cadence_sec, trigger_kinds
                     ) VALUES (
-                        ?::date, ?::date, ?, ARRAY['atc']
+                        ?::date, ?::date, ?::int, ARRAY['atc']
                     ) RETURNING id
                     """.trimIndent(),
                     startDate,
@@ -158,7 +166,26 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         return pollers.findById(pollerId)!!
     }
 
-    private fun executorFor(provider: ReservationProvider): AvailabilityPollExecutor {
+    /** A limiter double that always grants or always denies, recording every
+     *  acquire request so tests can assert the token count. */
+    private inner class RecordingLimiter(
+        private val grant: Boolean,
+    ) : VendorRateLimiter(VendorRateLimitConfig(), ds) {
+        val requests = mutableListOf<Pair<String, Long>>()
+
+        override fun tryAcquire(
+            provider: String,
+            tokens: Long,
+        ): Boolean {
+            requests += provider to tokens
+            return grant
+        }
+    }
+
+    private fun executorFor(
+        provider: ReservationProvider,
+        limiter: VendorRateLimiter = RecordingLimiter(grant = true),
+    ): AvailabilityPollExecutor {
         val reservablesRepo = ReservableRepo(ctx)
         val registry = ReservationProviderRegistry(mapOf("test" to provider))
         val dateResolver = AvailabilityDateResolver()
@@ -179,6 +206,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             dateResolver = dateResolver,
             targets = targets,
             fetchCalls = AvailabilityFetchCallRepo(ctx),
+            limiter = limiter,
         )
     }
 
@@ -225,6 +253,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             dateResolver = dateResolver,
             targets = targets,
             fetchCalls = AvailabilityFetchCallRepo(failingCtx),
+            limiter = RecordingLimiter(grant = true),
         )
     }
 
@@ -335,6 +364,112 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals("232447", fetchCalls[0].parentRef)
         }
 
+    // --- Cadence fall-through (PR4) ---
+    //
+    // A watch's `cadenceSec` is a NULLABLE desired override (V34): NULL means
+    // "no watch-level preference," which reaches the middle "poi override" rung
+    // of the spec's `watch.cadence_sec ?? poi.cadence_override_sec ??
+    // GLOBAL_DEFAULT_SEC` fall-through. The pure resolver is unit-tested for
+    // every rung; the integration tests below prove the reachable paths (a NULL
+    // watch cadence falls through to the POI override, an explicit watch cadence
+    // wins) end-to-end.
+
+    private fun watchWithCadence(cadenceSec: Int?): AvailabilityWatchRepo.Watch =
+        AvailabilityWatchRepo.Watch(
+            id = 0,
+            targets = emptyList(),
+            reservableFilters = kotlinx.serialization.json.JsonObject(emptyMap()),
+            startDate = farStart,
+            endDate = farStart.plusDays(2),
+            cadenceSec = cadenceSec,
+            triggerKinds = emptyList(),
+            triggerConfig = kotlinx.serialization.json.JsonObject(emptyMap()),
+            stopWhenTriggered = false,
+            status = ca.floo.roadtrip.service.availability.WatchStatus.ACTIVE,
+            createdAt = now(),
+            updatedAt = now(),
+        )
+
+    @Test
+    fun `resolver falls through to poi override when a watch has no explicit cadence`() {
+        // NULL watch cadence -> poi override (30), not GLOBAL_DEFAULT_SEC.
+        assertEquals(30, resolveCadenceSec(listOf(watchWithCadence(null)), poiCadenceOverrideSec = 30))
+    }
+
+    @Test
+    fun `resolver lets a tighter watch cadence win over a looser poi override`() {
+        assertEquals(10, resolveCadenceSec(listOf(watchWithCadence(10)), poiCadenceOverrideSec = 30))
+    }
+
+    @Test
+    fun `resolver falls through to GLOBAL_DEFAULT_SEC with no watch cadence and no poi override`() {
+        assertEquals(300, resolveCadenceSec(listOf(watchWithCadence(null)), poiCadenceOverrideSec = null))
+    }
+
+    @Test
+    fun `resolver takes the min across watches after each resolves its own fall-through`() {
+        // watch A leans on the poi override (30); watch B has explicit 15 -> min = 15.
+        val resolved = resolveCadenceSec(listOf(watchWithCadence(null), watchWithCadence(15)), poiCadenceOverrideSec = 30)
+        assertEquals(15, resolved)
+    }
+
+    @Test
+    fun `poi cadence override is read from the poller's representative poi and plumbs into next_run_at`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447", cadenceOverrideSec = 45)
+            seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 30)
+            val poller = linkWatch(provider, watchId)
+
+            assertEquals(45, AvailabilityPollerRepo(ctx).cadenceOverrideForPoller(poller.id))
+
+            val before = OffsetDateTime.now()
+            val result = executorFor(provider).handle(poller)
+
+            // watch cadence (30) is specified, so it wins over the override (45).
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertEquals(30L, delaySec)
+        }
+
+    @Test
+    fun `null watch cadence falls through to the poi override end-to-end`() =
+        runBlocking {
+            // Proves the middle rung is REACHABLE: a persisted watch with a NULL
+            // cadence (V34) leans on pois.cadence_override_sec, not the global
+            // default. Before V34 the column was NOT NULL and this rung was dead.
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447", cadenceOverrideSec = 45)
+            seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = null)
+            val poller = linkWatch(provider, watchId)
+
+            val before = OffsetDateTime.now()
+            val result = executorFor(provider).handle(poller)
+
+            // NULL watch cadence -> poi override (45), not GLOBAL_DEFAULT_SEC (300).
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertEquals(45L, delaySec)
+        }
+
+    @Test
+    fun `explicit watch cadence wins over the poi override end-to-end`() =
+        runBlocking {
+            // The companion to the fall-through test: when the watch DOES express a
+            // cadence, it takes precedence over the POI override.
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447", cadenceOverrideSec = 45)
+            seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 20)
+            val poller = linkWatch(provider, watchId)
+
+            val before = OffsetDateTime.now()
+            val result = executorFor(provider).handle(poller)
+
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertEquals(20L, delaySec)
+        }
+
     @Test
     fun `cadence is the min over live watches`() =
         runBlocking {
@@ -354,6 +489,89 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // min(300, 30) = 30s on success.
             val delaySec = Duration.between(before, result.nextRunAt).seconds
             assertEquals(30L, delaySec)
+        }
+
+    @Test
+    fun `governor starvation skips the fetch and reschedules soon without failing the run`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+            val denyingLimiter = RecordingLimiter(grant = false)
+
+            val before = OffsetDateTime.now()
+            val result = executorFor(provider, limiter = denyingLimiter).handle(poller)
+
+            // No upstream call was made.
+            assertEquals(0, provider.calls)
+            // Exactly one acquire request, for this poller's provider.
+            assertEquals(1, denyingLimiter.requests.size)
+            assertEquals("recgov", denyingLimiter.requests.single().first)
+            // Rescheduled soon (governor-starved), not on the 60s success cadence.
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertTrue(delaySec in 1..30, "expected a short starved retry, got ${delaySec}s")
+            // No run row — a starved tick is a non-event, not a failure.
+            assertEquals(0, AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10).size)
+        }
+
+    @Test
+    fun `governor success proceeds to fetch and consumes one token per bucket`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            listOf("100", "101").forEach { seedReservable(poiId, it) }
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+            val grantingLimiter = RecordingLimiter(grant = true)
+
+            executorFor(provider, limiter = grantingLimiter).handle(poller)
+
+            // Single-provider, single-parentRef, single-dateContext poller -> K = 1 bucket.
+            assertEquals(1, provider.calls)
+            assertEquals(1, grantingLimiter.requests.size)
+            assertEquals("recgov" to 1L, grantingLimiter.requests.single())
+            // A granted tick fetches and writes a completed run row as normal.
+            val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
+            assertEquals(1, runs.size)
+            assertEquals("completed", runs[0].status)
+        }
+
+    @Test
+    fun `null-window groups acquire zero tokens and are never starved`() =
+        runBlocking {
+            // A watch that passes the poller's UTC prefilter (end_date >= today)
+            // but whose target-local polling window resolves to null: end_date is
+            // today, and the polling-window clamp is max(start, earliestDate) where
+            // earliestDate is today-or-tomorrow, so end_date is never after the
+            // clamped start regardless of time of day. Every group is a non-fetch.
+            // The governor must charge ZERO tokens: a token spent on a non-fetch
+            // could starve the bucket and delay retiring an all-elapsed poller. Even
+            // a denying limiter must not block this tick.
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val today = LocalDate.now(ZoneOffset.UTC)
+            // start < end (satisfies the date-window CHECK) yet the whole window
+            // is at/behind the earliest bookable date -> null polling window.
+            val watchId = seedWatch(poiId, today.minusDays(1).toString(), today.toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+            val denyingLimiter = RecordingLimiter(grant = false)
+
+            val result = executorFor(provider, limiter = denyingLimiter).handle(poller)
+
+            // Zero groups have a real window -> zero tokens requested, and the
+            // denying limiter never got the chance to starve the tick.
+            assertEquals(0, denyingLimiter.requests.size)
+            // No upstream call was made (all groups skipped for a null window).
+            assertEquals(0, provider.calls)
+            // Not blocked/starved: the tick proceeded and wrote a run row (no-op
+            // completed run), so the poller keeps its normal cadence rather than
+            // being wedged behind a starved retry.
+            val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
+            assertEquals(1, runs.size)
+            assertEquals("completed", runs[0].status)
         }
 
     @Test

@@ -58,6 +58,29 @@ internal class CatalogAvailabilityBatcher {
         val dateContext: PoiDateContext,
     )
 
+    /**
+     * How many distinct (provider, parentRef, dateContext) groups [targets]
+     * would produce a REAL upstream call for — i.e. groups whose polling
+     * window ([windowFor]) is non-null. Groups with a null window are skipped
+     * by [fetchByGroup] (all target dates elapsed: no upstream call, no error),
+     * so they must NOT be counted for the governor: charging a token for a
+     * non-fetch wastes it and can needlessly starve a bucket, delaying the
+     * retirement of an all-elapsed poller.
+     *
+     * The governor consumes one vendor token per REAL fetch group, so this is
+     * the token count the executor must acquire before fetching. Uses the same
+     * [GroupKey] and the same [windowFor] as [fetchByGroup] so the two never
+     * drift on either the grouping key or the skip decision.
+     */
+    fun countFetchGroups(
+        targets: List<ResolvedAvailabilityTarget>,
+        windowFor: (PoiDateContext, ReservationProviderCapabilities) -> ResolvedDateWindow?,
+    ): Int =
+        targets
+            .map { GroupKey(it.provider, it.parentRef, it.dateContext) }
+            .distinct()
+            .count { windowFor(it.dateContext, it.provider.capabilities) != null }
+
     suspend fun fetchByGroup(
         targets: List<ResolvedAvailabilityTarget>,
         windowFor: (PoiDateContext, ReservationProviderCapabilities) -> ResolvedDateWindow?,

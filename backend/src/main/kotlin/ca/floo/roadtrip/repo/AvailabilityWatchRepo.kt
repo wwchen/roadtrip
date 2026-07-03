@@ -28,7 +28,8 @@ class AvailabilityWatchRepo(
         val reservableFilters: JsonObject,
         val startDate: LocalDate,
         val endDate: LocalDate,
-        val cadenceSec: Int,
+        // NULL = no watch-level cadence override (fall through to POI override / default).
+        val cadenceSec: Int?,
         val triggerKinds: List<String>,
         val triggerConfig: JsonObject,
         val stopWhenTriggered: Boolean,
@@ -52,7 +53,8 @@ class AvailabilityWatchRepo(
         val reservableFilters: JsonObject,
         val startDate: LocalDate,
         val endDate: LocalDate,
-        val cadenceSec: Int,
+        // NULL = no watch-level cadence override; resolver falls through.
+        val cadenceSec: Int?,
         val triggerKinds: List<String>,
         val triggerConfig: JsonObject,
         val stopWhenTriggered: Boolean,
@@ -198,7 +200,7 @@ class AvailabilityWatchRepo(
             reservableFilters = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.RESERVABLE_FILTERS)!!.data()).jsonObject,
             startDate = r.get(AVAILABILITY_WATCH.START_DATE)!!,
             endDate = r.get(AVAILABILITY_WATCH.END_DATE)!!,
-            cadenceSec = r.get(AVAILABILITY_WATCH.CADENCE_SEC)!!,
+            cadenceSec = r.get(AVAILABILITY_WATCH.CADENCE_SEC),
             triggerKinds = r.get(AVAILABILITY_WATCH.TRIGGER_KINDS)!!.filterNotNull(),
             triggerConfig = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.TRIGGER_CONFIG)!!.data()).jsonObject,
             stopWhenTriggered = r.get(AVAILABILITY_WATCH.STOP_WHEN_TRIGGERED)!!,

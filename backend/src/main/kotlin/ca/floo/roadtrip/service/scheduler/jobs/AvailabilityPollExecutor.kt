@@ -14,6 +14,7 @@ import ca.floo.roadtrip.service.availability.GroupFetchResult
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.availability.toCatalogReservableRef
+import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
 import kotlinx.coroutines.slf4j.MDCContext
@@ -69,6 +70,7 @@ internal class AvailabilityPollExecutor(
     private val dateResolver: AvailabilityDateResolver,
     private val targets: AvailabilityTargetResolver,
     private val fetchCalls: AvailabilityFetchCallRepo,
+    private val limiter: VendorRateLimiter,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scopeResolver = WatchScopeResolver(reservablesRepo)
@@ -86,41 +88,74 @@ internal class AvailabilityPollExecutor(
             return HandlerResult(nextRunAt = OffsetDateTime.now()) // inert; poller now inactive
         }
 
-        // Cadence = tightest (min) over live watches. cadence_sec is NOT NULL so the min
-        // is well-defined; the GLOBAL_DEFAULT_SEC fall-through guards a non-positive value.
-        val cadenceSec =
-            liveWatches.minOf { it.cadenceSec }.let {
-                if (it <= 0) GLOBAL_DEFAULT_SEC else it
-            }
+        // Cadence = tightest (min) over live watches, each watch resolving its own
+        // three-level fall-through: watch.cadence_sec ?? poi.cadence_override_sec ??
+        // GLOBAL_DEFAULT_SEC. The poi override is resolved once against the poller's
+        // *representative* poi_id (a poller has one cadence and one representative POI),
+        // not per watch-target — see AvailabilityPollerRepo.cadenceOverrideForPoller.
+        val poiCadenceOverrideSec = pollers.cadenceOverrideForPoller(poller.id)
+        val cadenceSec = resolveCadenceSec(liveWatches, poiCadenceOverrideSec)
+
+        val resolved =
+            liveWatches
+                .flatMap { w -> scopeResolver.resolve(w).mapNotNull { targets.resolve(it) } }
+                .filter {
+                    parentRefKey(it.parentRef) == poller.parentRef &&
+                        it.provider.id.name
+                            .lowercase() == poller.provider
+                }
+                // Coalesced watches sharing this poller can resolve the same
+                // reservable more than once; dedupe so a site is fetched once.
+                .distinctBy { it.reservable.id }
+
+        // The polling window per date-context. Shared by the governor token
+        // count below and the batcher fetch, so the "skip null-window groups"
+        // decision is made once and never drifts between the two.
+        val windowFor: (
+            ca.floo.roadtrip.models.availability.PoiDateContext,
+            ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities,
+        ) -> ca.floo.roadtrip.models.availability.ResolvedDateWindow? = { context, caps ->
+            dateResolver.resolvePollingWindow(
+                startDate = minStart,
+                endDate = maxEnd,
+                context = context,
+                bookingHorizonDays = caps.bookingHorizonDays,
+                maxDays = MAX_POLL_WINDOW_DAYS,
+            )
+        }
+
+        // Vendor governor: acquire one token per (provider, parentRef, dateContext)
+        // group the batcher will actually FETCH, BEFORE any upstream call. Groups
+        // whose polling window is null (all target dates elapsed) are skipped by
+        // the batcher — no upstream call — so they are excluded from the count;
+        // charging a token for a non-fetch would waste it and could starve a
+        // bucket, delaying retirement of an all-elapsed poller. On starvation,
+        // skip the fetch entirely — no upstream call, no wasted 429, and no run
+        // row (a starved tick is a non-event, like an empty window, not a
+        // failure, so it never feeds consecutive-failure backoff). Reschedule soon
+        // so the poller retries once the bucket refills. Per-poller backoff stays
+        // the reactive net for real upstream failures.
+        val bucketCount = batcher.countFetchGroups(resolved, windowFor)
+        if (bucketCount > 0 && !limiter.tryAcquire(poller.provider, bucketCount.toLong())) {
+            log.info(
+                "poller {} governor starved ({} tokens for {}); rescheduling in {}s",
+                poller.id,
+                bucketCount,
+                poller.provider,
+                GOVERNOR_STARVED_RETRY_SEC,
+            )
+            return HandlerResult(nextRunAt = OffsetDateTime.now().plusSeconds(GOVERNOR_STARVED_RETRY_SEC))
+        }
 
         val startedAt = OffsetDateTime.now()
         val runId = runs.start(poller.id, startedAt)
         var runFailed = false
         try {
             withContext(MDCContext(mapOf("run_id" to runId.toString()))) {
-                val resolved =
-                    liveWatches
-                        .flatMap { w -> scopeResolver.resolve(w).mapNotNull { targets.resolve(it) } }
-                        .filter {
-                            parentRefKey(it.parentRef) == poller.parentRef &&
-                                it.provider.id.name
-                                    .lowercase() == poller.provider
-                        }
-                        // Coalesced watches sharing this poller can resolve the same
-                        // reservable more than once; dedupe so a site is fetched once.
-                        .distinctBy { it.reservable.id }
                 val results =
                     batcher.fetchByGroup(
                         targets = resolved,
-                        windowFor = { context, caps ->
-                            dateResolver.resolvePollingWindow(
-                                startDate = minStart,
-                                endDate = maxEnd,
-                                context = context,
-                                bookingHorizonDays = caps.bookingHorizonDays,
-                                maxDays = MAX_POLL_WINDOW_DAYS,
-                            )
-                        },
+                        windowFor = windowFor,
                         fetch = { parentRef, provider, rows, window ->
                             provider.catalogAvailability(
                                 CatalogAvailabilityRequest(
@@ -271,7 +306,37 @@ internal class AvailabilityPollExecutor(
             .coerceAtLeast(0)
 }
 
+/**
+ * Resolves the poller's cadence as the tightest (min) over live watches, where
+ * each watch resolves the spec's three-level fall-through:
+ * `watch.cadence_sec ?? poi.cadence_override_sec ?? GLOBAL_DEFAULT_SEC`.
+ *
+ * A watch's `cadenceSec` is a NULLABLE desired override: NULL means "no
+ * watch-level preference," so the rung falls through to the POI override, then
+ * the global default. [poiCadenceOverrideSec] is the override of the poller's
+ * *representative* POI — a poller has one cadence and one representative POI, so
+ * the override is a single per-poller rung rather than a per-watch-target lookup.
+ */
+internal fun resolveCadenceSec(
+    liveWatches: List<ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch>,
+    poiCadenceOverrideSec: Int?,
+): Int {
+    val resolved =
+        liveWatches.map { w ->
+            w.cadenceSec
+                ?: poiCadenceOverrideSec
+                ?: GLOBAL_DEFAULT_SEC
+        }
+    return resolved.minOrNull() ?: GLOBAL_DEFAULT_SEC
+}
+
 private const val MAX_POLL_WINDOW_DAYS = 60
 private const val BACKOFF_BASE_MULTIPLIER = 2.0
 private const val BACKOFF_CEILING_SEC = 3_600L // 1h cap on a wedged poller
 private const val GLOBAL_DEFAULT_SEC = 300 // 5 min fall-through; PR4 layers poi override
+
+// How soon a governor-starved poller retries. Short — the skip made no upstream
+// call and did no work, so there is no backoff penalty to serve; we just want to
+// re-check once the vendor bucket has likely refilled a token. Distinct from the
+// success cadence and the failure backoff.
+private const val GOVERNOR_STARVED_RETRY_SEC = 15L

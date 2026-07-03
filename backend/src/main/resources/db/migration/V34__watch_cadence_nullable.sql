@@ -1,0 +1,15 @@
+-- PR4 P2: make availability_watch.cadence_sec a NULLABLE desired override.
+--
+-- The spec's cadence design is a three-level fall-through:
+--   watch.cadence_sec ?? poi.cadence_override_sec ?? GLOBAL_DEFAULT_SEC
+-- A watch's cadence is only the *first* rung: NULL means "no watch-level
+-- preference, fall through to the POI override, then the global default."
+--
+-- Before this migration cadence_sec was NOT NULL, so persisted watches always
+-- carried a value and the POI override rung (pois.cadence_override_sec, V32)
+-- was unreachable. Dropping NOT NULL makes NULL the "no override" signal.
+--
+-- The V14 CHECK is `cadence_sec >= 5`, which a SQL CHECK passes on NULL, so
+-- the constraint still forbids sub-5 positive values while allowing NULL.
+-- No CHECK change is required.
+ALTER TABLE availability_watch ALTER COLUMN cadence_sec DROP NOT NULL;

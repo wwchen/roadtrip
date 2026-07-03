@@ -3,6 +3,7 @@ package ca.floo.roadtrip.repo
 import ca.floo.roadtrip.db.generated.tables.AvailabilityPoller.Companion.AVAILABILITY_POLLER
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchPoller.Companion.AVAILABILITY_WATCH_POLLER
+import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.service.availability.WatchStatus
 import ca.floo.roadtrip.service.scheduler.framework.Schedulable
 import ca.floo.roadtrip.service.scheduler.framework.SchedulableRepo
@@ -99,6 +100,23 @@ class AvailabilityPollerRepo(
             .where(AVAILABILITY_POLLER.ID.eq(id))
             .fetchOne()
             ?.let(::fromRecord)
+
+    /**
+     * The `cadence_override_sec` of the poller's *representative* POI (PR4).
+     * A poller spans a single (provider, parent_ref) with one representative
+     * `poi_id`; the per-POI cadence override is resolved against that POI, not
+     * per watch-target — a poller has exactly one cadence, so the override is a
+     * single fall-through rung between the watch's own cadence and the global
+     * default. NULL when the POI sets no override.
+     */
+    fun cadenceOverrideForPoller(pollerId: Long): Int? =
+        ctx
+            .select(POIS.CADENCE_OVERRIDE_SEC)
+            .from(AVAILABILITY_POLLER)
+            .join(POIS)
+            .on(POIS.ID.eq(AVAILABILITY_POLLER.POI_ID))
+            .where(AVAILABILITY_POLLER.ID.eq(pollerId))
+            .fetchOne(POIS.CADENCE_OVERRIDE_SEC)
 
     /** A poller plus its current attached-watch count, for the dashboard list. */
     data class PollerListItem(

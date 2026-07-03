@@ -24,7 +24,9 @@ data class AvailabilityWatchCreateRequest(
     @SerialName("reservable_filters") val reservableFilters: JsonObject = JsonObject(emptyMap()),
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,
-    @SerialName("cadence_sec") val cadenceSec: Int,
+    // NULL means "no watch-level cadence override" — the resolver falls
+    // through to the POI override, then the global default.
+    @SerialName("cadence_sec") val cadenceSec: Int? = null,
     @SerialName("trigger_kinds") val triggerKinds: List<String>,
     @SerialName("trigger_config") val triggerConfig: JsonObject = JsonObject(emptyMap()),
     @SerialName("stop_when_triggered") val stopWhenTriggered: Boolean = true,
@@ -59,7 +61,9 @@ data class AvailabilityWatchSchema(
     @SerialName("reservable_filters") val reservableFilters: JsonObject,
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,
-    @SerialName("cadence_sec") val cadenceSec: Int,
+    // NULL when the watch carries no cadence override (falls through to the
+    // POI override / global default).
+    @SerialName("cadence_sec") val cadenceSec: Int? = null,
     @SerialName("trigger_kinds") val triggerKinds: List<String>,
     @SerialName("trigger_config") val triggerConfig: JsonObject,
     @SerialName("stop_when_triggered") val stopWhenTriggered: Boolean,
