@@ -10,6 +10,7 @@ import kotlinx.serialization.json.jsonObject
 import org.jooq.DSLContext
 import org.jooq.JSONB
 import org.jooq.Record
+import org.jooq.SelectField
 import org.jooq.impl.DSL
 import java.time.LocalDate
 import java.time.OffsetDateTime
@@ -166,7 +167,14 @@ class AvailabilityWatchRepo(
             .leftJoin(RESERVABLES)
             .on(RESERVABLES.ID.eq(AVAILABILITY_WATCH.RESERVABLE_ID))
 
-    private fun fromRecord(r: Record): Watch {
+    /**
+     * Exposed so sibling repos (e.g. [AvailabilityPollerRepo]) can extend
+     * this join with their own conditions rather than re-deriving the
+     * watch+reservable mapping.
+     */
+    internal fun baseSelectFields(): List<SelectField<*>> = AVAILABILITY_WATCH.fields().toList() + RESERVABLES.fields().toList()
+
+    internal fun fromRecord(r: Record): Watch {
         val reservableId = r.get(AVAILABILITY_WATCH.RESERVABLE_ID)
         return Watch(
             id = r.get(AVAILABILITY_WATCH.ID)!!,
