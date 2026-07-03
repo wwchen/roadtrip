@@ -14,9 +14,11 @@ const val SLACK_NOTIFY_KIND = "slack_notify"
 
 private const val MAX_SITES_IN_MESSAGE = 10
 
-/** Grafana dashboard the alert deep-links to (per-watch drill-down). Its
- *  `watch_id` template var takes the firing watch's id. */
+/** Grafana dashboards the alert deep-links to. The watch drill-down takes the
+ *  firing watch's id (`var-watch_id`); the cube matrix takes a POI
+ *  (`var-poi_id`) for the current availability grid. */
 private const val WATCH_DASHBOARD_UID = "reservable-watch-drill"
+private const val CELL_MATRIX_UID = "availability-cell-matrix"
 
 /**
  * Turns cube edges into Slack alerts. Called once per poller run, after the
@@ -78,21 +80,45 @@ internal class WatchAlertDispatcher(
         watchId: Long,
     ): String {
         val ordered = covered.sortedWith(compareBy({ it.reservableId }, { it.targetDate }))
+        // Distinct POIs the openings sit under, for the cell-matrix (cube) link.
+        // Collected in the same pass that resolves each reservable's provider for
+        // its booking link, so we resolve each target once.
+        val poiIds = LinkedHashSet<Long>()
         val lines =
             ordered.take(MAX_SITES_IN_MESSAGE).joinToString("\n") { t ->
-                val r = reservablesById[t.reservableId]
-                val label = r?.name ?: r?.rid?.encode() ?: "site ${t.reservableId}"
-                val loop = r?.loop?.let { " ($it)" }.orEmpty()
+                // covered was filtered to reservables in this map, so the key exists.
+                val r = reservablesById.getValue(t.reservableId)
+                val target = targets.resolve(r)
+                target?.parentPoiId?.let(poiIds::add)
+                val label = r.name ?: r.rid.encode()
+                val loop = r.loop?.let { " ($it)" }.orEmpty()
                 // Booking link, if the reservable's provider exposes one — the
                 // URL scheme is the adapter's, never this dispatcher's.
-                val url = r?.let { targets.resolve(it)?.provider?.bookingUrl(it.rid, t.targetDate) }
+                val url = target?.provider?.bookingUrl(r.rid, t.targetDate)
                 if (url != null) "• *$label*$loop — ${t.targetDate} <$url|book>" else "• *$label*$loop — ${t.targetDate}"
             }
         val count = ordered.size
         val header = "⛺ $count campsite opening${if (count == 1) "" else "s"} available"
         val more = if (count > MAX_SITES_IN_MESSAGE) "\n…and ${count - MAX_SITES_IN_MESSAGE} more" else ""
-        val dashboard = "\n📊 <$grafanaRootUrl/d/$WATCH_DASHBOARD_UID?var-watch_id=$watchId|watch dashboard>"
-        return "$header\n$lines$more$dashboard"
+        return "$header\n$lines$more${dashboardLinks(watchId, poiIds)}"
+    }
+
+    /** Grafana deep links appended to every alert: the watch drill-down (always)
+     *  and the availability-cube matrix for each POI the openings sit under. */
+    private fun dashboardLinks(
+        watchId: Long,
+        poiIds: Set<Long>,
+    ): String {
+        val watch = "\n📊 <$grafanaRootUrl/d/$WATCH_DASHBOARD_UID?var-watch_id=$watchId|watch dashboard>"
+        val cube =
+            when (poiIds.size) {
+                0 -> ""
+                1 -> "\n🗓 <$grafanaRootUrl/d/$CELL_MATRIX_UID?var-poi_id=${poiIds.first()}|availability grid>"
+                else ->
+                    "\n🗓 " +
+                        poiIds.joinToString(" · ") { "<$grafanaRootUrl/d/$CELL_MATRIX_UID?var-poi_id=$it|grid $it>" }
+            }
+        return "$watch$cube"
     }
 }
 

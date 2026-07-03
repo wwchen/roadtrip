@@ -491,6 +491,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     .second
                     .contains("$GRAFANA_ROOT_URL/d/reservable-watch-drill?var-watch_id=$watchId"),
             )
+            // …and the availability-cube matrix for the POI the opening sits under.
+            assertTrue(
+                notifier.posts
+                    .single()
+                    .second
+                    .contains("$GRAFANA_ROOT_URL/d/availability-cell-matrix?var-poi_id=$poiId"),
+            )
         }
 
     @Test
