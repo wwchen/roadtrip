@@ -1189,6 +1189,14 @@ pre {
   color: var(--cg-faint);
 }
 
+.cg-site-matrix-cell-past {
+  opacity: 0.5;
+}
+
+.cg-site-matrix-cell-past .cg-site-matrix-cell-button {
+  color: var(--cg-faint);
+}
+
 .cg-site-matrix-cell-button.is-armed {
   background: var(--cg-accent-bg);
   color: #fff;
