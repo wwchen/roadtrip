@@ -4,11 +4,14 @@ import java.time.Duration
 
 data class AppConfig(
     val cache: ApiCacheConfig,
+    /** Slack alerting config, or null when unconfigured (alerts disabled). */
+    val slack: SlackConfig?,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig =
             AppConfig(
                 cache = ApiCacheConfig.fromEnv(env),
+                slack = SlackConfig.fromEnv(env),
             )
     }
 }

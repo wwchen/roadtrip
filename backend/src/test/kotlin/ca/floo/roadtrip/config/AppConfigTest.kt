@@ -59,4 +59,26 @@ class AppConfigTest {
 
         assertEquals("ROADTRIP_CACHE_ROUTE_TTL must be positive", err.message)
     }
+
+    @Test
+    fun `slack config is null when token or channel is absent or blank`() {
+        assertEquals(null, AppConfig.fromEnv(emptyMap()).slack)
+        assertEquals(null, AppConfig.fromEnv(mapOf("SLACK_BOT_TOKEN" to "xoxb-x")).slack)
+        assertEquals(null, AppConfig.fromEnv(mapOf("SLACK_ALERT_CHANNEL" to "#c")).slack)
+        assertEquals(
+            null,
+            AppConfig.fromEnv(mapOf("SLACK_BOT_TOKEN" to "  ", "SLACK_ALERT_CHANNEL" to "#c")).slack,
+        )
+    }
+
+    @Test
+    fun `slack config is populated and trimmed when both token and channel are set`() {
+        val slack =
+            AppConfig
+                .fromEnv(mapOf("SLACK_BOT_TOKEN" to " xoxb-abc ", "SLACK_ALERT_CHANNEL" to " #camping "))
+                .slack
+
+        assertEquals("xoxb-abc", slack?.botToken)
+        assertEquals("#camping", slack?.defaultChannel)
+    }
 }

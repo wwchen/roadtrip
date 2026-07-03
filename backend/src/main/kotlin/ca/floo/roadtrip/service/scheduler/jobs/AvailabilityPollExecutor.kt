@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
+import ca.floo.roadtrip.models.availability.CellTransition
 import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -11,6 +12,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.FetchOutcome
 import ca.floo.roadtrip.service.availability.GroupFetchResult
+import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.availability.toCatalogReservableRef
@@ -71,6 +73,7 @@ internal class AvailabilityPollExecutor(
     private val targets: AvailabilityTargetResolver,
     private val fetchCalls: AvailabilityFetchCallRepo,
     private val limiter: VendorRateLimiter,
+    private val alertDispatcher: WatchAlertDispatcher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val scopeResolver = WatchScopeResolver(reservablesRepo)
@@ -169,7 +172,8 @@ internal class AvailabilityPollExecutor(
                         },
                     )
                 val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
-                val snapshotCount = results.sumOf { writeCube(it, runId) }
+                val transitions = results.flatMap { writeCube(it, runId) }
+                val snapshotCount = transitions.size
                 // Dates that quietly aged out of a still-live poller's window reach
                 // their terminal 'past' state here (belt-and-suspenders alongside PR1's
                 // window-clamp retirement, which stops polling but does not flip the cell).
@@ -184,6 +188,12 @@ internal class AvailabilityPollExecutor(
                     runs.fail(runId, error = failure.outcome.name.lowercase(), completedAt = completedAt, durationMs = durationMs)
                 } else {
                     runs.complete(runId, snapshotCount, completedAt, durationMs)
+                    // Alert on the edges this tick produced (best-effort: a
+                    // notification failure is logged, never fails the run or
+                    // trips backoff). liveWatches + transitions are already in
+                    // hand — no re-scan of the cube.
+                    runCatching { alertDispatcher.dispatch(liveWatches, transitions) }
+                        .onFailure { log.warn("poller {} run {} alert dispatch failed: {}", poller.id, runId, it.message) }
                 }
             }
         } catch (e: Exception) {
@@ -213,8 +223,9 @@ internal class AvailabilityPollExecutor(
     /** Cube write for one fetch group. Upserts every observed cell (liveness bump
      *  always; status/last_changed_at only on change), then appends an
      *  availability_snapshot transition row ONLY for cells whose status changed
-     *  from the prior stored value. Returns the transition count for
-     *  run.snapshot_count. Replaces PR1's append-every-observation appendSnapshots.
+     *  from the prior stored value. Returns one [CellTransition] per changed cell
+     *  — the caller sums them for run.snapshot_count and hands the online-bookable
+     *  subset to the alert dispatcher. Replaces PR1's append-every-observation.
      *
      *  The cell upsert and the snapshot append run in ONE transaction (fresh
      *  txn-scoped repos over `DSL.using(config)`). Atomicity is load-bearing for
@@ -227,8 +238,8 @@ internal class AvailabilityPollExecutor(
     private fun writeCube(
         result: GroupFetchResult,
         runId: Long,
-    ): Int {
-        val batch = result.batch ?: return 0
+    ): List<CellTransition> {
+        val batch = result.batch ?: return emptyList()
         val idByRid = result.reservables.associateBy({ it.rid.encode() }, { it.id })
         val cellObservations =
             batch.observations.mapNotNull { obs ->
@@ -240,7 +251,7 @@ internal class AvailabilityPollExecutor(
                     observedAt = obs.observedAt,
                 )
             }
-        if (cellObservations.isEmpty()) return 0
+        if (cellObservations.isEmpty()) return emptyList()
         return ctx.transactionResult { config ->
             val txn = DSL.using(config)
             val changedKeys =
@@ -249,23 +260,30 @@ internal class AvailabilityPollExecutor(
                     .filter { it.changed }
                     .map { it.reservableId to it.targetDate }
                     .toSet()
-            val snapshotObservations =
+            val changed =
                 batch.observations.mapNotNull { obs ->
                     val dbId = idByRid[obs.reservableId] ?: return@mapNotNull null
                     if ((dbId to obs.date) !in changedKeys) return@mapNotNull null
-                    AvailabilitySnapshotRepo.SnapshotObservation(
-                        reservableId = dbId,
-                        reservableRid = obs.reservableId,
-                        targetDate = obs.date,
-                        observedAt = obs.observedAt,
-                        status = obs.status,
-                    )
+                    dbId to obs
                 }
             // A throw here (e.g. snapshot append failure) rolls back the cell upsert
             // above so the edge is re-detected on the next successful poll.
             AvailabilitySnapshotRepo(txn).appendObservations(
-                AvailabilitySnapshotRepo.SnapshotObservationBatch(runId = runId, observations = snapshotObservations),
+                AvailabilitySnapshotRepo.SnapshotObservationBatch(
+                    runId = runId,
+                    observations =
+                        changed.map { (dbId, obs) ->
+                            AvailabilitySnapshotRepo.SnapshotObservation(
+                                reservableId = dbId,
+                                reservableRid = obs.reservableId,
+                                targetDate = obs.date,
+                                observedAt = obs.observedAt,
+                                status = obs.status,
+                            )
+                        },
+                ),
             )
+            changed.map { (dbId, obs) -> CellTransition(reservableId = dbId, targetDate = obs.date, status = obs.status) }
         }
     }
 

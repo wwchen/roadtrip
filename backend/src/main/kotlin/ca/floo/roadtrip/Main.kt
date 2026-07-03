@@ -5,6 +5,7 @@ import ca.floo.roadtrip.clients.cache.RouteCache
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.HttpAvailabilityClient
+import ca.floo.roadtrip.clients.slack.SlackNotifier
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
@@ -15,6 +16,7 @@ import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
+import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.ReservableRepo
@@ -39,6 +41,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
@@ -251,6 +254,17 @@ fun Application.module() {
     // capacity/refill come from the env (ROADTRIP_VENDOR_RATELIMIT_*), defaulting
     // to a conservative code-level bucket for unconfigured vendors.
     val vendorRateLimiter = VendorRateLimiter(VendorRateLimitConfig.fromEnv(), ds)
+    // Slack alerting (PR6). Null config => disabled: the dispatcher no-ops and
+    // the poller runs identically. Set SLACK_BOT_TOKEN + SLACK_ALERT_CHANNEL to
+    // enable. The notifier's HTTP client is closed on shutdown, below.
+    val slackNotifier = appConfig.slack?.let { SlackNotifier(it) }
+    val watchAlertDispatcher =
+        WatchAlertDispatcher(
+            notifier = slackNotifier,
+            scopeResolver = WatchScopeResolver(reservablesRepo),
+            watches = AvailabilityWatchRepo(ctx),
+            defaultChannel = appConfig.slack?.defaultChannel,
+        )
     val pollExecutor =
         AvailabilityPollExecutor(
             ctx = ctx,
@@ -263,6 +277,7 @@ fun Application.module() {
             targets = availabilityTargets,
             fetchCalls = AvailabilityFetchCallRepo(ctx),
             limiter = vendorRateLimiter,
+            alertDispatcher = watchAlertDispatcher,
         )
     val availabilityScheduler =
         Scheduler(
@@ -274,6 +289,7 @@ fun Application.module() {
     environment.monitor.subscribe(ApplicationStopping) {
         schedulerScope.cancel()
         recgovAvailabilityClient.close()
+        slackNotifier?.close()
     }
 
     routing {
