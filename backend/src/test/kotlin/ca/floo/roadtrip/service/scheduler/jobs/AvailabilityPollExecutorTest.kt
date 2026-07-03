@@ -38,6 +38,7 @@ import org.junit.jupiter.api.TestInstance
 import org.slf4j.MDC
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
+import java.time.Duration
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
@@ -141,6 +142,7 @@ class AvailabilityPollExecutorTest {
         poiId: Long,
         startDate: String,
         endDate: String,
+        cadenceSec: Int = 60,
     ): Long {
         val watchId =
             ctx
@@ -149,12 +151,13 @@ class AvailabilityPollExecutorTest {
                     INSERT INTO availability_watch (
                         poi_id, start_date, end_date, cadence_sec, trigger_kinds
                     ) VALUES (
-                        ?, ?::date, ?::date, 60, ARRAY['atc']
+                        ?, ?::date, ?::date, ?, ARRAY['atc']
                     ) RETURNING id
                     """.trimIndent(),
                     poiId,
                     startDate,
                     endDate,
+                    cadenceSec,
                 )!!
                 .get("id", Long::class.java)
         val intent: JsonObject =
@@ -168,7 +171,7 @@ class AvailabilityPollExecutorTest {
             .upsertForWatch(
                 watchId = watchId,
                 intentPayload = intent,
-                cadenceSec = 60,
+                cadenceSec = cadenceSec,
                 status = WatchStatus.ACTIVE,
                 nextRunAt = now(),
             ).id
@@ -318,5 +321,46 @@ class AvailabilityPollExecutorTest {
             assertEquals("rate_limited", fetchCalls[0].outcome)
             assertEquals(1, fetchCalls[0].reservableCount)
             assertEquals("232447", fetchCalls[0].parentRef)
+        }
+
+    @Test
+    fun `rate limited run backs off beyond flat cadence`() =
+        runBlocking {
+            val provider = RateLimitedProvider()
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val jobId = seedPoiJob(poiId, "2026-07-17", "2026-07-31", cadenceSec = 120)
+            val job = AvailabilityJobRepo(ctx).findById(jobId)!!
+            val runsRepo = AvailabilityJobRunRepo(ctx)
+
+            // Seed one prior failed run so this run's failure is the 2nd consecutive.
+            val priorRunId = runsRepo.start(jobId, now().minusMinutes(5))
+            runsRepo.fail(priorRunId, error = "rate_limited", completedAt = now().minusMinutes(4), durationMs = 0)
+
+            val executor = executorFor(provider)
+            val before = OffsetDateTime.now()
+            val result = executor.handle(job)
+
+            // 2 consecutive failures -> 120 * 2^2 = 480s, well above the flat 120s cadence,
+            // and comfortably under BACKOFF_CEILING_SEC (3600s).
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertTrue(delaySec in 400..3_600L)
+        }
+
+    @Test
+    fun `successful run schedules at flat cadence`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val jobId = seedPoiJob(poiId, "2026-07-17", "2026-07-31", cadenceSec = 120)
+            val job = AvailabilityJobRepo(ctx).findById(jobId)!!
+
+            val executor = executorFor(provider)
+            val before = OffsetDateTime.now()
+            val result = executor.handle(job)
+
+            val delaySec = Duration.between(before, result.nextRunAt).seconds
+            assertEquals(120L, delaySec)
         }
 }
