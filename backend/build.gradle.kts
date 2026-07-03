@@ -86,6 +86,7 @@ val jooqVersion = "3.19.15"
 val postgresVersion = "42.7.4"
 val flywayVersion = "10.20.1"
 val testcontainersVersion = "1.21.4"
+val bucket4jVersion = "8.10.1"
 val timeshapeVersion = "2025b.26"
 val junitVersion = "5.11.3"
 val playwrightVersion = "1.50.0"
@@ -131,6 +132,13 @@ dependencies {
     implementation("org.postgresql:postgresql:$postgresVersion")
     implementation("org.flywaydb:flyway-core:$flywayVersion")
     implementation("org.flywaydb:flyway-database-postgresql:$flywayVersion")
+
+    // Durable, Postgres-backed per-vendor token bucket (the fetch governor).
+    // Verified against Maven Central: bucket4j-core 8.10.1 provides the
+    // BucketConfiguration/BandwidthBuilder + distributed proxy API;
+    // bucket4j-postgresql 8.10.1 provides PostgreSQLSelectForUpdateBasedProxyManager.
+    implementation("com.bucket4j:bucket4j-core:$bucket4jVersion")
+    implementation("com.bucket4j:bucket4j-postgresql:$bucket4jVersion")
 
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.9.0")
