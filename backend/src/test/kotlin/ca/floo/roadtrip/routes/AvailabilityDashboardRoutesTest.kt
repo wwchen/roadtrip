@@ -4,6 +4,7 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import io.ktor.client.request.get
+import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.routing.routing
@@ -168,6 +169,52 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
             val rows = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["runs"]!!.jsonArray
             assertEquals(1, rows.size)
             assertEquals(pollerA, rows[0].jsonObject["poller_id"]!!.jsonPrimitive.long)
+        }
+
+    @Test
+    fun `POST pollers id force returns 200 with new next_run_at when outside cooldown`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val pollerId = seedPoller()
+            val before = OffsetDateTime.now(ZoneOffset.UTC)
+            val resp = client.post("/api/availability/pollers/$pollerId/force")
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals(pollerId, body["poller_id"]!!.jsonPrimitive.long)
+            val nextRunAt = OffsetDateTime.parse(body["next_run_at"]!!.jsonPrimitive.content)
+            // next_run_at was pulled to ~now (server-side), not left far in the future.
+            assertEquals(true, !nextRunAt.isBefore(before.minusMinutes(1)))
+            assertEquals(true, !nextRunAt.isAfter(OffsetDateTime.now(ZoneOffset.UTC).plusMinutes(1)))
+        }
+
+    @Test
+    fun `POST pollers id force returns 429 with retry_after_sec when inside cooldown`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val pollerId = seedPoller()
+            val first = client.post("/api/availability/pollers/$pollerId/force")
+            assertEquals(HttpStatusCode.OK, first.status)
+            val second = client.post("/api/availability/pollers/$pollerId/force")
+            assertEquals(HttpStatusCode.TooManyRequests, second.status)
+            val body = Json.parseToJsonElement(second.bodyAsText()).jsonObject
+            assertEquals(pollerId, body["poller_id"]!!.jsonPrimitive.long)
+            assertEquals(true, body["retry_after_sec"]!!.jsonPrimitive.long > 0)
+        }
+
+    @Test
+    fun `POST pollers id force returns 404 on unknown poller`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val resp = client.post("/api/availability/pollers/999999/force")
+            assertEquals(HttpStatusCode.NotFound, resp.status)
+        }
+
+    @Test
+    fun `POST pollers id force returns 400 on invalid id`() =
+        testApplication {
+            application { routing { availabilityDashboardRoutes(ctx) } }
+            val resp = client.post("/api/availability/pollers/not-a-number/force")
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
         }
 
     @Test

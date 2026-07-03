@@ -10,10 +10,13 @@ import ca.floo.roadtrip.models.api.AvailabilitySnapshotSchema
 import ca.floo.roadtrip.models.api.AvailabilitySnapshotStatsSchema
 import ca.floo.roadtrip.models.api.AvailabilitySnapshotsListResponse
 import ca.floo.roadtrip.models.api.AvailabilitySnapshotsSummaryResponse
+import ca.floo.roadtrip.models.api.CheckNowCooldownDto
+import ca.floo.roadtrip.models.api.CheckNowResponseDto
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
+import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -30,6 +33,17 @@ private const val DEFAULT_LIST_LIMIT = 100
 private const val MAX_LIST_LIMIT = 500
 private const val SNAPSHOT_DEFAULT_LIMIT = 200
 private const val SNAPSHOT_MAX_LIMIT = 1000
+
+/**
+ * Per-poller "check now" cooldown: the minimum spacing between two human-forced
+ * pulls of the same poller. Keeps a user mashing the button from starving the
+ * shared vendor governor (PR4) for everyone attached to this poller. Overridable
+ * via the `FORCE_PULL_COOLDOWN_SEC` env var.
+ */
+private val FORCE_PULL_COOLDOWN: java.time.Duration =
+    java.time.Duration.ofSeconds(
+        System.getenv("FORCE_PULL_COOLDOWN_SEC")?.toLongOrNull() ?: 60L,
+    )
 
 @OptIn(ExperimentalSerializationApi::class)
 private val dashboardJson =
@@ -128,6 +142,41 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                 .coerceIn(1, MAX_LIST_LIMIT)
         val rows = runs.listForPoller(id, limit = limit)
         call.respondJson(AvailabilityRunsListResponse(runs = rows.map { it.toSchema() }))
+    }
+
+    post("/api/availability/pollers/{id}/force", {
+        tags = listOf("availability")
+        summary = "Force a poller due now ('check now'), rate-limited per poller"
+        request {
+            pathParameter<Long>("id") { description = "Poller id." }
+        }
+        response {
+            code(HttpStatusCode.OK) {
+                body<CheckNowResponseDto> { mediaTypes(ContentType.Application.Json) }
+            }
+            code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
+            code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
+            code(HttpStatusCode.TooManyRequests) { body<CheckNowCooldownDto> { mediaTypes(ContentType.Application.Json) } }
+        }
+    }) {
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@post call.respondError("invalid_id", HttpStatusCode.BadRequest)
+        when (val result = pollers.forcePull(id, OffsetDateTime.now(), cooldown = FORCE_PULL_COOLDOWN)) {
+            is AvailabilityPollerRepo.ForcePullResult.Accepted ->
+                call.respondJson(
+                    CheckNowResponseDto(pollerId = id, nextRunAt = result.nextRunAt.toString()),
+                )
+
+            is AvailabilityPollerRepo.ForcePullResult.Cooldown ->
+                call.respondJson(
+                    CheckNowCooldownDto(pollerId = id, retryAfterSec = result.retryAfterSec),
+                    HttpStatusCode.TooManyRequests,
+                )
+
+            AvailabilityPollerRepo.ForcePullResult.NotFound ->
+                call.respondError("poller_not_found", HttpStatusCode.NotFound, "no poller with id $id")
+        }
     }
 
     get("/api/availability/runs", {

@@ -45,9 +45,26 @@ class AvailabilityPollerRepo(
         val claimedUntil: OffsetDateTime?,
         override val claimToken: String?,
         val lastRunAt: OffsetDateTime?,
+        val lastForcePullAt: OffsetDateTime?,
         val createdAt: OffsetDateTime,
         val updatedAt: OffsetDateTime,
     ) : Schedulable
+
+    /** Outcome of a [forcePull] "check now" attempt. */
+    sealed class ForcePullResult {
+        /** The poller was pulled due; its `next_run_at` is now [nextRunAt]. */
+        data class Accepted(
+            val nextRunAt: OffsetDateTime,
+        ) : ForcePullResult()
+
+        /** The poller exists but is still inside its cooldown; retry in [retryAfterSec]. */
+        data class Cooldown(
+            val retryAfterSec: Long,
+        ) : ForcePullResult()
+
+        /** No poller with that id. */
+        data object NotFound : ForcePullResult()
+    }
 
     /**
      * Atomically create or revive the poller for (provider, parentRef).
@@ -462,6 +479,57 @@ class AvailabilityPollerRepo(
             .and(AVAILABILITY_POLLER.CLAIMED_UNTIL.lt(now))
             .execute()
 
+    /**
+     * "Check now": pull the poller due immediately by setting `next_run_at =
+     * now` and stamping `last_force_pull_at = now`, enforcing a per-poller
+     * [cooldown] so a human mashing "check now" can't starve the shared vendor
+     * governor for everyone on this poller.
+     *
+     * The accept/reject decision is embedded in the UPDATE's WHERE clause
+     * (`last_force_pull_at IS NULL OR last_force_pull_at <= now - cooldown`) so
+     * two concurrent callers race in Postgres, not in the JVM — exactly one
+     * wins the UPDATE. The scheduler's normal claim loop picks the poller up on
+     * its next tick like any other due poller; there is no force-specific
+     * fetch path (PR1 already fetches with `force = true` unconditionally, and
+     * PR4's governor still gates every fetch — force pull draws tokens, no
+     * bypass).
+     *
+     * Returns [ForcePullResult.Accepted] with the new `next_run_at`,
+     * [ForcePullResult.Cooldown] with the remaining wait when still cooling
+     * down, or [ForcePullResult.NotFound] for an unknown id.
+     */
+    fun forcePull(
+        pollerId: Long,
+        now: OffsetDateTime,
+        cooldown: Duration,
+    ): ForcePullResult {
+        val cooldownThreshold = now.minus(cooldown)
+        val updated =
+            ctx
+                .update(AVAILABILITY_POLLER)
+                .set(AVAILABILITY_POLLER.NEXT_RUN_AT, now)
+                .set(AVAILABILITY_POLLER.LAST_FORCE_PULL_AT, now)
+                .set(AVAILABILITY_POLLER.UPDATED_AT, now)
+                .where(AVAILABILITY_POLLER.ID.eq(pollerId))
+                .and(
+                    AVAILABILITY_POLLER.LAST_FORCE_PULL_AT.isNull
+                        .or(AVAILABILITY_POLLER.LAST_FORCE_PULL_AT.le(cooldownThreshold)),
+                ).execute()
+        if (updated > 0) return ForcePullResult.Accepted(nextRunAt = now)
+
+        // The WHERE didn't match: either the poller is gone, or it exists but
+        // is still cooling down. The atomic accept/reject already happened
+        // above; this read only shapes the error response.
+        val poller = findById(pollerId) ?: return ForcePullResult.NotFound
+        val lastForcePullAt = poller.lastForcePullAt ?: return ForcePullResult.NotFound
+        val retryAfterSec =
+            Duration
+                .between(now, lastForcePullAt.plus(cooldown))
+                .seconds
+                .coerceAtLeast(0)
+        return ForcePullResult.Cooldown(retryAfterSec)
+    }
+
     private fun fromRecord(r: Record): Poller =
         Poller(
             id = r.get(AVAILABILITY_POLLER.ID)!!,
@@ -473,6 +541,7 @@ class AvailabilityPollerRepo(
             claimedUntil = r.get(AVAILABILITY_POLLER.CLAIMED_UNTIL),
             claimToken = r.get(AVAILABILITY_POLLER.CLAIM_TOKEN),
             lastRunAt = r.get(AVAILABILITY_POLLER.LAST_RUN_AT),
+            lastForcePullAt = r.get(AVAILABILITY_POLLER.LAST_FORCE_PULL_AT),
             createdAt = r.get(AVAILABILITY_POLLER.CREATED_AT)!!,
             updatedAt = r.get(AVAILABILITY_POLLER.UPDATED_AT)!!,
         )
