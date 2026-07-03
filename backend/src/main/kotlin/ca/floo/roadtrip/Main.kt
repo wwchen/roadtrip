@@ -264,6 +264,7 @@ fun Application.module() {
             scopeResolver = WatchScopeResolver(reservablesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets = availabilityTargets,
+            grafanaRootUrl = appConfig.grafana.rootUrl,
             defaultChannel = appConfig.slack?.defaultChannel,
         )
     val pollExecutor =

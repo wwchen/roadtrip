@@ -231,6 +231,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     reservationProviders = ReservationProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
                 ),
+            grafanaRootUrl = GRAFANA_ROOT_URL,
             defaultChannel = null,
         )
 
@@ -244,6 +245,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
             targets = targetsFor(provider),
+            grafanaRootUrl = GRAFANA_ROOT_URL,
             defaultChannel = defaultChannel,
         )
 
@@ -481,6 +483,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     .single()
                     .second
                     .contains("https://example.test/book/100"),
+            )
+            // The alert deep-links the watch's Grafana drill-down at the configured host.
+            assertTrue(
+                notifier.posts
+                    .single()
+                    .second
+                    .contains("$GRAFANA_ROOT_URL/d/reservable-watch-drill?var-watch_id=$watchId"),
             )
         }
 
@@ -983,3 +992,5 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             )
         }
 }
+
+private const val GRAFANA_ROOT_URL = "http://grafana.test/dash"

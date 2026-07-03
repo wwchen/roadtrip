@@ -14,6 +14,10 @@ const val SLACK_NOTIFY_KIND = "slack_notify"
 
 private const val MAX_SITES_IN_MESSAGE = 10
 
+/** Grafana dashboard the alert deep-links to (per-watch drill-down). Its
+ *  `watch_id` template var takes the firing watch's id. */
+private const val WATCH_DASHBOARD_UID = "reservable-watch-drill"
+
 /**
  * Turns cube edges into Slack alerts. Called once per poller run, after the
  * cube write, with the transitions that tick produced and the poller's live
@@ -34,6 +38,7 @@ internal class WatchAlertDispatcher(
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
+    private val grafanaRootUrl: String,
     private val defaultChannel: String?,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -60,7 +65,7 @@ internal class WatchAlertDispatcher(
                 log.warn("watch {} matched but no Slack channel (no override, no default); skipping", watch.id)
                 continue
             }
-            val fired = notifier.notify(channel, buildMessage(covered, reservablesById))
+            val fired = notifier.notify(channel, buildMessage(covered, reservablesById, watch.id))
             if (fired && watch.stopWhenTriggered) {
                 watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
             }
@@ -70,6 +75,7 @@ internal class WatchAlertDispatcher(
     private fun buildMessage(
         covered: List<CellTransition>,
         reservablesById: Map<Long, Reservable>,
+        watchId: Long,
     ): String {
         val ordered = covered.sortedWith(compareBy({ it.reservableId }, { it.targetDate }))
         val lines =
@@ -85,7 +91,8 @@ internal class WatchAlertDispatcher(
         val count = ordered.size
         val header = "⛺ $count campsite opening${if (count == 1) "" else "s"} available"
         val more = if (count > MAX_SITES_IN_MESSAGE) "\n…and ${count - MAX_SITES_IN_MESSAGE} more" else ""
-        return "$header\n$lines$more"
+        val dashboard = "\n📊 <$grafanaRootUrl/d/$WATCH_DASHBOARD_UID?var-watch_id=$watchId|watch dashboard>"
+        return "$header\n$lines$more$dashboard"
     }
 }
 

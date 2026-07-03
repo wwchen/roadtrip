@@ -111,6 +111,11 @@ class SlackNotifier(
   and lives in the adapter (rec.gov implements it; other adapters default to
   null → a plain line). The dispatcher never hardcodes a vendor URL; it asks the
   resolved provider via `AvailabilityTargetResolver`.
+- The message also deep-links the firing watch's Grafana drill-down dashboard
+  (`/d/reservable-watch-drill?var-watch_id=<id>`). The host comes from
+  `GrafanaConfig.rootUrl` (env `GRAFANA_ROOT_URL`, the same var + default the
+  Grafana container uses for `GF_SERVER_ROOT_URL` — `localhost:3000/dash` local,
+  `roadtrip.floo.ca/dash` prod), so backend and Grafana can't disagree on host.
 
 ### `service/availability/WatchAlertDispatcher.kt` (business logic)
 

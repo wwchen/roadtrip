@@ -81,4 +81,17 @@ class AppConfigTest {
         assertEquals("xoxb-abc", slack?.botToken)
         assertEquals("#camping", slack?.defaultChannel)
     }
+
+    @Test
+    fun `grafana root url defaults to prod when unset`() {
+        assertEquals("https://roadtrip.floo.ca/dash", AppConfig.fromEnv(emptyMap()).grafana.rootUrl)
+    }
+
+    @Test
+    fun `grafana root url is taken from env with any trailing slash stripped`() {
+        assertEquals(
+            "http://localhost:3000/dash",
+            AppConfig.fromEnv(mapOf("GRAFANA_ROOT_URL" to "http://localhost:3000/dash/")).grafana.rootUrl,
+        )
+    }
 }
