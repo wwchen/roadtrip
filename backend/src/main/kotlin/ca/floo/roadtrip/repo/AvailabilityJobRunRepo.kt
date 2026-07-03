@@ -5,6 +5,12 @@ import org.jooq.DSLContext
 import org.jooq.Record
 import java.time.OffsetDateTime
 
+/**
+ * Caps the newest-first terminal-run scan in [AvailabilityJobRunRepo.countConsecutiveFailures]
+ * so a permanently-failing job can't force an unbounded fetch.
+ */
+private const val CONSECUTIVE_FAILURE_SCAN_LIMIT = 100
+
 class AvailabilityJobRunRepo(
     private val ctx: DSLContext,
 ) {
@@ -127,6 +133,27 @@ class AvailabilityJobRunRepo(
             ).orderBy(AVAILABILITY_JOB_RUN.STARTED_AT.desc(), AVAILABILITY_JOB_RUN.ID.desc())
             .limit(limit.coerceIn(1, 500))
             .fetch { fromRecord(it) }
+    }
+
+    /**
+     * Number of `failed` runs at the newest end of the job's run history,
+     * stopping at the first non-failed terminal run. 0 if the most recent
+     * terminal run is `completed`. Only terminal statuses are considered;
+     * in-flight `started` rows are ignored. Derived from run rows (source
+     * of truth) rather than a maintained column, so there's no double-write
+     * to keep in sync.
+     */
+    fun countConsecutiveFailures(jobId: Long): Int {
+        val statuses =
+            ctx
+                .select(AVAILABILITY_JOB_RUN.STATUS)
+                .from(AVAILABILITY_JOB_RUN)
+                .where(AVAILABILITY_JOB_RUN.JOB_ID.eq(jobId))
+                .and(AVAILABILITY_JOB_RUN.STATUS.`in`("completed", "failed"))
+                .orderBy(AVAILABILITY_JOB_RUN.STARTED_AT.desc(), AVAILABILITY_JOB_RUN.ID.desc())
+                .limit(CONSECUTIVE_FAILURE_SCAN_LIMIT)
+                .fetch(AVAILABILITY_JOB_RUN.STATUS)
+        return statuses.takeWhile { it == "failed" }.count()
     }
 
     private fun fromRecord(r: Record): Run =

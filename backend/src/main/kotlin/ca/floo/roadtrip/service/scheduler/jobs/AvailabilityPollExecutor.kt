@@ -59,6 +59,7 @@ internal class AvailabilityPollExecutor(
     suspend fun handle(job: AvailabilityJobRepo.Job): HandlerResult {
         val startedAt = OffsetDateTime.now()
         val runId = runs.start(job.id, startedAt)
+        var runFailed = false
         try {
             withContext(MDCContext(mapOf("run_id" to runId.toString()))) {
                 val intent = AvailabilityJobIntent.fromJsonObject(job.intentPayload)
@@ -93,6 +94,7 @@ internal class AvailabilityPollExecutor(
                 val completedAt = OffsetDateTime.now()
                 val durationMs = durationMs(startedAt, completedAt)
                 if (failure != null) {
+                    runFailed = true
                     runs.fail(runId, error = failure.outcome.name.lowercase(), completedAt = completedAt, durationMs = durationMs)
                 } else {
                     runs.complete(runId, snapshotCount, completedAt, durationMs)
@@ -100,6 +102,7 @@ internal class AvailabilityPollExecutor(
             }
         } catch (e: Exception) {
             log.warn("job {} run {} failed: {}", job.id, runId, e.message)
+            runFailed = true
             val completedAt = OffsetDateTime.now()
             runs.fail(
                 runId,
@@ -108,7 +111,17 @@ internal class AvailabilityPollExecutor(
                 durationMs = durationMs(startedAt, completedAt),
             )
         }
-        return HandlerResult(nextRunAt = OffsetDateTime.now().plusSeconds(job.cadenceSec.toLong()))
+        val nextRunAt =
+            if (runFailed) {
+                // countConsecutiveFailures includes the run we just failed (its terminal
+                // status was already written above), so failures >= 1 here.
+                val failures = runs.countConsecutiveFailures(job.id)
+                val backoffSec = (job.cadenceSec * Math.pow(BACKOFF_BASE_MULTIPLIER, failures.toDouble())).toLong()
+                OffsetDateTime.now().plusSeconds(backoffSec.coerceAtMost(BACKOFF_CEILING_SEC))
+            } else {
+                OffsetDateTime.now().plusSeconds(job.cadenceSec.toLong())
+            }
+        return HandlerResult(nextRunAt = nextRunAt)
     }
 
     /** Resolve an intent to the reservables we will poll, each carrying its
@@ -199,3 +212,5 @@ internal class AvailabilityPollExecutor(
 }
 
 private const val MAX_POLL_WINDOW_DAYS = 60
+private const val BACKOFF_BASE_MULTIPLIER = 2.0
+private const val BACKOFF_CEILING_SEC = 3_600L // 1h cap on a wedged watch
