@@ -108,14 +108,34 @@ internal class AvailabilityPollExecutor(
                 // reservable more than once; dedupe so a site is fetched once.
                 .distinctBy { it.reservable.id }
 
+        // The polling window per date-context. Shared by the governor token
+        // count below and the batcher fetch, so the "skip null-window groups"
+        // decision is made once and never drifts between the two.
+        val windowFor: (
+            ca.floo.roadtrip.models.availability.PoiDateContext,
+            ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities,
+        ) -> ca.floo.roadtrip.models.availability.ResolvedDateWindow? = { context, caps ->
+            dateResolver.resolvePollingWindow(
+                startDate = minStart,
+                endDate = maxEnd,
+                context = context,
+                bookingHorizonDays = caps.bookingHorizonDays,
+                maxDays = MAX_POLL_WINDOW_DAYS,
+            )
+        }
+
         // Vendor governor: acquire one token per (provider, parentRef, dateContext)
-        // group the batcher is about to fetch, BEFORE any upstream call. On
-        // starvation, skip the fetch entirely — no upstream call, no wasted 429,
-        // and no run row (a starved tick is a non-event, like an empty window, not
-        // a failure, so it never feeds consecutive-failure backoff). Reschedule
-        // soon so the poller retries once the bucket refills. Per-poller backoff
-        // stays the reactive net for real upstream failures.
-        val bucketCount = batcher.countGroups(resolved)
+        // group the batcher will actually FETCH, BEFORE any upstream call. Groups
+        // whose polling window is null (all target dates elapsed) are skipped by
+        // the batcher — no upstream call — so they are excluded from the count;
+        // charging a token for a non-fetch would waste it and could starve a
+        // bucket, delaying retirement of an all-elapsed poller. On starvation,
+        // skip the fetch entirely — no upstream call, no wasted 429, and no run
+        // row (a starved tick is a non-event, like an empty window, not a
+        // failure, so it never feeds consecutive-failure backoff). Reschedule soon
+        // so the poller retries once the bucket refills. Per-poller backoff stays
+        // the reactive net for real upstream failures.
+        val bucketCount = batcher.countFetchGroups(resolved, windowFor)
         if (bucketCount > 0 && !limiter.tryAcquire(poller.provider, bucketCount.toLong())) {
             log.info(
                 "poller {} governor starved ({} tokens for {}); rescheduling in {}s",
@@ -135,15 +155,7 @@ internal class AvailabilityPollExecutor(
                 val results =
                     batcher.fetchByGroup(
                         targets = resolved,
-                        windowFor = { context, caps ->
-                            dateResolver.resolvePollingWindow(
-                                startDate = minStart,
-                                endDate = maxEnd,
-                                context = context,
-                                bookingHorizonDays = caps.bookingHorizonDays,
-                                maxDays = MAX_POLL_WINDOW_DAYS,
-                            )
-                        },
+                        windowFor = windowFor,
                         fetch = { parentRef, provider, rows, window ->
                             provider.catalogAvailability(
                                 CatalogAvailabilityRequest(

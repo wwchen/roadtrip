@@ -539,6 +539,42 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 
     @Test
+    fun `null-window groups acquire zero tokens and are never starved`() =
+        runBlocking {
+            // A watch that passes the poller's UTC prefilter (end_date >= today)
+            // but whose target-local polling window resolves to null: end_date is
+            // today, and the polling-window clamp is max(start, earliestDate) where
+            // earliestDate is today-or-tomorrow, so end_date is never after the
+            // clamped start regardless of time of day. Every group is a non-fetch.
+            // The governor must charge ZERO tokens: a token spent on a non-fetch
+            // could starve the bucket and delay retiring an all-elapsed poller. Even
+            // a denying limiter must not block this tick.
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val today = LocalDate.now(ZoneOffset.UTC)
+            // start < end (satisfies the date-window CHECK) yet the whole window
+            // is at/behind the earliest bookable date -> null polling window.
+            val watchId = seedWatch(poiId, today.minusDays(1).toString(), today.toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+            val denyingLimiter = RecordingLimiter(grant = false)
+
+            val result = executorFor(provider, limiter = denyingLimiter).handle(poller)
+
+            // Zero groups have a real window -> zero tokens requested, and the
+            // denying limiter never got the chance to starve the tick.
+            assertEquals(0, denyingLimiter.requests.size)
+            // No upstream call was made (all groups skipped for a null window).
+            assertEquals(0, provider.calls)
+            // Not blocked/starved: the tick proceeded and wrote a run row (no-op
+            // completed run), so the poller keeps its normal cadence rather than
+            // being wedged behind a starved retry.
+            val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
+            assertEquals(1, runs.size)
+            assertEquals("completed", runs[0].status)
+        }
+
+    @Test
     fun `empty window retires the poller and does not fetch`() =
         runBlocking {
             val provider = CountingRecgovProvider()
