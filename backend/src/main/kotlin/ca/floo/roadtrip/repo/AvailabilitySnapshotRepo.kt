@@ -23,7 +23,7 @@ import ca.floo.roadtrip.db.generated.enums.AvailabilityStatus as DbAvailabilityS
  */
 class AvailabilitySnapshotRepo(
     private val ctx: DSLContext,
-) {
+) : AvailabilitySnapshotStore {
     data class SnapshotObservationBatch(
         val runId: Long? = null,
         val observations: List<SnapshotObservation>,
@@ -45,7 +45,7 @@ class AvailabilitySnapshotRepo(
         val available: Boolean,
     )
 
-    fun appendObservations(input: SnapshotObservationBatch): Int {
+    override fun appendObservations(input: SnapshotObservationBatch): Int {
         if (input.observations.isEmpty()) return 0
         val inserts =
             input.observations.map { observation ->
@@ -64,7 +64,7 @@ class AvailabilitySnapshotRepo(
         return inserts.size
     }
 
-    fun loadLatestObservations(
+    override fun loadLatestObservations(
         reservableIds: List<Long>,
         dates: List<LocalDate>,
     ): List<LatestObservation> {

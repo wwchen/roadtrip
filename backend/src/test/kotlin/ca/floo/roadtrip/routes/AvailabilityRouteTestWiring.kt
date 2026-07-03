@@ -6,7 +6,7 @@ import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityQueryServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
-import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.defaultSnapshotFreshnessTtl
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
@@ -22,7 +22,7 @@ internal fun Route.availabilityRoutes(
 ) {
     val dateResolver = AvailabilityDateResolver()
     val targets =
-        AvailabilityTargetResolver(
+        DbAvailabilityTargetResolver(
             providerRefs = providerRefs,
             reservablesRepo = reservablesRepo,
             reservationProviders = reservationProviders,

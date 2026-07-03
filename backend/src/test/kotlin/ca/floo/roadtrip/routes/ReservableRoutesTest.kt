@@ -12,7 +12,7 @@ import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
-import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -906,7 +906,7 @@ class ReservableRoutesTest {
             val availabilityService =
                 AvailabilityServiceImpl(
                     targets =
-                        AvailabilityTargetResolver(
+                        DbAvailabilityTargetResolver(
                             providerRefs = CampsiteProviderRepo(ctx),
                             reservablesRepo = ReservableRepo(ctx),
                             reservationProviders = fakeReservationProviders(),

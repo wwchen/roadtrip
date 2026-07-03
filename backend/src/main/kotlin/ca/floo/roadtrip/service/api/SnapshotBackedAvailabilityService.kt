@@ -6,6 +6,7 @@ import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
+import ca.floo.roadtrip.repo.AvailabilitySnapshotStore
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -13,7 +14,7 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 class SnapshotBackedAvailabilityService(
-    private val snapshots: AvailabilitySnapshotRepo?,
+    private val snapshots: AvailabilitySnapshotStore?,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     data class TargetReservable(
@@ -73,7 +74,7 @@ class SnapshotBackedAvailabilityService(
     }
 
     private fun appendKnownObservations(
-        sink: AvailabilitySnapshotRepo,
+        sink: AvailabilitySnapshotStore,
         request: Request,
         batch: AvailabilityObservationBatch,
     ) {
