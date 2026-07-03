@@ -21,6 +21,9 @@ enum class AvailabilityStatus(
 
     @SerialName("unknown")
     UNKNOWN("unknown"),
+
+    @SerialName("past")
+    PAST("past"),
     ;
 
     val isOnlineBookable: Boolean

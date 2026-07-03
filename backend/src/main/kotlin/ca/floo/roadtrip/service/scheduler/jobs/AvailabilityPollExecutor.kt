@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
+import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -17,9 +18,13 @@ import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
+import org.jooq.DSLContext
+import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
 import java.time.Duration
+import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 /**
  * Executes one poller tick. Wired into [ca.floo.roadtrip.service.scheduler.framework.Scheduler]
@@ -41,7 +46,9 @@ import java.time.OffsetDateTime
  * no run row.
  *
  * Per-run audit: every invocation that fetches writes one [AvailabilityRunRepo]
- * row. Successful runs are recorded as 'completed' with `snapshot_count`.
+ * row. Successful runs are recorded as 'completed' with `snapshot_count` -- which
+ * under the cube model counts edge-triggered transitions (status changes), not raw
+ * observations.
  * If any group's fetch did not come back OK (rate limited, blocked,
  * upstream 5xx, other), the run is recorded as 'failed' with that
  * outcome as the error string. Upstream / unexpected exceptions are
@@ -53,10 +60,11 @@ import java.time.OffsetDateTime
  * because losing the row would mean the poller silently stops polling.
  */
 internal class AvailabilityPollExecutor(
+    private val ctx: DSLContext,
     private val pollers: AvailabilityPollerRepo,
     private val reservablesRepo: ReservableRepo,
     private val batcher: CatalogAvailabilityBatcher,
-    private val snapshots: AvailabilitySnapshotRepo,
+    private val cells: AvailabilityCellRepo,
     private val runs: AvailabilityRunRepo,
     private val dateResolver: AvailabilityDateResolver,
     private val targets: AvailabilityTargetResolver,
@@ -126,7 +134,13 @@ internal class AvailabilityPollExecutor(
                         },
                     )
                 val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
-                val snapshotCount = results.sumOf { appendSnapshots(it, runId) }
+                val snapshotCount = results.sumOf { writeCube(it, runId) }
+                // Dates that quietly aged out of a still-live poller's window reach
+                // their terminal 'past' state here (belt-and-suspenders alongside PR1's
+                // window-clamp retirement, which stops polling but does not flip the cell).
+                val observedReservableIds =
+                    results.flatMap { r -> r.reservables.map { it.id } }.distinct()
+                cells.markElapsedAsPast(observedReservableIds, LocalDate.now(ZoneOffset.UTC))
                 recordFetchCalls(results, runId)
                 val completedAt = OffsetDateTime.now()
                 val durationMs = durationMs(startedAt, completedAt)
@@ -161,28 +175,63 @@ internal class AvailabilityPollExecutor(
         return HandlerResult(nextRunAt = nextRunAt)
     }
 
-    /** Append every observation the group returned as a snapshot row tagged with
-     *  runId, mapping each observation's rid back to its catalog db id. */
-    private fun appendSnapshots(
+    /** Cube write for one fetch group. Upserts every observed cell (liveness bump
+     *  always; status/last_changed_at only on change), then appends an
+     *  availability_snapshot transition row ONLY for cells whose status changed
+     *  from the prior stored value. Returns the transition count for
+     *  run.snapshot_count. Replaces PR1's append-every-observation appendSnapshots.
+     *
+     *  The cell upsert and the snapshot append run in ONE transaction (fresh
+     *  txn-scoped repos over `DSL.using(config)`). Atomicity is load-bearing for
+     *  the edge model: the cell holds the "seen" status, and a transition row is
+     *  written only when that status *changes*. If the append failed after the
+     *  cell already advanced, the next poll would see "no change" and never write
+     *  the missing transition — the edge would be lost forever. Rolling the cell
+     *  upsert back on append failure keeps the prior status stored, so a
+     *  subsequent successful poll re-detects the same edge and writes it. */
+    private fun writeCube(
         result: GroupFetchResult,
         runId: Long,
     ): Int {
         val batch = result.batch ?: return 0
         val idByRid = result.reservables.associateBy({ it.rid.encode() }, { it.id })
-        val observations =
+        val cellObservations =
             batch.observations.mapNotNull { obs ->
                 val dbId = idByRid[obs.reservableId] ?: return@mapNotNull null
-                AvailabilitySnapshotRepo.SnapshotObservation(
+                AvailabilityCellRepo.CellObservation(
                     reservableId = dbId,
-                    reservableRid = obs.reservableId,
                     targetDate = obs.date,
-                    observedAt = obs.observedAt,
                     status = obs.status,
+                    observedAt = obs.observedAt,
                 )
             }
-        return snapshots.appendObservations(
-            AvailabilitySnapshotRepo.SnapshotObservationBatch(runId = runId, observations = observations),
-        )
+        if (cellObservations.isEmpty()) return 0
+        return ctx.transactionResult { config ->
+            val txn = DSL.using(config)
+            val changedKeys =
+                AvailabilityCellRepo(txn)
+                    .upsertObservations(cellObservations)
+                    .filter { it.changed }
+                    .map { it.reservableId to it.targetDate }
+                    .toSet()
+            val snapshotObservations =
+                batch.observations.mapNotNull { obs ->
+                    val dbId = idByRid[obs.reservableId] ?: return@mapNotNull null
+                    if ((dbId to obs.date) !in changedKeys) return@mapNotNull null
+                    AvailabilitySnapshotRepo.SnapshotObservation(
+                        reservableId = dbId,
+                        reservableRid = obs.reservableId,
+                        targetDate = obs.date,
+                        observedAt = obs.observedAt,
+                        status = obs.status,
+                    )
+                }
+            // A throw here (e.g. snapshot append failure) rolls back the cell upsert
+            // above so the edge is re-detected on the next successful poll.
+            AvailabilitySnapshotRepo(txn).appendObservations(
+                AvailabilitySnapshotRepo.SnapshotObservationBatch(runId = runId, observations = snapshotObservations),
+            )
+        }
     }
 
     /** Write one trace row per group that made a real upstream call (window

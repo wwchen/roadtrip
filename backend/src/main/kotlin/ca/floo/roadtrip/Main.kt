@@ -10,6 +10,7 @@ import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
+import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -246,10 +247,11 @@ fun Application.module() {
     PollerBackfill(ctx, pollerMembership).run()
     val pollExecutor =
         AvailabilityPollExecutor(
+            ctx = ctx,
             pollers = availabilityPollers,
             reservablesRepo = reservablesRepo,
             batcher = CatalogAvailabilityBatcher(),
-            snapshots = availabilitySnapshots,
+            cells = AvailabilityCellRepo(ctx),
             runs = AvailabilityRunRepo(ctx),
             dateResolver = availabilityDateResolver,
             targets = availabilityTargets,

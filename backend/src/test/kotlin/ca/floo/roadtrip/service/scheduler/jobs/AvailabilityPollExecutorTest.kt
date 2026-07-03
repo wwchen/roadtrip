@@ -4,6 +4,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -26,6 +27,11 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import kotlinx.coroutines.runBlocking
+import org.jooq.DSLContext
+import org.jooq.ExecuteContext
+import org.jooq.ExecuteListener
+import org.jooq.SQLDialect
+import org.jooq.impl.DSL
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.slf4j.MDC
@@ -42,6 +48,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability_cell")
         ctx.execute("DELETE FROM availability_fetch_call")
         ctx.execute("DELETE FROM availability_run")
         ctx.execute("DELETE FROM availability_watch_target")
@@ -163,10 +170,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 dateResolver = dateResolver,
             )
         return AvailabilityPollExecutor(
+            ctx = ctx,
             pollers = AvailabilityPollerRepo(ctx),
             reservablesRepo = reservablesRepo,
             batcher = CatalogAvailabilityBatcher(),
-            snapshots = AvailabilitySnapshotRepo(ctx),
+            cells = AvailabilityCellRepo(ctx),
             runs = AvailabilityRunRepo(ctx),
             dateResolver = dateResolver,
             targets = targets,
@@ -174,9 +182,57 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         )
     }
 
+    /** Marker thrown by the snapshot-append-failing listener below. */
+    private class SnapshotAppendBoom : RuntimeException("boom: availability_snapshot insert failed")
+
+    /** An ExecuteListener that throws when it sees an INSERT into
+     *  availability_snapshot, simulating a failure of the snapshot append that
+     *  happens AFTER the cell upsert inside writeCube's transaction. */
+    private class FailSnapshotAppendListener : ExecuteListener {
+        override fun renderEnd(dctx: ExecuteContext) {
+            val sql = dctx.sql()?.lowercase() ?: return
+            if (sql.startsWith("insert into") && sql.contains("availability_snapshot")) {
+                throw SnapshotAppendBoom()
+            }
+        }
+    }
+
+    /** Builds an executor whose DSLContext fails every availability_snapshot
+     *  INSERT. Everything else (cell upsert, run rows) runs against the same DB
+     *  so the rollback of the cube-write transaction is observable. */
+    private fun executorWithFailingSnapshotAppend(provider: ReservationProvider): AvailabilityPollExecutor {
+        val failingCtx: DSLContext =
+            DSL.using(
+                DSL.using(ds, SQLDialect.POSTGRES).configuration().derive(FailSnapshotAppendListener()),
+            )
+        val reservablesRepo = ReservableRepo(failingCtx)
+        val registry = ReservationProviderRegistry(mapOf("test" to provider))
+        val dateResolver = AvailabilityDateResolver()
+        val targets =
+            DbAvailabilityTargetResolver(
+                providerRefs = CampsiteProviderRepo(failingCtx),
+                reservablesRepo = reservablesRepo,
+                reservationProviders = registry,
+                dateResolver = dateResolver,
+            )
+        return AvailabilityPollExecutor(
+            ctx = failingCtx,
+            pollers = AvailabilityPollerRepo(failingCtx),
+            reservablesRepo = reservablesRepo,
+            batcher = CatalogAvailabilityBatcher(),
+            cells = AvailabilityCellRepo(failingCtx),
+            runs = AvailabilityRunRepo(failingCtx),
+            dateResolver = dateResolver,
+            targets = targets,
+            fetchCalls = AvailabilityFetchCallRepo(failingCtx),
+        )
+    }
+
     /** Fake provider that records each catalogAvailability call's window and
      *  returns one observation per requested reservable/day. */
-    private class CountingRecgovProvider : ReservationProvider {
+    private class CountingRecgovProvider(
+        var status: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
+    ) : ReservationProvider {
         var calls: Int = 0
         var lastStart: LocalDate? = null
         var lastEnd: LocalDate? = null
@@ -207,7 +263,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                         reservableId = ref.rid,
                         date = req.startDate,
                         observedAt = observedAt,
-                        status = AvailabilityStatus.AVAILABLE,
+                        status = status,
                     )
                 }
             return AvailabilityObservationBatch(
@@ -359,7 +415,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 
     @Test
-    fun `snapshot writing is unchanged (one row per observation)`() =
+    fun `first-sight observations each write a transition snapshot row`() =
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
@@ -374,12 +430,136 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertTrue(runs[0].snapshotCount > 0)
 
             val snapshots = AvailabilitySnapshotRepo(ctx).listForRun(runs[0].id, limit = 100)
-            // Provider returns one observation per reservable (2 sites) for the window start.
+            // Provider returns one observation per reservable (2 sites) for the window
+            // start; both are first-sight, so both are transitions.
             assertEquals(2, snapshots.size)
             assertTrue(snapshots.all { it.runId == runs[0].id })
 
             // MDC run_id propagated across the coroutine dispatch and cleared after.
             assertEquals(runs[0].id.toString(), provider.mdcRunIdDuringCall)
             assertNull(MDC.get("run_id"), "MDC should be cleared on this thread after handle() returns")
+        }
+
+    @Test
+    fun `unchanged status across two runs upserts the cell but writes no second snapshot row`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            val reservableId = seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
+            val snapshotRepo = AvailabilitySnapshotRepo(ctx)
+            val cellRepo = AvailabilityCellRepo(ctx)
+
+            executorFor(provider).handle(poller)
+            val snapshotsAfterFirst = snapshotRepo.listForReservable(reservableId)
+            val cellAfterFirst = cellRepo.loadCells(listOf(reservableId), listOf(farStart)).single()
+
+            Thread.sleep(5)
+            executorFor(provider).handle(poller)
+            val snapshotsAfterSecond = snapshotRepo.listForReservable(reservableId)
+
+            // No new snapshot row: the status did not change.
+            assertEquals(snapshotsAfterFirst.size, snapshotsAfterSecond.size)
+            // But the cell's liveness advanced.
+            val cellAfterSecond = cellRepo.loadCells(listOf(reservableId), listOf(farStart)).single()
+            assertTrue(cellAfterSecond.lastObservedAt.isAfter(cellAfterFirst.lastObservedAt))
+            assertEquals(cellAfterFirst.lastChangedAt, cellAfterSecond.lastChangedAt)
+        }
+
+    @Test
+    fun `a status change writes exactly one new snapshot row (the transition)`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            val reservableId = seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
+            val snapshotRepo = AvailabilitySnapshotRepo(ctx)
+
+            executorFor(provider).handle(poller)
+            val before = snapshotRepo.listForReservable(reservableId).size
+
+            provider.status = AvailabilityStatus.RESERVED
+            executorFor(provider).handle(poller)
+            val after = snapshotRepo.listForReservable(reservableId).size
+
+            assertEquals(before + 1, after)
+        }
+
+    @Test
+    fun `run snapshot_count reflects transitions, not raw observation count`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            listOf("100", "101", "102").forEach { seedReservable(poiId, it) }
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
+            val runsRepo = AvailabilityRunRepo(ctx)
+
+            // Run 1: 3 reservables, all first-sight -> 3 transitions.
+            executorFor(provider).handle(poller)
+            val run1 = runsRepo.listForPoller(poller.id, limit = 10).first()
+            assertEquals(3, run1.snapshotCount)
+
+            // Run 2: identical statuses -> 0 transitions.
+            executorFor(provider).handle(poller)
+            val run2 = runsRepo.listForPoller(poller.id, limit = 10).first()
+            assertEquals(0, run2.snapshotCount)
+        }
+
+    @Test
+    fun `snapshot append failure rolls back the cell upsert so the edge is re-detected next poll`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            val reservableId = seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
+            val cellRepo = AvailabilityCellRepo(ctx)
+            val snapshotRepo = AvailabilitySnapshotRepo(ctx)
+
+            // Run 1: establish the cell at AVAILABLE (first-sight transition written).
+            executorFor(provider).handle(poller)
+            val cellAfterFirst = cellRepo.loadCells(listOf(reservableId), listOf(farStart)).single()
+            assertEquals(AvailabilityStatus.AVAILABLE, cellAfterFirst.status)
+            val snapshotsAfterFirst = snapshotRepo.listForReservable(reservableId).size
+
+            // Run 2: provider now reports RESERVED (an edge), but the snapshot append
+            // fails inside the cube-write transaction. The whole transaction must roll
+            // back: the cell must NOT advance to RESERVED, and no transition row lands.
+            provider.status = AvailabilityStatus.RESERVED
+            executorWithFailingSnapshotAppend(provider).handle(poller)
+
+            val cellAfterFailedRun = cellRepo.loadCells(listOf(reservableId), listOf(farStart)).single()
+            assertEquals(
+                AvailabilityStatus.AVAILABLE,
+                cellAfterFailedRun.status,
+                "cell status rolled back to prior value; edge not silently swallowed",
+            )
+            // last_changed_at must be unchanged (truncate the DB round-trip to micros).
+            assertEquals(
+                cellAfterFirst.lastChangedAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS),
+                cellAfterFailedRun.lastChangedAt.truncatedTo(java.time.temporal.ChronoUnit.MICROS),
+            )
+            assertEquals(
+                snapshotsAfterFirst,
+                snapshotRepo.listForReservable(reservableId).size,
+                "no transition row written when the append failed",
+            )
+            // The run itself is recorded as failed (handler never loses the row).
+            val failedRun = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10).first()
+            assertEquals("failed", failedRun.status)
+
+            // Run 3: a subsequent successful poll re-detects the SAME edge
+            // (AVAILABLE -> RESERVED) and writes the transition that was lost.
+            executorFor(provider).handle(poller)
+            val cellAfterRecovery = cellRepo.loadCells(listOf(reservableId), listOf(farStart)).single()
+            assertEquals(AvailabilityStatus.RESERVED, cellAfterRecovery.status)
+            assertEquals(
+                snapshotsAfterFirst + 1,
+                snapshotRepo.listForReservable(reservableId).size,
+                "the previously-lost transition is written on the next successful poll",
+            )
         }
 }

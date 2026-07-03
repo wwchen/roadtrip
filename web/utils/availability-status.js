@@ -44,6 +44,15 @@ const STATUS_META = Object.freeze({
     heatmapClass: 'cell-unknown',
     detailClass: 'cg-status-unknown',
   }),
+  past: Object.freeze({
+    value: 'past',
+    kind: 'past',
+    label: '·',
+    aria: 'past',
+    text: 'Past',
+    heatmapClass: 'cell-past',
+    detailClass: 'cg-status-muted',
+  }),
 });
 
 export function normalizeAvailabilityStatus(raw) {

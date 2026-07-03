@@ -195,6 +195,7 @@ jooq {
                             listOf(
                                 "alerts",
                                 "api_cache",
+                                "availability_cell",
                                 "availability_fetch_call",
                                 "availability_poller",
                                 "availability_run",
