@@ -150,6 +150,41 @@ What's deferred (see RFC 0007): the actual override columns and the
 admin UI to set them. v1 ships the resolver with global config only;
 overrides plug in later without changing call sites.
 
+## How a watch becomes API calls
+
+Every poll run leaves a trace of the upstream calls it actually made, one
+level below the `availability_job_run` row described above:
+
+```
+watch → job → run → fetch-call(s) → snapshots
+                     └ one availability_fetch_call row per upstream group call
+```
+
+A run can cover many reservables (a POI-scope watch fans out to every child
+reservable), but the poller does not issue one upstream call per reservable.
+`CatalogAvailabilityBatcher` groups a run's resolved targets by
+`(provider, parentRef, dateContext)` and issues exactly one
+`catalogAvailability` call per group — so N reservables under one campground
+become one upstream call. This is what fixed the old per-site rate-limit
+fan-out. Call-shaping stays inside each adapter (months for rec.gov, the park
+matrix for ReserveAmerica, map/occupancy for Aspira); the batcher and poller
+never branch on vendor, they only group and dispatch.
+
+`availability_fetch_call` is the trace table for this grouping: one row per
+group call, keyed by `run_id`, with columns `provider`, `parent_ref`,
+`reservable_count`, `window_start` / `window_end`, `outcome`
+(`ok | rate_limited | upstream_5xx | blocked | other`), `duration_ms`, and
+`error`. Rows are written only when a real upstream call was made — a group
+with no future dates is skipped by the batcher and produces no row. This
+table is surfaced in the "Reservable Availability Watch drill down" Grafana
+dashboard's "Fetch calls for this run" panel, with a "Rate-limited fetches"
+monitor watching the outcome column across runs.
+
+For deep debugging beyond the trace row, `run_id` is set in the logging MDC
+for the duration of the fetch, so the rec.gov client's `Poller: GET …` and
+`429 …` log lines carry `run_id` and can be correlated back to the run and
+the fetch-call row it produced.
+
 ## Availability history
 
 History is a side effect of the watch poller, not a separate ETL. Every
