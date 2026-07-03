@@ -11,7 +11,6 @@ import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import kotlinx.serialization.json.JsonObject
@@ -151,14 +150,6 @@ internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Dur
         ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
         ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
     }
-
-private fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
-    CatalogReservableRef(
-        rid = rid.encode(),
-        vendorId = rid.vendorId,
-        mapId = aspiraProviderRefLong("mapId"),
-        resourceLocationId = aspiraProviderRefLong("resourceLocationId"),
-    )
 
 private fun Reservable.toAvailabilityTarget(): SnapshotBackedAvailabilityService.TargetReservable =
     SnapshotBackedAvailabilityService.TargetReservable(
