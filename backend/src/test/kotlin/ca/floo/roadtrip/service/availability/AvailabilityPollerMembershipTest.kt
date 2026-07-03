@@ -19,6 +19,7 @@ import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -337,7 +338,9 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         membership.sync(watch(watchId), repo, null)
         val pollerId = repo.pollerIdsForWatch(watchId).single()
 
-        val earlier = now().minusDays(1)
+        // Truncate to micros: Postgres TIMESTAMPTZ has microsecond resolution, so a
+        // nanosecond-precision value can round UP on storage and break the `<=` below.
+        val earlier = now().minusDays(1).truncatedTo(ChronoUnit.MICROS)
         membership.sync(watch(watchId), repo, tighterCadencePull = earlier)
 
         assertTrue(repo.findById(pollerId)!!.nextRunAt <= earlier)
