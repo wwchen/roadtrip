@@ -251,6 +251,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             dateResolver = dateResolver,
             targets = targets,
             fetchCalls = AvailabilityFetchCallRepo(failingCtx),
+            limiter = RecordingLimiter(grant = true),
         )
     }
 
