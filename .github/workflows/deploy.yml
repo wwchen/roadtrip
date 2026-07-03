@@ -72,8 +72,8 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       # Mirrors the laptop `make deploy` command. Single ssh invocation so
-      # any failure (git pull, gradle build, compose up) returns non-zero
-      # and fails the workflow.
+      # any failure (git pull, gradle build, compose up, targeted restarts)
+      # returns non-zero and fails the workflow.
       - name: Deploy on mini-ca
         env:
           DEPLOY_HOST: ${{ vars.DEPLOY_HOST || 'mini-ca' }}
@@ -81,7 +81,7 @@ jobs:
           DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '~/workspace/roadtrip' }}
         run: |
           ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" \
-            "cd $DEPLOY_DIR && git pull --ff-only && ./gradlew :backend:shadowJar && docker build -t roadtrip/backend --target backend . && docker compose --profile tunnel --profile pois up -d"
+            "cd $DEPLOY_DIR && before=\$(git rev-parse HEAD) && git pull --ff-only && after=\$(git rev-parse HEAD) && BACKEND_IMAGE=roadtrip/backend bash scripts/deploy_after_pull.sh \"\$before\" \"\$after\""
 
       - name: Health check
         run: |

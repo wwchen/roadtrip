@@ -29,7 +29,7 @@ help:
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / reservable_data / poi_reservable_joiner)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
-	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up (backend+postgres+tunnel)"
+	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up; restarts Grafana on dashboard changes"
 	@echo "  make grafana-export   Snapshot UI-edited dashboards back to grafana/dashboards/*.json"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
@@ -65,7 +65,7 @@ check-pushed:
 	 if [ -n "$$dirty" ]; then echo "refusing: working tree has uncommitted changes"; git status --short; exit 1; fi
 
 deploy: check-pushed
-	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && git pull --ff-only && ./gradlew :backend:shadowJar && docker build -t $(BACKEND_IMAGE) --target backend . && docker compose --profile tunnel --profile pois up -d'
+	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && before=$$(git rev-parse HEAD) && git pull --ff-only && after=$$(git rev-parse HEAD) && BACKEND_IMAGE=$(BACKEND_IMAGE) bash scripts/deploy_after_pull.sh "$$before" "$$after"'
 
 # Two-step refresh through the backend's admin API (RFC 0004 / issue #44):
 #   make data-fetch                       # all targets
