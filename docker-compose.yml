@@ -144,6 +144,33 @@ services:
       grafana-db-setup:
         condition: service_completed_successfully
 
+  # Single-binary Loki for backend log storage/search. Backend logs JSON
+  # (see backend/src/main/resources/logback.xml) with MDC run_id; Alloy ships
+  # container stdout here, Grafana queries it via the Loki datasource.
+  loki:
+    profiles: [pois]
+    image: grafana/loki:3.2.1
+    restart: unless-stopped
+    hostname: loki
+    command: -config.file=/etc/loki/loki-config.yml
+    volumes:
+      - ./grafana/loki/loki-config.yml:/etc/loki/loki-config.yml:ro
+      - loki-data:/loki
+
+  # Ships Docker container logs (stdout/stderr) to Loki. Discovers containers
+  # via the Docker socket; see grafana/alloy/config.alloy for the pipeline.
+  alloy:
+    profiles: [pois]
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    hostname: alloy
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./grafana/alloy/config.alloy:/etc/alloy/config.alloy:ro
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+    depends_on:
+      - loki
+
   cloudflared:
     # Runs in deploy with `--profile tunnel --profile pois`. Local modes skip it.
     # Public hostname routing is managed in Cloudflare Zero Trust; this
@@ -157,3 +184,4 @@ services:
 
 volumes:
   grafana-data:
+  loki-data:

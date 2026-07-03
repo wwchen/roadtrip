@@ -1044,6 +1044,42 @@
       ],
       "title": "Rate-limited fetches",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "roadtrip-loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 104
+      },
+      "id": 15,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": false,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": false
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "roadtrip-loki"
+          },
+          "expr": "{container=\"roadtrip-backend-1\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Backend logs",
+      "type": "logs"
     }
   ],
   "preload": false,

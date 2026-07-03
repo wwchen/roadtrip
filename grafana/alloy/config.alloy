@@ -1,0 +1,42 @@
+// Discover all Docker containers on the host and ship their logs to Loki.
+// Standard Alloy Docker-logs pattern: discovery.docker -> discovery.relabel
+// (strip the leading "/" from the container name into a `container` label)
+// -> loki.source.docker -> loki.write.
+
+discovery.docker "containers" {
+  host = "unix:///var/run/docker.sock"
+}
+
+discovery.relabel "containers" {
+  targets = discovery.docker.containers.targets
+
+  // Only ship this project's containers. Without this, Alloy tails every
+  // container on the host (testcontainers-*, dev-env-*, …), which floods
+  // Loki with noise and spams "No such container" errors as ephemeral
+  // test containers come and go.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/roadtrip-.*"
+    action        = "keep"
+  }
+
+  // Strip the leading "/" from the container name into a `container` label.
+  rule {
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "/(.*)"
+    target_label  = "container"
+  }
+}
+
+loki.source.docker "default" {
+  host             = "unix:///var/run/docker.sock"
+  targets          = discovery.relabel.containers.output
+  relabel_rules    = discovery.relabel.containers.rules
+  forward_to       = [loki.write.default.receiver]
+}
+
+loki.write "default" {
+  endpoint {
+    url = "http://loki:3100/loki/api/v1/push"
+  }
+}
