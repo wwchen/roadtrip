@@ -11,6 +11,7 @@ import ca.floo.roadtrip.service.availability.defaultSnapshotFreshnessTtl
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.ktor.server.routing.Route
+import java.time.Clock
 import java.time.Duration
 
 internal fun Route.availabilityRoutes(
@@ -19,8 +20,9 @@ internal fun Route.availabilityRoutes(
     reservablesRepo: ReservableRepo,
     snapshots: AvailabilitySnapshotRepo? = null,
     snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
+    clock: Clock = Clock.systemUTC(),
 ) {
-    val dateResolver = AvailabilityDateResolver()
+    val dateResolver = AvailabilityDateResolver(clock)
     val targets =
         DbAvailabilityTargetResolver(
             providerRefs = providerRefs,
