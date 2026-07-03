@@ -46,18 +46,20 @@ internal class DbAvailabilityTargetResolver(
         val parent =
             poiIds
                 .asSequence()
-                .mapNotNull { providerRefsByPoiId[it] }
-                .firstOrNull { row ->
+                .mapNotNull { poiId -> providerRefsByPoiId[poiId]?.let { poiId to it } }
+                .firstOrNull { (_, row) ->
                     reservationProviders.forPoi(row) != null && ProviderRefParser.parse(row.providerRefJson) != null
                 } ?: return null
+        val (parentPoiId, parentRow) = parent
 
-        val provider = reservationProviders.forPoi(parent) ?: return null
-        val parentRef = ProviderRefParser.parse(parent.providerRefJson) ?: return null
+        val provider = reservationProviders.forPoi(parentRow) ?: return null
+        val parentRef = ProviderRefParser.parse(parentRow.providerRefJson) ?: return null
         return ResolvedAvailabilityTarget(
             reservable = reservable,
             provider = provider,
             parentRef = parentRef,
-            dateContext = dateResolver.context(lat = parent.lat, lng = parent.lng),
+            parentPoiId = parentPoiId,
+            dateContext = dateResolver.context(lat = parentRow.lat, lng = parentRow.lng),
         )
     }
 }

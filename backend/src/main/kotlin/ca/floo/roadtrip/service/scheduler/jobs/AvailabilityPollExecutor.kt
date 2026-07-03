@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
@@ -13,6 +12,7 @@ import ca.floo.roadtrip.service.availability.FetchOutcome
 import ca.floo.roadtrip.service.availability.GroupFetchResult
 import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.availability.toCatalogReservableRef
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
@@ -188,17 +188,6 @@ internal class AvailabilityPollExecutor(
             )
         }
     }
-
-    /** Renders a vendor's call-unit id as text for observability. Not
-     *  provider dispatch — just formatting a value already picked by the
-     *  batcher's grouping key, so this `when` is not a capability leak. */
-    private fun parentRefKey(ref: ProviderRef): String =
-        when (ref) {
-            is ProviderRef.RecGov -> ref.recgovId
-            is ProviderRef.Aspira -> ref.mapId.toString()
-            is ProviderRef.ReserveAmerica -> ref.parkId
-            is ProviderRef.ReserveCalifornia -> ref.facilityIds.joinToString(",")
-        }
 
     private fun durationMs(
         start: OffsetDateTime,

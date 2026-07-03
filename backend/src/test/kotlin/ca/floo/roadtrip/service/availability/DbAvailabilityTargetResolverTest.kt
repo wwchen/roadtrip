@@ -1,0 +1,163 @@
+package ca.floo.roadtrip.service.availability
+
+import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.service.reservation.AvailabilityRequest
+import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.ReservationProvider
+import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
+import kotlinx.coroutines.runBlocking
+import org.jooq.DSLContext
+import org.jooq.SQLDialect
+import org.jooq.impl.DSL
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
+import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.utility.DockerImageName
+import kotlin.test.assertEquals
+
+/**
+ * Testcontainers-backed tests for [DbAvailabilityTargetResolver.resolve], which
+ * picks the winning provider_ref among a reservable's linked POIs. Mirrors the
+ * DB setup helpers in [ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutorTest].
+ */
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class DbAvailabilityTargetResolverTest {
+    private lateinit var pg: PostgreSQLContainer<Nothing>
+    private lateinit var ds: HikariDataSource
+    private lateinit var ctx: DSLContext
+
+    @BeforeAll
+    fun start() {
+        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
+        pg =
+            PostgreSQLContainer<Nothing>(image).apply {
+                withDatabaseName("roadtrip_test")
+                withUsername("test")
+                withPassword("test")
+            }
+        pg.start()
+        val cfg =
+            HikariConfig().apply {
+                jdbcUrl = pg.jdbcUrl
+                username = pg.username
+                password = pg.password
+                maximumPoolSize = 2
+            }
+        ds = HikariDataSource(cfg)
+        migrate(ds)
+        ctx = DSL.using(ds, SQLDialect.POSTGRES)
+    }
+
+    @AfterAll
+    fun stop() {
+        ds.close()
+        pg.stop()
+    }
+
+    @BeforeEach
+    fun cleanup() {
+        ctx.execute("DELETE FROM reservable_pois")
+        ctx.execute("DELETE FROM reservables")
+        ctx.execute("DELETE FROM pois")
+    }
+
+    /** Seeds a POI. When [campgroundId] is null, provider_ref is left NULL (no
+     *  resolvable provider) — otherwise it resolves to ProviderRef.RecGov. */
+    private fun seedPoi(campgroundId: String?): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO pois (
+                    source, source_id, category, name, geom, region,
+                    properties, provider_ref, fetched_at
+                ) VALUES (
+                    'test', ?, 'campground', 'Upper Pines',
+                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
+                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
+                ) RETURNING id
+                """.trimIndent(),
+                "poi-${campgroundId ?: "none"}-${System.nanoTime()}",
+                campgroundId?.let { """{"recgov_id": "$it"}""" },
+            )!!
+            .get("id", Long::class.java)
+
+    /** Seeds one reservable (site) and links it to every poi id given. */
+    private fun seedReservable(
+        siteId: String,
+        poiIds: List<Long>,
+    ): Long {
+        val reservableId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO reservables (type, vendor, vendor_id, name, source)
+                    VALUES ('site', 'recgov', ?, ?, 'test')
+                    RETURNING id
+                    """.trimIndent(),
+                    siteId,
+                    "Site $siteId",
+                )!!
+                .get("id", Long::class.java)
+        poiIds.forEach { poiId ->
+            ctx.execute(
+                "INSERT INTO reservable_pois (reservable_id, poi_id) VALUES (?, ?)",
+                reservableId,
+                poiId,
+            )
+        }
+        return reservableId
+    }
+
+    private class NoopRecgovProvider : ReservationProvider {
+        override val id: ReservationProviderId = ReservationProviderId.RECGOV
+        override val capabilities: ReservationProviderCapabilities =
+            ReservationProviderCapabilities(
+                supportsAvailability = true,
+                supportsAlerts = true,
+                bookingHorizonDays = 180,
+            )
+
+        override suspend fun availability(req: AvailabilityRequest) = throw UnsupportedOperationException("not used")
+
+        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest) =
+            throw UnsupportedOperationException("not used")
+
+        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest) =
+            throw UnsupportedOperationException("not used")
+    }
+
+    private fun resolverFor(reservablesRepo: ReservableRepo): DbAvailabilityTargetResolver =
+        DbAvailabilityTargetResolver(
+            providerRefs = CampsiteProviderRepo(ctx),
+            reservablesRepo = reservablesRepo,
+            reservationProviders = ReservationProviderRegistry(mapOf("test" to NoopRecgovProvider())),
+            dateResolver = AvailabilityDateResolver(),
+        )
+
+    @Test
+    fun `resolve carries the parent poi id that supplied the provider ref`() =
+        runBlocking {
+            val poiA = seedPoi(campgroundId = null)
+            val poiB = seedPoi(campgroundId = "232447")
+            val reservablesRepo = ReservableRepo(ctx)
+            val reservableId = seedReservable("100", listOf(poiA, poiB))
+            val reservable = reservablesRepo.findById(reservableId)!!
+
+            val resolver = resolverFor(reservablesRepo)
+            val t = resolver.resolve(reservable)!!
+
+            assertEquals(poiB, t.parentPoiId)
+            assertEquals("232447", parentRefKey(t.parentRef))
+        }
+}
