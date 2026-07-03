@@ -175,6 +175,7 @@ jooq {
                             listOf(
                                 "alerts",
                                 "api_cache",
+                                "availability_fetch_call",
                                 "availability_job",
                                 "availability_job_run",
                                 "availability_snapshot",
