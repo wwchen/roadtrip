@@ -739,16 +739,24 @@ availabilityScheduler.start(schedulerScope)
 
 Also wire `AvailabilityWatchService` with the `membershipFor` factory. Delete `AvailabilityJobRepo.kt`, `AvailabilityJobIntent.kt`, and the `WatchScopeResolver.resolve(intent)` overload (keep `resolve(watch)`).
 
-- [ ] **Step 7: Build + run the full backend test suite.**
+- [ ] **Step 7: Dashboard rename (job → poller) — added scope, confirmed by user.** The in-app dashboard is coupled to the dropped `availability_job`/renamed run table and must be repointed to pollers in this same commit:
+  - **Backend routes** `routes/AvailabilityDashboardRoutes.kt`: `/api/availability/jobs` → `/api/availability/pollers`, `/api/availability/jobs/summary` → `/pollers/summary`, `/api/availability/jobs/{id}/runs` → `/pollers/{id}/runs`, `/api/availability/runs?job_id=` → `?poller_id=`. Back them with `AvailabilityPollerRepo` + `AvailabilityRunRepo` instead of `AvailabilityJobRepo`/`AvailabilityJobRunRepo`.
+  - **Repo query methods** (add to `AvailabilityPollerRepo`): `list(active: Boolean?, limit, offset): List<Poller>`, `count(active: Boolean?): Int`, `summary(now): {active, dormant, dueNow, claimed}`, plus `attachedWatchCount(pollerId)` (or fold the count into the list query via the join). `AvailabilityRunRepo` already has `listForPoller`/`listSince(pollerId=)` after the rename.
+  - **Schemas** `models/api/AvailabilityDashboardSchemas.kt`: `AvailabilityJobSchema` → `AvailabilityPollerSchema` (`id, provider, parent_ref, poi_id, active, next_run_at, claimed_until, last_run_at, attached_watches, created_at, updated_at` — drop the 1:1 `watch_id`, add `provider`/`parent_ref`/`attached_watches`); `AvailabilityJobsListResponse`→`AvailabilityPollersListResponse`; `AvailabilityJobsSummary`→`AvailabilityPollersSummary` (`active/dormant/dueNow/claimed`); `AvailabilityJobRunSchema.job_id`→`poller_id`.
+  - **Web** (`web/`): `api/availability-dashboard-api.js` (`listJobs`→`listPollers`, `/jobs`→`/pollers`, `job_id`→`poller_id`); `availability.js` (jobs-tab → pollers-tab import/mount); rename `components/availability/jobs-tab.js` → `pollers-tab.js` and rework its columns to poller fields (provider, parent_ref, active, attached_watches) with active/dormant status; `runs-tab.js` (`job_id`→`poller_id`, label "Job"→"Poller"). Grep `web/` for `job_id`/`/jobs`/`jobs-tab` and fix all.
+  - Update `AvailabilityDashboardRoutesTest.kt` and the "PATCH paused parks it" case in `AvailabilityWatchRoutesTest.kt` to the poller model (pausing a watch drops its poller links / dormant, not "parks a job").
+
+- [ ] **Step 8: Build + run the full backend test suite + ktlint.**
 
 Run: `export JAVA_HOME=$(/usr/libexec/java_home -v 17); ./gradlew :backend:test`
-Expected: BUILD SUCCESSFUL, all tests green (executor, membership, service, repo, backfill).
+Then: `./gradlew :backend:ktlintCheck`
+Expected: both BUILD SUCCESSFUL, all tests green (executor, membership, service, repo, backfill, dashboard routes). Also fix the pre-existing ktlint debt in `DbAvailabilityTargetResolverTest.kt`.
 
-- [ ] **Step 8: Commit.**
+- [ ] **Step 9: Commit (one commit for the whole cutover).**
 
 ```bash
 git add -A
-git commit -m "feat(poller): executor handles pollers; service syncs membership; boot backfill; drop availability_job"
+git commit -m "feat(poller): cutover — executor handles pollers, service syncs membership, dashboard+API job->poller rename, boot backfill, V28 drop availability_job"
 ```
 
 ---
