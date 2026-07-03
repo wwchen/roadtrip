@@ -34,7 +34,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "### watch \u2192 poller \u2192 run \u2192 snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** \u2014 POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_poller` | **Scheduler state** \u2014 `next_run_at`, claim token, `active`/dormant. Keyed on `(provider, parent_ref)`; **many watches can coalesce onto one poller** via `availability_watch_poller`. | Service maintains membership when a watch is created/edited; coalesces watches that share a vendor call target. |\n| `availability_run` | **Append-only execution log** \u2014 one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed poller. |\n| `availability_snapshot` | **Observed availability** \u2014 per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each poller run. |\n\n### How to drill\n\nClick a **watch_id** / **poller_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Watch / Job Run Detail](/d/watch-job-run-detail)** \u2014 drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/poi-detail)**. |\n| Current cube face: reservables \u00d7 dates, current status. | **[Availability Cell Matrix](/d/availability-cell-matrix)** \u2014 the cube's *now* face. |\n",
+        "content": "### watch \u2192 poller \u2192 run \u2192 snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** \u2014 POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_poller` | **Scheduler state** \u2014 `next_run_at`, claim token, `active`/dormant. Keyed on `(provider, parent_ref)`; **many watches can coalesce onto one poller** via `availability_watch_poller`. | Service maintains membership when a watch is created/edited; coalesces watches that share a vendor call target. |\n| `availability_run` | **Append-only execution log** \u2014 one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed poller. |\n| `availability_snapshot` | **Observed availability** \u2014 per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each poller run. |\n\n### How to drill\n\nClick a **watch_id** / **poller_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Poller / Run Detail](/d/poller-run-detail)** \u2014 drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/poi-detail)**. |\n| Current cube face: reservables \u00d7 dates, current status. | **[Availability Cell Matrix](/d/availability-cell-matrix)** \u2014 the cube's *now* face. |\n",
         "mode": "markdown"
       },
       "pluginVersion": "13.1.0",
@@ -515,8 +515,8 @@
                   },
                   {
                     "targetBlank": false,
-                    "title": "Open Watch / Job Run Detail",
-                    "url": "/d/watch-job-run-detail/watch-job-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
+                    "title": "Open Poller / Run Detail",
+                    "url": "/d/poller-run-detail/poller-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
                   }
                 ]
               }
@@ -655,8 +655,8 @@
                   },
                   {
                     "targetBlank": false,
-                    "title": "Open Watch / Job Run Detail",
-                    "url": "/d/watch-job-run-detail/watch-job-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
+                    "title": "Open Poller / Run Detail",
+                    "url": "/d/poller-run-detail/poller-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
                   }
                 ]
               }

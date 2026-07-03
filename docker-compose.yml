@@ -66,9 +66,8 @@ services:
       - ./grafana/db/create-grafana-reader.sh:/docker-entrypoint-initdb.d/create-grafana-reader.sh:ro
 
   # Kotlin/Ktor backend. Serves the entire site:
-  #   - GET /                       → index.html
-  #   - GET /pois, /reservables,
-  #         /watches, /availability   → catalog pages
+  #   - GET /                       → index.html (map)
+  #   - GET /availability           → availability dashboard
   #   - GET /web/*, /data/*         → static files (data/pricing-cache/ excluded)
   #   - GET /api/pois               → bbox query against postgres
   #   - GET /api/pricing/{slug}     → cache-only read of data/pricing-cache/{slug}.json
@@ -97,10 +96,6 @@ services:
       - TESLA_COOKIES=${TESLA_COOKIES:-}
     volumes:
       - ./index.html:/app/static/index.html:ro
-      - ./pois.html:/app/static/pois.html:ro
-      - ./reservables.html:/app/static/reservables.html:ro
-      - ./watches.html:/app/static/watches.html:ro
-      - ./watch-detail.html:/app/static/watch-detail.html:ro
       - ./availability.html:/app/static/availability.html:ro
       - ./web:/app/static/web:ro
       - ./scripts:/app/static/scripts:ro

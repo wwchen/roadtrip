@@ -24,14 +24,8 @@ on:
       - 'data/**'
       - 'docker-compose*.yml'
       - 'index.html'
-      - 'pois.html'
-      - 'reservables.html'
-      - 'watches.html'
-      - 'watch-detail.html'
       - 'availability.html'
       - 'web/**'
-      - 'app.js'
-      - 'style.css'
       - '.github/workflows/deploy.yml'
   workflow_dispatch: {}
 

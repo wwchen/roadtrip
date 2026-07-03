@@ -975,7 +975,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Run Detail",
-                    "url": "/d/watch-job-run-detail/roadtrip-watch-job-run-detail?var-run_id=${__value.raw}"
+                    "url": "/d/poller-run-detail/roadtrip-poller-run-detail?var-run_id=${__value.raw}"
                   }
                 ]
               }
@@ -1130,6 +1130,6 @@
   },
   "timezone": "browser",
   "title": "✔︎ Reservable Availability Watch / Poller Run Detail",
-  "uid": "watch-job-run-detail",
+  "uid": "poller-run-detail",
   "version": 1
 }

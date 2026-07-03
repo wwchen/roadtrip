@@ -41,8 +41,6 @@ jobs:
               - 'gradlew.bat'
               - 'settings.gradle.kts'
               - '*.html'
-              - '*.js'
-              - '*.css'
               - 'web/**/*.js'
               - 'web/**/*.css'
               - '.github/workflows/ci.yml'
