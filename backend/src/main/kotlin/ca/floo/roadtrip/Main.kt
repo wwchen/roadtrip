@@ -247,10 +247,10 @@ fun Application.module() {
     PollerBackfill(ctx, pollerMembership).run()
     val pollExecutor =
         AvailabilityPollExecutor(
+            ctx = ctx,
             pollers = availabilityPollers,
             reservablesRepo = reservablesRepo,
             batcher = CatalogAvailabilityBatcher(),
-            snapshots = availabilitySnapshots,
             cells = AvailabilityCellRepo(ctx),
             runs = AvailabilityRunRepo(ctx),
             dateResolver = availabilityDateResolver,

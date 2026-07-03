@@ -128,6 +128,11 @@ class AvailabilityCellRepo(
      * reservable set) so a date that quietly ages out without ever being
      * re-observed still reaches its terminal state. Bumps last_changed_at on the
      * flip so the transition is visible on the cell face. Returns rows updated.
+     *
+     * NOTE: the -> past transition is intentionally cell-only — it writes NO
+     * availability_snapshot transition row. Per the spec, history simply ends
+     * when a date elapses; there is no edge worth logging. The resulting
+     * cell-without-snapshot state is by design, not a bug.
      */
     fun markElapsedAsPast(
         reservableIds: List<Long>,
