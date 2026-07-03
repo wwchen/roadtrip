@@ -377,7 +377,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  p.*\n  -- p.id   AS poller_id,\n  -- w.id   AS watch_id,\n  -- w.status AS watch_status,\n  -- p.active,\n  -- w.cadence_sec,\n  -- w.start_date,\n  -- w.end_date,\n  -- w.trigger_kinds,\n  -- w.stop_when_triggered,\n  -- w.poi_id,\n  -- w.reservable_id,\n  -- r.name AS reservable_name,\n  -- p.next_run_at,\n  -- p.last_run_at,\n  -- w.created_at AS watch_created_at\nFROM availability_run sr\nJOIN availability_poller p ON p.id = sr.poller_id\nLEFT JOIN availability_watch_poller wp ON wp.poller_id = p.id\nLEFT JOIN availability_watch w ON w.id = wp.watch_id\nLEFT JOIN reservables   r ON r.id = w.reservable_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
+          "rawSql": "SELECT p.*\nFROM availability_run sr\nJOIN availability_poller p ON p.id = sr.poller_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -553,7 +553,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "-- A poller can coalesce multiple watches; this lists every watch\n-- currently attached to the poller that produced this run.\nSELECT\n  w.*\n  -- p.id   AS poller_id,\n  -- w.id   AS watch_id,\n  -- w.status AS watch_status,\n  -- p.active,\n  -- w.cadence_sec,\n  -- w.start_date,\n  -- w.end_date,\n  -- w.trigger_kinds,\n  -- w.stop_when_triggered,\n  -- w.poi_id,\n  -- w.reservable_id,\n  -- r.name AS reservable_name,\n  -- p.next_run_at,\n  -- p.last_run_at,\n  -- w.created_at AS watch_created_at\nFROM availability_run sr\nJOIN availability_poller p ON p.id = sr.poller_id\nJOIN availability_watch_poller wp ON wp.poller_id = p.id\nJOIN availability_watch w ON w.id = wp.watch_id\nLEFT JOIN reservables   r ON r.id = w.reservable_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
+          "rawSql": "-- A poller can coalesce multiple watches; this lists every watch\n-- currently attached to the poller that produced this run.\nSELECT\n  w.*\nFROM availability_run sr\nJOIN availability_poller p ON p.id = sr.poller_id\nJOIN availability_watch_poller wp ON wp.poller_id = p.id\nJOIN availability_watch w ON w.id = wp.watch_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -975,7 +975,7 @@
                   {
                     "targetBlank": false,
                     "title": "Open Run Detail",
-                    "url": "/d/watch-job-run-detail/roadtrip-watch-job-run-detail?var-run_id=${__value.raw}"
+                    "url": "/d/poller-run-detail/roadtrip-poller-run-detail?var-run_id=${__value.raw}"
                   }
                 ]
               }
@@ -1130,6 +1130,6 @@
   },
   "timezone": "browser",
   "title": "✔︎ Reservable Availability Watch / Poller Run Detail",
-  "uid": "watch-job-run-detail",
+  "uid": "poller-run-detail",
   "version": 1
 }
