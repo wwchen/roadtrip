@@ -1,0 +1,416 @@
+package ca.floo.roadtrip.service.availability
+
+import ca.floo.roadtrip.models.availability.PoiDateContext
+import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.models.domain.ReservableType
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.service.reservation.ReservationProvider
+import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import com.zaxxer.hikari.HikariConfig
+import com.zaxxer.hikari.HikariDataSource
+import org.jooq.DSLContext
+import org.jooq.SQLDialect
+import org.jooq.impl.DSL
+import org.junit.jupiter.api.AfterAll
+import org.junit.jupiter.api.BeforeAll
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.TestInstance
+import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.utility.DockerImageName
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import kotlin.test.assertEquals
+import kotlin.test.assertTrue
+
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class AvailabilityPollerMembershipTest {
+    private lateinit var pg: PostgreSQLContainer<Nothing>
+    private lateinit var ds: HikariDataSource
+    private lateinit var ctx: DSLContext
+    private lateinit var reservableRepo: ReservableRepo
+    private lateinit var scopeResolver: WatchScopeResolver
+
+    @BeforeAll
+    fun start() {
+        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
+        pg =
+            PostgreSQLContainer<Nothing>(image).apply {
+                withDatabaseName("roadtrip_test")
+                withUsername("test")
+                withPassword("test")
+            }
+        pg.start()
+        val cfg =
+            HikariConfig().apply {
+                jdbcUrl = pg.jdbcUrl
+                username = pg.username
+                password = pg.password
+                maximumPoolSize = 2
+            }
+        ds = HikariDataSource(cfg)
+        migrate(ds)
+        ctx = DSL.using(ds, SQLDialect.POSTGRES)
+        reservableRepo = ReservableRepo(ctx)
+        scopeResolver = WatchScopeResolver(reservableRepo)
+    }
+
+    @AfterAll
+    fun stop() {
+        ds.close()
+        pg.stop()
+    }
+
+    @BeforeEach
+    fun cleanup() {
+        ctx.execute("DELETE FROM availability_watch_poller")
+        ctx.execute("DELETE FROM availability_poller")
+        ctx.execute("DELETE FROM availability_job")
+        ctx.execute("DELETE FROM availability_watch")
+        ctx.execute("DELETE FROM reservable_pois")
+        ctx.execute("DELETE FROM reservables")
+        ctx.execute("DELETE FROM pois")
+    }
+
+    private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
+
+    private var poiSeq = 0
+
+    private fun insertPoi(name: String = "Upper Pines"): Long {
+        val sourceId = "poi-${poiSeq++}"
+        return ctx
+            .fetchOne(
+                """
+                INSERT INTO pois (
+                    source, source_id, category, name, geom, region,
+                    properties, provider_ref, fetched_at
+                ) VALUES (
+                    'test', ?, 'campground', ?,
+                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
+                    'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
+                ) RETURNING id
+                """.trimIndent(),
+                sourceId,
+                name,
+            )!!
+            .get("id", Long::class.java)
+    }
+
+    private fun insertActiveWatch(
+        poiId: Long? = null,
+        reservableId: Long? = null,
+        startDate: String = "2026-07-04",
+        endDate: String = "2026-12-31",
+    ): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO availability_watch (
+                    poi_id, reservable_id, start_date, end_date, cadence_sec, trigger_kinds
+                ) VALUES (
+                    ?, ?, ?::date, ?::date, 60, ARRAY['atc']
+                ) RETURNING id
+                """.trimIndent(),
+                poiId,
+                reservableId,
+                startDate,
+                endDate,
+            )!!
+            .get("id", Long::class.java)
+
+    private fun insertPausedWatch(poiId: Long): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO availability_watch (
+                    poi_id, start_date, end_date, cadence_sec, trigger_kinds, status
+                ) VALUES (
+                    ?, '2026-07-04'::date, '2026-12-31'::date, 60, ARRAY['atc'], 'paused'
+                ) RETURNING id
+                """.trimIndent(),
+                poiId,
+            )!!
+            .get("id", Long::class.java)
+
+    /** Inserts a `reservables` row linked to [poiId] and returns its surrogate id. */
+    private fun insertReservable(
+        poiId: Long,
+        vendorId: String,
+    ): Long {
+        val id =
+            reservableRepo.upsert(
+                ReservableRepo.Input(
+                    rid = ReservableId(type = ReservableType.SITE, vendor = "test", vendorId = vendorId),
+                    name = "Site $vendorId",
+                    loop = null,
+                    siteType = null,
+                    raw = null,
+                ),
+            )
+        reservableRepo.linkToPoi(id, poiId)
+        return id
+    }
+
+    private fun watch(id: Long): AvailabilityWatchRepo.Watch = AvailabilityWatchRepo(ctx).findById(id)!!
+
+    /** Minimal ReservationProvider stub — only `id` is consumed by the membership. */
+    private class FakeProvider(
+        override val id: ReservationProviderId,
+    ) : ReservationProvider {
+        override val capabilities: ReservationProviderCapabilities = ReservationProviderCapabilities.UNSUPPORTED
+
+        override suspend fun availability(
+            req: ca.floo.roadtrip.service.reservation.AvailabilityRequest,
+        ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch =
+            throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
+    }
+
+    private val fakeDateContext = PoiDateContext(timeZone = ZoneId.of("UTC"), earliestDate = LocalDate.now())
+
+    /**
+     * In-memory fake keyed by reservable id, so a test can control exactly
+     * which (provider, parentRef, parentPoiId) each reservable resolves to
+     * without seeding real provider-ref rows.
+     */
+    private class FakeTargetResolver : AvailabilityTargetResolver {
+        val byReservableId = mutableMapOf<Long, ResolvedAvailabilityTarget>()
+
+        fun stub(
+            reservable: Reservable,
+            provider: ReservationProviderId,
+            parentRef: ProviderRef,
+            parentPoiId: Long,
+            dateContext: PoiDateContext,
+        ) {
+            byReservableId[reservable.id] =
+                ResolvedAvailabilityTarget(
+                    reservable = reservable,
+                    provider = FakeProvider(provider),
+                    parentRef = parentRef,
+                    parentPoiId = parentPoiId,
+                    dateContext = dateContext,
+                )
+        }
+
+        override fun requireByRid(rid: ca.floo.roadtrip.models.domain.ReservableId): ResolvedAvailabilityTarget =
+            throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
+
+        override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byReservableId[reservable.id]
+    }
+
+    @Test
+    fun `two watches on same parentRef link to ONE poller`() {
+        val poi = insertPoi()
+        val reservableA = insertReservable(poi, "site-a")
+        val reservableB = insertReservable(poi, "site-b")
+
+        val targets = FakeTargetResolver()
+        targets.stub(
+            reservableRepo.findById(reservableA)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("232447"),
+            poi,
+            fakeDateContext,
+        )
+        targets.stub(
+            reservableRepo.findById(reservableB)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("232447"),
+            poi,
+            fakeDateContext,
+        )
+        val membership = AvailabilityPollerMembership(scopeResolver, targets)
+        val repo = AvailabilityPollerRepo(ctx)
+
+        // watchA: POI-scope (expands to both reservables). watchB: reservable-scope under the same campground.
+        val watchAId = insertActiveWatch(poiId = poi)
+        val watchBId = insertActiveWatch(reservableId = reservableB)
+
+        membership.sync(watch(watchAId), repo, null)
+        membership.sync(watch(watchBId), repo, null)
+
+        val a = repo.pollerIdsForWatch(watchAId)
+        val b = repo.pollerIdsForWatch(watchBId)
+        assertEquals(a, b)
+        assertEquals(1, a.size)
+    }
+
+    @Test
+    fun `two POIs sharing a parentRef produce ONE poller`() {
+        // Two distinct POI rows (e.g. two campsites under the same campground)
+        // resolving to the same vendor parentRef must coalesce to one poller.
+        val poiX = insertPoi("Site Cluster X")
+        val poiY = insertPoi("Site Cluster Y")
+        val reservableX = insertReservable(poiX, "site-x")
+        val reservableY = insertReservable(poiY, "site-y")
+
+        val targets = FakeTargetResolver()
+        targets.stub(
+            reservableRepo.findById(reservableX)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("999000"),
+            poiX,
+            fakeDateContext,
+        )
+        targets.stub(
+            reservableRepo.findById(reservableY)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("999000"),
+            poiY,
+            fakeDateContext,
+        )
+        val membership = AvailabilityPollerMembership(scopeResolver, targets)
+        val repo = AvailabilityPollerRepo(ctx)
+
+        val watchXId = insertActiveWatch(reservableId = reservableX)
+        val watchYId = insertActiveWatch(reservableId = reservableY)
+
+        membership.sync(watch(watchXId), repo, null)
+        membership.sync(watch(watchYId), repo, null)
+
+        val x = repo.pollerIdsForWatch(watchXId)
+        val y = repo.pollerIdsForWatch(watchYId)
+        assertEquals(x, y)
+        assertEquals(1, x.size)
+    }
+
+    @Test
+    fun `watch spanning two parentRefs links two pollers`() {
+        val poi = insertPoi()
+        val reservableA = insertReservable(poi, "site-a")
+        val reservableB = insertReservable(poi, "site-b")
+
+        val targets = FakeTargetResolver()
+        targets.stub(
+            reservableRepo.findById(reservableA)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("111111"),
+            poi,
+            fakeDateContext,
+        )
+        targets.stub(
+            reservableRepo.findById(reservableB)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("222222"),
+            poi,
+            fakeDateContext,
+        )
+        val membership = AvailabilityPollerMembership(scopeResolver, targets)
+        val repo = AvailabilityPollerRepo(ctx)
+
+        // POI-scope watch expands to both reservables, which resolve to two distinct parentRefs.
+        val watchId = insertActiveWatch(poiId = poi)
+
+        membership.sync(watch(watchId), repo, null)
+
+        assertEquals(2, repo.pollerIdsForWatch(watchId).size)
+    }
+
+    @Test
+    fun `re-sync after target change drops the stale link`() {
+        val poi = insertPoi()
+        val reservableA = insertReservable(poi, "site-a")
+
+        val targets = FakeTargetResolver()
+        targets.stub(
+            reservableRepo.findById(reservableA)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("333333"),
+            poi,
+            fakeDateContext,
+        )
+        val membership = AvailabilityPollerMembership(scopeResolver, targets)
+        val repo = AvailabilityPollerRepo(ctx)
+
+        val watchId = insertActiveWatch(reservableId = reservableA)
+        membership.sync(watch(watchId), repo, null)
+        val firstLinks = repo.pollerIdsForWatch(watchId)
+        assertEquals(1, firstLinks.size)
+        val firstPollerId = firstLinks.single()
+
+        // Target set changes: same reservable now resolves to a different parentRef
+        // (e.g. the campground's provider ref was corrected).
+        targets.stub(
+            reservableRepo.findById(reservableA)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("444444"),
+            poi,
+            fakeDateContext,
+        )
+        membership.sync(watch(watchId), repo, null)
+
+        val secondLinks = repo.pollerIdsForWatch(watchId)
+        assertEquals(1, secondLinks.size)
+        assertTrue(firstPollerId !in secondLinks)
+        // The stale poller lost its only link and should have been deactivated.
+        assertEquals(false, repo.findById(firstPollerId)!!.active)
+    }
+
+    @Test
+    fun `tighter cadence pull moves next_run_at earlier`() {
+        val poi = insertPoi()
+        val reservableA = insertReservable(poi, "site-a")
+
+        val targets = FakeTargetResolver()
+        targets.stub(
+            reservableRepo.findById(reservableA)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("555555"),
+            poi,
+            fakeDateContext,
+        )
+        val membership = AvailabilityPollerMembership(scopeResolver, targets)
+        val repo = AvailabilityPollerRepo(ctx)
+
+        val watchId = insertActiveWatch(reservableId = reservableA)
+        membership.sync(watch(watchId), repo, null)
+        val pollerId = repo.pollerIdsForWatch(watchId).single()
+
+        val earlier = now().minusDays(1)
+        membership.sync(watch(watchId), repo, tighterCadencePull = earlier)
+
+        assertTrue(repo.findById(pollerId)!!.nextRunAt <= earlier)
+    }
+
+    @Test
+    fun `non-ACTIVE watch clears its links and reaps the orphaned poller`() {
+        val poi = insertPoi()
+        val reservableA = insertReservable(poi, "site-a")
+
+        val targets = FakeTargetResolver()
+        targets.stub(
+            reservableRepo.findById(reservableA)!!,
+            ReservationProviderId.RECGOV,
+            ProviderRef.RecGov("666666"),
+            poi,
+            fakeDateContext,
+        )
+        val membership = AvailabilityPollerMembership(scopeResolver, targets)
+        val repo = AvailabilityPollerRepo(ctx)
+
+        val watchId = insertActiveWatch(reservableId = reservableA)
+        membership.sync(watch(watchId), repo, null)
+        val pollerId = repo.pollerIdsForWatch(watchId).single()
+
+        val pausedWatchId = insertPausedWatch(poi)
+        // Re-fetch: the paused watch has no reservable_id, but the sync should
+        // short-circuit on status before ever resolving scope/targets.
+        membership.sync(watch(pausedWatchId), repo, null)
+        assertTrue(repo.pollerIdsForWatch(pausedWatchId).isEmpty())
+
+        // Now pause the watch actually holding the link and re-sync it.
+        ctx.execute("UPDATE availability_watch SET status = 'paused' WHERE id = ?", watchId)
+        membership.sync(watch(watchId), repo, null)
+
+        assertTrue(repo.pollerIdsForWatch(watchId).isEmpty())
+        assertEquals(false, repo.findById(pollerId)!!.active)
+    }
+}
