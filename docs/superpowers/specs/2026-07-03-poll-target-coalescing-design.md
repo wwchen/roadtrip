@@ -96,9 +96,9 @@ reading the shared snapshots. The poll target never branches on user intent.
   provider buckets (rec.gov months) and skips buckets with no future date.
 - **cadence** = `min(cadence_sec)` over linked active watches (tightest wins;
   then rate-limit/backoff clamps it, unchanged from 07-02).
-- **refcount** = number of active watch links. Lifecycle: poll target created
-  lazily on first link; polling stops (`status = done`) when refcount hits 0 —
-  the doc's "starts on first watch, stops at zero," now literal.
+- **refcount** = number of **live** watch links (see *Lifecycle & expiry*). Poll
+  target created lazily on first link; retires (`status = done`) when refcount
+  hits 0 — the doc's "starts on first watch, stops at zero," now literal.
 
 ### Over-fetch is intentional and lossless
 
@@ -181,6 +181,38 @@ A **run reads the poll target's `{window, cadence}` at start** (as the executor
 reads intent today), so the removed `intent_payload` freeze is preserved in
 behavior without denormalized state.
 
+## Lifecycle & expiry
+
+Time-expiry and user-removal collapse into one concept — a link that stops
+counting — so there is exactly one retirement path.
+
+- **Live link.** A watch→poll-target link is *live* iff the watch is `active`
+  **and** has at least one `target_date ≥ earliestDate` (the target-local
+  earliest bookable date from `AvailabilityDateResolver`). `refcount` counts
+  *live* links; `window`/`cadence` are derived from *live* links only. A watch
+  whose dates have all elapsed is not live even though nobody removed it.
+- **The scheduler tick is the reaper — no separate janitor.** On each run the
+  executor resolves the effective window = `(union span of live members) ∩
+  [earliestDate, horizon]` via `resolvePollingWindow`. If that window is empty
+  for the whole poll target (every member elapsed), the executor **retires
+  instead of rescheduling**: mark the elapsed member watches `done`, drop their
+  links, set `refcount = 0` and `poll_target.status = done`. `next_run_at` is
+  not advanced. This delivers the doc's "stops unconditionally when the date
+  elapses," which the current executor does *not* do (it reschedules empty runs
+  forever — a pre-existing bug this design closes).
+- **At most one empty tick of lag.** A poll target reaps on its first tick after
+  its last live date passes (≈ next cadence interval), not at the instant of
+  expiry. That tick makes no upstream call (null window → batcher skip), so the
+  lag is harmless.
+- **Partial expiry keeps polling.** If only some dates have passed, the window
+  clamps forward (`start = max(startDate, earliestDate)`) and the poll target
+  keeps running over the remaining future dates. It reaps only when *every*
+  member is fully elapsed.
+- **Creating an already-elapsed watch is rejected.** The watch-creation path
+  reuses `resolveWindow`'s `BadDateWindow.StartBeforeEarliest` guard: a watch
+  whose entire date set is in the past is refused at validation — you cannot
+  start something already elapsed.
+
 ## Executor changes
 
 `AvailabilityPollExecutor.handle(pollTarget)` (was `handle(job)`):
@@ -188,9 +220,12 @@ behavior without denormalized state.
 - `resolveTargets` collapses to "all reservables under `pollTarget.poi_id`"
   (always whole-POI; the `AvailabilityJobIntent` sealed type + per-site variant
   are removed — scope now lives in watches, not the schedulable).
-- Everything below — `CatalogAvailabilityBatcher.fetchByGroup`, snapshot append,
-  `availability_fetch_call` trace, backoff — is **unchanged**. This is the proof
-  the seam holds: coalescing changes *what schedules a run*, not the run itself.
+- `CatalogAvailabilityBatcher.fetchByGroup`, snapshot append,
+  `availability_fetch_call` trace, and backoff are **unchanged** — coalescing
+  changes *what schedules a run*, not the run's body. The seam holds.
+- One new branch in the reschedule decision (see *Lifecycle & expiry*): when the
+  effective window is empty for the whole poll target, **retire instead of
+  rescheduling**. Success and rate-limit/backoff paths are otherwise as today.
 
 ## Migration / backfill
 
@@ -229,6 +264,14 @@ original confusion (two jobs → one poll target, two watches).
   that run's fetched window.
 - Snapshots for a shared poll target carry one `observed_at` per campground/date
   (no duplicate history rows across the former two jobs).
+- **Expiry:** a poll target whose every member watch has fully elapsed → next
+  tick retires it (`status = done`, member watches `done`, refcount 0) and makes
+  **no** upstream call; `next_run_at` is not advanced.
+- **Partial expiry:** with some dates elapsed and some future, the window clamps
+  forward and the poll target keeps polling; it does not retire.
+- **Reject-in-past:** creating a watch whose entire date set precedes
+  `earliestDate` fails validation (`StartBeforeEarliest`), creating no watch,
+  link, or poll target.
 
 ## PR sequencing
 
