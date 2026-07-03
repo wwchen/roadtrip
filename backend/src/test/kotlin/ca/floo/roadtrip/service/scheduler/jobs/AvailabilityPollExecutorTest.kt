@@ -4,6 +4,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
@@ -34,12 +35,14 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
+import org.slf4j.MDC
 import org.testcontainers.containers.PostgreSQLContainer
 import org.testcontainers.utility.DockerImageName
 import java.time.Instant
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -79,6 +82,7 @@ class AvailabilityPollExecutorTest {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability_fetch_call")
         ctx.execute("DELETE FROM availability_job_run")
         ctx.execute("DELETE FROM availability_job")
         ctx.execute("DELETE FROM availability_watch")
@@ -175,6 +179,10 @@ class AvailabilityPollExecutorTest {
     private class CountingRecgovProvider : ReservationProvider {
         var calls: Int = 0
 
+        /** Captures the MDC `run_id` seen inside the upstream call, proving it
+         *  propagated across the coroutine dispatch from [AvailabilityPollExecutor]. */
+        var mdcRunIdDuringCall: String? = null
+
         override val id: ReservationProviderId = ReservationProviderId.RECGOV
         override val capabilities: ReservationProviderCapabilities =
             ReservationProviderCapabilities(
@@ -188,6 +196,7 @@ class AvailabilityPollExecutorTest {
 
         override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
             calls++
+            mdcRunIdDuringCall = MDC.get("run_id")
             val observedAt = Instant.now()
             val observations =
                 req.reservables.map { ref ->
@@ -248,6 +257,7 @@ class AvailabilityPollExecutorTest {
             runs = AvailabilityJobRunRepo(ctx),
             dateResolver = dateResolver,
             targets = targets,
+            fetchCalls = AvailabilityFetchCallRepo(ctx),
         )
     }
 
@@ -273,6 +283,17 @@ class AvailabilityPollExecutorTest {
             val snapshots = AvailabilitySnapshotRepo(ctx).listForRun(runs[0].id, limit = 100)
             assertTrue(snapshots.isNotEmpty())
             assertTrue(snapshots.all { it.runId == runs[0].id })
+
+            val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
+            assertEquals(1, fetchCalls.size)
+            assertEquals("ok", fetchCalls[0].outcome)
+            assertEquals(3, fetchCalls[0].reservableCount)
+            assertEquals("232447", fetchCalls[0].parentRef)
+
+            // The upstream client call happened with run_id in the MDC, so its log
+            // lines (e.g. "Poller: GET availability ...") are correlatable to this run.
+            assertEquals(runs[0].id.toString(), provider.mdcRunIdDuringCall)
+            assertNull(MDC.get("run_id"), "MDC should be cleared on this thread after handle() returns")
         }
 
     @Test
@@ -291,5 +312,11 @@ class AvailabilityPollExecutorTest {
             assertEquals(1, runs.size)
             assertEquals("failed", runs[0].status)
             assertEquals("rate_limited", runs[0].error)
+
+            val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
+            assertEquals(1, fetchCalls.size)
+            assertEquals("rate_limited", fetchCalls[0].outcome)
+            assertEquals(1, fetchCalls[0].reservableCount)
+            assertEquals("232447", fetchCalls[0].parentRef)
         }
 }
