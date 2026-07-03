@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.repo
 
-import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
 import org.flywaydb.core.Flyway
 import org.jooq.SQLDialect
@@ -9,42 +8,26 @@ import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class PoiAgencyMigrationTest {
-    private lateinit var pg: PostgreSQLContainer<Nothing>
     private lateinit var ds: HikariDataSource
 
     @BeforeAll
     fun start() {
-        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
-        pg =
-            PostgreSQLContainer<Nothing>(image).apply {
-                withDatabaseName("roadtrip_agency_migration")
-                withUsername("test")
-                withPassword("test")
-            }
-        pg.start()
-        ds =
-            HikariDataSource(
-                HikariConfig().apply {
-                    jdbcUrl = pg.jdbcUrl
-                    username = pg.username
-                    password = pg.password
-                    maximumPoolSize = 2
-                },
-            )
+        // This test drives Flyway itself (migrate to an intermediate target,
+        // seed, then migrate the rest) so it needs its OWN unmigrated DB — it
+        // can't share the pre-migrated template. It gets a blank database on the
+        // shared container, so the whole suite still runs one Postgres instance.
+        ds = SharedTestDb.createEmptyDatabase()
     }
 
     @AfterAll
     fun stop() {
         ds.close()
-        pg.stop()
     }
 
     @Test
