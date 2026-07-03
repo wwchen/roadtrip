@@ -29,7 +29,6 @@ import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
-import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityQueryServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
@@ -235,13 +234,6 @@ fun Application.module() {
     // snapshot rows. Cancelled on app shutdown so tests don't leak threads.
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     val availabilityJobs = AvailabilityJobRepo(ctx)
-    // TODO(Task 1.5): ReservableAvailabilityFetchService is unused by the poller
-    // now that AvailabilityPollExecutor calls CatalogAvailabilityBatcher directly.
-    // Left wired here so other call sites keep compiling; Task 1.5 removes it.
-    val availabilityFetches =
-        ReservableAvailabilityFetchService(
-            snapshots = availabilitySnapshots,
-        )
     val pollExecutor =
         AvailabilityPollExecutor(
             reservablesRepo = reservablesRepo,
