@@ -7,6 +7,7 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
+import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -48,3 +49,70 @@ internal fun ReservationProviderError.toFetchOutcome(): FetchOutcome =
         is ReservationProviderError.UpstreamUnavailable -> FetchOutcome.UPSTREAM_5XX
         else -> FetchOutcome.OTHER
     }
+
+internal class CatalogAvailabilityBatcher {
+    private data class GroupKey(
+        val provider: ReservationProvider,
+        val parentRef: ProviderRef,
+        val dateContext: PoiDateContext,
+    )
+
+    suspend fun fetchByGroup(
+        targets: List<ResolvedAvailabilityTarget>,
+        windowFor: (PoiDateContext, ReservationProviderCapabilities) -> ResolvedDateWindow?,
+        fetch: suspend (
+            parentRef: ProviderRef,
+            provider: ReservationProvider,
+            reservables: List<Reservable>,
+            window: ResolvedDateWindow,
+        ) -> AvailabilityObservationBatch,
+    ): List<GroupFetchResult> =
+        targets
+            .groupBy { GroupKey(it.provider, it.parentRef, it.dateContext) }
+            .map { (key, groupTargets) ->
+                val reservables = groupTargets.map { it.reservable }
+                val window = windowFor(key.dateContext, key.provider.capabilities)
+                if (window == null) {
+                    return@map GroupFetchResult(
+                        provider = key.provider,
+                        parentRef = key.parentRef,
+                        dateContext = key.dateContext,
+                        reservables = reservables,
+                        window = null,
+                        batch = null,
+                        outcome = FetchOutcome.OK,
+                        durationMs = 0,
+                        error = null,
+                    )
+                }
+                val startedNanos = System.nanoTime()
+                try {
+                    val batch = fetch(key.parentRef, key.provider, reservables, window)
+                    GroupFetchResult(
+                        provider = key.provider,
+                        parentRef = key.parentRef,
+                        dateContext = key.dateContext,
+                        reservables = reservables,
+                        window = window,
+                        batch = batch,
+                        outcome = FetchOutcome.OK,
+                        durationMs = elapsedMs(startedNanos),
+                        error = null,
+                    )
+                } catch (e: ReservationProviderError) {
+                    GroupFetchResult(
+                        provider = key.provider,
+                        parentRef = key.parentRef,
+                        dateContext = key.dateContext,
+                        reservables = reservables,
+                        window = window,
+                        batch = null,
+                        outcome = e.toFetchOutcome(),
+                        durationMs = elapsedMs(startedNanos),
+                        error = e.message ?: e::class.simpleName,
+                    )
+                }
+            }
+
+    private fun elapsedMs(startedNanos: Long): Int = ((System.nanoTime() - startedNanos) / 1_000_000).toInt().coerceAtLeast(0)
+}
