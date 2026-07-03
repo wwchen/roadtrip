@@ -488,6 +488,125 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `PATCH rejects an empty targets array`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        watchService(),
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p-patch-empty-targets", name = "Patch Empty Targets")
+            val body =
+                """
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val resp =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"targets": []}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("invalid_scope", obj["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `PATCH rejects a target with both poi_id and reservable_id set`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        watchService(),
+                    )
+                }
+            }
+            val poiId = seedPoi(sourceId = "p-patch-bad-target", name = "Patch Bad Target")
+            val rid = seedReservable("patch-bad-target-1")
+            linkReservableToPoi(rid, poiId)
+            val body =
+                """
+                {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val resp =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"targets": [{"poi_id": $poiId, "reservable_id": $rid}]}""")
+                }
+            assertEquals(HttpStatusCode.BadRequest, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
+            assertEquals("invalid_scope", obj["error"]!!.jsonPrimitive.content)
+        }
+
+    @Test
+    fun `PATCH with a valid single-target targets array updates the watch`() =
+        testApplication {
+            application {
+                routing {
+                    availabilityWatchRoutes(
+                        ctx,
+                        watchService(),
+                    )
+                }
+            }
+            val poiA = seedPoi(sourceId = "p-patch-targets-a", name = "Patch Targets A")
+            val poiB = seedPoi(sourceId = "p-patch-targets-b", name = "Patch Targets B")
+            val body =
+                """
+                {"poi_id": $poiA, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                """.trimIndent()
+            val created =
+                client.post("/api/availability/watches") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body)
+                }
+            val id =
+                Json
+                    .parseToJsonElement(created.bodyAsText())
+                    .jsonObject["watch"]!!
+                    .jsonObject["id"]!!
+                    .jsonPrimitive.long
+
+            val resp =
+                client.patch("/api/availability/watches/$id") {
+                    contentType(ContentType.Application.Json)
+                    setBody("""{"targets": [{"poi_id": $poiB}]}""")
+                }
+            assertEquals(HttpStatusCode.OK, resp.status)
+            val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["watch"]!!.jsonObject
+            val targets = obj["targets"]!!.jsonArray
+            assertEquals(1, targets.size)
+            assertEquals(poiB, targets[0].jsonObject["poi_id"]!!.jsonPrimitive.long)
+        }
+
+    @Test
     fun `DELETE removes a watch`() =
         testApplication {
             application {

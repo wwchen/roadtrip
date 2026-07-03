@@ -207,11 +207,17 @@ internal fun Route.availabilityWatchRoutes(
                         )
                 else -> null
             }
+        val updateTargets =
+            when (val r = resolveUpdateScope(req)) {
+                is ResolveResult.Err -> return@patch call.respondError(r.error, HttpStatusCode.BadRequest, r.detail)
+                is ResolveResult.Ok -> r.targets
+                null -> null
+            }
         val updated =
             watchService.update(
                 id,
                 AvailabilityWatchRepo.UpdateInput(
-                    targets = resolveUpdateScope(req)?.targets,
+                    targets = updateTargets,
                     reservableFilters = req.reservableFilters,
                     startDate = dateWindow?.first,
                     endDate = dateWindow?.second,
@@ -326,6 +332,24 @@ private sealed class ResolveResult {
 }
 
 /**
+ * Validates a `targets` array: it must be non-empty, and each target must
+ * set exactly one of `poi_id`/`reservable_id`. Shared by create and update so
+ * both reject malformed target sets with a clean 400 `invalid_scope` instead
+ * of letting bad input reach the service layer.
+ */
+private fun validateTargets(targets: List<AvailabilityWatchTargetSchema>): ResolveResult {
+    if (targets.isEmpty()) return ResolveResult.Err("invalid_scope", "targets must be non-empty")
+    val resolved = mutableListOf<AvailabilityWatchTargetRepo.TargetInput>()
+    for (t in targets) {
+        if ((t.poiId == null) == (t.reservableId == null)) {
+            return ResolveResult.Err("invalid_scope", "each target must set exactly one of poi_id/reservable_id")
+        }
+        resolved += AvailabilityWatchTargetRepo.TargetInput(poiId = t.poiId, reservableId = t.reservableId)
+    }
+    return ResolveResult.Ok(resolved)
+}
+
+/**
  * Builds the target list for create/update from either the preferred
  * `targets` array or the legacy single-scope fields (`poi_id`,
  * `reservable_id`, `reservable_rid`) — exactly one of the two shapes must be
@@ -342,16 +366,7 @@ private fun resolveCreateScope(
         return ResolveResult.Err("invalid_scope", "specify either targets or poi_id/reservable_id/reservable_rid, not both")
     }
     if (hasTargets) {
-        val targets = req.targets!!
-        if (targets.isEmpty()) return ResolveResult.Err("invalid_scope", "targets must be non-empty")
-        val resolved = mutableListOf<AvailabilityWatchTargetRepo.TargetInput>()
-        for (t in targets) {
-            if ((t.poiId == null) == (t.reservableId == null)) {
-                return ResolveResult.Err("invalid_scope", "each target must set exactly one of poi_id/reservable_id")
-            }
-            resolved += AvailabilityWatchTargetRepo.TargetInput(poiId = t.poiId, reservableId = t.reservableId)
-        }
-        return ResolveResult.Ok(resolved)
+        return validateTargets(req.targets!!)
     }
     if (legacyKeysSet != 1) {
         return ResolveResult.Err("invalid_scope", "exactly one of targets, poi_id, reservable_id, or reservable_rid must be set")
@@ -370,15 +385,15 @@ private fun resolveCreateScope(
 }
 
 /**
- * Same targets-or-legacy resolution as [resolveCreateScope], for PATCH. A
- * request with neither `targets` nor any legacy scope field means "leave
- * the target set untouched" (returns null, distinct from an empty list).
+ * Same targets validation as [resolveCreateScope], for PATCH. A request with
+ * no `targets` field means "leave the target set untouched" (returns null,
+ * distinct from an empty list). When `targets` is present, it goes through
+ * the same [validateTargets] check as create, so malformed target sets
+ * return `Err` (400 `invalid_scope`) instead of reaching the service layer.
  */
-private fun resolveUpdateScope(req: AvailabilityWatchUpdateRequest): ResolveResult.Ok? {
+private fun resolveUpdateScope(req: AvailabilityWatchUpdateRequest): ResolveResult? {
     if (req.targets != null) {
-        return ResolveResult.Ok(
-            req.targets.map { AvailabilityWatchTargetRepo.TargetInput(poiId = it.poiId, reservableId = it.reservableId) },
-        )
+        return validateTargets(req.targets)
     }
     return null
 }
