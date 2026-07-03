@@ -1074,7 +1074,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "{container=\"roadtrip-backend-1\"} | json",
+          "expr": "{container=\"roadtrip-backend-1\"}",
           "refId": "A"
         }
       ],
