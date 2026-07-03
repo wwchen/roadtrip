@@ -9,12 +9,14 @@ import ca.floo.roadtrip.models.api.AvailabilityWatchHeatmapRow
 import ca.floo.roadtrip.models.api.AvailabilityWatchListResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchSchema
+import ca.floo.roadtrip.models.api.AvailabilityWatchTargetSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.models.api.ReservableSchema
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
+import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.WatchStatus
@@ -91,7 +93,7 @@ internal fun Route.availabilityWatchRoutes(
                 total = total,
                 limit = limit,
                 offset = offset,
-                watches = rows.map { it.toSchema() },
+                watches = rows.map { it.toSchema(reservablesRepo) },
             ),
         )
     }
@@ -113,7 +115,7 @@ internal fun Route.availabilityWatchRoutes(
         val watch =
             watches.findById(id)
                 ?: return@get call.respondError("not_found", HttpStatusCode.NotFound)
-        call.respondJson(AvailabilityWatchResponse(watch.toSchema()))
+        call.respondJson(AvailabilityWatchResponse(watch.toSchema(reservablesRepo)))
     }
 
     post("/api/availability/watches", {
@@ -145,8 +147,7 @@ internal fun Route.availabilityWatchRoutes(
         val watch =
             watchService.create(
                 AvailabilityWatchRepo.CreateInput(
-                    poiId = resolved.poiId,
-                    reservableId = resolved.reservableId,
+                    targets = resolved.targets,
                     reservableFilters = req.reservableFilters,
                     startDate = dateWindow.first,
                     endDate = dateWindow.second,
@@ -156,7 +157,7 @@ internal fun Route.availabilityWatchRoutes(
                     stopWhenTriggered = req.stopWhenTriggered,
                 ),
             )
-        call.respondJson(AvailabilityWatchResponse(watch.toSchema()), HttpStatusCode.Created)
+        call.respondJson(AvailabilityWatchResponse(watch.toSchema(reservablesRepo)), HttpStatusCode.Created)
     }
 
     patch("/api/availability/watches/{id}", {
@@ -210,6 +211,7 @@ internal fun Route.availabilityWatchRoutes(
             watchService.update(
                 id,
                 AvailabilityWatchRepo.UpdateInput(
+                    targets = resolveUpdateScope(req)?.targets,
                     reservableFilters = req.reservableFilters,
                     startDate = dateWindow?.first,
                     endDate = dateWindow?.second,
@@ -221,7 +223,7 @@ internal fun Route.availabilityWatchRoutes(
                 ),
             )
         if (updated == null) return@patch call.respondError("not_found", HttpStatusCode.NotFound)
-        call.respondJson(AvailabilityWatchResponse(updated.toSchema()))
+        call.respondJson(AvailabilityWatchResponse(updated.toSchema(reservablesRepo)))
     }
 
     delete("/api/availability/watches/{id}", {
@@ -314,8 +316,7 @@ internal fun Route.availabilityWatchRoutes(
 
 private sealed class ResolveResult {
     data class Ok(
-        val poiId: Long?,
-        val reservableId: Long?,
+        val targets: List<AvailabilityWatchTargetRepo.TargetInput>,
     ) : ResolveResult()
 
     data class Err(
@@ -324,34 +325,60 @@ private sealed class ResolveResult {
     ) : ResolveResult()
 }
 
+/**
+ * Builds the target list for create/update from either the preferred
+ * `targets` array or the legacy single-scope fields (`poi_id`,
+ * `reservable_id`, `reservable_rid`) — exactly one of the two shapes must be
+ * present. Legacy fields are sugar for a one-element `targets` list so the
+ * existing calendar UI keeps working unmodified.
+ */
 private fun resolveCreateScope(
     req: AvailabilityWatchCreateRequest,
     reservablesRepo: ReservableRepo,
 ): ResolveResult {
-    val scopeKeysSet = listOf(req.poiId, req.reservableId, req.reservableRid).count { it != null }
-    if (scopeKeysSet != 1) {
-        return ResolveResult.Err(
-            "invalid_scope",
-            "exactly one of poi_id, reservable_id, or reservable_rid must be set",
-        )
+    val legacyKeysSet = listOf(req.poiId, req.reservableId, req.reservableRid).count { it != null }
+    val hasTargets = req.targets != null
+    if (hasTargets && legacyKeysSet > 0) {
+        return ResolveResult.Err("invalid_scope", "specify either targets or poi_id/reservable_id/reservable_rid, not both")
+    }
+    if (hasTargets) {
+        val targets = req.targets!!
+        if (targets.isEmpty()) return ResolveResult.Err("invalid_scope", "targets must be non-empty")
+        val resolved = mutableListOf<AvailabilityWatchTargetRepo.TargetInput>()
+        for (t in targets) {
+            if ((t.poiId == null) == (t.reservableId == null)) {
+                return ResolveResult.Err("invalid_scope", "each target must set exactly one of poi_id/reservable_id")
+            }
+            resolved += AvailabilityWatchTargetRepo.TargetInput(poiId = t.poiId, reservableId = t.reservableId)
+        }
+        return ResolveResult.Ok(resolved)
+    }
+    if (legacyKeysSet != 1) {
+        return ResolveResult.Err("invalid_scope", "exactly one of targets, poi_id, reservable_id, or reservable_rid must be set")
     }
     if (req.reservableRid != null) {
         val parsed =
             ca.floo.roadtrip.models.domain.ReservableId
                 .parse(req.reservableRid)
-                ?: return ResolveResult.Err(
-                    "invalid_reservable_rid",
-                    "could not parse reservable_rid '${req.reservableRid}'",
-                )
+                ?: return ResolveResult.Err("invalid_reservable_rid", "could not parse reservable_rid '${req.reservableRid}'")
         val resolvedReservable =
             reservablesRepo.findByRid(parsed)
-                ?: return ResolveResult.Err(
-                    "reservable_not_found",
-                    "no reservable with rid ${req.reservableRid}",
-                )
-        return ResolveResult.Ok(poiId = null, reservableId = resolvedReservable.id)
+                ?: return ResolveResult.Err("reservable_not_found", "no reservable with rid ${req.reservableRid}")
+        return ResolveResult.Ok(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = null, reservableId = resolvedReservable.id)))
     }
-    return ResolveResult.Ok(poiId = req.poiId, reservableId = req.reservableId)
+    return ResolveResult.Ok(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = req.poiId, reservableId = req.reservableId)))
+}
+
+/**
+ * Same targets-or-legacy resolution as [resolveCreateScope], for PATCH. A
+ * request with neither `targets` nor any legacy scope field means "leave
+ * the target set untouched" (returns null, distinct from an empty list).
+ */
+private fun resolveUpdateScope(req: AvailabilityWatchUpdateRequest): ResolveResult.Ok? {
+    if (req.targets != null) {
+        return ResolveResult.Ok(req.targets.map { AvailabilityWatchTargetRepo.TargetInput(poiId = it.poiId, reservableId = it.reservableId) })
+    }
+    return null
 }
 
 private fun validateCreateBody(req: AvailabilityWatchCreateRequest): Pair<String, String?>? {
@@ -382,13 +409,14 @@ private fun datesInWindow(
     endDate: LocalDate,
 ): List<LocalDate> = generateSequence(startDate) { d -> d.plusDays(1).takeIf { it.isBefore(endDate) } }.toList()
 
-private fun Watch.toSchema(): AvailabilityWatchSchema =
-    AvailabilityWatchSchema(
-        id = id,
-        poiId = poiId,
-        reservableId = reservableId,
-        reservable =
-            reservable?.let { r ->
+private fun Watch.toSchema(reservablesRepo: ReservableRepo): AvailabilityWatchSchema {
+    val firstTarget = targets.firstOrNull()
+    val singleReservable =
+        firstTarget
+            ?.reservableId
+            ?.takeIf { targets.size == 1 }
+            ?.let { reservablesRepo.findById(it) }
+            ?.let { r ->
                 ReservableSchema(
                     rid = r.rid.encode(),
                     type = r.rid.type.encode(),
@@ -400,7 +428,13 @@ private fun Watch.toSchema(): AvailabilityWatchSchema =
                     poiIds = emptyList(),
                     raw = r.raw,
                 )
-            },
+            }
+    return AvailabilityWatchSchema(
+        id = id,
+        targets = targets.map { AvailabilityWatchTargetSchema(poiId = it.poiId, reservableId = it.reservableId) },
+        poiId = firstTarget?.poiId,
+        reservableId = firstTarget?.reservableId,
+        reservable = singleReservable,
         reservableFilters = reservableFilters,
         startDate = startDate.toString(),
         endDate = endDate.toString(),
@@ -412,6 +446,7 @@ private fun Watch.toSchema(): AvailabilityWatchSchema =
         createdAt = createdAt.toString(),
         updatedAt = updatedAt.toString(),
     )
+}
 
 private suspend inline fun <reified T> ApplicationCall.respondJson(
     body: T,
