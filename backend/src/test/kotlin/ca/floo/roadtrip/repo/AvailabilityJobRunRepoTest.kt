@@ -188,4 +188,32 @@ class AvailabilityJobRunRepoTest {
         assertEquals(r2, rows[0].id)
         assertEquals(r1, rows[1].id)
     }
+
+    @Test
+    fun `countConsecutiveFailures counts leading failed runs`() {
+        val jobId = seedJob(seedPoi())
+        val repo = AvailabilityJobRunRepo(ctx)
+        // oldest → newest: completed, failed, failed
+        repo.start(jobId, now().minusMinutes(3)).also { repo.complete(it, 1, now().minusMinutes(3), 10) }
+        repo.start(jobId, now().minusMinutes(2)).also { repo.fail(it, "rate_limited", now().minusMinutes(2), 10) }
+        repo.start(jobId, now().minusMinutes(1)).also { repo.fail(it, "rate_limited", now().minusMinutes(1), 10) }
+        assertEquals(2, repo.countConsecutiveFailures(jobId))
+    }
+
+    @Test
+    fun `countConsecutiveFailures is zero when newest run completed`() {
+        val jobId = seedJob(seedPoi())
+        val repo = AvailabilityJobRunRepo(ctx)
+        repo.start(jobId, now().minusMinutes(1)).also { repo.fail(it, "x", now().minusMinutes(1), 10) }
+        repo.start(jobId, now()).also { repo.complete(it, 1, now(), 10) }
+        assertEquals(0, repo.countConsecutiveFailures(jobId))
+    }
+
+    @Test
+    fun `countConsecutiveFailures is zero when there are no terminal runs`() {
+        val jobId = seedJob(seedPoi())
+        val repo = AvailabilityJobRunRepo(ctx)
+        repo.start(jobId, now())
+        assertEquals(0, repo.countConsecutiveFailures(jobId))
+    }
 }
