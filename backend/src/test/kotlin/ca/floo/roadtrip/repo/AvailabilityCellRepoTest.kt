@@ -57,7 +57,10 @@ class AvailabilityCellRepoTest : SharedDbTest() {
         repo.upsertObservations(listOf(AvailabilityCellRepo.CellObservation(rid, date, AvailabilityStatus.AVAILABLE, Instant.now())))
         val before = repo.loadCells(listOf(rid), listOf(date)).single()
         Thread.sleep(5)
-        val result = repo.upsertObservations(listOf(AvailabilityCellRepo.CellObservation(rid, date, AvailabilityStatus.AVAILABLE, Instant.now())))
+        val result =
+            repo.upsertObservations(
+                listOf(AvailabilityCellRepo.CellObservation(rid, date, AvailabilityStatus.AVAILABLE, Instant.now())),
+            )
         assertFalse(result.single().changed)
         val after = repo.loadCells(listOf(rid), listOf(date)).single()
         assertTrue(after.lastObservedAt.isAfter(before.lastObservedAt))
@@ -72,7 +75,10 @@ class AvailabilityCellRepoTest : SharedDbTest() {
         repo.upsertObservations(listOf(AvailabilityCellRepo.CellObservation(rid, date, AvailabilityStatus.AVAILABLE, Instant.now())))
         val before = repo.loadCells(listOf(rid), listOf(date)).single()
         Thread.sleep(5)
-        val result = repo.upsertObservations(listOf(AvailabilityCellRepo.CellObservation(rid, date, AvailabilityStatus.RESERVED, Instant.now())))
+        val result =
+            repo.upsertObservations(
+                listOf(AvailabilityCellRepo.CellObservation(rid, date, AvailabilityStatus.RESERVED, Instant.now())),
+            )
         assertTrue(result.single().changed)
         val cell = repo.loadCells(listOf(rid), listOf(date)).single()
         assertEquals(AvailabilityStatus.RESERVED, cell.status)

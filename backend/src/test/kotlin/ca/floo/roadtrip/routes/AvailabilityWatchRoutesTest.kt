@@ -33,6 +33,7 @@ import kotlin.test.assertTrue
 class AvailabilityWatchRoutesTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
+        ctx.execute("DELETE FROM availability_cell")
         ctx.execute("DELETE FROM availability_watch_target")
         ctx.execute("DELETE FROM availability_watch_poller")
         ctx.execute("DELETE FROM availability_poller")
@@ -742,7 +743,9 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         )
     }
 
-    private fun insertSnapshot(
+    /** Seeds a cube cell -- the heatmap's source of truth since PR3 -- rather than
+     *  a raw snapshot log row. */
+    private fun insertCell(
         reservableId: Long,
         targetDate: String,
         observedAt: java.time.OffsetDateTime,
@@ -750,15 +753,15 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     ) {
         ctx.execute(
             """
-            INSERT INTO availability_snapshot (
-                reservable_id, observed_at, target_date, status, available, day_payload
-            ) VALUES (?::bigint, ?::timestamptz, ?::date, ?::availability_status, ?::boolean, '{}'::jsonb)
+            INSERT INTO availability_cell (
+                reservable_id, target_date, status, last_observed_at, last_changed_at
+            ) VALUES (?::bigint, ?::date, ?::availability_status, ?::timestamptz, ?::timestamptz)
             """.trimIndent(),
             reservableId,
-            observedAt.toString(),
             targetDate,
             if (available) "available" else "reserved",
-            available,
+            observedAt.toString(),
+            observedAt.toString(),
         )
     }
 
@@ -809,7 +812,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-            insertSnapshot(rid, "2026-07-04", now.minusMinutes(1), available = true)
+            insertCell(rid, "2026-07-04", now.minusMinutes(1), available = true)
 
             val resp = client.get("/api/availability/watches/$watchId/heatmap")
             assertEquals(HttpStatusCode.OK, resp.status)
