@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
+import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -19,7 +20,9 @@ import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
 import org.slf4j.LoggerFactory
 import java.time.Duration
+import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 
 /**
  * Executes one poller tick. Wired into [ca.floo.roadtrip.service.scheduler.framework.Scheduler]
@@ -41,7 +44,9 @@ import java.time.OffsetDateTime
  * no run row.
  *
  * Per-run audit: every invocation that fetches writes one [AvailabilityRunRepo]
- * row. Successful runs are recorded as 'completed' with `snapshot_count`.
+ * row. Successful runs are recorded as 'completed' with `snapshot_count` -- which
+ * under the cube model counts edge-triggered transitions (status changes), not raw
+ * observations.
  * If any group's fetch did not come back OK (rate limited, blocked,
  * upstream 5xx, other), the run is recorded as 'failed' with that
  * outcome as the error string. Upstream / unexpected exceptions are
@@ -57,6 +62,7 @@ internal class AvailabilityPollExecutor(
     private val reservablesRepo: ReservableRepo,
     private val batcher: CatalogAvailabilityBatcher,
     private val snapshots: AvailabilitySnapshotRepo,
+    private val cells: AvailabilityCellRepo,
     private val runs: AvailabilityRunRepo,
     private val dateResolver: AvailabilityDateResolver,
     private val targets: AvailabilityTargetResolver,
@@ -126,7 +132,13 @@ internal class AvailabilityPollExecutor(
                         },
                     )
                 val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
-                val snapshotCount = results.sumOf { appendSnapshots(it, runId) }
+                val snapshotCount = results.sumOf { writeCube(it, runId) }
+                // Dates that quietly aged out of a still-live poller's window reach
+                // their terminal 'past' state here (belt-and-suspenders alongside PR1's
+                // window-clamp retirement, which stops polling but does not flip the cell).
+                val observedReservableIds =
+                    results.flatMap { r -> r.reservables.map { it.id } }.distinct()
+                cells.markElapsedAsPast(observedReservableIds, LocalDate.now(ZoneOffset.UTC))
                 recordFetchCalls(results, runId)
                 val completedAt = OffsetDateTime.now()
                 val durationMs = durationMs(startedAt, completedAt)
@@ -161,17 +173,38 @@ internal class AvailabilityPollExecutor(
         return HandlerResult(nextRunAt = nextRunAt)
     }
 
-    /** Append every observation the group returned as a snapshot row tagged with
-     *  runId, mapping each observation's rid back to its catalog db id. */
-    private fun appendSnapshots(
+    /** Cube write for one fetch group. Upserts every observed cell (liveness bump
+     *  always; status/last_changed_at only on change), then appends an
+     *  availability_snapshot transition row ONLY for cells whose status changed
+     *  from the prior stored value. Returns the transition count for
+     *  run.snapshot_count. Replaces PR1's append-every-observation appendSnapshots. */
+    private fun writeCube(
         result: GroupFetchResult,
         runId: Long,
     ): Int {
         val batch = result.batch ?: return 0
         val idByRid = result.reservables.associateBy({ it.rid.encode() }, { it.id })
-        val observations =
+        val cellObservations =
             batch.observations.mapNotNull { obs ->
                 val dbId = idByRid[obs.reservableId] ?: return@mapNotNull null
+                AvailabilityCellRepo.CellObservation(
+                    reservableId = dbId,
+                    targetDate = obs.date,
+                    status = obs.status,
+                    observedAt = obs.observedAt,
+                )
+            }
+        if (cellObservations.isEmpty()) return 0
+        val changedKeys =
+            cells
+                .upsertObservations(cellObservations)
+                .filter { it.changed }
+                .map { it.reservableId to it.targetDate }
+                .toSet()
+        val snapshotObservations =
+            batch.observations.mapNotNull { obs ->
+                val dbId = idByRid[obs.reservableId] ?: return@mapNotNull null
+                if ((dbId to obs.date) !in changedKeys) return@mapNotNull null
                 AvailabilitySnapshotRepo.SnapshotObservation(
                     reservableId = dbId,
                     reservableRid = obs.reservableId,
@@ -181,7 +214,7 @@ internal class AvailabilityPollExecutor(
                 )
             }
         return snapshots.appendObservations(
-            AvailabilitySnapshotRepo.SnapshotObservationBatch(runId = runId, observations = observations),
+            AvailabilitySnapshotRepo.SnapshotObservationBatch(runId = runId, observations = snapshotObservations),
         )
     }
 

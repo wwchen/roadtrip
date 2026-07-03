@@ -4,6 +4,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
@@ -42,6 +43,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability_cell")
         ctx.execute("DELETE FROM availability_fetch_call")
         ctx.execute("DELETE FROM availability_run")
         ctx.execute("DELETE FROM availability_watch_target")
@@ -167,6 +169,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             reservablesRepo = reservablesRepo,
             batcher = CatalogAvailabilityBatcher(),
             snapshots = AvailabilitySnapshotRepo(ctx),
+            cells = AvailabilityCellRepo(ctx),
             runs = AvailabilityRunRepo(ctx),
             dateResolver = dateResolver,
             targets = targets,
@@ -176,7 +179,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     /** Fake provider that records each catalogAvailability call's window and
      *  returns one observation per requested reservable/day. */
-    private class CountingRecgovProvider : ReservationProvider {
+    private class CountingRecgovProvider(
+        var status: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
+    ) : ReservationProvider {
         var calls: Int = 0
         var lastStart: LocalDate? = null
         var lastEnd: LocalDate? = null
@@ -207,7 +212,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                         reservableId = ref.rid,
                         date = req.startDate,
                         observedAt = observedAt,
-                        status = AvailabilityStatus.AVAILABLE,
+                        status = status,
                     )
                 }
             return AvailabilityObservationBatch(
@@ -359,7 +364,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 
     @Test
-    fun `snapshot writing is unchanged (one row per observation)`() =
+    fun `first-sight observations each write a transition snapshot row`() =
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
@@ -374,12 +379,81 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertTrue(runs[0].snapshotCount > 0)
 
             val snapshots = AvailabilitySnapshotRepo(ctx).listForRun(runs[0].id, limit = 100)
-            // Provider returns one observation per reservable (2 sites) for the window start.
+            // Provider returns one observation per reservable (2 sites) for the window
+            // start; both are first-sight, so both are transitions.
             assertEquals(2, snapshots.size)
             assertTrue(snapshots.all { it.runId == runs[0].id })
 
             // MDC run_id propagated across the coroutine dispatch and cleared after.
             assertEquals(runs[0].id.toString(), provider.mdcRunIdDuringCall)
             assertNull(MDC.get("run_id"), "MDC should be cleared on this thread after handle() returns")
+        }
+
+    @Test
+    fun `unchanged status across two runs upserts the cell but writes no second snapshot row`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            val reservableId = seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
+            val snapshotRepo = AvailabilitySnapshotRepo(ctx)
+            val cellRepo = AvailabilityCellRepo(ctx)
+
+            executorFor(provider).handle(poller)
+            val snapshotsAfterFirst = snapshotRepo.listForReservable(reservableId)
+            val cellAfterFirst = cellRepo.loadCells(listOf(reservableId), listOf(farStart)).single()
+
+            Thread.sleep(5)
+            executorFor(provider).handle(poller)
+            val snapshotsAfterSecond = snapshotRepo.listForReservable(reservableId)
+
+            // No new snapshot row: the status did not change.
+            assertEquals(snapshotsAfterFirst.size, snapshotsAfterSecond.size)
+            // But the cell's liveness advanced.
+            val cellAfterSecond = cellRepo.loadCells(listOf(reservableId), listOf(farStart)).single()
+            assertTrue(cellAfterSecond.lastObservedAt.isAfter(cellAfterFirst.lastObservedAt))
+            assertEquals(cellAfterFirst.lastChangedAt, cellAfterSecond.lastChangedAt)
+        }
+
+    @Test
+    fun `a status change writes exactly one new snapshot row (the transition)`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            val reservableId = seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
+            val snapshotRepo = AvailabilitySnapshotRepo(ctx)
+
+            executorFor(provider).handle(poller)
+            val before = snapshotRepo.listForReservable(reservableId).size
+
+            provider.status = AvailabilityStatus.RESERVED
+            executorFor(provider).handle(poller)
+            val after = snapshotRepo.listForReservable(reservableId).size
+
+            assertEquals(before + 1, after)
+        }
+
+    @Test
+    fun `run snapshot_count reflects transitions, not raw observation count`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            listOf("100", "101", "102").forEach { seedReservable(poiId, it) }
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
+            val runsRepo = AvailabilityRunRepo(ctx)
+
+            // Run 1: 3 reservables, all first-sight -> 3 transitions.
+            executorFor(provider).handle(poller)
+            val run1 = runsRepo.listForPoller(poller.id, limit = 10).first()
+            assertEquals(3, run1.snapshotCount)
+
+            // Run 2: identical statuses -> 0 transitions.
+            executorFor(provider).handle(poller)
+            val run2 = runsRepo.listForPoller(poller.id, limit = 10).first()
+            assertEquals(0, run2.snapshotCount)
         }
 }
