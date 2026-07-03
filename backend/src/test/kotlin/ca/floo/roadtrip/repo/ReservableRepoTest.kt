@@ -2,18 +2,9 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.models.domain.ReservableType
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
 import kotlinx.serialization.json.Json
-import org.jooq.DSLContext
-import org.jooq.SQLDialect
-import org.jooq.impl.DSL
-import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
-import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -30,37 +21,12 @@ import kotlin.test.assertNull
  *   - linkToPoi/unlinkFromPoi are idempotent
  *   - one reservable can belong to multiple POIs (the N:M shape)
  */
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class ReservableRepoTest {
-    private lateinit var pg: PostgreSQLContainer<*>
-    private lateinit var ds: HikariDataSource
-    private lateinit var ctx: DSLContext
+class ReservableRepoTest : SharedDbTest() {
     private lateinit var repo: ReservableRepo
 
     @BeforeAll
     fun setUp() {
-        pg = PostgreSQLContainer(DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres"))
-        pg
-            .withDatabaseName("roadtrip")
-            .withUsername("test")
-            .withPassword("test")
-            .start()
-        val cfg =
-            HikariConfig().apply {
-                jdbcUrl = pg.jdbcUrl
-                username = pg.username
-                password = pg.password
-            }
-        ds = HikariDataSource(cfg)
-        migrate(ds)
-        ctx = DSL.using(ds, SQLDialect.POSTGRES)
         repo = ReservableRepo(ctx)
-    }
-
-    @AfterAll
-    fun tearDown() {
-        ds.close()
-        pg.stop()
     }
 
     @BeforeEach

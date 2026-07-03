@@ -1,17 +1,7 @@
 package ca.floo.roadtrip.repo
 
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
-import org.jooq.DSLContext
-import org.jooq.SQLDialect
-import org.jooq.impl.DSL
-import org.junit.jupiter.api.AfterAll
-import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import org.junit.jupiter.api.TestInstance
-import org.testcontainers.containers.PostgreSQLContainer
-import org.testcontainers.utility.DockerImageName
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
@@ -20,40 +10,7 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
-class AvailabilityRunRepoTest {
-    private lateinit var pg: PostgreSQLContainer<Nothing>
-    private lateinit var ds: HikariDataSource
-    private lateinit var ctx: DSLContext
-
-    @BeforeAll
-    fun start() {
-        val image = DockerImageName.parse("postgis/postgis:16-3.4").asCompatibleSubstituteFor("postgres")
-        pg =
-            PostgreSQLContainer<Nothing>(image).apply {
-                withDatabaseName("roadtrip_test")
-                withUsername("test")
-                withPassword("test")
-            }
-        pg.start()
-        val cfg =
-            HikariConfig().apply {
-                jdbcUrl = pg.jdbcUrl
-                username = pg.username
-                password = pg.password
-                maximumPoolSize = 2
-            }
-        ds = HikariDataSource(cfg)
-        migrate(ds)
-        ctx = DSL.using(ds, SQLDialect.POSTGRES)
-    }
-
-    @AfterAll
-    fun stop() {
-        ds.close()
-        pg.stop()
-    }
-
+class AvailabilityRunRepoTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_run")
