@@ -119,14 +119,23 @@ class AvailabilityPollerMembership(
 **Interfaces:**
 - Produces: tables `availability_poller`, `availability_watch_poller`; renamed `availability_run` (from `availability_job_run`) with column `poller_id`; drops `availability_job`. jOOQ types `AvailabilityPoller`, `AvailabilityWatchPoller`, `AvailabilityRun` generated under `ca.floo.roadtrip.db.generated.tables`.
 
-- [ ] **Step 1: Write the migration.** Create `V27__poller_coalescing.sql`:
+> **Sequencing note (controller correction):** Task 1 is **additive only** — it creates
+> the two new tables and leaves `availability_job` / `availability_job_run` intact so the
+> module keeps compiling and Tasks 2–4 can run their tests under TDD. The destructive
+> rename (`availability_job_run` → `availability_run`, `job_id` → `poller_id`) and
+> `DROP TABLE availability_job` move into the **Task 5 cutover** (migration V28), landing
+> atomically with the executor/service rewrite that removes the code referencing them.
+
+- [ ] **Step 1: Write the migration.** Create `V27__poller_coalescing.sql` (additive only):
 
 ```sql
--- PR1: poller coalescing. The schedulable unit becomes the vendor call unit
--- (provider, parent_ref) instead of one job per watch.
+-- PR1: poller coalescing (additive). The schedulable unit becomes the vendor call
+-- unit (provider, parent_ref). Tables added here; the rename of availability_job_run
+-- and the drop of availability_job land in the Task 5 cutover (V28) so this migration
+-- keeps the module compiling.
 
--- 1. Poller: shared schedulable, absorbs availability_job. Stores ONLY scheduling
---    flags; window/cadence/refcount are derived in-run from live watches.
+-- 1. Poller: shared schedulable, will absorb availability_job at cutover. Stores ONLY
+--    scheduling flags; window/cadence/refcount are derived in-run from live watches.
 CREATE TABLE availability_poller (
   id             BIGSERIAL   PRIMARY KEY,
   provider       TEXT        NOT NULL,
@@ -154,48 +163,27 @@ CREATE TABLE availability_watch_poller (
 );
 CREATE INDEX availability_watch_poller_poller_idx
   ON availability_watch_poller (poller_id);
-
--- 3. Rename availability_job_run -> availability_run; job_id -> poller_id.
---    Old runs referenced now-dead jobs; drop them (audit history only, tiny counts;
---    snapshots survive via ON DELETE SET NULL on availability_snapshot.run_id).
-ALTER TABLE availability_job_run RENAME TO availability_run;
-ALTER TABLE availability_run RENAME COLUMN job_id TO poller_id;
-
-DELETE FROM availability_run;  -- orphaned pre-migration runs
-
-ALTER TABLE availability_run
-  DROP CONSTRAINT availability_job_run_job_id_fkey;
-ALTER TABLE availability_run
-  ADD CONSTRAINT availability_run_poller_id_fkey
-  FOREIGN KEY (poller_id) REFERENCES availability_poller(id) ON DELETE CASCADE;
-
--- 4. availability_job is fully replaced by availability_poller + the join.
-DROP TABLE availability_job;
 ```
 
-Note: verify the exact FK constraint name for `availability_job_run.job_id` with `\d availability_job_run` (Postgres default is `availability_job_run_job_id_fkey`; adjust the `DROP CONSTRAINT` if the migration errors). The index `availability_job_run_job_started_idx` auto-follows the table rename but still references column `poller_id` under its old name — rename it for clarity:
+- [ ] **Step 2: Update the jOOQ includes allowlist.** In `backend/build.gradle.kts`, inside the `includes = listOf(...)` block: **add** `"availability_poller"` and `"availability_watch_poller"` (alphabetical). **Keep** `"availability_job"` and `"availability_job_run"` — they are removed in the Task 5 cutover. Leave all other entries (including the already-stale `reservable_availability_*`) untouched.
 
-```sql
-ALTER INDEX availability_job_run_job_started_idx RENAME TO availability_run_poller_started_idx;
-```
-
-- [ ] **Step 2: Update the jOOQ includes allowlist.** In `backend/build.gradle.kts`, inside the `includes = listOf(...)` block: replace `"availability_job"` and `"availability_job_run"` with `"availability_poller"`, `"availability_watch_poller"`, and `"availability_run"`. Leave the other entries (including the already-stale `reservable_availability_*`) untouched — out of scope.
-
-- [ ] **Step 3: Regenerate jOOQ + confirm the migration applies.**
+- [ ] **Step 3: Regenerate jOOQ + confirm the module still compiles.**
 
 Run: `export JAVA_HOME=$(/usr/libexec/java_home -v 17); ./gradlew :backend:generateJooq`
-Expected: BUILD SUCCESSFUL; Flyway applies V27 against the codegen DB; generated files `AvailabilityPoller.kt`, `AvailabilityWatchPoller.kt`, `AvailabilityRun.kt` appear under `backend/build/generated/jooq/main/.../tables/`, and `AvailabilityJob.kt` / `AvailabilityJobRun.kt` are gone.
+Expected: BUILD SUCCESSFUL; generated `AvailabilityPoller.kt` and `AvailabilityWatchPoller.kt` appear under `backend/build/generated/jooq/main/.../tables/`; `AvailabilityJob.kt` / `AvailabilityJobRun.kt` remain (untouched).
 
-If codegen uses a persistent local DB rather than an ephemeral one, the drop/rename must apply cleanly on top of the existing schema; if it fails on the FK name, fix the `DROP CONSTRAINT` name (Step 1 note) and re-run.
+Then confirm the whole module still compiles (this is the point of additive-only):
+Run: `./gradlew :backend:compileTestKotlin`
+Expected: BUILD SUCCESSFUL — no references broke.
 
 - [ ] **Step 4: Commit.**
 
 ```bash
 git add backend/src/main/resources/db/migration/V27__poller_coalescing.sql backend/build.gradle.kts
-git commit -m "feat(poller): V27 migration — poller + watch_poller tables, rename job_run to run"
+git commit -m "feat(poller): V27 migration — additive poller + watch_poller tables"
 ```
 
-The repo will not fully compile until Task 6 removes the code referencing the dropped `availability_job`. That is expected; this commit is the schema+codegen checkpoint. (If your workflow requires every commit to compile, fold Tasks 1–6 into one branch and commit at Step 4 of Task 6 instead.)
+The module compiles after this commit; every subsequent task's tests run normally until the Task 5 cutover.
 
 ---
 
@@ -503,7 +491,28 @@ git commit -m "feat(poller): membership maintenance — watch write recomputes p
 
 ---
 
-### Task 5: Rename AvailabilityJobRunRepo → AvailabilityRunRepo
+### Task 5 + 6: Atomic cutover (V28 migration → run-repo rename → executor/service/Main rewrite → drop availability_job)
+
+> **Execute Tasks 5 and 6 as ONE atomic unit — one implementer, one commit.** The module
+> does not compile between the run-repo rename and the executor rewrite, so they cannot be
+> separate green commits. Order: Step A (migration V28) → Task 5's repo rename → all of
+> Task 6 → full suite → commit once (Task 6 Step 8).
+>
+> **Step A — migration `V28__poller_cutover.sql`** (the destructive half deferred from V27):
+> ```sql
+> ALTER TABLE availability_job_run RENAME TO availability_run;
+> ALTER TABLE availability_run RENAME COLUMN job_id TO poller_id;
+> ALTER INDEX availability_job_run_job_started_idx RENAME TO availability_run_poller_started_idx;
+> DELETE FROM availability_run;  -- orphaned pre-migration runs (snapshots survive via SET NULL; fetch_calls cascade)
+> ALTER TABLE availability_run DROP CONSTRAINT availability_job_run_job_id_fkey;
+> ALTER TABLE availability_run ADD CONSTRAINT availability_run_poller_id_fkey
+>   FOREIGN KEY (poller_id) REFERENCES availability_poller(id) ON DELETE CASCADE;
+> DROP TABLE availability_job;
+> ```
+> Then in `backend/build.gradle.kts` includes: remove `"availability_job"` and
+> `"availability_job_run"`, add `"availability_run"`. Regen jOOQ (`generateJooq`);
+> `AvailabilityRun.kt` appears, `AvailabilityJob*.kt` gone. (Codegen DB may need a Flyway
+> clean if persistent, since V27's checksum is unchanged but new V28 applies on top.)
 
 **Files:**
 - Rename+edit: `AvailabilityJobRunRepo.kt` → `backend/src/main/kotlin/ca/floo/roadtrip/repo/AvailabilityRunRepo.kt`
@@ -519,21 +528,13 @@ git commit -m "feat(poller): membership maintenance — watch write recomputes p
 
 - [ ] **Step 3: Implement the rename.** Copy `AvailabilityJobRunRepo.kt` to `AvailabilityRunRepo.kt`; replace `AVAILABILITY_JOB_RUN`→`AVAILABILITY_RUN`, `.JOB_ID`→`.POLLER_ID`, `jobId`→`pollerId` throughout; rename `class`/`data class Run`. Delete the old file. Fix any import of the generated `AvailabilityJobRun` in the snapshot/fetch-call repos (their `run_id` FK now points at `availability_run` — column reference is unchanged, only the table type name in any explicit reference changes; most references are via `AVAILABILITY_SNAPSHOT.RUN_ID` and need no change).
 
-- [ ] **Step 4: Run to verify it passes.** Expected: PASS.
-
-- [ ] **Step 5: Commit.**
-
-```bash
-git add backend/src/main/kotlin/ca/floo/roadtrip/repo/AvailabilityRunRepo.kt backend/src/test/kotlin/ca/floo/roadtrip/repo/AvailabilityRunRepoTest.kt
-git rm backend/src/main/kotlin/ca/floo/roadtrip/repo/AvailabilityJobRunRepo.kt backend/src/test/kotlin/ca/floo/roadtrip/repo/AvailabilityJobRunRepoTest.kt
-git commit -m "refactor(poller): rename AvailabilityJobRunRepo to AvailabilityRunRepo (job_id -> poller_id)"
-```
+- [ ] **Step 4: Do NOT commit yet.** The renamed repo won't compile until the executor (Task 6) stops referencing the old `AvailabilityJobRunRepo`. Continue straight into Task 6; the single commit at Task 6 Step 8 covers the whole cutover.
 
 ---
 
 ### Task 6: Rewrite the executor + cut over the service, Main, and delete dead code
 
-This is the atomic cutover. After it, the project compiles again with pollers as the only schedulable.
+This is the atomic cutover (continues Task 5 — same implementer, same commit). After it, the project compiles again with pollers as the only schedulable.
 
 **Files:**
 - Rewrite: `AvailabilityPollExecutor.kt`
@@ -589,8 +590,9 @@ internal class AvailabilityPollExecutor(
         val minStart = liveWatches.minOfOrNull { it.startDate }
         val maxEnd = liveWatches.maxOfOrNull { it.endDate }
         if (liveWatches.isEmpty() || minStart == null || maxEnd == null) {
-            val elapsed = pollers.pollerIdsForWatch  // (see note) -> gather this poller's linked watch ids
-            pollers.retire(poller.id, elapsedWatchIds = linkedWatchIds(poller.id))
+            // Empty window for the whole poller: every linked watch is elapsed. Mark them
+            // done, drop links, deactivate the poller. No fetch, no run row.
+            pollers.retire(poller.id, elapsedWatchIds = pollers.watchIdsForPoller(poller.id))
             return HandlerResult(nextRunAt = OffsetDateTime.now())  // inert; poller now inactive
         }
 
@@ -648,7 +650,6 @@ internal class AvailabilityPollExecutor(
         return HandlerResult(nextRunAt = nextRunAt)
     }
 
-    private fun linkedWatchIds(pollerId: Long): List<Long> = pollers.watchIdsForPoller(pollerId)  // add to repo
     // appendSnapshots / recordFetchCalls / durationMs unchanged (parentRefKey now the shared top-level fun)
 }
 private const val MAX_POLL_WINDOW_DAYS = 60
