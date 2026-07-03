@@ -33,9 +33,10 @@ import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityQueryServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
-import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
+import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
+import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
@@ -198,7 +199,7 @@ fun Application.module() {
     val availabilityDateResolver = AvailabilityDateResolver()
     CoordinateTimeZones.warmUp()
     val availabilityTargets =
-        AvailabilityTargetResolver(
+        DbAvailabilityTargetResolver(
             providerRefs = campsiteProviders,
             reservablesRepo = reservablesRepo,
             reservationProviders = reservationProviderRegistry,
@@ -234,6 +235,9 @@ fun Application.module() {
     // snapshot rows. Cancelled on app shutdown so tests don't leak threads.
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     val availabilityJobs = AvailabilityJobRepo(ctx)
+    // TODO(Task 1.5): ReservableAvailabilityFetchService is unused by the poller
+    // now that AvailabilityPollExecutor calls CatalogAvailabilityBatcher directly.
+    // Left wired here so other call sites keep compiling; Task 1.5 removes it.
     val availabilityFetches =
         ReservableAvailabilityFetchService(
             snapshots = availabilitySnapshots,
@@ -241,7 +245,8 @@ fun Application.module() {
     val pollExecutor =
         AvailabilityPollExecutor(
             reservablesRepo = reservablesRepo,
-            fetches = availabilityFetches,
+            batcher = CatalogAvailabilityBatcher(),
+            snapshots = availabilitySnapshots,
             runs = AvailabilityJobRunRepo(ctx),
             dateResolver = availabilityDateResolver,
             targets = availabilityTargets,

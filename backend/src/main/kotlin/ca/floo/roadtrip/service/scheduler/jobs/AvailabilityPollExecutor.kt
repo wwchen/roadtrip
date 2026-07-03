@@ -1,39 +1,49 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityJobRepo
 import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
+import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.service.api.ReservableAvailabilityFetchService
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
+import ca.floo.roadtrip.service.availability.FetchOutcome
+import ca.floo.roadtrip.service.availability.GroupFetchResult
+import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.toCatalogReservableRef
+import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
 import org.slf4j.LoggerFactory
+import java.time.Duration
 import java.time.LocalDate
 import java.time.OffsetDateTime
 
 /**
  * Executes one polling job. Wired into [Scheduler] as the handler.
  *
- * Reservable-scope fetches one reservable through the reservation provider and
- * appends snapshot rows. POI-scope fans out to linked child reservables using
- * the watch scope resolver.
+ * Both reservable-scope and POI-scope intents resolve to a list of
+ * [ResolvedAvailabilityTarget] (POI-scope fans out to child reservables via
+ * [WatchScopeResolver]), which [CatalogAvailabilityBatcher] then groups by
+ * (provider, parentRef, dateContext) into ONE upstream call per campground
+ * — not one call per site.
  *
  * Per-run audit: every invocation writes one [AvailabilityJobRunRepo]
- * row. Successful runs, including no-op runs for unresolvable scopes, are
- * recorded as 'completed' with `snapshot_count`.
- * Upstream / unexpected exceptions are recorded as 'failed' with the
- * error message. Runs are never lost — even if `start` succeeds and
- * the work errors, the row gets a terminal status so the operator can
- * see the failure.
+ * row. Successful runs are recorded as 'completed' with `snapshot_count`.
+ * If any group's fetch did not come back OK (rate limited, blocked,
+ * upstream 5xx, other), the run is recorded as 'failed' with that
+ * outcome as the error string. Upstream / unexpected exceptions are
+ * recorded as 'failed' with the exception message. Runs are never lost —
+ * even if `start` succeeds and the work errors, the row gets a terminal
+ * status so the operator can see the failure.
  *
  * Handler always returns a [HandlerResult] — even on upstream failure —
  * because losing the row would mean the watch silently stops polling.
  */
 internal class AvailabilityPollExecutor(
     private val reservablesRepo: ReservableRepo,
-    private val fetches: ReservableAvailabilityFetchService,
+    private val batcher: CatalogAvailabilityBatcher,
+    private val snapshots: AvailabilitySnapshotRepo,
     private val runs: AvailabilityJobRunRepo,
     private val dateResolver: AvailabilityDateResolver,
     private val targets: AvailabilityTargetResolver,
@@ -44,130 +54,103 @@ internal class AvailabilityPollExecutor(
     suspend fun handle(job: AvailabilityJobRepo.Job): HandlerResult {
         val startedAt = OffsetDateTime.now()
         val runId = runs.start(job.id, startedAt)
-        var snapshotCount = 0
         try {
             val intent = AvailabilityJobIntent.fromJsonObject(job.intentPayload)
-            snapshotCount =
-                when (intent) {
-                    is AvailabilityJobIntent.Reservable -> runReservable(job.id, runId, intent)
-                    is AvailabilityJobIntent.Poi -> runPoi(job.id, runId, intent)
-                }
+            val resolved = resolveTargets(intent)
+            val results =
+                batcher.fetchByGroup(
+                    targets = resolved,
+                    windowFor = { context, caps ->
+                        dateResolver.resolvePollingWindow(
+                            startDate = LocalDate.parse(intent.startDate),
+                            endDate = LocalDate.parse(intent.endDate),
+                            context = context,
+                            bookingHorizonDays = caps.bookingHorizonDays,
+                            maxDays = MAX_POLL_WINDOW_DAYS,
+                        )
+                    },
+                    fetch = { parentRef, provider, rows, window ->
+                        provider.catalogAvailability(
+                            CatalogAvailabilityRequest(
+                                ref = parentRef,
+                                reservables = rows.map { it.toCatalogReservableRef() },
+                                startDate = window.startDate,
+                                endDate = window.endDate,
+                                force = true,
+                            ),
+                        )
+                    },
+                )
+            val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
+            val snapshotCount = results.sumOf { appendSnapshots(it, runId) }
             val completedAt = OffsetDateTime.now()
-            val durationMs =
-                java.time.Duration
-                    .between(startedAt, completedAt)
-                    .toMillis()
-                    .toInt()
-                    .coerceAtLeast(0)
-            runs.complete(runId, snapshotCount, completedAt, durationMs)
+            val durationMs = durationMs(startedAt, completedAt)
+            if (failure != null) {
+                runs.fail(runId, error = failure.outcome.name.lowercase(), completedAt = completedAt, durationMs = durationMs)
+            } else {
+                runs.complete(runId, snapshotCount, completedAt, durationMs)
+            }
         } catch (e: Exception) {
             log.warn("job {} run {} failed: {}", job.id, runId, e.message)
             val completedAt = OffsetDateTime.now()
-            val durationMs =
-                java.time.Duration
-                    .between(startedAt, completedAt)
-                    .toMillis()
-                    .toInt()
-                    .coerceAtLeast(0)
-            runs.fail(runId, error = e.message ?: e::class.simpleName ?: "unknown", completedAt = completedAt, durationMs = durationMs)
+            runs.fail(
+                runId,
+                error = e.message ?: e::class.simpleName ?: "unknown",
+                completedAt = completedAt,
+                durationMs = durationMs(startedAt, completedAt),
+            )
         }
         return HandlerResult(nextRunAt = OffsetDateTime.now().plusSeconds(job.cadenceSec.toLong()))
     }
 
-    /**
-     * Runs a Reservable-scope intent. Returns the number of snapshot
-     * rows the fetch produced (sized by the upstream's per-day window).
-     * Returns 0 when the intent can't be executed (missing reservable,
-     * no resolvable reservation provider) — these are recorded as
-     * successful no-op runs, not failures.
-     */
-    private suspend fun runReservable(
-        jobId: Long,
+    /** Resolve an intent to the reservables we will poll, each carrying its
+     *  provider target. POI-scope fans out to child reservables here (in the
+     *  poller), but the fan-out becomes ONE grouped upstream call in the batcher. */
+    private fun resolveTargets(intent: AvailabilityJobIntent): List<ResolvedAvailabilityTarget> =
+        when (intent) {
+            is AvailabilityJobIntent.Reservable ->
+                reservablesRepo
+                    .findById(intent.reservableId)
+                    ?.let { targets.resolve(it) }
+                    ?.let(::listOf)
+                    .orEmpty()
+            is AvailabilityJobIntent.Poi ->
+                scopeResolver.resolve(intent).mapNotNull { targets.resolve(it) }
+        }
+
+    /** Append every observation the group returned as a snapshot row tagged with
+     *  runId, mapping each observation's rid back to its catalog db id. */
+    private fun appendSnapshots(
+        result: GroupFetchResult,
         runId: Long,
-        intent: AvailabilityJobIntent.Reservable,
     ): Int {
-        val reservable =
-            reservablesRepo.findById(intent.reservableId)
-                ?: run {
-                    log.warn("job {}: reservable {} no longer exists", jobId, intent.reservableId)
-                    return 0
-                }
-        return runReservable(
-            jobId = jobId,
-            runId = runId,
-            reservable = reservable,
-            startDate = intent.startDate,
-            endDate = intent.endDate,
+        val batch = result.batch ?: return 0
+        val idByRid = result.reservables.associateBy({ it.rid.encode() }, { it.id })
+        val observations =
+            batch.observations.mapNotNull { obs ->
+                val dbId = idByRid[obs.reservableId] ?: return@mapNotNull null
+                AvailabilitySnapshotRepo.SnapshotObservation(
+                    reservableId = dbId,
+                    reservableRid = obs.reservableId,
+                    targetDate = obs.date,
+                    observedAt = obs.observedAt,
+                    status = obs.status,
+                )
+            }
+        return snapshots.appendObservations(
+            AvailabilitySnapshotRepo.SnapshotObservationBatch(runId = runId, observations = observations),
         )
     }
 
-    private suspend fun runPoi(
-        jobId: Long,
-        runId: Long,
-        intent: AvailabilityJobIntent.Poi,
-    ): Int {
-        val children = scopeResolver.resolve(intent)
-        if (children.isEmpty()) {
-            log.warn("job {}: POI {} has no matching child reservables", jobId, intent.poiId)
-            return 0
-        }
-        var snapshots = 0
-        for (reservable in children) {
-            snapshots +=
-                runReservable(
-                    jobId = jobId,
-                    runId = runId,
-                    reservable = reservable,
-                    startDate = intent.startDate,
-                    endDate = intent.endDate,
-                )
-        }
-        return snapshots
-    }
-
-    private suspend fun runReservable(
-        jobId: Long,
-        runId: Long,
-        reservable: Reservable,
-        startDate: String,
-        endDate: String,
-    ): Int {
-        val target = targets.resolve(reservable)
-        if (target == null) {
-            log.warn("job {}: reservable {} has no resolvable reservation provider", jobId, reservable.id)
-            return 0
-        }
-        val window =
-            dateResolver.resolvePollingWindow(
-                startDate = LocalDate.parse(startDate),
-                endDate = LocalDate.parse(endDate),
-                context = target.dateContext,
-                bookingHorizonDays = target.provider.capabilities.bookingHorizonDays,
-                maxDays = MAX_POLL_WINDOW_DAYS,
-            ) ?: run {
-                log.info("job {}: reservable {} watch window has no future dates", jobId, reservable.id)
-                return 0
-            }
-
-        val response =
-            fetches.fetch(
-                ReservableAvailabilityFetchService.Request(
-                    reservableId = reservable.id,
-                    reservableRid = reservable.rid.encode(),
-                    provider = target.provider,
-                    ref = target.parentRef,
-                    vendorId = reservable.rid.vendorId,
-                    startDate = window.startDate,
-                    endDate = window.endDate,
-                    force = false,
-                    runId = runId,
-                ),
-            )
-        // Each day in the response window is one snapshot row in
-        // availability_snapshot (ReservableAvailabilityFetchService appends
-        // the provider's atomic observations).
-        return response.availability.size
-    }
+    private fun durationMs(
+        start: OffsetDateTime,
+        end: OffsetDateTime,
+    ): Int =
+        Duration
+            .between(start, end)
+            .toMillis()
+            .toInt()
+            .coerceAtLeast(0)
 }
 
 private const val MAX_POLL_WINDOW_DAYS = 60
