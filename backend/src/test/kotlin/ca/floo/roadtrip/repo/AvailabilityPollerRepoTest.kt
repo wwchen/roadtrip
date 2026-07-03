@@ -120,7 +120,7 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
         val poi = insertPoi()
         val due = repo.upsertActive("recgov", "A", poi, null)
         val notDue = repo.upsertActive("recgov", "B", poi, null)
-        repo.parkFar(notDue) // test helper via release far-future
+        repo.parkFar(notDue) // test helper: direct UPDATE parking next_run_at far future
         val claimed = repo.claimDue(OffsetDateTime.now(), limit = 10, leaseDuration = Duration.ofMinutes(2))
         assertEquals(listOf(due), claimed.map { it.id })
         assertNotNull(claimed.single().claimToken)

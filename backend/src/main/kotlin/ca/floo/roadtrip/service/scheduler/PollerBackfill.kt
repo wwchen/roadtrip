@@ -33,6 +33,12 @@ internal class PollerBackfill(
         val watchRepo = AvailabilityWatchRepo(ctx)
         val pollerRepo = AvailabilityPollerRepo(ctx)
         val active = watchRepo.list(status = WatchStatus.ACTIVE, limit = BACKFILL_BATCH_LIMIT)
+        if (active.size == BACKFILL_BATCH_LIMIT) {
+            // We hit the cap: any active watches beyond this page get no poller
+            // membership until their next mutation. Surface the gap instead of
+            // silently under-linking. (Paginate here if this ever fires in prod.)
+            log.warn("poller backfill hit the {}-watch cap; watches beyond it stay unlinked until edited", BACKFILL_BATCH_LIMIT)
+        }
         var filled = 0
         for (w in active) {
             if (pollerRepo.pollerIdsForWatch(w.id).isNotEmpty()) continue
