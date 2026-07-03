@@ -299,22 +299,20 @@ internal class AvailabilityPollExecutor(
  * each watch resolves the spec's three-level fall-through:
  * `watch.cadence_sec ?? poi.cadence_override_sec ?? GLOBAL_DEFAULT_SEC`.
  *
- * A watch's `cadence_sec` is treated as "specified" only when positive; a
- * non-positive value (the "no explicit preference" representation) falls through
- * to the POI override, then the global default. [poiCadenceOverrideSec] is the
- * override of the poller's *representative* POI — a poller has one cadence and one
- * representative POI, so the override is a single per-poller rung rather than a
- * per-watch-target lookup.
+ * A watch's `cadenceSec` is a NULLABLE desired override: NULL means "no
+ * watch-level preference," so the rung falls through to the POI override, then
+ * the global default. [poiCadenceOverrideSec] is the override of the poller's
+ * *representative* POI — a poller has one cadence and one representative POI, so
+ * the override is a single per-poller rung rather than a per-watch-target lookup.
  */
 internal fun resolveCadenceSec(
     liveWatches: List<ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch>,
     poiCadenceOverrideSec: Int?,
 ): Int {
-    val poiOverride = poiCadenceOverrideSec?.takeIf { it > 0 }
     val resolved =
         liveWatches.map { w ->
-            w.cadenceSec.takeIf { it > 0 }
-                ?: poiOverride
+            w.cadenceSec
+                ?: poiCadenceOverrideSec
                 ?: GLOBAL_DEFAULT_SEC
         }
     return resolved.minOrNull() ?: GLOBAL_DEFAULT_SEC
