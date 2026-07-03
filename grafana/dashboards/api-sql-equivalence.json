@@ -34,11 +34,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  id,\n  watch_id,\n  cadence_sec,\n  status,\n  next_run_at,\n  claimed_until,\n  last_run_at,\n  created_at,\n  updated_at\nFROM availability_job\nWHERE (${status:sqlstring} = '' OR status = ${status:sqlstring})\n  AND (${watch_id:sqlstring} = '' OR watch_id = NULLIF(${watch_id:sqlstring}, '')::bigint)\nORDER BY created_at DESC, id DESC\nLIMIT 100;",
+          "rawSql": "-- A poller is no longer 1:1 with a watch (see availability_watch_poller);\n-- this aggregates the watch ids currently attached to each poller.\n-- availability_poller has only a boolean `active` flag (no paused/done states),\n-- so the legacy 3-way ${status} filter collapses to active/not-active here.\nSELECT\n  p.id,\n  p.provider,\n  p.parent_ref,\n  p.poi_id,\n  array_remove(array_agg(DISTINCT wp.watch_id), NULL) AS watch_ids,\n  p.active,\n  p.next_run_at,\n  p.claimed_until,\n  p.last_run_at,\n  p.created_at,\n  p.updated_at\nFROM availability_poller p\nLEFT JOIN availability_watch_poller wp ON wp.poller_id = p.id\nWHERE (${status:sqlstring} = '' OR p.active = (${status:sqlstring} = 'active'))\n  AND (${watch_id:sqlstring} = '' OR EXISTS (\n    SELECT 1 FROM availability_watch_poller wp2\n    WHERE wp2.poller_id = p.id AND wp2.watch_id = NULLIF(${watch_id:sqlstring}, '')::bigint\n  ))\nGROUP BY p.id\nORDER BY p.created_at DESC, p.id DESC\nLIMIT 100;",
           "refId": "A"
         }
       ],
-      "title": "/api/availability/jobs",
+      "title": "/api/availability/pollers",
       "type": "table"
     },
     {
@@ -69,11 +69,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  count(*) FILTER (WHERE status = 'active') AS active,\n  count(*) FILTER (WHERE status = 'paused') AS paused,\n  count(*) FILTER (WHERE status = 'done') AS done,\n  count(*) FILTER (\n    WHERE status = 'active'\n      AND next_run_at <= now()\n      AND (claimed_until IS NULL OR claimed_until < now())\n  ) AS due_now,\n  count(*) FILTER (\n    WHERE claimed_until IS NOT NULL\n      AND claimed_until >= now()\n  ) AS claimed\nFROM availability_job;",
+          "rawSql": "-- availability_poller has no paused/done states (see /api/availability/pollers panel);\n-- summary is active vs inactive instead of the old 3-way status breakdown.\nSELECT\n  count(*) FILTER (WHERE active) AS active,\n  count(*) FILTER (WHERE NOT active) AS inactive,\n  count(*) FILTER (\n    WHERE active\n      AND next_run_at <= now()\n      AND (claimed_until IS NULL OR claimed_until < now())\n  ) AS due_now,\n  count(*) FILTER (\n    WHERE claimed_until IS NOT NULL\n      AND claimed_until >= now()\n  ) AS claimed\nFROM availability_poller;",
           "refId": "A"
         }
       ],
-      "title": "/api/availability/jobs/summary",
+      "title": "/api/availability/pollers/summary",
       "type": "table"
     },
     {
@@ -104,11 +104,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  id,\n  job_id,\n  status,\n  snapshot_count,\n  duration_ms,\n  error,\n  started_at,\n  completed_at\nFROM availability_job_run\nWHERE ${job_id:sqlstring} <> ''\n  AND job_id = NULLIF(${job_id:sqlstring}, '')::bigint\nORDER BY started_at DESC, id DESC\nLIMIT 100;",
+          "rawSql": "SELECT\n  id,\n  poller_id,\n  status,\n  snapshot_count,\n  duration_ms,\n  error,\n  started_at,\n  completed_at\nFROM availability_run\nWHERE ${poller_id:sqlstring} <> ''\n  AND poller_id = NULLIF(${poller_id:sqlstring}, '')::bigint\nORDER BY started_at DESC, id DESC\nLIMIT 100;",
           "refId": "A"
         }
       ],
-      "title": "/api/availability/jobs/{id}/runs",
+      "title": "/api/availability/pollers/{id}/runs",
       "type": "table"
     },
     {
@@ -139,7 +139,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  id,\n  job_id,\n  status,\n  snapshot_count,\n  duration_ms,\n  error,\n  started_at,\n  completed_at\nFROM availability_job_run\nWHERE (${run_status:sqlstring} = '' OR status = ${run_status:sqlstring})\n  AND (${job_id:sqlstring} = '' OR job_id = NULLIF(${job_id:sqlstring}, '')::bigint)\n  AND (${since:sqlstring} = '' OR started_at >= NULLIF(${since:sqlstring}, '')::timestamptz)\nORDER BY started_at DESC, id DESC\nLIMIT 100;",
+          "rawSql": "SELECT\n  id,\n  poller_id,\n  status,\n  snapshot_count,\n  duration_ms,\n  error,\n  started_at,\n  completed_at\nFROM availability_run\nWHERE (${run_status:sqlstring} = '' OR status = ${run_status:sqlstring})\n  AND (${poller_id:sqlstring} = '' OR poller_id = NULLIF(${poller_id:sqlstring}, '')::bigint)\n  AND (${since:sqlstring} = '' OR started_at >= NULLIF(${since:sqlstring}, '')::timestamptz)\nORDER BY started_at DESC, id DESC\nLIMIT 100;",
           "refId": "A"
         }
       ],
@@ -389,7 +389,7 @@
           "text": "",
           "value": ""
         },
-        "name": "job_id",
+        "name": "poller_id",
         "query": "",
         "type": "textbox"
       },

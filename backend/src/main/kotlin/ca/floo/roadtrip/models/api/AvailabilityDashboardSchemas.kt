@@ -5,39 +5,40 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 
 @Serializable
-data class AvailabilityJobSchema(
+data class AvailabilityPollerSchema(
     val id: Long,
-    @SerialName("watch_id") val watchId: Long,
-    @SerialName("cadence_sec") val cadenceSec: Int,
-    val status: String,
+    val provider: String,
+    @SerialName("parent_ref") val parentRef: String,
+    @SerialName("poi_id") val poiId: Long,
+    val active: Boolean,
     @SerialName("next_run_at") val nextRunAt: String,
     @SerialName("claimed_until") val claimedUntil: String? = null,
     @SerialName("last_run_at") val lastRunAt: String? = null,
+    @SerialName("attached_watches") val attachedWatches: Int,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
 )
 
 @Serializable
-data class AvailabilityJobsListResponse(
+data class AvailabilityPollersListResponse(
     val total: Int,
     val limit: Int,
     val offset: Int,
-    val jobs: List<AvailabilityJobSchema>,
+    val pollers: List<AvailabilityPollerSchema>,
 )
 
 @Serializable
-data class AvailabilityJobsSummary(
+data class AvailabilityPollersSummary(
     val active: Int,
-    val paused: Int,
-    val done: Int,
+    val dormant: Int,
     @SerialName("due_now") val dueNow: Int,
     val claimed: Int,
 )
 
 @Serializable
-data class AvailabilityJobRunSchema(
+data class AvailabilityRunSchema(
     val id: Long,
-    @SerialName("job_id") val jobId: Long,
+    @SerialName("poller_id") val pollerId: Long,
     val status: String,
     @SerialName("snapshot_count") val snapshotCount: Int,
     @SerialName("duration_ms") val durationMs: Int? = null,
@@ -47,8 +48,8 @@ data class AvailabilityJobRunSchema(
 )
 
 @Serializable
-data class AvailabilityJobRunsListResponse(
-    val runs: List<AvailabilityJobRunSchema>,
+data class AvailabilityRunsListResponse(
+    val runs: List<AvailabilityRunSchema>,
 )
 
 @Serializable

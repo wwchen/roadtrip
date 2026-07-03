@@ -1,9 +1,9 @@
-import { mount as mountJobs } from '/web/components/availability/jobs-tab.js';
+import { mount as mountPollers } from '/web/components/availability/pollers-tab.js';
 import { mount as mountRuns } from '/web/components/availability/runs-tab.js';
 import { mount as mountSnapshots } from '/web/components/availability/snapshots-tab.js';
 
 const TABS = {
-  jobs: mountJobs,
+  pollers: mountPollers,
   runs: mountRuns,
   snapshots: mountSnapshots,
 };
@@ -24,12 +24,12 @@ setTab(initial.tab, initial.params);
 
 function readUrlState() {
   const qs = new URLSearchParams(window.location.search);
-  const tab = qs.get('tab') || 'jobs';
+  const tab = qs.get('tab') || 'pollers';
   const params = {};
   for (const [k, v] of qs) {
     if (k !== 'tab') params[k] = v;
   }
-  return { tab: TABS[tab] ? tab : 'jobs', params };
+  return { tab: TABS[tab] ? tab : 'pollers', params };
 }
 
 function setTab(tab, params) {

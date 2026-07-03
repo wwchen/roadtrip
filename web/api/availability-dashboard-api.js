@@ -1,33 +1,32 @@
-// Client for /api/availability/jobs|runs|snapshots GETs.
+// Client for /api/availability/pollers|runs|snapshots GETs.
 // Read-only — no mutations from the dashboard.
 
 import { jsonGetOk } from './http.js';
 
-export function listJobs({ status, watchId, limit, offset, signal } = {}) {
+export function listPollers({ active, limit, offset, signal } = {}) {
   const qs = new URLSearchParams();
-  if (status) qs.set('status', status);
-  if (watchId != null && watchId !== '') qs.set('watch_id', watchId);
+  if (active != null && active !== '') qs.set('active', active);
   if (limit != null) qs.set('limit', limit);
   if (offset != null) qs.set('offset', offset);
   const suffix = qs.toString() ? `?${qs}` : '';
-  return jsonGetOk(`/api/availability/jobs${suffix}`, { signal });
+  return jsonGetOk(`/api/availability/pollers${suffix}`, { signal });
 }
 
-export function getJobsSummary({ signal } = {}) {
-  return jsonGetOk('/api/availability/jobs/summary', { signal });
+export function getPollersSummary({ signal } = {}) {
+  return jsonGetOk('/api/availability/pollers/summary', { signal });
 }
 
-export function listRunsForJob(jobId, { limit, signal } = {}) {
+export function listRunsForPoller(pollerId, { limit, signal } = {}) {
   const qs = new URLSearchParams();
   if (limit != null) qs.set('limit', limit);
   const suffix = qs.toString() ? `?${qs}` : '';
-  return jsonGetOk(`/api/availability/jobs/${encodeURIComponent(jobId)}/runs${suffix}`, { signal });
+  return jsonGetOk(`/api/availability/pollers/${encodeURIComponent(pollerId)}/runs${suffix}`, { signal });
 }
 
-export function listRuns({ status, jobId, since, limit, signal } = {}) {
+export function listRuns({ status, pollerId, since, limit, signal } = {}) {
   const qs = new URLSearchParams();
   if (status) qs.set('status', status);
-  if (jobId != null && jobId !== '') qs.set('job_id', jobId);
+  if (pollerId != null && pollerId !== '') qs.set('poller_id', pollerId);
   if (since) qs.set('since', since);
   if (limit != null) qs.set('limit', limit);
   const suffix = qs.toString() ? `?${qs}` : '';

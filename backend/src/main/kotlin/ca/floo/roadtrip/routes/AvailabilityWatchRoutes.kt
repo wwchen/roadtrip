@@ -47,7 +47,7 @@ private val watchJson =
         ignoreUnknownKeys = true
     }
 
-fun Route.availabilityWatchRoutes(
+internal fun Route.availabilityWatchRoutes(
     ctx: DSLContext,
     watchService: ca.floo.roadtrip.service.availability.AvailabilityWatchService,
 ) {

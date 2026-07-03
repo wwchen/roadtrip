@@ -843,7 +843,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.observed_at,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.run_id,\n  jr.status AS run_status,\n  jsonb_pretty(s.day_payload) AS day_payload\nFROM availability_snapshot s\nLEFT JOIN availability_job_run jr ON jr.id = s.run_id\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n  AND $__timeFilter(s.observed_at)\nORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC;",
+          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.observed_at,\n  s.target_date,\n  s.status::text AS observed_status,\n  s.available,\n  s.run_id,\n  ar.status AS run_status,\n  jsonb_pretty(s.day_payload) AS day_payload\nFROM availability_snapshot s\nLEFT JOIN availability_run ar ON ar.id = s.run_id\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n  AND $__timeFilter(s.observed_at)\nORDER BY s.observed_at DESC, s.target_date ASC, s.id DESC;",
           "refId": "A",
           "sql": {
             "columns": [

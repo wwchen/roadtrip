@@ -9,5 +9,6 @@ internal data class ResolvedAvailabilityTarget(
     val reservable: Reservable,
     val provider: ReservationProvider,
     val parentRef: ProviderRef,
+    val parentPoiId: Long,
     val dateContext: PoiDateContext,
 )

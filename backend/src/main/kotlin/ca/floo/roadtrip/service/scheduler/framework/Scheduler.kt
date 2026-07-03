@@ -28,7 +28,7 @@ data class HandlerResult(
 
 /**
  * In-process scheduler. One instance per Schedulable type
- * (`Scheduler<AvailabilityJob>` for polling jobs, eventually
+ * (`Scheduler<Poller>` for availability polling, eventually
  * `Scheduler<IngestRun>` for ETLs).
  *
  * Owns: tick cadence, claim batch size, lease duration, boot recovery,

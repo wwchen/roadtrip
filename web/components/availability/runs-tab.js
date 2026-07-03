@@ -1,6 +1,6 @@
-// Runs tab: recent executions across all jobs (or filtered to one job).
+// Runs tab: recent executions across all pollers (or filtered to one poller).
 // Provenance: clicking a run id navigates to /availability?tab=snapshots&run_id={id}.
-// Clicking a run's job_id filters this tab to that job.
+// Clicking a run's poller_id filters this tab to that poller.
 
 import { listRuns } from '/web/api/availability-dashboard-api.js';
 
@@ -17,7 +17,7 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
             <option value="failed">failed</option>
           </select>
         </label>
-        <label>Job ID <input name="job_id" inputmode="numeric"></label>
+        <label>Poller ID <input name="poller_id" inputmode="numeric"></label>
         <div class="actions">
           <button class="primary" type="submit">Apply</button>
           <button type="reset">Reset</button>
@@ -34,7 +34,7 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
   const statusEl = rootEl.querySelector('#runs-status');
   const resultsEl = rootEl.querySelector('#runs-results');
 
-  if (urlParams.job_id) filterForm.querySelector('[name=job_id]').value = urlParams.job_id;
+  if (urlParams.poller_id) filterForm.querySelector('[name=poller_id]').value = urlParams.poller_id;
   if (urlParams.status) filterForm.querySelector('[name=status]').value = urlParams.status;
 
   filterForm.addEventListener('submit', (e) => {
@@ -49,8 +49,8 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
     e.preventDefault();
     if (link.dataset.action === 'goto-snapshots-for-run') {
       onTabSwitch('snapshots', { run_id: link.dataset.runId });
-    } else if (link.dataset.action === 'goto-jobs-tab') {
-      onTabSwitch('jobs', {});
+    } else if (link.dataset.action === 'goto-pollers-tab') {
+      onTabSwitch('pollers', {});
     }
   });
 
@@ -60,7 +60,7 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
     const fd = new FormData(filterForm);
     const params = {
       status: fd.get('status') || undefined,
-      jobId: fd.get('job_id') || undefined,
+      pollerId: fd.get('poller_id') || undefined,
     };
     statusEl.textContent = 'Loading…';
     try {
@@ -81,7 +81,7 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
     resultsEl.innerHTML = `
       <table class="data-table">
         <thead><tr>
-          <th>id</th><th>job</th><th>status</th><th>snapshots</th>
+          <th>id</th><th>poller</th><th>status</th><th>snapshots</th>
           <th>duration</th><th>started</th><th>error</th>
         </tr></thead>
         <tbody>
@@ -98,7 +98,7 @@ export async function mount(rootEl, { onTabSwitch, urlParams }) {
           <a href="#" data-action="goto-snapshots-for-run" data-run-id="${escapeHtml(r.id)}">${escapeHtml(r.id)}</a>
         </td>
         <td>
-          <a href="#" data-action="goto-jobs-tab" data-job-id="${escapeHtml(r.job_id)}">#${escapeHtml(r.job_id)}</a>
+          <a href="#" data-action="goto-pollers-tab" data-poller-id="${escapeHtml(r.poller_id)}">#${escapeHtml(r.poller_id)}</a>
         </td>
         <td>${escapeHtml(r.status)}</td>
         <td>${escapeHtml(r.snapshot_count)}</td>

@@ -1,19 +1,18 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.api.ApiErrorSchema
-import ca.floo.roadtrip.models.api.AvailabilityJobRunSchema
-import ca.floo.roadtrip.models.api.AvailabilityJobRunsListResponse
-import ca.floo.roadtrip.models.api.AvailabilityJobSchema
-import ca.floo.roadtrip.models.api.AvailabilityJobsListResponse
-import ca.floo.roadtrip.models.api.AvailabilityJobsSummary
+import ca.floo.roadtrip.models.api.AvailabilityPollerSchema
+import ca.floo.roadtrip.models.api.AvailabilityPollersListResponse
+import ca.floo.roadtrip.models.api.AvailabilityPollersSummary
+import ca.floo.roadtrip.models.api.AvailabilityRunSchema
+import ca.floo.roadtrip.models.api.AvailabilityRunsListResponse
 import ca.floo.roadtrip.models.api.AvailabilitySnapshotSchema
 import ca.floo.roadtrip.models.api.AvailabilitySnapshotStatsSchema
 import ca.floo.roadtrip.models.api.AvailabilitySnapshotsListResponse
 import ca.floo.roadtrip.models.api.AvailabilitySnapshotsSummaryResponse
-import ca.floo.roadtrip.repo.AvailabilityJobRepo
-import ca.floo.roadtrip.repo.AvailabilityJobRunRepo
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.service.availability.WatchStatus
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -41,35 +40,33 @@ private val dashboardJson =
     }
 
 fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
-    val jobs = AvailabilityJobRepo(ctx)
-    val runs = AvailabilityJobRunRepo(ctx)
+    val pollers = AvailabilityPollerRepo(ctx)
+    val runs = AvailabilityRunRepo(ctx)
     val snapshots = AvailabilitySnapshotRepo(ctx)
     val reservablesRepo =
         ca.floo.roadtrip.repo
             .ReservableRepo(ctx)
 
-    get("/api/availability/jobs", {
+    get("/api/availability/pollers", {
         tags = listOf("availability")
-        summary = "List availability polling jobs"
+        summary = "List availability pollers (coalesced per-vendor-call-unit schedulable)"
         request {
-            queryParameter<String>("status") { description = "active | paused | done" }
-            queryParameter<Long>("watch_id") { description = "Filter to one watch's job(s)." }
+            queryParameter<String>("active") { description = "true | false; omit for both." }
             queryParameter<Int>("limit") { description = "Page size, default 100, max 500." }
             queryParameter<Int>("offset") { description = "Page offset, default 0." }
         }
         response {
             code(HttpStatusCode.OK) {
-                body<AvailabilityJobsListResponse> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityPollersListResponse> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
-        val status =
-            call.request.queryParameters["status"]?.let {
-                WatchStatus.parse(it)
-                    ?: return@get call.respondError("invalid_status", HttpStatusCode.BadRequest, "status must be active, paused, or done")
+        val active =
+            call.request.queryParameters["active"]?.let {
+                it.toBooleanStrictOrNull()
+                    ?: return@get call.respondError("invalid_active", HttpStatusCode.BadRequest, "active must be true or false")
             }
-        val watchId = call.request.queryParameters["watch_id"]?.toLongOrNull()
         val limit =
             (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT)
                 .coerceIn(1, MAX_LIST_LIMIT)
@@ -77,49 +74,48 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
             call.request.queryParameters["offset"]
                 ?.toIntOrNull()
                 ?.coerceAtLeast(0) ?: 0
-        val rows = jobs.list(status = status, watchId = watchId, limit = limit, offset = offset)
-        val total = jobs.count(status = status, watchId = watchId)
+        val rows = pollers.list(active = active, limit = limit, offset = offset)
+        val total = pollers.count(active = active)
         call.respondJson(
-            AvailabilityJobsListResponse(
+            AvailabilityPollersListResponse(
                 total = total,
                 limit = limit,
                 offset = offset,
-                jobs = rows.map { it.toSchema() },
+                pollers = rows.map { it.toSchema() },
             ),
         )
     }
 
-    get("/api/availability/jobs/summary", {
+    get("/api/availability/pollers/summary", {
         tags = listOf("availability")
-        summary = "Per-status job counters for the dashboard header"
+        summary = "Poller counters for the dashboard header"
         response {
             code(HttpStatusCode.OK) {
-                body<AvailabilityJobsSummary> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityPollersSummary> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
-        val s = jobs.summary(OffsetDateTime.now())
+        val s = pollers.summary(OffsetDateTime.now())
         call.respondJson(
-            AvailabilityJobsSummary(
+            AvailabilityPollersSummary(
                 active = s.active,
-                paused = s.paused,
-                done = s.done,
+                dormant = s.dormant,
                 dueNow = s.dueNow,
                 claimed = s.claimed,
             ),
         )
     }
 
-    get("/api/availability/jobs/{id}/runs", {
+    get("/api/availability/pollers/{id}/runs", {
         tags = listOf("availability")
-        summary = "Runs for one job, newest first"
+        summary = "Runs for one poller, newest first"
         request {
-            pathParameter<Long>("id") { description = "Job id." }
+            pathParameter<Long>("id") { description = "Poller id." }
             queryParameter<Int>("limit") { description = "Page size, default 100, max 500." }
         }
         response {
             code(HttpStatusCode.OK) {
-                body<AvailabilityJobRunsListResponse> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityRunsListResponse> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.BadRequest) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
@@ -130,27 +126,27 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         val limit =
             (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT)
                 .coerceIn(1, MAX_LIST_LIMIT)
-        val rows = runs.listForJob(id, limit = limit)
-        call.respondJson(AvailabilityJobRunsListResponse(runs = rows.map { it.toSchema() }))
+        val rows = runs.listForPoller(id, limit = limit)
+        call.respondJson(AvailabilityRunsListResponse(runs = rows.map { it.toSchema() }))
     }
 
     get("/api/availability/runs", {
         tags = listOf("availability")
-        summary = "Recent runs across all jobs"
+        summary = "Recent runs across all pollers"
         request {
             queryParameter<String>("status") { description = "started | completed | failed" }
-            queryParameter<Long>("job_id") { description = "Scope to one job." }
+            queryParameter<Long>("poller_id") { description = "Scope to one poller." }
             queryParameter<String>("since") { description = "ISO-8601 timestamp; only runs after this." }
             queryParameter<Int>("limit") { description = "Page size, default 100, max 500." }
         }
         response {
             code(HttpStatusCode.OK) {
-                body<AvailabilityJobRunsListResponse> { mediaTypes(ContentType.Application.Json) }
+                body<AvailabilityRunsListResponse> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
         val status = call.request.queryParameters["status"]
-        val jobId = call.request.queryParameters["job_id"]?.toLongOrNull()
+        val pollerId = call.request.queryParameters["poller_id"]?.toLongOrNull()
         val since =
             call.request.queryParameters["since"]?.let {
                 runCatching { OffsetDateTime.parse(it) }.getOrNull()
@@ -158,8 +154,8 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         val limit =
             (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT)
                 .coerceIn(1, MAX_LIST_LIMIT)
-        val rows = runs.listSince(since = since, status = status, jobId = jobId, limit = limit)
-        call.respondJson(AvailabilityJobRunsListResponse(runs = rows.map { it.toSchema() }))
+        val rows = runs.listSince(since = since, status = status, pollerId = pollerId, limit = limit)
+        call.respondJson(AvailabilityRunsListResponse(runs = rows.map { it.toSchema() }))
     }
 
     get("/api/availability/snapshots", {
@@ -299,23 +295,25 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
     }
 }
 
-private fun AvailabilityJobRepo.Job.toSchema(): AvailabilityJobSchema =
-    AvailabilityJobSchema(
-        id = id,
-        watchId = watchId,
-        cadenceSec = cadenceSec,
-        status = status.wireValue,
-        nextRunAt = nextRunAt.toString(),
-        claimedUntil = claimedUntil?.toString(),
-        lastRunAt = lastRunAt?.toString(),
-        createdAt = createdAt.toString(),
-        updatedAt = updatedAt.toString(),
+private fun AvailabilityPollerRepo.PollerListItem.toSchema(): AvailabilityPollerSchema =
+    AvailabilityPollerSchema(
+        id = poller.id,
+        provider = poller.provider,
+        parentRef = poller.parentRef,
+        poiId = poller.poiId,
+        active = poller.active,
+        nextRunAt = poller.nextRunAt.toString(),
+        claimedUntil = poller.claimedUntil?.toString(),
+        lastRunAt = poller.lastRunAt?.toString(),
+        attachedWatches = attachedWatches,
+        createdAt = poller.createdAt.toString(),
+        updatedAt = poller.updatedAt.toString(),
     )
 
-private fun AvailabilityJobRunRepo.Run.toSchema(): AvailabilityJobRunSchema =
-    AvailabilityJobRunSchema(
+private fun AvailabilityRunRepo.Run.toSchema(): AvailabilityRunSchema =
+    AvailabilityRunSchema(
         id = id,
-        jobId = jobId,
+        pollerId = pollerId,
         status = status,
         snapshotCount = snapshotCount,
         durationMs = durationMs,

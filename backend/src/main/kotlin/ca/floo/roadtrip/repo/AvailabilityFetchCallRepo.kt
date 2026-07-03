@@ -6,7 +6,7 @@ import org.jooq.Record
 import java.time.LocalDate
 
 /**
- * Trace layer between an [AvailabilityJobRunRepo] run and the raw upstream
+ * Trace layer between an [AvailabilityRunRepo] run and the raw upstream
  * calls it issued: one row per (provider, parent_ref) fetch a run made, at
  * the grouping granularity produced by CatalogAvailabilityBatcher. Written
  * only when a real upstream call was made.

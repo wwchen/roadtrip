@@ -187,6 +187,7 @@ class AvailabilityServiceImplTest {
         dbId: Long,
         provider: ReservationProvider,
         parentRef: ProviderRef,
+        parentPoiId: Long = 1L,
     ): ResolvedAvailabilityTarget =
         ResolvedAvailabilityTarget(
             reservable =
@@ -200,6 +201,7 @@ class AvailabilityServiceImplTest {
                 ),
             provider = provider,
             parentRef = parentRef,
+            parentPoiId = parentPoiId,
             dateContext = PoiDateContext(timeZone = ZoneOffset.UTC, earliestDate = earliest),
         )
 

@@ -98,7 +98,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT *\nFROM availability_job_run\nWHERE id = NULLIF(${run_id:sqlstring}, '')::bigint;",
+          "rawSql": "SELECT *\nFROM availability_run\nWHERE id = NULLIF(${run_id:sqlstring}, '')::bigint;",
           "refId": "A"
         }
       ],
@@ -222,7 +222,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT \n  j.intent_payload     AS \"job.intent_payload\",\n  w.reservable_filters   AS \"watch.reservable_filters\",\n  w.trigger_config     AS \"watch.trigger_config\"\nFROM availability_job_run r\nJOIN availability_job   j ON j.id = r.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nWHERE r.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
+          "rawSql": "SELECT\n  p.provider           AS \"poller.provider\",\n  p.parent_ref          AS \"poller.parent_ref\",\n  min(w.start_date)       AS \"poller.window_start\",\n  max(w.end_date)         AS \"poller.window_end\",\n  jsonb_agg(w.reservable_filters) AS \"watch.reservable_filters\",\n  jsonb_agg(w.trigger_config)   AS \"watch.trigger_config\"\nFROM availability_run r\nJOIN availability_poller p ON p.id = r.poller_id\nLEFT JOIN availability_watch_poller wp ON wp.poller_id = p.id\nLEFT JOIN availability_watch w ON w.id = wp.watch_id AND w.status = 'active'\nWHERE r.id = NULLIF(${run_id:sqlstring}, '')::bigint\nGROUP BY p.provider, p.parent_ref;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -243,7 +243,7 @@
           }
         }
       ],
-      "title": "Run inputs (job intent + watch config)",
+      "title": "Run inputs (poller identity + attached watch config)",
       "transformations": [
         {
           "id": "transpose",
@@ -299,7 +299,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "job_id"
+              "options": "poller_id"
             },
             "properties": [
               {
@@ -377,7 +377,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  j.*\n  -- j.id   AS job_id,\n  -- w.id   AS watch_id,\n  -- w.status AS watch_status,\n  -- j.status AS job_status,\n  -- w.cadence_sec,\n  -- w.start_date,\n  -- w.end_date,\n  -- w.trigger_kinds,\n  -- w.stop_when_triggered,\n  -- w.poi_id,\n  -- w.reservable_id,\n  -- r.name AS reservable_name,\n  -- j.next_run_at,\n  -- j.last_run_at,\n  -- w.created_at AS watch_created_at\nFROM availability_job_run sr\nJOIN availability_job   j ON j.id = sr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables   r ON r.id = w.reservable_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
+          "rawSql": "SELECT\n  p.*\n  -- p.id   AS poller_id,\n  -- w.id   AS watch_id,\n  -- w.status AS watch_status,\n  -- p.active,\n  -- w.cadence_sec,\n  -- w.start_date,\n  -- w.end_date,\n  -- w.trigger_kinds,\n  -- w.stop_when_triggered,\n  -- w.poi_id,\n  -- w.reservable_id,\n  -- r.name AS reservable_name,\n  -- p.next_run_at,\n  -- p.last_run_at,\n  -- w.created_at AS watch_created_at\nFROM availability_run sr\nJOIN availability_poller p ON p.id = sr.poller_id\nLEFT JOIN availability_watch_poller wp ON wp.poller_id = p.id\nLEFT JOIN availability_watch w ON w.id = wp.watch_id\nLEFT JOIN reservables   r ON r.id = w.reservable_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -398,7 +398,7 @@
           }
         }
       ],
-      "title": "Parent job",
+      "title": "Parent poller",
       "transformations": [
         {
           "id": "convertFieldType",
@@ -474,7 +474,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "job_id"
+              "options": "poller_id"
             },
             "properties": [
               {
@@ -553,7 +553,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  w.*\n  -- j.id   AS job_id,\n  -- w.id   AS watch_id,\n  -- w.status AS watch_status,\n  -- j.status AS job_status,\n  -- w.cadence_sec,\n  -- w.start_date,\n  -- w.end_date,\n  -- w.trigger_kinds,\n  -- w.stop_when_triggered,\n  -- w.poi_id,\n  -- w.reservable_id,\n  -- r.name AS reservable_name,\n  -- j.next_run_at,\n  -- j.last_run_at,\n  -- w.created_at AS watch_created_at\nFROM availability_job_run sr\nJOIN availability_job   j ON j.id = sr.job_id\nJOIN availability_watch w ON w.id = j.watch_id\nLEFT JOIN reservables   r ON r.id = w.reservable_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
+          "rawSql": "-- A poller can coalesce multiple watches; this lists every watch\n-- currently attached to the poller that produced this run.\nSELECT\n  w.*\n  -- p.id   AS poller_id,\n  -- w.id   AS watch_id,\n  -- w.status AS watch_status,\n  -- p.active,\n  -- w.cadence_sec,\n  -- w.start_date,\n  -- w.end_date,\n  -- w.trigger_kinds,\n  -- w.stop_when_triggered,\n  -- w.poi_id,\n  -- w.reservable_id,\n  -- r.name AS reservable_name,\n  -- p.next_run_at,\n  -- p.last_run_at,\n  -- w.created_at AS watch_created_at\nFROM availability_run sr\nJOIN availability_poller p ON p.id = sr.poller_id\nJOIN availability_watch_poller wp ON wp.poller_id = p.id\nJOIN availability_watch w ON w.id = wp.watch_id\nLEFT JOIN reservables   r ON r.id = w.reservable_id\nWHERE sr.id = NULLIF(${run_id:sqlstring}, '')::bigint;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -924,7 +924,7 @@
         "y": 53
       },
       "id": 17,
-      "title": "History (this job's runs)",
+      "title": "History (this poller's runs)",
       "type": "row"
     },
     {
@@ -1048,7 +1048,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_job_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ajr.id AS run_id,\n  ajr.status,\n  ajr.snapshot_count,\n  ajr.duration_ms,\n  ajr.started_at,\n  ajr.completed_at,\n  ajr.error,\n  CASE WHEN ajr.id = (SELECT id FROM selected) THEN true ELSE false END AS selected\nFROM availability_job_run ajr\nJOIN selected sr ON sr.job_id = ajr.job_id\nORDER BY ajr.started_at DESC, ajr.id DESC;",
+          "rawSql": "WITH selected AS (\n  SELECT * FROM availability_run\n  WHERE id = NULLIF(${run_id:sqlstring}, '')::bigint\n)\nSELECT\n  ar.id AS run_id,\n  ar.status,\n  ar.snapshot_count,\n  ar.duration_ms,\n  ar.started_at,\n  ar.completed_at,\n  ar.error,\n  CASE WHEN ar.id = (SELECT id FROM selected) THEN true ELSE false END AS selected\nFROM availability_run ar\nJOIN selected sr ON sr.poller_id = ar.poller_id\nORDER BY ar.started_at DESC, ar.id DESC;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1069,7 +1069,7 @@
           }
         }
       ],
-      "title": "Recent runs for this job",
+      "title": "Recent runs for this poller",
       "type": "table"
     }
   ],
@@ -1099,7 +1099,7 @@
         "multi": false,
         "name": "run_id",
         "options": [],
-        "query": "SELECT ajr.id::text AS __text, ajr.id::text AS __value FROM availability_job_run ajr ORDER BY ajr.started_at DESC, ajr.id DESC LIMIT 500",
+        "query": "SELECT ar.id::text AS __text, ar.id::text AS __value FROM availability_run ar ORDER BY ar.started_at DESC, ar.id DESC LIMIT 500",
         "refresh": 1,
         "regex": "",
         "regexApplyTo": "value",
@@ -1129,7 +1129,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "✔︎ Reservable Availability Watch / Job Run Detail",
+  "title": "✔︎ Reservable Availability Watch / Poller Run Detail",
   "uid": "watch-job-run-detail",
   "version": 1
 }

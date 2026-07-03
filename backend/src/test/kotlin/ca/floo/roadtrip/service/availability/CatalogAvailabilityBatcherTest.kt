@@ -146,11 +146,13 @@ class CatalogAvailabilityBatcherTest {
         reservableRid: String,
         provider: ReservationProvider,
         parentRef: ProviderRef,
+        parentPoiId: Long = 1L,
     ): ResolvedAvailabilityTarget =
         ResolvedAvailabilityTarget(
             reservable = reservable(reservableRid),
             provider = provider,
             parentRef = parentRef,
+            parentPoiId = parentPoiId,
             dateContext = PoiDateContext(timeZone = ZoneOffset.UTC, earliestDate = window.startDate),
         )
 
