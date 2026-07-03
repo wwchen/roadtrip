@@ -35,6 +35,20 @@ data class AvailabilityPollersSummary(
     val claimed: Int,
 )
 
+/** 200 response for `POST /api/availability/pollers/{id}/force`: the poller was pulled due. */
+@Serializable
+data class CheckNowResponseDto(
+    @SerialName("poller_id") val pollerId: Long,
+    @SerialName("next_run_at") val nextRunAt: String,
+)
+
+/** 429 response for `POST /api/availability/pollers/{id}/force`: still cooling down. */
+@Serializable
+data class CheckNowCooldownDto(
+    @SerialName("poller_id") val pollerId: Long,
+    @SerialName("retry_after_sec") val retryAfterSec: Long,
+)
+
 @Serializable
 data class AvailabilityRunSchema(
     val id: Long,
