@@ -2,17 +2,13 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.AvailabilityResponseDto
-import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
-import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
+import ca.floo.roadtrip.repo.AvailabilitySnapshotStore
 import ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.CatalogReservableRef
-import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -26,7 +22,7 @@ private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 internal class AvailabilityServiceImpl(
     private val targets: AvailabilityTargetResolver,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    snapshots: AvailabilitySnapshotRepo? = null,
+    snapshots: AvailabilitySnapshotStore? = null,
     private val snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
 ) : AvailabilityService {
     private val snapshotAvailability = SnapshotBackedAvailabilityService(snapshots)
@@ -47,102 +43,72 @@ internal class AvailabilityServiceImpl(
         if (rids.isEmpty()) return emptyList()
         val resolved = rids.map { targets.requireByRid(it) }
         val byRid = linkedMapOf<String, AvailabilityResponseDto>()
-        resolved
-            .groupBy { AvailabilityFetchGroup(provider = it.provider, parentRef = it.parentRef, dateContext = it.dateContext) }
-            .forEach { (group, items) ->
-                val query =
+        val batcher = CatalogAvailabilityBatcher()
+        val results =
+            batcher.fetchByGroup(
+                targets = resolved,
+                windowFor = { context, caps ->
                     dateResolver.resolveWindow(
                         startDate = startDate,
                         endDate = endDate,
-                        context = group.dateContext,
-                        bookingHorizonDays = group.provider.capabilities.bookingHorizonDays,
+                        context = context,
+                        bookingHorizonDays = caps.bookingHorizonDays,
                         maxDays = MAX_AVAILABILITY_DAYS,
                         defaultDays = DEFAULT_AVAILABILITY_DAYS,
                     )
-                fetchCatalogReservablesAvailability(
-                    catalogRows = items.map { it.reservable },
-                    parentRef = group.parentRef,
-                    provider = group.provider,
-                    startDate = query.startDate,
-                    endDate = query.endDate,
-                    force = force,
-                ).forEach { response ->
-                    response.reservableId?.let { byRid[it] = response }
-                }
+                },
+                fetch = { parentRef, provider, rows, window ->
+                    snapshotAvailability.loadOrFetch(
+                        SnapshotBackedAvailabilityService.Request(
+                            metadata = availabilityMetadata(provider.id, parentRef),
+                            targets = rows.map { it.toAvailabilityTarget() },
+                            startDate = window.startDate,
+                            endDate = window.endDate,
+                            ttl = snapshotFreshnessTtl(provider.id),
+                            force = force,
+                        ),
+                    ) {
+                        provider.catalogAvailability(
+                            CatalogAvailabilityRequest(
+                                ref = parentRef,
+                                reservables = rows.map { it.toCatalogReservableRef() },
+                                startDate = window.startDate,
+                                endDate = window.endDate,
+                                force = force,
+                            ),
+                        )
+                    }
+                },
+            )
+        // A group's provider error is swallowed-and-classified by the batcher so the
+        // poller can record the failed run. On this live read path that classification
+        // must not silently degrade into AvailabilityServiceError.NotFound (404, "stop
+        // retrying") — rethrow so the route maps it to 503 (retryable), matching
+        // pre-batching behavior.
+        results.firstOrNull { it.providerError != null }?.let { throw it.providerError!! }
+        results.forEach { result ->
+            val batch = result.batch ?: return@forEach
+            result.reservables.forEach { reservable ->
+                val rid = reservable.rid.encode()
+                val ref = reservable.providerRefForReservable(result.parentRef)
+                val metadata = availabilityMetadata(result.provider.id, ref, reservableId = rid)
+                byRid[rid] =
+                    availabilityResponseFromObservations(
+                        batch.copy(
+                            observations = batch.observations.filter { it.reservableId == rid },
+                            campgroundId = metadata.campgroundId ?: batch.campgroundId,
+                            host = batch.host,
+                            mapId = metadata.mapId ?: batch.mapId,
+                            reservableId = rid,
+                        ),
+                    )
             }
+        }
         return rids.map { rid ->
             byRid[rid.encode()] ?: throw AvailabilityServiceError.NotFound
         }
     }
-
-    private suspend fun fetchCatalogReservablesAvailability(
-        catalogRows: List<Reservable>,
-        parentRef: ProviderRef,
-        provider: ReservationProvider,
-        startDate: LocalDate,
-        endDate: LocalDate,
-        force: Boolean,
-    ): List<AvailabilityResponseDto> {
-        val batch =
-            fetchCatalogAvailabilityBatch(
-                catalogRows = catalogRows,
-                parentRef = parentRef,
-                provider = provider,
-                startDate = startDate,
-                endDate = endDate,
-                force = force,
-            )
-        return catalogRows.map { reservable ->
-            val rid = reservable.rid.encode()
-            val ref = reservable.providerRefForReservable(parentRef)
-            val metadata = availabilityMetadata(provider.id, ref, reservableId = rid)
-            availabilityResponseFromObservations(
-                batch.copy(
-                    observations = batch.observations.filter { it.reservableId == rid },
-                    campgroundId = metadata.campgroundId ?: batch.campgroundId,
-                    host = batch.host,
-                    mapId = metadata.mapId ?: batch.mapId,
-                    reservableId = rid,
-                ),
-            )
-        }
-    }
-
-    private suspend fun fetchCatalogAvailabilityBatch(
-        catalogRows: List<Reservable>,
-        parentRef: ProviderRef,
-        provider: ReservationProvider,
-        startDate: LocalDate,
-        endDate: LocalDate,
-        force: Boolean,
-    ): AvailabilityObservationBatch =
-        snapshotAvailability.loadOrFetch(
-            SnapshotBackedAvailabilityService.Request(
-                metadata = availabilityMetadata(provider.id, parentRef),
-                targets = catalogRows.map { it.toAvailabilityTarget() },
-                startDate = startDate,
-                endDate = endDate,
-                ttl = snapshotFreshnessTtl(provider.id),
-                force = force,
-            ),
-        ) {
-            provider.catalogAvailability(
-                CatalogAvailabilityRequest(
-                    ref = parentRef,
-                    reservables = catalogRows.map { it.toCatalogReservableRef() },
-                    startDate = startDate,
-                    endDate = endDate,
-                    force = force,
-                ),
-            )
-        }
 }
-
-private data class AvailabilityFetchGroup(
-    val provider: ReservationProvider,
-    val parentRef: ProviderRef,
-    val dateContext: PoiDateContext,
-)
 
 internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =
     when (providerId) {
@@ -151,14 +117,6 @@ internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Dur
         ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
         ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
     }
-
-private fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
-    CatalogReservableRef(
-        rid = rid.encode(),
-        vendorId = rid.vendorId,
-        mapId = aspiraProviderRefLong("mapId"),
-        resourceLocationId = aspiraProviderRefLong("resourceLocationId"),
-    )
 
 private fun Reservable.toAvailabilityTarget(): SnapshotBackedAvailabilityService.TargetReservable =
     SnapshotBackedAvailabilityService.TargetReservable(

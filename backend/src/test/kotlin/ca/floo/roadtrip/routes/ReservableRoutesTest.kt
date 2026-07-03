@@ -12,7 +12,7 @@ import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
-import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -52,6 +52,13 @@ import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class ReservableRoutesTest {
+    /**
+     * Fixed "now" for tests that hardcode 2026-07-01-era availability query
+     * dates. Pinning the clock well before those dates keeps the assertions
+     * robust to date drift without changing production date-window logic.
+     */
+    private val fixedClock: Clock = Clock.fixed(Instant.parse("2026-06-15T12:00:00Z"), ZoneOffset.UTC)
+
     private lateinit var pg: PostgreSQLContainer<Nothing>
     private lateinit var ds: HikariDataSource
     private lateinit var ctx: DSLContext
@@ -500,6 +507,7 @@ class ReservableRoutesTest {
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -535,6 +543,7 @@ class ReservableRoutesTest {
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -563,6 +572,7 @@ class ReservableRoutesTest {
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -595,6 +605,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -619,6 +630,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -649,6 +661,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -695,6 +708,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -730,6 +744,7 @@ class ReservableRoutesTest {
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -768,6 +783,7 @@ class ReservableRoutesTest {
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -845,6 +861,7 @@ class ReservableRoutesTest {
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -868,6 +885,7 @@ class ReservableRoutesTest {
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
                         AvailabilitySnapshotRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -906,7 +924,7 @@ class ReservableRoutesTest {
             val availabilityService =
                 AvailabilityServiceImpl(
                     targets =
-                        AvailabilityTargetResolver(
+                        DbAvailabilityTargetResolver(
                             providerRefs = CampsiteProviderRepo(ctx),
                             reservablesRepo = ReservableRepo(ctx),
                             reservationProviders = fakeReservationProviders(),
@@ -978,6 +996,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeAspiraReservationProviders(),
                         ReservableRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -1038,6 +1057,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeAspiraReservationProviders(),
                         ReservableRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }
@@ -1062,6 +1082,7 @@ class ReservableRoutesTest {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
+                        clock = fixedClock,
                     )
                 }
             }

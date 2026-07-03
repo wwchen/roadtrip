@@ -7,13 +7,30 @@ import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 
-internal class AvailabilityTargetResolver(
+/**
+ * Resolves a reservable (by rid, or from an already-loaded [Reservable]) to the
+ * provider adapter, parent provider ref, and date context needed to fetch its
+ * availability. A port so the request path can be unit-tested with an in-memory
+ * fake; [DbAvailabilityTargetResolver] is the production, DB-backed implementation.
+ */
+internal interface AvailabilityTargetResolver {
+    /** Resolve by rid, throwing [AvailabilityServiceError.NotFound] when the
+     *  reservable is unknown and [AvailabilityServiceError.UnknownCampground]
+     *  when it has no resolvable reservation provider. */
+    fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget
+
+    /** Resolve an already-loaded reservable, or null when it has no resolvable
+     *  reservation provider. */
+    fun resolve(reservable: Reservable): ResolvedAvailabilityTarget?
+}
+
+internal class DbAvailabilityTargetResolver(
     private val providerRefs: CampsiteProviderRepo,
     private val reservablesRepo: ReservableRepo,
     private val reservationProviders: ReservationProviderRegistry,
     private val dateResolver: AvailabilityDateResolver,
-) {
-    fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget {
+) : AvailabilityTargetResolver {
+    override fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget {
         val reservable =
             reservablesRepo.findByRid(rid)
                 ?: throw AvailabilityServiceError.NotFound
@@ -21,7 +38,7 @@ internal class AvailabilityTargetResolver(
             ?: throw AvailabilityServiceError.UnknownCampground
     }
 
-    fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? {
+    override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? {
         val poiIds = reservablesRepo.poiIdsForReservable(reservable.id)
         if (poiIds.isEmpty()) return null
 
