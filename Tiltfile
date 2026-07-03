@@ -89,6 +89,20 @@ docker_build(
         'Dockerfile',
         'backend/build/libs',
     ],
+    # Auto-restart the backend the moment `backend-jar` produces a new fat jar.
+    # Without this, a completed rebuild could leave the running container serving
+    # a stale jar (e.g. never applying new Flyway migrations). live_update syncs
+    # the freshly built jar into the container and restarts the JVM process, so a
+    # source change deterministically reaches the running backend — and faster
+    # than a full image rebuild + recreate.
+    #
+    # The jar name is version-pinned by shadowJar's archiveBaseName +
+    # `version` in backend/build.gradle.kts (currently roadtrip-backend-0.1.0);
+    # keep this path and the Dockerfile COPY in sync if the version bumps.
+    live_update=[
+        sync('backend/build/libs/roadtrip-backend-0.1.0-all.jar', '/app/app.jar'),
+        restart_container(),
+    ],
 )
 
 dc_resource('postgres', resource_deps=['compose-cleanup'], labels=['infra'])
