@@ -74,7 +74,7 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       # Single ssh invocation so any failure (git pull, Gradle build, image
-      # build, Compose up, targeted restarts) returns non-zero and fails the
+      # build, or Compose recreate) returns non-zero and fails the
       # workflow. The generated remote script is piped over SSH, not printed,
       # so secret values don't land in logs.
       - name: Deploy on mini-ca
@@ -119,10 +119,8 @@ jobs:
           set -euo pipefail
           deploy_dir="${DEPLOY_DIR/#\~/$HOME}"
           cd "$deploy_dir"
-          before=$(git rev-parse HEAD)
           git pull --ff-only
-          after=$(git rev-parse HEAD)
-          DEPLOY_BEFORE_SHA="$before" DEPLOY_AFTER_SHA="$after" make run env=prod
+          make run env=prod
           REMOTE
           } | ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" 'bash -se'
 

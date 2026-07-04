@@ -33,22 +33,13 @@ help:
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
 # Plain `make run` runs the backend on the host for local dev. `make run
-# env=prod` builds the container image and brings up the production Compose
-# profiles on the deploy host.
+# env=prod` builds the container image and recreates the production Compose
+# stack on the deploy host.
 run:
 ifeq ($(RUN_ENV),prod)
 	./gradlew :backend:shadowJar
 	docker build -t $(BACKEND_IMAGE) --target backend .
-	$(PROD_COMPOSE) up -d
-	@before="$${DEPLOY_BEFORE_SHA:-}"; \
-	 after="$${DEPLOY_AFTER_SHA:-}"; \
-	 if [ -n "$$before" ] && [ -n "$$after" ] && [ "$$before" != "$$after" ] && \
-	    git diff --name-only "$$before" "$$after" -- grafana/dashboards grafana/provisioning | grep -q .; then \
-	   echo "Grafana dashboard/provisioning files changed; restarting grafana."; \
-	   $(PROD_COMPOSE) restart grafana; \
-	 else \
-	   echo "No Grafana dashboard/provisioning file changes detected; leaving grafana running."; \
-	 fi
+	$(PROD_COMPOSE) up -d --force-recreate
 else ifeq ($(RUN_ENV),dev)
 	$(LOCAL_COMPOSE) up -d postgres
 	PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \

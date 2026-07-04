@@ -39,8 +39,8 @@ Tilt UI is at <http://localhost:10350>.
 
 Plain `make run` remains the fastest backend-only loop: it starts Postgres in
 Docker and runs the Kotlin/Ktor backend on the host with Gradle. Production
-deploys use `make run env=prod`, which builds the backend image and runs the
-production Compose profiles.
+deploys use `make run env=prod`, which builds the backend image and recreates
+the production Compose stack.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`) for POI refresh. Tesla Supercharger pricing
@@ -232,7 +232,7 @@ the backend container and write raw captures back to the checkout.
    Grafana to persist UI edits in its database.
 
 3. **Bring up the stack:** on the deploy host, `make run env=prod` builds the
-   backend image and runs `docker compose up`. The deploy is wired to GHA
+   backend image and recreates the Compose stack. The deploy is wired to GHA
    (push to master → .github/workflows/deploy.yml), so you usually don't run
    this by hand. The older `make deploy` SSH wrapper has been removed.
 
