@@ -315,24 +315,31 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                 .orEmpty()
         val dates =
             explicitDates.ifEmpty {
-                // Discover distinct dates that have any snapshot in the window.
+                val snap = ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT
+                val cell = ca.floo.roadtrip.db.generated.tables.AvailabilityCell.AVAILABILITY_CELL
                 val windowStart =
                     java.time.OffsetDateTime
                         .now()
                         .minusHours(windowHours.toLong())
-                ctx
-                    .selectDistinct(ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT.TARGET_DATE)
-                    .from(ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT)
-                    .where(
-                        ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT.RESERVABLE_ID
-                            .eq(reservable.id),
-                    ).and(
-                        ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT.OBSERVED_AT
-                            .ge(windowStart),
-                    ).orderBy(
-                        ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT.TARGET_DATE
-                            .asc(),
-                    ).fetch { it.value1() }
+                // Dates that saw a snapshot edge in the window, UNIONed with the
+                // current/future dates tracked in the cube. Snapshots are edge-only,
+                // so a stable cell whose last edge predates the window has no rows in
+                // it; the cube keeps such dates from dropping out of the summary.
+                val snapDates =
+                    ctx
+                        .selectDistinct(snap.TARGET_DATE)
+                        .from(snap)
+                        .where(snap.RESERVABLE_ID.eq(reservable.id))
+                        .and(snap.OBSERVED_AT.ge(windowStart))
+                        .fetch { it.value1() }
+                val cubeDates =
+                    ctx
+                        .selectDistinct(cell.TARGET_DATE)
+                        .from(cell)
+                        .where(cell.RESERVABLE_ID.eq(reservable.id))
+                        .and(cell.TARGET_DATE.ge(java.time.LocalDate.now()))
+                        .fetch { it.value1() }
+                (snapDates + cubeDates).distinct().sorted()
             }
         val stats = snapshots.summarize(reservable.id, dates, windowHours = windowHours)
         call.respondJson(

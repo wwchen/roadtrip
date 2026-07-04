@@ -14,8 +14,30 @@ class AvailabilitySnapshotStatsTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability_cell")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
+    }
+
+    private fun insertCell(
+        reservableId: Long,
+        targetDate: LocalDate,
+        status: String,
+        lastObservedAt: OffsetDateTime,
+        lastChangedAt: OffsetDateTime,
+    ) {
+        ctx.execute(
+            """
+            INSERT INTO availability_cell (
+                reservable_id, target_date, status, last_observed_at, last_changed_at
+            ) VALUES (?::bigint, ?::date, ?::availability_status, ?::timestamptz, ?::timestamptz)
+            """.trimIndent(),
+            reservableId,
+            targetDate.toString(),
+            status,
+            lastObservedAt.toString(),
+            lastChangedAt.toString(),
+        )
     }
 
     private fun seedReservable(): Long =
@@ -170,5 +192,52 @@ class AvailabilitySnapshotStatsTest : SharedDbTest() {
         assertEquals(d2, stats[1].targetDate)
         assertEquals(true, stats[0].isCurrentlyOpen)
         assertEquals(false, stats[1].isCurrentlyOpen)
+    }
+
+    @Test
+    fun `cube reports currently-open with a real window when the last edge predates the window`() {
+        // Edge-only history: the cell became available 10 days ago and stayed
+        // available, so its only snapshot edge is before the 7-day window and
+        // there are NO in-window rows. Pre-cube this returned zeroed / not-open;
+        // now the cube is authoritative.
+        val reservableId = seedReservable()
+        val now = now()
+        insertSnapshot(reservableId, date, now.minusDays(10), available = true) // pre-window edge (seed)
+        insertCell(
+            reservableId,
+            date,
+            status = "available",
+            lastObservedAt = now.minusMinutes(1),
+            lastChangedAt = now.minusDays(10),
+        )
+        val repo = AvailabilitySnapshotRepo(ctx)
+        val stats = repo.summarize(reservableId, listOf(date), now).single()
+
+        assertEquals(0, stats.totalSnapshots, "no rows inside the 7d window")
+        assertEquals(true, stats.isCurrentlyOpen, "cube says available")
+        assertNotNull(stats.currentOrLastOpenWindowSec)
+        // ~10 days open, measured from the cube's last_changed_at, not collapsed to 0.
+        assertTrue(stats.currentOrLastOpenWindowSec!! > 9 * 24 * 3600)
+        assertNotNull(stats.lastOpenAt)
+    }
+
+    @Test
+    fun `cube status overrides a stale in-window snapshot for isCurrentlyOpen`() {
+        // Window has an old 'reserved' edge, but the cube now says available.
+        val reservableId = seedReservable()
+        val now = now()
+        insertSnapshot(reservableId, date, now.minusHours(30), available = false)
+        insertCell(
+            reservableId,
+            date,
+            status = "available",
+            lastObservedAt = now.minusMinutes(1),
+            lastChangedAt = now.minusHours(2),
+        )
+        val repo = AvailabilitySnapshotRepo(ctx)
+        val stats = repo.summarize(reservableId, listOf(date), now).single()
+
+        assertEquals(true, stats.isCurrentlyOpen)
+        assertNotNull(stats.currentOrLastOpenWindowSec)
     }
 }
