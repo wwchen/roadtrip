@@ -64,32 +64,16 @@ class AvailabilitySnapshotRepo(
         return inserts.size
     }
 
-    override fun loadLatestObservations(
+    override fun pruneObservationsBefore(
         reservableIds: List<Long>,
-        dates: List<LocalDate>,
-    ): List<LatestObservation> {
-        if (reservableIds.isEmpty() || dates.isEmpty()) return emptyList()
+        cutoff: Instant,
+    ): Int {
+        if (reservableIds.isEmpty()) return 0
         return ctx
-            .resultQuery(
-                """
-                SELECT DISTINCT ON (reservable_id, target_date)
-                    id, reservable_id, target_date, status, available, observed_at
-                FROM availability_snapshot
-                WHERE reservable_id = ANY(?::bigint[])
-                  AND target_date = ANY(?::date[])
-                ORDER BY reservable_id, target_date, observed_at DESC, id DESC
-                """.trimIndent(),
-                reservableIds.toTypedArray(),
-                dates.toTypedArray(),
-            ).fetch { r ->
-                LatestObservation(
-                    reservableId = r.get("reservable_id", Long::class.java),
-                    targetDate = r.get("target_date", LocalDate::class.java),
-                    observedAt = r.get("observed_at", OffsetDateTime::class.java),
-                    status = AvailabilityStatus.parse(r.get("status", String::class.java)),
-                    available = r.get("available", Boolean::class.java),
-                )
-            }
+            .deleteFrom(AVAILABILITY_SNAPSHOT)
+            .where(AVAILABILITY_SNAPSHOT.RESERVABLE_ID.`in`(reservableIds))
+            .and(AVAILABILITY_SNAPSHOT.OBSERVED_AT.lt(OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC)))
+            .execute()
     }
 
     private fun AvailabilityDayDto.toJson(): String = availabilityResponseJson.encodeToString(AvailabilityDayDto.serializer(), this)

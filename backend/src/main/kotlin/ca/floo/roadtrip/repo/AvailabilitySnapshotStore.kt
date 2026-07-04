@@ -1,7 +1,5 @@
 package ca.floo.roadtrip.repo
 
-import java.time.LocalDate
-
 /**
  * Persistence port for per-day availability snapshots used by the
  * snapshot-backed read path ([ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService]).
@@ -14,8 +12,16 @@ import java.time.LocalDate
 interface AvailabilitySnapshotStore {
     fun appendObservations(input: AvailabilitySnapshotRepo.SnapshotObservationBatch): Int
 
-    fun loadLatestObservations(
+    /**
+     * Delete snapshot history older than [cutoff] for the given reservables.
+     * Scoped by reservable so it rides the (reservable_id, observed_at) index
+     * and stays cheap when called opportunistically from the poll loop. The
+     * live read path serves latest state from the cube, so pruning old history
+     * never affects read latency — it only bounds the append-only log.
+     * Returns rows deleted.
+     */
+    fun pruneObservationsBefore(
         reservableIds: List<Long>,
-        dates: List<LocalDate>,
-    ): List<AvailabilitySnapshotRepo.LatestObservation>
+        cutoff: java.time.Instant,
+    ): Int
 }

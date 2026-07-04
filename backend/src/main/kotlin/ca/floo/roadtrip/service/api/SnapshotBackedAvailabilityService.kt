@@ -5,8 +5,9 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.repo.AvailabilityCacheStore
+import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.repo.AvailabilitySnapshotStore
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -14,7 +15,7 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 class SnapshotBackedAvailabilityService(
-    private val snapshots: AvailabilitySnapshotStore?,
+    private val store: AvailabilityCacheStore?,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     data class TargetReservable(
@@ -44,23 +45,24 @@ class SnapshotBackedAvailabilityService(
         request: Request,
         fetch: suspend () -> AvailabilityObservationBatch,
     ): AvailabilityObservationBatch {
-        val sink = snapshots
-        if (sink == null || request.targets.isEmpty()) {
+        val cache = store
+        if (cache == null || request.targets.isEmpty()) {
             return fetch()
         }
 
         val dates = datesInWindow(request.startDate, request.endDate)
+        val dbIds = request.targets.map { it.dbId }
         if (!request.force) {
-            val latest = sink.loadLatestObservations(request.targets.map { it.dbId }, dates)
+            val latest = cache.loadLatest(dbIds, dates)
             if (hasFullFreshCoverage(request, dates, latest)) {
                 return batchFromLatest(request, latest, hit = true)
             }
         }
 
         val fetched = fetch()
-        appendKnownObservations(sink, request, fetched)
+        recordFetched(cache, request, fetched)
 
-        val latest = sink.loadLatestObservations(request.targets.map { it.dbId }, dates)
+        val latest = cache.loadLatest(dbIds, dates)
         return if (hasFullCoverage(request, dates, latest)) {
             batchFromLatest(
                 request = request.copy(metadata = metadataFromBatch(fetched, request.metadata)),
@@ -73,54 +75,54 @@ class SnapshotBackedAvailabilityService(
         }
     }
 
-    private fun appendKnownObservations(
-        sink: AvailabilitySnapshotStore,
+    /**
+     * Upsert every (target, date) cell from this fetch into the cube and append
+     * the edge (status-changed) subset to the snapshot log — delegated to the
+     * store so both happen in one transaction, mirroring the poller. Cells the
+     * provider did not return are recorded as UNKNOWN so the window reaches full
+     * coverage and the next read is a cube hit rather than a refetch loop
+     * (matching the pre-cube UNKNOWN backfill).
+     */
+    private fun recordFetched(
+        cache: AvailabilityCacheStore,
         request: Request,
         batch: AvailabilityObservationBatch,
     ) {
         val targetByRid = request.targets.associateBy { it.rid }
+        val ridByDbId = request.targets.associate { it.dbId to it.rid }
         val dates = datesInWindow(request.startDate, request.endDate)
         val observedAtByDate =
             batch.observations
                 .groupBy { it.date }
-                .mapValues { (_, observations) ->
-                    observations.maxOf { it.observedAt }
-                }
+                .mapValues { (_, observations) -> observations.maxOf { it.observedAt } }
         val fallbackObservedAt = batch.observations.maxOfOrNull { it.observedAt } ?: Instant.now(clock)
         val covered = mutableSetOf<Pair<Long, LocalDate>>()
-        val rows = mutableListOf<AvailabilitySnapshotRepo.SnapshotObservation>()
+        val observations = mutableListOf<AvailabilityCellRepo.CellObservation>()
 
-        rows +=
-            batch.observations.mapNotNull { observation ->
-                val target = targetByRid[observation.reservableId] ?: return@mapNotNull null
-                covered += target.dbId to observation.date
-                AvailabilitySnapshotRepo.SnapshotObservation(
+        for (observation in batch.observations) {
+            val target = targetByRid[observation.reservableId] ?: continue
+            covered += target.dbId to observation.date
+            observations +=
+                AvailabilityCellRepo.CellObservation(
                     reservableId = target.dbId,
-                    reservableRid = target.rid,
                     targetDate = observation.date,
-                    observedAt = observation.observedAt,
                     status = observation.status,
+                    observedAt = observation.observedAt,
                 )
-            }
+        }
         for (target in request.targets) {
             for (date in dates) {
                 if (target.dbId to date in covered) continue
-                rows +=
-                    AvailabilitySnapshotRepo.SnapshotObservation(
+                observations +=
+                    AvailabilityCellRepo.CellObservation(
                         reservableId = target.dbId,
-                        reservableRid = target.rid,
                         targetDate = date,
-                        observedAt = observedAtByDate[date] ?: fallbackObservedAt,
                         status = AvailabilityStatus.UNKNOWN,
+                        observedAt = observedAtByDate[date] ?: fallbackObservedAt,
                     )
             }
         }
-        sink.appendObservations(
-            AvailabilitySnapshotRepo.SnapshotObservationBatch(
-                runId = request.runId,
-                observations = rows,
-            ),
-        )
+        cache.recordFetched(request.runId, observations, ridByDbId)
     }
 
     private fun hasFullFreshCoverage(
