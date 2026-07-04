@@ -32,14 +32,23 @@ import io.ktor.server.request.receiveText
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
+import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
 private const val DEFAULT_LIST_LIMIT = 100
 private const val MAX_LIST_LIMIT = 500
+
+// Logger anchor for these top-level route functions (the file has no class of
+// its own); keeps the category class-derived rather than a hardcoded string.
+private object AvailabilityWatchRoutes
+
+private val log = LoggerFactory.getLogger(AvailabilityWatchRoutes::class.java)
 
 @OptIn(ExperimentalSerializationApi::class)
 private val watchJson =
@@ -52,11 +61,25 @@ private val watchJson =
 internal fun Route.availabilityWatchRoutes(
     ctx: DSLContext,
     watchService: ca.floo.roadtrip.service.availability.AvailabilityWatchService,
+    alertDispatcher: ca.floo.roadtrip.service.availability.WatchAlertDispatcher,
+    notifyScope: CoroutineScope,
 ) {
     val watches = AvailabilityWatchRepo(ctx)
     val reservablesRepo = ReservableRepo(ctx)
     val heatmaps = AvailabilityHeatmapRepo(ctx)
     val scopeResolver = WatchScopeResolver(reservablesRepo)
+
+    // The "first message": on create/update, post the current window state to
+    // Slack so an already-open site isn't stranded behind the edge-triggered
+    // poller. Fire-and-forget, outside the mutation's transaction — it must
+    // never block or fail the HTTP response. All gating (Slack configured,
+    // slack_notify kind, active status) lives in dispatchInitial.
+    fun scheduleInitialNotify(watch: Watch) {
+        notifyScope.launch {
+            runCatching { alertDispatcher.dispatchInitial(watch) }
+                .onFailure { log.warn("initial Slack notify for watch {} failed", watch.id, it) }
+        }
+    }
 
     get("/api/availability/watches", {
         tags = listOf("availability")
@@ -157,6 +180,7 @@ internal fun Route.availabilityWatchRoutes(
                     stopWhenTriggered = req.stopWhenTriggered,
                 ),
             )
+        scheduleInitialNotify(watch)
         call.respondJson(AvailabilityWatchResponse(watch.toSchema(reservablesRepo)), HttpStatusCode.Created)
     }
 
@@ -229,6 +253,7 @@ internal fun Route.availabilityWatchRoutes(
                 ),
             )
         if (updated == null) return@patch call.respondError("not_found", HttpStatusCode.NotFound)
+        scheduleInitialNotify(updated)
         call.respondJson(AvailabilityWatchResponse(updated.toSchema(reservablesRepo)))
     }
 
