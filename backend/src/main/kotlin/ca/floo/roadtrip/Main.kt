@@ -8,6 +8,7 @@ import ca.floo.roadtrip.clients.recgov.HttpAvailabilityClient
 import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
+import ca.floo.roadtrip.config.SlackConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
@@ -262,6 +263,17 @@ fun Application.module() {
     // enable. The client's HTTP client is closed on shutdown, below.
     val slackClient = appConfig.slack?.let { SlackClient(it) }
     val slackNotifications = slackClient?.let { SlackNotificationServiceImpl(it, appConfig.slack?.defaultChannel) }
+    // Surface the enabled/disabled state at boot: a null config disables all
+    // watch alerts silently, which is easy to mistake for a broken alert.
+    if (slackNotifications == null) {
+        environment.log.warn(
+            "Slack alerts DISABLED: {} / {} unset — watch alerts will not be delivered",
+            SlackConfig.TOKEN_ENV,
+            SlackConfig.CHANNEL_ENV,
+        )
+    } else {
+        environment.log.info("Slack alerts enabled → default channel {}", appConfig.slack?.defaultChannel)
+    }
     val watchAlertDispatcher =
         WatchAlertDispatcher(
             slack = slackNotifications,

@@ -6,6 +6,7 @@ import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import kotlinx.serialization.json.JsonPrimitive
+import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
 /** The only trigger kind that dispatches today. Others (e.g. `atc`) are stored
@@ -44,6 +45,8 @@ internal class WatchAlertDispatcher(
     private val heatmaps: AvailabilityHeatmapRepo,
     private val grafanaRootUrl: String?,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
         transitions: List<CellTransition>,
@@ -84,8 +87,11 @@ internal class WatchAlertDispatcher(
      * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
-        if (slack == null) return
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
+        if (slack == null) {
+            log.warn("watch {} requests slack_notify but Slack is unconfigured; no message sent", watch.id)
+            return
+        }
         val reservables = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
             slack.sendMessage(buildLifecycleMessage(watch, reservables), watch.channelOverride())
