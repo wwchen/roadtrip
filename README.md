@@ -219,6 +219,8 @@ the backend container and write raw captures back to the checkout.
    Grafana state is stored in the Compose-managed named volume
    `grafana-data` (Docker prefixes it with the Compose project name);
    dashboard JSON and datasource provisioning stay bind-mounted from `grafana/`.
+   Deploy restarts Grafana when committed dashboard/provisioning files change so
+   file-provisioned dashboards are reconciled immediately.
    Provisioned dashboard UI saves are disabled by default on deploy hosts; set
    `GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=true` only when you intentionally want
    Grafana to persist UI edits in its database.
