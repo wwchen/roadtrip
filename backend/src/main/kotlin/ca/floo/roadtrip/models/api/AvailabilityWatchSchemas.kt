@@ -70,6 +70,13 @@ data class AvailabilityWatchSchema(
     val status: String,
     @SerialName("created_at") val createdAt: String,
     @SerialName("updated_at") val updatedAt: String,
+    // Freshness/error of the most recent poll run across this watch's
+    // poller(s). All null when no run has happened yet. `lastRunAt` is the
+    // run's completed_at (null while a run is still in flight). Read-only —
+    // sourced from availability_run, never accepted on create/update.
+    @SerialName("last_run_at") val lastRunAt: String? = null,
+    @SerialName("last_run_status") val lastRunStatus: String? = null,
+    @SerialName("last_run_error") val lastRunError: String? = null,
 )
 
 @Serializable

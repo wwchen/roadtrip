@@ -1,0 +1,121 @@
+// web/availability/watch-popover.js
+//
+// In-view popover for setting or removing an availability watch on a single
+// day for a POI. Opened from a reserved (non-available) matrix cell in the
+// campground drawer. The backend watch is POI-level and single-day.
+//
+// Today this is a one-tap confirm (no config). The body is laid out so future
+// trigger configuration (selectable Slack channel, an ATC action alongside
+// Slack) can be added without a redesign: the note line becomes a field group.
+//
+// Pure-ish widget: it owns its own busy/error state and re-renders in place;
+// the parent (availability-week.js) supplies onSet / onRemove / onClose and
+// owns the authoritative watch cache.
+
+import { escapeHtml } from '../core.js';
+
+/**
+ * @param {HTMLElement} host
+ * @param {object}   args
+ * @param {string}   args.poiName
+ * @param {string}   args.date          YYYY-MM-DD (the watched day).
+ * @param {boolean}  args.watching      Whether a watch already exists.
+ * @param {() => Promise<void>} args.onSet
+ * @param {() => Promise<void>} args.onRemove
+ * @param {() => void}          args.onClose
+ */
+export function mountWatchPopover(host, args) {
+  const { poiName, date, onSet, onRemove, onClose } = args;
+  let state = { watching: !!args.watching, busy: false, error: null };
+
+  function rerender() {
+    host.innerHTML = renderPopover({ poiName, date, ...state });
+  }
+
+  async function onClick(e) {
+    const tgt = e.target;
+    if (!(tgt instanceof Element)) return;
+    if (tgt.closest('.cg-watch-pop-close')) {
+      onClose();
+      return;
+    }
+    const action = tgt.closest('.cg-watch-pop-action');
+    if (!action || action.disabled) return;
+    state = { ...state, busy: true, error: null };
+    rerender();
+    try {
+      if (state.watching) {
+        await onRemove?.();
+        state = { watching: false, busy: false, error: null };
+      } else {
+        await onSet?.();
+        state = { watching: true, busy: false, error: null };
+      }
+      rerender();
+    } catch (err) {
+      if (err?.name === 'AbortError') return;
+      state = { ...state, busy: false, error: 'Could not save. Try again.' };
+      rerender();
+    }
+  }
+
+  function onDocClick(e) {
+    if (host.contains(e.target)) return;
+    onClose();
+  }
+
+  function onKey(e) {
+    if (e.key === 'Escape') onClose();
+  }
+
+  rerender();
+  host.addEventListener('click', onClick);
+  // Defer document listeners a tick so the opening click doesn't close it.
+  setTimeout(() => {
+    document.addEventListener('click', onDocClick);
+    document.addEventListener('keydown', onKey);
+  }, 0);
+
+  return {
+    dispose() {
+      host.removeEventListener('click', onClick);
+      document.removeEventListener('click', onDocClick);
+      document.removeEventListener('keydown', onKey);
+    },
+  };
+}
+
+function renderPopover({ poiName, date, watching, busy, error }) {
+  const dateLabel = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+    timeZone: 'UTC',
+  });
+  const actionLabel = busy
+    ? watching
+      ? 'Removing…'
+      : 'Setting…'
+    : watching
+      ? 'Watching — tap to remove'
+      : 'Set watch';
+  const actionClass = watching ? 'cg-btn-secondary' : 'cg-btn-primary';
+  const errorHtml = error ? `<div class="cg-watch-pop-error">${escapeHtml(error)}</div>` : '';
+  return `
+    <div class="cg-watch-pop" role="dialog" aria-label="Availability watch">
+      <div class="cg-watch-pop-head">
+        <div class="cg-watch-pop-title">Watch ${escapeHtml(poiName)}</div>
+        <button type="button" class="cg-watch-pop-close" aria-label="Close">×</button>
+      </div>
+      <div class="cg-watch-pop-date">${escapeHtml(dateLabel)}</div>
+      <button
+        type="button"
+        class="cg-btn ${actionClass} cg-watch-pop-action"
+        data-state="${watching ? 'watching' : 'set'}"
+        ${busy ? 'disabled' : ''}
+      >${escapeHtml(actionLabel)}</button>
+      ${errorHtml}
+      <div class="cg-watch-pop-note">🔔 Alerts post to Slack when a site opens.</div>
+    </div>
+  `;
+}

@@ -22,6 +22,8 @@ import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
 import { renderSiteList } from './site-list.js';
 import { reservationUrlFromTemplate } from './booking-links.js';
 import { mountCalendarPopover } from './calendar-popover.js';
+import { mountWatchPopover } from './watch-popover.js';
+import { notifyWatchesChanged, onWatchesChanged } from './watch-events.js';
 import { availableCount } from './day-fields.js';
 import { availabilityStatusLabel } from '../utils/availability-status.js';
 import { addLocalDays, localToday, localYmd, parseLocalYmd, sameLocalDay } from '../utils/local-date.js';
@@ -56,6 +58,9 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
   fetchWeek(ctx);
   fetchWatches(ctx);
   fetchSites(ctx);
+  // Keep the drawer's watched-cell indicators in sync when a watch is
+  // created/removed/paused elsewhere (e.g. the nav alerts summary).
+  const unsubscribeWatches = onWatchesChanged(() => fetchWatches(ctx));
 
   return {
     dispose() {
@@ -63,6 +68,8 @@ export function mountAvailabilityWeek(host, feature, { signal } = {}) {
       clearTimeout(ctx.skeletonTimer);
       ctx.calendar?.dispose();
       ctx.calendar = null;
+      closeWatchPopover(ctx);
+      unsubscribeWatches();
       window.removeEventListener('resize', onResize);
     },
   };
@@ -183,7 +190,21 @@ function renderAvailabilitySurface(ctx) {
     weekStart: localYmd(ctx.weekStart),
     showToday: shouldShowEarliestButton(ctx),
     armedBook: ctx.armedBook,
+    watchedDates: watchedDatesSet(ctx),
+    canWatch: ctx.poiId != null,
   });
+}
+
+// Set of YYYY-MM-DD start dates this POI currently has an active watch on.
+// Watches are single-day (end = start + 1), so the start date is the watched
+// day and the matrix marks that column's reserved cells.
+function watchedDatesSet(ctx) {
+  const out = new Set();
+  for (const w of ctx.watchesByWindow.values()) {
+    const start = w?.start_date ?? w?.startDate;
+    if (start) out.add(start);
+  }
+  return out;
 }
 
 function renderFreshness(ctx) {
@@ -289,6 +310,14 @@ function onRootClick(ctx, e) {
 
   const wasArmed = ctx.armedBook != null;
   if (wasArmed) ctx.armedBook = null;
+
+  const watchCell = tgt.closest('[data-watch-date]');
+  if (watchCell) {
+    e.preventDefault();
+    const date = watchCell.getAttribute('data-watch-date');
+    if (date) openWatchPopover(ctx, watchCell, date);
+    return;
+  }
 
   const matrixDateBtn = tgt.closest('[data-matrix-date], .cg-day[data-date]');
   if (matrixDateBtn) {
@@ -418,6 +447,9 @@ function onRootScroll(ctx, e) {
   if (!(scroll instanceof HTMLElement)) return;
   if (!scroll.classList.contains('cg-site-matrix-scroll')) return;
   if (ctx.restoringMatrixScroll) return;
+  // A genuine user scroll detaches the fixed-positioned popover from its
+  // cell; close it. Programmatic scroll restores are guarded above.
+  closeWatchPopover(ctx);
 }
 
 function disarmBookButtonsInPlace(ctx) {
@@ -551,6 +583,67 @@ function openCalendar(ctx, anchorBtn) {
       rerender(ctx);
     },
   });
+}
+
+function openWatchPopover(ctx, anchorEl, date) {
+  ctx.watchPopover?.dispose();
+  ctx.watchPopover = null;
+
+  // Anchored with fixed positioning against the cell rect (not appended into
+  // the cell) so the scrollable matrix doesn't clip it. Closed on outside
+  // click / Escape / matrix scroll.
+  const host = document.createElement('div');
+  host.className = 'cg-watch-pop-host';
+  document.body.appendChild(host);
+  positionWatchPopover(host, anchorEl);
+
+  const endDate = stayEndDate(ctx, date);
+  const key = watchWindowKey(date, endDate);
+  const poiName = ctx.feature?.properties?.name || 'this campground';
+
+  const controller = mountWatchPopover(host, {
+    poiName,
+    date,
+    watching: ctx.watchesByWindow.has(key),
+    onSet: async () => {
+      const payload = buildWatchPayload(ctx, date, endDate);
+      const created = await createWatch(payload, { signal: ctx.signal });
+      ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
+      notifyWatchesChanged();
+      rerender(ctx);
+    },
+    onRemove: async () => {
+      const existing = ctx.watchesByWindow.get(key);
+      if (existing) {
+        await deleteWatch(existing.id, { signal: ctx.signal });
+        ctx.watchesByWindow.delete(key);
+      }
+      notifyWatchesChanged();
+      rerender(ctx);
+    },
+    onClose: () => closeWatchPopover(ctx),
+  });
+
+  ctx.watchPopover = {
+    dispose() {
+      controller.dispose();
+      host.remove();
+    },
+  };
+}
+
+function closeWatchPopover(ctx) {
+  ctx.watchPopover?.dispose();
+  ctx.watchPopover = null;
+}
+
+function positionWatchPopover(host, anchorEl) {
+  const rect = anchorEl.getBoundingClientRect();
+  const width = 240;
+  host.style.position = 'fixed';
+  host.style.zIndex = '1200';
+  host.style.top = `${Math.max(8, Math.min(rect.bottom + 6, window.innerHeight - 12))}px`;
+  host.style.left = `${Math.max(8, Math.min(rect.left, window.innerWidth - width - 8))}px`;
 }
 
 function jumpMatrixToToday(ctx) {
@@ -799,6 +892,7 @@ async function toggleWatch(ctx, button) {
       const created = await createWatch(payload, { signal: ctx.signal });
       ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
     }
+    notifyWatchesChanged();
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;
@@ -815,7 +909,10 @@ function buildWatchPayload(ctx, date, endDate) {
     start_date: date,
     end_date: endDate,
     cadence_sec: 60,
-    trigger_kinds: ['availability'],
+    // Must be 'slack_notify' — WatchAlertDispatcher only posts for watches
+    // carrying that kind (see backend WatchAlertDispatcher.kt). Future kinds
+    // (e.g. 'atc') get added alongside it when trigger config lands.
+    trigger_kinds: ['slack_notify'],
     trigger_config: {},
     stop_when_triggered: true,
   };

@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.repo
 
+import ca.floo.roadtrip.db.generated.tables.AvailabilityRun.Companion.AVAILABILITY_RUN
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatch.Companion.AVAILABILITY_WATCH
+import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchPoller.Companion.AVAILABILITY_WATCH_POLLER
 import ca.floo.roadtrip.db.generated.tables.AvailabilityWatchTarget.Companion.AVAILABILITY_WATCH_TARGET
 import ca.floo.roadtrip.service.availability.WatchStatus
 import kotlinx.serialization.json.Json
@@ -61,6 +63,20 @@ class AvailabilityWatchRepo(
         val status: WatchStatus,
         val createdAt: OffsetDateTime,
         val updatedAt: OffsetDateTime,
+        // Latest poll run across this watch's poller(s); null when never run.
+        // Populated by list()/findById(); left null by fromRecord() so sibling
+        // repos that reuse the row mapping are unaffected.
+        val lastRun: LatestRun? = null,
+    )
+
+    /**
+     * Freshness/error snapshot of the most recent [AVAILABILITY_RUN] across a
+     * watch's poller(s). `completedAt` is null while a run is still in flight.
+     */
+    data class LatestRun(
+        val status: String,
+        val error: String?,
+        val completedAt: OffsetDateTime?,
     )
 
     fun create(input: CreateInput): Watch {
@@ -84,7 +100,8 @@ class AvailabilityWatchRepo(
         return findById(id)!!
     }
 
-    fun findById(id: Long): Watch? = baseSelect().where(AVAILABILITY_WATCH.ID.eq(id)).fetchOne()?.let(::fromRecord)
+    fun findById(id: Long): Watch? =
+        baseSelect().where(AVAILABILITY_WATCH.ID.eq(id)).fetchOne()?.let(::fromRecord)?.let { withLatestRuns(listOf(it)).single() }
 
     fun list(
         status: WatchStatus? = null,
@@ -94,12 +111,56 @@ class AvailabilityWatchRepo(
         offset: Int = 0,
     ): List<Watch> {
         val effectiveLimit = limit.coerceIn(1, MAX_LIST_LIMIT)
-        return baseSelect()
-            .where(scopeConditions(status, poiId, reservableId))
-            .orderBy(AVAILABILITY_WATCH.CREATED_AT.desc(), AVAILABILITY_WATCH.ID.desc())
-            .limit(effectiveLimit)
-            .offset(offset)
-            .fetch { fromRecord(it) }
+        val rows =
+            baseSelect()
+                .where(scopeConditions(status, poiId, reservableId))
+                .orderBy(AVAILABILITY_WATCH.CREATED_AT.desc(), AVAILABILITY_WATCH.ID.desc())
+                .limit(effectiveLimit)
+                .offset(offset)
+                .fetch { fromRecord(it) }
+        return withLatestRuns(rows)
+    }
+
+    /**
+     * Attaches the latest poll run to each watch in one batched query, so
+     * list() stays a single extra round-trip regardless of page size (no
+     * per-watch fan-out). Watches with no run keep [Watch.lastRun] = null.
+     */
+    private fun withLatestRuns(watches: List<Watch>): List<Watch> {
+        if (watches.isEmpty()) return watches
+        val runs = latestRunsByWatch(watches.map { it.id })
+        return watches.map { w -> runs[w.id]?.let { w.copy(lastRun = it) } ?: w }
+    }
+
+    /**
+     * Newest run per watch across all its pollers. Uses Postgres `DISTINCT ON
+     * (watch_id)` ordered by run start desc, so exactly one row (the most
+     * recent) survives per watch. Backed by
+     * `availability_run_poller_started_idx (poller_id, started_at DESC)`.
+     */
+    private fun latestRunsByWatch(watchIds: List<Long>): Map<Long, LatestRun> {
+        if (watchIds.isEmpty()) return emptyMap()
+        return ctx
+            .select(
+                AVAILABILITY_WATCH_POLLER.WATCH_ID,
+                AVAILABILITY_RUN.STATUS,
+                AVAILABILITY_RUN.ERROR,
+                AVAILABILITY_RUN.COMPLETED_AT,
+            ).distinctOn(AVAILABILITY_WATCH_POLLER.WATCH_ID)
+            .from(AVAILABILITY_WATCH_POLLER)
+            .join(AVAILABILITY_RUN)
+            .on(AVAILABILITY_RUN.POLLER_ID.eq(AVAILABILITY_WATCH_POLLER.POLLER_ID))
+            .where(AVAILABILITY_WATCH_POLLER.WATCH_ID.`in`(watchIds))
+            .orderBy(AVAILABILITY_WATCH_POLLER.WATCH_ID, AVAILABILITY_RUN.STARTED_AT.desc())
+            .fetch()
+            .associate { r ->
+                r.get(AVAILABILITY_WATCH_POLLER.WATCH_ID)!! to
+                    LatestRun(
+                        status = r.get(AVAILABILITY_RUN.STATUS)!!,
+                        error = r.get(AVAILABILITY_RUN.ERROR),
+                        completedAt = r.get(AVAILABILITY_RUN.COMPLETED_AT),
+                    )
+            }
     }
 
     fun count(
