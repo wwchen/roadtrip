@@ -20,9 +20,13 @@ edge-triggered poller path is unchanged and handles all subsequent flow.
 
 `WatchAlertDispatcher.dispatchInitial(watch)` — fired fire-and-forget after a
 create/update commits. Gated to: notifier configured, `slack_notify` in
-`triggerKinds`, watch `status == ACTIVE`, a channel resolvable.
+`triggerKinds`, a channel resolvable. Fires on any lifecycle change — created,
+updated, or paused.
 
-Reads the current cube face for the watch's reservables × window via
+A **paused/done** watch posts a lifecycle status message ("⏸ Paused watching …",
+"✅ Done watching …") and stops — no availability lookup, never a trigger.
+
+An **active** watch reads the current cube face for its reservables × window via
 `AvailabilityHeatmapRepo.loadHeatmap`, then:
 
 - **Some cells bookable** → the normal openings alert (reuse the existing

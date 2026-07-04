@@ -74,32 +74,37 @@ internal class WatchAlertDispatcher(
     }
 
     /**
-     * The "first message" for a freshly created/updated watch. Unlike [dispatch]
-     * — which reacts to cube *edges* — this reads the current cube face for the
-     * watch's window and always sends exactly one message, so a watch created on
-     * an already-open site is not silently stranded (its openings pre-date any
-     * future edge). Gated to active `slack_notify` watches; fire-and-forget from
-     * the route, so like [dispatch] it never throws into its caller.
+     * The "status message" for a `slack_notify` watch whose lifecycle just
+     * changed — created, updated, or paused. Unlike [dispatch], which reacts to
+     * cube *edges*, this always sends exactly one message reflecting the watch's
+     * current status, so a watch created on an already-open site is not silently
+     * stranded (its openings pre-date any future edge). Fire-and-forget from the
+     * route, so like [dispatch] it never throws into its caller.
      *
-     * Three states, mirroring what the cube can tell us:
+     * A **paused/done** watch reports its lifecycle state and stops — no
+     * availability lookup, never a trigger. An **active** watch reads the current
+     * cube face for its window:
      *  - **some cells bookable** → the same openings alert [dispatch] sends; a
      *    real trigger, so `stopWhenTriggered` still marks the watch `DONE`.
      *  - **cells known, none bookable** → informational "nothing open yet".
      *  - **no cells (cold POI)** → informational "not checked yet"; the immediate
      *    poll `create()` schedules will observe the window and its first
      *    observation is itself an edge, so the real opening fires via [dispatch].
-     * The two informational states never mark a watch `DONE`.
+     * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
         if (notifier == null) return
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
-        if (watch.status != WatchStatus.ACTIVE) return
         val channel = resolveChannel(watch)
         if (channel == null) {
-            log.warn("watch {} created/updated but no Slack channel (no override, no default); skipping", watch.id)
+            log.warn("watch {} status changed but no Slack channel (no override, no default); skipping", watch.id)
             return
         }
         val reservables = scopeResolver.resolve(watch)
+        if (watch.status != WatchStatus.ACTIVE) {
+            notifier.notify(channel, buildLifecycleMessage(watch, reservables))
+            return
+        }
         val reservablesById = reservables.associateBy { it.id }
         val cells = heatmaps.loadHeatmap(reservables.map { it.id }, datesInWindow(watch))
         val bookable = cells.filter { it.available }
@@ -107,7 +112,7 @@ internal class WatchAlertDispatcher(
             val covered = bookable.map { CellTransition(it.reservableId, it.targetDate, it.status) }
             postOpenings(watch, channel, covered, reservablesById)
         } else {
-            notifier.notify(channel, buildInitialStatusMessage(watch, reservables, cubeKnown = cells.isNotEmpty()))
+            notifier.notify(channel, buildWatchingMessage(watch, reservables, cubeKnown = cells.isNotEmpty()))
         }
     }
 
@@ -177,13 +182,13 @@ internal class WatchAlertDispatcher(
         return "$watch$cube"
     }
 
-    /** Body of the initial message when nothing is bookable in the window:
+    /** Body of an active watch's message when nothing is bookable in the window:
      *  either the cube has no observation for it yet ([cubeKnown] = false,
      *  "unknown") or every cell is currently taken. Never a trigger — it carries
      *  the watch's scope, window, and dashboards so the user can confirm the
      *  watch is live, but lists no openings. POI links come from the watch's
      *  POI-scoped targets (reservable-scoped targets carry no POI). */
-    private fun buildInitialStatusMessage(
+    private fun buildWatchingMessage(
         watch: AvailabilityWatchRepo.Watch,
         reservables: List<Reservable>,
         cubeKnown: Boolean,
@@ -193,6 +198,25 @@ internal class WatchAlertDispatcher(
         val state = if (cubeKnown) "nothing available right now" else "availability not checked yet"
         val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
         return "👀 Watching $scope for $window — $state. I'll alert the moment a site opens.${dashboardLinks(watch.id, poiIds)}"
+    }
+
+    /** Message for a non-active watch (paused or done). Reports the lifecycle
+     *  state only — no availability lookup, never a trigger — so pausing a watch
+     *  posts a clear "stopped watching" note rather than going silent. */
+    private fun buildLifecycleMessage(
+        watch: AvailabilityWatchRepo.Watch,
+        reservables: List<Reservable>,
+    ): String {
+        val scope = scopeLabel(reservables)
+        val window = "${watch.startDate} → ${watch.endDate}"
+        val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
+        val body =
+            when (watch.status) {
+                WatchStatus.PAUSED -> "⏸ Paused watching $scope for $window — I won't alert until it's resumed."
+                WatchStatus.DONE -> "✅ Done watching $scope for $window."
+                WatchStatus.ACTIVE -> "👀 Watching $scope for $window." // unreachable; active takes the snapshot path
+            }
+        return "$body${dashboardLinks(watch.id, poiIds)}"
     }
 
     /** Short human label for a watch's scope: the single site's name when the

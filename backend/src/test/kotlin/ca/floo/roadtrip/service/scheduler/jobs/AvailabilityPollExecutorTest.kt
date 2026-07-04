@@ -689,6 +689,26 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 
     @Test
+    fun `initial notify on a paused watch posts a lifecycle message and no openings`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            val reservableId = seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), triggerKinds = listOf("slack_notify"))
+            // Even with the site open, a paused watch reports status — not openings.
+            seedCell(reservableId, farStart, AvailabilityStatus.AVAILABLE)
+            ctx.execute("UPDATE availability_watch SET status = 'paused' WHERE id = ?", watchId)
+            val notifier = RecordingSlackNotifier()
+
+            dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
+
+            assertEquals(1, notifier.posts.size)
+            val text = notifier.posts.single().second
+            assertTrue(text.contains("Paused"), text)
+            assertTrue(!text.contains("opening"), text)
+        }
+
+    @Test
     fun `initial notify skips a watch without the slack_notify kind`() =
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
