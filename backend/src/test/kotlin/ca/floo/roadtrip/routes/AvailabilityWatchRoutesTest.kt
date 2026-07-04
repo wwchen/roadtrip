@@ -95,7 +95,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     private fun disabledDispatcher(): WatchAlertDispatcher {
         val reservablesRepo = ReservableRepo(ctx)
         return WatchAlertDispatcher(
-            notifications = null,
+            slack = null,
             scopeResolver = WatchScopeResolver(reservablesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets =
@@ -107,7 +107,6 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 ),
             heatmaps = AvailabilityHeatmapRepo(ctx),
             grafanaRootUrl = null,
-            defaultChannel = null,
         )
     }
 

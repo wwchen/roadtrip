@@ -44,7 +44,11 @@ import java.time.LocalDate
 private const val DEFAULT_LIST_LIMIT = 100
 private const val MAX_LIST_LIMIT = 500
 
-private val log = LoggerFactory.getLogger("ca.floo.roadtrip.routes.AvailabilityWatchRoutes")
+// Logger anchor for these top-level route functions (the file has no class of
+// its own); keeps the category class-derived rather than a hardcoded string.
+private object AvailabilityWatchRoutes
+
+private val log = LoggerFactory.getLogger(AvailabilityWatchRoutes::class.java)
 
 @OptIn(ExperimentalSerializationApi::class)
 private val watchJson =

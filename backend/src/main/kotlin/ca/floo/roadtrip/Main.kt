@@ -261,16 +261,15 @@ fun Application.module() {
     // the poller runs identically. Set SLACK_BOT_TOKEN + SLACK_ALERT_CHANNEL to
     // enable. The client's HTTP client is closed on shutdown, below.
     val slackClient = appConfig.slack?.let { SlackClient(it) }
-    val slackNotifications = slackClient?.let { SlackNotificationServiceImpl(it) }
+    val slackNotifications = slackClient?.let { SlackNotificationServiceImpl(it, appConfig.slack?.defaultChannel) }
     val watchAlertDispatcher =
         WatchAlertDispatcher(
-            notifications = slackNotifications,
+            slack = slackNotifications,
             scopeResolver = WatchScopeResolver(reservablesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets = availabilityTargets,
             heatmaps = AvailabilityHeatmapRepo(ctx),
             grafanaRootUrl = appConfig.grafana?.rootUrl,
-            defaultChannel = appConfig.slack?.defaultChannel,
         )
     val pollExecutor =
         AvailabilityPollExecutor(

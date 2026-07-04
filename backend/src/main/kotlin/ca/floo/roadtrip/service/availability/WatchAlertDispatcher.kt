@@ -6,7 +6,6 @@ import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import kotlinx.serialization.json.JsonPrimitive
-import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
 /** The only trigger kind that dispatches today. Others (e.g. `atc`) are stored
@@ -32,26 +31,24 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * goes `DONE` **only after a post actually succeeds**, so a delivery failure
  * never silences a watch we could not notify on.
  *
- * [notifications] is null when Slack is unconfigured; then the whole path
- * no-ops. Nothing here throws into the caller: the service swallows its own
- * failures and the executor wraps this call best-effort.
+ * [slack] is null when Slack is unconfigured; then the whole path no-ops.
+ * Nothing here throws into the caller: the service swallows its own failures
+ * and the executor wraps this call best-effort. A watch's channel override (if
+ * any) is passed through; the service falls back to its default channel.
  */
 internal class WatchAlertDispatcher(
-    private val notifications: SlackNotificationService?,
+    private val slack: SlackNotificationService?,
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
     private val heatmaps: AvailabilityHeatmapRepo,
     private val grafanaRootUrl: String?,
-    private val defaultChannel: String?,
 ) {
-    private val log = LoggerFactory.getLogger(javaClass)
-
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
         transitions: List<CellTransition>,
     ) {
-        if (notifications == null) return
+        if (slack == null) return
         val bookable = transitions.filter { it.status.isOnlineBookable }
         if (bookable.isEmpty()) return
 
@@ -63,13 +60,7 @@ internal class WatchAlertDispatcher(
                     t.reservableId in reservablesById && t.targetDate.withinWindow(watch)
                 }
             if (covered.isEmpty()) continue
-
-            val channel = resolveChannel(watch)
-            if (channel == null) {
-                log.warn("watch {} matched but no Slack channel (no override, no default); skipping", watch.id)
-                continue
-            }
-            postOpenings(watch, channel, covered, reservablesById)
+            postOpenings(watch, covered, reservablesById)
         }
     }
 
@@ -93,16 +84,11 @@ internal class WatchAlertDispatcher(
      * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
-        if (notifications == null) return
+        if (slack == null) return
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
-        val channel = resolveChannel(watch)
-        if (channel == null) {
-            log.warn("watch {} status changed but no Slack channel (no override, no default); skipping", watch.id)
-            return
-        }
         val reservables = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
-            notifications.sendMessage(channel, buildLifecycleMessage(watch, reservables))
+            slack.sendMessage(buildLifecycleMessage(watch, reservables), watch.channelOverride())
             return
         }
         val reservablesById = reservables.associateBy { it.id }
@@ -110,24 +96,21 @@ internal class WatchAlertDispatcher(
         val bookable = cells.filter { it.available }
         if (bookable.isNotEmpty()) {
             val covered = bookable.map { CellTransition(it.reservableId, it.targetDate, it.status) }
-            postOpenings(watch, channel, covered, reservablesById)
+            postOpenings(watch, covered, reservablesById)
         } else {
-            notifications.sendMessage(channel, buildWatchingMessage(watch, reservables, cubeKnown = cells.isNotEmpty()))
+            slack.sendMessage(buildWatchingMessage(watch, reservables, cubeKnown = cells.isNotEmpty()), watch.channelOverride())
         }
     }
-
-    private fun resolveChannel(watch: AvailabilityWatchRepo.Watch): String? = watch.channelOverride() ?: defaultChannel
 
     /** Posts the openings alert for one watch and, on a successful post, marks a
      *  `stopWhenTriggered` watch `DONE` — so a delivery failure never silences a
      *  watch we could not notify on. Shared by the edge and initial paths. */
     private suspend fun postOpenings(
         watch: AvailabilityWatchRepo.Watch,
-        channel: String,
         covered: List<CellTransition>,
         reservablesById: Map<Long, Reservable>,
     ) {
-        val fired = notifications!!.sendMessage(channel, buildMessage(covered, reservablesById, watch.id))
+        val fired = slack!!.sendMessage(buildMessage(covered, reservablesById, watch.id), watch.channelOverride())
         if (fired && watch.stopWhenTriggered) {
             watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }

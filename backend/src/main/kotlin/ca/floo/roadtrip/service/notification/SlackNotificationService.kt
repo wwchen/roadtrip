@@ -9,11 +9,13 @@ package ca.floo.roadtrip.service.notification
  */
 interface SlackNotificationService {
     /**
-     * Sends [text] to [channel]. Never throws: a delivery failure is surfaced as
-     * `false` so a notification problem can't break the caller's flow.
+     * Sends [text] to [channel], or to the service's configured default channel
+     * when [channel] is null. Never throws: a delivery failure — or having no
+     * channel to send to — is surfaced as `false` so a notification problem
+     * can't break the caller's flow.
      */
     suspend fun sendMessage(
-        channel: String,
         text: String,
+        channel: String? = null,
     ): Boolean
 }
