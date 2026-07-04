@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.ReservableId
 import java.time.LocalDate
 
 /**
@@ -66,6 +67,21 @@ interface ReservationProvider {
      */
     suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
         throw ReservationProviderError.Unsupported("reservableAvailability", id)
+
+    /**
+     * User-facing booking deep link for [rid] on the single night beginning
+     * [date] (check-out the next day), or null when this provider exposes no
+     * stable deep link. Pure and cheap — no upstream call, no throw.
+     *
+     * The URL scheme is vendor-specific, so it lives in the adapter.
+     * Provider-neutral callers (e.g. alert notifications) ask the port for a
+     * link instead of hardcoding vendor URLs. Default null keeps deep links
+     * opt-in per adapter — a provider without one is not a gap to fill.
+     */
+    fun bookingUrl(
+        rid: ReservableId,
+        date: LocalDate,
+    ): String? = null
 }
 
 /**

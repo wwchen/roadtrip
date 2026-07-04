@@ -78,7 +78,7 @@ drawer can hide affordances the provider doesn't support.
 | Capability probe | `ReservationProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Append history snapshot | poller writes `availability_snapshot` rows | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
-| Notify on match | poller dispatches via Slack / push (future) | Channels are not provider-specific. |
+| Notify on match | poller dispatches via Slack (`slack_notify`; push future) | Channels are not provider-specific. See `docs/superpowers/specs/2026-07-03-availability-alerts-design.md`. |
 
 Reservation providers do not model cart automation, payment, or booking on
 the user's behalf. Watch flows produce matches, notifications, and

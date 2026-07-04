@@ -59,4 +59,40 @@ class AppConfigTest {
 
         assertEquals("ROADTRIP_CACHE_ROUTE_TTL must be positive", err.message)
     }
+
+    @Test
+    fun `slack config is null when token or channel is absent or blank`() {
+        assertEquals(null, AppConfig.fromEnv(emptyMap()).slack)
+        assertEquals(null, AppConfig.fromEnv(mapOf("SLACK_BOT_TOKEN" to "xoxb-x")).slack)
+        assertEquals(null, AppConfig.fromEnv(mapOf("SLACK_ALERT_CHANNEL" to "#c")).slack)
+        assertEquals(
+            null,
+            AppConfig.fromEnv(mapOf("SLACK_BOT_TOKEN" to "  ", "SLACK_ALERT_CHANNEL" to "#c")).slack,
+        )
+    }
+
+    @Test
+    fun `slack config is populated and trimmed when both token and channel are set`() {
+        val slack =
+            AppConfig
+                .fromEnv(mapOf("SLACK_BOT_TOKEN" to " xoxb-abc ", "SLACK_ALERT_CHANNEL" to " #camping "))
+                .slack
+
+        assertEquals("xoxb-abc", slack?.botToken)
+        assertEquals("#camping", slack?.defaultChannel)
+    }
+
+    @Test
+    fun `grafana config is null when the host is unset (no hardcoded default)`() {
+        assertEquals(null, AppConfig.fromEnv(emptyMap()).grafana)
+        assertEquals(null, AppConfig.fromEnv(mapOf("GRAFANA_ROOT_URL" to "  ")).grafana)
+    }
+
+    @Test
+    fun `grafana root url is taken from env with any trailing slash stripped`() {
+        assertEquals(
+            "http://localhost:3000/dash",
+            AppConfig.fromEnv(mapOf("GRAFANA_ROOT_URL" to "http://localhost:3000/dash/")).grafana?.rootUrl,
+        )
+    }
 }

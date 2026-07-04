@@ -13,6 +13,10 @@ services:
     restart: "no"
     ports:
       - "127.0.0.1:8765:8765"
+    environment:
+      # Local Grafana host, so alert dashboard links point at the dev instance
+      # instead of the prod default. Matches the grafana service below.
+      - GRAFANA_ROOT_URL=http://localhost:3000/dash/
 
   grafana:
     restart: "no"

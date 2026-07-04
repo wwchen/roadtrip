@@ -4,6 +4,7 @@ import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
 import kotlinx.coroutines.runBlocking
@@ -166,6 +167,18 @@ class RecGovReservationProviderTest {
             val dates = availabilityDatesFromObservations(batch)
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }
+
+    @Test
+    fun `booking url points at the rec_gov campsite page for the single night`() {
+        val adapter = RecGovReservationProvider(fakeRecgovClient { _, _ -> emptyMap() })
+
+        val url = adapter.bookingUrl(ReservableId.parse("site:recgov:330257")!!, LocalDate.parse("2026-07-01"))
+
+        assertEquals(
+            "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-02",
+            url,
+        )
+    }
 }
 
 private fun fakeRecgovClient(fetcher: suspend (campgroundId: String, monthStart: String) -> Map<String, Campsite>): AvailabilityClient =

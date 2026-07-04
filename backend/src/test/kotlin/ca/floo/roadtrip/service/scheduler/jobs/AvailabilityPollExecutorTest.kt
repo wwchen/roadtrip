@@ -1,9 +1,12 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
+import ca.floo.roadtrip.clients.slack.SlackNotifier
+import ca.floo.roadtrip.config.SlackConfig
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -17,6 +20,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
@@ -120,20 +124,26 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         startDate: String,
         endDate: String,
         cadenceSec: Int? = 60,
+        triggerKinds: List<String> = listOf("atc"),
+        triggerConfig: String = "{}",
+        stopWhenTriggered: Boolean = false,
     ): Long {
+        val kindsLiteral = triggerKinds.joinToString(prefix = "ARRAY[", postfix = "]") { "'$it'" }
         val watchId =
             ctx
                 .fetchOne(
                     """
                     INSERT INTO availability_watch (
-                        start_date, end_date, cadence_sec, trigger_kinds
+                        start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
                     ) VALUES (
-                        ?::date, ?::date, ?::int, ARRAY['atc']
+                        ?::date, ?::date, ?::int, $kindsLiteral, ?::jsonb, ?
                     ) RETURNING id
                     """.trimIndent(),
                     startDate,
                     endDate,
                     cadenceSec,
+                    triggerConfig,
+                    stopWhenTriggered,
                 )!!
                 .get("id", Long::class.java)
         ctx.execute("INSERT INTO availability_watch_target (watch_id, poi_id) VALUES (?, ?)", watchId, poiId)
@@ -182,9 +192,68 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
     }
 
+    /** A notifier double that records every post and returns a configurable
+     *  result, so alert tests never touch a live Slack workspace. */
+    private class RecordingSlackNotifier(
+        var result: Boolean = true,
+    ) : SlackNotifier(SlackConfig(botToken = "xoxb-test", defaultChannel = "#unused")) {
+        val posts = mutableListOf<Pair<String, String>>() // (channel, text)
+
+        override suspend fun notify(
+            channel: String,
+            text: String,
+        ): Boolean {
+            posts += channel to text
+            return result
+        }
+    }
+
+    private fun targetsFor(provider: ReservationProvider): DbAvailabilityTargetResolver =
+        DbAvailabilityTargetResolver(
+            providerRefs = CampsiteProviderRepo(ctx),
+            reservablesRepo = ReservableRepo(ctx),
+            reservationProviders = ReservationProviderRegistry(mapOf("test" to provider)),
+            dateResolver = AvailabilityDateResolver(),
+        )
+
+    /** Dispatcher with Slack disabled (notifier null) — the alert path no-ops.
+     *  Default for tests that don't exercise alerting; its targets resolver is
+     *  never reached because a null notifier returns early. */
+    private fun disabledDispatcher(): WatchAlertDispatcher =
+        WatchAlertDispatcher(
+            notifier = null,
+            scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
+            watches = AvailabilityWatchRepo(ctx),
+            targets =
+                DbAvailabilityTargetResolver(
+                    providerRefs = CampsiteProviderRepo(ctx),
+                    reservablesRepo = ReservableRepo(ctx),
+                    reservationProviders = ReservationProviderRegistry(emptyMap()),
+                    dateResolver = AvailabilityDateResolver(),
+                ),
+            grafanaRootUrl = GRAFANA_ROOT_URL,
+            defaultChannel = null,
+        )
+
+    private fun dispatcherWith(
+        provider: ReservationProvider,
+        notifier: SlackNotifier?,
+        defaultChannel: String? = "#camping",
+        grafanaRootUrl: String? = GRAFANA_ROOT_URL,
+    ): WatchAlertDispatcher =
+        WatchAlertDispatcher(
+            notifier = notifier,
+            scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
+            watches = AvailabilityWatchRepo(ctx),
+            targets = targetsFor(provider),
+            grafanaRootUrl = grafanaRootUrl,
+            defaultChannel = defaultChannel,
+        )
+
     private fun executorFor(
         provider: ReservationProvider,
         limiter: VendorRateLimiter = RecordingLimiter(grant = true),
+        alertDispatcher: WatchAlertDispatcher = disabledDispatcher(),
     ): AvailabilityPollExecutor {
         val reservablesRepo = ReservableRepo(ctx)
         val registry = ReservationProviderRegistry(mapOf("test" to provider))
@@ -207,6 +276,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             targets = targets,
             fetchCalls = AvailabilityFetchCallRepo(ctx),
             limiter = limiter,
+            alertDispatcher = alertDispatcher,
         )
     }
 
@@ -254,6 +324,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             targets = targets,
             fetchCalls = AvailabilityFetchCallRepo(failingCtx),
             limiter = RecordingLimiter(grant = true),
+            alertDispatcher = disabledDispatcher(),
         )
     }
 
@@ -261,6 +332,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
      *  returns one observation per requested reservable/day. */
     private class CountingRecgovProvider(
         var status: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
+        // When set, every observation is reported for this date instead of the
+        // window start — lets a test place a transition on an exact day.
+        var observationDate: LocalDate? = null,
     ) : ReservationProvider {
         var calls: Int = 0
         var lastStart: LocalDate? = null
@@ -290,7 +364,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 req.reservables.map { ref ->
                     ReservableDayObservation(
                         reservableId = ref.rid,
-                        date = req.startDate,
+                        date = observationDate ?: req.startDate,
                         observedAt = observedAt,
                         status = status,
                     )
@@ -306,6 +380,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
         override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
             throw UnsupportedOperationException("not used")
+
+        override fun bookingUrl(
+            rid: ReservableId,
+            date: LocalDate,
+        ): String = "https://example.test/book/${rid.vendorId}?d=$date"
     }
 
     private class RateLimitedProvider : ReservationProvider {
@@ -362,6 +441,218 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals("ok", fetchCalls[0].outcome)
             assertEquals(3, fetchCalls[0].reservableCount)
             assertEquals("232447", fetchCalls[0].parentRef)
+        }
+
+    // --- Alerts (PR6): cube edge -> Slack notify ---
+
+    private fun watchStatus(watchId: Long): String =
+        ctx.fetchOne("SELECT status FROM availability_watch WHERE id = ?", watchId)!!.get("status", String::class.java)
+
+    @Test
+    fun `reserved to available transition alerts the covering slack_notify watch on the default channel`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.RESERVED)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchId =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    farStart.plusDays(2).toString(),
+                    triggerKinds = listOf("slack_notify"),
+                )
+            val poller = linkWatch(provider, watchId)
+            val notifier = RecordingSlackNotifier()
+            val executor = executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier))
+
+            // First poll: RESERVED — a change (first observation) but not bookable, so no alert.
+            executor.handle(poller)
+            assertTrue(notifier.posts.isEmpty())
+
+            // Second poll: the site opens. reserved -> available edge fires exactly once.
+            provider.status = AvailabilityStatus.AVAILABLE
+            executor.handle(poller)
+
+            assertEquals(1, notifier.posts.size)
+            assertEquals("#camping", notifier.posts.single().first)
+            assertTrue(
+                notifier.posts
+                    .single()
+                    .second
+                    .contains("Site 100"),
+            )
+            // The booking link comes from the provider (adapter), not the dispatcher.
+            assertTrue(
+                notifier.posts
+                    .single()
+                    .second
+                    .contains("https://example.test/book/100"),
+            )
+            // The alert deep-links the watch's Grafana drill-down at the configured host.
+            assertTrue(
+                notifier.posts
+                    .single()
+                    .second
+                    .contains("$GRAFANA_ROOT_URL/d/reservable-watch-drill?var-watch_id=$watchId"),
+            )
+            // …and the availability-cube matrix for the POI the opening sits under.
+            assertTrue(
+                notifier.posts
+                    .single()
+                    .second
+                    .contains("$GRAFANA_ROOT_URL/d/availability-cell-matrix?var-poi_id=$poiId"),
+            )
+        }
+
+    @Test
+    fun `channel override in trigger_config wins over the default channel`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchId =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    farStart.plusDays(2).toString(),
+                    triggerKinds = listOf("slack_notify"),
+                    triggerConfig = """{"channel":"#custom"}""",
+                )
+            val poller = linkWatch(provider, watchId)
+            val notifier = RecordingSlackNotifier()
+
+            // First observation of an already-open site alerts (chosen behavior).
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
+
+            assertEquals(1, notifier.posts.size)
+            assertEquals("#custom", notifier.posts.single().first)
+        }
+
+    @Test
+    fun `stop_when_triggered marks the watch done after a successful post`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchId =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    farStart.plusDays(2).toString(),
+                    triggerKinds = listOf("slack_notify"),
+                    stopWhenTriggered = true,
+                )
+            val poller = linkWatch(provider, watchId)
+
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, RecordingSlackNotifier(result = true))).handle(poller)
+
+            assertEquals("done", watchStatus(watchId))
+        }
+
+    @Test
+    fun `a failed post leaves a stop_when_triggered watch active`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchId =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    farStart.plusDays(2).toString(),
+                    triggerKinds = listOf("slack_notify"),
+                    stopWhenTriggered = true,
+                )
+            val poller = linkWatch(provider, watchId)
+
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, RecordingSlackNotifier(result = false))).handle(poller)
+
+            assertEquals("active", watchStatus(watchId))
+        }
+
+    @Test
+    fun `a watch without the slack_notify kind is never posted`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            // default trigger_kinds = ['atc'] — no slack_notify, so it stays inert.
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
+            val notifier = RecordingSlackNotifier()
+
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
+
+            assertTrue(notifier.posts.isEmpty())
+        }
+
+    @Test
+    fun `a transition on a shorter watch's exclusive end date alerts only the longer watch`() =
+        runBlocking {
+            // Two watches coalesced onto one poller. The window is half-open
+            // [start, end): the transition falls on A's end date (a checkout day,
+            // not a watched night) but inside B's window. It must alert B only,
+            // and must NOT mark A done despite A being stop_when_triggered.
+            val transitionDate = farStart.plusDays(2)
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = transitionDate)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchA =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    transitionDate.toString(), // end == transition date -> excluded (half-open)
+                    triggerKinds = listOf("slack_notify"),
+                    triggerConfig = """{"channel":"#a"}""",
+                    stopWhenTriggered = true,
+                )
+            val watchB =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    farStart.plusDays(3).toString(), // covers the transition date
+                    triggerKinds = listOf("slack_notify"),
+                    triggerConfig = """{"channel":"#b"}""",
+                )
+            val poller = linkWatch(provider, watchA)
+            AvailabilityWatchRepo(ctx).findById(watchB)!!.let { w ->
+                membershipFor(provider).sync(w, AvailabilityPollerRepo(ctx), tighterCadencePull = now())
+            }
+
+            val notifier = RecordingSlackNotifier()
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
+
+            assertEquals(1, notifier.posts.size)
+            assertEquals("#b", notifier.posts.single().first, "only the longer watch's window covers the transition")
+            assertEquals("active", watchStatus(watchA), "the shorter watch never fired, so it must not be marked done")
+        }
+
+    @Test
+    fun `alert omits the grafana dashboard links when the host is unset`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchId =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    farStart.plusDays(2).toString(),
+                    triggerKinds = listOf("slack_notify"),
+                )
+            val poller = linkWatch(provider, watchId)
+            val notifier = RecordingSlackNotifier()
+
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier, grafanaRootUrl = null)).handle(poller)
+
+            assertEquals(1, notifier.posts.size)
+            assertTrue(
+                !notifier.posts
+                    .single()
+                    .second
+                    .contains("/d/"),
+                "no dashboard links without a grafana host",
+            )
         }
 
     // --- Cadence fall-through (PR4) ---
@@ -781,3 +1072,5 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             )
         }
 }
+
+private const val GRAFANA_ROOT_URL = "http://grafana.test/dash"
