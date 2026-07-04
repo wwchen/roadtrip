@@ -6,17 +6,54 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class AvailabilityWatchRepoTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
+        ctx.execute("DELETE FROM availability_run")
+        ctx.execute("DELETE FROM availability_watch_poller")
+        ctx.execute("DELETE FROM availability_poller")
         ctx.execute("DELETE FROM availability_watch_target")
         ctx.execute("DELETE FROM availability_watch")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
         ctx.execute("DELETE FROM pois")
     }
+
+    private fun insertPoller(poiId: Long): Long =
+        ctx
+            .fetchOne(
+                "INSERT INTO availability_poller (provider, parent_ref, poi_id) VALUES ('recgov', ?, ?) RETURNING id",
+                "parent-$poiId",
+                poiId,
+            )!!
+            .get("id", Long::class.java)
+
+    private fun linkWatchPoller(
+        watchId: Long,
+        pollerId: Long,
+    ) = ctx.execute("INSERT INTO availability_watch_poller (watch_id, poller_id) VALUES (?, ?)", watchId, pollerId)
+
+    private fun insertRun(
+        pollerId: Long,
+        status: String,
+        error: String?,
+        startedAt: String,
+        completedAt: String?,
+    ) = ctx.execute(
+        """
+        INSERT INTO availability_run (poller_id, status, error, started_at, completed_at)
+        VALUES (?, ?, ?, ?::timestamptz, ?::timestamptz)
+        """.trimIndent(),
+        pollerId,
+        status,
+        error,
+        startedAt,
+        completedAt,
+    )
 
     private var poiSeq = 0
 
@@ -135,5 +172,34 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
         assertEquals(listOf(watchWithA.id), filtered.map { it.id })
         assertTrue(repo.list(poiId = poiB).map { it.id }.toSet() == setOf(watchWithA.id, watchWithBOnly.id))
+    }
+
+    @Test
+    fun `list surfaces the latest run status and error across the watch's pollers`() {
+        val poi = insertPoi()
+        val repo = AvailabilityWatchRepo(ctx)
+        val watch = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, reservableId = null))))
+        val poller = insertPoller(poi)
+        linkWatchPoller(watch.id, poller)
+        // Older successful run, then a newer failed run — the newer one wins.
+        insertRun(poller, "completed", null, "2026-07-01T00:00:00Z", "2026-07-01T00:00:05Z")
+        insertRun(poller, "failed", "rate_limited", "2026-07-02T00:00:00Z", "2026-07-02T00:00:03Z")
+
+        val listed = repo.list(poiId = poi).single()
+
+        assertEquals("failed", listed.lastRun?.status)
+        assertEquals("rate_limited", listed.lastRun?.error)
+        assertNotNull(listed.lastRun?.completedAt)
+        // findById resolves the same latest-run snapshot.
+        assertEquals("failed", repo.findById(watch.id)!!.lastRun?.status)
+    }
+
+    @Test
+    fun `list leaves lastRun null when the watch has never polled`() {
+        val poi = insertPoi()
+        val repo = AvailabilityWatchRepo(ctx)
+        repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, reservableId = null))))
+
+        assertNull(repo.list(poiId = poi).single().lastRun)
     }
 }

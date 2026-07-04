@@ -24,6 +24,10 @@ const SORT_OPTIONS = [
   ['loop', 'Loop'],
   ['type', 'Type'],
 ];
+// Cell statuses a user can set an availability watch on: occupied now but able
+// to open up. Excludes available (already bookable), closed, unknown, and past.
+// Note the hyphenated 'first-come' matches STATUS_META.first_come.kind.
+const WATCHABLE_KINDS = new Set(['reserved', 'first-come']);
 export function renderSiteMatrix({
   state,
   reservables,
@@ -36,6 +40,8 @@ export function renderSiteMatrix({
   weekStart = null,
   showToday = true,
   armedBook = null,
+  watchedDates = null,
+  canWatch = false,
 }) {
   const visibleDays = Array.isArray(days) ? days.filter((d) => d?.date) : [];
   if (visibleDays.length === 0) return '';
@@ -99,6 +105,8 @@ export function renderSiteMatrix({
         selectedSiteRid,
         visibleDays,
         armedBook,
+        watchedDates,
+        canWatch,
       }),
     )
     .join('');
@@ -349,6 +357,8 @@ function rowHtml(row, context) {
         selectedDate: context.selectedDate,
         siteLabel,
         armedBook: context.armedBook,
+        watchedDates: context.watchedDates,
+        canWatch: context.canWatch,
       }),
     )
     .join('');
@@ -389,13 +399,32 @@ function siteLabelHtml(row, siteLabel, siteTitle, isSelected) {
   `;
 }
 
-function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook }) {
+function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, watchedDates, canWatch }) {
   const state = cellState(row, day, availableIds);
   const isSelected = selectedDate === day.date;
   const selectedClass = isSelected ? ' is-selected' : '';
   const aria = `${siteLabel} ${day.date}: ${state.aria}`;
 
   if (state.kind !== 'available') {
+    // Reserved / first-come cells become watch buttons: tap to set (or manage)
+    // an availability watch on that day for this POI.
+    if (canWatch && WATCHABLE_KINDS.has(state.kind)) {
+      const watched = !!watchedDates && watchedDates.has(day.date);
+      const watchedClass = watched ? ' is-watched' : '';
+      const watchAria = watched
+        ? `${aria}; availability watch set, tap to manage`
+        : `${aria}; tap to set an availability watch`;
+      return `
+        <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}">
+          <button
+            type="button"
+            class="cg-site-matrix-cell-button cg-site-matrix-cell-watch${watchedClass}"
+            data-watch-date="${escapeHtml(day.date)}"
+            aria-label="${escapeHtml(watchAria)}"
+          >${escapeHtml(state.label)}</button>
+        </td>
+      `;
+    }
     return `
       <td class="cg-site-matrix-cell cg-site-matrix-cell-${state.kind}${selectedClass}" aria-label="${escapeHtml(aria)}">
         <span class="cg-site-matrix-cell-button">${escapeHtml(state.label)}</span>

@@ -464,6 +464,9 @@ private fun Watch.toSchema(reservablesRepo: ReservableRepo): AvailabilityWatchSc
         status = status.wireValue,
         createdAt = createdAt.toString(),
         updatedAt = updatedAt.toString(),
+        lastRunAt = lastRun?.completedAt?.toString(),
+        lastRunStatus = lastRun?.status,
+        lastRunError = lastRun?.error,
     )
 }
 
