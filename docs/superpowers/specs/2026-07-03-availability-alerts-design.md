@@ -141,7 +141,11 @@ class WatchAlertDispatcher(
 
 Per live watch:
 1. `covered = transitions` where `reservableId ∈ scopeResolver.resolve(watch).ids`
-   **and** `targetDate ∈ [watch.startDate, watch.endDate]`.
+   **and** `targetDate ∈ [watch.startDate, watch.endDate)` — half-open, the same
+   contract the provider fetch and heatmap use (`endDate` is the checkout day,
+   not a watched night, so it is excluded). This matters under coalescing: a
+   longer watch can pull a transition on a shorter watch's `endDate` into the
+   shared fetch, and an inclusive bound would misfire the shorter watch.
 2. If `covered` is empty → skip.
 3. If `SLACK_NOTIFY_KIND ("slack_notify") ∈ watch.triggerKinds` and
    `notifier != null` → build the message from `covered`, resolve channel =

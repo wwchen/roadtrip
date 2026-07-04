@@ -331,6 +331,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
      *  returns one observation per requested reservable/day. */
     private class CountingRecgovProvider(
         var status: AvailabilityStatus = AvailabilityStatus.AVAILABLE,
+        // When set, every observation is reported for this date instead of the
+        // window start — lets a test place a transition on an exact day.
+        var observationDate: LocalDate? = null,
     ) : ReservationProvider {
         var calls: Int = 0
         var lastStart: LocalDate? = null
@@ -360,7 +363,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 req.reservables.map { ref ->
                     ReservableDayObservation(
                         reservableId = ref.rid,
-                        date = req.startDate,
+                        date = observationDate ?: req.startDate,
                         observedAt = observedAt,
                         status = status,
                     )
@@ -580,6 +583,47 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
 
             assertTrue(notifier.posts.isEmpty())
+        }
+
+    @Test
+    fun `a transition on a shorter watch's exclusive end date alerts only the longer watch`() =
+        runBlocking {
+            // Two watches coalesced onto one poller. The window is half-open
+            // [start, end): the transition falls on A's end date (a checkout day,
+            // not a watched night) but inside B's window. It must alert B only,
+            // and must NOT mark A done despite A being stop_when_triggered.
+            val transitionDate = farStart.plusDays(2)
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = transitionDate)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchA =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    transitionDate.toString(), // end == transition date -> excluded (half-open)
+                    triggerKinds = listOf("slack_notify"),
+                    triggerConfig = """{"channel":"#a"}""",
+                    stopWhenTriggered = true,
+                )
+            val watchB =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    farStart.plusDays(3).toString(), // covers the transition date
+                    triggerKinds = listOf("slack_notify"),
+                    triggerConfig = """{"channel":"#b"}""",
+                )
+            val poller = linkWatch(provider, watchA)
+            AvailabilityWatchRepo(ctx).findById(watchB)!!.let { w ->
+                membershipFor(provider).sync(w, AvailabilityPollerRepo(ctx), tighterCadencePull = now())
+            }
+
+            val notifier = RecordingSlackNotifier()
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
+
+            assertEquals(1, notifier.posts.size)
+            assertEquals("#b", notifier.posts.single().first, "only the longer watch's window covers the transition")
+            assertEquals("active", watchStatus(watchA), "the shorter watch never fired, so it must not be marked done")
         }
 
     // --- Cadence fall-through (PR4) ---

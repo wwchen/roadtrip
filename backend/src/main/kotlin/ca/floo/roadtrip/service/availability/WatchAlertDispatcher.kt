@@ -122,7 +122,12 @@ internal class WatchAlertDispatcher(
     }
 }
 
-private fun LocalDate.withinWindow(watch: AvailabilityWatchRepo.Watch): Boolean = !isBefore(watch.startDate) && !isAfter(watch.endDate)
+// The watch window is half-open [startDate, endDate) — the same contract the
+// provider fetch and the heatmap use. endDate is the checkout day, not a
+// watched night, so it is excluded: with coalesced pollers a longer watch can
+// pull a transition on a shorter watch's endDate into the shared fetch, and an
+// inclusive bound would misfire the shorter watch (and wrongly mark it done).
+private fun LocalDate.withinWindow(watch: AvailabilityWatchRepo.Watch): Boolean = !isBefore(watch.startDate) && isBefore(watch.endDate)
 
 private fun AvailabilityWatchRepo.Watch.channelOverride(): String? =
     (triggerConfig["channel"] as? JsonPrimitive)
