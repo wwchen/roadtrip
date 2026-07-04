@@ -418,6 +418,11 @@
                 "value": [
                   {
                     "targetBlank": false,
+                    "title": "Open Poller Detail",
+                    "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
+                  },
+                  {
+                    "targetBlank": false,
                     "title": "Scope dashboard to this poller_id",
                     "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-poller_id=${__data.fields.poller_id}&var-run_id=$__all"
                   }
@@ -527,6 +532,11 @@
               {
                 "id": "links",
                 "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Poller Detail",
+                    "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
+                  },
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this poller_id",
@@ -682,6 +692,11 @@
                 "value": [
                   {
                     "targetBlank": false,
+                    "title": "Open Poller Detail",
+                    "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
+                  },
+                  {
+                    "targetBlank": false,
                     "title": "Scope dashboard to this poller_id",
                     "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-poller_id=${__data.fields.poller_id}&var-run_id=$__all"
                   }
@@ -833,6 +848,11 @@
               {
                 "id": "links",
                 "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Poller Detail",
+                    "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
+                  },
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this poller_id",
@@ -1195,6 +1215,11 @@
               {
                 "id": "links",
                 "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Poller Detail",
+                    "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
+                  },
                   {
                     "targetBlank": false,
                     "title": "Scope dashboard to this poller_id",
