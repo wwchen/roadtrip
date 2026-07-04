@@ -17,7 +17,7 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 tilt up                  # Compose stack (Postgres/backend/Grafana) + host companion
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make companion           # campsite Playwright companion against the local backend
-make deploy              # ssh to the mini, git pull, docker compose up
+make run env=prod        # on the deploy host: build image + docker compose up
 make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
 ```
 
@@ -37,8 +37,10 @@ stats, ingest/catalog freshness, provider cache audit, watch/scheduler health,
 and API/SQL equivalence.
 Tilt UI is at <http://localhost:10350>.
 
-`make run` remains the fastest backend-only loop: it starts Postgres in
-Docker and runs the Kotlin/Ktor backend on the host with Gradle.
+Plain `make run` remains the fastest backend-only loop: it starts Postgres in
+Docker and runs the Kotlin/Ktor backend on the host with Gradle. Production
+deploys use `make run env=prod`, which builds the backend image and recreates
+the production Compose stack.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`) for POI refresh. Tesla Supercharger pricing
@@ -208,10 +210,13 @@ the backend container and write raw captures back to the checkout.
    tunnel token. The tunnel's public hostname routing is managed in Cloudflare;
    Compose only starts `cloudflared` with the token.
 
-2. **`.env` on the host:**
+2. **`.env` on the deploy host:** Docker Compose reads runtime config from the
+   checkout's `.env` when GitHub Deploy or a manual deploy runs
+   `make run env=prod`:
    ```
    TESLA_COOKIES=ak_bmsc=...; _abck=...; bm_sz=...; ...
    CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+   POSTGRES_PASSWORD=<strong password>
    GRAFANA_ADMIN_PASSWORD=<strong password>
    GRAFANA_DB_PASSWORD=<strong password>
    ```
@@ -219,15 +224,20 @@ the backend container and write raw captures back to the checkout.
    Grafana state is stored in the Compose-managed named volume
    `grafana-data` (Docker prefixes it with the Compose project name);
    dashboard JSON and datasource provisioning stay bind-mounted from `grafana/`.
-   Deploy restarts Grafana when committed dashboard/provisioning files change so
-   file-provisioned dashboards are reconciled immediately.
+   Dashboard JSON reconciles on Grafana's provisioning poll
+   (`updateIntervalSeconds` is >10 so Grafana polls the files rather than
+   relying on inotify, which doesn't cross the bind mount). Deploy also
+   restarts Grafana so datasource/config changes reload and dashboards refresh
+   immediately rather than on the next poll.
    Provisioned dashboard UI saves are disabled by default on deploy hosts; set
    `GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=true` only when you intentionally want
    Grafana to persist UI edits in its database.
 
-3. **Bring up the stack:** `make deploy` (ssh's to the mini, git pull, build,
-   `docker compose up`). The deploy is also wired to GHA (push to master →
-   .github/workflows/deploy.yml), so you usually don't run this by hand.
+3. **Bring up the stack:** on the deploy host, `make run env=prod` builds the
+   backend image and rolls it out with `docker compose up -d` (Postgres and the
+   other long-running services stay up). The deploy is wired to GHA
+   (push to master → .github/workflows/deploy.yml), so you usually don't run
+   this by hand. The older `make deploy` SSH wrapper has been removed.
 
    The `backend` container serves the map on port 8765 (not exposed to the
    public host — cloudflared talks to it on the compose network). A
