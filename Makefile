@@ -40,9 +40,10 @@ ifeq ($(RUN_ENV),prod)
 	# and any service whose `.env`-sourced config moved. Postgres/Loki/Alloy
 	# keep running, so a code deploy no longer bounces the database.
 	docker compose --profile tunnel --profile pois up -d
-	# Grafana bind-mounts provisioning, so `up -d` won't reload it. Dashboards
-	# self-reload (updateIntervalSeconds), but datasource/config changes need a
-	# restart; do it unconditionally since it's a ~seconds blip.
+	# Grafana bind-mounts provisioning, so `up -d` won't reload it. Provisioned
+	# dashboards poll the files (updateIntervalSeconds > 10) and reconcile on
+	# their own, but datasource/config changes need a restart — which also
+	# reloads dashboards immediately instead of waiting for the next poll.
 	docker compose --profile tunnel --profile pois restart grafana
 else ifeq ($(RUN_ENV),dev)
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
