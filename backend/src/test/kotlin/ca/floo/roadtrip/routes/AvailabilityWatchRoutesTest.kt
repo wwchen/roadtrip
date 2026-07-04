@@ -1,13 +1,19 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
@@ -81,6 +87,30 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         return AvailabilityWatchService(ctx, reservablesRepo, targets)
     }
 
+    // These CRUD tests don't exercise Slack, so the dispatcher runs with the
+    // notifier disabled — dispatchInitial no-ops and the fire-and-forget launch
+    // does nothing. Initial-notify behavior is covered in AvailabilityPollExecutorTest.
+    private val testNotifyScope = CoroutineScope(Dispatchers.Unconfined)
+
+    private fun disabledDispatcher(): WatchAlertDispatcher {
+        val reservablesRepo = ReservableRepo(ctx)
+        return WatchAlertDispatcher(
+            notifier = null,
+            scopeResolver = WatchScopeResolver(reservablesRepo),
+            watches = AvailabilityWatchRepo(ctx),
+            targets =
+                DbAvailabilityTargetResolver(
+                    providerRefs = CampsiteProviderRepo(ctx),
+                    reservablesRepo = reservablesRepo,
+                    reservationProviders = ReservationProviderRegistry(emptyMap()),
+                    dateResolver = AvailabilityDateResolver(),
+                ),
+            heatmaps = AvailabilityHeatmapRepo(ctx),
+            grafanaRootUrl = null,
+            defaultChannel = null,
+        )
+    }
+
     @Test
     fun `POST creates a poi-scoped watch with filters`() =
         testApplication {
@@ -89,6 +119,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -127,6 +159,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -153,6 +187,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -189,6 +225,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -214,6 +252,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -251,6 +291,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -280,6 +322,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -306,6 +350,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -334,6 +380,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -362,6 +410,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -399,6 +449,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -456,6 +508,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -496,6 +550,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -534,6 +590,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -574,6 +632,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -615,6 +675,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -645,7 +707,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         testApplication {
             application {
                 routing {
-                    availabilityWatchRoutes(ctx, watchServiceWithRecgov())
+                    availabilityWatchRoutes(ctx, watchServiceWithRecgov(), disabledDispatcher(), testNotifyScope)
                 }
             }
             // POI with a resolvable recgov provider_ref + a child reservable so the
@@ -773,6 +835,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -788,6 +852,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }
@@ -839,6 +905,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     availabilityWatchRoutes(
                         ctx,
                         watchService(),
+                        disabledDispatcher(),
+                        testNotifyScope,
                     )
                 }
             }

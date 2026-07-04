@@ -17,6 +17,7 @@ import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
+import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
@@ -265,6 +266,7 @@ fun Application.module() {
             scopeResolver = WatchScopeResolver(reservablesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets = availabilityTargets,
+            heatmaps = AvailabilityHeatmapRepo(ctx),
             grafanaRootUrl = appConfig.grafana?.rootUrl,
             defaultChannel = appConfig.slack?.defaultChannel,
         )
@@ -321,7 +323,7 @@ fun Application.module() {
             },
         )
         reservableRoutes(ctx)
-        availabilityWatchRoutes(ctx, availabilityWatchService)
+        availabilityWatchRoutes(ctx, availabilityWatchService, watchAlertDispatcher, schedulerScope)
         availabilityDashboardRoutes(ctx)
         poisOnRouteRoutes(ctx, routeCache, poiRegistry)
         routeRoutes(routeCache, ctx)

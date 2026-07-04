@@ -3,6 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.clients.slack.SlackNotifier
 import ca.floo.roadtrip.models.availability.CellTransition
 import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
@@ -40,6 +41,7 @@ internal class WatchAlertDispatcher(
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
+    private val heatmaps: AvailabilityHeatmapRepo,
     private val grafanaRootUrl: String?,
     private val defaultChannel: String?,
 ) {
@@ -62,15 +64,67 @@ internal class WatchAlertDispatcher(
                 }
             if (covered.isEmpty()) continue
 
-            val channel = watch.channelOverride() ?: defaultChannel
+            val channel = resolveChannel(watch)
             if (channel == null) {
                 log.warn("watch {} matched but no Slack channel (no override, no default); skipping", watch.id)
                 continue
             }
-            val fired = notifier.notify(channel, buildMessage(covered, reservablesById, watch.id))
-            if (fired && watch.stopWhenTriggered) {
-                watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
-            }
+            postOpenings(watch, channel, covered, reservablesById)
+        }
+    }
+
+    /**
+     * The "first message" for a freshly created/updated watch. Unlike [dispatch]
+     * — which reacts to cube *edges* — this reads the current cube face for the
+     * watch's window and always sends exactly one message, so a watch created on
+     * an already-open site is not silently stranded (its openings pre-date any
+     * future edge). Gated to active `slack_notify` watches; fire-and-forget from
+     * the route, so like [dispatch] it never throws into its caller.
+     *
+     * Three states, mirroring what the cube can tell us:
+     *  - **some cells bookable** → the same openings alert [dispatch] sends; a
+     *    real trigger, so `stopWhenTriggered` still marks the watch `DONE`.
+     *  - **cells known, none bookable** → informational "nothing open yet".
+     *  - **no cells (cold POI)** → informational "not checked yet"; the immediate
+     *    poll `create()` schedules will observe the window and its first
+     *    observation is itself an edge, so the real opening fires via [dispatch].
+     * The two informational states never mark a watch `DONE`.
+     */
+    suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
+        if (notifier == null) return
+        if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
+        if (watch.status != WatchStatus.ACTIVE) return
+        val channel = resolveChannel(watch)
+        if (channel == null) {
+            log.warn("watch {} created/updated but no Slack channel (no override, no default); skipping", watch.id)
+            return
+        }
+        val reservables = scopeResolver.resolve(watch)
+        val reservablesById = reservables.associateBy { it.id }
+        val cells = heatmaps.loadHeatmap(reservables.map { it.id }, datesInWindow(watch))
+        val bookable = cells.filter { it.available }
+        if (bookable.isNotEmpty()) {
+            val covered = bookable.map { CellTransition(it.reservableId, it.targetDate, it.status) }
+            postOpenings(watch, channel, covered, reservablesById)
+        } else {
+            notifier.notify(channel, buildInitialStatusMessage(watch, reservables, cubeKnown = cells.isNotEmpty()))
+        }
+    }
+
+    private fun resolveChannel(watch: AvailabilityWatchRepo.Watch): String? = watch.channelOverride() ?: defaultChannel
+
+    /** Posts the openings alert for one watch and, on a successful post, marks a
+     *  `stopWhenTriggered` watch `DONE` — so a delivery failure never silences a
+     *  watch we could not notify on. Shared by the edge and initial paths. */
+    private suspend fun postOpenings(
+        watch: AvailabilityWatchRepo.Watch,
+        channel: String,
+        covered: List<CellTransition>,
+        reservablesById: Map<Long, Reservable>,
+    ) {
+        val fired = notifier!!.notify(channel, buildMessage(covered, reservablesById, watch.id))
+        if (fired && watch.stopWhenTriggered) {
+            watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }
     }
 
@@ -122,6 +176,40 @@ internal class WatchAlertDispatcher(
             }
         return "$watch$cube"
     }
+
+    /** Body of the initial message when nothing is bookable in the window:
+     *  either the cube has no observation for it yet ([cubeKnown] = false,
+     *  "unknown") or every cell is currently taken. Never a trigger — it carries
+     *  the watch's scope, window, and dashboards so the user can confirm the
+     *  watch is live, but lists no openings. POI links come from the watch's
+     *  POI-scoped targets (reservable-scoped targets carry no POI). */
+    private fun buildInitialStatusMessage(
+        watch: AvailabilityWatchRepo.Watch,
+        reservables: List<Reservable>,
+        cubeKnown: Boolean,
+    ): String {
+        val scope = scopeLabel(reservables)
+        val window = "${watch.startDate} → ${watch.endDate}"
+        val state = if (cubeKnown) "nothing available right now" else "availability not checked yet"
+        val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
+        return "👀 Watching $scope for $window — $state. I'll alert the moment a site opens.${dashboardLinks(watch.id, poiIds)}"
+    }
+
+    /** Short human label for a watch's scope: the single site's name when the
+     *  watch covers exactly one reservable, else the reservable count. */
+    private fun scopeLabel(reservables: List<Reservable>): String =
+        when (reservables.size) {
+            1 -> {
+                val r = reservables.first()
+                "*${r.name ?: r.rid.encode()}*${r.loop?.let { " ($it)" }.orEmpty()}"
+            }
+            else -> "${reservables.size} sites"
+        }
+
+    /** The half-open [startDate, endDate) day list — the same window contract
+     *  [withinWindow] enforces on the edge path — for reading the current cube. */
+    private fun datesInWindow(watch: AvailabilityWatchRepo.Watch): List<LocalDate> =
+        generateSequence(watch.startDate) { d -> d.plusDays(1).takeIf { it.isBefore(watch.endDate) } }.toList()
 }
 
 // The watch window is half-open [startDate, endDate) — the same contract the
