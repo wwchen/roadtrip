@@ -133,6 +133,11 @@ services:
       - GF_USERS_ALLOW_SIGN_UP=false
       - GF_SERVER_ROOT_URL=${GRAFANA_ROOT_URL:-https://roadtrip.floo.ca/dash/}
       - GF_SERVER_SERVE_FROM_SUB_PATH=true
+      # Allowlist for one-click panel action POST/PUT targets (Grafana blocks
+      # them otherwise). The cell-matrix "Create Slack alert" action posts to
+      # the backend's /api/availability/watches; the glob matches it in both
+      # local (localhost:8765) and prod (same-origin) forms.
+      - GF_SECURITY_ACTIONS_ALLOW_POST_URL=${GRAFANA_ACTIONS_ALLOW_POST_URL:-*/api/availability/*}
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
       - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}

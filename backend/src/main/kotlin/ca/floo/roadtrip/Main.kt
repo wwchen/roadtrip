@@ -60,6 +60,8 @@ import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
 import io.github.smiley4.ktorswaggerui.routing.swaggerUI
 import io.ktor.http.ContentType
+import io.ktor.http.HttpHeaders
+import io.ktor.http.HttpMethod
 import io.ktor.server.application.Application
 import io.ktor.server.application.ApplicationStopping
 import io.ktor.server.application.install
@@ -72,6 +74,7 @@ import io.ktor.server.plugins.compression.gzip
 import io.ktor.server.plugins.compression.matchContentType
 import io.ktor.server.plugins.compression.minimumSize
 import io.ktor.server.plugins.conditionalheaders.ConditionalHeaders
+import io.ktor.server.plugins.cors.routing.CORS
 import io.ktor.server.request.path
 import io.ktor.server.response.respondFile
 import io.ktor.server.routing.get
@@ -180,6 +183,25 @@ fun Application.module() {
     install(CachingHeaders) {
         options { call, content ->
             cacheOptionsFor(call.request.path(), content.contentType)
+        }
+    }
+
+    // CORS only when CORS_ALLOWED_ORIGINS is set. The one caller is a local
+    // Grafana (`:3000`) firing a one-click action POST at this backend
+    // (`:8765`) — cross-origin, so the browser needs the allow-origin header.
+    // Prod serves Grafana and the API from one host, so this stays unset and
+    // no CORS headers are emitted. POST + Content-Type only: the sole
+    // cross-origin call is the watch-create action.
+    appConfig.cors?.let { cors ->
+        install(CORS) {
+            cors.allowedOrigins.forEach { origin ->
+                allowHost(
+                    host = origin.substringAfter("://"),
+                    schemes = listOf(origin.substringBefore("://", "https")),
+                )
+            }
+            allowHeader(HttpHeaders.ContentType)
+            allowMethod(HttpMethod.Post)
         }
     }
 

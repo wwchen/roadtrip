@@ -9,6 +9,9 @@ data class AppConfig(
     /** Grafana host for dashboard deep links in alerts, or null when unset
      *  (alerts omit the dashboard links). */
     val grafana: GrafanaConfig?,
+    /** Cross-origin allowlist for browser callers on another origin (local
+     *  Grafana → backend action POSTs), or null when unset (same-origin only). */
+    val cors: CorsConfig?,
 ) {
     companion object {
         fun fromEnv(env: Map<String, String> = System.getenv()): AppConfig =
@@ -16,6 +19,7 @@ data class AppConfig(
                 cache = ApiCacheConfig.fromEnv(env),
                 slack = SlackConfig.fromEnv(env),
                 grafana = GrafanaConfig.fromEnv(env),
+                cors = CorsConfig.fromEnv(env),
             )
     }
 }

@@ -17,6 +17,10 @@ services:
       # Local Grafana host, so alert dashboard links point at the dev instance
       # instead of the prod default. Matches the grafana service below.
       - GRAFANA_ROOT_URL=http://localhost:3000/dash/
+      # Local dev is split-origin: Grafana on :3000, this backend on :8765. The
+      # cell-matrix "Create Slack alert" action POSTs cross-origin, so allow the
+      # Grafana page origin(s). Prod is same-origin and leaves this unset.
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
   grafana:
     restart: "no"
