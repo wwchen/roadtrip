@@ -5,7 +5,7 @@ import ca.floo.roadtrip.models.api.AvailabilityResponseDto
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.repo.AvailabilitySnapshotStore
+import ca.floo.roadtrip.repo.AvailabilityCacheStore
 import ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
@@ -22,10 +22,10 @@ private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 internal class AvailabilityServiceImpl(
     private val targets: AvailabilityTargetResolver,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
-    snapshots: AvailabilitySnapshotStore? = null,
+    cacheStore: AvailabilityCacheStore? = null,
     private val snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
 ) : AvailabilityService {
-    private val snapshotAvailability = SnapshotBackedAvailabilityService(snapshots)
+    private val snapshotAvailability = SnapshotBackedAvailabilityService(cacheStore)
 
     override suspend fun getByRid(
         rid: ReservableId,

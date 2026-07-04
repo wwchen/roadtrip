@@ -8,8 +8,9 @@ import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.repo.AvailabilityCacheStore
+import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
-import ca.floo.roadtrip.repo.AvailabilitySnapshotStore
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -48,17 +49,17 @@ class AvailabilityServiceImplTest {
             val provider = fakeProvider()
             val ref = ProviderRef.RecGov(recgovId = "232447")
             val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ref)
-            val store = FakeSnapshotStore()
+            val store = FakeCacheStore()
             val service = service(listOf(target), store)
 
             val first = service.getByRids(listOf(target.rid()), null, null, force = false)
             assertEquals(1, provider.catalogCalls, "cache miss should fetch upstream exactly once")
-            assertEquals(1, store.appendCalls, "cache miss should persist a snapshot")
+            assertEquals(1, store.recordCalls, "cache miss should persist a snapshot")
             assertFalse(first.single().cache.hit, "first read is a miss")
 
             val second = service.getByRids(listOf(target.rid()), null, null, force = false)
             assertEquals(1, provider.catalogCalls, "repeat read must be served from cache, not re-fetched")
-            assertEquals(1, store.appendCalls, "cache hit should not write again")
+            assertEquals(1, store.recordCalls, "cache hit should not write again")
             assertTrue(second.single().cache.hit, "second read is a cache hit")
         }
 
@@ -82,7 +83,7 @@ class AvailabilityServiceImplTest {
                 }
             val targetA = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
             val targetB = resolvedTarget("site:recgov:200", dbId = 2L, provider = provider, parentRef = ProviderRef.RecGov("200"))
-            val service = service(listOf(targetA, targetB), FakeSnapshotStore())
+            val service = service(listOf(targetA, targetB), FakeCacheStore())
 
             // Request order is B then A; results must come back in the requested order.
             val results = service.getByRids(listOf(targetB.rid(), targetA.rid()), null, null, force = true)
@@ -101,7 +102,7 @@ class AvailabilityServiceImplTest {
         runBlocking {
             val provider = fakeProvider()
             val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
-            val service = service(listOf(target), FakeSnapshotStore())
+            val service = service(listOf(target), FakeCacheStore())
 
             // startDate before the target's earliest bookable date → StartBeforeEarliest.
             assertFailsWith<AvailabilityServiceError.BadDateWindow.StartBeforeEarliest> {
@@ -113,7 +114,7 @@ class AvailabilityServiceImplTest {
     @Test
     fun `requireByRid NotFound propagates before batching`() =
         runBlocking {
-            val service = service(targets = emptyList(), snapshots = FakeSnapshotStore())
+            val service = service(targets = emptyList(), cacheStore = FakeCacheStore())
             val error =
                 assertFailsWith<AvailabilityServiceError.NotFound> {
                     service.getByRids(listOf(ReservableId.parse("site:recgov:999")!!), null, null, force = false)
@@ -131,7 +132,7 @@ class AvailabilityServiceImplTest {
 
                     override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = null
                 }
-            val service = AvailabilityServiceImpl(targets = resolver, snapshots = FakeSnapshotStore(), snapshotFreshnessTtl = { longTtl })
+            val service = AvailabilityServiceImpl(targets = resolver, cacheStore = FakeCacheStore(), snapshotFreshnessTtl = { longTtl })
             val error =
                 assertFailsWith<AvailabilityServiceError.UnknownCampground> {
                     service.getByRids(listOf(ReservableId.parse("site:recgov:100")!!), null, null, force = false)
@@ -149,7 +150,7 @@ class AvailabilityServiceImplTest {
             // route maps it to 503) must be preserved.
             val provider = fakeProvider { throw ReservationProviderError.RateLimited(RuntimeException("429")) }
             val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
-            val service = service(listOf(target), FakeSnapshotStore())
+            val service = service(listOf(target), FakeCacheStore())
 
             assertFailsWith<ReservationProviderError.RateLimited> {
                 service.getByRids(listOf(target.rid()), null, null, force = true)
@@ -162,7 +163,7 @@ class AvailabilityServiceImplTest {
         runBlocking {
             val provider = fakeProvider()
             val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
-            val service = service(listOf(target), FakeSnapshotStore())
+            val service = service(listOf(target), FakeCacheStore())
 
             val dto = service.getByRid(target.rid(), null, null, force = true)
             assertEquals("site:recgov:100", dto.reservableId)
@@ -172,11 +173,11 @@ class AvailabilityServiceImplTest {
 
     private fun service(
         targets: Collection<ResolvedAvailabilityTarget>,
-        snapshots: AvailabilitySnapshotStore,
+        cacheStore: AvailabilityCacheStore,
     ): AvailabilityServiceImpl =
         AvailabilityServiceImpl(
             targets = FakeTargetResolver(targets.associateBy { it.rid() }),
-            snapshots = snapshots,
+            cacheStore = cacheStore,
             snapshotFreshnessTtl = { longTtl },
         )
 
@@ -262,40 +263,43 @@ class AvailabilityServiceImplTest {
             throw UnsupportedOperationException("not used by getByRids")
     }
 
-    /** In-memory [AvailabilitySnapshotStore]: keeps the latest observation per (reservableId, date). */
-    private class FakeSnapshotStore : AvailabilitySnapshotStore {
-        var appendCalls = 0
-        private val latest = linkedMapOf<Pair<Long, LocalDate>, AvailabilitySnapshotRepo.SnapshotObservation>()
+    /**
+     * In-memory [AvailabilityCacheStore]: models the availability_cell cube,
+     * keeping the current cell per (reservableId, date). `recordCalls` counts
+     * fetch persistences so tests can assert a cache hit doesn't re-persist.
+     */
+    private class FakeCacheStore : AvailabilityCacheStore {
+        var recordCalls = 0
+        private val cells = linkedMapOf<Pair<Long, LocalDate>, AvailabilityCellRepo.CellObservation>()
 
-        override fun appendObservations(input: AvailabilitySnapshotRepo.SnapshotObservationBatch): Int {
-            appendCalls++
-            for (observation in input.observations) {
-                val key = observation.reservableId to observation.targetDate
-                val existing = latest[key]
-                if (existing == null || !observation.observedAt.isBefore(existing.observedAt)) {
-                    latest[key] = observation
-                }
-            }
-            return input.observations.size
-        }
-
-        override fun loadLatestObservations(
+        override fun loadLatest(
             reservableIds: List<Long>,
             dates: List<LocalDate>,
         ): List<AvailabilitySnapshotRepo.LatestObservation> {
             val ids = reservableIds.toSet()
             val wanted = dates.toSet()
-            return latest.values
+            return cells.values
                 .filter { it.reservableId in ids && it.targetDate in wanted }
-                .map { observation ->
+                .map { cell ->
                     AvailabilitySnapshotRepo.LatestObservation(
-                        reservableId = observation.reservableId,
-                        targetDate = observation.targetDate,
-                        observedAt = OffsetDateTime.ofInstant(observation.observedAt, ZoneOffset.UTC),
-                        status = observation.status,
-                        available = observation.status.isOnlineBookable,
+                        reservableId = cell.reservableId,
+                        targetDate = cell.targetDate,
+                        observedAt = OffsetDateTime.ofInstant(cell.observedAt, ZoneOffset.UTC),
+                        status = cell.status,
+                        available = cell.status.isOnlineBookable,
                     )
                 }
+        }
+
+        override fun recordFetched(
+            runId: Long?,
+            observations: List<AvailabilityCellRepo.CellObservation>,
+            reservableRidByDbId: Map<Long, String>,
+        ) {
+            recordCalls++
+            for (observation in observations) {
+                cells[observation.reservableId to observation.targetDate] = observation
+            }
         }
     }
 }

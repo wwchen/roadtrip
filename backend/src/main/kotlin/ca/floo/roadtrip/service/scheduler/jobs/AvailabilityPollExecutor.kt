@@ -25,9 +25,17 @@ import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
 import java.time.Duration
+import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+
+/**
+ * How long append-only availability_snapshot history is retained. The live
+ * read path serves latest state from the cube, so snapshots are only the
+ * long-tail trend/alert log; older rows are pruned opportunistically per poll.
+ */
+private val SNAPSHOT_HISTORY_RETENTION: Duration = Duration.ofDays(180)
 
 /**
  * Executes one poller tick. Wired into [ca.floo.roadtrip.service.scheduler.framework.Scheduler]
@@ -180,6 +188,12 @@ internal class AvailabilityPollExecutor(
                 val observedReservableIds =
                     results.flatMap { r -> r.reservables.map { it.id } }.distinct()
                 cells.markElapsedAsPast(observedReservableIds, LocalDate.now(ZoneOffset.UTC))
+                // Bound the append-only snapshot log. Scoped to this run's
+                // reservables so it rides the (reservable_id, observed_at) index;
+                // the live read path serves latest from the cube, so pruning old
+                // history never affects read latency.
+                AvailabilitySnapshotRepo(ctx)
+                    .pruneObservationsBefore(observedReservableIds, Instant.now().minus(SNAPSHOT_HISTORY_RETENTION))
                 recordFetchCalls(results, runId)
                 val completedAt = OffsetDateTime.now()
                 val durationMs = durationMs(startedAt, completedAt)

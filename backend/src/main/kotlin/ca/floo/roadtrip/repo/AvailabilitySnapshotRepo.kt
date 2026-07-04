@@ -64,32 +64,16 @@ class AvailabilitySnapshotRepo(
         return inserts.size
     }
 
-    override fun loadLatestObservations(
+    override fun pruneObservationsBefore(
         reservableIds: List<Long>,
-        dates: List<LocalDate>,
-    ): List<LatestObservation> {
-        if (reservableIds.isEmpty() || dates.isEmpty()) return emptyList()
+        cutoff: Instant,
+    ): Int {
+        if (reservableIds.isEmpty()) return 0
         return ctx
-            .resultQuery(
-                """
-                SELECT DISTINCT ON (reservable_id, target_date)
-                    id, reservable_id, target_date, status, available, observed_at
-                FROM availability_snapshot
-                WHERE reservable_id = ANY(?::bigint[])
-                  AND target_date = ANY(?::date[])
-                ORDER BY reservable_id, target_date, observed_at DESC, id DESC
-                """.trimIndent(),
-                reservableIds.toTypedArray(),
-                dates.toTypedArray(),
-            ).fetch { r ->
-                LatestObservation(
-                    reservableId = r.get("reservable_id", Long::class.java),
-                    targetDate = r.get("target_date", LocalDate::class.java),
-                    observedAt = r.get("observed_at", OffsetDateTime::class.java),
-                    status = AvailabilityStatus.parse(r.get("status", String::class.java)),
-                    available = r.get("available", Boolean::class.java),
-                )
-            }
+            .deleteFrom(AVAILABILITY_SNAPSHOT)
+            .where(AVAILABILITY_SNAPSHOT.RESERVABLE_ID.`in`(reservableIds))
+            .and(AVAILABILITY_SNAPSHOT.OBSERVED_AT.lt(OffsetDateTime.ofInstant(cutoff, ZoneOffset.UTC)))
+            .execute()
     }
 
     private fun AvailabilityDayDto.toJson(): String = availabilityResponseJson.encodeToString(AvailabilityDayDto.serializer(), this)
@@ -178,30 +162,67 @@ class AvailabilitySnapshotRepo(
                     AVAILABILITY_SNAPSHOT.OBSERVED_AT.asc(),
                 ).fetch { fromRecord(it) }
         val grouped = rows.groupBy { it.targetDate }
+        // Snapshots are edge-only (both the poller and the on-demand read path
+        // append only status changes), so the window can be empty for a cell
+        // whose last edge predates it. Take authoritative current state from the
+        // `availability_cell` cube, and seed each group with the last snapshot
+        // before the window so run/flip detection knows the entering state.
+        val cellByDate = AvailabilityCellRepo(ctx).loadCells(listOf(reservableId), dates).associateBy { it.targetDate }
+        val seedByDate = latestSnapshotBefore(reservableId, dates, windowStart)
         return dates.map { date ->
-            val group = grouped[date].orEmpty()
-            statsFor(date, group, flipWindowStart)
+            statsFor(
+                date = date,
+                windowRows = grouped[date].orEmpty(),
+                seed = seedByDate[date],
+                currentCell = cellByDate[date],
+                flipWindowStart = flipWindowStart,
+                now = now,
+            )
         }
+    }
+
+    /** Newest snapshot strictly before [before] per date — the carry-forward seed. */
+    private fun latestSnapshotBefore(
+        reservableId: Long,
+        dates: List<LocalDate>,
+        before: OffsetDateTime,
+    ): Map<LocalDate, Snapshot> {
+        if (dates.isEmpty()) return emptyMap()
+        return ctx
+            .select(AVAILABILITY_SNAPSHOT.fields().toList())
+            .distinctOn(AVAILABILITY_SNAPSHOT.TARGET_DATE)
+            .from(AVAILABILITY_SNAPSHOT)
+            .where(AVAILABILITY_SNAPSHOT.RESERVABLE_ID.eq(reservableId))
+            .and(AVAILABILITY_SNAPSHOT.TARGET_DATE.`in`(dates))
+            .and(AVAILABILITY_SNAPSHOT.OBSERVED_AT.lt(before))
+            .orderBy(
+                AVAILABILITY_SNAPSHOT.TARGET_DATE,
+                AVAILABILITY_SNAPSHOT.OBSERVED_AT.desc(),
+                AVAILABILITY_SNAPSHOT.ID.desc(),
+            ).fetch { fromRecord(it) }
+            .associateBy { it.targetDate }
     }
 
     private fun statsFor(
         date: LocalDate,
-        snapshots: List<Snapshot>,
+        windowRows: List<Snapshot>,
+        seed: Snapshot?,
+        currentCell: AvailabilityCellRepo.Cell?,
         flipWindowStart: OffsetDateTime,
+        now: OffsetDateTime,
     ): TargetDateStats {
-        if (snapshots.isEmpty()) {
-            return TargetDateStats(
-                targetDate = date,
-                totalSnapshots = 0,
-                lastOpenAt = null,
-                isCurrentlyOpen = false,
-                currentOrLastOpenWindowSec = null,
-                medianOpenWindowSec = null,
-                flipsLast24h = 0,
-            )
-        }
+        // Authoritative current state is the cube; snapshots are edge-only history.
+        // Fall back to the newest sample only when the cube has no cell (e.g. unit
+        // tests, or a reservable never written to the cube).
+        val samples = if (seed != null) listOf(seed) + windowRows else windowRows
+        val isCurrentlyOpen =
+            currentCell?.status?.isOnlineBookable
+                ?: samples.lastOrNull()?.available
+                ?: false
 
-        // Walk for contiguous available=true runs.
+        // Contiguous available runs across the seeded samples. A trailing open run
+        // extends to `now` when the cell is currently open, so a stable-open cell
+        // whose only edge predates the window reports a real duration, not ~0.
         data class Run(
             val start: OffsetDateTime,
             val end: OffsetDateTime,
@@ -209,7 +230,7 @@ class AvailabilitySnapshotRepo(
         val runs = mutableListOf<Run>()
         var runStart: OffsetDateTime? = null
         var lastTrueAt: OffsetDateTime? = null
-        for (s in snapshots) {
+        for (s in samples) {
             if (s.available) {
                 if (runStart == null) runStart = s.observedAt
                 lastTrueAt = s.observedAt
@@ -218,56 +239,57 @@ class AvailabilitySnapshotRepo(
                 runStart = null
             }
         }
-        val isCurrentlyOpen = snapshots.last().available
         if (runStart != null) {
-            runs += Run(start = runStart, end = lastTrueAt!!)
+            runs += Run(start = runStart, end = if (isCurrentlyOpen) maxOf(lastTrueAt!!, now) else lastTrueAt!!)
         }
+
+        // Current open window prefers the cube's last_changed_at (the exact edge
+        // that opened the current run), which may predate the seeded samples.
         val currentOrLastOpenWindowSec =
-            runs.lastOrNull()?.let {
-                java.time.Duration
-                    .between(it.start, it.end)
-                    .seconds
-                    .toInt()
-                    .coerceAtLeast(0)
-            }
-        val medianOpenWindowSec =
-            if (runs.isEmpty()) {
-                null
+            if (isCurrentlyOpen && currentCell != null) {
+                durationSec(currentCell.lastChangedAt, now)
             } else {
-                val durations =
-                    runs
-                        .map {
-                            java.time.Duration
-                                .between(it.start, it.end)
-                                .seconds
-                                .toInt()
-                                .coerceAtLeast(0)
-                        }.sorted()
-                val mid = durations.size / 2
-                if (durations.size % 2 == 0) {
-                    (durations[mid - 1] + durations[mid]) / 2
-                } else {
-                    durations[mid]
-                }
+                runs.lastOrNull()?.let { durationSec(it.start, it.end) }
             }
-        // Count false→true transitions within the last 24h.
+        val medianOpenWindowSec = medianOrNull(runs.map { durationSec(it.start, it.end) })
+
+        // Count false→true transitions in the last 24h; the seed supplies the
+        // state entering the window so an entering flip is counted.
         var flips = 0
-        var prev: Snapshot? = null
-        for (s in snapshots) {
+        var prev: Snapshot? = seed
+        for (s in windowRows) {
             if (s.observedAt >= flipWindowStart && prev != null && !prev.available && s.available) {
                 flips += 1
             }
             prev = s
         }
+        val lastOpenAt = lastTrueAt ?: currentCell?.takeIf { isCurrentlyOpen }?.lastObservedAt
         return TargetDateStats(
             targetDate = date,
-            totalSnapshots = snapshots.size,
-            lastOpenAt = lastTrueAt,
+            totalSnapshots = windowRows.size,
+            lastOpenAt = lastOpenAt,
             isCurrentlyOpen = isCurrentlyOpen,
             currentOrLastOpenWindowSec = currentOrLastOpenWindowSec,
             medianOpenWindowSec = medianOpenWindowSec,
             flipsLast24h = flips,
         )
+    }
+
+    private fun durationSec(
+        start: OffsetDateTime,
+        end: OffsetDateTime,
+    ): Int =
+        java.time.Duration
+            .between(start, end)
+            .seconds
+            .toInt()
+            .coerceAtLeast(0)
+
+    private fun medianOrNull(values: List<Int>): Int? {
+        if (values.isEmpty()) return null
+        val sorted = values.sorted()
+        val mid = sorted.size / 2
+        return if (sorted.size % 2 == 0) (sorted[mid - 1] + sorted[mid]) / 2 else sorted[mid]
     }
 
     private fun fromRecord(r: org.jooq.Record): Snapshot =

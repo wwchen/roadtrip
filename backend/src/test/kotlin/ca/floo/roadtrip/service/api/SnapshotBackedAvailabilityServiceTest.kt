@@ -4,7 +4,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
-import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
+import ca.floo.roadtrip.repo.AvailabilityCacheStoreImpl
 import ca.floo.roadtrip.repo.SharedDbTest
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
@@ -20,12 +20,13 @@ class SnapshotBackedAvailabilityServiceTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability_cell")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
     }
 
     @Test
-    fun `vendor omissions append unknown observations for every known target date`() =
+    fun `vendor omissions record unknown cells for every known target date`() =
         runBlocking {
             val startDate = LocalDate.parse("2026-07-01")
             val endDate = LocalDate.parse("2026-07-03")
@@ -33,45 +34,18 @@ class SnapshotBackedAvailabilityServiceTest : SharedDbTest() {
             val dayTwoObservedAt = Instant.parse("2026-06-18T10:01:00Z")
             val seen = seedReservable("100")
             val omitted = seedReservable("200")
-            val repo = AvailabilitySnapshotRepo(ctx)
+            val store = AvailabilityCacheStoreImpl(ctx)
             val service =
                 SnapshotBackedAvailabilityService(
-                    snapshots = repo,
+                    store = store,
                     clock = Clock.fixed(Instant.parse("2026-06-18T12:00:00Z"), ZoneOffset.UTC),
                 )
 
             val batch =
                 service.loadOrFetch(
-                    SnapshotBackedAvailabilityService.Request(
-                        metadata = SnapshotBackedAvailabilityService.Metadata(provider = "recgov", campgroundId = "232447"),
-                        targets =
-                            listOf(
-                                SnapshotBackedAvailabilityService.TargetReservable(seen, "site:recgov:100"),
-                                SnapshotBackedAvailabilityService.TargetReservable(omitted, "site:recgov:200"),
-                            ),
-                        startDate = startDate,
-                        endDate = endDate,
-                        ttl = Duration.ofMinutes(10),
-                        force = true,
-                    ),
+                    request(seen, omitted, startDate, endDate, force = true),
                 ) {
-                    AvailabilityObservationBatch(
-                        provider = "recgov",
-                        startDate = startDate,
-                        endDate = endDate,
-                        observations =
-                            listOf(
-                                ReservableDayObservation("site:recgov:100", startDate, dayOneObservedAt, AvailabilityStatus.AVAILABLE),
-                                ReservableDayObservation(
-                                    "site:recgov:100",
-                                    startDate.plusDays(1),
-                                    dayTwoObservedAt,
-                                    AvailabilityStatus.RESERVED,
-                                ),
-                            ),
-                        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
-                        campgroundId = "232447",
-                    )
+                    fetchedBatch(startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
                 }
 
             val byPair = batch.observations.associateBy { it.reservableId to it.date }
@@ -83,14 +57,86 @@ class SnapshotBackedAvailabilityServiceTest : SharedDbTest() {
             assertEquals(dayOneObservedAt, byPair["site:recgov:200" to startDate]!!.observedAt)
             assertEquals(dayTwoObservedAt, byPair["site:recgov:200" to startDate.plusDays(1)]!!.observedAt)
 
+            // Latest state is now served from the cube (one row per cell), not a
+            // DISTINCT ON over snapshot history.
             val persisted =
-                repo
-                    .loadLatestObservations(listOf(seen, omitted), listOf(startDate, startDate.plusDays(1)))
+                store
+                    .loadLatest(listOf(seen, omitted), listOf(startDate, startDate.plusDays(1)))
                     .associateBy { it.reservableId to it.targetDate }
             assertEquals(4, persisted.size)
             assertEquals(AvailabilityStatus.UNKNOWN, persisted[omitted to startDate]!!.status)
             assertEquals(AvailabilityStatus.UNKNOWN, persisted[omitted to startDate.plusDays(1)]!!.status)
         }
+
+    @Test
+    fun `snapshot appends are edge-triggered - an unchanged refetch adds no history rows`() =
+        runBlocking {
+            val startDate = LocalDate.parse("2026-07-01")
+            val endDate = LocalDate.parse("2026-07-03")
+            val dayOneObservedAt = Instant.parse("2026-06-18T10:00:00Z")
+            val dayTwoObservedAt = Instant.parse("2026-06-18T10:01:00Z")
+            val seen = seedReservable("100")
+            val omitted = seedReservable("200")
+            val store = AvailabilityCacheStoreImpl(ctx)
+            val service =
+                SnapshotBackedAvailabilityService(
+                    store = store,
+                    clock = Clock.fixed(Instant.parse("2026-06-18T12:00:00Z"), ZoneOffset.UTC),
+                )
+
+            // First fetch: 4 cells transition from absent → status, so 4 edge rows.
+            service.loadOrFetch(request(seen, omitted, startDate, endDate, force = true)) {
+                fetchedBatch(startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
+            }
+            assertEquals(4, snapshotRowCount())
+
+            // Identical refetch: no status changed, so NO new snapshot rows.
+            // (The pre-cube path appended a full cell-set on every call, which is
+            // why availability_snapshot grew to millions of rows.)
+            service.loadOrFetch(request(seen, omitted, startDate, endDate, force = true)) {
+                fetchedBatch(startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
+            }
+            assertEquals(4, snapshotRowCount())
+        }
+
+    private fun request(
+        seen: Long,
+        omitted: Long,
+        startDate: LocalDate,
+        endDate: LocalDate,
+        force: Boolean,
+    ) = SnapshotBackedAvailabilityService.Request(
+        metadata = SnapshotBackedAvailabilityService.Metadata(provider = "recgov", campgroundId = "232447"),
+        targets =
+            listOf(
+                SnapshotBackedAvailabilityService.TargetReservable(seen, "site:recgov:100"),
+                SnapshotBackedAvailabilityService.TargetReservable(omitted, "site:recgov:200"),
+            ),
+        startDate = startDate,
+        endDate = endDate,
+        ttl = Duration.ofMinutes(10),
+        force = force,
+    )
+
+    private fun fetchedBatch(
+        startDate: LocalDate,
+        endDate: LocalDate,
+        dayOneObservedAt: Instant,
+        dayTwoObservedAt: Instant,
+    ) = AvailabilityObservationBatch(
+        provider = "recgov",
+        startDate = startDate,
+        endDate = endDate,
+        observations =
+            listOf(
+                ReservableDayObservation("site:recgov:100", startDate, dayOneObservedAt, AvailabilityStatus.AVAILABLE),
+                ReservableDayObservation("site:recgov:100", startDate.plusDays(1), dayTwoObservedAt, AvailabilityStatus.RESERVED),
+            ),
+        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
+        campgroundId = "232447",
+    )
+
+    private fun snapshotRowCount(): Int = ctx.fetchOne("SELECT count(*) AS c FROM availability_snapshot")!!.get("c", Int::class.java)
 
     private fun seedReservable(vendorId: String): Long =
         ctx

@@ -11,6 +11,7 @@ import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
+import ca.floo.roadtrip.repo.AvailabilityCacheStoreImpl
 import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -226,7 +227,7 @@ fun Application.module() {
         AvailabilityServiceImpl(
             targets = availabilityTargets,
             dateResolver = availabilityDateResolver,
-            snapshots = availabilitySnapshots,
+            cacheStore = AvailabilityCacheStoreImpl(ctx),
             snapshotFreshnessTtl = availabilitySnapshotFreshnessTtl,
         )
     val availabilityQueryService =
