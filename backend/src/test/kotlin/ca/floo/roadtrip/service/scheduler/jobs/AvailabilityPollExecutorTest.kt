@@ -239,13 +239,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         provider: ReservationProvider,
         notifier: SlackNotifier?,
         defaultChannel: String? = "#camping",
+        grafanaRootUrl: String? = GRAFANA_ROOT_URL,
     ): WatchAlertDispatcher =
         WatchAlertDispatcher(
             notifier = notifier,
             scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
             targets = targetsFor(provider),
-            grafanaRootUrl = GRAFANA_ROOT_URL,
+            grafanaRootUrl = grafanaRootUrl,
             defaultChannel = defaultChannel,
         )
 
@@ -624,6 +625,34 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals(1, notifier.posts.size)
             assertEquals("#b", notifier.posts.single().first, "only the longer watch's window covers the transition")
             assertEquals("active", watchStatus(watchA), "the shorter watch never fired, so it must not be marked done")
+        }
+
+    @Test
+    fun `alert omits the grafana dashboard links when the host is unset`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchId =
+                seedWatch(
+                    poiId,
+                    farStart.toString(),
+                    farStart.plusDays(2).toString(),
+                    triggerKinds = listOf("slack_notify"),
+                )
+            val poller = linkWatch(provider, watchId)
+            val notifier = RecordingSlackNotifier()
+
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier, grafanaRootUrl = null)).handle(poller)
+
+            assertEquals(1, notifier.posts.size)
+            assertTrue(
+                !notifier.posts
+                    .single()
+                    .second
+                    .contains("/d/"),
+                "no dashboard links without a grafana host",
+            )
         }
 
     // --- Cadence fall-through (PR4) ---

@@ -40,7 +40,7 @@ internal class WatchAlertDispatcher(
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
-    private val grafanaRootUrl: String,
+    private val grafanaRootUrl: String?,
     private val defaultChannel: String?,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
@@ -103,12 +103,14 @@ internal class WatchAlertDispatcher(
         return "$header\n$lines$more${dashboardLinks(watchId, poiIds)}"
     }
 
-    /** Grafana deep links appended to every alert: the watch drill-down (always)
-     *  and the availability-cube matrix for each POI the openings sit under. */
+    /** Grafana deep links appended to an alert when the Grafana host is
+     *  configured: the watch drill-down and the availability-cube matrix for each
+     *  POI the openings sit under. Empty when [grafanaRootUrl] is null. */
     private fun dashboardLinks(
         watchId: Long,
         poiIds: Set<Long>,
     ): String {
+        val grafanaRootUrl = grafanaRootUrl ?: return ""
         val watch = "\n📊 <$grafanaRootUrl/d/$WATCH_DASHBOARD_UID?var-watch_id=$watchId|watch dashboard>"
         val cube =
             when (poiIds.size) {
