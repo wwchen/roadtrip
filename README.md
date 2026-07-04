@@ -224,14 +224,15 @@ the backend container and write raw captures back to the checkout.
    Grafana state is stored in the Compose-managed named volume
    `grafana-data` (Docker prefixes it with the Compose project name);
    dashboard JSON and datasource provisioning stay bind-mounted from `grafana/`.
-   Deploy recreates the Compose stack, so file-provisioned dashboards are
-   reconciled immediately.
+   Deploy restarts Grafana so datasource/provisioning changes reload; dashboard
+   JSON self-reloads on Grafana's provisioning poll interval.
    Provisioned dashboard UI saves are disabled by default on deploy hosts; set
    `GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=true` only when you intentionally want
    Grafana to persist UI edits in its database.
 
 3. **Bring up the stack:** on the deploy host, `make run env=prod` builds the
-   backend image and recreates the Compose stack. The deploy is wired to GHA
+   backend image and rolls it out with `docker compose up -d` (Postgres and the
+   other long-running services stay up). The deploy is wired to GHA
    (push to master → .github/workflows/deploy.yml), so you usually don't run
    this by hand. The older `make deploy` SSH wrapper has been removed.
 

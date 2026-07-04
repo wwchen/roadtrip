@@ -2,7 +2,7 @@
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
-RUN_ENV ?= $(or $(env),$(ENV),dev)
+RUN_ENV ?= $(or $(env),dev)
 POSTGRES_DB ?= roadtrip
 POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
@@ -30,13 +30,20 @@ help:
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
 # Plain `make run` runs the backend on the host for local dev. `make run
-# env=prod` builds the container image and recreates the production Compose
+# env=prod` builds the container image and rolls out the production Compose
 # stack on the deploy host.
 run:
 ifeq ($(RUN_ENV),prod)
 	./gradlew :backend:shadowJar
 	docker build -t $(BACKEND_IMAGE) --target backend .
-	docker compose --profile tunnel --profile pois up -d --force-recreate
+	# `up -d` recreates only what changed: the rebuilt backend (new image id)
+	# and any service whose `.env`-sourced config moved. Postgres/Loki/Alloy
+	# keep running, so a code deploy no longer bounces the database.
+	docker compose --profile tunnel --profile pois up -d
+	# Grafana bind-mounts provisioning, so `up -d` won't reload it. Dashboards
+	# self-reload (updateIntervalSeconds), but datasource/config changes need a
+	# restart; do it unconditionally since it's a ~seconds blip.
+	docker compose --profile tunnel --profile pois restart grafana
 else ifeq ($(RUN_ENV),dev)
 	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
 	PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
