@@ -1,8 +1,8 @@
 name: Deploy
 
 # SSHes to mini-ca, fast-forwards the deploy checkout, then runs
-# `make run env=prod` with GitHub-provided production secrets/vars exported
-# for Docker Compose. Wraps a Tailscale join (mini-ca isn't on the public
+# `make run env=prod`. Runtime config is read by Docker Compose from the
+# deploy host's `.env`. Wraps a Tailscale join (mini-ca isn't on the public
 # internet) around the SSH step.
 #
 # Triggers only when files that affect the running service change. Doc-only
@@ -74,55 +74,11 @@ jobs:
           chmod 600 ~/.ssh/known_hosts
 
       # Single ssh invocation so any failure (git pull, Gradle build, image
-      # build, or Compose recreate) returns non-zero and fails the
-      # workflow. The generated remote script is piped over SSH, not printed,
-      # so secret values don't land in logs.
+      # build, or Compose recreate) returns non-zero and fails the workflow.
       - name: Deploy on mini-ca
-        env:
-          DEPLOY_HOST: ${{ vars.DEPLOY_HOST || 'mini-ca' }}
-          DEPLOY_USER: ${{ vars.DEPLOY_USER || 'mini' }}
-          DEPLOY_DIR: ${{ vars.DEPLOY_DIR || '~/workspace/roadtrip' }}
-          POSTGRES_DB: ${{ vars.POSTGRES_DB || 'roadtrip' }}
-          POSTGRES_USER: ${{ vars.POSTGRES_USER || 'roadtrip' }}
-          POSTGRES_PASSWORD: ${{ secrets.POSTGRES_PASSWORD }}
-          GRAFANA_ADMIN_USER: ${{ vars.GRAFANA_ADMIN_USER || 'admin' }}
-          GRAFANA_ADMIN_PASSWORD: ${{ secrets.GRAFANA_ADMIN_PASSWORD }}
-          GRAFANA_DB_USER: ${{ vars.GRAFANA_DB_USER || 'grafana_reader' }}
-          GRAFANA_DB_PASSWORD: ${{ secrets.GRAFANA_DB_PASSWORD }}
-          GRAFANA_ROOT_URL: ${{ vars.GRAFANA_ROOT_URL || 'https://roadtrip.floo.ca/dash/' }}
-          GRAFANA_SLACK_WEBHOOK_URL: ${{ secrets.GRAFANA_SLACK_WEBHOOK_URL }}
-          CLOUDFLARE_TUNNEL_TOKEN: ${{ secrets.CLOUDFLARE_TUNNEL_TOKEN }}
-          MAPBOX_TOKEN: ${{ secrets.MAPBOX_TOKEN }}
-          RIDB_API_KEY: ${{ secrets.RIDB_API_KEY }}
-          TESLA_COOKIES: ${{ secrets.TESLA_COOKIES }}
-          COOKIE_BOT_URL: ${{ vars.COOKIE_BOT_URL }}
-          COOKIE_BOT_TOKEN: ${{ secrets.COOKIE_BOT_TOKEN }}
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-          SLACK_ALERT_CHANNEL: ${{ vars.SLACK_ALERT_CHANNEL || secrets.SLACK_ALERT_CHANNEL }}
         run: |
-          {
-            printf 'export DEPLOY_DIR=%q\n' "$DEPLOY_DIR"
-            printf 'export BACKEND_IMAGE=%q\n' "roadtrip/backend"
-            for name in \
-              POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD \
-              GRAFANA_ADMIN_USER GRAFANA_ADMIN_PASSWORD \
-              GRAFANA_DB_USER GRAFANA_DB_PASSWORD GRAFANA_ROOT_URL GRAFANA_SLACK_WEBHOOK_URL \
-              CLOUDFLARE_TUNNEL_TOKEN MAPBOX_TOKEN RIDB_API_KEY TESLA_COOKIES \
-              COOKIE_BOT_URL COOKIE_BOT_TOKEN SLACK_BOT_TOKEN SLACK_ALERT_CHANNEL
-            do
-              value="${!name:-}"
-              if [ -n "$value" ]; then
-                printf 'export %s=%q\n' "$name" "$value"
-              fi
-            done
-            cat <<'REMOTE'
-          set -euo pipefail
-          deploy_dir="${DEPLOY_DIR/#\~/$HOME}"
-          cd "$deploy_dir"
-          git pull --ff-only
-          make run env=prod
-          REMOTE
-          } | ssh -o BatchMode=yes "$DEPLOY_USER@$DEPLOY_HOST" 'bash -se'
+          ssh -o BatchMode=yes mini@mini-ca \
+            'cd ~/workspace/roadtrip && git pull --ff-only && make run env=prod'
 
       - name: Health check
         run: |

@@ -210,10 +210,9 @@ the backend container and write raw captures back to the checkout.
    tunnel token. The tunnel's public hostname routing is managed in Cloudflare;
    Compose only starts `cloudflared` with the token.
 
-2. **Production runtime config:** the GitHub Deploy workflow exports configured
-   repo secrets/vars into the remote `make run env=prod` process before Docker
-   Compose runs. For manual deploy-host runs, the same names can live in
-   `.env`:
+2. **`.env` on the deploy host:** Docker Compose reads runtime config from the
+   checkout's `.env` when GitHub Deploy or a manual deploy runs
+   `make run env=prod`:
    ```
    TESLA_COOKIES=ak_bmsc=...; _abck=...; bm_sz=...; ...
    CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
@@ -225,8 +224,8 @@ the backend container and write raw captures back to the checkout.
    Grafana state is stored in the Compose-managed named volume
    `grafana-data` (Docker prefixes it with the Compose project name);
    dashboard JSON and datasource provisioning stay bind-mounted from `grafana/`.
-   Deploy restarts Grafana when committed dashboard/provisioning files change so
-   file-provisioned dashboards are reconciled immediately.
+   Deploy recreates the Compose stack, so file-provisioned dashboards are
+   reconciled immediately.
    Provisioned dashboard UI saves are disabled by default on deploy hosts; set
    `GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=true` only when you intentionally want
    Grafana to persist UI edits in its database.
