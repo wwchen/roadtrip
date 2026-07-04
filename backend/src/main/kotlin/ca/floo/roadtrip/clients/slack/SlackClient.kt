@@ -18,31 +18,34 @@ import org.slf4j.LoggerFactory
 private val slackJson = Json { encodeDefaults = true }
 
 /**
- * Outbound Slack `chat.postMessage` client — the only thing that talks to
- * Slack. Text-only (no Block Kit): a message is a channel + a string.
+ * Outbound Slack `chat.postMessage` transport — the only thing that talks to
+ * Slack over the wire. Text-only (no Block Kit): a message is a channel + a
+ * string. Business callers go through
+ * [ca.floo.roadtrip.service.notification.SlackNotificationService]; this client
+ * only knows how to put bytes on the network.
  *
- * [notify] **never throws.** Any failure — bad token, non-`ok` Slack response,
- * network/timeout — is logged and surfaced as `false`, so a notification
- * problem can never break the poll loop that calls it. `open` so tests can
- * substitute a fake without a live Slack workspace (mirrors
+ * [postMessage] **never throws.** Any failure — bad token, non-`ok` Slack
+ * response, network/timeout — is logged and surfaced as `false`, so a delivery
+ * problem can never break the caller. `open` so tests can substitute a fake
+ * without a live Slack workspace (mirrors
  * [ca.floo.roadtrip.service.ratelimit.VendorRateLimiter]).
  */
-open class SlackNotifier(
+open class SlackClient(
     private val config: SlackConfig,
     private val client: HttpClient = HttpClient(CIO) { engine { requestTimeout = SLACK_REQUEST_TIMEOUT_MS } },
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
     /** Posts one message to [channel]. Returns true only on Slack `ok:true`. */
-    open suspend fun notify(
+    open suspend fun postMessage(
         channel: String,
         text: String,
     ): Boolean =
-        runCatching { postMessage(channel, text) }
-            .onFailure { log.error("Slack notify to {} failed: {}", channel, it.message) }
+        runCatching { post(channel, text) }
+            .onFailure { log.error("Slack postMessage to {} failed: {}", channel, it.message) }
             .getOrDefault(false)
 
-    private suspend fun postMessage(
+    private suspend fun post(
         channel: String,
         text: String,
     ): Boolean {

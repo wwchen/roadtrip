@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.clients.slack.SlackNotifier
 import ca.floo.roadtrip.models.availability.CellTransition
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.service.notification.SlackNotificationService
 import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import java.time.LocalDate
@@ -32,12 +32,12 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * goes `DONE` **only after a post actually succeeds**, so a delivery failure
  * never silences a watch we could not notify on.
  *
- * [notifier] is null when Slack is unconfigured; then the whole path no-ops.
- * Nothing here throws into the caller: the notifier swallows its own failures
- * and the executor wraps this call best-effort.
+ * [notifications] is null when Slack is unconfigured; then the whole path
+ * no-ops. Nothing here throws into the caller: the service swallows its own
+ * failures and the executor wraps this call best-effort.
  */
 internal class WatchAlertDispatcher(
-    private val notifier: SlackNotifier?,
+    private val notifications: SlackNotificationService?,
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
@@ -51,7 +51,7 @@ internal class WatchAlertDispatcher(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
         transitions: List<CellTransition>,
     ) {
-        if (notifier == null) return
+        if (notifications == null) return
         val bookable = transitions.filter { it.status.isOnlineBookable }
         if (bookable.isEmpty()) return
 
@@ -93,7 +93,7 @@ internal class WatchAlertDispatcher(
      * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
-        if (notifier == null) return
+        if (notifications == null) return
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
         val channel = resolveChannel(watch)
         if (channel == null) {
@@ -102,7 +102,7 @@ internal class WatchAlertDispatcher(
         }
         val reservables = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
-            notifier.notify(channel, buildLifecycleMessage(watch, reservables))
+            notifications.sendMessage(channel, buildLifecycleMessage(watch, reservables))
             return
         }
         val reservablesById = reservables.associateBy { it.id }
@@ -112,7 +112,7 @@ internal class WatchAlertDispatcher(
             val covered = bookable.map { CellTransition(it.reservableId, it.targetDate, it.status) }
             postOpenings(watch, channel, covered, reservablesById)
         } else {
-            notifier.notify(channel, buildWatchingMessage(watch, reservables, cubeKnown = cells.isNotEmpty()))
+            notifications.sendMessage(channel, buildWatchingMessage(watch, reservables, cubeKnown = cells.isNotEmpty()))
         }
     }
 
@@ -127,7 +127,7 @@ internal class WatchAlertDispatcher(
         covered: List<CellTransition>,
         reservablesById: Map<Long, Reservable>,
     ) {
-        val fired = notifier!!.notify(channel, buildMessage(covered, reservablesById, watch.id))
+        val fired = notifications!!.sendMessage(channel, buildMessage(covered, reservablesById, watch.id))
         if (fired && watch.stopWhenTriggered) {
             watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }
