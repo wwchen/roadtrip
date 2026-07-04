@@ -80,6 +80,23 @@ docker_compose(
     profiles=['pois'],
 )
 
+# When `backend-jar` produces a new fat jar, Tilt rebuilds this image and
+# recreates the backend compose service, restarting the JVM so the new jar
+# (and any new Flyway migrations) actually takes effect.
+#
+# No live_update here on purpose. In-place `sync` alone can't work — the JVM
+# loads its classes from the jar at startup, so replacing the file under a
+# running process changes nothing — and the process-restart mechanisms don't
+# apply to Docker Compose: `restart_container()` is deprecated and a no-op, and
+# the restart_process extension's entrypoint wrapper is rejected for compose
+# resources ("entrypoint not supported for Docker Compose"). A full rebuild +
+# recreate is the reliable path, and it's cheap here: only the jar COPY layer
+# changes (the JRE + apt base layers are cached), so the rebuild is a fast
+# layer swap, not a from-scratch image build.
+#
+# The jar name is version-pinned by shadowJar's archiveBaseName + `version` in
+# backend/build.gradle.kts (currently roadtrip-backend-0.1.0); keep this path
+# and the Dockerfile COPY in sync if the version bumps.
 docker_build(
     'roadtrip/backend',
     '.',
@@ -88,20 +105,6 @@ docker_build(
     only=[
         'Dockerfile',
         'backend/build/libs',
-    ],
-    # Auto-restart the backend the moment `backend-jar` produces a new fat jar.
-    # Without this, a completed rebuild could leave the running container serving
-    # a stale jar (e.g. never applying new Flyway migrations). live_update syncs
-    # the freshly built jar into the container and restarts the JVM process, so a
-    # source change deterministically reaches the running backend — and faster
-    # than a full image rebuild + recreate.
-    #
-    # The jar name is version-pinned by shadowJar's archiveBaseName +
-    # `version` in backend/build.gradle.kts (currently roadtrip-backend-0.1.0);
-    # keep this path and the Dockerfile COPY in sync if the version bumps.
-    live_update=[
-        sync('backend/build/libs/roadtrip-backend-0.1.0-all.jar', '/app/app.jar'),
-        restart_container(),
     ],
 )
 
