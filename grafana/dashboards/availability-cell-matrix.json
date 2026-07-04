@@ -38,7 +38,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "### Availability cube — current face\n\nOne cell per `(reservable_id, target_date)`, read straight from **`availability_cell`** — the cube's *now* face, upserted on every poll. `last_observed_at` bumps every tick; `status` / `last_changed_at` advance only on an edge (status change). The append-only transition history lives in `availability_snapshot`; drill into it from the **[Watch drill-down](/d/reservable-watch-drill/reservable-watch-drill)**.\n\nRows are reservables (site), columns are `target_date`, color is the current `status`. `past` = the date has elapsed and the cube stopped recording.",
+        "content": "### Availability cube — current face\n\nOne row per `(reservable_id, target_date)`, read straight from **`availability_cell`** — the cube's *now* face, upserted on every poll. `last_observed_at` bumps every tick; `status` / `last_changed_at` advance only on an edge (status change). The append-only transition history lives in `availability_snapshot`; drill into it from the **[Watch drill-down](/d/reservable-watch-drill/reservable-watch-drill)**.\n\nEach row is a site + night colored by current `status`. Click a cell's **Create Slack alert** action to watch that site+night and get pinged in Slack when it flips to bookable. `past` = the date has elapsed and the cube stopped recording.",
         "mode": "markdown"
       },
       "pluginVersion": "13.1.0",
@@ -108,7 +108,43 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "reservable_id" },
+            "properties": [ { "id": "custom.hidden", "value": true } ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "start_date" },
+            "properties": [ { "id": "custom.hidden", "value": true } ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "end_date" },
+            "properties": [ { "id": "custom.hidden", "value": true } ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "status" },
+            "properties": [
+              {
+                "id": "actions",
+                "value": [
+                  {
+                    "type": "fetch",
+                    "title": "Create Slack alert",
+                    "oneClick": false,
+                    "confirmation": "Watch this site for this night and ping Slack when it opens?",
+                    "fetch": {
+                      "method": "POST",
+                      "url": "${api_base}/api/availability/watches",
+                      "body": "{\"targets\":[{\"reservable_id\":${__data.fields.reservable_id}}],\"start_date\":\"${__data.fields.start_date}\",\"end_date\":\"${__data.fields.end_date}\",\"trigger_kinds\":[\"slack_notify\"],\"stop_when_triggered\":true}",
+                      "headers": [ { "name": "Content-Type", "value": "application/json" } ],
+                      "queryParams": []
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 18,
@@ -138,7 +174,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.id AS reservable_id,\n         coalesce(r.loop || ' / ', '') || coalesce(r.name, r.vendor_id) AS label\n  FROM reservables r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n)\nSELECT\n  format('[%s] %s', sc.reservable_id, sc.label) AS site,\n  to_char(c.target_date, 'MM-DD Dy')             AS day,\n  c.status::text                                 AS status\nFROM availability_cell c\nJOIN scoped sc ON sc.reservable_id = c.reservable_id\nWHERE c.target_date >= ${__from:date:YYYY-MM-DD}::date\n  AND c.target_date <= ${__to:date:YYYY-MM-DD}::date\nORDER BY sc.label, c.target_date;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.id AS reservable_id,\n         coalesce(r.loop || ' / ', '') || coalesce(r.name, r.vendor_id) AS label\n  FROM reservables r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n)\nSELECT\n  sc.reservable_id                              AS reservable_id,\n  format('[%s] %s', sc.reservable_id, sc.label) AS site,\n  to_char(c.target_date, 'YYYY-MM-DD Dy')       AS day,\n  c.target_date::text                           AS start_date,\n  (c.target_date + 1)::text                     AS end_date,\n  c.status::text                                AS status\nFROM availability_cell c\nJOIN scoped sc ON sc.reservable_id = c.reservable_id\nWHERE c.target_date >= '${__from:date:YYYY-MM-DD}'::date\n  AND c.target_date <= '${__to:date:YYYY-MM-DD}'::date\nORDER BY sc.label, c.target_date;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -159,39 +195,8 @@
           }
         }
       ],
-      "title": "Cell matrix (reservables × dates)",
-      "transformations": [
-        {
-          "id": "groupingToMatrix",
-          "options": {
-            "columnField": "day",
-            "rowField": "site",
-            "valueField": "status"
-          }
-        },
-        {
-          "id": "extractFields",
-          "options": {
-            "format": "regex",
-            "keepSourceField": false,
-            "regex": "^\\[(?<reservable_id>\\d+)\\] (?<site>.+)$",
-            "source": "site\\day"
-          }
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {},
-            "indexByName": {
-              "reservable_id": 0,
-              "site": 1
-            },
-            "renameByName": {
-              "site": "site / day"
-            }
-          }
-        }
-      ],
+      "title": "Cells (site × night) — click a cell to alert",
+      "transformations": [],
       "type": "table"
     }
   ],
@@ -250,6 +255,17 @@
         "skipUrlSync": false,
         "sort": 3,
         "type": "query"
+      },
+      {
+        "current": { "text": "", "value": "" },
+        "description": "Origin for the Create-alert action POST. Blank = same-origin (prod, where Grafana and the API share a host). For local split-origin dev set it to the backend, e.g. http://localhost:8765.",
+        "hide": 0,
+        "label": "API base",
+        "name": "api_base",
+        "options": [ { "selected": true, "text": "", "value": "" } ],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
       }
     ]
   },
