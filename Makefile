@@ -1,14 +1,11 @@
-.PHONY: help run deploy check-pushed data-fetch data-import reset-db qa install install-hooks companion grafana-export
+.PHONY: help run run-dev run-prod data-fetch data-import reset-db qa install install-hooks companion grafana-export
 
 PORT       ?= 8765
-DEPLOY_HOST ?= mini-ca
-DEPLOY_USER ?= mini
-DEPLOY_DIR  ?= ~/workspace/roadtrip
 BACKEND_IMAGE ?= roadtrip/backend
+RUN_ENV ?= $(or $(env),$(ENV),dev)
 POSTGRES_DB ?= roadtrip
 POSTGRES_USER ?= roadtrip
 POSTGRES_PASSWORD ?= roadtrip
-export POSTGRES_DB POSTGRES_USER POSTGRES_PASSWORD
 
 DB_HOST ?= 127.0.0.1
 DB_PORT ?= 5432
@@ -17,34 +14,56 @@ DB_USER ?= $(POSTGRES_USER)
 DB_PASSWORD ?= $(POSTGRES_PASSWORD)
 DB_JDBC_URL ?= jdbc:postgresql://$(DB_HOST):$(DB_PORT)/$(DB_NAME)
 
-COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
+LOCAL_COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
+PROD_COMPOSE := docker compose --profile tunnel --profile pois
 
 help:
 	@echo "Targets:"
 	@echo "  make install          One-time host setup: brew deps + companion + git hooks"
 	@echo "  make install-hooks    Point this clone's git hooks at .githooks/ (per-clone)"
 	@echo "  make run              Build + run backend locally on 127.0.0.1:$(PORT) (serves static + /api)"
+	@echo "  make run env=prod     Build backend image + run production Compose profiles"
 	@echo "  make companion        Run the campsite Playwright companion (against the local backend)"
 	@echo "  make data-fetch       Fetch upstream data via admin API (TARGET=<data_source slug> for one)."
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / reservable_data / poi_reservable_joiner)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
-	@echo "  make deploy           SSH to $(DEPLOY_HOST), git pull, build backend, docker compose up; restarts Grafana on dashboard changes"
 	@echo "  make grafana-export   Snapshot UI-edited dashboards back to grafana/dashboards/*.json"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
-# Run the backend on the host, serving static + /api. Brings up Postgres
-# in Docker first (idempotent — `compose up -d` is a no-op if already
-# running). The backend serves index.html, /web/*, /data/* (excluding
-# pricing-cache, which is exposed only via /api/pricing/{slug}), plus all
-# four /api/* routes.
+# Plain `make run` runs the backend on the host for local dev. `make run
+# env=prod` builds the container image and brings up the production Compose
+# profiles on the deploy host.
 run:
-	$(COMPOSE) up -d postgres
+ifeq ($(RUN_ENV),prod)
+	$(MAKE) run-prod
+else ifeq ($(RUN_ENV),dev)
+	$(MAKE) run-dev
+else
+	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
+endif
+
+run-dev:
+	$(LOCAL_COMPOSE) up -d postgres
 	PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
 	  ROADTRIP_DB_URL=$(DB_JDBC_URL) \
 	  ROADTRIP_DB_USER=$(DB_USER) ROADTRIP_DB_PASSWORD=$(DB_PASSWORD) \
 	  ./gradlew :backend:run
+
+run-prod:
+	./gradlew :backend:shadowJar
+	docker build -t $(BACKEND_IMAGE) --target backend .
+	$(PROD_COMPOSE) up -d
+	@before="$${DEPLOY_BEFORE_SHA:-}"; \
+	 after="$${DEPLOY_AFTER_SHA:-}"; \
+	 if [ -n "$$before" ] && [ -n "$$after" ] && [ "$$before" != "$$after" ] && \
+	    git diff --name-only "$$before" "$$after" -- grafana/dashboards grafana/provisioning | grep -q .; then \
+	   echo "Grafana dashboard/provisioning files changed; restarting grafana."; \
+	   $(PROD_COMPOSE) restart grafana; \
+	 else \
+	   echo "No Grafana dashboard/provisioning file changes detected; leaving grafana running."; \
+	 fi
 
 companion:
 	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) node --experimental-eventsource src/index.js
@@ -56,16 +75,6 @@ companion:
 install: install-hooks
 	brew install tilt docker openjdk node
 	cd companion && npm install && npx playwright install chromium
-
-check-pushed:
-	@git fetch --quiet origin
-	@ahead=$$(git rev-list --count @{u}..HEAD 2>/dev/null || echo 0); \
-	 dirty=$$(git status --porcelain); \
-	 if [ "$$ahead" -gt 0 ]; then echo "refusing: $$ahead local commit(s) not pushed to origin"; exit 1; fi; \
-	 if [ -n "$$dirty" ]; then echo "refusing: working tree has uncommitted changes"; git status --short; exit 1; fi
-
-deploy: check-pushed
-	ssh $(DEPLOY_HOST) -l $(DEPLOY_USER) 'cd $(DEPLOY_DIR) && before=$$(git rev-parse HEAD) && git pull --ff-only && after=$$(git rev-parse HEAD) && BACKEND_IMAGE=$(BACKEND_IMAGE) bash scripts/deploy_after_pull.sh "$$before" "$$after"'
 
 # Two-step refresh through the backend's admin API (RFC 0004 / issue #44):
 #   make data-fetch                       # all targets
@@ -91,9 +100,9 @@ data-import:
 # Hard reset the local dev schema, including flyway_schema_history. Useful
 # when switching worktrees/branches that intentionally changed a migration.
 reset-db:
-	$(COMPOSE) up -d postgres
+	$(LOCAL_COMPOSE) up -d postgres
 	@echo "dropping and recreating local schema public in database $(DB_NAME)"
-	$(COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO "$(DB_USER)"; GRANT ALL ON SCHEMA public TO public;'
+	$(LOCAL_COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO "$(DB_USER)"; GRANT ALL ON SCHEMA public TO public;'
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first

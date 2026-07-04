@@ -17,7 +17,7 @@ Personal web map for roadtripping a Tesla. Live at [roadtrip.floo.ca](https://ro
 tilt up                  # Compose stack (Postgres/backend/Grafana) + host companion
 make run                 # Kotlin/Ktor backend on http://127.0.0.1:8765 (serves static + /api)
 make companion           # campsite Playwright companion against the local backend
-make deploy              # ssh to the mini, git pull, docker compose up
+make run env=prod        # on the deploy host: build image + docker compose up
 make fetch-tesla-supercharger-pricing  # mint cookies + crawl Tesla Supercharger pricing into data/raw/
 ```
 
@@ -37,8 +37,10 @@ stats, ingest/catalog freshness, provider cache audit, watch/scheduler health,
 and API/SQL equivalence.
 Tilt UI is at <http://localhost:10350>.
 
-`make run` remains the fastest backend-only loop: it starts Postgres in
-Docker and runs the Kotlin/Ktor backend on the host with Gradle.
+Plain `make run` remains the fastest backend-only loop: it starts Postgres in
+Docker and runs the Kotlin/Ktor backend on the host with Gradle. Production
+deploys use `make run env=prod`, which builds the backend image and runs the
+production Compose profiles.
 
 The Tilt UI also has a `data` cluster of manual-trigger background workers
 (none auto-run on `tilt up`) for POI refresh. Tesla Supercharger pricing
@@ -208,10 +210,14 @@ the backend container and write raw captures back to the checkout.
    tunnel token. The tunnel's public hostname routing is managed in Cloudflare;
    Compose only starts `cloudflared` with the token.
 
-2. **`.env` on the host:**
+2. **Production runtime config:** the GitHub Deploy workflow exports configured
+   repo secrets/vars into the remote `make run env=prod` process before Docker
+   Compose runs. For manual deploy-host runs, the same names can live in
+   `.env`:
    ```
    TESLA_COOKIES=ak_bmsc=...; _abck=...; bm_sz=...; ...
    CLOUDFLARE_TUNNEL_TOKEN=eyJhIjoi...
+   POSTGRES_PASSWORD=<strong password>
    GRAFANA_ADMIN_PASSWORD=<strong password>
    GRAFANA_DB_PASSWORD=<strong password>
    ```
@@ -225,9 +231,10 @@ the backend container and write raw captures back to the checkout.
    `GRAFANA_DASHBOARD_ALLOW_UI_UPDATES=true` only when you intentionally want
    Grafana to persist UI edits in its database.
 
-3. **Bring up the stack:** `make deploy` (ssh's to the mini, git pull, build,
-   `docker compose up`). The deploy is also wired to GHA (push to master →
-   .github/workflows/deploy.yml), so you usually don't run this by hand.
+3. **Bring up the stack:** on the deploy host, `make run env=prod` builds the
+   backend image and runs `docker compose up`. The deploy is wired to GHA
+   (push to master → .github/workflows/deploy.yml), so you usually don't run
+   this by hand. The older `make deploy` SSH wrapper has been removed.
 
    The `backend` container serves the map on port 8765 (not exposed to the
    public host — cloudflared talks to it on the compose network). A

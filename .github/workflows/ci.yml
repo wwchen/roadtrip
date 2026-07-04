@@ -1,7 +1,7 @@
 name: CI
 
-# Build-only. No auto-deploy — `make deploy` from a laptop is the production
-# path (mini-ca runs the prod container).
+# Build-only. Production deploys are handled by the separate Deploy workflow
+# (mini-ca runs the prod container via `make run env=prod`).
 on:
   push:
     branches: [master]
