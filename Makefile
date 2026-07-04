@@ -14,9 +14,6 @@ DB_USER ?= $(POSTGRES_USER)
 DB_PASSWORD ?= $(POSTGRES_PASSWORD)
 DB_JDBC_URL ?= jdbc:postgresql://$(DB_HOST):$(DB_PORT)/$(DB_NAME)
 
-LOCAL_COMPOSE := docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois
-PROD_COMPOSE := docker compose --profile tunnel --profile pois
-
 help:
 	@echo "Targets:"
 	@echo "  make install          One-time host setup: brew deps + companion + git hooks"
@@ -39,9 +36,9 @@ run:
 ifeq ($(RUN_ENV),prod)
 	./gradlew :backend:shadowJar
 	docker build -t $(BACKEND_IMAGE) --target backend .
-	$(PROD_COMPOSE) up -d --force-recreate
+	docker compose --profile tunnel --profile pois up -d --force-recreate
 else ifeq ($(RUN_ENV),dev)
-	$(LOCAL_COMPOSE) up -d postgres
+	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
 	PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
 	  ROADTRIP_DB_URL=$(DB_JDBC_URL) \
 	  ROADTRIP_DB_USER=$(DB_USER) ROADTRIP_DB_PASSWORD=$(DB_PASSWORD) \
@@ -85,9 +82,9 @@ data-import:
 # Hard reset the local dev schema, including flyway_schema_history. Useful
 # when switching worktrees/branches that intentionally changed a migration.
 reset-db:
-	$(LOCAL_COMPOSE) up -d postgres
+	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois up -d postgres
 	@echo "dropping and recreating local schema public in database $(DB_NAME)"
-	$(LOCAL_COMPOSE) exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO "$(DB_USER)"; GRANT ALL ON SCHEMA public TO public;'
+	docker compose --env-file /dev/null -f docker-compose.yml -f docker-compose.local.yml --profile pois exec -T postgres psql -U $(DB_USER) -d $(DB_NAME) -v ON_ERROR_STOP=1 -c 'DROP SCHEMA public CASCADE; CREATE SCHEMA public; GRANT ALL ON SCHEMA public TO "$(DB_USER)"; GRANT ALL ON SCHEMA public TO public;'
 
 # Local-only Playwright smoke. Hits the Kotlin backend on $(PORT) (serves
 # static + all /api routes). Doesn't boot the stack — bring it up first
