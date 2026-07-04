@@ -1,4 +1,4 @@
-.PHONY: help run run-dev run-prod data-fetch data-import reset-db qa install install-hooks companion grafana-export
+.PHONY: help run data-fetch data-import reset-db qa install install-hooks companion grafana-export
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -37,21 +37,6 @@ help:
 # profiles on the deploy host.
 run:
 ifeq ($(RUN_ENV),prod)
-	$(MAKE) run-prod
-else ifeq ($(RUN_ENV),dev)
-	$(MAKE) run-dev
-else
-	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
-endif
-
-run-dev:
-	$(LOCAL_COMPOSE) up -d postgres
-	PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
-	  ROADTRIP_DB_URL=$(DB_JDBC_URL) \
-	  ROADTRIP_DB_USER=$(DB_USER) ROADTRIP_DB_PASSWORD=$(DB_PASSWORD) \
-	  ./gradlew :backend:run
-
-run-prod:
 	./gradlew :backend:shadowJar
 	docker build -t $(BACKEND_IMAGE) --target backend .
 	$(PROD_COMPOSE) up -d
@@ -64,6 +49,15 @@ run-prod:
 	 else \
 	   echo "No Grafana dashboard/provisioning file changes detected; leaving grafana running."; \
 	 fi
+else ifeq ($(RUN_ENV),dev)
+	$(LOCAL_COMPOSE) up -d postgres
+	PORT=$(PORT) ROADTRIP_STATIC_DIR=$(PWD) \
+	  ROADTRIP_DB_URL=$(DB_JDBC_URL) \
+	  ROADTRIP_DB_USER=$(DB_USER) ROADTRIP_DB_PASSWORD=$(DB_PASSWORD) \
+	  ./gradlew :backend:run
+else
+	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
+endif
 
 companion:
 	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) node --experimental-eventsource src/index.js
