@@ -101,7 +101,11 @@ class AvailabilityWatchRepo(
     }
 
     fun findById(id: Long): Watch? =
-        baseSelect().where(AVAILABILITY_WATCH.ID.eq(id)).fetchOne()?.let(::fromRecord)?.let { withLatestRuns(listOf(it)).single() }
+        baseSelect()
+            .where(AVAILABILITY_WATCH.ID.eq(id))
+            .fetchOne()
+            ?.let(::fromRecord)
+            ?.let { withLatestRuns(listOf(it)).single() }
 
     fun list(
         status: WatchStatus? = null,
