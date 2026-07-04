@@ -1,4 +1,8 @@
-backend/build/
+# Ignore backend build churn (classes, generated, reports, tmp) but KEEP
+# watching the fat jar — Tilt must see backend/build/libs/*.jar change to
+# rebuild + recreate the backend after backend-jar runs. Mirrors .dockerignore.
+backend/build/*
+!backend/build/libs/
 backend/.gradle/
 companion/node_modules/
 data/pricing-cache/
