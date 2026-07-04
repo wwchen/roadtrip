@@ -5,10 +5,8 @@ import ca.floo.roadtrip.clients.cache.RouteCache
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.HttpAvailabilityClient
-import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
-import ca.floo.roadtrip.config.SlackConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
@@ -22,6 +20,7 @@ import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.dataSourceFor
 import ca.floo.roadtrip.repo.dsl
@@ -258,28 +257,14 @@ fun Application.module() {
     // capacity/refill come from the env (ROADTRIP_VENDOR_RATELIMIT_*), defaulting
     // to a conservative code-level bucket for unconfigured vendors.
     val vendorRateLimiter = VendorRateLimiter(VendorRateLimitConfig.fromEnv(), ds)
-    // Slack alerting (PR6). Null config => disabled: the dispatcher no-ops and
-    // the poller runs identically. Set SLACK_BOT_TOKEN + SLACK_ALERT_CHANNEL to
-    // enable. The client's HTTP client is closed on shutdown, below.
-    val slackClient = appConfig.slack?.let { SlackClient(it) }
-    val slackNotifications = slackClient?.let { SlackNotificationServiceImpl(it, appConfig.slack?.defaultChannel) }
-    // Surface the enabled/disabled state at boot: a null config disables all
-    // watch alerts silently, which is easy to mistake for a broken alert.
-    if (slackNotifications == null) {
-        environment.log.warn(
-            "Slack alerts DISABLED: {} / {} unset — watch alerts will not be delivered",
-            SlackConfig.TOKEN_ENV,
-            SlackConfig.CHANNEL_ENV,
-        )
-    } else {
-        environment.log.info("Slack alerts enabled → default channel {}", appConfig.slack?.defaultChannel)
-    }
+    val slackNotifications = SlackNotificationServiceImpl(appConfig.slack)
     val watchAlertDispatcher =
         WatchAlertDispatcher(
             slack = slackNotifications,
             scopeResolver = WatchScopeResolver(reservablesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets = availabilityTargets,
+            pois = PoiServingRepo(ctx),
             heatmaps = AvailabilityHeatmapRepo(ctx),
             grafanaRootUrl = appConfig.grafana?.rootUrl,
         )
@@ -307,7 +292,7 @@ fun Application.module() {
     environment.monitor.subscribe(ApplicationStopping) {
         schedulerScope.cancel()
         recgovAvailabilityClient.close()
-        slackClient?.close()
+        slackNotifications.close()
     }
 
     routing {

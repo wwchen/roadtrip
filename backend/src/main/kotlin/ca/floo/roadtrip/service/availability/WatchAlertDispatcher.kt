@@ -1,12 +1,14 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.clients.slack.SlackBlockDto
+import ca.floo.roadtrip.clients.slack.SlackBlocks
 import ca.floo.roadtrip.models.availability.CellTransition
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import kotlinx.serialization.json.JsonPrimitive
-import org.slf4j.LoggerFactory
 import java.time.LocalDate
 
 /** The only trigger kind that dispatches today. Others (e.g. `atc`) are stored
@@ -38,20 +40,18 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * any) is passed through; the service falls back to its default channel.
  */
 internal class WatchAlertDispatcher(
-    private val slack: SlackNotificationService?,
+    private val slack: SlackNotificationService,
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
+    private val pois: PoiServingRepo,
     private val heatmaps: AvailabilityHeatmapRepo,
     private val grafanaRootUrl: String?,
 ) {
-    private val log = LoggerFactory.getLogger(javaClass)
-
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
         transitions: List<CellTransition>,
     ) {
-        if (slack == null) return
         val bookable = transitions.filter { it.status.isOnlineBookable }
         if (bookable.isEmpty()) return
 
@@ -88,10 +88,7 @@ internal class WatchAlertDispatcher(
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
-        if (slack == null) {
-            log.warn("watch {} requests slack_notify but Slack is unconfigured; no message sent", watch.id)
-            return
-        }
+
         val reservables = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
             slack.sendMessage(buildLifecycleMessage(watch, reservables), watch.channelOverride())
@@ -116,39 +113,89 @@ internal class WatchAlertDispatcher(
         covered: List<CellTransition>,
         reservablesById: Map<Long, Reservable>,
     ) {
-        val fired = slack!!.sendMessage(buildMessage(covered, reservablesById, watch.id), watch.channelOverride())
+        val (fallback, blocks) = openingsMessage(watch, covered, reservablesById)
+        val fired = slack.sendMessage(fallback, watch.channelOverride(), blocks)
         if (fired && watch.stopWhenTriggered) {
             watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }
     }
 
-    private fun buildMessage(
+    /** One opening resolved to everything the alert renders. */
+    private data class OpeningRow(
+        val label: String,
+        val loop: String?,
+        val siteType: String?,
+        val date: LocalDate,
+        val campground: String?,
+        val bookingUrl: String?,
+    )
+
+    /**
+     * Builds the "Campsites Available!" alert: a notification-fallback string and
+     * the Block Kit body (header, campground/count/window fields, per-site lines,
+     * a Reserve button for the first site). Each opening is hydrated once —
+     * reservable name/loop/type, campground POI name, and the provider booking
+     * URL. Spans multiple campgrounds gracefully (the field summarizes the count,
+     * each line prefixes its campground). No Grafana links here — those stay on
+     * the informational messages.
+     */
+    private fun openingsMessage(
+        watch: AvailabilityWatchRepo.Watch,
         covered: List<CellTransition>,
         reservablesById: Map<Long, Reservable>,
-        watchId: Long,
-    ): String {
-        val ordered = covered.sortedWith(compareBy({ it.reservableId }, { it.targetDate }))
-        // Distinct POIs the openings sit under, for the cell-matrix (cube) link.
-        // Collected in the same pass that resolves each reservable's provider for
-        // its booking link, so we resolve each target once.
-        val poiIds = LinkedHashSet<Long>()
-        val lines =
-            ordered.take(MAX_SITES_IN_MESSAGE).joinToString("\n") { t ->
-                // covered was filtered to reservables in this map, so the key exists.
-                val r = reservablesById.getValue(t.reservableId)
-                val target = targets.resolve(r)
-                target?.parentPoiId?.let(poiIds::add)
-                val label = r.name ?: r.rid.encode()
-                val loop = r.loop?.let { " ($it)" }.orEmpty()
-                // Booking link, if the reservable's provider exposes one — the
-                // URL scheme is the adapter's, never this dispatcher's.
-                val url = target?.provider?.bookingUrl(r.rid, t.targetDate)
-                if (url != null) "• *$label*$loop — ${t.targetDate} <$url|book>" else "• *$label*$loop — ${t.targetDate}"
+    ): Pair<String, List<SlackBlockDto>> {
+        val poiNames = HashMap<Long, String?>()
+        val rows =
+            covered
+                .sortedWith(compareBy({ it.reservableId }, { it.targetDate }))
+                .map { t ->
+                    // covered was filtered to reservables in this map, so the key exists.
+                    val r = reservablesById.getValue(t.reservableId)
+                    val target = targets.resolve(r)
+                    OpeningRow(
+                        label = r.name ?: r.rid.encode(),
+                        loop = r.loop,
+                        siteType = r.siteType,
+                        date = t.targetDate,
+                        campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiById(it)?.name } },
+                        bookingUrl = target?.provider?.bookingUrl(r.rid, t.targetDate),
+                    )
+                }
+        val count = rows.size
+        val campgrounds = rows.mapNotNull { it.campground }.distinct()
+        val multiCampground = campgrounds.size > 1
+        val campgroundLabel =
+            when (campgrounds.size) {
+                0 -> "—"
+                1 -> campgrounds.single()
+                else -> "${campgrounds.size} campgrounds"
             }
-        val count = ordered.size
-        val header = "⛺ $count campsite opening${if (count == 1) "" else "s"} available"
+        val siteLines =
+            rows.take(MAX_SITES_IN_MESSAGE).joinToString("\n") { row ->
+                val prefix = if (multiCampground && row.campground != null) "${row.campground} — " else ""
+                val loop = row.loop?.let { " ($it)" }.orEmpty()
+                val type = row.siteType?.let { " _($it)_" }.orEmpty()
+                "• $prefix*${row.label}*$loop — ${row.date}$type"
+            }
         val more = if (count > MAX_SITES_IN_MESSAGE) "\n…and ${count - MAX_SITES_IN_MESSAGE} more" else ""
-        return "$header\n$lines$more${dashboardLinks(watchId, poiIds)}"
+        val sitesFound = "$count${if (count > MAX_SITES_IN_MESSAGE) " (showing $MAX_SITES_IN_MESSAGE)" else ""}"
+        val first = rows.first()
+        val blocks =
+            listOfNotNull(
+                SlackBlocks.header("🏕️ Campsites Available!"),
+                SlackBlocks.fields(
+                    listOf(
+                        "*Campground*\n$campgroundLabel",
+                        "*Sites found*\n$sitesFound",
+                        "*Your window*\n${watch.startDate} → ${watch.endDate}",
+                    ),
+                ),
+                SlackBlocks.section("$siteLines$more"),
+                first.bookingUrl?.let { SlackBlocks.primaryButton("Reserve ${first.label} →", it) },
+            )
+        val plural = if (count == 1) "" else "s"
+        val where = if (!multiCampground && campgrounds.isNotEmpty()) " at ${campgrounds.single()}" else ""
+        return "⛺ $count campsite$plural available$where" to blocks
     }
 
     /** Grafana deep links appended to an alert when the Grafana host is
