@@ -74,25 +74,25 @@
                   "color": "green",
                   "index": 0
                 },
+                "closed": {
+                  "color": "dark-gray",
+                  "index": 3
+                },
                 "first_come": {
                   "color": "orange",
                   "index": 1
+                },
+                "past": {
+                  "color": "semi-dark-gray",
+                  "index": 5
                 },
                 "reserved": {
                   "color": "red",
                   "index": 2
                 },
-                "closed": {
-                  "color": "dark-gray",
-                  "index": 3
-                },
                 "unknown": {
                   "color": "text",
                   "index": 4
-                },
-                "past": {
-                  "color": "semi-dark-gray",
-                  "index": 5
                 }
               },
               "type": "value"

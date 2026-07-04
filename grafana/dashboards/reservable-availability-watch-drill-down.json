@@ -34,7 +34,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "### watch \u2192 poller \u2192 run \u2192 snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** \u2014 POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_poller` | **Scheduler state** \u2014 `next_run_at`, claim token, `active`/dormant. Keyed on `(provider, parent_ref)`; **many watches can coalesce onto one poller** via `availability_watch_poller`. | Service maintains membership when a watch is created/edited; coalesces watches that share a vendor call target. |\n| `availability_run` | **Append-only execution log** \u2014 one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed poller. |\n| `availability_snapshot` | **Observed availability** \u2014 per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each poller run. |\n\n### How to drill\n\nClick a **watch_id** / **poller_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Poller / Run Detail](/d/poller-run-detail)** \u2014 drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/poi-detail)**. |\n| Current cube face: reservables \u00d7 dates, current status. | **[Availability Cell Matrix](/d/availability-cell-matrix)** \u2014 the cube's *now* face. |\n",
+        "content": "### watch → poller → run → snapshot\n\n| Table | Concern | Lifecycle |\n|---|---|---|\n| `availability_watch` | **User intent** — POI (or one reservable), dates, cadence, triggers. | Created by the user/API. Status: `active` / `paused` / `done`. |\n| `availability_poller` | **Scheduler state** — `next_run_at`, claim token, `active`/dormant. Keyed on `(provider, parent_ref)`; **many watches can coalesce onto one poller** via `availability_watch_poller`. | Service maintains membership when a watch is created/edited; coalesces watches that share a vendor call target. |\n| `availability_run` | **Append-only execution log** — one row per poll: `started` / `completed` / `failed`, `snapshot_count`, `duration_ms`, `error`. | Inserted every time the executor runs a claimed poller. |\n| `availability_snapshot` | **Observed availability** — per `(reservable_id, target_date, observed_at)`. Linked to the run via `run_id`. | Inserted in bulk by the executor for each poller run. |\n\n### How to drill\n\nClick a **watch_id** / **poller_id** / **run_id** anywhere in the tables below to scope the whole dashboard. Clear a var (top bar) to widen back out. Use per-column filters inside each table for status / errors / etc.\n\n### Where else to look\n\n| Question | Dashboard |\n|---|---|\n| What did a single run write? Full payload. | **[Poller / Run Detail](/d/poller-run-detail)** — drill in via `run_id`. |\n| Reservable-centric: full history + last fetch + watches scoped to one reservable. | **[Reservable / Detail](/d/reservable-detail)**. |\n| POI-centric: linked reservables, coverage. | **[POI Detail](/d/poi-detail)**. |\n| Current cube face: reservables × dates, current status. | **[Availability Cell Matrix](/d/availability-cell-matrix)** — the cube's *now* face. |\n",
         "mode": "markdown"
       },
       "pluginVersion": "13.1.0",
@@ -49,15 +49,8 @@
       },
       "fieldConfig": {
         "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
+          "color": {
+            "mode": "thresholds"
           },
           "thresholds": {
             "mode": "absolute",
@@ -75,15 +68,28 @@
         }
       },
       "gridPos": {
-        "h": 7,
+        "h": 5,
         "w": 24,
         "x": 0,
         "y": 9
       },
       "id": 1,
       "options": {
-        "cellHeight": "sm",
-        "showHeader": true
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "percentChangeColorMode": "standard",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
       },
       "pluginVersion": "13.1.0",
       "targets": [
@@ -92,14 +98,32 @@
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  count(*) FILTER (WHERE p.active) AS active_pollers,\n  count(*) FILTER (WHERE NOT p.active) AS dormant_pollers,\n  count(*) FILTER (\n    WHERE p.active\n      AND p.next_run_at <= now()\n      AND (p.claimed_until IS NULL OR p.claimed_until < now())\n  ) AS due_now,\n  count(*) FILTER (\n    WHERE p.claimed_until IS NOT NULL\n      AND p.claimed_until >= now()\n  ) AS currently_claimed,\n  count(*) FILTER (\n    WHERE p.claimed_until IS NOT NULL\n      AND p.claimed_until < now()\n      AND p.last_run_at IS NULL\n  ) AS expired_claim_without_run\nFROM availability_poller p;",
-          "refId": "A"
+          "rawSql": "SELECT\n  count(*) FILTER (WHERE p.active) AS \"Active Pollers\",\n  count(*) FILTER (WHERE NOT p.active) AS \"Dormant Pollers\",\n  -- count(*) FILTER (\n  --   WHERE p.active\n  --     AND p.next_run_at <= now()\n  --     AND (p.claimed_until IS NULL OR p.claimed_until < now())\n  -- ) AS \"Due Now\",\n  count(*) FILTER (\n    WHERE p.claimed_until IS NOT NULL\n      AND p.claimed_until >= now()\n  ) AS \"Currently Claimed\",\n  count(*) FILTER (\n    WHERE p.claimed_until IS NOT NULL\n      AND p.claimed_until < now()\n      AND p.last_run_at IS NULL\n  ) AS \"Expired Claim Without Run\"\nFROM availability_poller p;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
         }
       ],
-      "title": "Queue Summary",
-      "type": "table"
+      "title": "Queue Summary (All time)",
+      "type": "stat"
     },
     {
       "datasource": {
@@ -165,7 +189,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 16
+        "y": 14
       },
       "id": 7,
       "options": {
@@ -281,7 +305,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 16
+        "y": 14
       },
       "id": 8,
       "options": {
@@ -400,6 +424,19 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(date|_at)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
           }
         ]
       },
@@ -407,7 +444,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 24
+        "y": 22
       },
       "id": 2,
       "options": {
@@ -423,7 +460,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  w.id AS watch_id,\n  w.status AS watch_status,\n  p.id AS poller_id,\n  CASE WHEN p.active THEN 'active' ELSE 'dormant' END AS poller_status,\n  p.provider,\n  p.parent_ref,\n  tgt.scope,\n  tgt.target_count,\n  tgt.targets,\n  w.reservable_filters,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec AS watch_cadence_sec,\n  w.trigger_kinds,\n  w.trigger_config,\n  w.stop_when_triggered,\n  agg.attached_watches,\n  agg.poller_cadence_sec,\n  agg.window_start,\n  agg.window_end,\n  p.next_run_at,\n  p.claimed_until,\n  p.last_run_at,\n  p.updated_at AS poller_updated_at\nFROM availability_watch w\nLEFT JOIN availability_watch_poller wp ON wp.watch_id = w.id\nLEFT JOIN availability_poller p ON p.id = wp.poller_id\n-- A watch now covers a SET of targets (availability_watch_target); summarise\n-- them into scope + count + names rather than one poi/reservable column.\nLEFT JOIN LATERAL (\n  SELECT\n    count(*) AS target_count,\n    CASE\n      WHEN count(*) = 0 THEN NULL\n      WHEN count(*) FILTER (WHERE wt.poi_id IS NOT NULL) > 0\n       AND count(*) FILTER (WHERE wt.reservable_id IS NOT NULL) > 0 THEN 'mixed'\n      WHEN count(*) FILTER (WHERE wt.poi_id IS NOT NULL) > 0 THEN 'poi'\n      ELSE 'reservable'\n    END AS scope,\n    string_agg(\n      COALESCE(poi.name, rv.type || ':' || rv.vendor || ':' || rv.vendor_id),\n      ', ' ORDER BY poi.name NULLS LAST\n    ) AS targets\n  FROM availability_watch_target wt\n  LEFT JOIN pois poi ON poi.id = wt.poi_id\n  LEFT JOIN reservables rv ON rv.id = wt.reservable_id\n  WHERE wt.watch_id = w.id\n) tgt ON true\nLEFT JOIN LATERAL (\n  SELECT\n    count(*) AS attached_watches,\n    min(w2.cadence_sec) AS poller_cadence_sec,\n    min(w2.start_date) AS window_start,\n    max(w2.end_date) AS window_end\n  FROM availability_watch_poller wp2\n  JOIN availability_watch w2 ON w2.id = wp2.watch_id AND w2.status = 'active'\n  WHERE wp2.poller_id = p.id\n) agg ON true\nWHERE (${watch_id:sqlstring} IN ('', '__all') OR w.id::text IN (${watch_id:sqlstring}))\n  AND (${poller_id:sqlstring} IN ('', '__all') OR p.id::text IN (${poller_id:sqlstring}))\nORDER BY\n  p.next_run_at ASC NULLS LAST,\n  w.created_at DESC,\n  w.id DESC;",
+          "rawSql": "SELECT\n  w.id AS watch_id,\n  w.status AS watch_status,\n  p.id AS poller_id,\n  CASE WHEN p.active THEN 'active' ELSE 'dormant' END AS poller_status,\n  p.provider,\n  p.parent_ref,\n  tgt.scope,\n  tgt.target_count,\n  concat_ws(\n    ', ',\n    'poi=' || array_to_string(tgt.poi_ids, ','),\n    'reservable=' || array_to_string(tgt.reservable_ids, ',')\n  ) AS targets,\n  w.reservable_filters,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec AS watch_cadence_sec,\n  w.trigger_kinds,\n  w.trigger_config,\n  w.stop_when_triggered,\n  agg.attached_watches,\n  agg.poller_cadence_sec,\n  agg.window_start,\n  agg.window_end,\n  p.next_run_at,\n  p.claimed_until,\n  p.last_run_at,\n  p.updated_at AS poller_updated_at\nFROM availability_watch w\nLEFT JOIN availability_watch_poller wp ON wp.watch_id = w.id\nLEFT JOIN availability_poller p ON p.id = wp.poller_id\n-- A watch now covers a SET of targets (availability_watch_target); summarise\n-- them into scope + count + ids rather than one poi/reservable column.\nLEFT JOIN LATERAL (\n  SELECT\n    count(*) AS target_count,\n    CASE\n      WHEN count(*) = 0 THEN NULL\n      WHEN count(*) FILTER (WHERE wt.poi_id IS NOT NULL) > 0\n       AND count(*) FILTER (WHERE wt.reservable_id IS NOT NULL) > 0 THEN 'mixed'\n      WHEN count(*) FILTER (WHERE wt.poi_id IS NOT NULL) > 0 THEN 'poi'\n      ELSE 'reservable'\n    END AS scope,\n    array_agg(wt.poi_id ORDER BY wt.poi_id)\n      FILTER (WHERE wt.poi_id IS NOT NULL) AS poi_ids,\n    array_agg(wt.reservable_id ORDER BY wt.reservable_id)\n      FILTER (WHERE wt.reservable_id IS NOT NULL) AS reservable_ids\n  FROM availability_watch_target wt\n  LEFT JOIN pois poi ON poi.id = wt.poi_id\n  LEFT JOIN reservables rv ON rv.id = wt.reservable_id\n  WHERE wt.watch_id = w.id\n) tgt ON true\nLEFT JOIN LATERAL (\n  SELECT\n    count(*) AS attached_watches,\n    min(w2.cadence_sec) AS poller_cadence_sec,\n    min(w2.start_date) AS window_start,\n    max(w2.end_date) AS window_end\n  FROM availability_watch_poller wp2\n  JOIN availability_watch w2 ON w2.id = wp2.watch_id AND w2.status = 'active'\n  WHERE wp2.poller_id = p.id\n) agg ON true\nWHERE (${watch_id:sqlstring} IN ('', '__all') OR w.id::text IN (${watch_id:sqlstring}))\n  AND (${poller_id:sqlstring} IN ('', '__all') OR p.id::text IN (${poller_id:sqlstring}))\nORDER BY\n  p.next_run_at ASC NULLS LAST,\n  w.created_at DESC,\n  w.id DESC;",
           "refId": "A"
         }
       ],
@@ -521,6 +558,19 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(date|_at)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
           }
         ]
       },
@@ -528,7 +578,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 34
       },
       "id": 10,
       "options": {
@@ -661,6 +711,19 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(date|_at)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
           }
         ]
       },
@@ -668,7 +731,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 46
+        "y": 44
       },
       "id": 3,
       "options": {
@@ -814,6 +877,19 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(date|_at)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
           }
         ]
       },
@@ -821,7 +897,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 56
+        "y": 54
       },
       "id": 9,
       "options": {
@@ -895,13 +971,27 @@
             ]
           }
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(date|_at)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          }
+        ]
       },
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 66
+        "y": 64
       },
       "id": 11,
       "options": {
@@ -1007,7 +1097,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 76
+        "y": 74
       },
       "id": 12,
       "options": {
@@ -1044,42 +1134,6 @@
       ],
       "title": "Rate-limited fetches",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "roadtrip-loki"
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 104
-      },
-      "id": 15,
-      "options": {
-        "dedupStrategy": "none",
-        "enableLogDetails": true,
-        "prettifyLogMessage": false,
-        "showCommonLabels": false,
-        "showLabels": false,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "wrapLogMessage": false
-      },
-      "pluginVersion": "13.1.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "expr": "{container=\"roadtrip-backend-1\"}",
-          "refId": "A"
-        }
-      ],
-      "title": "Backend logs",
-      "type": "logs"
     },
     {
       "datasource": {
@@ -1149,6 +1203,19 @@
                 ]
               }
             ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(date|_at)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
           }
         ]
       },
@@ -1156,7 +1223,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 84
+        "y": 82
       },
       "id": 13,
       "options": {
@@ -1262,7 +1329,7 @@
         "h": 8,
         "w": 24,
         "x": 0,
-        "y": 94
+        "y": 92
       },
       "id": 14,
       "options": {
@@ -1299,6 +1366,48 @@
       ],
       "title": "Effective poll interval over time",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "roadtrip-loki"
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 100
+      },
+      "id": 15,
+      "options": {
+        "dedupStrategy": "none",
+        "enableInfiniteScrolling": false,
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showControls": false,
+        "showFieldSelector": false,
+        "showLabels": false,
+        "showLevel": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "timestampResolution": "ms",
+        "unwrappedColumns": false,
+        "wrapLogMessage": false
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "roadtrip-loki"
+          },
+          "expr": "{container=\"roadtrip-backend-1\"}",
+          "refId": "A"
+        }
+      ],
+      "title": "Backend logs",
+      "type": "logs"
     }
   ],
   "preload": false,
@@ -1409,7 +1518,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "\u2714\ufe0e Reservable Availability Watch drill down",
+  "title": "✔︎ Reservable Availability Watch drill down",
   "uid": "reservable-watch-drill",
   "version": 1
 }
