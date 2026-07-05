@@ -228,8 +228,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         val blocks: List<SlackBlockDto>?,
     ) {
         /** Everything a reader would see: fallback text + every block's text and
-         *  fields + button labels/urls. Lets content assertions ignore whether a
-         *  string landed in the fallback or a block. */
+         *  fields. Deep-links render as `<url|label>` markup inside section text,
+         *  so both label and url are captured by the section-text append. Lets
+         *  content assertions ignore whether a string landed in the fallback or a
+         *  block. */
         val allText: String
             get() =
                 buildString {
@@ -237,7 +239,6 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     blocks?.forEach { b ->
                         b.text?.let { append('\n').append(it.text) }
                         b.fields?.forEach { append('\n').append(it.text) }
-                        b.elements?.forEach { append('\n').append(it.text.text).append(' ').append(it.url) }
                     }
                 }
     }
@@ -840,7 +841,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val poller = linkWatch(provider, watchId)
             val notifier = RecordingSlackNotifications()
 
-            // The rich openings alert has a Reserve button, not Grafana links —
+            // The rich openings alert has a Reserve link, not Grafana links —
             // those live only on the informational status messages.
             executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
 
