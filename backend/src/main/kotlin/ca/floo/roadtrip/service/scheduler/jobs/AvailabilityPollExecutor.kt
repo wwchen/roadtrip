@@ -58,9 +58,10 @@ private val SNAPSHOT_HISTORY_RETENTION: Duration = Duration.ofDays(180)
  * and not one call per watch.
  *
  * If the poller has no live watches (every linked watch has fully elapsed),
- * the tick is the reaper: it retires the poller (marks elapsed watches done,
- * drops links, deactivates the poller) and makes no upstream call and writes
- * no run row.
+ * the tick makes no upstream call and writes no run row — it just reschedules.
+ * Teardown (marking watches done, dropping links, deactivating the poller) is
+ * owned by [ca.floo.roadtrip.service.scheduler.WatchReaper], not the fetch
+ * path; the tick never mutates watch or poller lifecycle.
  *
  * Per-run audit: every invocation that fetches writes one [AvailabilityRunRepo]
  * row. Successful runs are recorded as 'completed' with `snapshot_count` -- which
@@ -95,12 +96,13 @@ internal class AvailabilityPollExecutor(
         val liveWatches = pollers.liveWatchesForPoller(poller.id)
 
         // A live watch gates *whether* this poller runs, never *how wide* it
-        // fetches (that's vendor-derived below). No live watch -> every linked
-        // watch is elapsed: retire (the tick is the reaper until PR3 moves this
-        // to a dedicated reaper). No fetch, no run row.
+        // fetches (that's vendor-derived below). No live watch -> nothing to
+        // serve: skip the fetch. The tick does NOT mutate — elapsed-watch
+        // teardown (mark done, drop links, deactivate) belongs to WatchReaper
+        // now, not the fetch path. Reschedule on the idle cadence; the reaper
+        // deactivates this poller shortly so it stops being claimed.
         if (liveWatches.isEmpty()) {
-            pollers.retire(poller.id, elapsedWatchIds = pollers.watchIdsForPoller(poller.id))
-            return HandlerResult(nextRunAt = OffsetDateTime.now()) // inert; poller now inactive
+            return HandlerResult(nextRunAt = OffsetDateTime.now().plusSeconds(IDLE_RESCHEDULE_SEC))
         }
 
         // Cadence = tightest (min) over live watches, each watch resolving its own
@@ -375,6 +377,11 @@ internal fun resolveCadenceSec(
         }
     return resolved.minOrNull() ?: GLOBAL_DEFAULT_SEC
 }
+
+// How soon a poller with no live watches re-checks. It made no upstream call
+// and did no work — WatchReaper will deactivate it shortly — so this is just a
+// low-frequency holding cadence, not the success cadence.
+private const val IDLE_RESCHEDULE_SEC = 300L
 
 private const val BACKOFF_BASE_MULTIPLIER = 2.0
 private const val BACKOFF_CEILING_SEC = 3_600L // 1h cap on a wedged poller

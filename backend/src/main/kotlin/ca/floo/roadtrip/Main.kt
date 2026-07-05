@@ -57,6 +57,7 @@ import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
+import ca.floo.roadtrip.service.scheduler.WatchReaper
 import ca.floo.roadtrip.service.scheduler.framework.Scheduler
 import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
 import io.github.smiley4.ktorswaggerui.SwaggerUI
@@ -289,6 +290,11 @@ fun Application.module() {
             name = "availability",
         )
     availabilityScheduler.start(schedulerScope)
+    // Elapsed-watch teardown runs on its own cadence, not on the poll tick:
+    // marks elapsed watches done, drops their poller links, deactivates
+    // orphaned pollers. Reads are correct without it (liveness is derived); it
+    // just materializes the lifecycle transitions.
+    WatchReaper(availabilityPollers).start(schedulerScope)
     environment.monitor.subscribe(ApplicationStopping) {
         schedulerScope.cancel()
         recgovAvailabilityClient.close()
