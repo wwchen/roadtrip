@@ -52,12 +52,12 @@ class ReservableAvailabilityComposerTest {
             val store = FakeCacheStore()
             val composer = composer(listOf(target), store)
 
-            val first = composer.availabilityFor(listOf(target.reservable), null, null, force = false)
+            val first = composer.availabilityFor(listOf(target.reservable), null, null)
             assertEquals(1, provider.catalogCalls, "cache miss should fetch upstream exactly once")
             assertEquals(1, store.recordCalls, "cache miss should persist a snapshot")
             assertFalse(first.single().cache.hit, "first read is a miss")
 
-            val second = composer.availabilityFor(listOf(target.reservable), null, null, force = false)
+            val second = composer.availabilityFor(listOf(target.reservable), null, null)
             assertEquals(1, provider.catalogCalls, "repeat read must be served from cache, not re-fetched")
             assertEquals(1, store.recordCalls, "cache hit should not write again")
             assertTrue(second.single().cache.hit, "second read is a cache hit")
@@ -86,7 +86,7 @@ class ReservableAvailabilityComposerTest {
             val composer = composer(listOf(targetA, targetB), FakeCacheStore())
 
             // Request order is B then A; results must come back in the requested order.
-            val results = composer.availabilityFor(listOf(targetB.reservable, targetA.reservable), null, null, force = true)
+            val results = composer.availabilityFor(listOf(targetB.reservable, targetA.reservable), null, null)
 
             assertEquals(2, provider.catalogCalls, "distinct groups fetch independently")
             assertEquals(2, results.size)
@@ -106,7 +106,7 @@ class ReservableAvailabilityComposerTest {
 
             // startDate before the target's earliest bookable date → StartBeforeEarliest.
             assertFailsWith<AvailabilityServiceError.BadDateWindow.StartBeforeEarliest> {
-                composer.availabilityFor(listOf(target.reservable), earliest.minusDays(1), null, force = false)
+                composer.availabilityFor(listOf(target.reservable), earliest.minusDays(1), null)
             }
             assertEquals(0, provider.catalogCalls, "an invalid window must short-circuit before any upstream fetch")
         }
@@ -120,7 +120,7 @@ class ReservableAvailabilityComposerTest {
             val composer = composer(targets = emptyList(), cacheStore = FakeCacheStore())
             val error =
                 assertFailsWith<AvailabilityServiceError.UnknownCampground> {
-                    composer.availabilityFor(listOf(reservable("site:recgov:999")), null, null, force = false)
+                    composer.availabilityFor(listOf(reservable("site:recgov:999")), null, null)
                 }
             assertEquals(AvailabilityServiceError.UnknownCampground, error)
         }
@@ -138,7 +138,7 @@ class ReservableAvailabilityComposerTest {
             val composer = composer(listOf(target), FakeCacheStore())
 
             assertFailsWith<ReservationProviderError.RateLimited> {
-                composer.availabilityFor(listOf(target.reservable), null, null, force = true)
+                composer.availabilityFor(listOf(target.reservable), null, null)
             }
             assertEquals(1, provider.catalogCalls, "provider should be called exactly once before the error propagates")
         }

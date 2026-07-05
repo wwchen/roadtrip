@@ -43,7 +43,6 @@ internal class ReservableAvailabilityComposer(
         reservables: List<Reservable>,
         startDate: LocalDate?,
         endDate: LocalDate?,
-        force: Boolean,
     ): List<AvailabilityResponseDto> {
         if (reservables.isEmpty()) return emptyList()
         val resolved = reservables.map { targets.resolve(it) ?: throw AvailabilityServiceError.UnknownCampground }
@@ -70,7 +69,6 @@ internal class ReservableAvailabilityComposer(
                             startDate = window.startDate,
                             endDate = window.endDate,
                             ttl = snapshotFreshnessTtl(provider.id),
-                            force = force,
                         ),
                     ) {
                         provider.catalogAvailability(
@@ -79,7 +77,6 @@ internal class ReservableAvailabilityComposer(
                                 reservables = rows.map { it.toCatalogReservableRef() },
                                 startDate = window.startDate,
                                 endDate = window.endDate,
-                                force = force,
                             ),
                         )
                     }

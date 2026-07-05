@@ -1,64 +1,125 @@
 package ca.floo.roadtrip.service.notification
 
+import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
 import kotlinx.coroutines.runBlocking
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class SlackNotificationServiceImplTest {
-    /** Records the (channel, text) it was asked to post and returns a fixed result. */
+    /** Records what it was asked to post and returns a fixed result, so the impl's
+     *  enabled path (channel resolution, blocks pass-through, result propagation)
+     *  is exercised without a live workspace. */
     private class RecordingSlackClient(
         private val result: Boolean = true,
     ) : SlackClient(SlackConfig(botToken = "xoxb-test", defaultChannel = "#unused")) {
-        val posts = mutableListOf<Pair<String, String>>()
+        data class Post(
+            val channel: String,
+            val text: String,
+            val blocks: List<SlackBlockDto>?,
+        )
+
+        val posts = mutableListOf<Post>()
 
         override suspend fun postMessage(
             channel: String,
             text: String,
+            blocks: List<SlackBlockDto>?,
         ): Boolean {
-            posts += channel to text
+            posts += Post(channel, text, blocks)
             return result
         }
     }
 
+    private fun service(
+        client: RecordingSlackClient,
+        defaultChannel: String = "#default",
+    ) = SlackNotificationServiceImpl(SlackConfig(botToken = "xoxb-test", defaultChannel = defaultChannel), client = client)
+
     @Test
-    fun `sends to the given channel and returns the client result`() =
+    fun `sendMessage posts plain text to the given channel and returns the client result`() =
         runBlocking {
             val client = RecordingSlackClient(result = true)
-            val service = SlackNotificationServiceImpl(client, defaultChannel = "#default")
-
-            val ok = service.sendMessage("hello camper", "#camping")
+            val ok = service(client).sendMessage("hello camper", "#camping")
 
             assertTrue(ok)
-            assertEquals(listOf("#camping" to "hello camper"), client.posts)
+            assertEquals(1, client.posts.size)
+            assertEquals("#camping", client.posts.single().channel)
+            assertEquals("hello camper", client.posts.single().text)
+            assertEquals(null, client.posts.single().blocks, "plain sendMessage carries no blocks")
         }
 
     @Test
-    fun `falls back to the default channel when none is given`() =
+    fun `sendMessage falls back to the configured default channel`() =
         runBlocking {
             val client = RecordingSlackClient()
-            SlackNotificationServiceImpl(client, defaultChannel = "#default").sendMessage("hi")
+            service(client, defaultChannel = "#default").sendMessage("hi")
 
-            assertEquals(listOf("#default" to "hi"), client.posts)
+            assertEquals("#default", client.posts.single().channel)
         }
 
     @Test
-    fun `returns false and sends nothing when there is no channel and no default`() =
+    fun `sendMessage surfaces a client failure as false`() =
+        runBlocking {
+            assertFalse(service(RecordingSlackClient(result = false)).sendMessage("x"))
+        }
+
+    @Test
+    fun `sendWatchOpenings renders blocks and forwards them to the client`() =
         runBlocking {
             val client = RecordingSlackClient()
-            val ok = SlackNotificationServiceImpl(client, defaultChannel = null).sendMessage("hi")
+            val ok =
+                service(client).sendWatchOpenings(
+                    startDate = LocalDate.of(2026, 8, 1),
+                    endDate = LocalDate.of(2026, 8, 3),
+                    openings =
+                        listOf(
+                            WatchOpening(
+                                label = "Site 100",
+                                loop = "Loop A",
+                                siteType = "Tent",
+                                date = LocalDate.of(2026, 8, 1),
+                                campgroundId = 7L,
+                                campground = "Kirk Creek",
+                                bookingUrl = "https://example.test/book/100",
+                            ),
+                        ),
+                    channel = "#camping",
+                )
+
+            assertTrue(ok)
+            val post = client.posts.single()
+            assertEquals("#camping", post.channel)
+            assertTrue(post.text.contains("campsite"), post.text)
+            assertTrue(!post.blocks.isNullOrEmpty(), "openings send carries Block Kit blocks")
+        }
+
+    @Test
+    fun `sendWatchOpenings sends nothing when there are no openings`() =
+        runBlocking {
+            val client = RecordingSlackClient()
+            val ok = service(client).sendWatchOpenings(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 3), emptyList())
 
             assertFalse(ok)
             assertTrue(client.posts.isEmpty())
         }
 
     @Test
-    fun `surfaces a client failure as false`() =
+    fun `a disabled service (null config) sends nothing and returns false`() =
         runBlocking {
-            val service = SlackNotificationServiceImpl(RecordingSlackClient(result = false), defaultChannel = "#default")
-            assertFalse(service.sendMessage("x"))
+            val service = SlackNotificationServiceImpl(config = null)
+            assertFalse(service.sendMessage("hello camper"))
+            assertFalse(service.sendMessage("with a channel", channel = "#camping"))
+            assertFalse(
+                service.sendWatchOpenings(
+                    LocalDate.of(2026, 8, 1),
+                    LocalDate.of(2026, 8, 3),
+                    listOf(WatchOpening("Site 100", null, null, LocalDate.of(2026, 8, 1), null, null, null)),
+                ),
+            )
         }
 }
