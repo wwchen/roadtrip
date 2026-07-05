@@ -963,6 +963,7 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.reservation.Reserva
             supportsAvailability = true,
             supportsAlerts = true,
             bookingHorizonDays = 180,
+            maxPollWindowDays = 60,
         )
 
     override suspend fun availability(

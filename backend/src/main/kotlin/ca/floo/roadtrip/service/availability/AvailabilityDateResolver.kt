@@ -55,22 +55,29 @@ internal class AvailabilityDateResolver(
         return ResolvedDateWindow(startDate = start, endDate = end)
     }
 
+    /**
+     * The poller's fetch window: the widest window the vendor exposes for a
+     * single tick, anchored at today. Deliberately **independent of any
+     * watch's dates** — a watch gates *whether* a poller runs (reference
+     * count), never *how wide* it fetches. Since one upstream call returns the
+     * whole window's per-day grid at no extra cost, polling maximally widens
+     * snapshot history for free.
+     *
+     * The window is `[earliestDate, earliestDate + min(maxPollWindowDays,
+     * bookingHorizonDays))`. Because [PoiDateContext.earliestDate] is
+     * clock-derived, the window slides forward every day with no state to
+     * maintain. Returns null when the effective span is non-positive (an
+     * unsupported vendor with a zero poll window / horizon) so the batcher
+     * skips the group and makes no upstream call.
+     */
     fun resolvePollingWindow(
-        startDate: LocalDate,
-        endDate: LocalDate,
         context: PoiDateContext,
+        maxPollWindowDays: Int,
         bookingHorizonDays: Int,
-        maxDays: Int,
     ): ResolvedDateWindow? {
-        val start = maxOf(startDate, context.earliestDate)
-        if (!endDate.isAfter(start)) return null
-        return resolveWindow(
-            startDate = start,
-            endDate = endDate,
-            context = context,
-            bookingHorizonDays = bookingHorizonDays,
-            maxDays = maxDays,
-            defaultDays = maxDays,
-        )
+        val days = minOf(maxPollWindowDays, bookingHorizonDays)
+        if (days <= 0) return null
+        val start = context.earliestDate
+        return ResolvedDateWindow(startDate = start, endDate = start.plusDays(days.toLong()))
     }
 }

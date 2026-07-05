@@ -51,6 +51,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -377,6 +378,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         // When set, every observation is reported for this date instead of the
         // window start — lets a test place a transition on an exact day.
         var observationDate: LocalDate? = null,
+        // Zero collapses the poll window to null so the batcher skips the group
+        // (the only way a supported provider yields a null window now that the
+        // window is vendor-derived, not watch-derived).
+        maxPollWindowDays: Int = 60,
     ) : ReservationProvider {
         var calls: Int = 0
         var lastStart: LocalDate? = null
@@ -390,6 +395,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = true,
                 bookingHorizonDays = 3650,
+                maxPollWindowDays = maxPollWindowDays,
             )
 
         override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =
@@ -436,6 +442,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = true,
                 bookingHorizonDays = 3650,
+                maxPollWindowDays = 60,
             )
 
         override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =
@@ -453,12 +460,15 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     private val farStart = LocalDate.now(ZoneOffset.UTC).plusYears(1)
 
     @Test
-    fun `two live watches on one poller makes one fetch over the union window`() =
+    fun `two live watches on one poller make one fetch over the vendor window`() =
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
             listOf("100", "101", "102").forEach { seedReservable(poiId, it) }
-            // watchA: [+1y+5, +1y+7]; watchB: [+1y, +1y+2]. Union = [+1y, +1y+7].
+            // Two watches with different, far-future date windows. The poll
+            // window is NOT derived from these dates — it's the vendor-max
+            // window anchored at today (maxPollWindowDays = 60) — so the watch
+            // dates only decide *whether* the poller runs, not how wide.
             val watchA = seedWatch(poiId, farStart.plusDays(5).toString(), farStart.plusDays(7).toString())
             val watchB = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
             val poller = linkWatch(provider, watchA)
@@ -469,10 +479,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
             executorFor(provider).handle(poller)
 
-            // ONE upstream call covering the union window and all 3 sites once each.
+            // ONE upstream call over the vendor window and all 3 sites once each.
             assertEquals(1, provider.calls)
-            assertEquals(farStart, provider.lastStart)
-            assertEquals(farStart.plusDays(7), provider.lastEnd)
+            // Window is today-anchored and 60 days wide, independent of the
+            // watches' year-out dates.
+            val start = provider.lastStart!!
+            val today = LocalDate.now(ZoneOffset.UTC)
+            assertTrue(start == today || start == today.plusDays(1), "window starts at today's earliest bookable date, not the watch start")
+            assertEquals(60L, ChronoUnit.DAYS.between(start, provider.lastEnd), "window spans the vendor cap, not the watch union")
 
             val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
             assertEquals(1, runs.size)
@@ -505,7 +519,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @Test
     fun `reserved to available transition alerts the covering slack_notify watch on the default channel`() =
         runBlocking {
-            val provider = CountingRecgovProvider(status = AvailabilityStatus.RESERVED)
+            // Observe on a watched date: the poll window is today-anchored and
+            // vendor-wide, so pin the fake's observation into the watch window.
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.RESERVED, observationDate = farStart)
             val poiId = seedPoi("232447")
             seedReservable(poiId, "100")
             val watchId =
@@ -542,7 +558,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @Test
     fun `channel override in trigger_config wins over the default channel`() =
         runBlocking {
-            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
             seedReservable(poiId, "100")
             val watchId =
@@ -566,7 +582,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @Test
     fun `stop_when_triggered marks the watch done after a successful post`() =
         runBlocking {
-            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
             seedReservable(poiId, "100")
             val watchId =
@@ -587,7 +603,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @Test
     fun `a failed post leaves a stop_when_triggered watch active`() =
         runBlocking {
-            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
             seedReservable(poiId, "100")
             val watchId =
@@ -810,7 +826,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @Test
     fun `openings alert carries no grafana dashboard links`() =
         runBlocking {
-            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
             seedReservable(poiId, "100")
             val watchId =
@@ -1014,21 +1030,17 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @Test
     fun `null-window groups acquire zero tokens and are never starved`() =
         runBlocking {
-            // A watch that passes the poller's UTC prefilter (end_date >= today)
-            // but whose target-local polling window resolves to null: end_date is
-            // today, and the polling-window clamp is max(start, earliestDate) where
-            // earliestDate is today-or-tomorrow, so end_date is never after the
-            // clamped start regardless of time of day. Every group is a non-fetch.
-            // The governor must charge ZERO tokens: a token spent on a non-fetch
-            // could starve the bucket and delay retiring an all-elapsed poller. Even
-            // a denying limiter must not block this tick.
-            val provider = CountingRecgovProvider()
+            // A group's polling window is null only when the vendor exposes a
+            // zero poll window (maxPollWindowDays = 0) — the window is
+            // vendor-derived now, not watch-derived, so a live watch can never
+            // produce a null window on its own. A null-window group is a
+            // non-fetch: the governor must charge ZERO tokens, since a token
+            // spent on a non-fetch could starve the bucket. Even a denying
+            // limiter must not block this tick.
+            val provider = CountingRecgovProvider(maxPollWindowDays = 0)
             val poiId = seedPoi("232447")
             seedReservable(poiId, "100")
-            val today = LocalDate.now(ZoneOffset.UTC)
-            // start < end (satisfies the date-window CHECK) yet the whole window
-            // is at/behind the earliest bookable date -> null polling window.
-            val watchId = seedWatch(poiId, today.minusDays(1).toString(), today.toString(), cadenceSec = 60)
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
             val poller = linkWatch(provider, watchId)
             val denyingLimiter = RecordingLimiter(grant = false)
 
@@ -1134,7 +1146,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @Test
     fun `unchanged status across two runs upserts the cell but writes no second snapshot row`() =
         runBlocking {
-            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
             val reservableId = seedReservable(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
@@ -1202,7 +1214,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     @Test
     fun `snapshot append failure rolls back the cell upsert so the edge is re-detected next poll`() =
         runBlocking {
-            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
+            val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
             val reservableId = seedReservable(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
