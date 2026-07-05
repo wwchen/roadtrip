@@ -31,9 +31,21 @@ data class SlackButtonDto(
     val style: String? = null,
 )
 
+/** A link button in an actions block: a [label], the [url] it opens, and
+ *  whether it renders as the green primary CTA. Callers pass these to
+ *  [SlackBlocks.actions] rather than building [SlackButtonDto]s directly. */
+data class ButtonSpec(
+    val label: String,
+    val url: String,
+    val primary: Boolean = false,
+)
+
 /** Semantic builders so callers express intent (header, fields, section,
- *  button) instead of sprinkling Block Kit `type` strings. */
+ *  buttons) instead of sprinkling Block Kit `type` strings. */
 object SlackBlocks {
+    /** Max buttons Slack accepts in one actions block; more must be split across blocks. */
+    const val ACTIONS_MAX_ELEMENTS = 25
+
     fun header(text: String): SlackBlockDto = SlackBlockDto(type = "header", text = plain(text))
 
     /** A section rendered as a 2-column field grid (Slack lays fields out in pairs). */
@@ -41,14 +53,21 @@ object SlackBlocks {
 
     fun section(text: String): SlackBlockDto = SlackBlockDto(type = "section", text = mrkdwn(text))
 
+    /** An actions block of link buttons. Caller must keep [buttons] within
+     *  [ACTIONS_MAX_ELEMENTS]; chunk longer lists into multiple blocks. */
+    fun actions(buttons: List<ButtonSpec>): SlackBlockDto =
+        SlackBlockDto(
+            type = "actions",
+            elements =
+                buttons.map { b ->
+                    SlackButtonDto(type = "button", text = plain(b.label), url = b.url, style = if (b.primary) "primary" else null)
+                },
+        )
+
     fun primaryButton(
         label: String,
         url: String,
-    ): SlackBlockDto =
-        SlackBlockDto(
-            type = "actions",
-            elements = listOf(SlackButtonDto(type = "button", text = plain(label), url = url, style = "primary")),
-        )
+    ): SlackBlockDto = actions(listOf(ButtonSpec(label, url, primary = true)))
 
     private fun plain(text: String): SlackTextDto = SlackTextDto(type = "plain_text", text = text, emoji = true)
 
