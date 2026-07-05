@@ -1,7 +1,6 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
-import ca.floo.roadtrip.clients.slack.SlackClient
-import ca.floo.roadtrip.config.SlackConfig
+import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
@@ -15,6 +14,7 @@ import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -23,7 +23,10 @@ import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
+import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
+import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
@@ -194,20 +197,55 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
     }
 
-    /** A Slack transport double that records every post and returns a
-     *  configurable result, so alert tests never touch a live Slack workspace.
-     *  [dispatcherWith] wraps it in a real SlackNotificationServiceImpl, so
-     *  default-channel routing is exercised end to end. */
-    private class RecordingSlackClient(
-        var result: Boolean = true,
-    ) : SlackClient(SlackConfig(botToken = "xoxb-test", defaultChannel = "#unused")) {
-        val posts = mutableListOf<Pair<String, String>>() // (channel, text)
+    /** One recorded send: the resolved channel, the fallback text, and the Block
+     *  Kit blocks (null for the plain-text informational messages). */
+    private data class Post(
+        val channel: String?,
+        val text: String,
+        val blocks: List<SlackBlockDto>?,
+    ) {
+        /** Everything a reader would see: fallback text + every block's text and
+         *  fields + button labels/urls. Lets content assertions ignore whether a
+         *  string landed in the fallback or a block. */
+        val allText: String
+            get() =
+                buildString {
+                    append(text)
+                    blocks?.forEach { b ->
+                        b.text?.let { append('\n').append(it.text) }
+                        b.fields?.forEach { append('\n').append(it.text) }
+                        b.elements?.forEach { append('\n').append(it.text.text).append(' ').append(it.url) }
+                    }
+                }
+    }
 
-        override suspend fun postMessage(
-            channel: String,
+    /** A [SlackNotificationService] double that records every send and returns a
+     *  configurable result, so alert tests never touch a live Slack workspace. It
+     *  resolves the default channel the way the real impl does, and renders
+     *  openings through the real [SlackContentAvailabilityRenderer], so both
+     *  channel and message-content assertions stay meaningful. */
+    private class RecordingSlackNotifications(
+        var result: Boolean = true,
+        private val defaultChannel: String? = "#camping",
+    ) : SlackNotificationService {
+        val posts = mutableListOf<Post>()
+
+        override suspend fun sendMessage(
             text: String,
+            channel: String?,
         ): Boolean {
-            posts += channel to text
+            posts += Post(channel = channel ?: defaultChannel, text = text, blocks = null)
+            return result
+        }
+
+        override suspend fun sendWatchOpenings(
+            startDate: LocalDate,
+            endDate: LocalDate,
+            openings: List<WatchOpening>,
+            channel: String?,
+        ): Boolean {
+            val (fallback, blocks) = SlackContentAvailabilityRenderer.openings(startDate, endDate, openings)
+            posts += Post(channel = channel ?: defaultChannel, text = fallback, blocks = blocks)
             return result
         }
     }
@@ -220,12 +258,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             dateResolver = AvailabilityDateResolver(),
         )
 
-    /** Dispatcher with Slack disabled (notifications null) — the alert path
-     *  no-ops. Default for tests that don't exercise alerting; its targets
-     *  resolver is never reached because a null service returns early. */
+    /** Dispatcher with Slack disabled — a null-config service that no-ops and
+     *  returns false. Default for tests that don't exercise alerting. */
     private fun disabledDispatcher(): WatchAlertDispatcher =
         WatchAlertDispatcher(
-            slack = null,
+            slack = SlackNotificationServiceImpl(config = null),
             scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
             targets =
@@ -235,21 +272,22 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     reservationProviders = ReservationProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
                 ),
+            pois = PoiServingRepo(ctx),
             heatmaps = AvailabilityHeatmapRepo(ctx),
             grafanaRootUrl = GRAFANA_ROOT_URL,
         )
 
     private fun dispatcherWith(
         provider: ReservationProvider,
-        client: RecordingSlackClient?,
-        defaultChannel: String? = "#camping",
+        notifications: RecordingSlackNotifications,
         grafanaRootUrl: String? = GRAFANA_ROOT_URL,
     ): WatchAlertDispatcher =
         WatchAlertDispatcher(
-            slack = client?.let { SlackNotificationServiceImpl(it, defaultChannel) },
+            slack = notifications,
             scopeResolver = WatchScopeResolver(ReservableRepo(ctx)),
             watches = AvailabilityWatchRepo(ctx),
             targets = targetsFor(provider),
+            pois = PoiServingRepo(ctx),
             heatmaps = AvailabilityHeatmapRepo(ctx),
             grafanaRootUrl = grafanaRootUrl,
         )
@@ -478,7 +516,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     triggerKinds = listOf("slack_notify"),
                 )
             val poller = linkWatch(provider, watchId)
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
             val executor = executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier))
 
             // First poll: RESERVED — a change (first observation) but not bookable, so no alert.
@@ -490,34 +528,15 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             executor.handle(poller)
 
             assertEquals(1, notifier.posts.size)
-            assertEquals("#camping", notifier.posts.single().first)
-            assertTrue(
-                notifier.posts
-                    .single()
-                    .second
-                    .contains("Site 100"),
-            )
+            val post = notifier.posts.single()
+            assertEquals("#camping", post.channel)
+            assertTrue(post.allText.contains("Campsites Available"), post.allText)
+            assertTrue(post.allText.contains("Site 100"), post.allText)
             // The booking link comes from the provider (adapter), not the dispatcher.
-            assertTrue(
-                notifier.posts
-                    .single()
-                    .second
-                    .contains("https://example.test/book/100"),
-            )
-            // The alert deep-links the watch's Grafana drill-down at the configured host.
-            assertTrue(
-                notifier.posts
-                    .single()
-                    .second
-                    .contains("$GRAFANA_ROOT_URL/d/reservable-watch-drill?var-watch_id=$watchId"),
-            )
-            // …and the availability-cube matrix for the POI the opening sits under.
-            assertTrue(
-                notifier.posts
-                    .single()
-                    .second
-                    .contains("$GRAFANA_ROOT_URL/d/availability-cell-matrix?var-poi_id=$poiId"),
-            )
+            assertTrue(post.allText.contains("https://example.test/book/100"), post.allText)
+            // The openings alert is Block Kit with no Grafana links — those stay on
+            // the plain-text informational messages.
+            assertTrue(!post.allText.contains("/d/"), post.allText)
         }
 
     @Test
@@ -535,13 +554,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     triggerConfig = """{"channel":"#custom"}""",
                 )
             val poller = linkWatch(provider, watchId)
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
 
             // First observation of an already-open site alerts (chosen behavior).
             executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
 
             assertEquals(1, notifier.posts.size)
-            assertEquals("#custom", notifier.posts.single().first)
+            assertEquals("#custom", notifier.posts.single().channel)
         }
 
     @Test
@@ -560,7 +579,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 )
             val poller = linkWatch(provider, watchId)
 
-            executorFor(provider, alertDispatcher = dispatcherWith(provider, RecordingSlackClient(result = true))).handle(poller)
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, RecordingSlackNotifications(result = true))).handle(poller)
 
             assertEquals("done", watchStatus(watchId))
         }
@@ -581,7 +600,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 )
             val poller = linkWatch(provider, watchId)
 
-            executorFor(provider, alertDispatcher = dispatcherWith(provider, RecordingSlackClient(result = false))).handle(poller)
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, RecordingSlackNotifications(result = false))).handle(poller)
 
             assertEquals("active", watchStatus(watchId))
         }
@@ -599,16 +618,16 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), triggerKinds = listOf("slack_notify"))
             // Site is already bookable when the watch is created — no future edge exists.
             seedCell(reservableId, farStart, AvailabilityStatus.AVAILABLE)
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
 
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
 
             assertEquals(1, notifier.posts.size)
-            assertEquals("#camping", notifier.posts.single().first)
-            val text = notifier.posts.single().second
-            assertTrue(text.contains("opening"), text)
-            assertTrue(text.contains("Site 100"), text)
-            assertTrue(text.contains("https://example.test/book/100"), text)
+            val post = notifier.posts.single()
+            assertEquals("#camping", post.channel)
+            assertTrue(post.allText.contains("Campsites Available"), post.allText)
+            assertTrue(post.allText.contains("Site 100"), post.allText)
+            assertTrue(post.allText.contains("https://example.test/book/100"), post.allText)
         }
 
     @Test
@@ -619,12 +638,12 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             seedReservable(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), triggerKinds = listOf("slack_notify"))
             // No cube data: the imminent poll's first observation will be the real edge.
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
 
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
 
             assertEquals(1, notifier.posts.size)
-            val text = notifier.posts.single().second
+            val text = notifier.posts.single().allText
             assertTrue(text.contains("Watching"), text)
             assertTrue(text.contains("not checked yet"), text)
         }
@@ -637,7 +656,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val reservableId = seedReservable(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), triggerKinds = listOf("slack_notify"))
             seedCell(reservableId, farStart, AvailabilityStatus.RESERVED)
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
 
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
 
@@ -645,9 +664,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertTrue(
                 notifier.posts
                     .single()
-                    .second
+                    .allText
                     .contains("nothing available right now"),
-                notifier.posts.single().second,
+                notifier.posts.single().allText,
             )
         }
 
@@ -667,7 +686,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 )
             seedCell(reservableId, farStart, AvailabilityStatus.AVAILABLE)
 
-            dispatcherWith(provider, RecordingSlackClient(result = true)).dispatchInitial(findWatch(watchId))
+            dispatcherWith(provider, RecordingSlackNotifications(result = true)).dispatchInitial(findWatch(watchId))
 
             assertEquals("done", watchStatus(watchId))
         }
@@ -686,7 +705,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     triggerKinds = listOf("slack_notify"),
                     stopWhenTriggered = true,
                 )
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
 
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
 
@@ -705,14 +724,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // Even with the site open, a paused watch reports status — not openings.
             seedCell(reservableId, farStart, AvailabilityStatus.AVAILABLE)
             ctx.execute("UPDATE availability_watch SET status = 'paused' WHERE id = ?", watchId)
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
 
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
 
             assertEquals(1, notifier.posts.size)
-            val text = notifier.posts.single().second
+            val text = notifier.posts.single().allText
             assertTrue(text.contains("Paused"), text)
-            assertTrue(!text.contains("opening"), text)
+            assertTrue(!text.contains("Campsites Available"), text)
         }
 
     @Test
@@ -724,7 +743,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // Default trigger kind is "atc" — inert for Slack.
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
             seedCell(reservableId, farStart, AvailabilityStatus.AVAILABLE)
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
 
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
 
@@ -740,7 +759,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // default trigger_kinds = ['atc'] — no slack_notify, so it stays inert.
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
             val poller = linkWatch(provider, watchId)
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
 
             executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
 
@@ -780,16 +799,16 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 membershipFor(provider).sync(w, AvailabilityPollerRepo(ctx), tighterCadencePull = now())
             }
 
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
             executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
 
             assertEquals(1, notifier.posts.size)
-            assertEquals("#b", notifier.posts.single().first, "only the longer watch's window covers the transition")
+            assertEquals("#b", notifier.posts.single().channel, "only the longer watch's window covers the transition")
             assertEquals("active", watchStatus(watchA), "the shorter watch never fired, so it must not be marked done")
         }
 
     @Test
-    fun `alert omits the grafana dashboard links when the host is unset`() =
+    fun `openings alert carries no grafana dashboard links`() =
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
@@ -802,17 +821,19 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     triggerKinds = listOf("slack_notify"),
                 )
             val poller = linkWatch(provider, watchId)
-            val notifier = RecordingSlackClient()
+            val notifier = RecordingSlackNotifications()
 
-            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier, grafanaRootUrl = null)).handle(poller)
+            // The rich openings alert has a Reserve button, not Grafana links —
+            // those live only on the plain-text informational messages.
+            executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
 
             assertEquals(1, notifier.posts.size)
             assertTrue(
                 !notifier.posts
                     .single()
-                    .second
+                    .allText
                     .contains("/d/"),
-                "no dashboard links without a grafana host",
+                "openings alert has no dashboard links",
             )
         }
 

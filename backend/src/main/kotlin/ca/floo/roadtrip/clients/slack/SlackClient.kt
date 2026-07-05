@@ -15,7 +15,11 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 
-private val slackJson = Json { encodeDefaults = true }
+private val slackJson =
+    Json {
+        encodeDefaults = true
+        explicitNulls = false
+    }
 
 /**
  * Outbound Slack `chat.postMessage` transport — the only thing that talks to
@@ -36,20 +40,30 @@ open class SlackClient(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    /** Posts one message to [channel]. Returns true only on Slack `ok:true`. */
+    /**
+     * Posts one message to [channel]. [text] is the notification fallback (shown
+     * in notifications and by clients that don't render blocks); [blocks], when
+     * present, is the rich Block Kit body. Returns true only on Slack `ok:true`.
+     */
     open suspend fun postMessage(
         channel: String,
         text: String,
+        blocks: List<SlackBlockDto>? = null,
     ): Boolean =
-        runCatching { post(channel, text) }
+        runCatching { post(channel, text, blocks) }
             .onFailure { log.error("Slack postMessage to {} failed: {}", channel, it.message) }
             .getOrDefault(false)
 
     private suspend fun post(
         channel: String,
         text: String,
+        blocks: List<SlackBlockDto>?,
     ): Boolean {
-        val body = slackJson.encodeToString(SlackPostMessageDto.serializer(), SlackPostMessageDto(channel = channel, text = text))
+        val body =
+            slackJson.encodeToString(
+                SlackPostMessageDto.serializer(),
+                SlackPostMessageDto(channel = channel, text = text, blocks = blocks),
+            )
         val resp =
             client.post(SLACK_POST_MESSAGE_URL) {
                 header("Authorization", "Bearer ${config.botToken}")
@@ -76,4 +90,5 @@ private const val SLACK_REQUEST_TIMEOUT_MS = 8_000L
 private data class SlackPostMessageDto(
     val channel: String,
     val text: String,
+    val blocks: List<SlackBlockDto>? = null,
 )

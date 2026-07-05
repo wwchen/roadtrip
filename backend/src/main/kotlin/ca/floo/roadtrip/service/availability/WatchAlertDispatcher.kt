@@ -4,15 +4,15 @@ import ca.floo.roadtrip.models.availability.CellTransition
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
+import ca.floo.roadtrip.service.notification.WatchOpening
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 
 /** The only trigger kind that dispatches today. Others (e.g. `atc`) are stored
  *  but inert — they match no branch here. */
 const val SLACK_NOTIFY_KIND = "slack_notify"
-
-private const val MAX_SITES_IN_MESSAGE = 10
 
 /** Grafana dashboards the alert deep-links to. The watch drill-down takes the
  *  firing watch's id (`var-watch_id`); the cube matrix takes a POI
@@ -31,16 +31,19 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * goes `DONE` **only after a post actually succeeds**, so a delivery failure
  * never silences a watch we could not notify on.
  *
- * [slack] is null when Slack is unconfigured; then the whole path no-ops.
- * Nothing here throws into the caller: the service swallows its own failures
- * and the executor wraps this call best-effort. A watch's channel override (if
- * any) is passed through; the service falls back to its default channel.
+ * This class only decides *which* watches fire and hydrates their openings; the
+ * [SlackNotificationService] owns the message rendering and delivery (and no-ops
+ * when Slack is unconfigured). Nothing here throws into the caller: the service
+ * swallows its own failures and the executor wraps this call best-effort. A
+ * watch's channel override (if any) is passed through; the service falls back to
+ * its default channel.
  */
 internal class WatchAlertDispatcher(
-    private val slack: SlackNotificationService?,
+    private val slack: SlackNotificationService,
     private val scopeResolver: WatchScopeResolver,
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
+    private val pois: PoiServingRepo,
     private val heatmaps: AvailabilityHeatmapRepo,
     private val grafanaRootUrl: String?,
 ) {
@@ -48,7 +51,6 @@ internal class WatchAlertDispatcher(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
         transitions: List<CellTransition>,
     ) {
-        if (slack == null) return
         val bookable = transitions.filter { it.status.isOnlineBookable }
         if (bookable.isEmpty()) return
 
@@ -84,8 +86,8 @@ internal class WatchAlertDispatcher(
      * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
-        if (slack == null) return
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
+
         val reservables = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
             slack.sendMessage(buildLifecycleMessage(watch, reservables), watch.channelOverride())
@@ -102,47 +104,47 @@ internal class WatchAlertDispatcher(
         }
     }
 
-    /** Posts the openings alert for one watch and, on a successful post, marks a
-     *  `stopWhenTriggered` watch `DONE` — so a delivery failure never silences a
-     *  watch we could not notify on. Shared by the edge and initial paths. */
+    /** Hydrates the covered cells into [WatchOpening]s, hands them to the
+     *  notification service (which owns the message rendering), and — on a
+     *  successful post — marks a `stopWhenTriggered` watch `DONE`, so a delivery
+     *  failure never silences a watch we could not notify on. Shared by the edge
+     *  and initial paths. */
     private suspend fun postOpenings(
         watch: AvailabilityWatchRepo.Watch,
         covered: List<CellTransition>,
         reservablesById: Map<Long, Reservable>,
     ) {
-        val fired = slack!!.sendMessage(buildMessage(covered, reservablesById, watch.id), watch.channelOverride())
+        val openings = hydrateOpenings(covered, reservablesById)
+        val fired = slack.sendWatchOpenings(watch.startDate, watch.endDate, openings, watch.channelOverride())
         if (fired && watch.stopWhenTriggered) {
             watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }
     }
 
-    private fun buildMessage(
+    /** Resolves each covered cell to a [WatchOpening] — the reservable's display
+     *  label/loop/type, its parent campground (id + name, each POI fetched once),
+     *  and the provider booking URL — so the notification layer only formats. */
+    private fun hydrateOpenings(
         covered: List<CellTransition>,
         reservablesById: Map<Long, Reservable>,
-        watchId: Long,
-    ): String {
-        val ordered = covered.sortedWith(compareBy({ it.reservableId }, { it.targetDate }))
-        // Distinct POIs the openings sit under, for the cell-matrix (cube) link.
-        // Collected in the same pass that resolves each reservable's provider for
-        // its booking link, so we resolve each target once.
-        val poiIds = LinkedHashSet<Long>()
-        val lines =
-            ordered.take(MAX_SITES_IN_MESSAGE).joinToString("\n") { t ->
-                // covered was filtered to reservables in this map, so the key exists.
-                val r = reservablesById.getValue(t.reservableId)
-                val target = targets.resolve(r)
-                target?.parentPoiId?.let(poiIds::add)
-                val label = r.name ?: r.rid.encode()
-                val loop = r.loop?.let { " ($it)" }.orEmpty()
-                // Booking link, if the reservable's provider exposes one — the
-                // URL scheme is the adapter's, never this dispatcher's.
-                val url = target?.provider?.bookingUrl(r.rid, t.targetDate)
-                if (url != null) "• *$label*$loop — ${t.targetDate} <$url|book>" else "• *$label*$loop — ${t.targetDate}"
-            }
-        val count = ordered.size
-        val header = "⛺ $count campsite opening${if (count == 1) "" else "s"} available"
-        val more = if (count > MAX_SITES_IN_MESSAGE) "\n…and ${count - MAX_SITES_IN_MESSAGE} more" else ""
-        return "$header\n$lines$more${dashboardLinks(watchId, poiIds)}"
+    ): List<WatchOpening> {
+        val poiNames = HashMap<Long, String?>()
+        return covered.map { t ->
+            // covered was filtered to reservables in this map, so the key exists.
+            val r = reservablesById.getValue(t.reservableId)
+            val target = targets.resolve(r)
+            WatchOpening(
+                label = r.name ?: r.rid.encode(),
+                loop = r.loop,
+                siteType = r.siteType,
+                date = t.targetDate,
+                campgroundId = target?.parentPoiId,
+                campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiById(it)?.name } },
+                // Booking link, if the reservable's provider exposes one — the URL
+                // scheme is the adapter's, never this dispatcher's.
+                bookingUrl = target?.provider?.bookingUrl(r.rid, t.targetDate),
+            )
+        }
     }
 
     /** Grafana deep links appended to an alert when the Grafana host is

@@ -4,6 +4,7 @@ import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -11,6 +12,7 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -95,7 +97,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     private fun disabledDispatcher(): WatchAlertDispatcher {
         val reservablesRepo = ReservableRepo(ctx)
         return WatchAlertDispatcher(
-            slack = null,
+            slack = SlackNotificationServiceImpl(config = null),
             scopeResolver = WatchScopeResolver(reservablesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets =
@@ -105,6 +107,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     reservationProviders = ReservationProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
                 ),
+            pois = PoiServingRepo(ctx),
             heatmaps = AvailabilityHeatmapRepo(ctx),
             grafanaRootUrl = null,
         )
