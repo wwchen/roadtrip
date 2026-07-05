@@ -6,6 +6,8 @@ import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.util.concurrent.CopyOnWriteArrayList
+import java.util.concurrent.CountDownLatch
 import kotlin.test.assertEquals
 
 class AvailabilityRepoTest : SharedDbTest() {
@@ -121,5 +123,78 @@ class AvailabilityRepoTest : SharedDbTest() {
         val s = stats.single()
         assertEquals(true, s.isCurrentlyOpen)
         assertEquals(1800, s.currentOrLastOpenWindowSec) // available run spans t0..t1 = 30 min
+    }
+
+    @Test
+    fun `summarize keeps a cell's current state even when its last observation predates the window`() {
+        val rid = seedReservable("100")
+        val repo = AvailabilityRepo(ctx)
+        val future = LocalDate.parse("2026-09-01")
+        // Observed once, long before any reasonable summary window.
+        val longAgo = Instant.parse("2026-01-01T00:00:00Z")
+        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(rid, future, AvailabilityStatus.AVAILABLE, longAgo)))
+        val now = OffsetDateTime.parse("2026-07-05T00:00:00Z")
+        val s = repo.summarize(rid, listOf(future), now = now, windowHours = 24 * 7).single()
+        // The current row predates the 7-day window, but the date must still report
+        // its true state, not zero-runs/closed.
+        assertEquals(true, s.isCurrentlyOpen)
+        assertEquals(1, s.totalRuns)
+        assertEquals(0, s.opensLast24h)
+    }
+
+    @Test
+    fun `concurrent writers to one cell keep a single-rooted linear chain without constraint errors`() {
+        val rid = seedReservable("100")
+        val repo = AvailabilityRepo(ctx)
+        val n = 8
+        val start = CountDownLatch(1)
+        val errors = CopyOnWriteArrayList<Throwable>()
+        // Half write RESERVED, half AVAILABLE, released simultaneously — exercises both
+        // the cold-cell first-insert race and the concurrent status-change race that
+        // would otherwise trip availability_previous_id_uq.
+        val threads =
+            (0 until n).map { i ->
+                Thread {
+                    val status = if (i % 2 == 0) AvailabilityStatus.RESERVED else AvailabilityStatus.AVAILABLE
+                    val t = Instant.parse("2026-06-18T10:00:00Z").plusSeconds(i.toLong())
+                    try {
+                        start.await()
+                        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(rid, date, status, t)))
+                    } catch (e: Throwable) {
+                        errors += e
+                    }
+                }
+            }
+        threads.forEach { it.start() }
+        start.countDown()
+        threads.forEach { it.join() }
+
+        assertEquals(emptyList(), errors.map { "${it::class.simpleName}: ${it.message}" }, "no writer should hit a constraint violation")
+        // Exactly one chain root for the cell.
+        val roots =
+            ctx
+                .fetchOne(
+                    "SELECT count(*) AS c FROM availability WHERE reservable_id = ? AND target_date = ? AND previous_id IS NULL",
+                    rid,
+                    date,
+                )!!
+                .get("c", Int::class.java)
+        assertEquals(1, roots, "concurrent cold writes must produce a single root row")
+        // No two rows share a predecessor (chain stays linear, no forks).
+        val forks =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT count(*) AS c FROM (
+                        SELECT previous_id FROM availability
+                        WHERE reservable_id = ? AND target_date = ? AND previous_id IS NOT NULL
+                        GROUP BY previous_id HAVING count(*) > 1
+                    ) x
+                    """.trimIndent(),
+                    rid,
+                    date,
+                )!!
+                .get("c", Int::class.java)
+        assertEquals(0, forks, "no predecessor may have two successors")
     }
 }
