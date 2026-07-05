@@ -42,6 +42,13 @@ export function mountCalendarPopover(host, args) {
     const tgt = e.target;
     if (!(tgt instanceof Element)) return;
 
+    // This handler is bound to `host`, so any click it sees came from inside
+    // the popover — it is never an outside-click. Stop it here so the deferred
+    // document listener doesn't treat it as one. (Month nav rerenders and
+    // detaches the clicked button, which would otherwise defeat onDocClick's
+    // host.contains(target) check and close the dialog.)
+    e.stopPropagation();
+
     if (tgt.closest('.cg-cal-prev')) {
       viewMonth = addLocalMonths(viewMonth, -1);
       rerender();
