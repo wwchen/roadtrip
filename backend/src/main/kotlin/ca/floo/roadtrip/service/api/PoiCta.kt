@@ -3,14 +3,12 @@ package ca.floo.roadtrip.service.api
 import ca.floo.roadtrip.models.api.PoiCtaSchema
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.PoiDetailRow
+import ca.floo.roadtrip.service.reservation.BookingUrlTemplate
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
+import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraBookingUrl
 import java.time.Clock
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 
 // Backend-computed primary action for a POI pin. The drawer button reads
 // {url, label, kind} verbatim — the FE doesn't own per-vendor precedence
@@ -108,54 +106,18 @@ internal class PoiCta(
         )
     }
 
-    // Port of buildAspiraDeeplink (web/aspira.js, deleted). Aspira's NextGen
-    // /create-booking/results URL carries a lot of inert defaults; only the
-    // per-park IDs and the dates are real. Anchor today/tomorrow to the
-    // park's TZ — the booking flow keys on "the park's day."
+    // The campground-level "book now" deeplink: the shared Aspira NextGen
+    // /create-booking/results scheme ([AspiraBookingUrl]), filled for
+    // today→tomorrow anchored to the park's TZ — the booking flow keys on
+    // "the park's day." The URL scheme lives in the adapter, never here.
     private fun aspiraDeeplink(
         host: String,
         ref: ProviderRef.Aspira,
     ): String {
         val today = LocalDate.now(clock.withZone(ASPIRA_ANCHOR_TZ))
-        val tomorrow = today.plusDays(1)
-        // Aspira's `searchTime` is naive ISO without trailing Z. Servers
-        // don't validate the shape; matching the working URL keeps the
-        // wire bytes recognizable.
-        val searchTime =
-            LocalDateTime
-                .now(clock.withZone(ASPIRA_ANCHOR_TZ))
-                .withNano(0)
-                .format(DateTimeFormatter.ISO_LOCAL_DATE_TIME) + ".000"
-        // WA's results-page redirect logic refuses to render unless
-        // flexibleSearch carries a real anchor date; null breaks it.
-        val flexAnchor = today.toString()
-
-        val fields =
-            buildList {
-                add("transactionLocationId" to ref.transactionLocationId.toString())
-                add("mapId" to ref.mapId.toString())
-                add("searchTabGroupId" to "0")
-                add("bookingCategoryId" to "0")
-                add("startDate" to today.toString())
-                add("endDate" to tomorrow.toString())
-                add("nights" to "1")
-                add("isReserving" to "true")
-                add("equipmentId" to "-32768")
-                add("subEquipmentId" to "-32768")
-                add("peopleCapacityCategoryCounts" to "[[-32767,null,1,null]]")
-                add("searchTime" to searchTime)
-                add("flexibleSearch" to "[false,false,\"$flexAnchor\",1]")
-                add("view" to "grid")
-                // Only include resourceLocationId when present. Sending the
-                // string "NULL" (or omitting when required) makes WA bounce
-                // the user back to the homepage instead of the results page.
-                ref.resourceLocationId?.let { add("resourceLocationId" to it.toString()) }
-            }
-        val qs = fields.joinToString("&") { (k, v) -> "$k=${urlEncode(v)}" }
-        return "https://$host/create-booking/results?$qs"
+        val template = AspiraBookingUrl.template(host, ref.transactionLocationId, ref.mapId, ref.resourceLocationId)
+        return BookingUrlTemplate.fill(template, today, today.plusDays(1))
     }
-
-    private fun urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
 
     private fun reserveCaliforniaParkUrl(placeId: Long): String = "$RESERVECALIFORNIA_URL/park/$placeId"
 
