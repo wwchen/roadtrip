@@ -78,6 +78,57 @@ class AvailabilityRepo(
         }
     }
 
+    /**
+     * Insert a terminal `past` status-run for every cell whose current row has an
+     * elapsed target_date and is not already `past`. Chained via previous_id so the
+     * transition is visible in history. Returns rows inserted.
+     *
+     * The elapsed lookup takes the current row per cell first (unfiltered top-1) and
+     * only then drops cells already `past`. Filtering before the top-1 pick would let
+     * an older non-`past` row resurface once the current row is `past`, and chaining a
+     * second `past` run onto it would violate the previous_id uniqueness — so this must
+     * be idempotent across repeated polls.
+     */
+    fun markElapsedAsPast(
+        reservableIds: List<Long>,
+        today: LocalDate,
+    ): Int {
+        if (reservableIds.isEmpty()) return 0
+        val now = OffsetDateTime.now(ZoneOffset.UTC)
+        return ctx.transactionResult { config ->
+            val txn = DSL.using(config)
+            val elapsed =
+                txn
+                    .resultQuery(
+                        """
+                        SELECT id, reservable_id, target_date
+                        FROM (
+                            SELECT DISTINCT ON (reservable_id, target_date)
+                                id, reservable_id, target_date, status
+                            FROM availability
+                            WHERE reservable_id = ANY(?::bigint[])
+                              AND target_date < ?::date
+                            ORDER BY reservable_id, target_date, last_observed_at DESC, id DESC
+                        ) cur
+                        WHERE cur.status <> 'past'
+                        """.trimIndent(),
+                        reservableIds.toTypedArray(),
+                        today,
+                    ).fetch { it }
+            for (row in elapsed) {
+                txn
+                    .insertInto(AVAILABILITY)
+                    .set(AVAILABILITY.RESERVABLE_ID, row.get("reservable_id", Long::class.java))
+                    .set(AVAILABILITY.TARGET_DATE, row.get("target_date", LocalDate::class.java))
+                    .set(AVAILABILITY.STATUS, DbAvailabilityStatus.past)
+                    .set(AVAILABILITY.LAST_OBSERVED_AT, now)
+                    .set(AVAILABILITY.PREVIOUS_ID, row.get("id", Long::class.java))
+                    .execute()
+            }
+            elapsed.size
+        }
+    }
+
     /** Current cell per (reservable, date): the row with the greatest last_observed_at. */
     fun readCurrent(
         reservableIds: List<Long>,
