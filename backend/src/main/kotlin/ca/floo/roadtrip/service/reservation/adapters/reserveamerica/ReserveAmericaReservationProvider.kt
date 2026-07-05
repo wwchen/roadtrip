@@ -28,6 +28,13 @@ data class ReserveAmericaTenant(
     val bookingHorizonDays: Int,
 )
 
+/**
+ * Widest single-tick poll window for ReserveAmerica / Active Network. Latent
+ * until watches turn on for this vendor (`supportsAlerts` is still false)
+ * pending cadence/load validation; declared for capability completeness.
+ */
+private const val RESERVEAMERICA_MAX_POLL_WINDOW_DAYS = 30
+
 class ReserveAmericaReservationProvider(
     private val tenant: ReserveAmericaTenant,
     private val client: ReserveAmericaAvailabilityClient,
@@ -41,6 +48,7 @@ class ReserveAmericaReservationProvider(
             // cadence and upstream load limits are validated for Active Network.
             supportsAlerts = false,
             bookingHorizonDays = tenant.bookingHorizonDays,
+            maxPollWindowDays = RESERVEAMERICA_MAX_POLL_WINDOW_DAYS,
         )
 
     override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {

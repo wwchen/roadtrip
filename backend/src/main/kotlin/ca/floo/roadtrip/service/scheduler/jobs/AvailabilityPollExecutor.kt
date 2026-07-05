@@ -43,8 +43,12 @@ private val SNAPSHOT_HISTORY_RETENTION: Duration = Duration.ofDays(180)
  *
  * A poller is the coalesced, per-(provider, parent_ref) unit of scheduled
  * work. The executor loads the poller's **live watches** (active, window
- * still reaching the future), derives the union polling window and the
- * tightest cadence across them, resolves each live watch's reservables to
+ * still reaching the future) only to decide *whether* to run (a live watch is
+ * the reference that keeps the poller alive) and to derive the tightest
+ * cadence across them. The polling window itself is vendor-derived and
+ * anchored at today — the widest window the upstream exposes per tick,
+ * independent of the watches' own dates. It resolves each live watch's
+ * reservables to
  * [ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget]s
  * (filtered to this poller's own (provider, parentRef)), and hands them to
  * [CatalogAvailabilityBatcher] which groups by (provider, parentRef,
@@ -89,12 +93,11 @@ internal class AvailabilityPollExecutor(
     suspend fun handle(poller: AvailabilityPollerRepo.Poller): HandlerResult {
         val liveWatches = pollers.liveWatchesForPoller(poller.id)
 
-        // Derive the union window across live watches; empty -> retire (the tick is the reaper).
-        val minStart = liveWatches.minOfOrNull { it.startDate }
-        val maxEnd = liveWatches.maxOfOrNull { it.endDate }
-        if (liveWatches.isEmpty() || minStart == null || maxEnd == null) {
-            // Empty window for the whole poller: every linked watch is elapsed. Mark them
-            // done, drop links, deactivate the poller. No fetch, no run row.
+        // A live watch gates *whether* this poller runs, never *how wide* it
+        // fetches (that's vendor-derived below). No live watch -> every linked
+        // watch is elapsed: retire (the tick is the reaper until PR3 moves this
+        // to a dedicated reaper). No fetch, no run row.
+        if (liveWatches.isEmpty()) {
             pollers.retire(poller.id, elapsedWatchIds = pollers.watchIdsForPoller(poller.id))
             return HandlerResult(nextRunAt = OffsetDateTime.now()) // inert; poller now inactive
         }
@@ -119,19 +122,19 @@ internal class AvailabilityPollExecutor(
                 // reservable more than once; dedupe so a site is fetched once.
                 .distinctBy { it.reservable.id }
 
-        // The polling window per date-context. Shared by the governor token
-        // count below and the batcher fetch, so the "skip null-window groups"
-        // decision is made once and never drifts between the two.
+        // The polling window per date-context: the widest window the vendor
+        // exposes for a single tick, anchored at today and independent of the
+        // watches' own dates. Shared by the governor token count below and the
+        // batcher fetch, so the "skip null-window groups" decision is made once
+        // and never drifts between the two.
         val windowFor: (
             ca.floo.roadtrip.models.availability.PoiDateContext,
             ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities,
         ) -> ca.floo.roadtrip.models.availability.ResolvedDateWindow? = { context, caps ->
             dateResolver.resolvePollingWindow(
-                startDate = minStart,
-                endDate = maxEnd,
                 context = context,
+                maxPollWindowDays = caps.maxPollWindowDays,
                 bookingHorizonDays = caps.bookingHorizonDays,
-                maxDays = MAX_POLL_WINDOW_DAYS,
             )
         }
 
@@ -362,7 +365,6 @@ internal fun resolveCadenceSec(
     return resolved.minOrNull() ?: GLOBAL_DEFAULT_SEC
 }
 
-private const val MAX_POLL_WINDOW_DAYS = 60
 private const val BACKOFF_BASE_MULTIPLIER = 2.0
 private const val BACKOFF_CEILING_SEC = 3_600L // 1h cap on a wedged poller
 private const val GLOBAL_DEFAULT_SEC = 300 // 5 min fall-through; PR4 layers poi override

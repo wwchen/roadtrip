@@ -16,6 +16,17 @@ data class ReservationProviderCapabilities(
     val supportsAlerts: Boolean,
     /** Max days into the future the upstream exposes (e.g. rec.gov = 180). */
     val bookingHorizonDays: Int,
+    /**
+     * Widest window, in days, the poller asks this vendor for in a single
+     * tick. This is a **load knob**, distinct from [bookingHorizonDays] (how
+     * far the upstream exposes): the poller always polls `[today, today +
+     * maxPollWindowDays)` — clamped to the horizon — independent of any
+     * watch's dates. A watch gates *whether* a poller runs (reference count),
+     * never *how wide* it fetches. Keep it inside a single upstream fetch
+     * shape (e.g. rec.gov shapes calls by month) so one tick doesn't fan out
+     * into ungoverned sub-calls. Zero means "don't poll" (unsupported stub).
+     */
+    val maxPollWindowDays: Int,
 ) {
     companion object {
         /** Reasonable starting point for a stub — can be flipped on as features land. */
@@ -24,6 +35,7 @@ data class ReservationProviderCapabilities(
                 supportsAvailability = false,
                 supportsAlerts = false,
                 bookingHorizonDays = 0,
+                maxPollWindowDays = 0,
             )
     }
 }

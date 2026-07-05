@@ -36,6 +36,7 @@ class ReserveCaliforniaReservationProvider(
             supportsAvailability = true,
             supportsAlerts = false,
             bookingHorizonDays = BOOKING_HORIZON_DAYS,
+            maxPollWindowDays = MAX_POLL_WINDOW_DAYS,
         )
 
     override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
@@ -169,6 +170,13 @@ class ReserveCaliforniaReservationProvider(
     private companion object {
         const val PROVIDER = "reservecalifornia"
         const val BOOKING_HORIZON_DAYS = 183
+
+        /**
+         * Widest single-tick poll window. Latent until watches turn on for
+         * ReserveCalifornia (`supportsAlerts` is still false); declared for
+         * capability completeness.
+         */
+        const val MAX_POLL_WINDOW_DAYS = 30
     }
 }
 

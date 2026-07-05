@@ -82,6 +82,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = true,
                 bookingHorizonDays = 180,
+                maxPollWindowDays = 60,
             )
 
         override suspend fun availability(req: AvailabilityRequest) = throw UnsupportedOperationException("not used")

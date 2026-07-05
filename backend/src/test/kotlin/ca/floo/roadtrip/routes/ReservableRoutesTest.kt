@@ -994,6 +994,7 @@ class ReservableRoutesTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = false,
                 bookingHorizonDays = 365,
+                maxPollWindowDays = 60,
             )
 
         override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
@@ -1074,6 +1075,7 @@ class ReservableRoutesTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = false,
                 bookingHorizonDays = 365,
+                maxPollWindowDays = 60,
             )
 
         override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {

@@ -14,6 +14,14 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import java.time.temporal.ChronoUnit
 
 /**
+ * Widest single-tick poll window for Aspira. Latent until the Aspira alert
+ * poller lands (see RFC 0007) — `supportsAlerts` is still false — but declared
+ * honestly so the capability is complete. Conservative default; tune per
+ * tenant when polling turns on.
+ */
+private const val ASPIRA_MAX_POLL_WINDOW_DAYS = 30
+
+/**
  * Aspira NextGen adapter. One adapter *class* for the whole vendor; one
  * adapter *instance* per upstream host (Parks Canada, BC Parks, WA State
  * Parks). Tenant-shaped data — host, vendor code, booking horizon —
@@ -47,6 +55,7 @@ class AspiraReservationProvider(
             // (see RFC 0007). Keep this honest until the poller adapter lands.
             supportsAlerts = false,
             bookingHorizonDays = tenant.bookingHorizonDays,
+            maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
         )
 
     override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {

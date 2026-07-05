@@ -29,6 +29,7 @@ class RecGovReservationProvider(
             supportsAvailability = true,
             supportsAlerts = true,
             bookingHorizonDays = RECGOV_BOOKING_HORIZON_DAYS,
+            maxPollWindowDays = RECGOV_MAX_POLL_WINDOW_DAYS,
         )
 
     override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
@@ -112,6 +113,14 @@ class RecGovReservationProvider(
     companion object {
         /** rec.gov exposes 6 months of inventory at any time. */
         private const val RECGOV_BOOKING_HORIZON_DAYS: Int = 180
+
+        /**
+         * Widest single-tick poll window. rec.gov shapes availability calls by
+         * calendar month, so 60 days keeps a tick to ~2-3 month calls — the
+         * same magnitude as the previous global cap, now anchored at today and
+         * independent of watch dates.
+         */
+        private const val RECGOV_MAX_POLL_WINDOW_DAYS: Int = 60
 
         /** Base for the public single-campsite booking page. */
         private const val RECGOV_CAMPSITE_URL = "https://www.recreation.gov/camping/campsites"
