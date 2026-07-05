@@ -62,6 +62,8 @@ internal class ReservableAvailabilityComposer(
                             maxDays = caps.maxPollWindowDays,
                             defaultDays = DEFAULT_AVAILABILITY_DAYS,
                         )
+                    // `?: target` is an unreachable safety net: once `target` resolved,
+                    // span > 0 and anchor >= earliestDate, so wideWindow never returns null.
                     val fetch =
                         dateResolver.wideWindow(
                             anchor = target.startDate,

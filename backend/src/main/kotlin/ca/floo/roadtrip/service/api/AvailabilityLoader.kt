@@ -55,6 +55,9 @@ class AvailabilityLoader(
         fetch: suspend () -> AvailabilityObservationBatch,
     ): AvailabilityObservationBatch {
         val repo = availability
+        // No store (or nothing to key on): pass through, but still slice the fetched
+        // window down to the requested one. sliceToTarget normalizes the cacheBlock
+        // (hit=false) — the raw batch's own cacheBlock is not preserved on this path.
         if (repo == null || request.targets.isEmpty()) return sliceToTarget(fetch(), request)
 
         val dates = datesInWindow(request.startDate, request.endDate)
