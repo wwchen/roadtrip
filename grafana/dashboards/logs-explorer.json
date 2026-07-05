@@ -140,12 +140,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "loggerName"
+              "options": "logger"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 300
+                "value": 260
               },
               {
                 "id": "links",
@@ -156,6 +156,18 @@
                     "url": "/d/logs-explorer/logs-explorer?${__url_time_range}&var-container=${container}&var-level=${level}&var-logger=${__data.fields.loggerName}"
                   }
                 ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "loggerName"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
               }
             ]
           },
@@ -212,7 +224,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "{container=~\"$container\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | level=~\"$level\", loggerName=~\"$logger\" |~ \"$search\"",
+          "expr": "{container=~\"$container\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` | level=~\"$level\", loggerName=~\"$logger\" |~ \"$search\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -228,7 +240,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|level|loggerName|message|context)$"
+              "pattern": "^(Time|level|logger|loggerName|message|context)$"
             }
           }
         },
@@ -239,16 +251,17 @@
             "renameByName": {
               "Time": "Date",
               "level": "Level",
-              "loggerName": "Logger",
+              "logger": "Logger",
               "message": "Message",
               "context": "Context"
             },
             "indexByName": {
               "Time": 0,
               "level": 1,
-              "loggerName": 2,
+              "logger": 2,
               "message": 3,
-              "context": 4
+              "context": 4,
+              "loggerName": 5
             }
           }
         }
@@ -554,12 +567,12 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "loggerName"
+              "options": "logger"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 300
+                "value": 260
               },
               {
                 "id": "links",
@@ -570,6 +583,18 @@
                     "url": "/d/logs-explorer/logs-explorer?${__url_time_range}&var-container=${container}&var-level=${level}&var-logger=${__data.fields.loggerName}"
                   }
                 ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "loggerName"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
               }
             ]
           },
@@ -626,7 +651,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "{container=~\"$container\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | level=~\"WARN|ERROR\", loggerName=~\"$logger\" |~ \"$search\"",
+          "expr": "{container=~\"$container\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` | level=~\"WARN|ERROR\", loggerName=~\"$logger\" |~ \"$search\"",
           "queryType": "range",
           "refId": "A"
         }
@@ -642,7 +667,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|level|loggerName|message|context)$"
+              "pattern": "^(Time|level|logger|loggerName|message|context)$"
             }
           }
         },
@@ -653,16 +678,17 @@
             "renameByName": {
               "Time": "Date",
               "level": "Level",
-              "loggerName": "Logger",
+              "logger": "Logger",
               "message": "Message",
               "context": "Context"
             },
             "indexByName": {
               "Time": 0,
               "level": 1,
-              "loggerName": 2,
+              "logger": 2,
               "message": 3,
-              "context": 4
+              "context": 4,
+              "loggerName": 5
             }
           }
         }
