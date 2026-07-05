@@ -51,7 +51,6 @@ internal class AvailabilityQueryServiceImpl(
                 rids = reservables.map { it.rid },
                 startDate = startDate,
                 endDate = endDate,
-                force = false,
             )
         val firstAvailability = availability.firstOrNull()
         if (firstAvailability != null) {
@@ -114,7 +113,6 @@ private suspend fun cataloglessProviderAvailability(
                 ref = ref,
                 startDate = window.startDate,
                 endDate = window.endDate,
-                force = false,
             ),
         )
     // Render-only fallback for POIs without linked reservables. Snapshot
