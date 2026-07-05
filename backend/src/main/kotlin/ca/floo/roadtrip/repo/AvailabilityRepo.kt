@@ -2,6 +2,7 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.db.generated.tables.Availability.Companion.AVAILABILITY
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.CellTransition
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import java.time.Instant
@@ -34,15 +35,20 @@ class AvailabilityRepo(
         val observedAt: OffsetDateTime,
     )
 
-    /** Bump-or-insert each observation; returns the count of transitions (new rows). */
+    /**
+     * Bump-or-insert each observation; returns one [CellTransition] per status
+     * change (new row inserted). Unchanged cells bump `last_observed_at` in place
+     * and contribute no transition. The count of transitions is the caller's
+     * `snapshot_count`; the bookable subset feeds alert dispatch.
+     */
     fun recordObservations(
         runId: Long?,
         observations: List<Observation>,
-    ): Int {
-        if (observations.isEmpty()) return 0
+    ): List<CellTransition> {
+        if (observations.isEmpty()) return emptyList()
         return ctx.transactionResult { config ->
             val txn = DSL.using(config)
-            var transitions = 0
+            val transitions = mutableListOf<CellTransition>()
             for (obs in observations) {
                 val observedAt = OffsetDateTime.ofInstant(obs.observedAt, ZoneOffset.UTC)
                 val current =
@@ -71,7 +77,7 @@ class AvailabilityRepo(
                         .set(AVAILABILITY.PREVIOUS_ID, current?.get(AVAILABILITY.ID))
                         .set(AVAILABILITY.RUN_ID, runId)
                         .execute()
-                    transitions += 1
+                    transitions += CellTransition(obs.reservableId, obs.targetDate, obs.status)
                 }
             }
             transitions

@@ -41,7 +41,7 @@ class AvailabilityRepoTest : SharedDbTest() {
                 runId = null,
                 listOf(AvailabilityRepo.Observation(rid, date, AvailabilityStatus.RESERVED, t2)),
             )
-        assertEquals(0, transitions)
+        assertEquals(0, transitions.size)
         assertEquals(1, ctx.fetchCount(ctx.selectFrom(ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY)))
         val current = repo.readCurrent(listOf(rid), listOf(date)).single()
         assertEquals(t2, current.observedAt.toInstant())
@@ -55,7 +55,7 @@ class AvailabilityRepoTest : SharedDbTest() {
         val t2 = Instant.parse("2026-06-18T10:05:00Z")
         repo.recordObservations(null, listOf(AvailabilityRepo.Observation(rid, date, AvailabilityStatus.RESERVED, t1)))
         val transitions = repo.recordObservations(null, listOf(AvailabilityRepo.Observation(rid, date, AvailabilityStatus.AVAILABLE, t2)))
-        assertEquals(1, transitions)
+        assertEquals(1, transitions.size)
         assertEquals(2, ctx.fetchCount(ctx.selectFrom(ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY)))
         val current = repo.readCurrent(listOf(rid), listOf(date)).single()
         assertEquals(AvailabilityStatus.AVAILABLE, current.status)
