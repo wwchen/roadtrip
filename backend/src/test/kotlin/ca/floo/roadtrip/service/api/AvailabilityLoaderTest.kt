@@ -15,6 +15,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class AvailabilityLoaderTest : SharedDbTest() {
     @BeforeEach
@@ -224,6 +225,52 @@ class AvailabilityLoaderTest : SharedDbTest() {
             // Response is the week-2 slice for both targets (2 targets × 7 days),
             // not the whole wide window.
             assertEquals(14, batch.observations.size)
+        }
+
+    @Test
+    fun `a repo-less fetch is sliced to the target window, not the wide fetched window`() =
+        runBlocking {
+            // No repo: loadOrFetch hands back the fetch result directly, but must still
+            // return only the target window even when the composer fetches wider.
+            val requestStart = LocalDate.parse("2026-07-01")
+            val requestEnd = LocalDate.parse("2026-07-04")
+            val wideEnd = LocalDate.parse("2026-08-30")
+            val observedAt = Instant.parse("2026-06-18T10:00:00Z")
+            val service = AvailabilityLoader(availability = null)
+
+            val batch =
+                service.loadOrFetch(
+                    AvailabilityLoader.Request(
+                        metadata = AvailabilityLoader.Metadata(provider = "recgov", campgroundId = "232447"),
+                        targets = listOf(AvailabilityLoader.TargetReservable(1L, "site:recgov:100")),
+                        startDate = requestStart,
+                        endDate = requestEnd,
+                        ttl = Duration.ofMinutes(10),
+                    ),
+                ) {
+                    AvailabilityObservationBatch(
+                        provider = "recgov",
+                        startDate = requestStart,
+                        endDate = wideEnd,
+                        observations =
+                            (0L until 60L).map {
+                                ReservableDayObservation(
+                                    "site:recgov:100",
+                                    requestStart.plusDays(it),
+                                    observedAt,
+                                    AvailabilityStatus.AVAILABLE,
+                                )
+                            },
+                        cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
+                        campgroundId = "232447",
+                    )
+                }
+
+            assertEquals(requestStart, batch.startDate)
+            assertEquals(requestEnd, batch.endDate)
+            // Only the 3 target days [07-01, 07-04) survive the slice.
+            assertEquals(3, batch.observations.size)
+            assertTrue(batch.observations.all { it.date < requestEnd })
         }
 
     private fun request(

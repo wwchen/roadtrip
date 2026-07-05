@@ -55,7 +55,7 @@ class AvailabilityLoader(
         fetch: suspend () -> AvailabilityObservationBatch,
     ): AvailabilityObservationBatch {
         val repo = availability
-        if (repo == null || request.targets.isEmpty()) return fetch()
+        if (repo == null || request.targets.isEmpty()) return sliceToTarget(fetch(), request)
 
         val dates = datesInWindow(request.startDate, request.endDate)
         val dbIds = request.targets.map { it.dbId }
@@ -78,14 +78,27 @@ class AvailabilityLoader(
                 seasonBlock = fetched.seasonBlock,
             )
         } else {
-            val targetDates = datesInWindow(request.startDate, request.endDate).toSet()
-            fetched.copy(
-                startDate = request.startDate,
-                endDate = request.endDate,
-                observations = fetched.observations.filter { it.date in targetDates },
-                cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = request.ttl.seconds),
-            )
+            sliceToTarget(fetched, request)
         }
+    }
+
+    /**
+     * Narrow a fetched batch to the request's target window. The composer may fetch a
+     * wider window than requested (so a later in-span request is a DB hit), but the
+     * loader's contract is to return only the target window on every path — the
+     * repo-less/no-target early return and the miss-fallback branch both go through here.
+     */
+    private fun sliceToTarget(
+        fetched: AvailabilityObservationBatch,
+        request: Request,
+    ): AvailabilityObservationBatch {
+        val targetDates = datesInWindow(request.startDate, request.endDate).toSet()
+        return fetched.copy(
+            startDate = request.startDate,
+            endDate = request.endDate,
+            observations = fetched.observations.filter { it.date in targetDates },
+            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = request.ttl.seconds),
+        )
     }
 
     /**
