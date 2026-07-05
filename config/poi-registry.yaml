@@ -224,6 +224,22 @@ data_sources:
       args: { tenant: NY }
       output_dir_prefix: data/raw/reserveamerica-ny
 
+  - slug: reserveamerica-campsites-abpp
+    name: ReserveAmerica Alberta campsite calendar rosters
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_reserveamerica_campsites.py
+      args: { tenant: ABPP }
+      output_dir_prefix: data/raw/reserveamerica-campsites-abpp
+
+  - slug: reserveamerica-campsites-ny
+    name: ReserveAmerica New York campsite calendar rosters
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_reserveamerica_campsites.py
+      args: { tenant: NY }
+      output_dir_prefix: data/raw/reserveamerica-campsites-ny
+
   # --- California State Parks / ReserveCalifornia ----------------------------
   # Search-all discovery mirrors the public SPA: one /search/place request with
   # isSearchAllParks=true, followed by per-place facility/grid captures.
@@ -436,6 +452,18 @@ reservable_data:
         adapter: ReserveCaliforniaSitesEtl
         inputs: [reservecalifornia-catalog]
 
+  - name: Alberta Provincial Park Sites
+    etls:
+      - slug: alberta-provincial-park-sites
+        adapter: ReserveAmericaSitesEtl
+        inputs: [reserveamerica-campsites-abpp]
+
+  - name: New York State Park Sites
+    etls:
+      - slug: new-york-state-park-sites
+        adapter: ReserveAmericaSitesEtl
+        inputs: [reserveamerica-campsites-ny]
+
 # ============================================================================
 # poi_reservable_joiner — link rows in the reservable_pois table. Each row
 # names one adapter class from the joiner registry. Adapters read both
@@ -454,3 +482,6 @@ poi_reservable_joiner:
 
   - name: ReserveCalifornia Sites → California State Parks
     adapter: ReserveCaliforniaPoiReservableJoiner
+
+  - name: ReserveAmerica Sites → Alberta + NY Parks
+    adapter: ReserveAmericaPoiReservableJoiner
