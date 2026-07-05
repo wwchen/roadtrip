@@ -28,7 +28,6 @@ internal class AvailabilityQueryServiceImpl(
         poiId: Long,
         startDate: LocalDate?,
         endDate: LocalDate?,
-        force: Boolean,
         siteTypes: List<String>,
     ): PoiReservablesAvailabilityResponseDto {
         val reservables =
@@ -40,7 +39,6 @@ internal class AvailabilityQueryServiceImpl(
                 poiId = poiId,
                 startDate = startDate,
                 endDate = endDate,
-                force = force,
                 siteTypes = siteTypes,
                 providerRefs = providerRefs,
                 reservationProviders = reservationProviders,
@@ -53,7 +51,7 @@ internal class AvailabilityQueryServiceImpl(
                 rids = reservables.map { it.rid },
                 startDate = startDate,
                 endDate = endDate,
-                force = force,
+                force = false,
             )
         val firstAvailability = availability.firstOrNull()
         if (firstAvailability != null) {
@@ -79,7 +77,6 @@ private suspend fun cataloglessProviderAvailability(
     poiId: Long,
     startDate: LocalDate?,
     endDate: LocalDate?,
-    force: Boolean,
     siteTypes: List<String>,
     providerRefs: CampsiteProviderRepo,
     reservationProviders: ReservationProviderRegistry,
@@ -117,7 +114,7 @@ private suspend fun cataloglessProviderAvailability(
                 ref = ref,
                 startDate = window.startDate,
                 endDate = window.endDate,
-                force = force,
+                force = false,
             ),
         )
     // Render-only fallback for POIs without linked reservables. Snapshot

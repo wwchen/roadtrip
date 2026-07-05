@@ -61,7 +61,6 @@ internal fun Route.availabilityRoutes(
             pathParameter<Long>("poi_id") { description = "pois.id primary key" }
             queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today's local date." }
             queryParameter<String>("end_date") { description = "Exclusive YYYY-MM-DD; default is start_date + 7 days." }
-            queryParameter<String>("force") { description = "Set to 1 to bypass provider cache." }
             queryParameter<String>("site_type") { description = "Exact site type filter. Repeat or comma-separate for OR." }
         }
         response {
@@ -110,7 +109,6 @@ internal fun Route.availabilityRoutes(
                 call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
                 return@get
             }
-        val force = call.forceQuery()
 
         try {
             call.respondAvailabilityJson(
@@ -118,7 +116,6 @@ internal fun Route.availabilityRoutes(
                     poiId = poiId,
                     startDate = startDate,
                     endDate = endDate,
-                    force = force,
                     siteTypes = call.queryValues("site_type", "siteType"),
                 ),
             )
