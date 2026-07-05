@@ -29,6 +29,14 @@ def main() -> int:
             if not variable.get("includeAll"):
                 continue
 
+            # The SQL-literal rule only applies to Postgres variables, whose
+            # All value is interpolated via :sqlstring. Loki (and other
+            # non-SQL) variables interpolate the All value as a raw regex
+            # (e.g. `level=~"$level"` with allValue ".+"), where a quoted SQL
+            # literal would break matching, so they are out of scope here.
+            if variable.get("datasource", {}).get("type") != "postgres":
+                continue
+
             name = variable.get("name", "<unnamed>")
             all_value = variable.get("allValue")
             if not isinstance(all_value, str) or not all_value:
