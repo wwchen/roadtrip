@@ -168,10 +168,7 @@ object ReserveAmericaAvailabilityParser {
                 .toInt()
         val dates = (0 until dayCount).map { startDate.plusDays(it.toLong()) }
         val statuses = linkedMapOf<String, Map<LocalDate, AvailabilityStatus>>()
-        val rowStarts = SITE_LABEL.findAll(html).map { it.range.first }.toList()
-        for ((index, rowStart) in rowStarts.withIndex()) {
-            val rowEnd = rowStarts.getOrNull(index + 1) ?: html.length
-            val row = html.substring(rowStart, rowEnd)
+        for (row in siteRows(html)) {
             val siteId = SITE_ID.find(row)?.groupValues?.get(1) ?: continue
             val byDate = linkedMapOf<LocalDate, AvailabilityStatus>()
             STATUS_CELL
@@ -185,6 +182,18 @@ object ReserveAmericaAvailabilityParser {
             }
         }
         return ParsedReserveAmericaMatrix(statuses = statuses, totalSites = totalSites(html))
+    }
+
+    /**
+     * One HTML slice per site row, split on the `siteListLabel` marker. Shared
+     * by the availability parser (status cells) and [ReserveAmericaCatalogParser]
+     * (roster), so both read the exact same `siteId` per row.
+     */
+    fun siteRows(html: String): List<String> {
+        val starts = SITE_LABEL.findAll(html).map { it.range.first }.toList()
+        return starts.mapIndexed { i, start ->
+            html.substring(start, starts.getOrNull(i + 1) ?: html.length)
+        }
     }
 
     private fun classify(

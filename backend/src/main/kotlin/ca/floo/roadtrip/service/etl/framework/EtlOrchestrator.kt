@@ -529,6 +529,12 @@ class EtlOrchestrator(
                 "california-state-park-sites" to
                     ca.floo.roadtrip.service.etl.vendors.reservecalifornia
                         .ReserveCaliforniaSitesEtl("california-state-park-sites"),
+                "alberta-provincial-park-sites" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaSitesEtl(etlSlug = "alberta-provincial-park-sites", contractCode = "ABPP"),
+                "new-york-state-park-sites" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaSitesEtl(etlSlug = "new-york-state-park-sites", contractCode = "NY"),
             )
 
         /**
@@ -548,6 +554,9 @@ class EtlOrchestrator(
                 "ReserveCaliforniaPoiReservableJoiner" to
                     ca.floo.roadtrip.service.etl.vendors.reservecalifornia
                         .ReserveCaliforniaPoiReservableJoiner(),
+                "ReserveAmericaPoiReservableJoiner" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaPoiReservableJoiner(),
             )
     }
 }
