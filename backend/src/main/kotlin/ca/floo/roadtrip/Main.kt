@@ -265,6 +265,7 @@ fun Application.module() {
             pois = PoiServingRepo(ctx),
             availability = availability,
             grafanaRootUrl = appConfig.grafana?.rootUrl,
+            appRootUrl = appConfig.webApp?.rootUrl,
         )
     val pollExecutor =
         AvailabilityPollExecutor(

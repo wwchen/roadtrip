@@ -95,4 +95,18 @@ class AppConfigTest {
             AppConfig.fromEnv(mapOf("GRAFANA_ROOT_URL" to "http://localhost:3000/dash/")).grafana?.rootUrl,
         )
     }
+
+    @Test
+    fun `web app config is null when the host is unset (no hardcoded default)`() {
+        assertEquals(null, AppConfig.fromEnv(emptyMap()).webApp)
+        assertEquals(null, AppConfig.fromEnv(mapOf("APP_ROOT_URL" to "  ")).webApp)
+    }
+
+    @Test
+    fun `web app root url is taken from env with any trailing slash stripped`() {
+        assertEquals(
+            "https://roadtrip.floo.ca",
+            AppConfig.fromEnv(mapOf("APP_ROOT_URL" to "https://roadtrip.floo.ca/")).webApp?.rootUrl,
+        )
+    }
 }

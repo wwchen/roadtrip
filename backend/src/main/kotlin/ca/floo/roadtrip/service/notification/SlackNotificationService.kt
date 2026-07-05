@@ -12,13 +12,15 @@ import java.time.LocalDate
  */
 interface SlackNotificationService {
     /**
-     * Sends plain [text] to [channel], or to the service's configured default
-     * channel when [channel] is null. Never throws: a delivery failure — or
+     * Renders and sends a watch's lifecycle/status card (watching, paused,
+     * done) for [notice] to [channel], or to the service's configured default
+     * channel when [channel] is null. The caller supplies plain domain data;
+     * the service owns the Block Kit body. Never throws: a delivery failure — or
      * having no channel to send to — is surfaced as `false` so a notification
      * problem can't break the caller's flow.
      */
-    suspend fun sendMessage(
-        text: String,
+    suspend fun sendWatchStatus(
+        notice: WatchStatusNotice,
         channel: String? = null,
     ): Boolean
 

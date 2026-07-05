@@ -35,6 +35,17 @@ def _load_dotenv(path):
 
 DOTENV = _load_dotenv('.env')
 
+# Point this clone's git at .githooks/ so the committed pre-commit (ktlint) and
+# pre-push (backend tests) hooks fire. core.hooksPath isn't tracked in the repo,
+# so a fresh clone starts with them inactive; wiring it into the primary dev
+# entry point means nobody has to remember `make install-hooks`. Idempotent and
+# quiet: only rewrites config when it isn't already pointed at .githooks.
+local(
+    '[ "$(git config core.hooksPath 2>/dev/null)" = ".githooks" ] || ' +
+    'git config core.hooksPath .githooks',
+    quiet=True,
+)
+
 # Tilt keeps Docker Compose resources running on Ctrl+C by default. Keep an
 # attached local resource alive so Tilt terminates it on exit; the shell trap
 # tears down dev containers while preserving bind-mounted and named volumes.

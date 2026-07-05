@@ -110,6 +110,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
             grafanaRootUrl = null,
+            appRootUrl = null,
         )
     }
 

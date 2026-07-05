@@ -31,10 +31,13 @@ class SlackNotificationServiceImpl(
     Closeable {
     private val log = LoggerFactory.getLogger(javaClass)
 
-    override suspend fun sendMessage(
-        text: String,
+    override suspend fun sendWatchStatus(
+        notice: WatchStatusNotice,
         channel: String?,
-    ): Boolean = send(channel, text, blocks = null)
+    ): Boolean {
+        val (fallback, blocks) = SlackContentWatchStatusRenderer.render(notice)
+        return send(channel, fallback, blocks)
+    }
 
     override suspend fun sendWatchOpenings(
         startDate: LocalDate,

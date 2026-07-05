@@ -1,4 +1,4 @@
-.PHONY: help run data-fetch data-import reset-db qa install install-hooks companion grafana-export
+.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks companion grafana-export
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -32,7 +32,7 @@ help:
 # Plain `make run` runs the backend on the host for local dev. `make run
 # env=prod` builds the container image and rolls out the production Compose
 # stack on the deploy host.
-run:
+run: _ensure-hooks
 ifeq ($(RUN_ENV),prod)
 	./gradlew :backend:shadowJar
 	docker build -t $(BACKEND_IMAGE) --target backend .
@@ -55,7 +55,7 @@ else
 	$(error unsupported env '$(RUN_ENV)'; use env=dev or env=prod)
 endif
 
-companion:
+companion: _ensure-hooks
 	cd companion && BACKEND_URL=http://127.0.0.1:$(PORT) node --experimental-eventsource src/index.js
 
 # One-time host setup for a fresh clone. Idempotent: brew is no-op when
@@ -98,16 +98,24 @@ reset-db:
 # static + all /api routes). Doesn't boot the stack — bring it up first
 # (e.g. `make run`). Runs the dedicated `smokeTest` source set (Playwright JVM);
 # QA_BASE_URL gates SmokeTest so it skips when the server isn't up.
-qa:
+qa: _ensure-hooks
 	./gradlew :backend:installPlaywrightBrowsers
 	QA_BASE_URL=http://127.0.0.1:$(PORT) ./gradlew :backend:smokeTest --rerun -x :backend:generateJooq
 
 # Point this clone's git at .githooks/ so .githooks/pre-commit runs ktlint on
-# staged backend Kotlin files. Per-clone (core.hooksPath isn't tracked in the
-# repo), so each contributor runs this once.
+# staged backend Kotlin files (and pre-push runs backend tests). Per-clone
+# (core.hooksPath isn't tracked in the repo). Common dev targets depend on
+# _ensure-hooks and `tilt up` sets it too, so this is rarely needed by hand.
 install-hooks:
 	git config core.hooksPath .githooks
 	@echo "git hooks installed (.githooks/pre-commit)"
+
+# Idempotent, quiet auto-install used as a prerequisite of the dev targets so a
+# fresh clone can't skip the hooks. Only rewrites config when it isn't already
+# pointed at .githooks; never fails the build outside a git work tree.
+_ensure-hooks:
+	@[ "$$(git config core.hooksPath 2>/dev/null)" = ".githooks" ] || \
+	  { git config core.hooksPath .githooks 2>/dev/null && echo "git hooks installed (.githooks/)"; } || true
 
 # Snapshot Grafana dashboards from the running container into
 # grafana/dashboards/*.json. Workflow: edit in the UI (allowUiUpdates=true

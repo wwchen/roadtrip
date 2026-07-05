@@ -96,6 +96,9 @@ services:
       # Grafana host for the dashboard deep link in alerts; same var + default
       # as the grafana service's GF_SERVER_ROOT_URL so they can't disagree.
       - GRAFANA_ROOT_URL=${GRAFANA_ROOT_URL:-https://roadtrip.floo.ca/dash/}
+      # Public web app host for the POI map deep link (?poi=<id>) in alerts. The
+      # backend serves the site at this host's root; Grafana lives under /dash/.
+      - APP_ROOT_URL=${APP_ROOT_URL:-https://roadtrip.floo.ca/}
       - RIDB_API_KEY=${RIDB_API_KEY:-}
       - COOKIE_BOT_URL=${COOKIE_BOT_URL:-}
       - COOKIE_BOT_TOKEN=${COOKIE_BOT_TOKEN:-}
