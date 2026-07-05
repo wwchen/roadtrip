@@ -16,7 +16,6 @@ import kotlinx.serialization.json.longOrNull
 import java.time.Duration
 import java.time.LocalDate
 
-private const val MAX_AVAILABILITY_DAYS: Int = 60
 private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 
 /**
@@ -54,16 +53,23 @@ internal class ReservableAvailabilityComposer(
             batcher.fetchByGroup(
                 targets = resolved,
                 windowFor = { context, caps ->
-                    val w =
+                    val target =
                         dateResolver.resolveWindow(
                             startDate = startDate,
                             endDate = endDate,
                             context = context,
                             bookingHorizonDays = caps.bookingHorizonDays,
-                            maxDays = MAX_AVAILABILITY_DAYS,
+                            maxDays = caps.maxPollWindowDays,
                             defaultDays = DEFAULT_AVAILABILITY_DAYS,
                         )
-                    AvailabilityWindows(target = w, fetch = w)
+                    val fetch =
+                        dateResolver.wideWindow(
+                            anchor = target.startDate,
+                            context = context,
+                            maxPollWindowDays = caps.maxPollWindowDays,
+                            bookingHorizonDays = caps.bookingHorizonDays,
+                        ) ?: target
+                    AvailabilityWindows(target = target, fetch = fetch)
                 },
                 fetch = { parentRef, provider, rows, windows ->
                     availabilityLoader.loadOrFetch(
