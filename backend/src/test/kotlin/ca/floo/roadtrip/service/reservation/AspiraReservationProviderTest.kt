@@ -6,13 +6,17 @@ import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenant
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 class AspiraReservationProviderTest {
     @Test
@@ -238,6 +242,37 @@ class AspiraReservationProviderTest {
             val dates = availabilityDatesFromObservations(batch)
             assertEquals(listOf("2026-07-01", "2026-07-02"), dates)
         }
+
+    @Test
+    fun `booking url builds the tenant's goingtocamp deep link for the single night`() {
+        val adapter =
+            AspiraReservationProvider(
+                tenant = AspiraTenant(host = "washington.goingtocamp.com", vendorCode = "aspira_wa", bookingHorizonDays = 365),
+                client = fakeAspiraClient(),
+            )
+        val reservable =
+            Reservable(
+                id = 1,
+                rid = ReservableId.parse("site:aspira_wa:-100")!!,
+                name = "A",
+                loop = null,
+                siteType = null,
+                raw = null,
+                // Site-level ref carries mapId + resourceLocationId; the parent supplies transactionLocationId.
+                providerRef = Json.parseToJsonElement("""{"mapId":-2147483615,"resourceLocationId":-2147483624}"""),
+            )
+        val parentRef = ProviderRef.Aspira(transactionLocationId = -2147483630, mapId = -2147483388, resourceLocationId = -2147483624)
+
+        val url = adapter.bookingUrl(reservable, parentRef, LocalDate.parse("2026-07-10"))!!
+
+        assertTrue(url.startsWith("https://washington.goingtocamp.com/create-booking/results?"), url)
+        assertTrue(url.contains("transactionLocationId=-2147483630"), url)
+        assertTrue(url.contains("mapId=-2147483615"), url)
+        assertTrue(url.contains("resourceLocationId=-2147483624"), url)
+        assertTrue(url.contains("startDate=2026-07-10"), url)
+        assertTrue(url.contains("endDate=2026-07-11"), url)
+        assertTrue(url.contains("nights=1"), url)
+    }
 }
 
 private fun fakeAspiraClient(

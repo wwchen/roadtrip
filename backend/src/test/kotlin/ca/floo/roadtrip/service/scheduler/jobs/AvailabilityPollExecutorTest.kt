@@ -5,7 +5,8 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
-import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -30,6 +31,7 @@ import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
+import ca.floo.roadtrip.service.reservation.BookingUrlTemplate
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
@@ -404,10 +406,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
             throw UnsupportedOperationException("not used")
 
-        override fun bookingUrl(
-            rid: ReservableId,
-            date: LocalDate,
-        ): String = "https://example.test/book/${rid.vendorId}?d=$date"
+        override fun bookingUrlTemplate(
+            reservable: Reservable,
+            parentRef: ProviderRef,
+        ): String = "https://example.test/book/${reservable.rid.vendorId}?d=${BookingUrlTemplate.START_DATE}"
     }
 
     private class RateLimitedProvider : ReservationProvider {

@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.clients.aspira.AspiraSearchDefaults
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PoiReservablesResponseSchema
 import ca.floo.roadtrip.models.api.ReservableDetailResponseSchema
@@ -13,6 +12,9 @@ import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
+import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraBookingUrl
+import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
+import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovBookingUrl
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
@@ -24,20 +26,7 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.contentOrNull
-import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.DSLContext
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-import java.time.LocalDate
-import java.time.temporal.ChronoUnit
-
-private const val RESERVATION_TEMPLATE_START_DATE = "{start_date}"
-private const val RESERVATION_TEMPLATE_END_DATE = "{end_date}"
-private const val RESERVATION_TEMPLATE_NIGHTS = "{nights}"
-private val ASPIRA_TEMPLATE_START_DATE: LocalDate = LocalDate.parse("2001-01-02")
-private val ASPIRA_TEMPLATE_END_DATE: LocalDate = LocalDate.parse("2001-01-03")
 
 @OptIn(ExperimentalSerializationApi::class)
 private val reservableRoutesJson =
@@ -309,114 +298,28 @@ internal fun Reservable.toSchema(
         raw = raw,
     )
 
-internal fun Reservable.reservationUrlTemplate(providerRef: ProviderRef?): String? =
+/**
+ * The reservation-URL template for a reservable, or null when its provider
+ * exposes no booking link. [parentRef] is the campground POI's parsed provider
+ * ref (supplies ids the per-site ref omits). The URL *scheme* lives in the
+ * provider adapters ([RecGovBookingUrl], [AspiraBookingUrl]) — this only routes
+ * by vendor to the right one, so the route never re-spells a vendor URL.
+ */
+internal fun Reservable.reservationUrlTemplate(parentRef: ProviderRef?): String? =
     when {
-        rid.vendor == "recgov" -> recgovReservationUrlTemplate()
-        rid.vendor.startsWith("aspira_") -> aspiraReservationUrlTemplate(providerRef)
+        rid.vendor == "recgov" -> RecGovBookingUrl.template(rid.vendorId)
+        rid.vendor.startsWith("aspira_") ->
+            AspiraTenants.byVendorCode(rid.vendor)?.host?.let { host ->
+                AspiraBookingUrl.templateFor(host, providerRef, parentRef)
+            }
         else -> null
     }
-
-private fun Reservable.recgovReservationUrlTemplate(): String {
-    val base = "https://www.recreation.gov/camping/campsites/${urlEncode(rid.vendorId)}"
-    return "$base?startDate=$RESERVATION_TEMPLATE_START_DATE&endDate=$RESERVATION_TEMPLATE_END_DATE"
-}
-
-private fun Reservable.aspiraReservationUrlTemplate(providerRef: ProviderRef?): String? {
-    val parts = aspiraReservationLinkParts(providerRef) ?: return null
-    return aspiraReservationUrl(
-        host = parts.host,
-        transactionLocationId = parts.transactionLocationId,
-        mapId = parts.mapId,
-        resourceLocationId = parts.resourceLocationId,
-        startDate = ASPIRA_TEMPLATE_START_DATE,
-        endDate = ASPIRA_TEMPLATE_END_DATE,
-    ).replace(ASPIRA_TEMPLATE_START_DATE.toString(), RESERVATION_TEMPLATE_START_DATE)
-        .replace(ASPIRA_TEMPLATE_END_DATE.toString(), RESERVATION_TEMPLATE_END_DATE)
-        .replace("nights=1", "nights=$RESERVATION_TEMPLATE_NIGHTS")
-}
-
-private data class AspiraReservationLinkParts(
-    val host: String,
-    val transactionLocationId: Long,
-    val mapId: Long,
-    val resourceLocationId: Long?,
-)
-
-private fun Reservable.aspiraReservationLinkParts(providerRef: ProviderRef?): AspiraReservationLinkParts? {
-    val parentRef = providerRef as? ProviderRef.Aspira
-    val host = aspiraHostForVendor(rid.vendor) ?: return null
-    val transactionLocationId =
-        aspiraProviderRefLong("transactionLocationId")
-            ?: parentRef?.transactionLocationId
-            ?: return null
-    val mapId =
-        aspiraProviderRefLong("mapId")
-            ?: parentRef?.mapId
-            ?: return null
-    val resourceLocationId =
-        aspiraProviderRefLong("resourceLocationId")
-            ?: parentRef?.resourceLocationId
-    return AspiraReservationLinkParts(
-        host = host,
-        transactionLocationId = transactionLocationId,
-        mapId = mapId,
-        resourceLocationId = resourceLocationId,
-    )
-}
-
-private fun Reservable.aspiraProviderRefLong(key: String): Long? =
-    ((providerRef as? JsonObject)?.get(key))?.jsonPrimitive?.contentOrNull?.toLongOrNull()
 
 internal fun List<Reservable>.filterBySiteTypes(siteTypes: Collection<String>): List<Reservable> {
     if (siteTypes.isEmpty()) return this
     val allowed = siteTypes.toSet()
     return filter { it.siteType != null && it.siteType in allowed }
 }
-
-private fun aspiraHostForVendor(vendor: String): String? =
-    when (vendor) {
-        "aspira_pc" -> "reservation.pc.gc.ca"
-        "aspira_bc" -> "camping.bcparks.ca"
-        "aspira_wa" -> "washington.goingtocamp.com"
-        else -> null
-    }
-
-private fun aspiraReservationUrl(
-    host: String,
-    transactionLocationId: Long,
-    mapId: Long,
-    resourceLocationId: Long?,
-    startDate: LocalDate,
-    endDate: LocalDate,
-): String {
-    val nights = ChronoUnit.DAYS.between(startDate, endDate).toInt()
-    val params =
-        mutableListOf(
-            "transactionLocationId" to transactionLocationId.toString(),
-            "mapId" to mapId.toString(),
-            "searchTabGroupId" to AspiraSearchDefaults.SEARCH_TAB_GROUP_ID.toString(),
-            "bookingCategoryId" to AspiraSearchDefaults.BOOKING_CATEGORY_ID.toString(),
-            "startDate" to startDate.toString(),
-            "endDate" to endDate.toString(),
-            "nights" to nights.toString(),
-            "isReserving" to "true",
-            "equipmentId" to AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID.toString(),
-            "subEquipmentId" to AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID.toString(),
-            "peopleCapacityCategoryCounts" to AspiraSearchDefaults.deeplinkPeopleCapacityCategoryCounts(),
-            "searchTime" to "${startDate}T00:00:00.000",
-            "flexibleSearch" to AspiraSearchDefaults.flexibleSearch(startDate),
-            "view" to "grid",
-        )
-    if (resourceLocationId != null) {
-        params += "resourceLocationId" to resourceLocationId.toString()
-    }
-    return "https://$host/create-booking/results?${queryString(*params.toTypedArray())}"
-}
-
-private fun queryString(vararg params: Pair<String, String>): String =
-    params.joinToString("&") { (key, value) -> "${urlEncode(key)}=${urlEncode(value)}" }
-
-private fun urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
 
 private suspend fun ApplicationCall.respondReservableError(
     error: String,

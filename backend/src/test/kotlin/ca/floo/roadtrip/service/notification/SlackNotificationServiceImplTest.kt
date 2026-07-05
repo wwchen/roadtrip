@@ -46,6 +46,7 @@ class SlackNotificationServiceImplTest {
             siteCount = 235,
             siteName = null,
             siteLoop = null,
+            campgroundName = null,
             startDate = LocalDate.of(2026, 7, 11),
             endDate = LocalDate.of(2026, 7, 12),
             dashboardUrl = "https://grafana.test/d/reservable-watch-drill?var-watch_id=1",

@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.reservation.adapters.recgov
 import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -11,7 +11,6 @@ import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import java.time.LocalDate
 
 /**
  * rec.gov adapter. Vendor-specific error translation lives here; routes only
@@ -80,11 +79,13 @@ class RecGovReservationProvider(
         }
     }
 
-    /** rec.gov single-site booking page for [date] → [date]+1 (one night). */
-    override fun bookingUrl(
-        rid: ReservableId,
-        date: LocalDate,
-    ): String = "$RECGOV_CAMPSITE_URL/${rid.vendorId}?startDate=$date&endDate=${date.plusDays(1)}"
+    /** rec.gov single-site booking page; the concrete-date [bookingUrl] fills
+     *  the window placeholders. [parentRef] is unused — the site id alone
+     *  addresses the page. */
+    override fun bookingUrlTemplate(
+        reservable: Reservable,
+        parentRef: ProviderRef,
+    ): String = RecGovBookingUrl.template(reservable.rid.vendorId)
 
     private fun recgovIdOrThrow(ref: ProviderRef): String =
         when (ref) {
@@ -121,8 +122,5 @@ class RecGovReservationProvider(
          * independent of watch dates.
          */
         private const val RECGOV_MAX_POLL_WINDOW_DAYS: Int = 60
-
-        /** Base for the public single-campsite booking page. */
-        private const val RECGOV_CAMPSITE_URL = "https://www.recreation.gov/camping/campsites"
     }
 }

@@ -57,8 +57,12 @@ object AspiraTenants {
         )
 
     private val BY_HOST: Map<String, AspiraTenant> = ALL.associateBy { it.host }
+    private val BY_VENDOR_CODE: Map<String, AspiraTenant> = ALL.associateBy { it.vendorCode }
 
     fun byHost(host: String): AspiraTenant? = BY_HOST[host]
+
+    /** Tenant for a reservable vendor code stamped under that tenant (e.g. `aspira_wa`). */
+    fun byVendorCode(vendorCode: String): AspiraTenant? = BY_VENDOR_CODE[vendorCode]
 
     fun knownHosts(): Set<String> = BY_HOST.keys
 }

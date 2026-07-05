@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.models.domain.Reservable
 import java.time.LocalDate
 
 /**
@@ -69,19 +69,35 @@ interface ReservationProvider {
         throw ReservationProviderError.Unsupported("reservableAvailability", id)
 
     /**
-     * User-facing booking deep link for [rid] on the single night beginning
-     * [date] (check-out the next day), or null when this provider exposes no
-     * stable deep link. Pure and cheap — no upstream call, no throw.
+     * User-facing booking URL *template* for [reservable] under a campground
+     * whose parent scope is [parentRef], or null when this provider exposes no
+     * stable deep link. The template may embed the
+     * [BookingUrlTemplate] placeholders (filled by the caller for a chosen
+     * window) or be a static URL. Pure and cheap — no upstream call, no throw.
      *
-     * The URL scheme is vendor-specific, so it lives in the adapter.
-     * Provider-neutral callers (e.g. alert notifications) ask the port for a
-     * link instead of hardcoding vendor URLs. Default null keeps deep links
-     * opt-in per adapter — a provider without one is not a gap to fill.
+     * The URL scheme is vendor-specific, so it lives in the adapter — the one
+     * place that knows the vendor's booking-site shape. Both the reservables
+     * API (which ships the template to the web app) and provider-neutral
+     * callers (alert notifications, via [bookingUrl]) read it from here rather
+     * than hardcoding vendor URLs. Default null keeps deep links opt-in per
+     * adapter — a provider without one is not a gap to fill.
+     */
+    fun bookingUrlTemplate(
+        reservable: Reservable,
+        parentRef: ProviderRef,
+    ): String? = null
+
+    /**
+     * Concrete booking deep link for [reservable] on the single night beginning
+     * [date] (check-out the next day), or null when the provider exposes none.
+     * Derived from [bookingUrlTemplate] by filling its window placeholders, so
+     * an adapter only implements the template once.
      */
     fun bookingUrl(
-        rid: ReservableId,
+        reservable: Reservable,
+        parentRef: ProviderRef,
         date: LocalDate,
-    ): String? = null
+    ): String? = bookingUrlTemplate(reservable, parentRef)?.let { BookingUrlTemplate.fill(it, date, date.plusDays(1)) }
 }
 
 /**
