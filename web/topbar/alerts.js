@@ -46,13 +46,13 @@ async function refresh() {
       listWatches({ status: 'paused', limit: WATCH_LIST_LIMIT }),
       listWatches({ status: 'done', limit: WATCH_LIST_LIMIT }),
     ]);
-    // Active first, then paused, then done (terminal); each block newest-first
-    // as the API returns.
+    // One flat list across all statuses, sorted by trip date (the Date column)
+    // soonest-first so the nearest window is at the top; undated watches last.
     watches = [
       ...(active?.watches || []),
       ...(paused?.watches || []),
       ...(done?.watches || []),
-    ];
+    ].sort(byStartDate);
     await ensurePoiNames(watches);
     render();
   } catch (e) {
@@ -145,7 +145,7 @@ function watchName(w) {
 
 function rowHtml(w) {
   const name = watchName(w);
-  const start = w.start_date ?? w.startDate ?? '';
+  const start = startDateOf(w);
   const stateClass = w.status === 'paused' ? ' is-paused' : w.status === 'done' ? ' is-done' : '';
   return `
     <div class="tb-alerts-row${stateClass}" role="row" data-poi="${escapeHtml(String(w.poi_id ?? ''))}" data-week="${escapeHtml(start)}">
@@ -202,6 +202,21 @@ function checkedHtml(w) {
   const at = w.last_run_at;
   if (!at) return '<span class="tb-alerts-faint">—</span>';
   return `<span title="${escapeHtml(at)}">${escapeHtml(relativeTime(at))}</span>`;
+}
+
+function startDateOf(w) {
+  return w.start_date ?? w.startDate ?? '';
+}
+
+// Ascending by start date. Dates are ISO 'YYYY-MM-DD', so lexicographic
+// compare is chronological. Undated watches sort last.
+function byStartDate(a, b) {
+  const da = startDateOf(a);
+  const db = startDateOf(b);
+  if (da === db) return 0;
+  if (!da) return 1;
+  if (!db) return -1;
+  return da < db ? -1 : 1;
 }
 
 function fmtDate(iso) {
