@@ -54,4 +54,60 @@ class AvailabilityDateResolverTest {
         assertNull(resolver.resolvePollingWindow(context, maxPollWindowDays = 0, bookingHorizonDays = 180))
         assertNull(resolver.resolvePollingWindow(context, maxPollWindowDays = 60, bookingHorizonDays = 0))
     }
+
+    @Test
+    fun `wideWindow anchored at earliest equals the polling window`() {
+        val resolver = resolverAt("2026-07-04T00:00:00Z")
+        val context = resolver.context(lat = null, lng = null)
+
+        val wide = resolver.wideWindow(context.earliestDate, context, maxPollWindowDays = 60, bookingHorizonDays = 180)!!
+        val polling = resolver.resolvePollingWindow(context, maxPollWindowDays = 60, bookingHorizonDays = 180)!!
+
+        assertEquals(polling.startDate, wide.startDate)
+        assertEquals(polling.endDate, wide.endDate)
+    }
+
+    @Test
+    fun `wideWindow anchors at a future target start and spans the vendor cap`() {
+        val resolver = resolverAt("2026-07-04T00:00:00Z")
+        val context = resolver.context(lat = null, lng = null)
+        val anchor = context.earliestDate.plusDays(90)
+
+        val wide = resolver.wideWindow(anchor, context, maxPollWindowDays = 30, bookingHorizonDays = 365)!!
+
+        assertEquals(anchor, wide.startDate)
+        assertEquals(30L, ChronoUnit.DAYS.between(wide.startDate, wide.endDate))
+    }
+
+    @Test
+    fun `wideWindow clamps a past anchor up to the earliest bookable date`() {
+        val resolver = resolverAt("2026-07-04T00:00:00Z")
+        val context = resolver.context(lat = null, lng = null)
+        val pastAnchor = context.earliestDate.minusDays(10)
+
+        val wide = resolver.wideWindow(pastAnchor, context, maxPollWindowDays = 30, bookingHorizonDays = 365)!!
+
+        assertEquals(context.earliestDate, wide.startDate)
+    }
+
+    @Test
+    fun `wideWindow end never passes the booking horizon`() {
+        val resolver = resolverAt("2026-07-04T00:00:00Z")
+        val context = resolver.context(lat = null, lng = null)
+        val horizonEnd = context.earliestDate.plusDays(30)
+        val anchor = context.earliestDate.plusDays(20)
+
+        val wide = resolver.wideWindow(anchor, context, maxPollWindowDays = 60, bookingHorizonDays = 30)!!
+
+        assertEquals(horizonEnd, wide.endDate)
+    }
+
+    @Test
+    fun `wideWindow yields no window for a zero cap or an anchor at the horizon`() {
+        val resolver = resolverAt("2026-07-04T00:00:00Z")
+        val context = resolver.context(lat = null, lng = null)
+
+        assertNull(resolver.wideWindow(context.earliestDate, context, maxPollWindowDays = 0, bookingHorizonDays = 180))
+        assertNull(resolver.wideWindow(context.earliestDate.plusDays(180), context, maxPollWindowDays = 60, bookingHorizonDays = 180))
+    }
 }
