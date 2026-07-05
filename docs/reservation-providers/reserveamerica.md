@@ -99,8 +99,9 @@ per-site scrape (linked from each calendar row) — not the dead API.
 
 Cataloged from the `campsiteCalendar.do` roster via `ReserveAmericaSitesEtl`
 (per tenant) + `ReserveAmericaPoiReservableJoiner`. `name` = site number;
-`loop`/`site_type` = null. This clears the ReserveAmerica POIs out of the
-catalogless availability path.
+`loop`/`site_type` = null. A POI only shows availability once its catalog rows
+are linked — POIs without linked `reservables` report an empty window (there is
+no live render-only fallback).
 
 ## Adapter design notes
 

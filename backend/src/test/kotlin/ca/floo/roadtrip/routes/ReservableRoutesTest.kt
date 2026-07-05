@@ -513,7 +513,7 @@ class ReservableRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `poi reservables availability falls back to provider matrix when no catalog reservables are linked`() =
+    fun `poi reservables availability is empty when no catalog reservables are linked (no live render fallback)`() =
         testApplication {
             val poiId =
                 seedPoi(
@@ -536,20 +536,11 @@ class ReservableRoutesTest : SharedDbTest() {
             val resp = client.get("/api/poi/$poiId/reservables/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            val reservables = body["reservables"]!!.jsonArray
 
-            assertEquals(1, reservables.size)
-            assertEquals(
-                "site:recgov:fake",
-                reservables
-                    .single()
-                    .jsonObject["reservable_id"]!!
-                    .jsonPrimitive
-                    .content,
-            )
-            assertEquals(1, FakeReservationProvider.availabilityCalls)
-            assertEquals(0, FakeReservationProvider.catalogAvailabilityCalls)
-            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
+            // A POI with a provider_ref but no linked catalog reservables now
+            // reports an empty window — the render-only catalogless fetch is gone.
+            assertEquals(0, body["reservables"]!!.jsonArray.size)
+            assertEquals(0, FakeReservationProvider.availabilityCalls)
         }
 
     @Test

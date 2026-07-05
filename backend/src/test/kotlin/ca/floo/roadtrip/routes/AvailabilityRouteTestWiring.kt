@@ -44,7 +44,6 @@ internal fun Route.availabilityRoutes(
                 reservablesRepo = reservablesRepo,
                 composer = composer,
                 dateResolver = dateResolver,
-                reservationProviders = reservationProviders,
             ),
     )
 }
