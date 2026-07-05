@@ -156,6 +156,32 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         return watchId
     }
 
+    /** Seeds an ACTIVE watch scoped to a single reservable (not the whole POI),
+     *  so tests can prove the poller polls the full catalog regardless of how
+     *  narrowly a watch is scoped. */
+    private fun seedReservableWatch(
+        reservableId: Long,
+        startDate: String,
+        endDate: String,
+    ): Long {
+        val watchId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO availability_watch (
+                        start_date, end_date, cadence_sec, trigger_kinds, trigger_config, stop_when_triggered
+                    ) VALUES (
+                        ?::date, ?::date, 60, ARRAY['atc'], '{}'::jsonb, false
+                    ) RETURNING id
+                    """.trimIndent(),
+                    startDate,
+                    endDate,
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute("INSERT INTO availability_watch_target (watch_id, reservable_id) VALUES (?, ?)", watchId, reservableId)
+        return watchId
+    }
+
     private fun membershipFor(provider: ReservationProvider): AvailabilityPollerMembership {
         val reservablesRepo = ReservableRepo(ctx)
         val registry = ReservationProviderRegistry(mapOf("test" to provider))
@@ -497,6 +523,29 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals("ok", fetchCalls[0].outcome)
             assertEquals(3, fetchCalls[0].reservableCount)
             assertEquals("232447", fetchCalls[0].parentRef)
+        }
+
+    @Test
+    fun `poller fetches the full campground catalog even when a watch scopes one site`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            val watchedSite = seedReservable(poiId, "100")
+            // Two more sites nobody watches — they must still be polled.
+            seedReservable(poiId, "101")
+            seedReservable(poiId, "102")
+            // A watch scoped to a single reservable, not the whole POI.
+            val watchId = seedReservableWatch(watchedSite, farStart.toString(), farStart.plusDays(2).toString())
+            val poller = linkWatch(provider, watchId)
+
+            executorFor(provider).handle(poller)
+
+            // One call covering the WHOLE catalog (3 sites), though only 1 is watched.
+            assertEquals(1, provider.calls)
+            val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
+            val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
+            assertEquals(1, fetchCalls.size)
+            assertEquals(3, fetchCalls[0].reservableCount, "fetches the parent catalog, not just the watched site")
         }
 
     // --- Alerts (PR6): cube edge -> Slack notify ---
