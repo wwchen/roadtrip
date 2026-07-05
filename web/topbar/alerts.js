@@ -1,9 +1,11 @@
-// web/topbar/alerts.js — nav "active availability alerts" row + summary.
+// web/topbar/alerts.js — nav "availability alerts" row + summary.
 //
-// A second row under the search box that appears when the user has open
+// A second row under the search box that appears when the user has any
 // availability watches. Clicking it expands a summary table (POI, date,
-// trigger, last-checked) with per-row pause/resume + delete. Watches are
-// global (no auth), so this reflects everyone's open watches.
+// trigger, last-checked) listing active, paused, and done watches, with
+// per-row pause/resume + delete (done watches show a ✅ found / ⌛ ended
+// status instead of a toggle). Watches are global (no auth), so this
+// reflects everyone's watches.
 //
 // Self-contained: owns its DOM (#tb-alerts), injects its own tb-* styles,
 // and refreshes on the shared 'watches-changed' event fired whenever a watch
@@ -39,12 +41,18 @@ export function initAlerts() {
 
 async function refresh() {
   try {
-    const [active, paused] = await Promise.all([
+    const [active, paused, done] = await Promise.all([
       listWatches({ status: 'active', limit: WATCH_LIST_LIMIT }),
       listWatches({ status: 'paused', limit: WATCH_LIST_LIMIT }),
+      listWatches({ status: 'done', limit: WATCH_LIST_LIMIT }),
     ]);
-    // Active first, then paused; each block newest-first as the API returns.
-    watches = [...(active?.watches || []), ...(paused?.watches || [])];
+    // Active first, then paused, then done (terminal); each block newest-first
+    // as the API returns.
+    watches = [
+      ...(active?.watches || []),
+      ...(paused?.watches || []),
+      ...(done?.watches || []),
+    ];
     await ensurePoiNames(watches);
     render();
   } catch (e) {
@@ -76,11 +84,16 @@ function pausedCount() {
   return watches.filter((w) => w.status === 'paused').length;
 }
 
+function doneCount() {
+  return watches.filter((w) => w.status === 'done').length;
+}
+
 function render() {
   if (!rootEl) return;
   const active = activeCount();
   const paused = pausedCount();
-  if (active + paused === 0) {
+  const done = doneCount();
+  if (active + paused + done === 0) {
     rootEl.innerHTML = '';
     rootEl.classList.remove('visible');
     expanded = false;
@@ -90,19 +103,20 @@ function render() {
   rootEl.innerHTML = `
     <button type="button" class="tb-alerts-bar" aria-expanded="${expanded}">
       <span class="tb-alerts-bell">🔔</span>
-      <span class="tb-alerts-label">${escapeHtml(barLabel(active, paused))}</span>
+      <span class="tb-alerts-label">${escapeHtml(barLabel(active, paused, done))}</span>
       <svg class="tb-alerts-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
     </button>
     ${expanded ? renderTable() : ''}
   `;
 }
 
-function barLabel(active, paused) {
-  if (active > 0) {
-    const base = `${active} active availability alert${active === 1 ? '' : 's'}`;
-    return paused > 0 ? `${base} · ${paused} paused` : base;
-  }
-  return `${paused} paused alert${paused === 1 ? '' : 's'}`;
+function barLabel(active, paused, done) {
+  const total = active + paused + done;
+  const base = `${total} availability alert${total === 1 ? '' : 's'}`;
+  const extra = [];
+  if (paused > 0) extra.push(`${paused} paused`);
+  if (done > 0) extra.push(`${done} done`);
+  return extra.length ? `${base} · ${extra.join(' · ')}` : base;
 }
 
 function renderTable() {
@@ -130,25 +144,48 @@ function watchName(w) {
 }
 
 function rowHtml(w) {
-  const paused = w.status === 'paused';
   const name = watchName(w);
   const start = w.start_date ?? w.startDate ?? '';
-  const pausedClass = paused ? ' is-paused' : '';
-  const toggle = paused
-    ? `<button type="button" class="tb-alerts-act" data-act="resume" data-id="${w.id}" title="Resume" aria-label="Resume watch">▶</button>`
-    : `<button type="button" class="tb-alerts-act" data-act="pause" data-id="${w.id}" title="Pause" aria-label="Pause watch">⏸</button>`;
+  const stateClass = w.status === 'paused' ? ' is-paused' : w.status === 'done' ? ' is-done' : '';
   return `
-    <div class="tb-alerts-row${pausedClass}" role="row" data-poi="${escapeHtml(String(w.poi_id ?? ''))}" data-week="${escapeHtml(start)}">
+    <div class="tb-alerts-row${stateClass}" role="row" data-poi="${escapeHtml(String(w.poi_id ?? ''))}" data-week="${escapeHtml(start)}">
       <span class="tb-alerts-poi" role="cell" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
       <span class="tb-alerts-date" role="cell">${escapeHtml(fmtDate(start))}</span>
       <span class="tb-alerts-trigger" role="cell">${escapeHtml(triggerLabel(w))}</span>
       <span class="tb-alerts-checked" role="cell">${checkedHtml(w)}</span>
       <span class="tb-alerts-actions" role="cell">
-        ${toggle}
+        ${actionsHtml(w)}
         <button type="button" class="tb-alerts-act tb-alerts-del" data-act="delete" data-id="${w.id}" title="Delete" aria-label="Delete watch">🗑</button>
       </span>
     </div>
   `;
+}
+
+// Active/paused get an interactive pause/resume toggle. Done watches are
+// terminal — show a static status glyph instead: ✅ when availability was
+// found, ⌛ when the watch window elapsed without a hit.
+function actionsHtml(w) {
+  if (w.status === 'done') {
+    return doneKind(w) === 'expired'
+      ? `<span class="tb-alerts-status" title="Watch window ended without availability">⌛</span>`
+      : `<span class="tb-alerts-status" title="Availability found">✅</span>`;
+  }
+  return w.status === 'paused'
+    ? `<button type="button" class="tb-alerts-act" data-act="resume" data-id="${w.id}" title="Resume" aria-label="Resume watch">▶</button>`
+    : `<button type="button" class="tb-alerts-act" data-act="pause" data-id="${w.id}" title="Pause" aria-label="Pause watch">⏸</button>`;
+}
+
+// A watch goes `done` two ways (see WatchAlertDispatcher / AvailabilityPollerRepo.retire):
+// a successful trigger (availability found), or its end date elapsing. We can't
+// see the trigger flag from the list payload, so infer "expired" from the window
+// having passed; anything still within its window that's done was triggered.
+function doneKind(w) {
+  const end = w.end_date ?? w.endDate ?? '';
+  return end && end < todayIso() ? 'expired' : 'found';
+}
+
+function todayIso() {
+  return new Date().toISOString().slice(0, 10);
 }
 
 function triggerLabel(w) {
@@ -261,7 +298,7 @@ function injectAlertsStyles() {
     font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
   }
   .tb-alerts-header:hover { background: transparent; }
-  .tb-alerts-row.is-paused { opacity: 0.55; }
+  .tb-alerts-row.is-paused, .tb-alerts-row.is-done { opacity: 0.55; }
   .tb-alerts-poi { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--cg-text); }
   .tb-alerts-date, .tb-alerts-trigger { white-space: nowrap; color: var(--cg-muted); }
   .tb-alerts-checked { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--cg-muted); }
@@ -277,6 +314,10 @@ function injectAlertsStyles() {
   .tb-alerts-act:hover { background: var(--cg-bg-hover); color: var(--cg-text); }
   .tb-alerts-del:hover { color: var(--cg-error); }
   .tb-alerts-act:disabled { opacity: 0.5; cursor: wait; }
+  .tb-alerts-status {
+    width: 24px; height: 24px;
+    display: grid; place-items: center; font-size: 12px;
+  }
   `;
   const tag = document.createElement('style');
   tag.id = 'tb-alerts-styles';
