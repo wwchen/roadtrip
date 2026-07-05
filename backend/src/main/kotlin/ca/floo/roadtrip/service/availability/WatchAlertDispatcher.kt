@@ -243,6 +243,7 @@ internal class WatchAlertDispatcher(
         canDelete: Boolean,
     ): WatchControlLinks {
         val root = appRootUrl ?: return WatchControlLinks()
+
         fun url(action: String) = "$root/?$ALERT_QUERY_KEY=$watchId&$ALERT_ACTION_QUERY_KEY=$action"
         return WatchControlLinks(
             pauseUrl = if (canPause) url(ALERT_ACTION_PAUSE) else null,
