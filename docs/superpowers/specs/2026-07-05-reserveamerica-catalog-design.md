@@ -57,24 +57,35 @@ Because the catalog `siteId` and the availability `siteId` come from the *same*
 `campsiteCalendar.do` document, `vendor_id == siteId` is true **by
 construction** — there is no cross-system id-reconciliation risk.
 
-### Rejected alternative: Active developer API
+### Dead alternative: Active developer API (`api.amp.active.com`)
 
-`api.amp.active.com/camping/campsites?contractCode=&parkId=&api_key=`
-(Campsite Search API) returns richer catalog fields (`SiteType` e.g.
-"40 FT. ELECTRIC - PREMIUM", `Loop`, `Maxpeople`, hookups) keyed by the same
-`(contractCode, parkId)` we already store. **Rejected because** it (a) needs a
-registered API key (5k/day, 2 rps) we do not have, (b) is a separate system
-from availability, reintroducing the `SiteId`-match risk as a hard gate, and
-(c) shows signs of neglect (stale docs, unanswered coverage complaints).
-Documented in `reserveamerica.md` as the rejected alternative and the future
-`site_type` enrichment source.
+The Campground/Campsite Search API (`camping/campgrounds`, `camping/campsites`)
+documents exactly the catalog we want — `SiteType` ("<= 40 FT. ELECTRIC -
+PREMIUM"), `Loop` ("CONIFER RIDGE"), `Maxpeople`, `Maxeqplen`, hookups — keyed
+by the same `(contractCode, parkId)` we store, with a numeric `SiteId` that
+almost certainly matches the scrape's `siteId`.
+
+**It is decommissioned.** Verified 2026-07-05: the endpoint returns
+`HTTP 403 Forbidden` from `server: awselb/2.0` for every caller —
+- no key and dummy key → app-level "Developer Inactive";
+- a *valid* provisioned key (`roadtrip: ztkdunkx43ja5k3dx9dnwx96`) → ELB 403;
+- from our local egress IP, from Anthropic's WebFetch egress (a different IP),
+  **and from Active's own I/O Docs interactive console** signed in as an
+  affiliate.
+
+The load balancer rejects requests before the app; Active's own tooling can't
+reach it; the docs footer reads © 2017. This is not an IP-allowlist or key
+problem we can resolve — the API is gone. It is **not** a future enrichment
+option. Recorded in `reserveamerica.md` so no one re-investigates it.
 
 **Accepted tradeoff — thin `site_type`.** The calendar roster reliably yields
-`siteId` + site number; `loop`/`site_type` only if the label block carries
-them. `site_type` filtering may stay limited for RA. This is still strictly
-better than catalogless (which returns empty for *any* `site_type` filter).
-Richer `site_type` via `campsiteDetails.do` per-site enrichment is documented
-as future work, not built.
+`siteId` + site number; real `loop` is absent (the calendar's `loopName` is a
+pagination bucket like "Sites 036-049") and `site_type` is only derivable from
+brittle per-site attribute markup. So RA ships with site-number `name`, correct
+availability binding, and `loop`/`site_type` left null rather than
+half-parsed. The **only** remaining route to rich `loop`/`site_type` is a
+`campsiteDetails.do` per-site scrape (option C) — documented as future work,
+explicitly NOT the dead developer API.
 
 ## Components
 
@@ -178,9 +189,11 @@ stays observable.
   (`provider_ref = {contract_code, park_id}`; reservable identity
   `site:reserveamerica_{contract}:{siteId}`); endpoint catalog — the
   `campsiteCalendar.do` site-roster shape (chosen) **and the developer API
-  findings (Campground Search / Details / Campsite Search — keyed, rich
-  `SiteType`, no availability) as the rejected alternative + future
-  `site_type` source**; catalog status; adapter notes.
+  finding recorded as DEAD (Campground/Campsite Search — documents rich
+  `SiteType`/`Loop` but the endpoint is decommissioned: `awselb/2.0` 403 to
+  all callers incl. Active's own I/O Docs, © 2017) so it is not
+  re-investigated**; catalog status; the `campsiteDetails.do` scrape as the
+  only future `loop`/`site_type` path; adapter notes.
 - **`docs/reservation-providers.md`** (architecture contract, no wire
   details): matrix note → "sites cataloged from the campsite calendar; see
   `reserveamerica.md`"; closing pointer → real `reserveamerica.md` link.
