@@ -71,12 +71,12 @@ drawer can hide affordances the provider doesn't support.
 
 | Action | Required interface | Notes |
 |---|---|---|
-| Per-day availability for a window | `ReservationProvider.availability(AvailabilityRequest)` | Drives provider-level availability. Adapters fetch upstream directly; caching is handled above the adapter by `SnapshotBackedAvailabilityService` reading the `availability_snapshots` table. |
+| Per-day availability for a window | `ReservationProvider.availability(AvailabilityRequest)` | Drives provider-level availability. Adapters fetch upstream directly; caching is handled above the adapter by `CachedAvailabilityService` reading current state from the `availability` interval table. |
 | Catalog availability for linked reservables | `ReservationProvider.catalogAvailability(CatalogAvailabilityRequest)` | POI/rids path uses this so the returned availability is narrowed to known catalog rows. |
 | Reservable availability | `ReservationProvider.reservableAvailability(ReservableAvailabilityRequest)` | Narrow projection for a single reservable. Currently unused: availability is always requested by collection (POI), so the port method has no live caller since the single-reservable endpoint was retired. Kept as a capability; remove if it stays dead. |
 | Capability probe | `ReservationProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
-| Append history snapshot | poller writes `availability_snapshot` rows | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
+| Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
 | Notify on match | poller dispatches via Slack (`slack_notify`; push future) | Channels are not provider-specific. See `docs/superpowers/specs/2026-07-03-availability-alerts-design.md`. |
 
 Reservation providers do not model cart automation, payment, or booking on
@@ -186,31 +186,31 @@ the fetch-call row it produced.
 
 ## Availability history
 
-History is a side effect of the watch poller, not a separate ETL. Every
-successful poll appends rows to `availability_snapshots`, keyed by
-`(poi_id, target_date, observed_at)`. Two principles:
+History is a side effect of the watch poller, not a separate ETL, and it is
+not a separate table. Each `(reservable_id, target_date)` cell has a chain of
+status-run rows in the `availability` interval table: an unchanged poll bumps
+the current row's `last_observed_at` in place, and a status change inserts a
+new row linked to its predecessor by `previous_id`. History is that chain —
+walk `previous_id` back from the current row. Each row is an interval
+`[previous.last_observed_at, last_observed_at]`. Two principles:
 
 - **History only exists for slots we polled.** No background backfill,
   no synthetic data. If a slot was never alerted on, there's no history
   for it. Capability-gate any history endpoint behind
   `supportsAlerts`.
 - **Widen data per upstream call.** Upstreams return a window of
-  per-day availability in one response. Snapshot the whole window, not
+  per-day availability in one response. Record the whole window, not
   just the alerted slot. Same upstream cost; vastly more history.
 
-History is read through provider-agnostic SQL on the snapshot table.
-Adapters do not own history queries. The snapshot lingua franca is one
+History is read through provider-agnostic SQL on the `availability` table.
+Adapters do not own history queries. The lingua franca is one
 reservable/date/status observation with the shared status enum:
 `first_come | reserved | available | closed | unknown`. `first_come` is
 visible to users but does not count as online availability; missing provider
 data is `unknown`, not `closed`. Provider-specific richness (equipment-type
-breakdowns, upstream map structure) is *not* captured in snapshots; that
-fidelity lives in the live availability call. Snapshots are the long-tail
-summary, not a replay log.
-
-Retention is tiered: raw rows for 90 days, daily aggregates beyond,
-discard raw past 1 year. The query layer reads raw or aggregates
-transparently based on the requested window.
+breakdowns, upstream map structure) is *not* captured; that
+fidelity lives in the live availability call. The interval rows are the
+long-tail summary, not a replay log.
 
 ## Lifecycle: how a user's intent becomes a watch
 
@@ -231,7 +231,7 @@ week pages                         ↓
   ↓                                  ↓ (match)
 "Set watch" click                  notify (Slack / push)
   ↓                                  ↓
-POST /api/availability/watches     append availability_snapshots
+POST /api/availability/watches     record availability status-runs
                                                                    list watches, pause,
                                                                    per-watch history,
                                                                    tune notification
