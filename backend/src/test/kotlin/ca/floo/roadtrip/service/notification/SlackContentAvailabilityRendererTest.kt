@@ -26,36 +26,43 @@ class SlackContentAvailabilityRendererTest {
         bookingUrl = bookingUrl,
     )
 
-    private fun actionsBlock(blocks: List<SlackBlockDto>) = blocks.firstOrNull { it.type == "actions" }
-
+    /** The site-lines section (the first mrkdwn section, before any link section). */
     private fun sectionText(blocks: List<SlackBlockDto>) = blocks.first { it.type == "section" && it.text != null }.text!!.text
 
+    /** The Reserve CTA renders as an emphasized mrkdwn hyperlink (`*<url|label>*`)
+     *  in its own section — not a Block Kit button. Returns its raw markup, or
+     *  null when no Reserve link was emitted. */
+    private fun reserveLinkMarkup(blocks: List<SlackBlockDto>): String? =
+        blocks
+            .filter { it.type == "section" && it.text != null }
+            .map { it.text!!.text }
+            .firstOrNull { it.contains("|Reserve") }
+
+    /** The visible label inside `<url|label>` markup. */
+    private fun linkLabel(markup: String) = markup.substringAfter('|').substringBeforeLast('>')
+
     @Test
-    fun `single campground names the campground in the fallback and shows a Reserve button`() {
+    fun `single campground names the campground in the fallback and shows a Reserve link`() {
         val (fallback, blocks) = SlackContentAvailabilityRenderer.openings(start, end, listOf(opening()))
 
         assertEquals("⛺ 1 campsite available at Kirk Creek", fallback)
-        val button = actionsBlock(blocks)!!.elements!!.single()
-        assertEquals("https://example.test/book/100", button.url)
-        assertTrue(button.text.text.startsWith("Reserve"), button.text.text)
+        val markup = reserveLinkMarkup(blocks)!!
+        assertTrue(markup.contains("<https://example.test/book/100|"), markup)
+        assertTrue(linkLabel(markup).startsWith("Reserve"), markup)
     }
 
     @Test
-    fun `Reserve button label never exceeds Slack's 75 char limit`() {
+    fun `Reserve link label never exceeds the readable 75 char budget`() {
         val longName = "Group Equestrian Camp Area — Upper Meadow Loop Reservation Site A (RV or Tent, 40ft)"
         val (_, blocks) = SlackContentAvailabilityRenderer.openings(start, end, listOf(opening(label = longName)))
 
-        val label =
-            actionsBlock(blocks)!!
-                .elements!!
-                .single()
-                .text.text
-        assertTrue(label.length <= 75, "button label was ${label.length} chars: $label")
+        val label = linkLabel(reserveLinkMarkup(blocks)!!)
+        assertTrue(label.length <= 75, "link label was ${label.length} chars: $label")
         assertTrue(label.endsWith("…") || label.contains(longName.take(10)), label)
     }
 
     @Test
-    fun `distinct campgrounds are detected by id even when names are null, and the button is dropped`() {
+    fun `distinct campgrounds are detected by id even when names are null, and the link is dropped`() {
         val openings =
             listOf(
                 opening(label = "A1", campgroundId = 1L, campground = null),
@@ -67,7 +74,7 @@ class SlackContentAvailabilityRendererTest {
         assertEquals("⛺ 2 campsites available", fallback)
         assertTrue(sectionText(blocks).contains("A1") && sectionText(blocks).contains("B1"))
         // A single Reserve CTA across parks would be arbitrary, so it is omitted.
-        assertNull(actionsBlock(blocks), "no Reserve button across multiple campgrounds")
+        assertNull(reserveLinkMarkup(blocks), "no Reserve link across multiple campgrounds")
     }
 
     @Test

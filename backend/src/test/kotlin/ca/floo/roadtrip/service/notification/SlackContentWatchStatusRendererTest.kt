@@ -38,15 +38,15 @@ class SlackContentWatchStatusRendererTest {
 
     private fun header(blocks: List<SlackBlockDto>) = blocks.first { it.type == "header" }.text!!.text
 
-    /** Every renderable string: fallback + each block's text, fields, and button
-     *  labels/urls (links now render as actions-block buttons, not mrkdwn text). */
+    /** Every renderable string: fallback + each block's text and fields. Deep-links
+     *  render as `<url|label>` markup inside section text, so both label and url
+     *  are already captured by the section-text append. */
     private fun allText(pair: Pair<String, List<SlackBlockDto>>) =
         buildString {
             append(pair.first)
             pair.second.forEach { b ->
                 b.text?.let { append('\n').append(it.text) }
                 b.fields?.forEach { append('\n').append(it.text) }
-                b.elements?.forEach { append('\n').append(it.text.text).append('\n').append(it.url) }
             }
         }
 
@@ -68,15 +68,22 @@ class SlackContentWatchStatusRendererTest {
     }
 
     @Test
-    fun `deep-links render as an actions block of link buttons`() {
+    fun `deep-links render as sections of mrkdwn hyperlinks, not interactive buttons`() {
         val blocks = SlackContentWatchStatusRenderer.render(notice()).second
-        val buttons = blocks.filter { it.type == "actions" }.flatMap { it.elements.orEmpty() }
-        assertTrue(buttons.all { it.type == "button" }, "links render as buttons")
-        val labels = buttons.map { it.text.text }
-        assertTrue(labels.any { it.contains("watch dashboard") }, labels.toString())
-        assertTrue(labels.any { it.contains("view on map") }, labels.toString())
-        assertTrue(labels.any { it.contains("availability grid") }, labels.toString())
-        assertTrue(buttons.any { it.url.contains("?poi=7") }, "map button links to the web-app POI")
+        // No actions/button blocks: those fire an interaction payload Slack would
+        // flag on an app with no interactivity endpoint. Links live in section text.
+        assertTrue(blocks.none { it.type == "actions" }, "deep-links must not render as interactive buttons")
+        val linkText =
+            blocks
+                .filter { it.type == "section" && it.text != null }
+                .map { it.text!!.text }
+                .filter { it.contains("<http") }
+                .joinToString("\n")
+        assertTrue(linkText.contains("watch dashboard"), linkText)
+        assertTrue(linkText.contains("view on map"), linkText)
+        assertTrue(linkText.contains("availability grid"), linkText)
+        // Rendered as a Slack hyperlink `<url|label>` targeting the web-app POI.
+        assertTrue(linkText.contains("<https://app.test/?poi=7|"), linkText)
     }
 
     @Test

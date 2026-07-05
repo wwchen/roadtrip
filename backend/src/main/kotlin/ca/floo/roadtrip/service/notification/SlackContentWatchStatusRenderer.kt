@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.notification
 
-import ca.floo.roadtrip.clients.slack.ButtonSpec
+import ca.floo.roadtrip.clients.slack.LinkSpec
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackBlocks
 
@@ -21,7 +21,9 @@ object SlackContentWatchStatusRenderer {
     // Slack Block Kit hard limits (chars). Exceeding either fails the post.
     private const val FIELD_TEXT_MAX = 2000
     private const val SECTION_TEXT_MAX = 3000
-    private const val BUTTON_TEXT_MAX = 75
+
+    /** Deep-link labels are kept short for readability, not a Slack limit. */
+    private const val LINK_LABEL_MAX = 75
 
     /**
      * Renders [notice] into the fallback text (shown in notifications / by
@@ -56,7 +58,7 @@ object SlackContentWatchStatusRenderer {
                     ),
                 )
                 add(SlackBlocks.section(truncate(statusLine(notice.state), SECTION_TEXT_MAX)))
-                addAll(linkButtons(notice))
+                addAll(linkSections(notice))
             }
 
         return fallback(notice, scopePlain(notice), window) to blocks
@@ -81,25 +83,25 @@ object SlackContentWatchStatusRenderer {
             WatchStatusNotice.State.STOPPED -> "Deleted — I've stopped watching and won't alert again."
         }
 
-    /** The deep-links as actions blocks of link buttons, or empty when the watch
-     *  carries none (both hosts unconfigured, or no POI-scoped targets). One
-     *  button for the watch dashboard, then a map + grid button per watched POI.
+    /** The deep-links as sections of inline mrkdwn hyperlinks, or empty when the
+     *  watch carries none (both hosts unconfigured, or no POI-scoped targets).
+     *  One link for the watch dashboard, then a map + grid link per watched POI.
      *  A single POI reads plainly ("view on map", "availability grid"); several
-     *  are suffixed with the POI id so each button is distinguishable. Buttons
-     *  are chunked to Slack's per-block cap so a many-POI watch can't be rejected.
+     *  are suffixed with the POI id so each link is distinguishable. Links are
+     *  chunked to Slack's per-section cap so a many-POI watch can't be rejected.
      *  The `url` binding lives here, never in the domain [WatchStatusNotice]. */
-    private fun linkButtons(notice: WatchStatusNotice): List<SlackBlockDto> {
+    private fun linkSections(notice: WatchStatusNotice): List<SlackBlockDto> {
         val single = notice.poiLinks.size == 1
-        val buttons =
+        val links =
             buildList {
-                notice.dashboardUrl?.let { add(ButtonSpec(truncate("📊 watch dashboard", BUTTON_TEXT_MAX), it)) }
+                notice.dashboardUrl?.let { add(LinkSpec(truncate("📊 watch dashboard", LINK_LABEL_MAX), it)) }
                 notice.poiLinks.forEach { poi ->
                     val suffix = if (single) "" else " ${poi.poiId}"
-                    poi.mapUrl?.let { add(ButtonSpec(truncate("🗺 view on map$suffix", BUTTON_TEXT_MAX), it)) }
-                    poi.gridUrl?.let { add(ButtonSpec(truncate("🗓 availability grid$suffix", BUTTON_TEXT_MAX), it)) }
+                    poi.mapUrl?.let { add(LinkSpec(truncate("🗺 view on map$suffix", LINK_LABEL_MAX), it)) }
+                    poi.gridUrl?.let { add(LinkSpec(truncate("🗓 availability grid$suffix", LINK_LABEL_MAX), it)) }
                 }
             }
-        return buttons.chunked(SlackBlocks.ACTIONS_MAX_ELEMENTS).map(SlackBlocks::actions)
+        return links.chunked(SlackBlocks.LINKS_MAX_PER_SECTION).map(SlackBlocks::links)
     }
 
     /** Notification-fallback line — keeps the pre-blocks phrasing so it reads as

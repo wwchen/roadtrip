@@ -7,11 +7,11 @@ import java.time.LocalDate
 /**
  * Maps availability [WatchOpening]s to the Slack "Campsites Available!" alert —
  * a notification-fallback string plus the Block Kit body (header, campground /
- * count / window fields, per-site lines, and a Reserve button). This is the one
+ * count / window fields, per-site lines, and a Reserve link). This is the one
  * place that turns the domain DTO into Slack content, so the notification
  * service owns the mapping and the dispatcher only supplies data.
  *
- * All rendered text is clamped to Slack's per-element limits ([BUTTON_TEXT_MAX],
+ * All rendered text is clamped to Slack's per-element limits ([RESERVE_LABEL_MAX],
  * [SECTION_TEXT_MAX], [FIELD_TEXT_MAX]); an over-long site name would otherwise
  * make `chat.postMessage` reject the whole message (`invalid_blocks`) and the
  * alert would silently never arrive.
@@ -21,9 +21,11 @@ object SlackContentAvailabilityRenderer {
     const val MAX_SITES_IN_MESSAGE = 10
 
     // Slack Block Kit hard limits (chars). Exceeding any of these fails the post.
-    private const val BUTTON_TEXT_MAX = 75
     private const val SECTION_TEXT_MAX = 3000
     private const val FIELD_TEXT_MAX = 2000
+
+    /** The Reserve link label is kept short for readability, not a Slack limit. */
+    private const val RESERVE_LABEL_MAX = 75
 
     private const val RESERVE_PREFIX = "Reserve "
     private const val RESERVE_SUFFIX = " →"
@@ -67,13 +69,13 @@ object SlackContentAvailabilityRenderer {
 
         // A single Reserve CTA is only meaningful when every opening is in one
         // campground; across parks the "first" site would be an arbitrary pick,
-        // so the button is dropped and the per-site lines carry the detail.
+        // so the link is dropped and the per-site lines carry the detail.
         val first = rows.first()
-        val reserveButton =
+        val reserveLink =
             if (!multiCampground) {
                 first.bookingUrl?.let { url ->
-                    val labelBudget = BUTTON_TEXT_MAX - RESERVE_PREFIX.length - RESERVE_SUFFIX.length
-                    SlackBlocks.primaryButton("$RESERVE_PREFIX${truncate(first.label, labelBudget)}$RESERVE_SUFFIX", url)
+                    val labelBudget = RESERVE_LABEL_MAX - RESERVE_PREFIX.length - RESERVE_SUFFIX.length
+                    SlackBlocks.primaryLink("$RESERVE_PREFIX${truncate(first.label, labelBudget)}$RESERVE_SUFFIX", url)
                 }
             } else {
                 null
@@ -90,7 +92,7 @@ object SlackContentAvailabilityRenderer {
                     ),
                 ),
                 SlackBlocks.section(truncate("$siteLines$more", SECTION_TEXT_MAX)),
-                reserveButton,
+                reserveLink,
             )
 
         val plural = if (count == 1) "" else "s"
