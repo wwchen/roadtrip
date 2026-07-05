@@ -89,7 +89,7 @@ availability history only.
 |---|---|---|---|
 | RecGov (rec.gov) | ✓ | ✓ | Availability and generic watch polling. |
 | Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | Availability ships now; watch dispatch still needs work. |
-| ReserveAmerica / Active Network (Alberta Parks, New York State Parks) | ✓ | ✗ | Availability reads the live campsite-calendar matrix. Alerts stay off until upstream cadence/load limits are validated. |
+| ReserveAmerica / Active Network (Alberta Parks, New York State Parks) | ✓ | ✗ | Availability reads the live campsite-calendar matrix; sites are cataloged from that same calendar roster (see `reserveamerica.md`). Alerts stay off until upstream cadence/load limits are validated. |
 | ReserveCalifornia / Tyler | ✓ | ✗ | Availability reads standard facility grids. Catalog import uses the public Search All Parks `search/place` flow. |
 
 When a row is added here, it should match a real file in
@@ -270,7 +270,9 @@ Each adapter's upstream API is documented separately under
   `washington.goingtocamp.com`).
 - [reservecalifornia.md](reservation-providers/reservecalifornia.md) —
   ReserveCalifornia / Tyler Technologies.
-- _recgov.md, reserveamerica.md — to be written._
+- [reserveamerica.md](reservation-providers/reserveamerica.md) — ReserveAmerica /
+  Active Network (`shop.albertaparks.ca`, `newyorkstateparks.reserveamerica.com`).
+- _recgov.md — to be written._
 
 When adding a new vendor, follow the
 [probe-vendor-api skill](../.claude/skills/probe-vendor-api/SKILL.md)
