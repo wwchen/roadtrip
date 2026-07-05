@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.notification
 
+import ca.floo.roadtrip.clients.slack.ButtonSpec
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackBlocks
 
@@ -20,6 +21,7 @@ object SlackContentWatchStatusRenderer {
     // Slack Block Kit hard limits (chars). Exceeding either fails the post.
     private const val FIELD_TEXT_MAX = 2000
     private const val SECTION_TEXT_MAX = 3000
+    private const val BUTTON_TEXT_MAX = 75
 
     /**
      * Renders [notice] into the fallback text (shown in notifications / by
@@ -37,21 +39,22 @@ object SlackContentWatchStatusRenderer {
                 "${notice.siteCount}"
             }
 
-        val links = linksLine(notice)
         val blocks =
-            listOfNotNull(
-                SlackBlocks.header(headerFor(notice.state)),
-                SlackBlocks.fields(
-                    listOf(
-                        // Clamp the whole field (label + value): Slack's limit is on
-                        // the field's text object, not just the value.
-                        truncate("*$fieldLabel*\n$fieldValue", FIELD_TEXT_MAX),
-                        "*Window*\n$window",
+            buildList {
+                add(SlackBlocks.header(headerFor(notice.state)))
+                add(
+                    SlackBlocks.fields(
+                        listOf(
+                            // Clamp the whole field (label + value): Slack's limit is on
+                            // the field's text object, not just the value.
+                            truncate("*$fieldLabel*\n$fieldValue", FIELD_TEXT_MAX),
+                            "*Window*\n$window",
+                        ),
                     ),
-                ),
-                SlackBlocks.section(truncate(statusLine(notice.state), SECTION_TEXT_MAX)),
-                links?.let { SlackBlocks.section(it) },
-            )
+                )
+                add(SlackBlocks.section(truncate(statusLine(notice.state), SECTION_TEXT_MAX)))
+                addAll(linkButtons(notice))
+            }
 
         return fallback(notice, scopePlain(notice), window) to blocks
     }
@@ -73,28 +76,25 @@ object SlackContentWatchStatusRenderer {
             WatchStatusNotice.State.DONE -> "This watch is complete — no more alerts."
         }
 
-    /** The deep-links as one mrkdwn section, or null when the watch carries none
-     *  (both hosts unconfigured, or no POI-scoped targets). One line for the
-     *  watch dashboard, then one line per watched POI pairing its map and grid
-     *  links. A single POI reads plainly ("view on map", "availability grid");
-     *  several are suffixed with the POI id so each is distinguishable. The
-     *  `<url|label>` markup lives here, never in the domain [WatchStatusNotice]. */
-    private fun linksLine(notice: WatchStatusNotice): String? {
+    /** The deep-links as actions blocks of link buttons, or empty when the watch
+     *  carries none (both hosts unconfigured, or no POI-scoped targets). One
+     *  button for the watch dashboard, then a map + grid button per watched POI.
+     *  A single POI reads plainly ("view on map", "availability grid"); several
+     *  are suffixed with the POI id so each button is distinguishable. Buttons
+     *  are chunked to Slack's per-block cap so a many-POI watch can't be rejected.
+     *  The `url` binding lives here, never in the domain [WatchStatusNotice]. */
+    private fun linkButtons(notice: WatchStatusNotice): List<SlackBlockDto> {
         val single = notice.poiLinks.size == 1
-        val parts =
+        val buttons =
             buildList {
-                notice.dashboardUrl?.let { add("📊 <$it|watch dashboard>") }
+                notice.dashboardUrl?.let { add(ButtonSpec(truncate("📊 watch dashboard", BUTTON_TEXT_MAX), it)) }
                 notice.poiLinks.forEach { poi ->
                     val suffix = if (single) "" else " ${poi.poiId}"
-                    val poiLinks =
-                        buildList {
-                            poi.mapUrl?.let { add("🗺 <$it|view on map$suffix>") }
-                            poi.gridUrl?.let { add("🗓 <$it|availability grid$suffix>") }
-                        }
-                    if (poiLinks.isNotEmpty()) add(poiLinks.joinToString("  ·  "))
+                    poi.mapUrl?.let { add(ButtonSpec(truncate("🗺 view on map$suffix", BUTTON_TEXT_MAX), it)) }
+                    poi.gridUrl?.let { add(ButtonSpec(truncate("🗓 availability grid$suffix", BUTTON_TEXT_MAX), it)) }
                 }
             }
-        return parts.takeIf { it.isNotEmpty() }?.joinToString("\n")
+        return buttons.chunked(SlackBlocks.ACTIONS_MAX_ELEMENTS).map(SlackBlocks::actions)
     }
 
     /** Notification-fallback line — keeps the pre-blocks phrasing so it reads as
