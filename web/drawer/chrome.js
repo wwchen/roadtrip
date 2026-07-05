@@ -10,6 +10,7 @@
 // re-opening (see beginSession).
 
 import { state } from '../core.js';
+import { clearVisiblePoiUrl } from '../share-links.js';
 
 export const DRAWER_ROOT_ID = 'cg-drawer';
 export const BACKDROP_ID = 'cg-drawer-backdrop';
@@ -76,6 +77,7 @@ export function closeDrawer() {
   const root = document.getElementById(DRAWER_ROOT_ID);
   const backdrop = document.getElementById(BACKDROP_ID);
   if (!root?.classList.contains('open') && !backdrop?.classList.contains('open')) return;
+  clearVisiblePoiUrl();
   root?.classList.remove('open', 'full');
   backdrop?.classList.remove('open');
   setTimeout(() => {

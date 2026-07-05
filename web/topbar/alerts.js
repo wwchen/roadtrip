@@ -17,10 +17,20 @@ import { onWatchesChanged } from '../availability/watch-events.js';
 import { escapeHtml } from '../core.js';
 
 const WATCH_LIST_LIMIT = 200;
-// Trigger-kind → display. Data-driven so future kinds (config'd Slack channel,
-// an ATC action) render without touching the table code.
-const TRIGGER_LABELS = {
-  slack_notify: '🔔 Slack',
+// Slack's official 4-color mark, inlined so the alert row stays self-contained
+// (no network fetch — works offline / behind CSP like the rest of the app).
+const SLACK_ICON =
+  '<svg class="tb-alerts-slack" viewBox="0 0 122.8 122.8" role="img" aria-label="Slack"><title>Slack</title>' +
+  '<path fill="#E01E5A" d="M25.8 77.6c0 7.1-5.8 12.9-12.9 12.9S0 84.7 0 77.6s5.8-12.9 12.9-12.9h12.9v12.9zm6.5 0c0-7.1 5.8-12.9 12.9-12.9s12.9 5.8 12.9 12.9v32.3c0 7.1-5.8 12.9-12.9 12.9s-12.9-5.8-12.9-12.9V77.6z"/>' +
+  '<path fill="#36C5F0" d="M45.2 25.8c-7.1 0-12.9-5.8-12.9-12.9S38.1 0 45.2 0s12.9 5.8 12.9 12.9v12.9H45.2zm0 6.5c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H12.9C5.8 58.1 0 52.3 0 45.2s5.8-12.9 12.9-12.9h32.3z"/>' +
+  '<path fill="#2EB67D" d="M97 45.2c0-7.1 5.8-12.9 12.9-12.9s12.9 5.8 12.9 12.9-5.8 12.9-12.9 12.9H97V45.2zm-6.5 0c0 7.1-5.8 12.9-12.9 12.9s-12.9-5.8-12.9-12.9V12.9C64.7 5.8 70.5 0 77.6 0s12.9 5.8 12.9 12.9v32.3z"/>' +
+  '<path fill="#ECB22E" d="M77.6 97c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9-12.9-5.8-12.9-12.9V97h12.9zm0-6.5c-7.1 0-12.9-5.8-12.9-12.9s5.8-12.9 12.9-12.9h32.3c7.1 0 12.9 5.8 12.9 12.9s-5.8 12.9-12.9 12.9H77.6z"/>' +
+  '</svg>';
+// Trigger-kind → display markup. Data-driven so future kinds (config'd Slack
+// channel, an ATC action) render without touching the table code. Values are
+// trusted markup (icons/emoji constants), injected unescaped by triggerHtml.
+const TRIGGER_HTML = {
+  slack_notify: SLACK_ICON,
   atc: '🛒 ATC',
 };
 
@@ -151,7 +161,7 @@ function rowHtml(w) {
     <div class="tb-alerts-row${stateClass}" role="row" data-poi="${escapeHtml(String(w.poi_id ?? ''))}" data-week="${escapeHtml(start)}">
       <span class="tb-alerts-poi" role="cell" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
       <span class="tb-alerts-date" role="cell">${escapeHtml(fmtDate(start))}</span>
-      <span class="tb-alerts-trigger" role="cell">${escapeHtml(triggerLabel(w))}</span>
+      <span class="tb-alerts-trigger" role="cell">${triggerHtml(w)}</span>
       <span class="tb-alerts-checked" role="cell">${checkedHtml(w)}</span>
       <span class="tb-alerts-actions" role="cell">
         ${actionsHtml(w)}
@@ -188,10 +198,13 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
-function triggerLabel(w) {
+function triggerHtml(w) {
   const kinds = Array.isArray(w.trigger_kinds) ? w.trigger_kinds : [];
   if (kinds.length === 0) return '—';
-  return kinds.map((k) => TRIGGER_LABELS[k] || k).join(', ');
+  // Known kinds map to trusted markup; unknown kinds fall back to escaped text.
+  // Object.hasOwn guards the allowlist so inherited keys (toString, constructor)
+  // can't bypass escaping.
+  return kinds.map((k) => (Object.hasOwn(TRIGGER_HTML, k) ? TRIGGER_HTML[k] : escapeHtml(k))).join(' ');
 }
 
 function checkedHtml(w) {
@@ -312,6 +325,7 @@ function injectAlertsStyles() {
   .tb-alerts-row.is-paused, .tb-alerts-row.is-done { opacity: 0.55; }
   .tb-alerts-poi { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--cg-text); }
   .tb-alerts-date, .tb-alerts-trigger { white-space: nowrap; color: var(--cg-muted); }
+  .tb-alerts-slack { width: 14px; height: 14px; vertical-align: -2px; }
   .tb-alerts-checked { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--cg-muted); }
   .tb-alerts-err { color: var(--cg-warn, #f1a04a); }
   .tb-alerts-faint { color: var(--cg-faint); }
