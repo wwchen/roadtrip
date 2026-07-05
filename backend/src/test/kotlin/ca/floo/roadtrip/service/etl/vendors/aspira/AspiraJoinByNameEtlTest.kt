@@ -88,6 +88,57 @@ class AspiraJoinByNameEtlTest {
             fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
         )
 
+    /** DTO variant carrying an inventory envelope + category dictionary for the non-bookable filter. */
+    private fun dtoWith(
+        leaf: AspiraLeaf,
+        inventoryPayloadJson: String,
+        dictionaryPayloadJson: String,
+        etlSlug: String = slug,
+    ): AspiraJoinDto =
+        AspiraJoinDto(
+            leaves = AspiraLeavesPayload(slug = etlSlug, leaves = listOf(leaf)),
+            geomSources =
+                listOf(
+                    "test-geom" to GeoJsonFeaturesSource(listOf(geomEnvelope()), "test-geom"),
+                ),
+            inventoryEnvelopes = listOf(envelopeOf(inventoryPayloadJson)),
+            dictionaryPayload = Json.parseToJsonElement(dictionaryPayloadJson).jsonObject,
+            fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
+        )
+
+    private fun envelopeOf(payloadJson: String): Envelope =
+        Json.decodeFromString(
+            Envelope.serializer(),
+            """
+            { "fetcher": "test", "fetcher_version": "1",
+              "fetched_at": "2026-07-05T00:00:00Z",
+              "request": { "url": "test://inv", "method": "GET" },
+              "response": { "status": 200 },
+              "payload": $payloadJson }
+            """.trimIndent(),
+        )
+
+    // resourceCategoryId 100 = Campsite (bookable), 200 = Parking (in the
+    // aspira-pc-pins non_bookable_categories blocklist).
+    private val categoryDict =
+        """
+        {"resource_categories":[
+          {"resourceCategoryId":100,"localizedValues":[{"cultureName":"en-CA","name":"Campsite"}]},
+          {"resourceCategoryId":200,"localizedValues":[{"cultureName":"en-CA","name":"Parking"}]}
+        ]}
+        """.trimIndent()
+
+    // A leaf that name-matches geometry (so it WOULD emit) but whose
+    // resourceLocationId varies per test via the inventory.
+    private fun nameMatchingLeaf(resLoc: Long) =
+        AspiraLeaf(
+            name = "Two Jack Lakeside",
+            transactionLocationId = 1005L,
+            mapId = -2147483650L,
+            resourceLocationId = resLoc,
+            parentName = null,
+        )
+
     private val parkContainer =
         AspiraLeaf(
             name = "Banff",
@@ -197,5 +248,43 @@ class AspiraJoinByNameEtlTest {
                 parentName = "Nowhere National Park",
             )
         assertTrue(AspiraJoinByNameEtl(slug).transform(dtoOf(orphan), ctx).isEmpty())
+    }
+
+    @Test
+    fun `drops a leaf whose resourceLocationId inventory is entirely non-bookable`() {
+        // resLoc 555's inventory is all Parking (category 200) → not a
+        // campground, even though the leaf name matches geometry.
+        val inventory = """{"r1":{"resourceLocationId":555,"resourceCategoryId":200}}"""
+        val pois = AspiraJoinByNameEtl(slug).transform(dtoWith(nameMatchingLeaf(555L), inventory, categoryDict), ctx)
+        assertTrue(pois.isEmpty(), "a resourceLocationId with only Parking inventory must be dropped")
+    }
+
+    @Test
+    fun `keeps a leaf whose resourceLocationId inventory includes a bookable category`() {
+        val inventory = """{"r1":{"resourceLocationId":666,"resourceCategoryId":100}}"""
+        val pois = AspiraJoinByNameEtl(slug).transform(dtoWith(nameMatchingLeaf(666L), inventory, categoryDict), ctx)
+        assertEquals(1, pois.size, "a resourceLocationId with Campsite inventory is a campground")
+    }
+
+    @Test
+    fun `keeps a resourceLocationId that mixes a bookable category with a non-bookable one`() {
+        // Headquarters-style: campsites (100) alongside parking (200). The
+        // filter only drops resLocs that are ENTIRELY non-bookable.
+        val inventory =
+            """{"a":{"resourceLocationId":777,"resourceCategoryId":100},"b":{"resourceLocationId":777,"resourceCategoryId":200}}"""
+        val pois = AspiraJoinByNameEtl(slug).transform(dtoWith(nameMatchingLeaf(777L), inventory, categoryDict), ctx)
+        assertEquals(1, pois.size, "a resLoc mixing campsites with parking is kept")
+    }
+
+    @Test
+    fun `a tenant with no non_bookable_categories arg does not filter`() {
+        // aspira-bc-pins declares no blocklist, so the same all-Parking
+        // inventory must NOT drop the leaf — the filter is config-driven, not
+        // slug-branched. Proves WA/BC are unaffected by the PC blocklist.
+        val inventory = """{"r1":{"resourceLocationId":555,"resourceCategoryId":200}}"""
+        val pois =
+            AspiraJoinByNameEtl("aspira-bc-pins")
+                .transform(dtoWith(nameMatchingLeaf(555L), inventory, categoryDict, etlSlug = "aspira-bc-pins"), ctx)
+        assertEquals(1, pois.size, "no blocklist arg → no filtering")
     }
 }

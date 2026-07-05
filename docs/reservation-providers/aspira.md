@@ -105,6 +105,19 @@ park-level container nodes (e.g. "Banff", "Camano Island", "Wells Gray"),
 not bookable campgrounds — they are skipped so they don't duplicate the
 park's already-correct campground POIs.
 
+A leaf can also carry a `resourceLocationId` and still not be a campground:
+`/api/maps` mounts activities (parking, guided hikes, shuttles, day-use
+buses) as sibling leaves, and their names sometimes match park geometry.
+Those are dropped by cross-referencing the inventory: a `resourceLocationId`
+whose `/api/resourcelocation/resources` catalog is made up **entirely** of
+non-overnight resource categories is not a campground. The category names
+are tenant-specific (PC's "Parking" is not WA's "Day Use Facility"), so the
+blocklist is the per-tenant `non_bookable_categories` arg in
+`poi-registry.yaml` — set for PC today; WA/BC set none and are unaffected. A
+`resourceLocationId` that mixes any bookable category (Campsite, Yurt,
+oTENTik, …) with a non-bookable one is kept (e.g. Fundy's "Headquarters"
+node, which fronts 100+ real campsites).
+
 ### `GET /api/availability/map`
 
 Per-day availability for one map node, optionally with per-resource

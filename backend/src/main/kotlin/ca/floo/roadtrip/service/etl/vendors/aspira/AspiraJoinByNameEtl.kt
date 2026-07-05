@@ -64,16 +64,26 @@ class AspiraJoinByNameEtl(
         }
         val leaves = leavesPayload ?: error("$etlSlug: no AspiraLeavesPayload input declared")
 
-        // Data_source-typed inputs become geometry sources, in declaration
-        // order so the YAML's `inputs:` order doubles as a preference order.
+        // The inventory + dictionary captures (when declared) drive the
+        // non-bookable-node filter, not geometry — pull them out first so
+        // detectGeometrySource never sees them.
+        val inventorySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("inventory") }
+        val dictionarySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("dictionaries") }
+
+        // Remaining data_source-typed inputs become geometry sources, in
+        // declaration order so the YAML's `inputs:` order doubles as a
+        // preference order.
         val geomEntries =
-            inputs.dataSourceSlugs().map { slug ->
-                slug to detectGeometrySource(slug, inputs.envelopes(slug))
-            }
+            inputs
+                .dataSourceSlugs()
+                .filter { it != inventorySlug && it != dictionarySlug }
+                .map { slug -> slug to detectGeometrySource(slug, inputs.envelopes(slug)) }
 
         return AspiraJoinDto(
             leaves = leaves,
             geomSources = geomEntries,
+            inventoryEnvelopes = inventorySlug?.let { inputs.envelopes(it) } ?: emptyList(),
+            dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject },
             fetchedAt = Instant.now(),
         )
     }
@@ -92,6 +102,29 @@ class AspiraJoinByNameEtl(
         val host = ctx.argFor(etlSlug, "host") ?: error("$etlSlug: missing args.host")
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
+
+        // Config-driven non-bookable filter. A leaf whose resourceLocationId's
+        // inventory is made up entirely of non-bookable categories (Parking,
+        // Guided Hike, Shuttle, Day Use Bus, …) is a park activity mount, not a
+        // campground — drop it even though its name may match geometry. The
+        // category taxonomy is tenant-specific, so the blocklist comes from the
+        // `non_bookable_categories` arg and the inventory + dictionary inputs.
+        // A tenant that declares neither gets an empty set and is unaffected —
+        // this stays input-driven, never branches on the tenant slug.
+        val nonBookableCategories =
+            ctx
+                .argFor(etlSlug, "non_bookable_categories")
+                ?.split(',')
+                ?.map { it.trim() }
+                ?.filter { it.isNotEmpty() }
+                ?.toSet()
+                .orEmpty()
+        val nonBookableResLocs =
+            AspiraInventoryCategories.nonBookableResourceLocationIds(
+                inventory = dto.inventoryEnvelopes,
+                dictionaryPayload = dto.dictionaryPayload,
+                nonBookableCategories = nonBookableCategories,
+            )
 
         // Build one merged name index: normalized name → first (lat, lon).
         // Geometry entries are walked in declared order, so the YAML's
@@ -120,6 +153,7 @@ class AspiraJoinByNameEtl(
         var viaParent = 0
         var miss = 0
         var skippedContainer = 0
+        var skippedNonBookable = 0
         val missSamples = mutableListOf<String>()
 
         for (leaf in dto.leaves.leaves) {
@@ -142,6 +176,14 @@ class AspiraJoinByNameEtl(
             // rules — so dropping them orphans nothing.
             if (leaf.resourceLocationId == null) {
                 skippedContainer++
+                continue
+            }
+            // Non-bookable activity node (parking, guided hike, shuttle, …):
+            // its resourceLocationId's inventory holds no overnight-stay
+            // resource. Drop it — a booking id + a name-match don't make a
+            // campground.
+            if (leaf.resourceLocationId in nonBookableResLocs) {
+                skippedNonBookable++
                 continue
             }
             val nk = normalize(leaf.name)
@@ -212,7 +254,7 @@ class AspiraJoinByNameEtl(
 
         log.info(
             "$etlSlug: {} leaves → {} pois " +
-                "(exact={} fuzzy={} parent={} miss={} skippedContainer={}; sample misses: {})",
+                "(exact={} fuzzy={} parent={} miss={} skippedContainer={} skippedNonBookable={}; sample misses: {})",
             dto.leaves.leaves.size,
             pois.size,
             exact,
@@ -220,6 +262,7 @@ class AspiraJoinByNameEtl(
             viaParent,
             miss,
             skippedContainer,
+            skippedNonBookable,
             missSamples.take(5),
         )
         return pois
@@ -288,6 +331,10 @@ private data class AspiraLeafExtrasDto(
 data class AspiraJoinDto(
     val leaves: AspiraLeavesPayload,
     val geomSources: List<Pair<String, GeometrySource>>,
+    /** Per-park `/api/resourcelocation/resources` envelopes, empty when the tenant declares no inventory input. */
+    val inventoryEnvelopes: List<ca.floo.roadtrip.models.metadata.Envelope> = emptyList(),
+    /** Tenant `/api/resourcecategory` dictionary payload, null when not declared. */
+    val dictionaryPayload: JsonObject? = null,
     val fetchedAt: Instant,
 )
 

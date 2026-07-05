@@ -334,10 +334,18 @@ poi_data:
         inputs: [aspira-maps-pc]
       - slug: aspira-pc-pins
         adapter: AspiraJoinByNameEtl
-        inputs: [aspira-leaves-pc, apca-accommodation, apca-places]
+        inputs: [aspira-leaves-pc, apca-accommodation, apca-places, aspira-inventory-pc, aspira-dictionaries-pc]
         args:
           host: reservation.pc.gc.ca
           parent_name_fallback: true
+          # Drop leaves whose resourceLocationId inventory is made up entirely
+          # of these non-overnight categories (parking lots, guided hikes,
+          # shuttles, day-use buses) — they name-match park geometry but are
+          # not campgrounds. Names are the PC /api/resourcecategory dictionary
+          # labels; the taxonomy is tenant-specific, so WA/BC set no blocklist
+          # and are unaffected. A resLoc that mixes any bookable category
+          # (Campsite, Yurt, oTENTik, …) with these is kept.
+          non_bookable_categories: "Parking, Shuttle, Ferry, Day Use Bus, Daily Fishing, Guided Hike, Guided Event, Day Runner Hike, Learn-to Activity"
 
   - name: Alberta Provincial Parks
     category: campground
