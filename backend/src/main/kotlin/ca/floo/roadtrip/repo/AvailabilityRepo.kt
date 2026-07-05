@@ -9,7 +9,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
-import java.util.concurrent.locks.ReentrantLock
 import ca.floo.roadtrip.db.generated.enums.AvailabilityStatus as DbAvailabilityStatus
 
 /**
@@ -41,45 +40,24 @@ class AvailabilityRepo(
      * change (new row inserted). Unchanged cells bump `last_observed_at` in place
      * and contribute no transition. The count of transitions is the caller's
      * `snapshot_count`; the bookable subset feeds alert dispatch.
+     *
+     * Known, accepted race: two writers to the SAME cell in the same instant (a
+     * live drawer fetch overlapping a poll) can both read the current row and both
+     * insert `previous_id` = that row, tripping `availability_previous_id_uq`. Left
+     * unguarded — low-probability on this single-instance, low-write backend, and
+     * self-healing: the poller records the tick as a failed run and re-polls next
+     * cadence, and the drawer read is retryable. Serialize per-cell (advisory lock
+     * or SELECT … FOR UPDATE) if it ever shows up in practice.
      */
     fun recordObservations(
         runId: Long?,
         observations: List<Observation>,
     ): List<CellTransition> {
         if (observations.isEmpty()) return emptyList()
-        // Order by cell for a stable lock-acquisition order (deadlock-free) when a
-        // batch spans multiple cells.
-        val ordered = observations.sortedWith(compareBy({ it.reservableId }, { it.targetDate }))
-        // Serialize the per-cell read-modify-write (find current row → bump-or-insert
-        // chained by previous_id) across the process. Two concurrent writers to the
-        // same cell (a live drawer fetch overlapping a poll) would otherwise both read
-        // the same current row and both insert previous_id = that row, tripping the
-        // previous_id uniqueness and turning a successful fetch/poll into a 500/failed
-        // run. Striped JVM locks bound memory and only ever over-serialize on hash
-        // collision; the lock is held until the transaction commits so the next writer
-        // reads the committed chain. The backend is a single instance — a Postgres
-        // advisory lock would be the multi-instance upgrade.
-        val stripes =
-            ordered
-                .map { cellStripeIndex(it.reservableId, it.targetDate) }
-                .distinct()
-                .sorted()
-        stripes.forEach { CELL_WRITE_STRIPES[it].lock() }
-        try {
-            return recordObservationsLocked(runId, ordered)
-        } finally {
-            stripes.asReversed().forEach { CELL_WRITE_STRIPES[it].unlock() }
-        }
-    }
-
-    private fun recordObservationsLocked(
-        runId: Long?,
-        ordered: List<Observation>,
-    ): List<CellTransition> =
-        ctx.transactionResult { config ->
+        return ctx.transactionResult { config ->
             val txn = DSL.using(config)
             val transitions = mutableListOf<CellTransition>()
-            for (obs in ordered) {
+            for (obs in observations) {
                 val observedAt = OffsetDateTime.ofInstant(obs.observedAt, ZoneOffset.UTC)
                 val current =
                     txn
@@ -112,6 +90,7 @@ class AvailabilityRepo(
             }
             transitions
         }
+    }
 
     /**
      * Insert a terminal `past` status-run for every cell whose current row has an
@@ -338,21 +317,6 @@ class AvailabilityRepo(
 }
 
 private const val DEFAULT_SUMMARY_WINDOW_HOURS: Int = 24 * 7
-
-// Process-wide striped locks serializing the per-cell read-modify-write in
-// recordObservations. Fixed count bounds memory; hash collisions only
-// over-serialize unrelated cells (harmless).
-private const val CELL_WRITE_STRIPE_COUNT: Int = 512
-private val CELL_WRITE_STRIPES: Array<ReentrantLock> = Array(CELL_WRITE_STRIPE_COUNT) { ReentrantLock() }
-
-private fun cellStripeIndex(
-    reservableId: Long,
-    targetDate: LocalDate,
-): Int {
-    val hash = reservableId * 31 + targetDate.hashCode()
-    val idx = (hash % CELL_WRITE_STRIPE_COUNT).toInt()
-    return if (idx < 0) idx + CELL_WRITE_STRIPE_COUNT else idx
-}
 
 private fun AvailabilityStatus.toDb(): DbAvailabilityStatus =
     DbAvailabilityStatus.entries.firstOrNull { it.literal == wireValue }
