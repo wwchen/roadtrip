@@ -5,6 +5,7 @@ import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.Instant
 import java.time.LocalDate
+import java.time.OffsetDateTime
 import kotlin.test.assertEquals
 
 class AvailabilityRepoTest : SharedDbTest() {
@@ -92,5 +93,33 @@ class AvailabilityRepoTest : SharedDbTest() {
         // Second run must not insert a duplicate past-run (would violate the previous_id chain).
         assertEquals(0, repo.markElapsedAsPast(listOf(rid), today = today))
         assertEquals(2, ctx.fetchCount(ctx.selectFrom(ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY)))
+    }
+
+    @Test
+    fun `history walks the previous_id chain, observedFrom derives from previous`() {
+        val rid = seedReservable("100")
+        val repo = AvailabilityRepo(ctx)
+        val t1 = Instant.parse("2026-06-18T10:00:00Z")
+        val t2 = Instant.parse("2026-06-18T11:00:00Z")
+        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(rid, date, AvailabilityStatus.RESERVED, t1)))
+        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(rid, date, AvailabilityStatus.AVAILABLE, t2)))
+        val runs = repo.listForReservable(rid)
+        assertEquals(2, runs.size)
+        val current = runs.first { it.status == AvailabilityStatus.AVAILABLE }
+        assertEquals(t1, current.observedFrom!!.toInstant()) // start = prior run's last_observed_at
+    }
+
+    @Test
+    fun `summarize reports an open window from an available run`() {
+        val rid = seedReservable("100")
+        val repo = AvailabilityRepo(ctx)
+        val t0 = Instant.parse("2026-06-18T10:00:00Z") // reserved
+        val t1 = Instant.parse("2026-06-18T10:30:00Z") // flips to available
+        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(rid, date, AvailabilityStatus.RESERVED, t0)))
+        repo.recordObservations(null, listOf(AvailabilityRepo.Observation(rid, date, AvailabilityStatus.AVAILABLE, t1)))
+        val stats = repo.summarize(rid, listOf(date), now = OffsetDateTime.parse("2026-06-18T12:00:00Z"))
+        val s = stats.single()
+        assertEquals(true, s.isCurrentlyOpen)
+        assertEquals(1800, s.currentOrLastOpenWindowSec) // available run spans t0..t1 = 30 min
     }
 }

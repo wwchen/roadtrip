@@ -158,7 +158,133 @@ class AvailabilityRepo(
                 )
             }
     }
+
+    data class StatusRun(
+        val reservableId: Long,
+        val runId: Long?,
+        val targetDate: LocalDate,
+        val status: AvailabilityStatus,
+        val available: Boolean,
+        val observedFrom: OffsetDateTime?,
+        val lastObservedAt: OffsetDateTime,
+    )
+
+    private val statusRunSelect =
+        """
+        SELECT reservable_id, run_id, target_date, status, last_observed_at,
+               lag(last_observed_at) OVER (
+                 PARTITION BY reservable_id, target_date ORDER BY last_observed_at, id
+               ) AS observed_from
+        FROM availability
+        """.trimIndent()
+
+    private fun mapStatusRun(r: org.jooq.Record): StatusRun {
+        val status = AvailabilityStatus.parse(r.get("status", String::class.java))
+        return StatusRun(
+            reservableId = r.get("reservable_id", Long::class.java),
+            runId = r.get("run_id", Long::class.java),
+            targetDate = r.get("target_date", LocalDate::class.java),
+            status = status,
+            available = status.isOnlineBookable,
+            observedFrom = r.get("observed_from", OffsetDateTime::class.java),
+            lastObservedAt = r.get("last_observed_at", OffsetDateTime::class.java),
+        )
+    }
+
+    fun listForReservable(
+        reservableId: Long,
+        limit: Int = 200,
+    ): List<StatusRun> =
+        ctx
+            .resultQuery(
+                "SELECT * FROM ($statusRunSelect) t WHERE reservable_id = ? " +
+                    "ORDER BY target_date DESC, last_observed_at DESC LIMIT ?",
+                reservableId,
+                limit.coerceIn(1, 1000),
+            ).fetch { mapStatusRun(it) }
+
+    fun listForRun(
+        runId: Long,
+        limit: Int = 500,
+    ): List<StatusRun> =
+        ctx
+            .resultQuery(
+                "SELECT * FROM ($statusRunSelect) t WHERE run_id = ? ORDER BY target_date ASC LIMIT ?",
+                runId,
+                limit.coerceIn(1, 1000),
+            ).fetch { mapStatusRun(it) }
+
+    data class TargetDateStats(
+        val targetDate: LocalDate,
+        val totalRuns: Int,
+        val lastOpenAt: OffsetDateTime?,
+        val isCurrentlyOpen: Boolean,
+        val currentOrLastOpenWindowSec: Int?,
+        val medianOpenWindowSec: Int?,
+        val opensLast24h: Int,
+    )
+
+    fun summarize(
+        reservableId: Long,
+        dates: List<LocalDate>,
+        now: OffsetDateTime = OffsetDateTime.now(),
+        windowHours: Int = DEFAULT_SUMMARY_WINDOW_HOURS,
+    ): List<TargetDateStats> {
+        if (dates.isEmpty()) return emptyList()
+        val windowStart = now.minusHours(windowHours.toLong())
+        val opensSince = now.minusHours(24)
+        val rows =
+            ctx
+                .resultQuery(
+                    "SELECT * FROM ($statusRunSelect) t WHERE reservable_id = ? " +
+                        "AND target_date = ANY(?::date[]) AND last_observed_at >= ? " +
+                        "ORDER BY target_date, last_observed_at",
+                    reservableId,
+                    dates.toTypedArray(),
+                    windowStart,
+                ).fetch { mapStatusRun(it) }
+        val byDate = rows.groupBy { it.targetDate }
+        return dates.map { d -> statsFor(d, byDate[d].orEmpty(), opensSince) }
+    }
+
+    private fun statsFor(
+        date: LocalDate,
+        runs: List<StatusRun>,
+        opensSince: OffsetDateTime,
+    ): TargetDateStats {
+        if (runs.isEmpty()) {
+            return TargetDateStats(date, 0, null, false, null, null, 0)
+        }
+        val openRuns = runs.filter { it.available }
+        val openWindows =
+            openRuns.map { r ->
+                val from = r.observedFrom ?: r.lastObservedAt
+                java.time.Duration
+                    .between(from, r.lastObservedAt)
+                    .seconds
+                    .toInt()
+                    .coerceAtLeast(0)
+            }
+        return TargetDateStats(
+            targetDate = date,
+            totalRuns = runs.size,
+            lastOpenAt = openRuns.lastOrNull()?.lastObservedAt,
+            isCurrentlyOpen = runs.last().available,
+            currentOrLastOpenWindowSec = openWindows.lastOrNull(),
+            medianOpenWindowSec = medianOrNull(openWindows),
+            opensLast24h = openRuns.count { (it.observedFrom ?: it.lastObservedAt) >= opensSince },
+        )
+    }
+
+    private fun medianOrNull(values: List<Int>): Int? {
+        if (values.isEmpty()) return null
+        val s = values.sorted()
+        val mid = s.size / 2
+        return if (s.size % 2 == 0) (s[mid - 1] + s[mid]) / 2 else s[mid]
+    }
 }
+
+private const val DEFAULT_SUMMARY_WINDOW_HOURS: Int = 24 * 7
 
 private fun AvailabilityStatus.toDb(): DbAvailabilityStatus =
     DbAvailabilityStatus.entries.firstOrNull { it.literal == wireValue }
