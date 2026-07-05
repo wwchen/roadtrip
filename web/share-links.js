@@ -83,6 +83,15 @@ export function clearVisibleShareUrl() {
   replaceVisibleUrl(url.toString());
 }
 
+/** Drop only the ?poi= param (drawer closed), preserving an active ?route=. */
+export function clearVisiblePoiUrl() {
+  if (typeof window === 'undefined') return;
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has('poi')) return;
+  url.searchParams.delete('poi');
+  replaceVisibleUrl(url.toString());
+}
+
 export function decodeRouteState(value) {
   if (!value || typeof value !== 'string') return null;
   try {
