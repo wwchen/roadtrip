@@ -180,7 +180,7 @@ function actionsHtml(w) {
 // see the trigger flag from the list payload, so infer "expired" from the window
 // having passed; anything still within its window that's done was triggered.
 function doneKind(w) {
-  const end = w.end_date ?? w.endDate ?? '';
+  const end = w.end_date ?? '';
   return end && end < todayIso() ? 'expired' : 'found';
 }
 
@@ -205,7 +205,7 @@ function checkedHtml(w) {
 }
 
 function startDateOf(w) {
-  return w.start_date ?? w.startDate ?? '';
+  return w.start_date ?? '';
 }
 
 // Ascending by start date. Dates are ISO 'YYYY-MM-DD', so lexicographic
