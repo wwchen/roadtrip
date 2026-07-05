@@ -4,6 +4,7 @@ import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
+import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -110,6 +111,15 @@ class AspiraReservationProvider(
             }
         }
     }
+
+    /** goingtocamp `create-booking/results` deep link for this tenant's host;
+     *  the concrete-date [bookingUrl] fills the window placeholders. Null when
+     *  neither the reservable's own ref nor [parentRef] carries the ids the
+     *  link needs. */
+    override fun bookingUrlTemplate(
+        reservable: Reservable,
+        parentRef: ProviderRef,
+    ): String? = AspiraBookingUrl.templateFor(tenant.host, reservable.providerRef, parentRef)
 
     override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
         val mapId = mapIdOrThrow(req.ref)

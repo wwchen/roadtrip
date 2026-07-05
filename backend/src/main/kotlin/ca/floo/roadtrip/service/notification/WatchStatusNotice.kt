@@ -11,14 +11,17 @@ import java.time.LocalDate
  * owns turning them into Block Kit and never reaches back into the availability
  * domain, and this type never surfaces Slack's `<url|label>` markup.
  *
- * Scope is either a single named site ([siteName] set, [siteCount] == 1) or a
- * plural count ([siteName] null); the renderer labels and formats accordingly.
+ * Scope is one of: a single named site ([siteName] set), a whole campground
+ * ([campgroundName] set — the watch covers every site in one POI), or a plural
+ * count ([siteName] and [campgroundName] null); the renderer labels and formats
+ * accordingly.
  */
 data class WatchStatusNotice(
     val state: State,
     val siteCount: Int,
     val siteName: String?,
     val siteLoop: String?,
+    val campgroundName: String?,
     val startDate: LocalDate,
     val endDate: LocalDate,
     val dashboardUrl: String?,
@@ -26,8 +29,9 @@ data class WatchStatusNotice(
 ) {
     /** Which status card to render. [WATCHING] and [UNCHECKED] are both live
      *  (actively watching); they differ only in whether the cube has an
-     *  observation for the window yet. */
-    enum class State { PAUSED, DONE, WATCHING, UNCHECKED }
+     *  observation for the window yet. [STOPPED] is a watch the user deleted —
+     *  a terminal goodbye card, sent once just before the row is removed. */
+    enum class State { PAUSED, DONE, WATCHING, UNCHECKED, STOPPED }
 
     /** Deep links for one watched POI: its page on the web map ([mapUrl]) and
      *  its Grafana availability grid ([gridUrl]). Either may be null when the

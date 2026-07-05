@@ -81,6 +81,16 @@ internal fun Route.availabilityWatchRoutes(
         }
     }
 
+    // The terminal "watch stopped" message on delete. Fire-and-forget on the
+    // captured pre-delete watch (its scope is still resolvable), symmetric with
+    // scheduleInitialNotify: it must never block or fail the HTTP response.
+    fun scheduleStoppedNotify(watch: Watch) {
+        notifyScope.launch {
+            runCatching { alertDispatcher.dispatchStopped(watch) }
+                .onFailure { log.warn("stopped Slack notify for watch {} failed", watch.id, it) }
+        }
+    }
+
     get("/api/availability/watches", {
         tags = listOf("availability")
         summary = "List availability watches"
@@ -271,7 +281,11 @@ internal fun Route.availabilityWatchRoutes(
         val id =
             call.parameters["id"]?.toLongOrNull()
                 ?: return@delete call.respondError("invalid_id", HttpStatusCode.BadRequest)
+        // Capture the watch before deletion so the goodbye notification can
+        // still resolve its scope; the row (and its poller links) are gone after.
+        val watch = watches.findById(id)
         if (watchService.delete(id)) {
+            watch?.let { scheduleStoppedNotify(it) }
             call.respond(HttpStatusCode.NoContent)
         } else {
             call.respondError("not_found", HttpStatusCode.NotFound)

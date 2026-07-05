@@ -29,14 +29,17 @@ object SlackContentWatchStatusRenderer {
      */
     fun render(notice: WatchStatusNotice): Pair<String, List<SlackBlockDto>> {
         val window = "${notice.startDate} → ${notice.endDate}"
-        val single = notice.siteName != null
 
-        val fieldLabel = if (single) "Site" else "Sites"
-        val fieldValue =
-            if (single) {
-                "*${notice.siteName}*${notice.siteLoop?.let { " ($it)" }.orEmpty()}"
-            } else {
-                "${notice.siteCount}"
+        // Scope reads as the single site, the whole campground, or a plural
+        // count — in that order of specificity.
+        val (fieldLabel, fieldValue) =
+            when {
+                notice.siteName != null ->
+                    "Site" to "*${notice.siteName}*${notice.siteLoop?.let { " ($it)" }.orEmpty()}"
+                notice.campgroundName != null ->
+                    "Campground" to "*${notice.campgroundName}*"
+                else ->
+                    "Sites" to "${notice.siteCount}"
             }
 
         val blocks =
@@ -65,6 +68,7 @@ object SlackContentWatchStatusRenderer {
             WatchStatusNotice.State.WATCHING, WatchStatusNotice.State.UNCHECKED -> "👀 Watching for openings"
             WatchStatusNotice.State.PAUSED -> "⏸️ Watch paused"
             WatchStatusNotice.State.DONE -> "✅ Watch complete"
+            WatchStatusNotice.State.STOPPED -> "🛑 Watch stopped"
         }
 
     /** The one-line status sentence under the fields. */
@@ -74,6 +78,7 @@ object SlackContentWatchStatusRenderer {
             WatchStatusNotice.State.UNCHECKED -> "Availability not checked yet — I'll alert the moment a site opens."
             WatchStatusNotice.State.PAUSED -> "Paused — I won't alert until this watch is resumed."
             WatchStatusNotice.State.DONE -> "This watch is complete — no more alerts."
+            WatchStatusNotice.State.STOPPED -> "Deleted — I've stopped watching and won't alert again."
         }
 
     /** The deep-links as actions blocks of link buttons, or empty when the watch
@@ -113,15 +118,17 @@ object SlackContentWatchStatusRenderer {
                 "⏸️ Paused watching $scope for $window — I won't alert until it's resumed."
             WatchStatusNotice.State.DONE ->
                 "✅ Done watching $scope for $window."
+            WatchStatusNotice.State.STOPPED ->
+                "🛑 Stopped watching $scope for $window — the watch was deleted."
         }
 
-    /** Unformatted scope for the fallback line: the single site's name (+ loop)
-     *  or the plural count. */
+    /** Unformatted scope for the fallback line: the single site's name (+ loop),
+     *  the whole campground's name, or the plural count. */
     private fun scopePlain(notice: WatchStatusNotice): String =
-        if (notice.siteName != null) {
-            "${notice.siteName}${notice.siteLoop?.let { " ($it)" }.orEmpty()}"
-        } else {
-            "${notice.siteCount} sites"
+        when {
+            notice.siteName != null -> "${notice.siteName}${notice.siteLoop?.let { " ($it)" }.orEmpty()}"
+            notice.campgroundName != null -> notice.campgroundName
+            else -> "${notice.siteCount} sites"
         }
 
     /** Clamps [s] to [max] chars, replacing the tail with an ellipsis so the

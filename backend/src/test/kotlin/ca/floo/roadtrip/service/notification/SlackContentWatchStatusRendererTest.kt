@@ -14,6 +14,7 @@ class SlackContentWatchStatusRendererTest {
         siteCount: Int = 235,
         siteName: String? = null,
         siteLoop: String? = null,
+        campgroundName: String? = null,
         dashboardUrl: String? = "https://grafana.test/d/reservable-watch-drill?var-watch_id=1",
         poiLinks: List<WatchStatusNotice.PoiLink> =
             listOf(
@@ -28,6 +29,7 @@ class SlackContentWatchStatusRendererTest {
         siteCount = siteCount,
         siteName = siteName,
         siteLoop = siteLoop,
+        campgroundName = campgroundName,
         startDate = start,
         endDate = end,
         dashboardUrl = dashboardUrl,
@@ -108,6 +110,22 @@ class SlackContentWatchStatusRendererTest {
         assertTrue(text.contains("072"), text)
         assertTrue(text.contains("Upper Pines"), text)
         assertTrue(!text.contains("1 sites"), text)
+    }
+
+    @Test
+    fun `a whole-campground watch names the campground instead of a raw site count`() {
+        val (fallback, blocks) = SlackContentWatchStatusRenderer.render(notice(siteCount = 360, campgroundName = "Deception Pass"))
+        val text = allText(fallback to blocks)
+        assertTrue(text.contains("Campground"), text)
+        assertTrue(text.contains("Deception Pass"), text)
+        assertTrue(!text.contains("360"), "campground scope shouldn't surface the raw site count")
+    }
+
+    @Test
+    fun `stopped state reports the watch was deleted`() {
+        val (fallback, blocks) = SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.STOPPED))
+        assertTrue(header(blocks).contains("stopped"), header(blocks))
+        assertTrue(fallback.contains("Stopped"), fallback)
     }
 
     @Test

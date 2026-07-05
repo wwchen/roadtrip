@@ -113,6 +113,18 @@ internal class WatchAlertDispatcher(
         }
     }
 
+    /**
+     * The terminal "watch stopped" message for a `slack_notify` watch the user
+     * just deleted. Sent once, from the delete route, *before* the row is
+     * removed (its scope is still resolvable). Like [dispatchInitial] it never
+     * throws into its caller and no-ops for a watch that never opted into Slack.
+     */
+    suspend fun dispatchStopped(watch: AvailabilityWatchRepo.Watch) {
+        if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
+        val reservables = scopeResolver.resolve(watch)
+        slack.sendWatchStatus(statusNotice(watch, reservables, WatchStatusNotice.State.STOPPED), watch.channelOverride())
+    }
+
     /** Hydrates the covered cells into [WatchOpening]s, hands them to the
      *  notification service (which owns the message rendering), and — on a
      *  successful post — marks a `stopWhenTriggered` watch `DONE`, so a delivery
@@ -150,8 +162,9 @@ internal class WatchAlertDispatcher(
                 campgroundId = target?.parentPoiId,
                 campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiById(it)?.name } },
                 // Booking link, if the reservable's provider exposes one — the URL
-                // scheme is the adapter's, never this dispatcher's.
-                bookingUrl = target?.provider?.bookingUrl(r.rid, t.targetDate),
+                // scheme is the adapter's, never this dispatcher's. The parent
+                // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
+                bookingUrl = target?.let { it.provider.bookingUrl(r, it.parentRef, t.targetDate) },
             )
         }
     }
@@ -168,13 +181,18 @@ internal class WatchAlertDispatcher(
         reservables: List<Reservable>,
         state: WatchStatusNotice.State,
     ): WatchStatusNotice {
-        val single = reservables.singleOrNull()
         val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
+        // A POI-scoped watch is "the campground" even when it expands to one
+        // site; a reservable-scoped watch names the site. So the scope label
+        // keys off the target kind, not the resolved reservable count.
+        val siteScoped = poiIds.isEmpty()
+        val single = reservables.singleOrNull().takeIf { siteScoped }
         return WatchStatusNotice(
             state = state,
             siteCount = reservables.size,
             siteName = single?.let { it.name ?: it.rid.encode() },
             siteLoop = single?.loop,
+            campgroundName = poiIds.singleOrNull()?.let { pois.fetchPoiById(it)?.name },
             startDate = watch.startDate,
             endDate = watch.endDate,
             dashboardUrl = grafanaRootUrl?.let { "$it/d/$WATCH_DASHBOARD_UID?var-watch_id=${watch.id}" },
