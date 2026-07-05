@@ -26,18 +26,18 @@ buildscript {
 
 plugins {
     application
-    kotlin("jvm") version "2.1.0"
-    kotlin("plugin.serialization") version "2.1.0"
+    kotlin("jvm") version "2.3.10"
+    kotlin("plugin.serialization") version "2.3.10"
     id("org.flywaydb.flyway") version "10.20.1"
     id("nu.studer.jooq") version "9.0"
     // shadowJar produces a single executable fat-jar with all dependencies
     // merged in. The Dockerfile uses this so the runtime image is just
-    // eclipse-temurin:21-jre + one .jar.
+    // eclipse-temurin:25-jre + one .jar.
     id("com.gradleup.shadow") version "8.3.5"
     id("org.jlleitschuh.gradle.ktlint") version "12.1.1"
     // Line/branch coverage. `./gradlew :backend:koverXmlReport` produces the XML the
     // CI job uploads to Codecov.
-    id("org.jetbrains.kotlinx.kover") version "0.8.3"
+    id("org.jetbrains.kotlinx.kover") version "0.9.8"
 }
 
 ktlint {
@@ -172,7 +172,7 @@ dependencies {
 }
 
 kotlin {
-    jvmToolchain(21)
+    jvmToolchain(25)
 }
 
 jooq {
