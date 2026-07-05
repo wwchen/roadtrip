@@ -899,7 +899,6 @@ class ReservableRoutesTest : SharedDbTest() {
                             ),
                         startDate = null,
                         endDate = null,
-                        force = false,
                     ).associateBy { it.reservableId }
 
             assertEquals("2026-06-18", availability["site:recgov:330301"]!!.startDate)

@@ -31,14 +31,12 @@ internal class AvailabilityServiceImpl(
         rid: ReservableId,
         startDate: LocalDate?,
         endDate: LocalDate?,
-        force: Boolean,
-    ): AvailabilityResponseDto = getByRids(listOf(rid), startDate, endDate, force).single()
+    ): AvailabilityResponseDto = getByRids(listOf(rid), startDate, endDate).single()
 
     override suspend fun getByRids(
         rids: List<ReservableId>,
         startDate: LocalDate?,
         endDate: LocalDate?,
-        force: Boolean,
     ): List<AvailabilityResponseDto> {
         if (rids.isEmpty()) return emptyList()
         val resolved = rids.map { targets.requireByRid(it) }
@@ -65,7 +63,6 @@ internal class AvailabilityServiceImpl(
                             startDate = window.startDate,
                             endDate = window.endDate,
                             ttl = snapshotFreshnessTtl(provider.id),
-                            force = force,
                         ),
                     ) {
                         provider.catalogAvailability(
@@ -74,7 +71,6 @@ internal class AvailabilityServiceImpl(
                                 reservables = rows.map { it.toCatalogReservableRef() },
                                 startDate = window.startDate,
                                 endDate = window.endDate,
-                                force = force,
                             ),
                         )
                     }
