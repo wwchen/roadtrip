@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
 import ca.floo.roadtrip.models.availability.CellTransition
+import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
@@ -13,7 +14,6 @@ import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.FetchOutcome
 import ca.floo.roadtrip.service.availability.GroupFetchResult
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
-import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.availability.toCatalogReservableRef
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
@@ -45,10 +45,12 @@ private val SNAPSHOT_HISTORY_RETENTION: Duration = Duration.ofDays(180)
  * work. The executor loads the poller's **live watches** (active, window
  * still reaching the future) only to decide *whether* to run (a live watch is
  * the reference that keeps the poller alive) and to derive the tightest
- * cadence across them. The polling window itself is vendor-derived and
- * anchored at today — the widest window the upstream exposes per tick,
- * independent of the watches' own dates. It resolves each live watch's
- * reservables to
+ * cadence across them. Neither the fetch window nor the fetch target set is
+ * derived from watch state: the polling window is vendor-derived and anchored
+ * at today (the widest window the upstream exposes per tick), and the target
+ * set is the poller's parent campground's **full catalog** — every child
+ * reservable under its representative POI, not just the sites a watch happens
+ * to reference. It resolves that catalog to
  * [ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget]s
  * (filtered to this poller's own (provider, parentRef)), and hands them to
  * [CatalogAvailabilityBatcher] which groups by (provider, parentRef,
@@ -88,7 +90,6 @@ internal class AvailabilityPollExecutor(
     private val alertDispatcher: WatchAlertDispatcher,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val scopeResolver = WatchScopeResolver(reservablesRepo)
 
     suspend fun handle(poller: AvailabilityPollerRepo.Poller): HandlerResult {
         val liveWatches = pollers.liveWatchesForPoller(poller.id)
@@ -110,16 +111,26 @@ internal class AvailabilityPollExecutor(
         val poiCadenceOverrideSec = pollers.cadenceOverrideForPoller(poller.id)
         val cadenceSec = resolveCadenceSec(liveWatches, poiCadenceOverrideSec)
 
+        // Fetch the parent campground's FULL catalog — every child reservable
+        // under the poller's representative POI — not just the sites some live
+        // watch happens to reference. One catalogAvailability call returns the
+        // whole parent grid regardless of the reservable list (the list is a
+        // projection, not a call multiplier), so widening to the full catalog
+        // costs no extra upstream calls and maximally widens snapshot history.
+        // This is what severs the fetch path from watch state: the poller reads
+        // no watch to decide *what* to fetch — only whether to run (above) and
+        // how often (cadence).
         val resolved =
-            liveWatches
-                .flatMap { w -> scopeResolver.resolve(w).mapNotNull { targets.resolve(it) } }
+            reservablesRepo
+                .findByPoi(poller.poiId, type = ReservableType.SITE)
+                .mapNotNull { targets.resolve(it) }
                 .filter {
                     parentRefKey(it.parentRef) == poller.parentRef &&
                         it.provider.id.name
                             .lowercase() == poller.provider
                 }
-                // Coalesced watches sharing this poller can resolve the same
-                // reservable more than once; dedupe so a site is fetched once.
+                // findByPoi returns distinct reservables, but guard against
+                // duplicate poi links so a site is fetched once.
                 .distinctBy { it.reservable.id }
 
         // The polling window per date-context: the widest window the vendor
