@@ -4,7 +4,6 @@ import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.AvailabilityResponseDto
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilityCacheStore
 import ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
@@ -19,29 +18,35 @@ import java.time.LocalDate
 private const val MAX_AVAILABILITY_DAYS: Int = 60
 private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 
-internal class AvailabilityServiceImpl(
+/**
+ * Composes per-reservable availability for a set of reservables that belong to
+ * the same catalog (today: one POI's linked reservables). There is no
+ * single-reservable entry point — availability is always requested for a
+ * collection, so callers hand in the reservables they already loaded.
+ *
+ * Each reservable is resolved to its provider target, upstream calls are grouped
+ * via [CatalogAvailabilityBatcher] (N reservables under one campground → one
+ * upstream call), the snapshot cache is read/written, and each reservable's
+ * observations map to an [AvailabilityResponseDto] in input order.
+ *
+ * [AvailabilityQueryServiceImpl] owns this composer.
+ */
+internal class ReservableAvailabilityComposer(
     private val targets: AvailabilityTargetResolver,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     cacheStore: AvailabilityCacheStore? = null,
     private val snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
-) : AvailabilityService {
+) {
     private val snapshotAvailability = SnapshotBackedAvailabilityService(cacheStore)
 
-    override suspend fun getByRid(
-        rid: ReservableId,
-        startDate: LocalDate?,
-        endDate: LocalDate?,
-        force: Boolean,
-    ): AvailabilityResponseDto = getByRids(listOf(rid), startDate, endDate, force).single()
-
-    override suspend fun getByRids(
-        rids: List<ReservableId>,
+    suspend fun availabilityFor(
+        reservables: List<Reservable>,
         startDate: LocalDate?,
         endDate: LocalDate?,
         force: Boolean,
     ): List<AvailabilityResponseDto> {
-        if (rids.isEmpty()) return emptyList()
-        val resolved = rids.map { targets.requireByRid(it) }
+        if (reservables.isEmpty()) return emptyList()
+        val resolved = reservables.map { targets.resolve(it) ?: throw AvailabilityServiceError.UnknownCampground }
         val byRid = linkedMapOf<String, AvailabilityResponseDto>()
         val batcher = CatalogAvailabilityBatcher()
         val results =
@@ -104,8 +109,8 @@ internal class AvailabilityServiceImpl(
                     )
             }
         }
-        return rids.map { rid ->
-            byRid[rid.encode()] ?: throw AvailabilityServiceError.NotFound
+        return reservables.map { reservable ->
+            byRid[reservable.rid.encode()] ?: throw AvailabilityServiceError.NotFound
         }
     }
 }

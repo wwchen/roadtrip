@@ -37,12 +37,11 @@ implementation gets the matching `*Impl.kt` file. Example:
 
 ```
 service/availability/
-├── AvailabilityService.kt          # public use-case contract
-├── AvailabilityServiceImpl.kt      # implementation
-├── AvailabilityQueryService.kt     # POI/bulk query use cases used by routes
-├── AvailabilityQueryServiceImpl.kt
-├── AvailabilityTargetResolver.kt   # shared rid/poi → provider target resolver
-├── AvailabilityDateResolver.kt     # target-local date/window policy
+├── AvailabilityQueryService.kt          # POI query contract used by routes
+├── AvailabilityQueryServiceImpl.kt      # implementation
+├── ReservableAvailabilityComposer.kt    # collection → per-reservable availability DTOs
+├── AvailabilityTargetResolver.kt        # shared rid/poi → provider target resolver
+├── AvailabilityDateResolver.kt          # target-local date/window policy
 └── AvailabilityServiceError.kt
 ```
 
@@ -209,9 +208,9 @@ polling must all resolve the same reservables and providers.
 routes.AvailabilityRoutes
   ↓ parse HTTP request, validate shape, map errors to HTTP
 service.availability.AvailabilityQueryService
-  ↓ POI/bulk use-case wiring
-service.availability.AvailabilityService
-  ↓ rid/rids use-case contract
+  ↓ POI use-case wiring (resolve POI → linked reservables)
+service.availability.ReservableAvailabilityComposer
+  ↓ group the collection's reservables into upstream calls
 service.availability.AvailabilityTargetResolver
   ↓ reservable → linked POI → provider_ref → ReservationProvider + date context
 service.reservation.ReservationProvider
