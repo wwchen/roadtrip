@@ -22,9 +22,11 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
+import ca.floo.roadtrip.service.notification.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.notification.WatchOpening
+import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
@@ -217,7 +219,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     }
 
     /** One recorded send: the resolved channel, the fallback text, and the Block
-     *  Kit blocks (null for the plain-text informational messages). */
+     *  Kit blocks (both the openings alert and the status messages carry them). */
     private data class Post(
         val channel: String?,
         val text: String,
@@ -249,11 +251,12 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     ) : SlackNotificationService {
         val posts = mutableListOf<Post>()
 
-        override suspend fun sendMessage(
-            text: String,
+        override suspend fun sendWatchStatus(
+            notice: WatchStatusNotice,
             channel: String?,
         ): Boolean {
-            posts += Post(channel = channel ?: defaultChannel, text = text, blocks = null)
+            val (fallback, blocks) = SlackContentWatchStatusRenderer.render(notice)
+            posts += Post(channel = channel ?: defaultChannel, text = fallback, blocks = blocks)
             return result
         }
 
@@ -294,12 +297,14 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
             grafanaRootUrl = GRAFANA_ROOT_URL,
+            appRootUrl = APP_ROOT_URL,
         )
 
     private fun dispatcherWith(
         provider: ReservationProvider,
         notifications: RecordingSlackNotifications,
         grafanaRootUrl: String? = GRAFANA_ROOT_URL,
+        appRootUrl: String? = APP_ROOT_URL,
     ): WatchAlertDispatcher =
         WatchAlertDispatcher(
             slack = notifications,
@@ -309,6 +314,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
             grafanaRootUrl = grafanaRootUrl,
+            appRootUrl = appRootUrl,
         )
 
     private fun executorFor(
@@ -544,7 +550,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // The booking link comes from the provider (adapter), not the dispatcher.
             assertTrue(post.allText.contains("https://example.test/book/100"), post.allText)
             // The openings alert is Block Kit with no Grafana links — those stay on
-            // the plain-text informational messages.
+            // the informational status messages.
             assertTrue(!post.allText.contains("/d/"), post.allText)
         }
 
@@ -833,7 +839,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val notifier = RecordingSlackNotifications()
 
             // The rich openings alert has a Reserve button, not Grafana links —
-            // those live only on the plain-text informational messages.
+            // those live only on the informational status messages.
             executorFor(provider, alertDispatcher = dispatcherWith(provider, notifier)).handle(poller)
 
             assertEquals(1, notifier.posts.size)
@@ -1207,3 +1213,4 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 }
 
 private const val GRAFANA_ROOT_URL = "http://grafana.test/dash"
+private const val APP_ROOT_URL = "http://app.test"

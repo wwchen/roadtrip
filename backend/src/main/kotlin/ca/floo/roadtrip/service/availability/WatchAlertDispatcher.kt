@@ -7,6 +7,7 @@ import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.WatchOpening
+import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 
@@ -46,6 +47,7 @@ internal class WatchAlertDispatcher(
     private val pois: PoiServingRepo,
     private val availability: AvailabilityRepo,
     private val grafanaRootUrl: String?,
+    private val appRootUrl: String?,
 ) {
     suspend fun dispatch(
         liveWatches: List<AvailabilityWatchRepo.Watch>,
@@ -90,7 +92,13 @@ internal class WatchAlertDispatcher(
 
         val reservables = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
-            slack.sendMessage(buildLifecycleMessage(watch, reservables), watch.channelOverride())
+            val state =
+                when (watch.status) {
+                    WatchStatus.PAUSED -> WatchStatusNotice.State.PAUSED
+                    WatchStatus.DONE -> WatchStatusNotice.State.DONE
+                    WatchStatus.ACTIVE -> WatchStatusNotice.State.WATCHING // unreachable; guarded above
+                }
+            slack.sendWatchStatus(statusNotice(watch, reservables, state), watch.channelOverride())
             return
         }
         val reservablesById = reservables.associateBy { it.id }
@@ -100,7 +108,8 @@ internal class WatchAlertDispatcher(
             val covered = bookable.map { CellTransition(it.reservableId, it.targetDate, it.status) }
             postOpenings(watch, covered, reservablesById)
         } else {
-            slack.sendMessage(buildWatchingMessage(watch, reservables, cubeKnown = cells.isNotEmpty()), watch.channelOverride())
+            val state = if (cells.isNotEmpty()) WatchStatusNotice.State.WATCHING else WatchStatusNotice.State.UNCHECKED
+            slack.sendWatchStatus(statusNotice(watch, reservables, state), watch.channelOverride())
         }
     }
 
@@ -147,72 +156,44 @@ internal class WatchAlertDispatcher(
         }
     }
 
-    /** Grafana deep links appended to an alert when the Grafana host is
-     *  configured: the watch drill-down and the availability-cube matrix for each
-     *  POI the openings sit under. Empty when [grafanaRootUrl] is null. */
-    private fun dashboardLinks(
-        watchId: Long,
-        poiIds: Set<Long>,
-    ): String {
-        val grafanaRootUrl = grafanaRootUrl ?: return ""
-        val watch = "\n📊 <$grafanaRootUrl/d/$WATCH_DASHBOARD_UID?var-watch_id=$watchId|watch dashboard>"
-        val cube =
-            when (poiIds.size) {
-                0 -> ""
-                1 -> "\n🗓 <$grafanaRootUrl/d/$CELL_MATRIX_UID?var-poi_id=${poiIds.first()}|availability grid>"
-                else ->
-                    "\n🗓 " +
-                        poiIds.joinToString(" · ") { "<$grafanaRootUrl/d/$CELL_MATRIX_UID?var-poi_id=$it|grid $it>" }
-            }
-        return "$watch$cube"
-    }
-
-    /** Body of an active watch's message when nothing is bookable in the window:
-     *  either the cube has no observation for it yet ([cubeKnown] = false,
-     *  "unknown") or every cell is currently taken. Never a trigger — it carries
-     *  the watch's scope, window, and dashboards so the user can confirm the
-     *  watch is live, but lists no openings. POI links come from the watch's
-     *  POI-scoped targets (reservable-scoped targets carry no POI). */
-    private fun buildWatchingMessage(
+    /** Builds the plain-data [WatchStatusNotice] for a watch's lifecycle/status
+     *  message. Carries the watch's scope, window, and deep-link URLs (the
+     *  Grafana watch dashboard, and per POI the web-app map page + Grafana
+     *  grid); the notification layer owns the Block Kit rendering. A
+     *  single-reservable watch reports its site name (+ loop); a broader one
+     *  reports the count. POI links come from the watch's POI-scoped targets
+     *  (reservable-scoped targets carry no POI). */
+    private fun statusNotice(
         watch: AvailabilityWatchRepo.Watch,
         reservables: List<Reservable>,
-        cubeKnown: Boolean,
-    ): String {
-        val scope = scopeLabel(reservables)
-        val window = "${watch.startDate} → ${watch.endDate}"
-        val state = if (cubeKnown) "nothing available right now" else "availability not checked yet"
+        state: WatchStatusNotice.State,
+    ): WatchStatusNotice {
+        val single = reservables.singleOrNull()
         val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
-        return "👀 Watching $scope for $window — $state. I'll alert the moment a site opens.${dashboardLinks(watch.id, poiIds)}"
+        return WatchStatusNotice(
+            state = state,
+            siteCount = reservables.size,
+            siteName = single?.let { it.name ?: it.rid.encode() },
+            siteLoop = single?.loop,
+            startDate = watch.startDate,
+            endDate = watch.endDate,
+            dashboardUrl = grafanaRootUrl?.let { "$it/d/$WATCH_DASHBOARD_UID?var-watch_id=${watch.id}" },
+            poiLinks = poiLinks(poiIds),
+        )
     }
 
-    /** Message for a non-active watch (paused or done). Reports the lifecycle
-     *  state only — no availability lookup, never a trigger — so pausing a watch
-     *  posts a clear "stopped watching" note rather than going silent. */
-    private fun buildLifecycleMessage(
-        watch: AvailabilityWatchRepo.Watch,
-        reservables: List<Reservable>,
-    ): String {
-        val scope = scopeLabel(reservables)
-        val window = "${watch.startDate} → ${watch.endDate}"
-        val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
-        val body =
-            when (watch.status) {
-                WatchStatus.PAUSED -> "⏸ Paused watching $scope for $window — I won't alert until it's resumed."
-                WatchStatus.DONE -> "✅ Done watching $scope for $window."
-                WatchStatus.ACTIVE -> "👀 Watching $scope for $window." // unreachable; active takes the snapshot path
-            }
-        return "$body${dashboardLinks(watch.id, poiIds)}"
-    }
-
-    /** Short human label for a watch's scope: the single site's name when the
-     *  watch covers exactly one reservable, else the reservable count. */
-    private fun scopeLabel(reservables: List<Reservable>): String =
-        when (reservables.size) {
-            1 -> {
-                val r = reservables.first()
-                "*${r.name ?: r.rid.encode()}*${r.loop?.let { " ($it)" }.orEmpty()}"
-            }
-            else -> "${reservables.size} sites"
+    /** Per watched POI, the deep links its host config supports: the web-app map
+     *  page (`?poi=<id>`) and the Grafana availability grid. Sorted by id so a
+     *  multi-POI watch renders deterministically. Empty when the watch has no
+     *  POI-scoped targets; a POI still appears (with the null side dropped) when
+     *  only one of the two hosts is configured. */
+    private fun poiLinks(poiIds: Set<Long>): List<WatchStatusNotice.PoiLink> =
+        poiIds.sorted().map { poiId ->
+            WatchStatusNotice.PoiLink(
+                poiId = poiId,
+                mapUrl = appRootUrl?.let { "$it/?poi=$poiId" },
+                gridUrl = grafanaRootUrl?.let { "$it/d/$CELL_MATRIX_UID?var-poi_id=$poiId" },
+            )
         }
 
     /** The half-open [startDate, endDate) day list — the same window contract

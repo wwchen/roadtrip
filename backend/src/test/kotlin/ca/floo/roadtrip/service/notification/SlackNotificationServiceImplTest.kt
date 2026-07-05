@@ -40,32 +40,52 @@ class SlackNotificationServiceImplTest {
         defaultChannel: String = "#default",
     ) = SlackNotificationServiceImpl(SlackConfig(botToken = "xoxb-test", defaultChannel = defaultChannel), client = client)
 
+    private fun watchStatus(state: WatchStatusNotice.State = WatchStatusNotice.State.WATCHING) =
+        WatchStatusNotice(
+            state = state,
+            siteCount = 235,
+            siteName = null,
+            siteLoop = null,
+            startDate = LocalDate.of(2026, 7, 11),
+            endDate = LocalDate.of(2026, 7, 12),
+            dashboardUrl = "https://grafana.test/d/reservable-watch-drill?var-watch_id=1",
+            poiLinks =
+                listOf(
+                    WatchStatusNotice.PoiLink(
+                        poiId = 7,
+                        mapUrl = "https://app.test/?poi=7",
+                        gridUrl = "https://grafana.test/d/availability-cell-matrix?var-poi_id=7",
+                    ),
+                ),
+        )
+
     @Test
-    fun `sendMessage posts plain text to the given channel and returns the client result`() =
+    fun `sendWatchStatus renders blocks to the given channel and returns the client result`() =
         runBlocking {
             val client = RecordingSlackClient(result = true)
-            val ok = service(client).sendMessage("hello camper", "#camping")
+            val ok = service(client).sendWatchStatus(watchStatus(), "#camping")
 
             assertTrue(ok)
             assertEquals(1, client.posts.size)
-            assertEquals("#camping", client.posts.single().channel)
-            assertEquals("hello camper", client.posts.single().text)
-            assertEquals(null, client.posts.single().blocks, "plain sendMessage carries no blocks")
+            val post = client.posts.single()
+            assertEquals("#camping", post.channel)
+            assertTrue(post.text.contains("Watching"), post.text)
+            assertTrue(!post.blocks.isNullOrEmpty(), "watch-status send carries Block Kit blocks")
         }
 
     @Test
-    fun `sendMessage falls back to the configured default channel`() =
+    fun `sendWatchStatus falls back to the configured default channel`() =
         runBlocking {
             val client = RecordingSlackClient()
-            service(client, defaultChannel = "#default").sendMessage("hi")
+            service(client, defaultChannel = "#default").sendWatchStatus(watchStatus())
 
             assertEquals("#default", client.posts.single().channel)
         }
 
     @Test
-    fun `sendMessage surfaces a client failure as false`() =
+    fun `sendWatchStatus surfaces a client failure as false`() =
         runBlocking {
-            assertFalse(service(RecordingSlackClient(result = false)).sendMessage("x"))
+            assertFalse(service(RecordingSlackClient(result = false)).sendWatchStatus(watchStatus()))
         }
 
     @Test
@@ -112,8 +132,8 @@ class SlackNotificationServiceImplTest {
     fun `a disabled service (null config) sends nothing and returns false`() =
         runBlocking {
             val service = SlackNotificationServiceImpl(config = null)
-            assertFalse(service.sendMessage("hello camper"))
-            assertFalse(service.sendMessage("with a channel", channel = "#camping"))
+            assertFalse(service.sendWatchStatus(watchStatus()))
+            assertFalse(service.sendWatchStatus(watchStatus(), channel = "#camping"))
             assertFalse(
                 service.sendWatchOpenings(
                     LocalDate.of(2026, 8, 1),
