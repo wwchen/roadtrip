@@ -17,13 +17,13 @@ private const val EMPTY_WINDOW_HORIZON_DAYS = 365
 private const val PROVIDER_WINDOW_DEFAULT_DAYS = 7
 private const val PROVIDER_WINDOW_MAX_DAYS = 60
 
-internal class AvailabilityQueryServiceImpl(
+internal class AvailabilityServiceImpl(
     private val providerRefs: CampsiteProviderRepo,
     private val reservablesRepo: ReservableRepo,
     private val composer: ReservableAvailabilityComposer,
     private val dateResolver: AvailabilityDateResolver,
     private val reservationProviders: ReservationProviderRegistry,
-) : AvailabilityQueryService {
+) : AvailabilityService {
     override suspend fun poiReservablesAvailability(
         poiId: Long,
         startDate: LocalDate?,
@@ -115,8 +115,8 @@ private suspend fun cataloglessProviderAvailability(
                 endDate = window.endDate,
             ),
         )
-    // Render-only fallback for POIs without linked reservables. Snapshot
-    // persistence currently happens through AvailabilityService once catalog
+    // Render-only fallback for POIs without linked reservables. Availability
+    // persistence currently happens through AvailabilityLoader once catalog
     // rows exist; synthetic upstream ids are not persisted here.
     val byReservableId =
         batch.observations

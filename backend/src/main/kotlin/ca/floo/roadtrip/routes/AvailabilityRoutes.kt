@@ -5,7 +5,7 @@ import ca.floo.roadtrip.models.api.AvailabilityErrorDto
 import ca.floo.roadtrip.models.api.PoiReservablesAvailabilityResponseDto
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.availability.AvailabilityQueryService
+import ca.floo.roadtrip.service.availability.AvailabilityService
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
@@ -29,13 +29,13 @@ private const val IP_RATE_LIMIT_PER_MINUTE = 30
 /**
  * Unified availability endpoints. The route layer parses HTTP request shapes,
  * applies cross-route HTTP guardrails, delegates availability lookup to
- * [AvailabilityQueryService], and serializes the result.
+ * [AvailabilityService], and serializes the result.
  *
  * See [ReservationProviderRegistry] / `docs/reservation-providers.md` for the
  * provider-port architecture. Adding a new upstream is one new adapter file
  * + one registry wiring line; this file does not change.
  */
-internal fun Route.availabilityRoutes(routeService: AvailabilityQueryService) {
+internal fun Route.availabilityRoutes(routeService: AvailabilityService) {
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
 
     get("/api/poi/{poi_id}/reservables/availability", {

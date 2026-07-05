@@ -33,8 +33,8 @@ private const val ASPIRA_MAX_POLL_WINDOW_DAYS = 30
  * out-of-range values to surface the truncation rather than silently
  * dropping the high bits.
  *
- * Caching is handled above the adapter by
- * [ca.floo.roadtrip.service.api.CachedAvailabilityService].
+ * Deciding whether to serve stored data or call this adapter live is handled
+ * above it by [ca.floo.roadtrip.service.api.AvailabilityLoader].
  */
 class AspiraReservationProvider(
     private val tenant: AspiraTenant,

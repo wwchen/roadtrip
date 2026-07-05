@@ -15,13 +15,16 @@ import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 /**
- * Read-through availability caching over the [AvailabilityRepo] interval table.
- * On a request it reads current state; if the window has full, fresh coverage it
- * serves from the cache, otherwise it fetches upstream, records the observations,
- * and re-reads. The single-table transaction lives in the repo — this service only
- * decides *when* to fetch and record.
+ * Loads availability for a window, deciding per request whether the stored data
+ * suffices or a live upstream call is needed. It reads current state from the
+ * [AvailabilityRepo] interval table; if the window has full, in-TTL coverage it
+ * returns those rows, otherwise it fetches from the provider, records the
+ * observations, and re-reads. There is one store (the interval table) — the
+ * choice is "serve fresh-from-DB or go live", not "cache vs. source of truth".
+ * The single-table transaction lives in the repo — this service only decides
+ * *when* to fetch and record.
  */
-class CachedAvailabilityService(
+class AvailabilityLoader(
     private val availability: AvailabilityRepo?,
     private val clock: Clock = Clock.systemUTC(),
 ) {

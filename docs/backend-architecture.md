@@ -37,8 +37,8 @@ implementation gets the matching `*Impl.kt` file. Example:
 
 ```
 service/availability/
-├── AvailabilityQueryService.kt          # POI query contract used by routes
-├── AvailabilityQueryServiceImpl.kt      # implementation
+├── AvailabilityService.kt               # POI availability contract used by routes
+├── AvailabilityServiceImpl.kt           # implementation
 ├── ReservableAvailabilityComposer.kt    # collection → per-reservable availability DTOs
 ├── AvailabilityTargetResolver.kt        # shared rid/poi → provider target resolver
 ├── AvailabilityDateResolver.kt          # target-local date/window policy
@@ -172,7 +172,7 @@ file-by-file relocation.
 | `route/RouteCache.kt` | `clients/cache/RouteCache.kt` |
 | `geocode/MapboxGeocoder.kt` | `clients/mapbox/MapboxGeocoder.kt` |
 | `aspira/AspiraAvailabilityClient.kt` | `clients/aspira/AspiraAvailabilityClient.kt` |
-| `aspira/AspiraAvailabilityRoutes.kt` | folded into `routes/AvailabilityRoutes.kt` + `service/availability/AvailabilityQueryService.kt` |
+| `aspira/AspiraAvailabilityRoutes.kt` | folded into `routes/AvailabilityRoutes.kt` + `service/availability/AvailabilityService.kt` |
 | `aspira/CachedAspiraAvailability.kt` | split: `clients/cache/AspiraAvailabilityCache.kt` + `service/api/AspiraAvailabilityService.kt` |
 | `aspira/AspiraStatus.kt` | `models/metadata/aspira/AspiraStatus.kt` |
 | `db/Db.kt` | `repo/Db.kt` |
@@ -208,10 +208,11 @@ polling must all resolve the same reservables and providers.
 ```
 routes.AvailabilityRoutes
   ↓ parse HTTP request, validate shape, map errors to HTTP
-service.availability.AvailabilityQueryService
+service.availability.AvailabilityService
   ↓ POI use-case wiring (resolve POI → linked reservables)
 service.availability.ReservableAvailabilityComposer
-  ↓ group the collection's reservables into upstream calls
+  ↓ group the collection's reservables into upstream calls; per group,
+    service.api.AvailabilityLoader serves stored observations or goes live
 service.availability.AvailabilityTargetResolver
   ↓ reservable → linked POI → provider_ref → ReservationProvider + date context
 service.reservation.ReservationProvider
@@ -304,7 +305,8 @@ because every ETL is `f(inputs) → output`.
   service orchestration; the service opens it and calls each single-table repo.
 - **Storage names never climb into service names.** `matrix`, `interval`,
   `snapshot`, `cube` are persistence vocabulary; a service is named for its job
-  (`CachedAvailabilityService`), never its store.
+  (`AvailabilityLoader` — it loads availability, serving stored rows or going
+  live), never its store or an implementation detail like caching.
 - **Store only non-derivable facts.** Don't persist derivable state (`is_current`,
   `observed_from`); persist what you can't (`previous_id`).
 

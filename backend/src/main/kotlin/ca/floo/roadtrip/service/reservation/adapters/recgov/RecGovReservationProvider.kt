@@ -14,9 +14,10 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderId
 
 /**
  * rec.gov adapter. Vendor-specific error translation lives here; routes only
- * see [ReservationProviderError]. Caching is handled above the adapter by
- * [ca.floo.roadtrip.service.api.CachedAvailabilityService] reading current
- * state from the `availability` interval table.
+ * see [ReservationProviderError]. Deciding whether to serve stored data or call
+ * this adapter live is handled above it by
+ * [ca.floo.roadtrip.service.api.AvailabilityLoader], reading current state from
+ * the `availability` interval table.
  */
 class RecGovReservationProvider(
     private val client: AvailabilityClient,

@@ -4,7 +4,7 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.availability.AvailabilityQueryServiceImpl
+import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.ReservableAvailabilityComposer
 import ca.floo.roadtrip.service.availability.defaultSnapshotFreshnessTtl
@@ -39,7 +39,7 @@ internal fun Route.availabilityRoutes(
         )
     availabilityRoutes(
         routeService =
-            AvailabilityQueryServiceImpl(
+            AvailabilityServiceImpl(
                 providerRefs = providerRefs,
                 reservablesRepo = reservablesRepo,
                 composer = composer,

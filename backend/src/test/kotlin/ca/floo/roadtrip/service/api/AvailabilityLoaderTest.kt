@@ -16,7 +16,7 @@ import java.time.LocalDate
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
 
-class CachedAvailabilityServiceTest : SharedDbTest() {
+class AvailabilityLoaderTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
         ctx.execute("DELETE FROM availability")
@@ -35,7 +35,7 @@ class CachedAvailabilityServiceTest : SharedDbTest() {
             val omitted = seedReservable("200")
             val repo = AvailabilityRepo(ctx)
             val service =
-                CachedAvailabilityService(
+                AvailabilityLoader(
                     availability = repo,
                     clock = Clock.fixed(Instant.parse("2026-06-18T12:00:00Z"), ZoneOffset.UTC),
                 )
@@ -77,7 +77,7 @@ class CachedAvailabilityServiceTest : SharedDbTest() {
             val omitted = seedReservable("200")
             val repo = AvailabilityRepo(ctx)
             val service =
-                CachedAvailabilityService(
+                AvailabilityLoader(
                     availability = repo,
                     clock = Clock.fixed(Instant.parse("2026-06-18T12:00:00Z"), ZoneOffset.UTC),
                 )
@@ -102,12 +102,12 @@ class CachedAvailabilityServiceTest : SharedDbTest() {
         omitted: Long,
         startDate: LocalDate,
         endDate: LocalDate,
-    ) = CachedAvailabilityService.Request(
-        metadata = CachedAvailabilityService.Metadata(provider = "recgov", campgroundId = "232447"),
+    ) = AvailabilityLoader.Request(
+        metadata = AvailabilityLoader.Metadata(provider = "recgov", campgroundId = "232447"),
         targets =
             listOf(
-                CachedAvailabilityService.TargetReservable(seen, "site:recgov:100"),
-                CachedAvailabilityService.TargetReservable(omitted, "site:recgov:200"),
+                AvailabilityLoader.TargetReservable(seen, "site:recgov:100"),
+                AvailabilityLoader.TargetReservable(omitted, "site:recgov:200"),
             ),
         startDate = startDate,
         endDate = endDate,

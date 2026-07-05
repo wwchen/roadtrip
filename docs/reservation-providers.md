@@ -42,8 +42,8 @@ The availability orchestration that consumes this port lives one layer above:
 
 ```
 service/availability/
-├── AvailabilityQueryService.kt          # POI query contract used by routes
-├── ReservableAvailabilityComposer.kt    # grouping, window policy, snapshot fetch for a collection
+├── AvailabilityService.kt               # POI availability contract used by routes
+├── ReservableAvailabilityComposer.kt    # grouping, window policy, per-collection availability load
 ├── AvailabilityTargetResolver.kt        # reservable → parent provider + date context
 └── AvailabilityDateResolver.kt          # target-local earliest date/window policy
 ```
@@ -71,7 +71,7 @@ drawer can hide affordances the provider doesn't support.
 
 | Action | Required interface | Notes |
 |---|---|---|
-| Per-day availability for a window | `ReservationProvider.availability(AvailabilityRequest)` | Drives provider-level availability. Adapters fetch upstream directly; caching is handled above the adapter by `CachedAvailabilityService` reading current state from the `availability` interval table. |
+| Per-day availability for a window | `ReservationProvider.availability(AvailabilityRequest)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
 | Catalog availability for linked reservables | `ReservationProvider.catalogAvailability(CatalogAvailabilityRequest)` | POI/rids path uses this so the returned availability is narrowed to known catalog rows. |
 | Reservable availability | `ReservationProvider.reservableAvailability(ReservableAvailabilityRequest)` | Narrow projection for a single reservable. Currently unused: availability is always requested by collection (POI), so the port method has no live caller since the single-reservable endpoint was retired. Kept as a capability; remove if it stays dead. |
 | Capability probe | `ReservationProvider.capabilities` | Static per adapter; cheap. |
