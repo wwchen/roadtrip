@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.repo.AvailabilityCacheStore
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
@@ -18,7 +18,7 @@ internal fun Route.availabilityRoutes(
     providerRefs: CampsiteProviderRepo,
     reservationProviders: ReservationProviderRegistry,
     reservablesRepo: ReservableRepo,
-    cacheStore: AvailabilityCacheStore? = null,
+    availability: AvailabilityRepo? = null,
     snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
     clock: Clock = Clock.systemUTC(),
 ) {
@@ -34,7 +34,7 @@ internal fun Route.availabilityRoutes(
         ReservableAvailabilityComposer(
             targets = targets,
             dateResolver = dateResolver,
-            cacheStore = cacheStore,
+            availability = availability,
             snapshotFreshnessTtl = snapshotFreshnessTtl,
         )
     availabilityRoutes(

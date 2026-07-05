@@ -87,8 +87,8 @@ export async function mount(rootEl, { urlParams }) {
     resultsEl.innerHTML = `
       <table class="data-table">
         <thead><tr>
-          <th>id</th><th>run</th><th>target date</th>
-          <th>observed</th><th>status</th><th>available</th>
+          <th>run</th><th>target date</th>
+          <th>since</th><th>observed</th><th>status</th><th>available</th>
         </tr></thead>
         <tbody>
           ${snaps.map(renderRow).join('')}
@@ -100,9 +100,9 @@ export async function mount(rootEl, { urlParams }) {
   function renderRow(s) {
     return `
       <tr>
-        <td>${escapeHtml(s.id)}</td>
         <td>${s.run_id != null ? `#${escapeHtml(s.run_id)}` : '—'}</td>
         <td>${escapeHtml(s.target_date)}</td>
+        <td>${s.observed_from ? escapeHtml(formatTimestamp(s.observed_from)) : '—'}</td>
         <td>${escapeHtml(formatTimestamp(s.observed_at))}</td>
         <td title="${escapeHtml(s.status)}">${escapeHtml(availabilityStatusLabel(s.status))}</td>
         <td>${s.available ? '✓' : '✗'}</td>
@@ -122,7 +122,7 @@ export async function mount(rootEl, { urlParams }) {
         <table class="data-table">
           <thead><tr>
             <th>target date</th><th>last available</th><th>available window</th>
-            <th>median 24h</th><th>flips 24h</th><th>snapshots</th>
+            <th>median 24h</th><th>opens 24h</th><th>runs</th>
           </tr></thead>
           <tbody>
             ${data.stats.map(renderStatsRow).join('')}
@@ -156,8 +156,8 @@ export async function mount(rootEl, { urlParams }) {
         <td>${lastAvailable}</td>
         <td>${escapeHtml(window)}</td>
         <td>${escapeHtml(median)}</td>
-        <td>${escapeHtml(s.flips_last_24h)}</td>
-        <td>${escapeHtml(s.total_snapshots)}</td>
+        <td>${escapeHtml(s.opens_last_24h)}</td>
+        <td>${escapeHtml(s.total_runs)}</td>
       </tr>
     `;
   }

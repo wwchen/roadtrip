@@ -16,8 +16,8 @@ import java.time.LocalDate
 /**
  * rec.gov adapter. Vendor-specific error translation lives here; routes only
  * see [ReservationProviderError]. Caching is handled above the adapter by
- * [ca.floo.roadtrip.service.api.SnapshotBackedAvailabilityService] reading
- * the `availability_snapshots` table.
+ * [ca.floo.roadtrip.service.api.CachedAvailabilityService] reading current
+ * state from the `availability` interval table.
  */
 class RecGovReservationProvider(
     private val client: AvailabilityClient,

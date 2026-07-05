@@ -243,7 +243,7 @@ class AvailabilityRepo(
             ctx
                 .resultQuery(
                     "SELECT * FROM ($statusRunSelect) t WHERE reservable_id = ? " +
-                        "AND target_date = ANY(?::date[]) AND last_observed_at >= ? " +
+                        "AND target_date = ANY(?::date[]) AND last_observed_at >= ?::timestamptz " +
                         "ORDER BY target_date, last_observed_at",
                     reservableId,
                     dates.toTypedArray(),

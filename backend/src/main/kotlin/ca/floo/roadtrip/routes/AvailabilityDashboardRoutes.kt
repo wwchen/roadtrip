@@ -13,8 +13,8 @@ import ca.floo.roadtrip.models.api.AvailabilitySnapshotsSummaryResponse
 import ca.floo.roadtrip.models.api.CheckNowCooldownDto
 import ca.floo.roadtrip.models.api.CheckNowResponseDto
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
-import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
@@ -56,7 +56,7 @@ private val dashboardJson =
 fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
     val pollers = AvailabilityPollerRepo(ctx)
     val runs = AvailabilityRunRepo(ctx)
-    val snapshots = AvailabilitySnapshotRepo(ctx)
+    val availability = AvailabilityRepo(ctx)
     val reservablesRepo =
         ca.floo.roadtrip.repo
             .ReservableRepo(ctx)
@@ -255,9 +255,9 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                             HttpStatusCode.NotFound,
                             "no reservable with rid $rid",
                         )
-                snapshots.listForReservable(reservable.id, limit = limit)
+                availability.listForReservable(reservable.id, limit = limit)
             } else {
-                snapshots.listForRun(runId!!, limit = limit)
+                availability.listForRun(runId!!, limit = limit)
             }
         call.respondJson(AvailabilitySnapshotsListResponse(snapshots = rows.map { it.toSchema() }))
     }
@@ -315,33 +315,28 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                 .orEmpty()
         val dates =
             explicitDates.ifEmpty {
-                val snap = ca.floo.roadtrip.db.generated.tables.AvailabilitySnapshot.AVAILABILITY_SNAPSHOT
-                val cell = ca.floo.roadtrip.db.generated.tables.AvailabilityCell.AVAILABILITY_CELL
+                val avail = ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY
                 val windowStart =
                     java.time.OffsetDateTime
                         .now()
                         .minusHours(windowHours.toLong())
-                // Dates that saw a snapshot edge in the window, UNIONed with the
-                // current/future dates tracked in the cube. Snapshots are edge-only,
-                // so a stable cell whose last edge predates the window has no rows in
-                // it; the cube keeps such dates from dropping out of the summary.
-                val snapDates =
-                    ctx
-                        .selectDistinct(snap.TARGET_DATE)
-                        .from(snap)
-                        .where(snap.RESERVABLE_ID.eq(reservable.id))
-                        .and(snap.OBSERVED_AT.ge(windowStart))
-                        .fetch { it.value1() }
-                val cubeDates =
-                    ctx
-                        .selectDistinct(cell.TARGET_DATE)
-                        .from(cell)
-                        .where(cell.RESERVABLE_ID.eq(reservable.id))
-                        .and(cell.TARGET_DATE.ge(java.time.LocalDate.now()))
-                        .fetch { it.value1() }
-                (snapDates + cubeDates).distinct().sorted()
+                // Interval rows for this reservable that were either observed within
+                // the window, or track a current/future date. One table now, so no
+                // union: the OR keeps stable-but-recent dates and upcoming dates in
+                // the summary even when their last status-run predates the window.
+                ctx
+                    .selectDistinct(avail.TARGET_DATE)
+                    .from(avail)
+                    .where(avail.RESERVABLE_ID.eq(reservable.id))
+                    .and(
+                        avail.LAST_OBSERVED_AT
+                            .ge(windowStart)
+                            .or(avail.TARGET_DATE.ge(java.time.LocalDate.now())),
+                    ).fetch { it.value1() }
+                    .filterNotNull()
+                    .sorted()
             }
-        val stats = snapshots.summarize(reservable.id, dates, windowHours = windowHours)
+        val stats = availability.summarize(reservable.id, dates, windowHours = windowHours)
         call.respondJson(
             AvailabilitySnapshotsSummaryResponse(
                 reservableRid = rid,
@@ -378,26 +373,26 @@ private fun AvailabilityRunRepo.Run.toSchema(): AvailabilityRunSchema =
         completedAt = completedAt?.toString(),
     )
 
-private fun AvailabilitySnapshotRepo.Snapshot.toSchema(): AvailabilitySnapshotSchema =
+private fun AvailabilityRepo.StatusRun.toSchema(): AvailabilitySnapshotSchema =
     AvailabilitySnapshotSchema(
-        id = id,
         reservableId = reservableId,
         runId = runId,
         targetDate = targetDate.toString(),
-        observedAt = observedAt.toString(),
+        observedFrom = observedFrom?.toString(),
+        observedAt = lastObservedAt.toString(),
         status = status,
         available = available,
     )
 
-private fun AvailabilitySnapshotRepo.TargetDateStats.toSchema(): AvailabilitySnapshotStatsSchema =
+private fun AvailabilityRepo.TargetDateStats.toSchema(): AvailabilitySnapshotStatsSchema =
     AvailabilitySnapshotStatsSchema(
         targetDate = targetDate.toString(),
-        totalSnapshots = totalSnapshots,
+        totalRuns = totalRuns,
         lastOpenAt = lastOpenAt?.toString(),
         isCurrentlyOpen = isCurrentlyOpen,
         currentOrLastOpenWindowSec = currentOrLastOpenWindowSec,
         medianOpenWindowSec = medianOpenWindowSec,
-        flipsLast24h = flipsLast24h,
+        opensLast24h = opensLast24h,
     )
 
 private suspend inline fun <reified T> ApplicationCall.respondJson(

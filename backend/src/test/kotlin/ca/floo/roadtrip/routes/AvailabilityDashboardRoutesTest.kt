@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import io.ktor.client.request.get
@@ -18,6 +20,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import kotlin.test.assertEquals
@@ -25,7 +28,7 @@ import kotlin.test.assertEquals
 class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability")
         ctx.execute("DELETE FROM availability_run")
         ctx.execute("DELETE FROM availability_watch_target")
         ctx.execute("DELETE FROM availability_watch_poller")
@@ -89,23 +92,24 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
             )!!
             .get("id", Long::class.java)
 
-    private fun insertSnapshot(
+    /** Records one observation into the interval table (bump-or-insert), so the
+     *  summary is derived from real status-runs. */
+    private fun recordObservation(
         reservableId: Long,
         targetDate: String,
         observedAt: OffsetDateTime,
         available: Boolean,
     ) {
-        ctx.execute(
-            """
-            INSERT INTO availability_snapshot (
-                reservable_id, observed_at, target_date, status, available, day_payload
-            ) VALUES (?, ?::timestamptz, ?::date, ?::availability_status, ?, '{}'::jsonb)
-            """.trimIndent(),
-            reservableId,
-            observedAt.toString(),
-            targetDate,
-            if (available) "available" else "reserved",
-            available,
+        AvailabilityRepo(ctx).recordObservations(
+            runId = null,
+            listOf(
+                AvailabilityRepo.Observation(
+                    reservableId = reservableId,
+                    targetDate = LocalDate.parse(targetDate),
+                    status = if (available) AvailabilityStatus.AVAILABLE else AvailabilityStatus.RESERVED,
+                    observedAt = observedAt.toInstant(),
+                ),
+            ),
         )
     }
 
@@ -241,9 +245,11 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
             application { routing { availabilityDashboardRoutes(ctx) } }
             val reservableId = seedReservable()
             val now = OffsetDateTime.now(ZoneOffset.UTC)
-            insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(3), available = false)
-            insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(2), available = true)
-            insertSnapshot(reservableId, "2026-07-04", now.minusMinutes(1), available = true)
+            // reserved → available → available. The two availables bump the same
+            // status-run in place, so this collapses to two runs (reserved, available).
+            recordObservation(reservableId, "2026-07-04", now.minusMinutes(3), available = false)
+            recordObservation(reservableId, "2026-07-04", now.minusMinutes(2), available = true)
+            recordObservation(reservableId, "2026-07-04", now.minusMinutes(1), available = true)
             val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:330257")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -252,9 +258,9 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
             assertEquals(1, stats.size)
             val row = stats[0].jsonObject
             assertEquals("2026-07-04", row["target_date"]!!.jsonPrimitive.content)
-            assertEquals(3, row["total_snapshots"]!!.jsonPrimitive.int)
+            assertEquals(2, row["total_runs"]!!.jsonPrimitive.int)
             assertEquals(true, row["is_currently_open"]!!.jsonPrimitive.boolean)
-            assertEquals(1, row["flips_last_24h"]!!.jsonPrimitive.int)
+            assertEquals(1, row["opens_last_24h"]!!.jsonPrimitive.int)
         }
 
     @Test
