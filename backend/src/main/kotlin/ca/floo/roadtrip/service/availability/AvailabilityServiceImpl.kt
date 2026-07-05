@@ -72,6 +72,22 @@ internal class AvailabilityServiceImpl(
     }
 }
 
+/**
+ * SUNSET — render-only fallback for POIs with no obtainable catalog.
+ *
+ * Serves POIs that have a `provider_ref` but no linked `reservables`. With
+ * ReserveAmerica now cataloged (see `ReserveAmericaSitesEtl`), the remaining
+ * population is upstream bad data, NOT missing ingestion:
+ *   - Aspira POIs with `provider_ref.resourceLocationId == null` (Parks Canada
+ *     join-by-name entries that never got a join key);
+ *   - RecGov non-campsite facilities (day-use areas, cabins, lookouts, group
+ *     sites, boat ramps, visitor centers) with no standard campsite roster;
+ *   - ReserveCalifornia open-camping / SVRA grids the sites ETL intentionally skips.
+ *
+ * Any vendor with an obtainable catalog MUST be cataloged (SitesEtl + joiner)
+ * rather than rely on this path. It is earmarked for removal once the
+ * catalogless population reaches zero. Do not add new vendors here.
+ */
 private suspend fun cataloglessProviderAvailability(
     poiId: Long,
     startDate: LocalDate?,
