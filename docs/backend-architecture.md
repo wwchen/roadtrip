@@ -71,7 +71,8 @@ ca.floo.roadtrip
 │   ├── ReservableRepo.kt    # reservable lookups and POI links
 │   ├── RawCapture.kt        # data/raw/<slug>/ readers (newest single + multipart)
 │   ├── IngestRunRepo.kt     # ingest_runs CRUD
-│   ├── AvailabilitySnapshotRepo.kt
+│   ├── ImportRunRepo.kt     # import_runs lifecycle (sole writer)
+│   ├── AvailabilityRepo.kt  # availability interval table (writes + reads + history)
 │   └── AvailabilityWatchRepo.kt
 │
 ├── clients                  # outbound network only
