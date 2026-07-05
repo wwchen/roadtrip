@@ -42,11 +42,10 @@ The availability orchestration that consumes this port lives one layer above:
 
 ```
 service/availability/
-├── AvailabilityService.kt          # rid/rids availability contract
-├── AvailabilityServiceImpl.kt      # grouping, window policy, snapshot fetch
-├── AvailabilityQueryService.kt     # POI/bulk query contract used by routes
-├── AvailabilityTargetResolver.kt   # reservable → parent provider + date context
-└── AvailabilityDateResolver.kt     # target-local earliest date/window policy
+├── AvailabilityQueryService.kt          # POI query contract used by routes
+├── ReservableAvailabilityComposer.kt    # grouping, window policy, snapshot fetch for a collection
+├── AvailabilityTargetResolver.kt        # reservable → parent provider + date context
+└── AvailabilityDateResolver.kt          # target-local earliest date/window policy
 ```
 
 ## Capabilities
@@ -74,7 +73,7 @@ drawer can hide affordances the provider doesn't support.
 |---|---|---|
 | Per-day availability for a window | `ReservationProvider.availability(AvailabilityRequest)` | Drives provider-level availability. Adapters fetch upstream directly; caching is handled above the adapter by `SnapshotBackedAvailabilityService` reading the `availability_snapshots` table. |
 | Catalog availability for linked reservables | `ReservationProvider.catalogAvailability(CatalogAvailabilityRequest)` | POI/rids path uses this so the returned availability is narrowed to known catalog rows. |
-| Reservable availability | `ReservationProvider.reservableAvailability(ReservableAvailabilityRequest)` | Narrow projection for a single reservable when the adapter supports it. |
+| Reservable availability | `ReservationProvider.reservableAvailability(ReservableAvailabilityRequest)` | Narrow projection for a single reservable. Currently unused: availability is always requested by collection (POI), so the port method has no live caller since the single-reservable endpoint was retired. Kept as a capability; remove if it stays dead. |
 | Capability probe | `ReservationProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Append history snapshot | poller writes `availability_snapshot` rows | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |

@@ -38,11 +38,11 @@ import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityQueryServiceImpl
-import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.ReservableAvailabilityComposer
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
@@ -225,8 +225,8 @@ fun Application.module() {
             ReservationProviderId.RESERVECALIFORNIA -> reserveCaliforniaAvailabilityTtl
         }
     }
-    val availabilityService =
-        AvailabilityServiceImpl(
+    val reservableAvailabilityComposer =
+        ReservableAvailabilityComposer(
             targets = availabilityTargets,
             dateResolver = availabilityDateResolver,
             cacheStore = AvailabilityCacheStoreImpl(ctx),
@@ -236,7 +236,7 @@ fun Application.module() {
         AvailabilityQueryServiceImpl(
             providerRefs = campsiteProviders,
             reservablesRepo = reservablesRepo,
-            availabilityService = availabilityService,
+            composer = reservableAvailabilityComposer,
             dateResolver = availabilityDateResolver,
             reservationProviders = reservationProviderRegistry,
         )
@@ -328,7 +328,6 @@ fun Application.module() {
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
         availabilityRoutes(
-            availabilityService = availabilityService,
             routeService = availabilityQueryService,
         )
         adminIngestRoutes(ingestController, ctx)

@@ -32,12 +32,12 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Unit tests for [AvailabilityServiceImpl.getByRids] and its delegation to
- * [CatalogAvailabilityBatcher] + the snapshot cache wrapper. Uses in-memory
- * fakes for the target resolver, reservation provider, and snapshot store —
- * consistent with [CatalogAvailabilityBatcherTest]; no DB required.
+ * Unit tests for [ReservableAvailabilityComposer.availabilityFor] and its
+ * delegation to [CatalogAvailabilityBatcher] + the snapshot cache wrapper. Uses
+ * in-memory fakes for the target resolver, reservation provider, and snapshot
+ * store — consistent with [CatalogAvailabilityBatcherTest]; no DB required.
  */
-class AvailabilityServiceImplTest {
+class ReservableAvailabilityComposerTest {
     // A fixed future earliest date keeps the default window deterministic and
     // clear of AvailabilityDateResolver's earliest-date guard.
     private val earliest = LocalDate.parse("2026-08-01")
@@ -50,14 +50,14 @@ class AvailabilityServiceImplTest {
             val ref = ProviderRef.RecGov(recgovId = "232447")
             val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ref)
             val store = FakeCacheStore()
-            val service = service(listOf(target), store)
+            val composer = composer(listOf(target), store)
 
-            val first = service.getByRids(listOf(target.rid()), null, null)
+            val first = composer.availabilityFor(listOf(target.reservable), null, null)
             assertEquals(1, provider.catalogCalls, "cache miss should fetch upstream exactly once")
             assertEquals(1, store.recordCalls, "cache miss should persist a snapshot")
             assertFalse(first.single().cache.hit, "first read is a miss")
 
-            val second = service.getByRids(listOf(target.rid()), null, null)
+            val second = composer.availabilityFor(listOf(target.reservable), null, null)
             assertEquals(1, provider.catalogCalls, "repeat read must be served from cache, not re-fetched")
             assertEquals(1, store.recordCalls, "cache hit should not write again")
             assertTrue(second.single().cache.hit, "second read is a cache hit")
@@ -83,10 +83,10 @@ class AvailabilityServiceImplTest {
                 }
             val targetA = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
             val targetB = resolvedTarget("site:recgov:200", dbId = 2L, provider = provider, parentRef = ProviderRef.RecGov("200"))
-            val service = service(listOf(targetA, targetB), FakeCacheStore())
+            val composer = composer(listOf(targetA, targetB), FakeCacheStore())
 
             // Request order is B then A; results must come back in the requested order.
-            val results = service.getByRids(listOf(targetB.rid(), targetA.rid()), null, null)
+            val results = composer.availabilityFor(listOf(targetB.reservable, targetA.reservable), null, null)
 
             assertEquals(2, provider.catalogCalls, "distinct groups fetch independently")
             assertEquals(2, results.size)
@@ -98,44 +98,29 @@ class AvailabilityServiceImplTest {
         }
 
     @Test
-    fun `bad date window from the date resolver propagates out of getByRids`() =
+    fun `bad date window from the date resolver propagates out of availabilityFor`() =
         runBlocking {
             val provider = fakeProvider()
             val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
-            val service = service(listOf(target), FakeCacheStore())
+            val composer = composer(listOf(target), FakeCacheStore())
 
             // startDate before the target's earliest bookable date → StartBeforeEarliest.
             assertFailsWith<AvailabilityServiceError.BadDateWindow.StartBeforeEarliest> {
-                service.getByRids(listOf(target.rid()), earliest.minusDays(1), null)
+                composer.availabilityFor(listOf(target.reservable), earliest.minusDays(1), null)
             }
             assertEquals(0, provider.catalogCalls, "an invalid window must short-circuit before any upstream fetch")
         }
 
     @Test
-    fun `requireByRid NotFound propagates before batching`() =
+    fun `a reservable with no resolvable provider propagates UnknownCampground before batching`() =
         runBlocking {
-            val service = service(targets = emptyList(), cacheStore = FakeCacheStore())
-            val error =
-                assertFailsWith<AvailabilityServiceError.NotFound> {
-                    service.getByRids(listOf(ReservableId.parse("site:recgov:999")!!), null, null)
-                }
-            assertEquals(AvailabilityServiceError.NotFound, error)
-        }
-
-    @Test
-    fun `requireByRid UnknownCampground propagates before batching`() =
-        runBlocking {
-            val resolver =
-                object : AvailabilityTargetResolver {
-                    override fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget =
-                        throw AvailabilityServiceError.UnknownCampground
-
-                    override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = null
-                }
-            val service = AvailabilityServiceImpl(targets = resolver, cacheStore = FakeCacheStore(), snapshotFreshnessTtl = { longTtl })
+            // The composer resolves each already-loaded reservable via the target
+            // resolver; a reservable with no linked provider target resolves to null
+            // and must fail the collection before any upstream fetch.
+            val composer = composer(targets = emptyList(), cacheStore = FakeCacheStore())
             val error =
                 assertFailsWith<AvailabilityServiceError.UnknownCampground> {
-                    service.getByRids(listOf(ReservableId.parse("site:recgov:100")!!), null, null)
+                    composer.availabilityFor(listOf(reservable("site:recgov:999")), null, null)
                 }
             assertEquals(AvailabilityServiceError.UnknownCampground, error)
         }
@@ -146,42 +131,39 @@ class AvailabilityServiceImplTest {
             // Regression test: PR 1's CatalogAvailabilityBatcher swallows
             // ReservationProviderError into a classified GroupFetchResult with a
             // null batch. On the live read path that must NOT become a 404 —
-            // the old behavior (provider error propagates out of getByRids so the
+            // the old behavior (provider error propagates out of the composer so the
             // route maps it to 503) must be preserved.
             val provider = fakeProvider { throw ReservationProviderError.RateLimited(RuntimeException("429")) }
             val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
-            val service = service(listOf(target), FakeCacheStore())
+            val composer = composer(listOf(target), FakeCacheStore())
 
             assertFailsWith<ReservationProviderError.RateLimited> {
-                service.getByRids(listOf(target.rid()), null, null)
+                composer.availabilityFor(listOf(target.reservable), null, null)
             }
             assertEquals(1, provider.catalogCalls, "provider should be called exactly once before the error propagates")
         }
 
-    @Test
-    fun `getByRid delegates to getByRids and returns the single result`() =
-        runBlocking {
-            val provider = fakeProvider()
-            val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
-            val service = service(listOf(target), FakeCacheStore())
-
-            val dto = service.getByRid(target.rid(), null, null)
-            assertEquals("site:recgov:100", dto.reservableId)
-        }
-
     // --- fixtures ---
 
-    private fun service(
+    private fun composer(
         targets: Collection<ResolvedAvailabilityTarget>,
         cacheStore: AvailabilityCacheStore,
-    ): AvailabilityServiceImpl =
-        AvailabilityServiceImpl(
-            targets = FakeTargetResolver(targets.associateBy { it.rid() }),
+    ): ReservableAvailabilityComposer =
+        ReservableAvailabilityComposer(
+            targets = FakeTargetResolver(targets.associateBy { it.reservable.rid }),
             cacheStore = cacheStore,
             snapshotFreshnessTtl = { longTtl },
         )
 
-    private fun ResolvedAvailabilityTarget.rid(): ReservableId = reservable.rid
+    private fun reservable(rid: String): Reservable =
+        Reservable(
+            id = 0L,
+            rid = ReservableId.parse(rid)!!,
+            name = null,
+            loop = null,
+            siteType = null,
+            raw = null,
+        )
 
     private fun resolvedTarget(
         rid: String,
@@ -260,7 +242,7 @@ class AvailabilityServiceImplTest {
         }
 
         override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
-            throw UnsupportedOperationException("not used by getByRids")
+            throw UnsupportedOperationException("composer uses catalogAvailability")
     }
 
     /**

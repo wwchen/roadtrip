@@ -122,7 +122,8 @@ internal suspend fun fetchRecgovCatalogObservations(
 
 /**
  * Same upstream fetch as [fetchRecgovAvailabilityObservations], narrowed to
- * one rec.gov campsite id. This powers `/api/reservable/{rid}/availability`.
+ * one rec.gov campsite id. This backs the [ReservationProvider.reservableAvailability]
+ * narrow projection.
  */
 internal suspend fun fetchRecgovReservableObservations(
     client: AvailabilityClient,

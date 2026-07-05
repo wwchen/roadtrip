@@ -3,11 +3,9 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.models.api.AvailabilityErrorDto
 import ca.floo.roadtrip.models.api.PoiReservablesAvailabilityResponseDto
-import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import ca.floo.roadtrip.service.availability.AvailabilityQueryService
-import ca.floo.roadtrip.service.availability.AvailabilityService
 import ca.floo.roadtrip.service.availability.AvailabilityServiceError
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
@@ -30,17 +28,14 @@ private const val IP_RATE_LIMIT_PER_MINUTE = 30
 
 /**
  * Unified availability endpoints. The route layer parses HTTP request shapes,
- * applies cross-route HTTP guardrails, resolves POI requests to reservable ids,
- * delegates availability lookup to [AvailabilityService], and serializes the result.
+ * applies cross-route HTTP guardrails, delegates availability lookup to
+ * [AvailabilityQueryService], and serializes the result.
  *
  * See [ReservationProviderRegistry] / `docs/reservation-providers.md` for the
  * provider-port architecture. Adding a new upstream is one new adapter file
  * + one registry wiring line; this file does not change.
  */
-internal fun Route.availabilityRoutes(
-    availabilityService: AvailabilityService,
-    routeService: AvailabilityQueryService,
-) {
+internal fun Route.availabilityRoutes(routeService: AvailabilityQueryService) {
     val rateLimit = IpRateLimiter(perMinute = IP_RATE_LIMIT_PER_MINUTE)
 
     get("/api/poi/{poi_id}/reservables/availability", {
@@ -48,8 +43,7 @@ internal fun Route.availabilityRoutes(
         summary = "Per-reservable availability for one POI's reservables"
         description =
             "Path key is `pois.id`. Returns one availability envelope per reservable " +
-            "linked to this POI — the same shape `/api/reservable/{rid}/availability` " +
-            "returns for a single reservable. The FE fuses the per-reservable streams " +
+            "linked to this POI. The FE fuses the per-reservable streams " +
             "into the campground week grid. If no local catalog rows are linked, providers " +
             "that can answer from a campground-level matrix may still return synthetic " +
             "per-reservable streams. An empty `reservables` array means the POI has no " +
@@ -124,87 +118,6 @@ internal fun Route.availabilityRoutes(
         } catch (e: ReservationProviderError) {
             val (status, error) = mapProviderError(e)
             log.info("poi reservables availability poi={} failed: {}", poiId, e.message)
-            call.respondAvailabilityJson(error, status)
-        }
-    }
-
-    get("/api/reservable/{rid}/availability", {
-        tags = listOf("campsite-availability", "reservable")
-        summary = "Per-day availability for one reservable"
-        description =
-            "Path key is RFC 0008 composite id `{type}:{vendor}:{vendor_id}`, " +
-            "for example `site:recgov:330257`. The route finds the linked " +
-            "campground POI, dispatches to its ReservationProvider, and returns " +
-            "the same availability response shape narrowed to that one site."
-        request {
-            pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
-            queryParameter<String>("start_date") { description = "YYYY-MM-DD; default is today's local date." }
-            queryParameter<String>("end_date") { description = "Exclusive YYYY-MM-DD; default is start_date + 7 days." }
-        }
-        response {
-            code(HttpStatusCode.OK) {
-                description = "Availability for one reservable."
-            }
-            code(HttpStatusCode.BadRequest) {
-                description = "Malformed reservable id or invalid date window."
-                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.NotFound) {
-                description = "No reservable or linked campground provider row exists."
-                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.NotImplemented) {
-                description = "The reservable's provider has no per-reservable availability adapter yet."
-                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
-            }
-            code(HttpStatusCode.ServiceUnavailable) {
-                description = "Rate limited or upstream availability service unavailable."
-                body<AvailabilityErrorDto> { mediaTypes(ContentType.Application.Json) }
-            }
-        }
-    }) {
-        val rid =
-            call.parameters["rid"]
-                ?.let(ReservableId::parse)
-                ?: return@get call.respondAvailabilityError("bad_rid", HttpStatusCode.BadRequest)
-
-        val ip = call.request.origin.remoteHost
-        if (!rateLimit.allow(ip)) {
-            call.respondAvailabilityError(
-                "ip_throttled",
-                HttpStatusCode.ServiceUnavailable,
-            )
-            return@get
-        }
-
-        val startDate =
-            try {
-                call.optionalDateQuery("start_date")
-            } catch (e: Exception) {
-                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
-                return@get
-            }
-        val endDate =
-            try {
-                call.optionalDateQuery("end_date")
-            } catch (e: Exception) {
-                call.respondAvailabilityError("bad_date_window", HttpStatusCode.BadRequest)
-                return@get
-            }
-
-        try {
-            call.respondAvailabilityJson(
-                availabilityService.getByRid(
-                    rid = rid,
-                    startDate = startDate,
-                    endDate = endDate,
-                ),
-            )
-        } catch (e: AvailabilityServiceError) {
-            call.respondServiceAvailabilityError(e)
-        } catch (e: ReservationProviderError) {
-            val (status, error) = mapProviderError(e)
-            log.info("reservable availability rid={} failed: {}", rid.encode(), e.message)
             call.respondAvailabilityJson(error, status)
         }
     }

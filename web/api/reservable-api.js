@@ -10,14 +10,9 @@
 //   GET /api/reservables
 //     → { total, limit, offset, reservables: [{rid, poi_ids, name, loop, …}, …] }
 //
-//   GET /api/reservable/{rid}/availability
-//     → provider availability response for one reservable
-//
-// Catalog routes are cheap (no upstream roundtrip). Reservable availability is
-// fetched per reservable and remains throttled/rate-limited.
+// Catalog routes are cheap (no upstream roundtrip).
 
 import { jsonGetOk } from './http.js';
-import { addLocalDays, localToday, localYmd, parseLocalYmd } from '../utils/local-date.js';
 
 /**
  * Search active reservables across supported catalog fields.
@@ -72,31 +67,4 @@ export function poiReservablesUrl(poiId, { type, siteType } = {}) {
  */
 export function fetchReservable(rid, { signal } = {}) {
   return jsonGetOk(`/api/reservable/${encodeURIComponent(rid)}`, { signal });
-}
-
-/**
- * Fetch per-day availability for one reservable.
- *
- * @param {string}      rid
- * @param {object}      [opts]
- * @param {string}      [opts.startDate]
- * @param {string}      [opts.endDate]
- * @param {boolean}     [opts.force]
- * @param {AbortSignal} [opts.signal]
- */
-export function fetchReservableAvailability(
-  rid,
-  { startDate, endDate, force, signal } = {},
-) {
-  return jsonGetOk(reservableAvailabilityUrl(rid, { startDate, endDate, force }), { signal });
-}
-
-export function reservableAvailabilityUrl(rid, { startDate = localYmd(localToday()), endDate, force } = {}) {
-  const resolvedEndDate = endDate || localYmd(addLocalDays(parseLocalYmd(startDate), 7));
-  const params = new URLSearchParams({
-    start_date: startDate,
-    end_date: resolvedEndDate,
-  });
-  if (force) params.set('force', '1');
-  return `/api/reservable/${encodeURIComponent(rid)}/availability?${params}`;
 }

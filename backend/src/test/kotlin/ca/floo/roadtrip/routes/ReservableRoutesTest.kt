@@ -11,8 +11,8 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
-import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.ReservableAvailabilityComposer
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -627,23 +627,12 @@ class ReservableRoutesTest : SharedDbTest() {
             val poiDaysStatus = client.get("/api/poi/$poiId/reservables/availability?$windowQuery&days=7").status
             val poiMinNightsStatus = client.get("/api/poi/$poiId/reservables/availability?$windowQuery&min_nights=2").status
             val poiMinNightsCamelStatus = client.get("/api/poi/$poiId/reservables/availability?$windowQuery&minNights=2").status
-            val reservableStartStatus =
-                client.get("/api/reservable/site:recgov:330257/availability?start=2026-07-01").status
-            val reservableDaysStatus = client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&days=7").status
-            val reservableMinNightsStatus =
-                client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&min_nights=2").status
-            val reservableMinNightsCamelStatus =
-                client.get("/api/reservable/site:recgov:330257/availability?$windowQuery&minNights=2").status
 
             assertAll(
                 { assertEquals(HttpStatusCode.OK, poiStartStatus) },
                 { assertEquals(HttpStatusCode.OK, poiDaysStatus) },
                 { assertEquals(HttpStatusCode.OK, poiMinNightsStatus) },
                 { assertEquals(HttpStatusCode.OK, poiMinNightsCamelStatus) },
-                { assertEquals(HttpStatusCode.OK, reservableStartStatus) },
-                { assertEquals(HttpStatusCode.OK, reservableDaysStatus) },
-                { assertEquals(HttpStatusCode.OK, reservableMinNightsStatus) },
-                { assertEquals(HttpStatusCode.OK, reservableMinNightsCamelStatus) },
             )
         }
 
@@ -722,116 +711,6 @@ class ReservableRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `reservable availability dispatches by linked campground provider`() =
-        testApplication {
-            val poiId =
-                seedPoi(
-                    sourceId = "upper-pines",
-                    name = "Upper Pines Campground",
-                    providerRefJson = """{"recgov_id":"232447"}""",
-                )
-            val reservableId = seedReservable(vendorId = "330257", name = "A12")
-            link(reservableId, poiId)
-            application {
-                routing {
-                    availabilityRoutes(
-                        CampsiteProviderRepo(ctx),
-                        fakeReservationProviders(),
-                        ReservableRepo(ctx),
-                        AvailabilityCacheStoreImpl(ctx),
-                        clock = fixedClock,
-                    )
-                }
-            }
-
-            val resp = client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-03")
-            assertEquals(HttpStatusCode.OK, resp.status)
-            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("fake", body["provider"]!!.jsonPrimitive.content)
-            assertEquals("site:recgov:330257", body["reservable_id"]!!.jsonPrimitive.content)
-            assertEquals(2, body["availability"]!!.jsonArray.size)
-            val firstDate =
-                body["availability"]!!
-                    .jsonArray
-                    .first()
-                    .jsonObject["date"]!!
-                    .jsonPrimitive
-                    .content
-            assertEquals("2026-07-01", firstDate)
-
-            val logRows =
-                ctx.fetch(
-                    """
-                    SELECT
-                        r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,
-                        s.target_date,
-                        s.status::text AS status,
-                        s.available,
-                        s.day_payload
-                    FROM availability_snapshot s
-                    JOIN reservables r ON r.id = s.reservable_id
-                    ORDER BY s.target_date
-                    """.trimIndent(),
-                )
-            assertEquals(2, logRows.size)
-            assertEquals("site:recgov:330257", logRows[0].get("reservable_rid", String::class.java))
-            assertEquals(java.time.LocalDate.parse("2026-07-01"), logRows[0].get("target_date", java.time.LocalDate::class.java))
-            assertEquals("available", logRows[0].get("status", String::class.java))
-            assertEquals(true, logRows[0].get("available", Boolean::class.java))
-            assertEquals(
-                "2026-07-01",
-                Json
-                    .parseToJsonElement(logRows[0].get("day_payload").toString())
-                    .jsonObject["date"]!!
-                    .jsonPrimitive
-                    .content,
-            )
-
-            val removedMinNights =
-                client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-03&min_nights=2")
-            assertEquals(HttpStatusCode.OK, removedMinNights.status)
-            val rowCountAfterMultiNight =
-                ctx
-                    .fetchOne("SELECT count(*) FROM availability_snapshot")!!
-                    .get(0, Long::class.java)
-            assertEquals(2L, rowCountAfterMultiNight)
-            assertEquals(1, FakeReservationProvider.catalogAvailabilityCalls)
-            assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
-        }
-
-    @Test
-    fun `reservable availability uses exclusive start and end date window`() =
-        testApplication {
-            val poiId =
-                seedPoi(
-                    sourceId = "upper-pines-reservable-window",
-                    name = "Upper Pines Campground",
-                    providerRefJson = """{"recgov_id":"232447"}""",
-                )
-            val reservableId = seedReservable(vendorId = "330257", name = "A12")
-            link(reservableId, poiId)
-            application {
-                routing {
-                    availabilityRoutes(
-                        CampsiteProviderRepo(ctx),
-                        fakeReservationProviders(),
-                        ReservableRepo(ctx),
-                        AvailabilityCacheStoreImpl(ctx),
-                        clock = fixedClock,
-                    )
-                }
-            }
-
-            val resp = client.get("/api/reservable/site:recgov:330257/availability?start_date=2026-07-01&end_date=2026-07-04")
-            assertEquals(HttpStatusCode.OK, resp.status)
-            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
-            assertEquals("2026-07-04", body["end_date"]!!.jsonPrimitive.content)
-            assertEquals(3, body["availability"]!!.jsonArray.size)
-            assertEquals(3L, ctx.fetchOne("SELECT count(*) FROM availability_snapshot")!!.get(0, Long::class.java))
-        }
-
-    @Test
     fun `bulk availability endpoint is not registered`() =
         testApplication {
             application {
@@ -877,12 +756,13 @@ class ReservableRoutesTest : SharedDbTest() {
                 AvailabilityDateResolver(
                     clock = Clock.fixed(Instant.parse("2026-06-18T04:00:00Z"), ZoneOffset.UTC),
                 )
-            val availabilityService =
-                AvailabilityServiceImpl(
+            val reservablesRepo = ReservableRepo(ctx)
+            val composer =
+                ReservableAvailabilityComposer(
                     targets =
                         DbAvailabilityTargetResolver(
                             providerRefs = CampsiteProviderRepo(ctx),
-                            reservablesRepo = ReservableRepo(ctx),
+                            reservablesRepo = reservablesRepo,
                             reservationProviders = fakeReservationProviders(),
                             dateResolver = dateResolver,
                         ),
@@ -890,12 +770,12 @@ class ReservableRoutesTest : SharedDbTest() {
                 )
 
             val availability =
-                availabilityService
-                    .getByRids(
-                        rids =
+                composer
+                    .availabilityFor(
+                        reservables =
                             listOf(
-                                ReservableId.parse("site:recgov:330301")!!,
-                                ReservableId.parse("site:recgov:330302")!!,
+                                reservablesRepo.findByRid(ReservableId.parse("site:recgov:330301")!!)!!,
+                                reservablesRepo.findByRid(ReservableId.parse("site:recgov:330302")!!)!!,
                             ),
                         startDate = null,
                         endDate = null,
@@ -977,51 +857,6 @@ class ReservableRoutesTest : SharedDbTest() {
                 "-2147483613",
                 byRid["site:aspira_wa:-200"]!!.jsonObject["map_id"]!!.jsonPrimitive.content,
             )
-        }
-
-    @Test
-    fun `reservable availability uses aspira reservable child map when present`() =
-        testApplication {
-            val poiId =
-                seedPoi(
-                    sourceId = "aspira--2147483630--2147483388",
-                    name = "Deep Tree Park",
-                    providerRefJson =
-                        """
-                        {
-                          "transactionLocationId": -2147483630,
-                          "mapId": -2147483388,
-                          "resourceLocationId": -2147483624
-                        }
-                        """.trimIndent(),
-                    source = "aspira-wa-pins",
-                )
-            val reservableId =
-                seedReservable(
-                    vendor = "aspira_wa",
-                    vendorId = "-100",
-                    source = "aspira-resources-wa",
-                    name = "A",
-                    raw = """{"_parent_aspira_map_id":-2147483615,"_parent_aspira_resource_loc":-2147483624}""",
-                    providerRefJson = """{"mapId":-2147483615,"resourceLocationId":-2147483624}""",
-                )
-            link(reservableId, poiId)
-            application {
-                routing {
-                    availabilityRoutes(
-                        CampsiteProviderRepo(ctx),
-                        fakeAspiraReservationProviders(),
-                        ReservableRepo(ctx),
-                        clock = fixedClock,
-                    )
-                }
-            }
-
-            val resp = client.get("/api/reservable/site:aspira_wa:-100/availability?start_date=2026-07-01&end_date=2026-07-02")
-            assertEquals(HttpStatusCode.OK, resp.status)
-            val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("-2147483615", body["map_id"]!!.jsonPrimitive.content)
-            assertEquals("site:aspira_wa:-100", body["reservable_id"]!!.jsonPrimitive.content)
         }
 
     @Test

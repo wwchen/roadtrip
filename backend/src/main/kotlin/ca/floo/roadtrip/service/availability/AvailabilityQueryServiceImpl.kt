@@ -20,7 +20,7 @@ private const val PROVIDER_WINDOW_MAX_DAYS = 60
 internal class AvailabilityQueryServiceImpl(
     private val providerRefs: CampsiteProviderRepo,
     private val reservablesRepo: ReservableRepo,
-    private val availabilityService: AvailabilityService,
+    private val composer: ReservableAvailabilityComposer,
     private val dateResolver: AvailabilityDateResolver,
     private val reservationProviders: ReservationProviderRegistry,
 ) : AvailabilityQueryService {
@@ -47,8 +47,8 @@ internal class AvailabilityQueryServiceImpl(
         }
 
         val availability =
-            availabilityService.getByRids(
-                rids = reservables.map { it.rid },
+            composer.availabilityFor(
+                reservables = reservables,
                 startDate = startDate,
                 endDate = endDate,
             )
