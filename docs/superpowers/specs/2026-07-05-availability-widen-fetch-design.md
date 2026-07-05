@@ -80,7 +80,7 @@ patch, no cross-method invariant.
 `MAX_AVAILABILITY_DAYS` is removed from the composer. (The catalogless path's
 `PROVIDER_WINDOW_MAX_DAYS` is out of scope — see below.)
 
-### 3. Composer computes both windows
+### 3. Composer computes both windows, through the batcher seam
 
 `ReservableAvailabilityComposer.availabilityFor` computes, per vendor group:
 
@@ -91,6 +91,25 @@ patch, no cross-method invariant.
 It passes the **target window** as the `AvailabilityLoader.Request` window (drives
 coverage + response) and wires the **fetch window** into the
 `catalogAvailability` fetch lambda.
+
+**Batcher seam change.** Today `CatalogAvailabilityBatcher`'s
+`windowFor: (PoiDateContext, ReservationProviderCapabilities) -> ResolvedDateWindow?`
+returns a single window that does triple duty: `countFetchGroups` null-checks it
+for the poller's governor, `fetchByGroup` hands it to `provider.catalogAvailability`,
+and the composer feeds it to the loader `Request`. This design splits fetch vs
+target, so `windowFor` returns **both** as one nullable pair
+(`AvailabilityWindows { target, fetch }`, null ⇒ group skipped, no upstream call):
+
+- `countFetchGroups` keeps null-checking the pair — governor semantics and the
+  "`countFetchGroups` and `fetchByGroup` never drift" contract are preserved,
+  since both still key off the same `windowFor`.
+- `fetchByGroup` passes `windows.fetch` to the fetch lambda (→
+  `provider.catalogAvailability`) and records the fetch window.
+- The composer builds the loader `Request` window from `windows.target`.
+
+The **poller's** `windowFor` returns `target == fetch == wideWindow(earliestDate)`
+(both the same wide window), so the poller path is behaviorally unchanged; only
+the live composer sets `target != fetch`.
 
 ### 4. Loader records the fetched window, returns the target slice
 
