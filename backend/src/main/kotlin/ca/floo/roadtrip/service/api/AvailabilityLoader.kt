@@ -78,7 +78,13 @@ class AvailabilityLoader(
                 seasonBlock = fetched.seasonBlock,
             )
         } else {
-            fetched.copy(cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = request.ttl.seconds))
+            val targetDates = datesInWindow(request.startDate, request.endDate).toSet()
+            fetched.copy(
+                startDate = request.startDate,
+                endDate = request.endDate,
+                observations = fetched.observations.filter { it.date in targetDates },
+                cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = request.ttl.seconds),
+            )
         }
     }
 
@@ -94,7 +100,7 @@ class AvailabilityLoader(
         batch: AvailabilityObservationBatch,
     ) {
         val targetByRid = request.targets.associateBy { it.rid }
-        val dates = datesInWindow(request.startDate, request.endDate)
+        val dates = datesInWindow(batch.startDate, batch.endDate)
         val observedAtByDate =
             batch.observations.groupBy { it.date }.mapValues { (_, o) -> o.maxOf { it.observedAt } }
         val fallbackObservedAt = batch.observations.maxOfOrNull { it.observedAt } ?: Instant.now(clock)
