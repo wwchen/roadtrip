@@ -121,6 +121,11 @@ dependencies {
     implementation("io.ktor:ktor-client-cio:$ktorVersion")
     implementation("io.ktor:ktor-client-content-negotiation:$ktorVersion")
     implementation("ch.qos.logback:logback-classic:1.5.12")
+    // JSON log encoder that emits the fully-formatted message (SLF4J {}
+    // placeholders interpolated). Replaces Logback's built-in JsonEncoder,
+    // which logged the raw pattern + a separate arguments array. 8.x targets
+    // logback 1.5.x / Java 11+.
+    implementation("net.logstash.logback:logstash-logback-encoder:8.0")
 
     // Self-documenting /api/docs at runtime — Swagger UI + OpenAPI 3.1 spec
     // built from the live routing tree. Compatible with Ktor 3.0.x.
