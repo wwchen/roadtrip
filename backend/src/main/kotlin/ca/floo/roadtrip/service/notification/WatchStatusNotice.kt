@@ -15,6 +15,11 @@ import java.time.LocalDate
  * ([campgroundName] set — the watch covers every site in one POI), or a plural
  * count ([siteName] and [campgroundName] null); the renderer labels and formats
  * accordingly.
+ *
+ * [controls] carries the pause/resume/delete deep-links for this watch — which
+ * ones apply depends on [state] (an active watch pauses, a paused one resumes,
+ * neither on a stopped one). Defaults to no controls so an unconfigured host
+ * simply omits them.
  */
 data class WatchStatusNotice(
     val state: State,
@@ -26,6 +31,7 @@ data class WatchStatusNotice(
     val endDate: LocalDate,
     val dashboardUrl: String?,
     val poiLinks: List<PoiLink>,
+    val controls: WatchControlLinks = WatchControlLinks(),
 ) {
     /** Which status card to render. [WATCHING] and [UNCHECKED] are both live
      *  (actively watching); they differ only in whether the cube has an

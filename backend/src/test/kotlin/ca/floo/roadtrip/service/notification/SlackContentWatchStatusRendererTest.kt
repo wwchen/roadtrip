@@ -158,6 +158,58 @@ class SlackContentWatchStatusRendererTest {
     }
 
     @Test
+    fun `an active watch renders pause and delete control links but not resume`() {
+        val controls =
+            WatchControlLinks(
+                pauseUrl = "https://app.test/?alert=1&alert_action=pause",
+                deleteUrl = "https://app.test/?alert=1&alert_action=delete",
+            )
+        val text = allText(SlackContentWatchStatusRenderer.render(notice().copy(controls = controls)))
+        assertTrue(text.contains("pause watch"), text)
+        assertTrue(text.contains("alert_action=pause"), text)
+        assertTrue(text.contains("delete watch"), text)
+        assertTrue(text.contains("alert_action=delete"), text)
+        assertTrue(!text.contains("resume watch"), text)
+    }
+
+    @Test
+    fun `a paused watch renders resume and delete control links but not pause`() {
+        val controls =
+            WatchControlLinks(
+                resumeUrl = "https://app.test/?alert=1&alert_action=resume",
+                deleteUrl = "https://app.test/?alert=1&alert_action=delete",
+            )
+        val text =
+            allText(
+                SlackContentWatchStatusRenderer.render(
+                    notice(state = WatchStatusNotice.State.PAUSED).copy(controls = controls),
+                ),
+            )
+        assertTrue(text.contains("resume watch"), text)
+        assertTrue(text.contains("delete watch"), text)
+        assertTrue(!text.contains("pause watch"), text)
+    }
+
+    @Test
+    fun `control links render as hyperlinks, not interactive buttons`() {
+        val controls = WatchControlLinks(pauseUrl = "https://app.test/?alert=1&alert_action=pause")
+        val blocks = SlackContentWatchStatusRenderer.render(notice().copy(controls = controls)).second
+        assertTrue(blocks.none { it.type == "actions" }, "controls must not render as interactive buttons")
+        val linkText =
+            blocks
+                .filter { it.type == "section" && it.text != null }
+                .map { it.text!!.text }
+                .joinToString("\n")
+        assertTrue(linkText.contains("<https://app.test/?alert=1&alert_action=pause|"), linkText)
+    }
+
+    @Test
+    fun `no controls (default) renders no control links`() {
+        val text = allText(SlackContentWatchStatusRenderer.render(notice()))
+        assertTrue(!text.contains("alert_action="), text)
+    }
+
+    @Test
     fun `an over-long single-site name is clamped so the post is never rejected`() {
         val longName = "x".repeat(5_000)
         val rendered = SlackContentWatchStatusRenderer.render(notice(siteCount = 1, siteName = longName))

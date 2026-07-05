@@ -34,12 +34,14 @@ object SlackContentAvailabilityRenderer {
      * Renders the openings alert for a watch window. Returns the fallback text
      * (shown in notifications / by clients that don't render blocks) paired with
      * the Block Kit body. [openings] must be non-empty — the alert exists because
-     * something opened.
+     * something opened. [controls], when supplied, appends the watch's
+     * pause/delete deep-links below the Reserve CTA.
      */
     fun openings(
         startDate: LocalDate,
         endDate: LocalDate,
         openings: List<WatchOpening>,
+        controls: WatchControlLinks? = null,
     ): Pair<String, List<SlackBlockDto>> {
         require(openings.isNotEmpty()) { "openings alert requires at least one opening" }
         val rows = openings.sortedWith(compareBy({ it.campgroundId ?: Long.MAX_VALUE }, { it.label }, { it.date }))
@@ -93,7 +95,7 @@ object SlackContentAvailabilityRenderer {
                 ),
                 SlackBlocks.section(truncate("$siteLines$more", SECTION_TEXT_MAX)),
                 reserveLink,
-            )
+            ) + WatchControlLinksRenderer.sections(controls)
 
         val plural = if (count == 1) "" else "s"
         val where = if (!multiCampground && campgroundNames.size == 1) " at ${campgroundNames.single()}" else ""

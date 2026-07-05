@@ -94,4 +94,27 @@ class SlackContentAvailabilityRendererTest {
         assertEquals("⛺ 12 campsites available at Kirk Creek", fallback)
         assertTrue(sectionText(blocks).contains("…and 2 more"), sectionText(blocks))
     }
+
+    @Test
+    fun `controls render pause and delete deep-links below the openings`() {
+        val controls =
+            WatchControlLinks(
+                pauseUrl = "https://app.test/?alert=9&alert_action=pause",
+                deleteUrl = "https://app.test/?alert=9&alert_action=delete",
+            )
+        val (_, blocks) = SlackContentAvailabilityRenderer.openings(start, end, listOf(opening()), controls)
+        val linkText =
+            blocks.filter { it.type == "section" && it.text != null }.joinToString("\n") { it.text!!.text }
+        assertTrue(linkText.contains("<https://app.test/?alert=9&alert_action=pause|"), linkText)
+        assertTrue(linkText.contains("<https://app.test/?alert=9&alert_action=delete|"), linkText)
+        assertTrue(blocks.none { it.type == "actions" }, "controls must not render as interactive buttons")
+    }
+
+    @Test
+    fun `no controls renders no control deep-links`() {
+        val (_, blocks) = SlackContentAvailabilityRenderer.openings(start, end, listOf(opening()))
+        val allSectionText =
+            blocks.filter { it.type == "section" && it.text != null }.joinToString("\n") { it.text!!.text }
+        assertTrue(!allSectionText.contains("alert_action="), allSectionText)
+    }
 }

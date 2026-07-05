@@ -44,9 +44,10 @@ class SlackNotificationServiceImpl(
         endDate: LocalDate,
         openings: List<WatchOpening>,
         channel: String?,
+        controls: WatchControlLinks?,
     ): Boolean {
         if (openings.isEmpty()) return false
-        val (fallback, blocks) = SlackContentAvailabilityRenderer.openings(startDate, endDate, openings)
+        val (fallback, blocks) = SlackContentAvailabilityRenderer.openings(startDate, endDate, openings, controls)
         return send(channel, fallback, blocks)
     }
 

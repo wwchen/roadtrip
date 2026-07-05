@@ -27,14 +27,16 @@ interface SlackNotificationService {
     /**
      * Renders and sends the rich "Campsites Available!" alert for the openings in
      * a watch's `[startDate, endDate)` window. The caller supplies fully-hydrated
-     * [WatchOpening]s (label, campground, booking URL); the service owns the
-     * mapping to the Slack message body. Never throws; returns `false` on a
-     * delivery failure or when Slack is disabled.
+     * [WatchOpening]s (label, campground, booking URL) and optionally the watch's
+     * [controls] (pause/delete deep-links); the service owns the mapping to the
+     * Slack message body. Never throws; returns `false` on a delivery failure or
+     * when Slack is disabled.
      */
     suspend fun sendWatchOpenings(
         startDate: LocalDate,
         endDate: LocalDate,
         openings: List<WatchOpening>,
         channel: String? = null,
+        controls: WatchControlLinks? = null,
     ): Boolean
 }
