@@ -97,8 +97,13 @@ GET https://{host}/api/maps
 ]
 ```
 
-Used for: POI enumeration (each leaf with a `transactionLocationId`
-becomes a campground POI), parent-name labeling for nested loops.
+Used for: POI enumeration and parent-name labeling for nested loops.
+`AspiraJoinByNameEtl` emits one campground POI per leaf that carries
+**both** a `transactionLocationId` and a `resourceLocationId`. Leaves
+with a `transactionLocationId` but a null `resourceLocationId` are
+park-level container nodes (e.g. "Banff", "Camano Island", "Wells Gray"),
+not bookable campgrounds — they are skipped so they don't duplicate the
+park's already-correct campground POIs.
 
 ### `GET /api/availability/map`
 

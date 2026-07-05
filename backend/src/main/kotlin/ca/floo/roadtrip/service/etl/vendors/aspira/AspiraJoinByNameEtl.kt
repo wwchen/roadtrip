@@ -31,8 +31,12 @@ import java.time.Instant
 //   WA → uscampgrounds.info CSV (state column 12)
 //   BC → BC Parks Strapi (already provincial-shape; protectedAreaName)
 //   PC → APCA ArcGIS Accommodation (campground points) + Places
-//        (per-park polygon centroids, falls back when a leaf is a parent
-//        park rather than a specific campground)
+//        (per-park polygon centroids). A campground leaf whose own name
+//        misses geometry falls back to its parent park's centroid via
+//        parent_name. Park-container leaves themselves are dropped before
+//        emission (see the resourceLocationId gate in transform), so the
+//        centroid now only backstops campground leaves, never emits a
+//        park-level pin.
 //
 // One ETL class. Inputs are declared in YAML; this class dispatches on
 // the slug shape (recognized via the envelope contents) at parse time.
@@ -129,6 +133,13 @@ class AspiraJoinByNameEtl(
             // own resourceLocationId). Skip container nodes here; their child
             // campgrounds carry the coordinates and the parent-name fallback
             // keeps every park represented on the map.
+            //
+            // Tenant-wide (WA/BC/PC share this ETL). Verified against all
+            // three /api/maps captures that the only null-resourceLocationId
+            // leaves are park containers (Camano Island WA, Wells Gray BC,
+            // 23 PC parks), and that none of them link a reservable via the
+            // joiner's source_id (Rule A) or resourceLocationId (Rule B)
+            // rules — so dropping them orphans nothing.
             if (leaf.resourceLocationId == null) {
                 skippedContainer++
                 continue

@@ -148,4 +148,54 @@ class AspiraJoinByNameEtlTest {
         assertEquals("reservation.pc.gc.ca", extras["host"]!!.jsonPrimitive.content)
         assertEquals("exact", extras["match_kind"]!!.jsonPrimitive.content)
     }
+
+    // A campground leaf whose own name misses geometry but whose parent park
+    // centroid matches. This is the load-bearing correctness claim of the
+    // change: dropping park-container leaves is only safe because each park's
+    // campground leaves still land — via their own coordinates or, failing
+    // that, the parent park's centroid. If this fallback regressed, parks
+    // would silently vanish from the map while every other test still passed.
+    private val campgroundMissingOwnName =
+        AspiraLeaf(
+            name = "Backcountry Site With No Geometry",
+            transactionLocationId = 1003L,
+            mapId = -2147483642L,
+            resourceLocationId = 9003L,
+            parentName = "Banff National Park of Canada",
+        )
+
+    @Test
+    fun `campground leaf that misses its own name falls back to the parent park centroid`() {
+        val poi = AspiraJoinByNameEtl(slug).transform(dtoOf(campgroundMissingOwnName), ctx).single()
+
+        assertEquals("Backcountry Site With No Geometry", poi.name)
+        assertEquals(
+            "parent",
+            poi.extras!!
+                .jsonObject["match_kind"]!!
+                .jsonPrimitive.content,
+        )
+        // Located at Banff's seeded centroid (lon -115.57, lat 51.18), not its own.
+        assertTrue(
+            poi.geomGeoJson.contains("-115.57") && poi.geomGeoJson.contains("51.18"),
+            "expected parent-park centroid coordinates, got ${poi.geomGeoJson}",
+        )
+    }
+
+    @Test
+    fun `campground leaf that misses both its own name and its parent is dropped`() {
+        // Distinct from the container skip: this leaf HAS a resourceLocationId
+        // (it is a bookable campground) but neither its name nor its parent
+        // matches any geometry, so it is dropped as a miss, not emitted with
+        // null coordinates.
+        val orphan =
+            AspiraLeaf(
+                name = "Nowhere Campground",
+                transactionLocationId = 1004L,
+                mapId = -2147483643L,
+                resourceLocationId = 9004L,
+                parentName = "Nowhere National Park",
+            )
+        assertTrue(AspiraJoinByNameEtl(slug).transform(dtoOf(orphan), ctx).isEmpty())
+    }
 }
