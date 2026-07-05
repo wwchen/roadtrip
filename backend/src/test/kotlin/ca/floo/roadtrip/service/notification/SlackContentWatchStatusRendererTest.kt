@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.notification
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import java.time.LocalDate
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 class SlackContentWatchStatusRendererTest {
@@ -123,7 +122,11 @@ class SlackContentWatchStatusRendererTest {
     fun `an over-long single-site name is clamped so the post is never rejected`() {
         val longName = "x".repeat(5_000)
         val rendered = SlackContentWatchStatusRenderer.render(notice(siteCount = 1, siteName = longName))
-        val field = rendered.second.first { it.type == "section" && it.fields != null }.fields!!.first { it.text.contains("x") }
+        val field =
+            rendered.second
+                .first { it.type == "section" && it.fields != null }
+                .fields!!
+                .first { it.text.contains("x") }
         assertTrue(field.text.length <= 2_000, "field was ${field.text.length} chars")
     }
 }
