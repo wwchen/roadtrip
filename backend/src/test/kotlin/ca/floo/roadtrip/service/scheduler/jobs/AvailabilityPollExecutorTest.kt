@@ -23,8 +23,10 @@ import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
+import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
@@ -219,8 +221,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
     /** A [SlackNotificationService] double that records every send and returns a
      *  configurable result, so alert tests never touch a live Slack workspace. It
-     *  resolves the default channel the way the real impl does, so channel
-     *  assertions stay meaningful. */
+     *  resolves the default channel the way the real impl does, and renders
+     *  openings through the real [SlackContentAvailabilityRenderer], so both
+     *  channel and message-content assertions stay meaningful. */
     private class RecordingSlackNotifications(
         var result: Boolean = true,
         private val defaultChannel: String? = "#camping",
@@ -230,9 +233,19 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override suspend fun sendMessage(
             text: String,
             channel: String?,
-            blocks: List<SlackBlockDto>?,
         ): Boolean {
-            posts += Post(channel = channel ?: defaultChannel, text = text, blocks = blocks)
+            posts += Post(channel = channel ?: defaultChannel, text = text, blocks = null)
+            return result
+        }
+
+        override suspend fun sendWatchOpenings(
+            startDate: LocalDate,
+            endDate: LocalDate,
+            openings: List<WatchOpening>,
+            channel: String?,
+        ): Boolean {
+            val (fallback, blocks) = SlackContentAvailabilityRenderer.openings(startDate, endDate, openings)
+            posts += Post(channel = channel ?: defaultChannel, text = fallback, blocks = blocks)
             return result
         }
     }

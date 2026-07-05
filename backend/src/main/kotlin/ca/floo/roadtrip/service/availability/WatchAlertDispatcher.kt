@@ -1,21 +1,18 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.clients.slack.SlackBlockDto
-import ca.floo.roadtrip.clients.slack.SlackBlocks
 import ca.floo.roadtrip.models.availability.CellTransition
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
+import ca.floo.roadtrip.service.notification.WatchOpening
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 
 /** The only trigger kind that dispatches today. Others (e.g. `atc`) are stored
  *  but inert — they match no branch here. */
 const val SLACK_NOTIFY_KIND = "slack_notify"
-
-private const val MAX_SITES_IN_MESSAGE = 10
 
 /** Grafana dashboards the alert deep-links to. The watch drill-down takes the
  *  firing watch's id (`var-watch_id`); the cube matrix takes a POI
@@ -34,10 +31,12 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * goes `DONE` **only after a post actually succeeds**, so a delivery failure
  * never silences a watch we could not notify on.
  *
- * [slack] is null when Slack is unconfigured; then the whole path no-ops.
- * Nothing here throws into the caller: the service swallows its own failures
- * and the executor wraps this call best-effort. A watch's channel override (if
- * any) is passed through; the service falls back to its default channel.
+ * This class only decides *which* watches fire and hydrates their openings; the
+ * [SlackNotificationService] owns the message rendering and delivery (and no-ops
+ * when Slack is unconfigured). Nothing here throws into the caller: the service
+ * swallows its own failures and the executor wraps this call best-effort. A
+ * watch's channel override (if any) is passed through; the service falls back to
+ * its default channel.
  */
 internal class WatchAlertDispatcher(
     private val slack: SlackNotificationService,
@@ -105,97 +104,47 @@ internal class WatchAlertDispatcher(
         }
     }
 
-    /** Posts the openings alert for one watch and, on a successful post, marks a
-     *  `stopWhenTriggered` watch `DONE` — so a delivery failure never silences a
-     *  watch we could not notify on. Shared by the edge and initial paths. */
+    /** Hydrates the covered cells into [WatchOpening]s, hands them to the
+     *  notification service (which owns the message rendering), and — on a
+     *  successful post — marks a `stopWhenTriggered` watch `DONE`, so a delivery
+     *  failure never silences a watch we could not notify on. Shared by the edge
+     *  and initial paths. */
     private suspend fun postOpenings(
         watch: AvailabilityWatchRepo.Watch,
         covered: List<CellTransition>,
         reservablesById: Map<Long, Reservable>,
     ) {
-        val (fallback, blocks) = openingsMessage(watch, covered, reservablesById)
-        val fired = slack.sendMessage(fallback, watch.channelOverride(), blocks)
+        val openings = hydrateOpenings(covered, reservablesById)
+        val fired = slack.sendWatchOpenings(watch.startDate, watch.endDate, openings, watch.channelOverride())
         if (fired && watch.stopWhenTriggered) {
             watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }
     }
 
-    /** One opening resolved to everything the alert renders. */
-    private data class OpeningRow(
-        val label: String,
-        val loop: String?,
-        val siteType: String?,
-        val date: LocalDate,
-        val campground: String?,
-        val bookingUrl: String?,
-    )
-
-    /**
-     * Builds the "Campsites Available!" alert: a notification-fallback string and
-     * the Block Kit body (header, campground/count/window fields, per-site lines,
-     * a Reserve button for the first site). Each opening is hydrated once —
-     * reservable name/loop/type, campground POI name, and the provider booking
-     * URL. Spans multiple campgrounds gracefully (the field summarizes the count,
-     * each line prefixes its campground). No Grafana links here — those stay on
-     * the informational messages.
-     */
-    private fun openingsMessage(
-        watch: AvailabilityWatchRepo.Watch,
+    /** Resolves each covered cell to a [WatchOpening] — the reservable's display
+     *  label/loop/type, its parent campground (id + name, each POI fetched once),
+     *  and the provider booking URL — so the notification layer only formats. */
+    private fun hydrateOpenings(
         covered: List<CellTransition>,
         reservablesById: Map<Long, Reservable>,
-    ): Pair<String, List<SlackBlockDto>> {
+    ): List<WatchOpening> {
         val poiNames = HashMap<Long, String?>()
-        val rows =
-            covered
-                .sortedWith(compareBy({ it.reservableId }, { it.targetDate }))
-                .map { t ->
-                    // covered was filtered to reservables in this map, so the key exists.
-                    val r = reservablesById.getValue(t.reservableId)
-                    val target = targets.resolve(r)
-                    OpeningRow(
-                        label = r.name ?: r.rid.encode(),
-                        loop = r.loop,
-                        siteType = r.siteType,
-                        date = t.targetDate,
-                        campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiById(it)?.name } },
-                        bookingUrl = target?.provider?.bookingUrl(r.rid, t.targetDate),
-                    )
-                }
-        val count = rows.size
-        val campgrounds = rows.mapNotNull { it.campground }.distinct()
-        val multiCampground = campgrounds.size > 1
-        val campgroundLabel =
-            when (campgrounds.size) {
-                0 -> "—"
-                1 -> campgrounds.single()
-                else -> "${campgrounds.size} campgrounds"
-            }
-        val siteLines =
-            rows.take(MAX_SITES_IN_MESSAGE).joinToString("\n") { row ->
-                val prefix = if (multiCampground && row.campground != null) "${row.campground} — " else ""
-                val loop = row.loop?.let { " ($it)" }.orEmpty()
-                val type = row.siteType?.let { " _($it)_" }.orEmpty()
-                "• $prefix*${row.label}*$loop — ${row.date}$type"
-            }
-        val more = if (count > MAX_SITES_IN_MESSAGE) "\n…and ${count - MAX_SITES_IN_MESSAGE} more" else ""
-        val sitesFound = "$count${if (count > MAX_SITES_IN_MESSAGE) " (showing $MAX_SITES_IN_MESSAGE)" else ""}"
-        val first = rows.first()
-        val blocks =
-            listOfNotNull(
-                SlackBlocks.header("🏕️ Campsites Available!"),
-                SlackBlocks.fields(
-                    listOf(
-                        "*Campground*\n$campgroundLabel",
-                        "*Sites found*\n$sitesFound",
-                        "*Your window*\n${watch.startDate} → ${watch.endDate}",
-                    ),
-                ),
-                SlackBlocks.section("$siteLines$more"),
-                first.bookingUrl?.let { SlackBlocks.primaryButton("Reserve ${first.label} →", it) },
+        return covered.map { t ->
+            // covered was filtered to reservables in this map, so the key exists.
+            val r = reservablesById.getValue(t.reservableId)
+            val target = targets.resolve(r)
+            WatchOpening(
+                label = r.name ?: r.rid.encode(),
+                loop = r.loop,
+                siteType = r.siteType,
+                date = t.targetDate,
+                campgroundId = target?.parentPoiId,
+                campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiById(it)?.name } },
+                // Booking link, if the reservable's provider exposes one — the URL
+                // scheme is the adapter's, never this dispatcher's.
+                bookingUrl = target?.provider?.bookingUrl(r.rid, t.targetDate),
             )
-        val plural = if (count == 1) "" else "s"
-        val where = if (!multiCampground && campgrounds.isNotEmpty()) " at ${campgrounds.single()}" else ""
-        return "⛺ $count campsite$plural available$where" to blocks
+        }
     }
 
     /** Grafana deep links appended to an alert when the Grafana host is
