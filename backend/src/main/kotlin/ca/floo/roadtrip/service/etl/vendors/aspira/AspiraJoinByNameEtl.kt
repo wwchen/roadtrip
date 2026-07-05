@@ -115,9 +115,24 @@ class AspiraJoinByNameEtl(
         var fuzzy = 0
         var viaParent = 0
         var miss = 0
+        var skippedContainer = 0
         val missSamples = mutableListOf<String>()
 
         for (leaf in dto.leaves.leaves) {
+            // Campground-level model: a POI is one bookable campground node.
+            // Aspira's /api/maps also carries park-level container nodes
+            // (Banff, Jasper, …) and park-scoped activity mounts. Those have
+            // no resourceLocationId — they are not a bookable resource
+            // location, so they are not campgrounds. Emitting them layered a
+            // duplicate park POI on top of the park's already-correct
+            // campground POIs (each real campground is a mapLink carrying its
+            // own resourceLocationId). Skip container nodes here; their child
+            // campgrounds carry the coordinates and the parent-name fallback
+            // keeps every park represented on the map.
+            if (leaf.resourceLocationId == null) {
+                skippedContainer++
+                continue
+            }
             val nk = normalize(leaf.name)
             var coords: Pair<Double, Double>? = byName[nk]
             var matchKind = "exact"
@@ -185,13 +200,15 @@ class AspiraJoinByNameEtl(
         }
 
         log.info(
-            "$etlSlug: {} leaves → {} pois (exact={} fuzzy={} parent={} miss={}; sample misses: {})",
+            "$etlSlug: {} leaves → {} pois " +
+                "(exact={} fuzzy={} parent={} miss={} skippedContainer={}; sample misses: {})",
             dto.leaves.leaves.size,
             pois.size,
             exact,
             fuzzy,
             viaParent,
             miss,
+            skippedContainer,
             missSamples.take(5),
         )
         return pois
