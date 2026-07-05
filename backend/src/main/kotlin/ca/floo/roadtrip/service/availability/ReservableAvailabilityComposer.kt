@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.AvailabilityResponseDto
+import ca.floo.roadtrip.models.availability.AvailabilityWindows
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -15,7 +16,6 @@ import kotlinx.serialization.json.longOrNull
 import java.time.Duration
 import java.time.LocalDate
 
-private const val MAX_AVAILABILITY_DAYS: Int = 60
 private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
 
 /**
@@ -53,22 +53,33 @@ internal class ReservableAvailabilityComposer(
             batcher.fetchByGroup(
                 targets = resolved,
                 windowFor = { context, caps ->
-                    dateResolver.resolveWindow(
-                        startDate = startDate,
-                        endDate = endDate,
-                        context = context,
-                        bookingHorizonDays = caps.bookingHorizonDays,
-                        maxDays = MAX_AVAILABILITY_DAYS,
-                        defaultDays = DEFAULT_AVAILABILITY_DAYS,
-                    )
+                    val target =
+                        dateResolver.resolveWindow(
+                            startDate = startDate,
+                            endDate = endDate,
+                            context = context,
+                            bookingHorizonDays = caps.bookingHorizonDays,
+                            maxDays = caps.maxPollWindowDays,
+                            defaultDays = DEFAULT_AVAILABILITY_DAYS,
+                        )
+                    // `?: target` is an unreachable safety net: once `target` resolved,
+                    // span > 0 and anchor >= earliestDate, so wideWindow never returns null.
+                    val fetch =
+                        dateResolver.wideWindow(
+                            anchor = target.startDate,
+                            context = context,
+                            maxPollWindowDays = caps.maxPollWindowDays,
+                            bookingHorizonDays = caps.bookingHorizonDays,
+                        ) ?: target
+                    AvailabilityWindows(target = target, fetch = fetch)
                 },
-                fetch = { parentRef, provider, rows, window ->
+                fetch = { parentRef, provider, rows, windows ->
                     availabilityLoader.loadOrFetch(
                         AvailabilityLoader.Request(
                             metadata = availabilityMetadata(provider.id, parentRef),
                             targets = rows.map { it.toAvailabilityTarget() },
-                            startDate = window.startDate,
-                            endDate = window.endDate,
+                            startDate = windows.target.startDate,
+                            endDate = windows.target.endDate,
                             ttl = snapshotFreshnessTtl(provider.id),
                         ),
                     ) {
@@ -76,8 +87,8 @@ internal class ReservableAvailabilityComposer(
                             CatalogAvailabilityRequest(
                                 ref = parentRef,
                                 reservables = rows.map { it.toCatalogReservableRef() },
-                                startDate = window.startDate,
-                                endDate = window.endDate,
+                                startDate = windows.fetch.startDate,
+                                endDate = windows.fetch.endDate,
                             ),
                         )
                     }

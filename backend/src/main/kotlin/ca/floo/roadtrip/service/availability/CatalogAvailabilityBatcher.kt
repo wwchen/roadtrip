@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityWindows
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.ProviderRef
@@ -74,7 +75,7 @@ internal class CatalogAvailabilityBatcher {
      */
     fun countFetchGroups(
         targets: List<ResolvedAvailabilityTarget>,
-        windowFor: (PoiDateContext, ReservationProviderCapabilities) -> ResolvedDateWindow?,
+        windowFor: (PoiDateContext, ReservationProviderCapabilities) -> AvailabilityWindows?,
     ): Int =
         targets
             .map { GroupKey(it.provider, it.parentRef, it.dateContext) }
@@ -83,20 +84,20 @@ internal class CatalogAvailabilityBatcher {
 
     suspend fun fetchByGroup(
         targets: List<ResolvedAvailabilityTarget>,
-        windowFor: (PoiDateContext, ReservationProviderCapabilities) -> ResolvedDateWindow?,
+        windowFor: (PoiDateContext, ReservationProviderCapabilities) -> AvailabilityWindows?,
         fetch: suspend (
             parentRef: ProviderRef,
             provider: ReservationProvider,
             reservables: List<Reservable>,
-            window: ResolvedDateWindow,
+            windows: AvailabilityWindows,
         ) -> AvailabilityObservationBatch,
     ): List<GroupFetchResult> =
         targets
             .groupBy { GroupKey(it.provider, it.parentRef, it.dateContext) }
             .map { (key, groupTargets) ->
                 val reservables = groupTargets.map { it.reservable }
-                val window = windowFor(key.dateContext, key.provider.capabilities)
-                if (window == null) {
+                val windows = windowFor(key.dateContext, key.provider.capabilities)
+                if (windows == null) {
                     return@map GroupFetchResult(
                         provider = key.provider,
                         parentRef = key.parentRef,
@@ -111,13 +112,13 @@ internal class CatalogAvailabilityBatcher {
                 }
                 val startedNanos = System.nanoTime()
                 try {
-                    val batch = fetch(key.parentRef, key.provider, reservables, window)
+                    val batch = fetch(key.parentRef, key.provider, reservables, windows)
                     GroupFetchResult(
                         provider = key.provider,
                         parentRef = key.parentRef,
                         dateContext = key.dateContext,
                         reservables = reservables,
-                        window = window,
+                        window = windows.fetch,
                         batch = batch,
                         outcome = FetchOutcome.OK,
                         durationMs = elapsedMs(startedNanos),
@@ -129,7 +130,7 @@ internal class CatalogAvailabilityBatcher {
                         parentRef = key.parentRef,
                         dateContext = key.dateContext,
                         reservables = reservables,
-                        window = window,
+                        window = windows.fetch,
                         batch = null,
                         outcome = e.toFetchOutcome(),
                         durationMs = elapsedMs(startedNanos),

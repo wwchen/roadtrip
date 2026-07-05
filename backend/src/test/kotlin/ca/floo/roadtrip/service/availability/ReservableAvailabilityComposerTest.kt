@@ -130,6 +130,55 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
         }
 
     @Test
+    fun `fetches the wide vendor window while requesting a single week`() =
+        runBlocking {
+            // The vendor's maxPollWindowDays (30) is wider than the requested
+            // week (7 days): the upstream call must span the full 30-day vendor
+            // window, anchored at the request's start, not the narrow request.
+            var fetchedStart: LocalDate? = null
+            var fetchedEnd: LocalDate? = null
+            val provider =
+                fakeProvider(maxPollWindowDays = 30, bookingHorizonDays = 365) { req ->
+                    fetchedStart = req.startDate
+                    fetchedEnd = req.endDate
+                    batchFor(req, AvailabilityStatus.AVAILABLE)
+                }
+            val target = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
+            val composer = composer(listOf(target), availability = null)
+
+            // An empty/short-lived batch would leave byRid empty and the mapping
+            // step would throw NotFound after the window is already captured, so
+            // the window assertions below still hold regardless.
+            runCatching {
+                composer.availabilityFor(
+                    listOf(target.reservable),
+                    LocalDate.parse("2026-08-12"),
+                    LocalDate.parse("2026-08-19"),
+                )
+            }
+
+            assertEquals(LocalDate.parse("2026-08-12"), fetchedStart)
+            assertEquals(30L, ChronoUnit.DAYS.between(fetchedStart, fetchedEnd))
+        }
+
+    @Test
+    fun `rejects a request wider than the vendor poll window`() =
+        runBlocking {
+            val provider = fakeProvider(maxPollWindowDays = 30, bookingHorizonDays = 365)
+            val target = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
+            val composer = composer(listOf(target), availability = null)
+
+            assertFailsWith<AvailabilityServiceError.BadDateWindow.WindowTooLong> {
+                composer.availabilityFor(
+                    listOf(target.reservable),
+                    LocalDate.parse("2026-08-12"),
+                    LocalDate.parse("2026-10-02"), // 51 days > 30
+                )
+            }
+            assertEquals(0, provider.catalogCalls, "an invalid window must short-circuit before any upstream fetch")
+        }
+
+    @Test
     fun `provider rate limit on live path rethrows instead of surfacing NotFound`() =
         runBlocking {
             // Regression test: PR 1's CatalogAvailabilityBatcher swallows
@@ -207,8 +256,10 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
         )
 
     private fun fakeProvider(
+        maxPollWindowDays: Int = 60,
+        bookingHorizonDays: Int = 180,
         onCatalog: (CatalogAvailabilityRequest) -> AvailabilityObservationBatch = { batchFor(it, AvailabilityStatus.AVAILABLE) },
-    ): FakeProvider = FakeProvider(onCatalog)
+    ): FakeProvider = FakeProvider(maxPollWindowDays, bookingHorizonDays, onCatalog)
 
     /** Build a batch that reports [status] for every requested reservable on every day in the window. */
     private fun batchFor(
@@ -239,6 +290,8 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
     }
 
     private class FakeProvider(
+        maxPollWindowDays: Int,
+        bookingHorizonDays: Int,
         private val onCatalog: (CatalogAvailabilityRequest) -> AvailabilityObservationBatch,
     ) : ReservationProvider {
         var catalogCalls = 0
@@ -248,8 +301,8 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
             ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
-                bookingHorizonDays = 180,
-                maxPollWindowDays = 60,
+                bookingHorizonDays = bookingHorizonDays,
+                maxPollWindowDays = maxPollWindowDays,
             )
 
         override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =

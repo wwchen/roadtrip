@@ -56,6 +56,31 @@ internal class AvailabilityDateResolver(
     }
 
     /**
+     * The widest window the vendor exposes for a single call, anchored at
+     * [anchor] (clamped forward to the earliest bookable date) and capped by
+     * `min(maxPollWindowDays, bookingHorizonDays)`, never running past the
+     * booking horizon. Shared by the poller (anchor = earliestDate) and the
+     * live read path (anchor = the requested week's start) so the two never
+     * drift on how wide a single fetch is. Returns null when the effective
+     * span is non-positive or the anchor is already at/after the horizon, so
+     * the batcher skips the group and makes no upstream call.
+     */
+    fun wideWindow(
+        anchor: LocalDate,
+        context: PoiDateContext,
+        maxPollWindowDays: Int,
+        bookingHorizonDays: Int,
+    ): ResolvedDateWindow? {
+        val span = minOf(maxPollWindowDays, bookingHorizonDays)
+        if (span <= 0) return null
+        val start = maxOf(context.earliestDate, anchor)
+        val horizonEnd = context.earliestDate.plusDays(bookingHorizonDays.toLong())
+        val end = minOf(horizonEnd, start.plusDays(span.toLong()))
+        if (!end.isAfter(start)) return null
+        return ResolvedDateWindow(startDate = start, endDate = end)
+    }
+
+    /**
      * The poller's fetch window: the widest window the vendor exposes for a
      * single tick, anchored at today. Deliberately **independent of any
      * watch's dates** — a watch gates *whether* a poller runs (reference
@@ -74,10 +99,5 @@ internal class AvailabilityDateResolver(
         context: PoiDateContext,
         maxPollWindowDays: Int,
         bookingHorizonDays: Int,
-    ): ResolvedDateWindow? {
-        val days = minOf(maxPollWindowDays, bookingHorizonDays)
-        if (days <= 0) return null
-        val start = context.earliestDate
-        return ResolvedDateWindow(startDate = start, endDate = start.plusDays(days.toLong()))
-    }
+    ): ResolvedDateWindow? = wideWindow(context.earliestDate, context, maxPollWindowDays, bookingHorizonDays)
 }

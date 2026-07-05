@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.availability.AvailabilityWindows
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.ProviderRef
@@ -25,6 +26,7 @@ import kotlin.test.assertTrue
 
 class CatalogAvailabilityBatcherTest {
     private val window = ResolvedDateWindow(LocalDate.parse("2026-07-17"), LocalDate.parse("2026-07-31"))
+    private val windows = AvailabilityWindows(target = window, fetch = window)
 
     @Test
     fun `groups same-campground targets into one fetch call`() =
@@ -41,11 +43,11 @@ class CatalogAvailabilityBatcherTest {
             val results =
                 CatalogAvailabilityBatcher().fetchByGroup(
                     targets = targets,
-                    windowFor = { _, _ -> window },
-                    fetch = { _, _, reservables, w ->
+                    windowFor = { _, _ -> windows },
+                    fetch = { _, _, reservables, ws ->
                         calls++
                         assertEquals(2, reservables.size)
-                        emptyBatch(w)
+                        emptyBatch(ws.fetch)
                     },
                 )
             assertEquals(1, calls)
@@ -64,9 +66,9 @@ class CatalogAvailabilityBatcherTest {
                     resolvedTarget("site:recgov:2", provider, ProviderRef.RecGov("200")),
                 )
             var calls = 0
-            CatalogAvailabilityBatcher().fetchByGroup(targets, { _, _ -> window }, { _, _, _, w ->
+            CatalogAvailabilityBatcher().fetchByGroup(targets, { _, _ -> windows }, { _, _, _, ws ->
                 calls++
-                emptyBatch(w)
+                emptyBatch(ws.fetch)
             })
             assertEquals(2, calls)
         }
@@ -80,7 +82,7 @@ class CatalogAvailabilityBatcherTest {
             val results =
                 CatalogAvailabilityBatcher().fetchByGroup(
                     targets,
-                    { _, _ -> window },
+                    { _, _ -> windows },
                     { _, _, _, _ -> throw thrown },
                 )
             assertEquals(FetchOutcome.RATE_LIMITED, results[0].outcome)
@@ -100,14 +102,30 @@ class CatalogAvailabilityBatcherTest {
                 CatalogAvailabilityBatcher().fetchByGroup(
                     targets,
                     { _, _ -> null },
-                    { _, _, _, w ->
+                    { _, _, _, ws ->
                         calls++
-                        emptyBatch(w)
+                        emptyBatch(ws.fetch)
                     },
                 )
             assertEquals(0, calls)
             assertNull(results[0].window)
             assertEquals(FetchOutcome.OK, results[0].outcome)
+        }
+
+    @Test
+    fun `records the fetch window from the windows pair`() =
+        runBlocking {
+            val provider = fakeProvider()
+            val target = ResolvedDateWindow(LocalDate.parse("2026-07-17"), LocalDate.parse("2026-07-24"))
+            val fetch = ResolvedDateWindow(LocalDate.parse("2026-07-17"), LocalDate.parse("2026-08-16"))
+            val targets = listOf(resolvedTarget("site:recgov:1", provider, ProviderRef.RecGov("100")))
+            val results =
+                CatalogAvailabilityBatcher().fetchByGroup(
+                    targets,
+                    { _, _ -> AvailabilityWindows(target, fetch) },
+                    { _, _, _, ws -> emptyBatch(ws.fetch) },
+                )
+            assertEquals(fetch, results[0].window)
         }
 
     // --- fixtures ---
