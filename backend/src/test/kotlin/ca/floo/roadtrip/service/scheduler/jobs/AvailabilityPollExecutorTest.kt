@@ -1109,15 +1109,15 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 
     @Test
-    fun `empty window retires the poller and does not fetch`() =
+    fun `a poller with no live watches skips the fetch without mutating`() =
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
             seedReservable(poiId, "100")
-            // A watch whose window is entirely in the past.
+            // A watch whose window is entirely in the past (not live).
             val watchId = seedWatch(poiId, "2020-01-01", "2020-01-05")
-            // Link it directly (membership's liveness is based on ACTIVE + end>=today,
-            // and this end_date is in the past, so link manually to exercise the reaper).
+            // Link it directly (liveness is ACTIVE + end>=today, and this end_date
+            // is past, so link manually to exercise the empty-live-watch tick).
             val pollers = AvailabilityPollerRepo(ctx)
             val pollerId =
                 pollers.upsertActive(provider = "recgov", parentRef = "232447", poiId = poiId, pullNextRunAt = now())
@@ -1129,14 +1129,16 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // No upstream call, no run row.
             assertEquals(0, provider.calls)
             assertEquals(0, AvailabilityRunRepo(ctx).listForPoller(pollerId, limit = 10).size)
-            // Poller retired: deactivated, links dropped, watch marked done.
-            assertEquals(false, pollers.findById(pollerId)!!.active)
-            assertTrue(pollers.watchIdsForPoller(pollerId).isEmpty())
+            // The fetch tick does NOT tear down — teardown is the WatchReaper's job.
+            // The poller stays active, its link stays, the watch stays active until
+            // the reaper sweeps.
+            assertEquals(true, pollers.findById(pollerId)!!.active)
+            assertEquals(listOf(watchId), pollers.watchIdsForPoller(pollerId))
             val watchStatus =
                 ctx
                     .fetchOne("SELECT status FROM availability_watch WHERE id = ?", watchId)!!
                     .get("status", String::class.java)
-            assertEquals("done", watchStatus)
+            assertEquals("active", watchStatus)
         }
 
     @Test

@@ -326,73 +326,82 @@ class AvailabilityPollerRepo(
             .fetch { watchRepo.fromRecord(it) }
 
     /**
-     * Retires a poller whose window the executor believes has fully elapsed.
-     * [elapsedWatchIds] is the executor's *candidate* set, computed from a
-     * prior read; a concurrent [AvailabilityPollerMembership.sync] (watch
-     * create/edit) can revive+link this poller or extend a watch's window
-     * between that read and this call. So retire re-verifies everything in
-     * one transaction and only ever touches watches it can *still* prove are
-     * elapsed:
-     *
-     * 1. Among [elapsedWatchIds], mark `done` and drop links only for watches
-     *    that are still `active` AND `end_date < CURRENT_DATE` — the window
-     *    has ended in every timezone. A watch extended to `end_date >=
-     *    CURRENT_DATE` in the meantime might still be live somewhere, so it is
-     *    left alone.
-     * 2. Delete `availability_watch_poller` links only for those proven-elapsed
-     *    watch ids — never a blanket delete, so a concurrently-added live link
-     *    survives.
-     * 3. Deactivate the poller only if it now has zero remaining links. If a
-     *    concurrent sync linked a fresh watch, the poller stays active.
-     *
-     * One transaction so a crash mid-retire can't leave a `done` watch still
-     * linked, or an active link to a dormant poller.
+     * The concrete lifecycle transitions one [reapElapsedWatches] sweep made,
+     * so the reaper can emit them as audit events (which watches were retired,
+     * which pollers went dormant) rather than an opaque count.
      */
-    fun retire(
-        pollerId: Long,
-        elapsedWatchIds: List<Long>,
+    data class ReapOutcome(
+        val reapedWatchIds: List<Long>,
+        val deactivatedPollerIds: List<Long>,
     ) {
-        ctx.transaction { config ->
+        val watchesReaped: Int get() = reapedWatchIds.size
+        val pollersDeactivated: Int get() = deactivatedPollerIds.size
+    }
+
+    /**
+     * The reaper's global teardown sweep — the single owner of elapsed-watch
+     * lifecycle now that the poll tick is pure fetch. In one transaction:
+     *
+     * 1. Mark every `active` watch whose window has ended in *every* timezone
+     *    (`end_date < CURRENT_DATE`) as `done`. The date is a coarse-but-safe
+     *    floor: a watch still live in some timezone has `end_date >=
+     *    CURRENT_DATE` and is left alone.
+     * 2. Drop those watches' `availability_watch_poller` links.
+     * 3. Deactivate any active poller left with zero links.
+     *
+     * A poller a concurrent [AvailabilityPollerMembership.sync] linked a fresh
+     * watch to keeps that link (the `andNotExists` sees it at statement time)
+     * and stays active; one the reaper deactivates is revived by the next
+     * `upsertActive`. One transaction so a crash mid-sweep can't leave a `done`
+     * watch still linked or an active link to a dormant poller. Idempotent — a
+     * sweep with nothing elapsed is a no-op.
+     */
+    fun reapElapsedWatches(): ReapOutcome =
+        ctx.transactionResult { config ->
             val txn = DSL.using(config)
-            val provenElapsed: List<Long> =
-                if (elapsedWatchIds.isEmpty()) {
-                    emptyList()
-                } else {
-                    txn
-                        .select(AVAILABILITY_WATCH.ID)
-                        .from(AVAILABILITY_WATCH)
-                        .where(AVAILABILITY_WATCH.ID.`in`(elapsedWatchIds))
-                        .and(AVAILABILITY_WATCH.STATUS.eq(WatchStatus.ACTIVE.wireValue))
-                        .and(AVAILABILITY_WATCH.END_DATE.lt(DSL.currentLocalDate()))
-                        .fetch(AVAILABILITY_WATCH.ID)
-                        .filterNotNull()
-                }
-            if (provenElapsed.isNotEmpty()) {
+            // Proof AND mutation in ONE statement: the liveness predicate lives
+            // in the UPDATE's own WHERE, not in a prior SELECT whose ids we later
+            // trust. Under READ COMMITTED, if a concurrent watch edit extends a
+            // row's end_date and commits first, Postgres re-evaluates this WHERE
+            // against the updated row and skips it — so an extended watch is never
+            // clobbered to `done`. RETURNING gives the exact ids reaped, for the
+            // link delete below and the audit event.
+            val reapedWatchIds =
                 txn
                     .update(AVAILABILITY_WATCH)
                     .set(AVAILABILITY_WATCH.STATUS, WatchStatus.DONE.wireValue)
                     .set(AVAILABILITY_WATCH.UPDATED_AT, OffsetDateTime.now())
-                    .where(AVAILABILITY_WATCH.ID.`in`(provenElapsed))
-                    .execute()
-                txn
-                    .deleteFrom(AVAILABILITY_WATCH_POLLER)
-                    .where(AVAILABILITY_WATCH_POLLER.POLLER_ID.eq(pollerId))
-                    .and(AVAILABILITY_WATCH_POLLER.WATCH_ID.`in`(provenElapsed))
-                    .execute()
+                    .where(AVAILABILITY_WATCH.STATUS.eq(WatchStatus.ACTIVE.wireValue))
+                    .and(AVAILABILITY_WATCH.END_DATE.lt(DSL.currentLocalDate()))
+                    .returning(AVAILABILITY_WATCH.ID)
+                    .fetch()
+                    .mapNotNull { it.get(AVAILABILITY_WATCH.ID) }
+            if (reapedWatchIds.isEmpty()) {
+                return@transactionResult ReapOutcome(
+                    reapedWatchIds = emptyList(),
+                    deactivatedPollerIds = emptyList(),
+                )
             }
             txn
-                .update(AVAILABILITY_POLLER)
-                .set(AVAILABILITY_POLLER.ACTIVE, false)
-                .set(AVAILABILITY_POLLER.UPDATED_AT, OffsetDateTime.now())
-                .where(AVAILABILITY_POLLER.ID.eq(pollerId))
-                .andNotExists(
-                    txn
-                        .selectOne()
-                        .from(AVAILABILITY_WATCH_POLLER)
-                        .where(AVAILABILITY_WATCH_POLLER.POLLER_ID.eq(pollerId)),
-                ).execute()
+                .deleteFrom(AVAILABILITY_WATCH_POLLER)
+                .where(AVAILABILITY_WATCH_POLLER.WATCH_ID.`in`(reapedWatchIds))
+                .execute()
+            val deactivatedPollerIds =
+                txn
+                    .update(AVAILABILITY_POLLER)
+                    .set(AVAILABILITY_POLLER.ACTIVE, false)
+                    .set(AVAILABILITY_POLLER.UPDATED_AT, OffsetDateTime.now())
+                    .where(AVAILABILITY_POLLER.ACTIVE.isTrue)
+                    .andNotExists(
+                        txn
+                            .selectOne()
+                            .from(AVAILABILITY_WATCH_POLLER)
+                            .where(AVAILABILITY_WATCH_POLLER.POLLER_ID.eq(AVAILABILITY_POLLER.ID)),
+                    ).returning(AVAILABILITY_POLLER.ID)
+                    .fetch()
+                    .mapNotNull { it.get(AVAILABILITY_POLLER.ID) }
+            ReapOutcome(reapedWatchIds = reapedWatchIds, deactivatedPollerIds = deactivatedPollerIds)
         }
-    }
 
     /**
      * Claim up to [limit] active pollers whose next_run_at has passed.
