@@ -13,7 +13,7 @@ import ca.floo.roadtrip.models.api.AvailabilityWatchTargetSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.models.api.ReservableSchema
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
@@ -66,7 +66,7 @@ internal fun Route.availabilityWatchRoutes(
 ) {
     val watches = AvailabilityWatchRepo(ctx)
     val reservablesRepo = ReservableRepo(ctx)
-    val heatmaps = AvailabilityHeatmapRepo(ctx)
+    val availability = AvailabilityRepo(ctx)
     val scopeResolver = WatchScopeResolver(reservablesRepo)
 
     // The "first message": on create/update, post the current window state to
@@ -301,7 +301,7 @@ internal fun Route.availabilityWatchRoutes(
 
         val children = scopeResolver.resolve(watch)
         val dates = datesInWindow(watch.startDate, watch.endDate)
-        val cells = heatmaps.loadHeatmap(children.map { it.id }, dates)
+        val cells = availability.readCurrent(children.map { it.id }, dates)
         val cellsByPair = cells.associateBy { it.reservableId to it.targetDate }
 
         val dateStrings = dates.map { it.toString() }

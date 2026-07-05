@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -41,7 +41,7 @@ import kotlin.test.assertTrue
 class AvailabilityWatchRoutesTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability_cell")
+        ctx.execute("DELETE FROM availability")
         ctx.execute("DELETE FROM availability_watch_target")
         ctx.execute("DELETE FROM availability_watch_poller")
         ctx.execute("DELETE FROM availability_poller")
@@ -108,7 +108,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     dateResolver = AvailabilityDateResolver(),
                 ),
             pois = PoiServingRepo(ctx),
-            heatmaps = AvailabilityHeatmapRepo(ctx),
+            availability = AvailabilityRepo(ctx),
             grafanaRootUrl = null,
         )
     }
@@ -807,8 +807,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         )
     }
 
-    /** Seeds a cube cell -- the heatmap's source of truth since PR3 -- rather than
-     *  a raw snapshot log row. */
+    /** Seeds one interval row -- the heatmap's current-state source of truth --
+     *  as a single status-run for the cell. */
     private fun insertCell(
         reservableId: Long,
         targetDate: String,
@@ -817,14 +817,13 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     ) {
         ctx.execute(
             """
-            INSERT INTO availability_cell (
-                reservable_id, target_date, status, last_observed_at, last_changed_at
-            ) VALUES (?::bigint, ?::date, ?::availability_status, ?::timestamptz, ?::timestamptz)
+            INSERT INTO availability (
+                reservable_id, target_date, status, last_observed_at
+            ) VALUES (?::bigint, ?::date, ?::availability_status, ?::timestamptz)
             """.trimIndent(),
             reservableId,
             targetDate,
             if (available) "available" else "reserved",
-            observedAt.toString(),
             observedAt.toString(),
         )
     }

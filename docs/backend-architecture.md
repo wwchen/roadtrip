@@ -71,7 +71,8 @@ ca.floo.roadtrip
 │   ├── ReservableRepo.kt    # reservable lookups and POI links
 │   ├── RawCapture.kt        # data/raw/<slug>/ readers (newest single + multipart)
 │   ├── IngestRunRepo.kt     # ingest_runs CRUD
-│   ├── AvailabilitySnapshotRepo.kt
+│   ├── ImportRunRepo.kt     # import_runs lifecycle (sole writer)
+│   ├── AvailabilityRepo.kt  # availability interval table (writes + reads + history)
 │   └── AvailabilityWatchRepo.kt
 │
 ├── clients                  # outbound network only
@@ -289,6 +290,23 @@ because every ETL is `f(inputs) → output`.
   helper inside the other.
 - **`clients` importing from `repo`.** Outbound HTTP shouldn't know
   about persistence; that's a service-layer concern.
+
+## Repo ownership rules
+
+- **Write-ownership is 1:1.** Each table has exactly one repo that owns its
+  mutations (INSERT/UPDATE/DELETE). Reads may join other tables; multiple
+  read-projection repos per table are allowed. `PoiRepo` (writer) + `PoiServingRepo`
+  (reader) is the model.
+- **Reader vs writer is explicit in the name** — by function
+  (`upsert*/insert*/update*/delete*/mark*` vs `read*/load*/find*`) or by class
+  (`…ServingRepo`, `…ReadRepo`). Never name a repo after the UI feature it feeds.
+- **No cross-table transactions in `repo`.** A transaction spanning two tables is
+  service orchestration; the service opens it and calls each single-table repo.
+- **Storage names never climb into service names.** `matrix`, `interval`,
+  `snapshot`, `cube` are persistence vocabulary; a service is named for its job
+  (`CachedAvailabilityService`), never its store.
+- **Store only non-derivable facts.** Don't persist derivable state (`is_current`,
+  `observed_from`); persist what you can't (`previous_id`).
 
 ## What's not in scope
 

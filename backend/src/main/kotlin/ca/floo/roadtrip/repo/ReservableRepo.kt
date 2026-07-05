@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.db.generated.tables.ReservablePois.Companion.RESERVABLE_POIS
 import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
@@ -14,8 +13,6 @@ import org.jooq.DSLContext
 import org.jooq.Record
 import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 
 /**
  * Persistence for the reservables catalog and its N:M link to POIs.
@@ -32,6 +29,7 @@ class ReservableRepo(
     private val ctx: DSLContext,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val importRuns = ImportRunRepo(ctx)
 
     data class ImportResult(
         val runId: Long,
@@ -99,15 +97,7 @@ class ReservableRepo(
         source: String,
         inputs: List<Input>,
     ): ImportResult {
-        val runId =
-            ctx
-                .insertInto(IMPORT_RUNS)
-                .set(IMPORT_RUNS.SOURCE, source)
-                .set(IMPORT_RUNS.STATUS, "started")
-                .set(IMPORT_RUNS.STARTED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-                .returningResult(IMPORT_RUNS.ID)
-                .fetchOne()!!
-                .value1()!!
+        val runId = importRuns.start(source)
         log.info("import_runs id={} reservables source={} started", runId, source)
 
         try {
@@ -125,13 +115,7 @@ class ReservableRepo(
             val swept = sweep(source, runId)
             log.info("swept {} reservables (soft-deleted) from source={}", swept, source)
 
-            ctx
-                .update(IMPORT_RUNS)
-                .set(IMPORT_RUNS.STATUS, "completed")
-                .set(IMPORT_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-                .set(IMPORT_RUNS.SEEN_COUNT, seen)
-                .where(IMPORT_RUNS.ID.eq(runId))
-                .execute()
+            importRuns.complete(runId, seen)
 
             return ImportResult(runId = runId, seenCount = seen, sweptCount = swept)
         } catch (e: Exception) {
@@ -458,15 +442,7 @@ class ReservableRepo(
     private fun fail(
         runId: Long,
         notes: String,
-    ) {
-        ctx
-            .update(IMPORT_RUNS)
-            .set(IMPORT_RUNS.STATUS, "failed")
-            .set(IMPORT_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .set(IMPORT_RUNS.NOTES, notes)
-            .where(IMPORT_RUNS.ID.eq(runId))
-            .execute()
-    }
+    ) = importRuns.fail(runId, notes)
 
     private companion object {
         // Encoding-only, kept here to avoid coupling the repo to a global Json

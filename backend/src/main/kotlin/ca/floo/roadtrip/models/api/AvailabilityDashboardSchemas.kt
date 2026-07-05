@@ -68,10 +68,10 @@ data class AvailabilityRunsListResponse(
 
 @Serializable
 data class AvailabilitySnapshotSchema(
-    val id: Long,
     @SerialName("reservable_id") val reservableId: Long? = null,
     @SerialName("run_id") val runId: Long? = null,
     @SerialName("target_date") val targetDate: String,
+    @SerialName("observed_from") val observedFrom: String? = null,
     @SerialName("observed_at") val observedAt: String,
     val status: AvailabilityStatus,
     val available: Boolean,
@@ -85,12 +85,12 @@ data class AvailabilitySnapshotsListResponse(
 @Serializable
 data class AvailabilitySnapshotStatsSchema(
     @SerialName("target_date") val targetDate: String,
-    @SerialName("total_snapshots") val totalSnapshots: Int,
+    @SerialName("total_runs") val totalRuns: Int,
     @SerialName("last_open_at") val lastOpenAt: String? = null,
     @SerialName("is_currently_open") val isCurrentlyOpen: Boolean,
     @SerialName("current_or_last_open_window_sec") val currentOrLastOpenWindowSec: Int? = null,
     @SerialName("median_open_window_sec") val medianOpenWindowSec: Int? = null,
-    @SerialName("flips_last_24h") val flipsLast24h: Int,
+    @SerialName("opens_last_24h") val opensLast24h: Int,
 )
 
 @Serializable

@@ -5,17 +5,24 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
-import ca.floo.roadtrip.repo.AvailabilityCacheStore
-import ca.floo.roadtrip.repo.AvailabilityCellRepo
-import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
+import ca.floo.roadtrip.service.availability.hasFullCoverage
+import ca.floo.roadtrip.service.availability.isFresh
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
-class SnapshotBackedAvailabilityService(
-    private val store: AvailabilityCacheStore?,
+/**
+ * Read-through availability caching over the [AvailabilityRepo] interval table.
+ * On a request it reads current state; if the window has full, fresh coverage it
+ * serves from the cache, otherwise it fetches upstream, records the observations,
+ * and re-reads. The single-table transaction lives in the repo — this service only
+ * decides *when* to fetch and record.
+ */
+class CachedAvailabilityService(
+    private val availability: AvailabilityRepo?,
     private val clock: Clock = Clock.systemUTC(),
 ) {
     data class TargetReservable(
@@ -44,23 +51,23 @@ class SnapshotBackedAvailabilityService(
         request: Request,
         fetch: suspend () -> AvailabilityObservationBatch,
     ): AvailabilityObservationBatch {
-        val cache = store
-        if (cache == null || request.targets.isEmpty()) {
-            return fetch()
-        }
+        val repo = availability
+        if (repo == null || request.targets.isEmpty()) return fetch()
 
         val dates = datesInWindow(request.startDate, request.endDate)
         val dbIds = request.targets.map { it.dbId }
-        val cached = cache.loadLatest(dbIds, dates)
-        if (hasFullFreshCoverage(request, dates, cached)) {
+        val cached = repo.readCurrent(dbIds, dates)
+        if (hasFullCoverage(request.targets.size, dates.size, cached.size) &&
+            isFresh(cached.map { it.observedAt.toInstant() }, Instant.now(clock), request.ttl)
+        ) {
             return batchFromLatest(request, cached, hit = true)
         }
 
         val fetched = fetch()
-        recordFetched(cache, request, fetched)
+        recordFetched(repo, request, fetched)
 
-        val latest = cache.loadLatest(dbIds, dates)
-        return if (hasFullCoverage(request, dates, latest)) {
+        val latest = repo.readCurrent(dbIds, dates)
+        return if (hasFullCoverage(request.targets.size, dates.size, latest.size)) {
             batchFromLatest(
                 request = request.copy(metadata = metadataFromBatch(fetched, request.metadata)),
                 rows = latest,
@@ -73,74 +80,46 @@ class SnapshotBackedAvailabilityService(
     }
 
     /**
-     * Upsert every (target, date) cell from this fetch into the cube and append
-     * the edge (status-changed) subset to the snapshot log — delegated to the
-     * store so both happen in one transaction, mirroring the poller. Cells the
-     * provider did not return are recorded as UNKNOWN so the window reaches full
-     * coverage and the next read is a cube hit rather than a refetch loop
-     * (matching the pre-cube UNKNOWN backfill).
+     * Record every returned observation, plus an UNKNOWN cell for each (target, date)
+     * the provider omitted, so the window reaches full coverage and the next read is a
+     * cache hit rather than a refetch loop. `recordObservations` bumps unchanged cells
+     * and inserts a status-run only on a change.
      */
     private fun recordFetched(
-        cache: AvailabilityCacheStore,
+        repo: AvailabilityRepo,
         request: Request,
         batch: AvailabilityObservationBatch,
     ) {
         val targetByRid = request.targets.associateBy { it.rid }
-        val ridByDbId = request.targets.associate { it.dbId to it.rid }
         val dates = datesInWindow(request.startDate, request.endDate)
         val observedAtByDate =
-            batch.observations
-                .groupBy { it.date }
-                .mapValues { (_, observations) -> observations.maxOf { it.observedAt } }
+            batch.observations.groupBy { it.date }.mapValues { (_, o) -> o.maxOf { it.observedAt } }
         val fallbackObservedAt = batch.observations.maxOfOrNull { it.observedAt } ?: Instant.now(clock)
         val covered = mutableSetOf<Pair<Long, LocalDate>>()
-        val observations = mutableListOf<AvailabilityCellRepo.CellObservation>()
-
-        for (observation in batch.observations) {
-            val target = targetByRid[observation.reservableId] ?: continue
-            covered += target.dbId to observation.date
-            observations +=
-                AvailabilityCellRepo.CellObservation(
-                    reservableId = target.dbId,
-                    targetDate = observation.date,
-                    status = observation.status,
-                    observedAt = observation.observedAt,
-                )
+        val observations = mutableListOf<AvailabilityRepo.Observation>()
+        for (o in batch.observations) {
+            val target = targetByRid[o.reservableId] ?: continue
+            covered += target.dbId to o.date
+            observations += AvailabilityRepo.Observation(target.dbId, o.date, o.status, o.observedAt)
         }
         for (target in request.targets) {
             for (date in dates) {
                 if (target.dbId to date in covered) continue
                 observations +=
-                    AvailabilityCellRepo.CellObservation(
-                        reservableId = target.dbId,
-                        targetDate = date,
-                        status = AvailabilityStatus.UNKNOWN,
-                        observedAt = observedAtByDate[date] ?: fallbackObservedAt,
+                    AvailabilityRepo.Observation(
+                        target.dbId,
+                        date,
+                        AvailabilityStatus.UNKNOWN,
+                        observedAtByDate[date] ?: fallbackObservedAt,
                     )
             }
         }
-        cache.recordFetched(request.runId, observations, ridByDbId)
+        repo.recordObservations(request.runId, observations)
     }
-
-    private fun hasFullFreshCoverage(
-        request: Request,
-        dates: List<LocalDate>,
-        rows: List<AvailabilitySnapshotRepo.LatestObservation>,
-    ): Boolean {
-        if (!hasFullCoverage(request, dates, rows)) return false
-        val freshAfter = Instant.now(clock).minus(request.ttl)
-        return rows.all { !it.observedAt.toInstant().isBefore(freshAfter) }
-    }
-
-    private fun hasFullCoverage(
-        request: Request,
-        dates: List<LocalDate>,
-        rows: List<AvailabilitySnapshotRepo.LatestObservation>,
-    ): Boolean = rows.size == request.targets.size * dates.size
 
     private fun batchFromLatest(
         request: Request,
-        rows: List<AvailabilitySnapshotRepo.LatestObservation>,
+        rows: List<AvailabilityRepo.CurrentCell>,
         hit: Boolean,
         seasonBlock: AvailabilitySeasonBlock? = null,
     ): AvailabilityObservationBatch {
@@ -159,12 +138,7 @@ class SnapshotBackedAvailabilityService(
                         status = row.status,
                     )
                 },
-            cacheBlock =
-                AvailabilityCacheBlock(
-                    hit = hit,
-                    ageSeconds = maxAgeSeconds(rows, now),
-                    ttlSeconds = request.ttl.seconds,
-                ),
+            cacheBlock = AvailabilityCacheBlock(hit = hit, ageSeconds = maxAgeSeconds(rows, now), ttlSeconds = request.ttl.seconds),
             seasonBlock = seasonBlock,
             campgroundId = request.metadata.campgroundId,
             host = request.metadata.host,
@@ -186,17 +160,12 @@ class SnapshotBackedAvailabilityService(
         )
 
     private fun maxAgeSeconds(
-        rows: List<AvailabilitySnapshotRepo.LatestObservation>,
+        rows: List<AvailabilityRepo.CurrentCell>,
         now: Instant,
-    ): Long =
-        rows.maxOfOrNull { row ->
-            Duration.between(row.observedAt.toInstant(), now).seconds.coerceAtLeast(0)
-        } ?: 0
+    ): Long = rows.maxOfOrNull { Duration.between(it.observedAt.toInstant(), now).seconds.coerceAtLeast(0) } ?: 0
 
     private fun datesInWindow(
         startDate: LocalDate,
         endDate: LocalDate,
-    ): List<LocalDate> =
-        (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt())
-            .map { startDate.plusDays(it.toLong()) }
+    ): List<LocalDate> = (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt()).map { startDate.plusDays(it.toLong()) }
 }

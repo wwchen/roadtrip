@@ -8,9 +8,8 @@ import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.repo.AvailabilityCacheStore
-import ca.floo.roadtrip.repo.AvailabilityCellRepo
-import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
+import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
@@ -19,47 +18,52 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import kotlinx.coroutines.runBlocking
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
 import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
-import java.time.OffsetDateTime
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
-import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 /**
- * Unit tests for [ReservableAvailabilityComposer.availabilityFor] and its
- * delegation to [CatalogAvailabilityBatcher] + the snapshot cache wrapper. Uses
- * in-memory fakes for the target resolver, reservation provider, and snapshot
- * store — consistent with [CatalogAvailabilityBatcherTest]; no DB required.
+ * Tests for [ReservableAvailabilityComposer.availabilityFor] and its delegation
+ * to [CatalogAvailabilityBatcher] + the read-through cache. The cache is a real
+ * [AvailabilityRepo] over Testcontainers Postgres — the in-memory `AvailabilityCacheStore`
+ * fake was removed with the port itself (single-table realign). Tests that don't
+ * exercise caching wire `availability = null` so the composer always fetches.
  */
-class ReservableAvailabilityComposerTest {
+class ReservableAvailabilityComposerTest : SharedDbTest() {
     // A fixed future earliest date keeps the default window deterministic and
     // clear of AvailabilityDateResolver's earliest-date guard.
     private val earliest = LocalDate.parse("2026-08-01")
     private val longTtl = Duration.ofHours(1)
 
+    @BeforeEach
+    fun cleanup() {
+        ctx.execute("DELETE FROM availability")
+        ctx.execute("DELETE FROM reservable_pois")
+        ctx.execute("DELETE FROM reservables")
+    }
+
     @Test
-    fun `repeat call hits the snapshot cache instead of re-fetching upstream`() =
+    fun `repeat call hits the cache instead of re-fetching upstream`() =
         runBlocking {
             val provider = fakeProvider()
             val ref = ProviderRef.RecGov(recgovId = "232447")
-            val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ref)
-            val store = FakeCacheStore()
-            val composer = composer(listOf(target), store)
+            val target = resolvedTarget("site:recgov:100", provider = provider, parentRef = ref)
+            val composer = composer(listOf(target), AvailabilityRepo(ctx))
 
             val first = composer.availabilityFor(listOf(target.reservable), null, null)
             assertEquals(1, provider.catalogCalls, "cache miss should fetch upstream exactly once")
-            assertEquals(1, store.recordCalls, "cache miss should persist a snapshot")
             assertFalse(first.single().cache.hit, "first read is a miss")
 
             val second = composer.availabilityFor(listOf(target.reservable), null, null)
             assertEquals(1, provider.catalogCalls, "repeat read must be served from cache, not re-fetched")
-            assertEquals(1, store.recordCalls, "cache hit should not write again")
             assertTrue(second.single().cache.hit, "second read is a cache hit")
         }
 
@@ -81,9 +85,9 @@ class ReservableAvailabilityComposerTest {
                         }
                     batchFor(req, status)
                 }
-            val targetA = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
-            val targetB = resolvedTarget("site:recgov:200", dbId = 2L, provider = provider, parentRef = ProviderRef.RecGov("200"))
-            val composer = composer(listOf(targetA, targetB), FakeCacheStore())
+            val targetA = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
+            val targetB = resolvedTarget("site:recgov:200", provider = provider, parentRef = ProviderRef.RecGov("200"))
+            val composer = composer(listOf(targetA, targetB), AvailabilityRepo(ctx))
 
             // Request order is B then A; results must come back in the requested order.
             val results = composer.availabilityFor(listOf(targetB.reservable, targetA.reservable), null, null)
@@ -101,8 +105,8 @@ class ReservableAvailabilityComposerTest {
     fun `bad date window from the date resolver propagates out of availabilityFor`() =
         runBlocking {
             val provider = fakeProvider()
-            val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
-            val composer = composer(listOf(target), FakeCacheStore())
+            val target = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
+            val composer = composer(listOf(target), availability = null)
 
             // startDate before the target's earliest bookable date → StartBeforeEarliest.
             assertFailsWith<AvailabilityServiceError.BadDateWindow.StartBeforeEarliest> {
@@ -117,7 +121,7 @@ class ReservableAvailabilityComposerTest {
             // The composer resolves each already-loaded reservable via the target
             // resolver; a reservable with no linked provider target resolves to null
             // and must fail the collection before any upstream fetch.
-            val composer = composer(targets = emptyList(), cacheStore = FakeCacheStore())
+            val composer = composer(targets = emptyList(), availability = null)
             val error =
                 assertFailsWith<AvailabilityServiceError.UnknownCampground> {
                     composer.availabilityFor(listOf(reservable("site:recgov:999")), null, null)
@@ -134,8 +138,8 @@ class ReservableAvailabilityComposerTest {
             // the old behavior (provider error propagates out of the composer so the
             // route maps it to 503) must be preserved.
             val provider = fakeProvider { throw ReservationProviderError.RateLimited(RuntimeException("429")) }
-            val target = resolvedTarget("site:recgov:100", dbId = 1L, provider = provider, parentRef = ProviderRef.RecGov("100"))
-            val composer = composer(listOf(target), FakeCacheStore())
+            val target = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
+            val composer = composer(listOf(target), availability = null)
 
             assertFailsWith<ReservationProviderError.RateLimited> {
                 composer.availabilityFor(listOf(target.reservable), null, null)
@@ -147,11 +151,11 @@ class ReservableAvailabilityComposerTest {
 
     private fun composer(
         targets: Collection<ResolvedAvailabilityTarget>,
-        cacheStore: AvailabilityCacheStore,
+        availability: AvailabilityRepo?,
     ): ReservableAvailabilityComposer =
         ReservableAvailabilityComposer(
             targets = FakeTargetResolver(targets.associateBy { it.reservable.rid }),
-            cacheStore = cacheStore,
+            availability = availability,
             snapshotFreshnessTtl = { longTtl },
         )
 
@@ -165,9 +169,23 @@ class ReservableAvailabilityComposerTest {
             raw = null,
         )
 
+    /** Seeds a reservable row so the interval-table FK holds, returning its db id. */
+    private fun seedReservable(rid: String): Long {
+        val vendorId = ReservableId.parse(rid)!!.vendorId
+        return ctx
+            .fetchOne(
+                """
+                INSERT INTO reservables (type, vendor, vendor_id, source, name)
+                VALUES ('site', 'recgov', ?, 'test', 'site')
+                RETURNING id
+                """.trimIndent(),
+                vendorId,
+            )!!
+            .get("id", Long::class.java)
+    }
+
     private fun resolvedTarget(
         rid: String,
-        dbId: Long,
         provider: ReservationProvider,
         parentRef: ProviderRef,
         parentPoiId: Long = 1L,
@@ -175,7 +193,7 @@ class ReservableAvailabilityComposerTest {
         ResolvedAvailabilityTarget(
             reservable =
                 Reservable(
-                    id = dbId,
+                    id = seedReservable(rid),
                     rid = ReservableId.parse(rid)!!,
                     name = null,
                     loop = null,
@@ -244,45 +262,5 @@ class ReservableAvailabilityComposerTest {
 
         override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
             throw UnsupportedOperationException("composer uses catalogAvailability")
-    }
-
-    /**
-     * In-memory [AvailabilityCacheStore]: models the availability_cell cube,
-     * keeping the current cell per (reservableId, date). `recordCalls` counts
-     * fetch persistences so tests can assert a cache hit doesn't re-persist.
-     */
-    private class FakeCacheStore : AvailabilityCacheStore {
-        var recordCalls = 0
-        private val cells = linkedMapOf<Pair<Long, LocalDate>, AvailabilityCellRepo.CellObservation>()
-
-        override fun loadLatest(
-            reservableIds: List<Long>,
-            dates: List<LocalDate>,
-        ): List<AvailabilitySnapshotRepo.LatestObservation> {
-            val ids = reservableIds.toSet()
-            val wanted = dates.toSet()
-            return cells.values
-                .filter { it.reservableId in ids && it.targetDate in wanted }
-                .map { cell ->
-                    AvailabilitySnapshotRepo.LatestObservation(
-                        reservableId = cell.reservableId,
-                        targetDate = cell.targetDate,
-                        observedAt = OffsetDateTime.ofInstant(cell.observedAt, ZoneOffset.UTC),
-                        status = cell.status,
-                        available = cell.status.isOnlineBookable,
-                    )
-                }
-        }
-
-        override fun recordFetched(
-            runId: Long?,
-            observations: List<AvailabilityCellRepo.CellObservation>,
-            reservableRidByDbId: Map<Long, String>,
-        ) {
-            recordCalls++
-            for (observation in observations) {
-                cells[observation.reservableId to observation.targetDate] = observation
-            }
-        }
     }
 }

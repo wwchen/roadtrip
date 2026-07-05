@@ -10,13 +10,10 @@ import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.ApiCacheRepo
-import ca.floo.roadtrip.repo.AvailabilityCacheStoreImpl
-import ca.floo.roadtrip.repo.AvailabilityCellRepo
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
-import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
-import ca.floo.roadtrip.repo.AvailabilitySnapshotRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.DbConfig
@@ -208,7 +205,7 @@ fun Application.module() {
 
     val reservablesRepo = ReservableRepo(ctx)
     val campsiteProviders = CampsiteProviderRepo(ctx)
-    val availabilitySnapshots = AvailabilitySnapshotRepo(ctx)
+    val availability = AvailabilityRepo(ctx)
     val availabilityDateResolver = AvailabilityDateResolver()
     CoordinateTimeZones.warmUp()
     val availabilityTargets =
@@ -230,7 +227,7 @@ fun Application.module() {
         ReservableAvailabilityComposer(
             targets = availabilityTargets,
             dateResolver = availabilityDateResolver,
-            cacheStore = AvailabilityCacheStoreImpl(ctx),
+            availability = availability,
             snapshotFreshnessTtl = availabilitySnapshotFreshnessTtl,
         )
     val availabilityQueryService =
@@ -266,16 +263,15 @@ fun Application.module() {
             watches = AvailabilityWatchRepo(ctx),
             targets = availabilityTargets,
             pois = PoiServingRepo(ctx),
-            heatmaps = AvailabilityHeatmapRepo(ctx),
+            availability = availability,
             grafanaRootUrl = appConfig.grafana?.rootUrl,
         )
     val pollExecutor =
         AvailabilityPollExecutor(
-            ctx = ctx,
             pollers = availabilityPollers,
             reservablesRepo = reservablesRepo,
             batcher = CatalogAvailabilityBatcher(),
-            cells = AvailabilityCellRepo(ctx),
+            availability = availability,
             runs = AvailabilityRunRepo(ctx),
             dateResolver = availabilityDateResolver,
             targets = availabilityTargets,

@@ -38,7 +38,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "### Availability cube — current face\n\nOne cell per `(reservable_id, target_date)`, read straight from **`availability_cell`** — the cube's *now* face, upserted on every poll. `last_observed_at` bumps every tick; `status` / `last_changed_at` advance only on an edge (status change). The append-only transition history lives in `availability_snapshot`; drill into it from the **[Watch drill-down](/d/reservable-watch-drill/reservable-watch-drill)**.\n\nRows are reservables (site), columns are `target_date`, color is the current `status`. `past` = the date has elapsed and the cube stopped recording.",
+        "content": "### Availability — current state\n\nOne current row per `(reservable_id, target_date)`, taken as the latest interval in the **`availability`** table. `last_observed_at` bumps on every poll; a new interval opens only on an edge (status change), so the table holds status-runs rather than raw observations. Drill into the full history from the **[Watch drill-down](/d/reservable-watch-drill/reservable-watch-drill)**.\n\nRows are reservables (site), columns are `target_date`, color is the current `status`. `past` = the date has elapsed and recording stopped.",
         "mode": "markdown"
       },
       "pluginVersion": "13.1.0",
@@ -138,7 +138,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.id AS reservable_id,\n         coalesce(r.loop || ' / ', '') || coalesce(r.name, r.vendor_id) AS label\n  FROM reservables r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n)\nSELECT\n  format('[%s] %s', sc.reservable_id, sc.label) AS site,\n  to_char(c.target_date, 'MM-DD Dy')             AS day,\n  c.status::text                                 AS status\nFROM availability_cell c\nJOIN scoped sc ON sc.reservable_id = c.reservable_id\nWHERE c.target_date >= ${__from:date:YYYY-MM-DD}::date\n  AND c.target_date <= ${__to:date:YYYY-MM-DD}::date\nORDER BY sc.label, c.target_date;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.id AS reservable_id,\n         coalesce(r.loop || ' / ', '') || coalesce(r.name, r.vendor_id) AS label\n  FROM reservables r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n)\nSELECT\n  format('[%s] %s', sc.reservable_id, sc.label) AS site,\n  to_char(c.target_date, 'MM-DD Dy')             AS day,\n  c.status::text                                 AS status\nFROM (SELECT DISTINCT ON (reservable_id, target_date) reservable_id, target_date, status, last_observed_at FROM availability ORDER BY reservable_id, target_date, last_observed_at DESC, id DESC) c\nJOIN scoped sc ON sc.reservable_id = c.reservable_id\nWHERE c.target_date >= ${__from:date:YYYY-MM-DD}::date\n  AND c.target_date <= ${__to:date:YYYY-MM-DD}::date\nORDER BY sc.label, c.target_date;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -159,7 +159,7 @@
           }
         }
       ],
-      "title": "Cell matrix (reservables × dates)",
+      "title": "Availability matrix (reservables × dates)",
       "transformations": [
         {
           "id": "groupingToMatrix",
@@ -259,7 +259,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "✔︎ Availability Cell Matrix — cube face",
+  "title": "✔︎ Availability Matrix — current state",
   "uid": "availability-cell-matrix",
   "version": 1
 }

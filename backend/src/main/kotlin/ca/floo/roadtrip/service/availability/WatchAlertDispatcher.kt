@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.CellTransition
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.repo.AvailabilityHeatmapRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
@@ -44,7 +44,7 @@ internal class WatchAlertDispatcher(
     private val watches: AvailabilityWatchRepo,
     private val targets: AvailabilityTargetResolver,
     private val pois: PoiServingRepo,
-    private val heatmaps: AvailabilityHeatmapRepo,
+    private val availability: AvailabilityRepo,
     private val grafanaRootUrl: String?,
 ) {
     suspend fun dispatch(
@@ -94,7 +94,7 @@ internal class WatchAlertDispatcher(
             return
         }
         val reservablesById = reservables.associateBy { it.id }
-        val cells = heatmaps.loadHeatmap(reservables.map { it.id }, datesInWindow(watch))
+        val cells = availability.readCurrent(reservables.map { it.id }, datesInWindow(watch))
         val bookable = cells.filter { it.available }
         if (bookable.isNotEmpty()) {
             val covered = bookable.map { CellTransition(it.reservableId, it.targetDate, it.status) }

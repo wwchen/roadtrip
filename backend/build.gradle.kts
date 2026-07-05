@@ -203,11 +203,10 @@ jooq {
                             listOf(
                                 "alerts",
                                 "api_cache",
-                                "availability_cell",
+                                "availability",
                                 "availability_fetch_call",
                                 "availability_poller",
                                 "availability_run",
-                                "availability_snapshot",
                                 "availability_status",
                                 "availability_watch",
                                 "availability_watch_poller",

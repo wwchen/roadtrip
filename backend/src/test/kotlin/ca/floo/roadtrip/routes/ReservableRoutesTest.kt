@@ -6,7 +6,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.repo.AvailabilityCacheStoreImpl
+import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
@@ -50,7 +50,7 @@ class ReservableRoutesTest : SharedDbTest() {
 
     @BeforeEach
     fun reset() {
-        ctx.execute("DELETE FROM availability_snapshot")
+        ctx.execute("DELETE FROM availability")
         ctx.execute("DELETE FROM reservable_pois")
         ctx.execute("DELETE FROM reservables")
         ctx.execute("DELETE FROM pois")
@@ -462,7 +462,7 @@ class ReservableRoutesTest : SharedDbTest() {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
-                        AvailabilityCacheStoreImpl(ctx),
+                        AvailabilityRepo(ctx),
                         clock = fixedClock,
                     )
                 }
@@ -498,7 +498,7 @@ class ReservableRoutesTest : SharedDbTest() {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
-                        AvailabilityCacheStoreImpl(ctx),
+                        AvailabilityRepo(ctx),
                         clock = fixedClock,
                     )
                 }
@@ -527,7 +527,7 @@ class ReservableRoutesTest : SharedDbTest() {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
-                        AvailabilityCacheStoreImpl(ctx),
+                        AvailabilityRepo(ctx),
                         clock = fixedClock,
                     )
                 }
@@ -688,7 +688,7 @@ class ReservableRoutesTest : SharedDbTest() {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
-                        AvailabilityCacheStoreImpl(ctx),
+                        AvailabilityRepo(ctx),
                         clock = fixedClock,
                     )
                 }
@@ -719,7 +719,7 @@ class ReservableRoutesTest : SharedDbTest() {
                         CampsiteProviderRepo(ctx),
                         fakeReservationProviders(),
                         ReservableRepo(ctx),
-                        AvailabilityCacheStoreImpl(ctx),
+                        AvailabilityRepo(ctx),
                         clock = fixedClock,
                     )
                 }

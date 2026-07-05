@@ -740,7 +740,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.reservable_id,\n  to_char(s.target_date, 'YYYY-MM-DD') AS target_date,\n  s.status::text AS status\nFROM availability_snapshot s\nWHERE s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.reservable_id, s.target_date;",
+          "rawSql": "SELECT\n  s.reservable_id,\n  to_char(s.target_date, 'YYYY-MM-DD') AS target_date,\n  s.status::text AS status\nFROM availability s\nWHERE s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.reservable_id, s.target_date;",
           "refId": "A"
         }
       ],
@@ -908,7 +908,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.reservable_id,\n  r.name AS reservable_name,\n  s.target_date,\n  s.status::text AS status,\n  s.available,\n  s.observed_at,\n  s.day_payload\nFROM availability_snapshot s\nLEFT JOIN reservables r ON r.id = s.reservable_id\nWHERE s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.reservable_id, s.target_date ASC;",
+          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.reservable_id,\n  r.name AS reservable_name,\n  s.target_date,\n  s.status::text AS status,\n  (s.status = 'available') AS available,\n  s.last_observed_at\nFROM availability s\nLEFT JOIN reservables r ON r.id = s.reservable_id\nWHERE s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.reservable_id, s.target_date ASC;",
           "refId": "A"
         }
       ],

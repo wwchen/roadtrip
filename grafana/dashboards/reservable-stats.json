@@ -187,7 +187,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT count(DISTINCT r.id) AS with_observations FROM scoped r JOIN availability_snapshot s ON s.reservable_id = r.id;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT count(DISTINCT r.id) AS with_observations FROM scoped r JOIN availability s ON s.reservable_id = r.id;",
           "refId": "A"
         }
       ],
@@ -249,7 +249,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT count(s.id) AS snapshots_in_window FROM scoped r JOIN availability_snapshot s ON s.reservable_id = r.id WHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT count(s.id) AS snapshots_in_window FROM scoped r JOIN availability s ON s.reservable_id = r.id WHERE s.last_observed_at >= now() - (${days_back:sqlstring} || ' days')::interval;",
           "refId": "A"
         }
       ],
@@ -332,7 +332,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.source,\n  p.region,\n  count(DISTINCT r.id) AS reservable_count,\n  max(s.observed_at) AS latest_observed_at,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat\nFROM scoped r\nJOIN reservable_pois rp ON rp.reservable_id = r.id\nJOIN pois p ON p.id = rp.poi_id\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE p.deleted_at IS NULL\nGROUP BY p.id\nORDER BY reservable_count DESC, p.name ASC\nLIMIT 2000;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.source,\n  p.region,\n  count(DISTINCT r.id) AS reservable_count,\n  max(s.last_observed_at) AS latest_observed_at,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat\nFROM scoped r\nJOIN reservable_pois rp ON rp.reservable_id = r.id\nJOIN pois p ON p.id = rp.poi_id\nLEFT JOIN availability s ON s.reservable_id = r.id\nWHERE p.deleted_at IS NULL\nGROUP BY p.id\nORDER BY reservable_count DESC, p.name ASC\nLIMIT 2000;",
           "refId": "A"
         }
       ],
@@ -402,7 +402,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  r.vendor,\n  r.type,\n  count(DISTINCT r.id) AS reservables,\n  count(DISTINCT s.reservable_id) AS reservables_with_observations,\n  count(s.id) FILTER (WHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval) AS snapshots_in_window,\n  max(s.observed_at) AS latest_observed_at,\n  now() - max(s.observed_at) AS latest_observation_age\nFROM scoped r\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nGROUP BY r.vendor, r.type\nORDER BY reservables DESC;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  r.vendor,\n  r.type,\n  count(DISTINCT r.id) AS reservables,\n  count(DISTINCT s.reservable_id) AS reservables_with_observations,\n  count(s.id) FILTER (WHERE s.last_observed_at >= now() - (${days_back:sqlstring} || ' days')::interval) AS snapshots_in_window,\n  max(s.last_observed_at) AS latest_observed_at,\n  now() - max(s.last_observed_at) AS latest_observation_age\nFROM scoped r\nLEFT JOIN availability s ON s.reservable_id = r.id\nGROUP BY r.vendor, r.type\nORDER BY reservables DESC;",
           "refId": "A"
         }
       ],
@@ -437,7 +437,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  s.status::text AS status,\n  s.available,\n  count(*) AS snapshots,\n  min(s.observed_at) AS first_observed_at,\n  max(s.observed_at) AS latest_observed_at\nFROM scoped r\nJOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE s.observed_at >= now() - (${days_back:sqlstring} || ' days')::interval\nGROUP BY s.status, s.available\nORDER BY snapshots DESC;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  s.status::text AS status,\n  (s.status = 'available') AS available,\n  count(*) AS snapshots,\n  min(s.last_observed_at) AS first_observed_at,\n  max(s.last_observed_at) AS latest_observed_at\nFROM scoped r\nJOIN availability s ON s.reservable_id = r.id\nWHERE s.last_observed_at >= now() - (${days_back:sqlstring} || ' days')::interval\nGROUP BY s.status\nORDER BY snapshots DESC;",
           "refId": "A"
         }
       ],
@@ -491,7 +491,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.source,\n  p.region,\n  count(DISTINCT r.id) AS reservable_count,\n  count(DISTINCT s.reservable_id) AS reservables_with_observations,\n  max(s.observed_at) AS latest_observed_at\nFROM scoped r\nJOIN reservable_pois rp ON rp.reservable_id = r.id\nJOIN pois p ON p.id = rp.poi_id\nLEFT JOIN availability_snapshot s ON s.reservable_id = r.id\nWHERE p.deleted_at IS NULL\nGROUP BY p.id\nORDER BY reservable_count DESC, p.name ASC\nLIMIT 200;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.*\n  FROM reservables r\n  WHERE r.deleted_at IS NULL\n    AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${vendor:sqlstring}))\n    AND (${source:sqlstring} IN ('', '__all') OR r.source IN (${source:sqlstring}))\n    AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type IN (${site_type:sqlstring}))\n)\nSELECT\n  p.id AS poi_id,\n  p.name,\n  p.category,\n  p.source,\n  p.region,\n  count(DISTINCT r.id) AS reservable_count,\n  count(DISTINCT s.reservable_id) AS reservables_with_observations,\n  max(s.last_observed_at) AS latest_observed_at\nFROM scoped r\nJOIN reservable_pois rp ON rp.reservable_id = r.id\nJOIN pois p ON p.id = rp.poi_id\nLEFT JOIN availability s ON s.reservable_id = r.id\nWHERE p.deleted_at IS NULL\nGROUP BY p.id\nORDER BY reservable_count DESC, p.name ASC\nLIMIT 200;",
           "refId": "A"
         }
       ],
