@@ -9,13 +9,11 @@ interface AvailabilityService {
         rid: ReservableId,
         startDate: LocalDate?,
         endDate: LocalDate?,
-        force: Boolean,
     ): AvailabilityResponseDto
 
     suspend fun getByRids(
         rids: List<ReservableId>,
         startDate: LocalDate?,
         endDate: LocalDate?,
-        force: Boolean,
     ): List<AvailabilityResponseDto>
 }

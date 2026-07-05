@@ -362,7 +362,7 @@ function onRootClick(ctx, e) {
   }
   if (tgt.closest('.cg-refresh')) {
     e.preventDefault();
-    fetchWeek(ctx, { force: true });
+    fetchWeek(ctx);
     return;
   }
   if (tgt.closest('.cg-retry')) {
@@ -667,7 +667,7 @@ function resetWeekViewState(ctx) {
 
 // ---- data -----------------------------------------------------------------
 
-async function fetchWeek(ctx, { force = false } = {}) {
+async function fetchWeek(ctx) {
   const requestSeq = ++ctx.weekRequestSeq;
   ctx.state = 'loading';
   ctx.error = null;
@@ -683,7 +683,6 @@ async function fetchWeek(ctx, { force = false } = {}) {
     const resp = await requestPoiReservablesAvailability(ctx.poiId, {
       startDate,
       endDate,
-      force,
       signal: ctx.signal,
     });
     if (requestSeq !== ctx.weekRequestSeq) return;

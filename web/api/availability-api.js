@@ -12,15 +12,13 @@
  * @param {string}        [opts.startDate] ISO date "YYYY-MM-DD". Default: today (server-side).
  * @param {string}        [opts.endDate]   Exclusive ISO date. Default: startDate + 7 days (server-side).
  * @param {string}        [opts.siteType]  Exact reservable site_type filter.
- * @param {boolean}       [opts.force]     Bust the per-month cache.
  * @param {AbortSignal}   [opts.signal]
  */
-export function requestPoiReservablesAvailability(id, { startDate, endDate, siteType, force, signal } = {}) {
+export function requestPoiReservablesAvailability(id, { startDate, endDate, siteType, signal } = {}) {
   const params = new URLSearchParams();
   if (startDate) params.set('start_date', startDate);
   if (endDate) params.set('end_date', endDate);
   if (siteType) params.set('site_type', siteType);
-  if (force) params.set('force', '1');
   const qs = params.toString();
   return fetch(`/api/poi/${encodeURIComponent(id)}/reservables/availability${qs ? `?${qs}` : ''}`, { signal });
 }

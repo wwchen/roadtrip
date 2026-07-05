@@ -8,7 +8,6 @@ internal interface AvailabilityQueryService {
         poiId: Long,
         startDate: LocalDate?,
         endDate: LocalDate?,
-        force: Boolean,
         siteTypes: List<String>,
     ): PoiReservablesAvailabilityResponseDto
 }

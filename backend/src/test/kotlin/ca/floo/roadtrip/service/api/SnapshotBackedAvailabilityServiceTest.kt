@@ -43,7 +43,7 @@ class SnapshotBackedAvailabilityServiceTest : SharedDbTest() {
 
             val batch =
                 service.loadOrFetch(
-                    request(seen, omitted, startDate, endDate, force = true),
+                    request(seen, omitted, startDate, endDate),
                 ) {
                     fetchedBatch(startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
                 }
@@ -85,7 +85,7 @@ class SnapshotBackedAvailabilityServiceTest : SharedDbTest() {
                 )
 
             // First fetch: 4 cells transition from absent → status, so 4 edge rows.
-            service.loadOrFetch(request(seen, omitted, startDate, endDate, force = true)) {
+            service.loadOrFetch(request(seen, omitted, startDate, endDate)) {
                 fetchedBatch(startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
             }
             assertEquals(4, snapshotRowCount())
@@ -93,7 +93,7 @@ class SnapshotBackedAvailabilityServiceTest : SharedDbTest() {
             // Identical refetch: no status changed, so NO new snapshot rows.
             // (The pre-cube path appended a full cell-set on every call, which is
             // why availability_snapshot grew to millions of rows.)
-            service.loadOrFetch(request(seen, omitted, startDate, endDate, force = true)) {
+            service.loadOrFetch(request(seen, omitted, startDate, endDate)) {
                 fetchedBatch(startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
             }
             assertEquals(4, snapshotRowCount())
@@ -104,7 +104,6 @@ class SnapshotBackedAvailabilityServiceTest : SharedDbTest() {
         omitted: Long,
         startDate: LocalDate,
         endDate: LocalDate,
-        force: Boolean,
     ) = SnapshotBackedAvailabilityService.Request(
         metadata = SnapshotBackedAvailabilityService.Metadata(provider = "recgov", campgroundId = "232447"),
         targets =
@@ -115,7 +114,6 @@ class SnapshotBackedAvailabilityServiceTest : SharedDbTest() {
         startDate = startDate,
         endDate = endDate,
         ttl = Duration.ofMinutes(10),
-        force = force,
     )
 
     private fun fetchedBatch(

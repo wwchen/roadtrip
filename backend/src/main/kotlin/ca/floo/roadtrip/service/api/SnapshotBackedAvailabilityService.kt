@@ -37,7 +37,6 @@ class SnapshotBackedAvailabilityService(
         val startDate: LocalDate,
         val endDate: LocalDate,
         val ttl: Duration,
-        val force: Boolean,
         val runId: Long? = null,
     )
 
@@ -52,11 +51,9 @@ class SnapshotBackedAvailabilityService(
 
         val dates = datesInWindow(request.startDate, request.endDate)
         val dbIds = request.targets.map { it.dbId }
-        if (!request.force) {
-            val latest = cache.loadLatest(dbIds, dates)
-            if (hasFullFreshCoverage(request, dates, latest)) {
-                return batchFromLatest(request, latest, hit = true)
-            }
+        val cached = cache.loadLatest(dbIds, dates)
+        if (hasFullFreshCoverage(request, dates, cached)) {
+            return batchFromLatest(request, cached, hit = true)
         }
 
         val fetched = fetch()
