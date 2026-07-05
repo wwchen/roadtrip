@@ -174,7 +174,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  s.run_id,\n  s.target_date,\n  s.observed_at,\n  s.status,\n  s.available,\n  s.day_payload\nFROM availability_snapshot s\nJOIN reservables r ON r.id = s.reservable_id\nWHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\nORDER BY s.target_date DESC, s.observed_at DESC, s.id DESC\nLIMIT 200;",
+          "rawSql": "SELECT\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  s.run_id,\n  s.target_date,\n  lag(s.last_observed_at) OVER (PARTITION BY s.reservable_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from,\n  s.last_observed_at AS observed_at,\n  s.status,\n  (s.status = 'available') AS available\nFROM availability s\nJOIN reservables r ON r.id = s.reservable_id\nWHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\nORDER BY s.target_date DESC, s.last_observed_at DESC, s.id DESC\nLIMIT 200;",
           "refId": "A"
         }
       ],
@@ -209,7 +209,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  s.run_id,\n  s.target_date,\n  s.observed_at,\n  s.status,\n  s.available,\n  s.day_payload\nFROM availability_snapshot s\nLEFT JOIN reservables r ON r.id = s.reservable_id\nWHERE ${run_id:sqlstring} <> ''\n  AND s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.target_date ASC\nLIMIT 500;",
+          "rawSql": "SELECT\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  s.run_id,\n  s.target_date,\n  lag(s.last_observed_at) OVER (PARTITION BY s.reservable_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from,\n  s.last_observed_at AS observed_at,\n  s.status,\n  (s.status = 'available') AS available\nFROM availability s\nLEFT JOIN reservables r ON r.id = s.reservable_id\nWHERE ${run_id:sqlstring} <> ''\n  AND s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.target_date ASC\nLIMIT 500;",
           "refId": "A"
         }
       ],
@@ -244,7 +244,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT\n    s.target_date,\n    s.observed_at,\n    s.available,\n    lag(s.available) OVER (\n      PARTITION BY s.target_date\n      ORDER BY s.observed_at ASC, s.id ASC\n    ) AS prev_available\n  FROM availability_snapshot s\n  JOIN reservables r ON r.id = s.reservable_id\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\n    AND s.observed_at >= now() - (${window_hours:sqlstring} || ' hours')::interval\n)\nSELECT\n  target_date,\n  count(*) AS total_snapshots,\n  max(observed_at) FILTER (WHERE available) AS last_open_at,\n  (array_agg(available ORDER BY observed_at DESC))[1] AS is_currently_open,\n  count(*) FILTER (\n    WHERE observed_at >= now() - interval '24 hours'\n      AND prev_available = false\n      AND available = true\n  ) AS flips_last_24h\nFROM scoped\nGROUP BY target_date\nORDER BY target_date ASC;",
+          "rawSql": "WITH scoped AS (\n  SELECT\n    s.id,\n    s.target_date,\n    s.last_observed_at,\n    s.status,\n    lag(s.last_observed_at) OVER (\n      PARTITION BY s.target_date\n      ORDER BY s.last_observed_at, s.id\n    ) AS observed_from\n  FROM availability s\n  JOIN reservables r ON r.id = s.reservable_id\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\n    AND s.last_observed_at >= now() - (${window_hours:sqlstring} || ' hours')::interval\n)\nSELECT\n  target_date,\n  count(*) AS total_runs,\n  max(last_observed_at) FILTER (WHERE status = 'available') AS last_open_at,\n  (array_agg((status = 'available') ORDER BY last_observed_at DESC, id DESC))[1] AS is_currently_open,\n  (array_agg(extract(epoch from (last_observed_at - coalesce(observed_from, last_observed_at))) ORDER BY last_observed_at DESC, id DESC) FILTER (WHERE status = 'available'))[1] AS current_or_last_open_window_sec,\n  percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch from (last_observed_at - coalesce(observed_from, last_observed_at)))) FILTER (WHERE status = 'available') AS median_open_window_sec,\n  count(*) FILTER (\n    WHERE status = 'available'\n      AND coalesce(observed_from, last_observed_at) >= now() - interval '24 hours'\n  ) AS opens_last_24h\nFROM scoped\nGROUP BY target_date\nORDER BY target_date ASC;",
           "refId": "A"
         }
       ],
