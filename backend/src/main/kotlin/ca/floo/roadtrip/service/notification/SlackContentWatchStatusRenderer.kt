@@ -59,6 +59,7 @@ object SlackContentWatchStatusRenderer {
                 )
                 add(SlackBlocks.section(truncate(statusLine(notice.state), SECTION_TEXT_MAX)))
                 addAll(linkSections(notice))
+                addAll(WatchControlLinksRenderer.sections(notice.controls))
             }
 
         return fallback(notice, scopePlain(notice), window) to blocks

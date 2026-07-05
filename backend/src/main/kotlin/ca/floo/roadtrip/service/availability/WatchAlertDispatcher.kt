@@ -6,6 +6,7 @@ import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.notification.SlackNotificationService
+import ca.floo.roadtrip.service.notification.WatchControlLinks
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import kotlinx.serialization.json.JsonPrimitive
@@ -20,6 +21,16 @@ const val SLACK_NOTIFY_KIND = "slack_notify"
  *  (`var-poi_id`) for the current availability grid. */
 private const val WATCH_DASHBOARD_UID = "reservable-watch-drill"
 private const val CELL_MATRIX_UID = "availability-cell-matrix"
+
+// Query params the web app's alerts panel reads to focus a watch and arm one of
+// its controls (see web/topbar/alerts.js). A control deep-link opens the panel
+// on the watch; the user confirms with the existing in-app control, so a Slack
+// card never mutates a watch directly.
+private const val ALERT_QUERY_KEY = "alert"
+private const val ALERT_ACTION_QUERY_KEY = "alert_action"
+private const val ALERT_ACTION_PAUSE = "pause"
+private const val ALERT_ACTION_RESUME = "resume"
+private const val ALERT_ACTION_DELETE = "delete"
 
 /**
  * Turns cube edges into Slack alerts. Called once per poller run, after the
@@ -136,7 +147,10 @@ internal class WatchAlertDispatcher(
         reservablesById: Map<Long, Reservable>,
     ) {
         val openings = hydrateOpenings(covered, reservablesById)
-        val fired = slack.sendWatchOpenings(watch.startDate, watch.endDate, openings, watch.channelOverride())
+        // An openings alert fires only for an active watch, so it offers pause +
+        // delete (never resume).
+        val controls = controlLinks(watch.id, canPause = true, canResume = false, canDelete = true)
+        val fired = slack.sendWatchOpenings(watch.startDate, watch.endDate, openings, watch.channelOverride(), controls)
         if (fired && watch.stopWhenTriggered) {
             watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }
@@ -197,6 +211,44 @@ internal class WatchAlertDispatcher(
             endDate = watch.endDate,
             dashboardUrl = grafanaRootUrl?.let { "$it/d/$WATCH_DASHBOARD_UID?var-watch_id=${watch.id}" },
             poiLinks = poiLinks(poiIds),
+            controls = controlsForState(watch.id, state),
+        )
+    }
+
+    /** The pause/resume/delete deep-links a status card offers, keyed off the
+     *  watch's lifecycle [state]: an active watch pauses, a paused one resumes,
+     *  a done one only deletes, and a just-deleted (STOPPED) one offers nothing. */
+    private fun controlsForState(
+        watchId: Long,
+        state: WatchStatusNotice.State,
+    ): WatchControlLinks =
+        when (state) {
+            WatchStatusNotice.State.WATCHING, WatchStatusNotice.State.UNCHECKED ->
+                controlLinks(watchId, canPause = true, canResume = false, canDelete = true)
+            WatchStatusNotice.State.PAUSED ->
+                controlLinks(watchId, canPause = false, canResume = true, canDelete = true)
+            WatchStatusNotice.State.DONE ->
+                controlLinks(watchId, canPause = false, canResume = false, canDelete = true)
+            WatchStatusNotice.State.STOPPED ->
+                WatchControlLinks()
+        }
+
+    /** Builds the applicable control deep-links into the web app's alerts panel.
+     *  Empty when the web app is unconfigured ([appRootUrl] null); the URL scheme
+     *  is the same `?alert=…` panel focus the FE reads (see web/topbar/alerts.js). */
+    private fun controlLinks(
+        watchId: Long,
+        canPause: Boolean,
+        canResume: Boolean,
+        canDelete: Boolean,
+    ): WatchControlLinks {
+        val root = appRootUrl ?: return WatchControlLinks()
+
+        fun url(action: String) = "$root/?$ALERT_QUERY_KEY=$watchId&$ALERT_ACTION_QUERY_KEY=$action"
+        return WatchControlLinks(
+            pauseUrl = if (canPause) url(ALERT_ACTION_PAUSE) else null,
+            resumeUrl = if (canResume) url(ALERT_ACTION_RESUME) else null,
+            deleteUrl = if (canDelete) url(ALERT_ACTION_DELETE) else null,
         )
     }
 

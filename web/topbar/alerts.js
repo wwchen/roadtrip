@@ -10,6 +10,12 @@
 // Self-contained: owns its DOM (#tb-alerts), injects its own tb-* styles,
 // and refreshes on the shared 'watches-changed' event fired whenever a watch
 // is created/removed/paused/resumed anywhere in the app.
+//
+// Slack deep-links: the alert cards link back here with ?alert=<id> (and an
+// optional &alert_action=pause|resume|delete). On load we expand the panel,
+// scroll the watch into view, and pulse the named control so the user finishes
+// the action with one click on the existing in-app button — the app stays the
+// only writer, so a stale or forwarded Slack card can't mutate a watch itself.
 
 import { listWatches, updateWatch, deleteWatch } from '../api/watches-api.js';
 import { fetchPoiDetail } from '../api/poi-api.js';
@@ -17,6 +23,13 @@ import { onWatchesChanged } from '../availability/watch-events.js';
 import { escapeHtml } from '../core.js';
 
 const WATCH_LIST_LIMIT = 200;
+// Slack alert deep-link params — kept in sync with WatchAlertDispatcher on the
+// backend, which builds `<appRoot>/?alert=<id>&alert_action=<action>`.
+const ALERT_PARAM = 'alert';
+const ALERT_ACTION_PARAM = 'alert_action';
+const ALERT_ACTIONS = new Set(['pause', 'resume', 'delete']);
+// How long the focused row + armed control stay highlighted after a deep-link.
+const FOCUS_HIGHLIGHT_MS = 6000;
 // Slack's official 4-color mark, inlined so the alert row stays self-contained
 // (no network fetch — works offline / behind CSP like the rest of the app).
 const SLACK_ICON =
@@ -39,6 +52,11 @@ const poiNameCache = new Map();
 let rootEl = null;
 let expanded = false;
 let watches = [];
+// Transient deep-link focus: the watch to highlight and the control to pulse,
+// cleared after FOCUS_HIGHLIGHT_MS (or on the next unrelated render).
+let focusWatchId = null;
+let focusAction = null;
+let focusTimer = null;
 
 export function initAlerts() {
   rootEl = document.getElementById('tb-alerts');
@@ -46,7 +64,9 @@ export function initAlerts() {
   injectAlertsStyles();
   rootEl.addEventListener('click', onClick);
   onWatchesChanged(refresh);
-  refresh();
+  // Handle a Slack deep-link only after the first load has the watch rows, so
+  // the target row exists to focus.
+  refresh().then(applyAlertDeepLink);
 }
 
 async function refresh() {
@@ -157,15 +177,20 @@ function rowHtml(w) {
   const name = watchName(w);
   const start = w.start_date ?? '';
   const stateClass = w.status === 'paused' ? ' is-paused' : w.status === 'done' ? ' is-done' : '';
+  const focused = String(w.id) === String(focusWatchId);
+  // A Slack deep-link may name an action to "arm" (pulse) on the focused row,
+  // pointing the user at the exact control to click.
+  const armed = focused ? focusAction : null;
+  const delArmed = armed === 'delete' ? ' is-armed' : '';
   return `
-    <div class="tb-alerts-row${stateClass}" role="row" data-poi="${escapeHtml(String(w.poi_id ?? ''))}" data-week="${escapeHtml(start)}">
+    <div class="tb-alerts-row${stateClass}${focused ? ' is-focus' : ''}" role="row" data-id="${escapeHtml(String(w.id))}" data-poi="${escapeHtml(String(w.poi_id ?? ''))}" data-week="${escapeHtml(start)}">
       <span class="tb-alerts-poi" role="cell" title="${escapeHtml(name)}">${escapeHtml(name)}</span>
       <span class="tb-alerts-date" role="cell">${escapeHtml(fmtDate(start))}</span>
       <span class="tb-alerts-trigger" role="cell">${triggerHtml(w)}</span>
       <span class="tb-alerts-checked" role="cell">${checkedHtml(w)}</span>
       <span class="tb-alerts-actions" role="cell">
-        ${actionsHtml(w)}
-        <button type="button" class="tb-alerts-act tb-alerts-del" data-act="delete" data-id="${w.id}" title="Delete" aria-label="Delete watch">🗑</button>
+        ${actionsHtml(w, armed)}
+        <button type="button" class="tb-alerts-act tb-alerts-del${delArmed}" data-act="delete" data-id="${w.id}" title="Delete" aria-label="Delete watch">🗑</button>
       </span>
     </div>
   `;
@@ -173,16 +198,53 @@ function rowHtml(w) {
 
 // Active/paused get an interactive pause/resume toggle. Done watches are
 // terminal — show a static status glyph instead: ✅ when availability was
-// found, ⌛ when the watch window elapsed without a hit.
-function actionsHtml(w) {
+// found, ⌛ when the watch window elapsed without a hit. [armed] pulses the
+// matching control when a Slack deep-link targeted it.
+function actionsHtml(w, armed) {
   if (w.status === 'done') {
     return doneKind(w) === 'expired'
       ? `<span class="tb-alerts-status" title="Watch window ended without availability">⌛</span>`
       : `<span class="tb-alerts-status" title="Availability found">✅</span>`;
   }
   return w.status === 'paused'
-    ? `<button type="button" class="tb-alerts-act" data-act="resume" data-id="${w.id}" title="Resume" aria-label="Resume watch">▶</button>`
-    : `<button type="button" class="tb-alerts-act" data-act="pause" data-id="${w.id}" title="Pause" aria-label="Pause watch">⏸</button>`;
+    ? `<button type="button" class="tb-alerts-act${armed === 'resume' ? ' is-armed' : ''}" data-act="resume" data-id="${w.id}" title="Resume" aria-label="Resume watch">▶</button>`
+    : `<button type="button" class="tb-alerts-act${armed === 'pause' ? ' is-armed' : ''}" data-act="pause" data-id="${w.id}" title="Pause" aria-label="Pause watch">⏸</button>`;
+}
+
+// A Slack alert card links back with ?alert=<id> (+ optional
+// &alert_action=pause|resume|delete). Expand the panel, focus + scroll to the
+// watch, and pulse the named control. We never auto-mutate: the user completes
+// the action with the existing in-app control, so a stale/forwarded card can't
+// change a watch on its own.
+function applyAlertDeepLink() {
+  if (!rootEl) return;
+  const params = new URLSearchParams(window.location.search);
+  const id = params.get(ALERT_PARAM);
+  if (!id) return;
+  const action = params.get(ALERT_ACTION_PARAM);
+  // Strip the params so a manual refresh or back-nav doesn't re-focus.
+  clearAlertDeepLinkParams();
+  focusWatchId = id;
+  focusAction = ALERT_ACTIONS.has(action) ? action : null;
+  expanded = true;
+  render();
+  const row = rootEl.querySelector('.tb-alerts-row.is-focus');
+  if (row) row.scrollIntoView({ block: 'nearest' });
+  // The highlight is a transient cue — drop it (and re-render) after a while.
+  clearTimeout(focusTimer);
+  focusTimer = setTimeout(() => {
+    focusWatchId = null;
+    focusAction = null;
+    render();
+  }, FOCUS_HIGHLIGHT_MS);
+}
+
+function clearAlertDeepLinkParams() {
+  const url = new URL(window.location.href);
+  if (!url.searchParams.has(ALERT_PARAM) && !url.searchParams.has(ALERT_ACTION_PARAM)) return;
+  url.searchParams.delete(ALERT_PARAM);
+  url.searchParams.delete(ALERT_ACTION_PARAM);
+  window.history.replaceState(null, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
 // A watch goes `done` two ways (see WatchAlertDispatcher / AvailabilityPollerRepo.retire):
@@ -339,6 +401,17 @@ function injectAlertsStyles() {
   .tb-alerts-act:hover { background: var(--cg-bg-hover); color: var(--cg-text); }
   .tb-alerts-del:hover { color: var(--cg-error); }
   .tb-alerts-act:disabled { opacity: 0.5; cursor: wait; }
+  /* Deep-link focus: the row a Slack card pointed at, and the control it named. */
+  .tb-alerts-row.is-focus { background: var(--cg-bg-hover); box-shadow: inset 2px 0 0 var(--cg-accent, #4a9eff); }
+  .tb-alerts-act.is-armed { color: var(--cg-text); animation: tb-alerts-pulse 1.2s ease-in-out infinite; }
+  .tb-alerts-del.is-armed { color: var(--cg-error); }
+  @keyframes tb-alerts-pulse {
+    0%, 100% { transform: scale(1); background: var(--cg-bg-hover); }
+    50% { transform: scale(1.18); background: var(--cg-accent, #4a9eff); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tb-alerts-act.is-armed { animation: none; background: var(--cg-bg-hover); }
+  }
   .tb-alerts-status {
     width: 24px; height: 24px;
     display: grid; place-items: center; font-size: 12px;

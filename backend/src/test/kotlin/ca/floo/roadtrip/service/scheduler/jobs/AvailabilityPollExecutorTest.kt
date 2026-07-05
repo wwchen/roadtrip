@@ -26,6 +26,7 @@ import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
+import ca.floo.roadtrip.service.notification.WatchControlLinks
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
@@ -268,8 +269,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             endDate: LocalDate,
             openings: List<WatchOpening>,
             channel: String?,
+            controls: WatchControlLinks?,
         ): Boolean {
-            val (fallback, blocks) = SlackContentAvailabilityRenderer.openings(startDate, endDate, openings)
+            val (fallback, blocks) = SlackContentAvailabilityRenderer.openings(startDate, endDate, openings, controls)
             posts += Post(channel = channel ?: defaultChannel, text = fallback, blocks = blocks)
             return result
         }
@@ -646,6 +648,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertTrue(post.allText.contains("Campsites Available"), post.allText)
             assertTrue(post.allText.contains("Site 100"), post.allText)
             assertTrue(post.allText.contains("https://example.test/book/100"), post.allText)
+            // An active watch's alert offers pause + delete deep-links into the app, never resume.
+            assertTrue(post.allText.contains("$APP_ROOT_URL/?alert=$watchId&alert_action=pause"), post.allText)
+            assertTrue(post.allText.contains("$APP_ROOT_URL/?alert=$watchId&alert_action=delete"), post.allText)
+            assertTrue(!post.allText.contains("alert_action=resume"), post.allText)
         }
 
     @Test
@@ -750,6 +756,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val text = notifier.posts.single().allText
             assertTrue(text.contains("Paused"), text)
             assertTrue(!text.contains("Campsites Available"), text)
+            // A paused watch's status card offers resume + delete, never pause.
+            assertTrue(text.contains("$APP_ROOT_URL/?alert=$watchId&alert_action=resume"), text)
+            assertTrue(text.contains("$APP_ROOT_URL/?alert=$watchId&alert_action=delete"), text)
+            assertTrue(!text.contains("alert_action=pause"), text)
         }
 
     @Test
