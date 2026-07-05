@@ -2,6 +2,7 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.models.api.AvailabilityResponseDto
+import ca.floo.roadtrip.models.availability.AvailabilityWindows
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -53,22 +54,24 @@ internal class ReservableAvailabilityComposer(
             batcher.fetchByGroup(
                 targets = resolved,
                 windowFor = { context, caps ->
-                    dateResolver.resolveWindow(
-                        startDate = startDate,
-                        endDate = endDate,
-                        context = context,
-                        bookingHorizonDays = caps.bookingHorizonDays,
-                        maxDays = MAX_AVAILABILITY_DAYS,
-                        defaultDays = DEFAULT_AVAILABILITY_DAYS,
-                    )
+                    val w =
+                        dateResolver.resolveWindow(
+                            startDate = startDate,
+                            endDate = endDate,
+                            context = context,
+                            bookingHorizonDays = caps.bookingHorizonDays,
+                            maxDays = MAX_AVAILABILITY_DAYS,
+                            defaultDays = DEFAULT_AVAILABILITY_DAYS,
+                        )
+                    AvailabilityWindows(target = w, fetch = w)
                 },
-                fetch = { parentRef, provider, rows, window ->
+                fetch = { parentRef, provider, rows, windows ->
                     availabilityLoader.loadOrFetch(
                         AvailabilityLoader.Request(
                             metadata = availabilityMetadata(provider.id, parentRef),
                             targets = rows.map { it.toAvailabilityTarget() },
-                            startDate = window.startDate,
-                            endDate = window.endDate,
+                            startDate = windows.target.startDate,
+                            endDate = windows.target.endDate,
                             ttl = snapshotFreshnessTtl(provider.id),
                         ),
                     ) {
@@ -76,8 +79,8 @@ internal class ReservableAvailabilityComposer(
                             CatalogAvailabilityRequest(
                                 ref = parentRef,
                                 reservables = rows.map { it.toCatalogReservableRef() },
-                                startDate = window.startDate,
-                                endDate = window.endDate,
+                                startDate = windows.fetch.startDate,
+                                endDate = windows.fetch.endDate,
                             ),
                         )
                     }

@@ -131,12 +131,17 @@ internal class AvailabilityPollExecutor(
         val windowFor: (
             ca.floo.roadtrip.models.availability.PoiDateContext,
             ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities,
-        ) -> ca.floo.roadtrip.models.availability.ResolvedDateWindow? = { context, caps ->
-            dateResolver.resolvePollingWindow(
-                context = context,
-                maxPollWindowDays = caps.maxPollWindowDays,
-                bookingHorizonDays = caps.bookingHorizonDays,
-            )
+        ) -> ca.floo.roadtrip.models.availability.AvailabilityWindows? = { context, caps ->
+            val resolvedWindow =
+                dateResolver.resolvePollingWindow(
+                    context = context,
+                    maxPollWindowDays = caps.maxPollWindowDays,
+                    bookingHorizonDays = caps.bookingHorizonDays,
+                )
+            resolvedWindow?.let {
+                ca.floo.roadtrip.models.availability
+                    .AvailabilityWindows(target = it, fetch = it)
+            }
         }
 
         // Vendor governor: acquire one token per (provider, parentRef, dateContext)
@@ -171,13 +176,13 @@ internal class AvailabilityPollExecutor(
                     batcher.fetchByGroup(
                         targets = resolved,
                         windowFor = windowFor,
-                        fetch = { parentRef, provider, rows, window ->
+                        fetch = { parentRef, provider, rows, windows ->
                             provider.catalogAvailability(
                                 CatalogAvailabilityRequest(
                                     ref = parentRef,
                                     reservables = rows.map { it.toCatalogReservableRef() },
-                                    startDate = window.startDate,
-                                    endDate = window.endDate,
+                                    startDate = windows.fetch.startDate,
+                                    endDate = windows.fetch.endDate,
                                     force = true,
                                 ),
                             )
