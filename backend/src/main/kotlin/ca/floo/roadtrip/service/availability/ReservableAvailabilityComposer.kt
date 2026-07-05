@@ -5,7 +5,7 @@ import ca.floo.roadtrip.models.api.AvailabilityResponseDto
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityRepo
-import ca.floo.roadtrip.service.api.CachedAvailabilityService
+import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
@@ -26,10 +26,11 @@ private const val DEFAULT_AVAILABILITY_DAYS: Int = 7
  *
  * Each reservable is resolved to its provider target, upstream calls are grouped
  * via [CatalogAvailabilityBatcher] (N reservables under one campground → one
- * upstream call), the snapshot cache is read/written, and each reservable's
- * observations map to an [AvailabilityResponseDto] in input order.
+ * upstream call), the [AvailabilityLoader] serves stored observations or goes
+ * live, and each reservable's observations map to an [AvailabilityResponseDto]
+ * in input order.
  *
- * [AvailabilityQueryServiceImpl] owns this composer.
+ * [AvailabilityServiceImpl] owns this composer.
  */
 internal class ReservableAvailabilityComposer(
     private val targets: AvailabilityTargetResolver,
@@ -37,7 +38,7 @@ internal class ReservableAvailabilityComposer(
     availability: AvailabilityRepo? = null,
     private val snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
 ) {
-    private val cachedAvailability = CachedAvailabilityService(availability)
+    private val availabilityLoader = AvailabilityLoader(availability)
 
     suspend fun availabilityFor(
         reservables: List<Reservable>,
@@ -62,8 +63,8 @@ internal class ReservableAvailabilityComposer(
                     )
                 },
                 fetch = { parentRef, provider, rows, window ->
-                    cachedAvailability.loadOrFetch(
-                        CachedAvailabilityService.Request(
+                    availabilityLoader.loadOrFetch(
+                        AvailabilityLoader.Request(
                             metadata = availabilityMetadata(provider.id, parentRef),
                             targets = rows.map { it.toAvailabilityTarget() },
                             startDate = window.startDate,
@@ -120,8 +121,8 @@ internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Dur
         ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
     }
 
-private fun Reservable.toAvailabilityTarget(): CachedAvailabilityService.TargetReservable =
-    CachedAvailabilityService.TargetReservable(
+private fun Reservable.toAvailabilityTarget(): AvailabilityLoader.TargetReservable =
+    AvailabilityLoader.TargetReservable(
         dbId = id,
         rid = rid.encode(),
     )
@@ -130,8 +131,8 @@ private fun availabilityMetadata(
     providerId: ReservationProviderId,
     ref: ProviderRef,
     reservableId: String? = null,
-): CachedAvailabilityService.Metadata =
-    CachedAvailabilityService.Metadata(
+): AvailabilityLoader.Metadata =
+    AvailabilityLoader.Metadata(
         provider = providerId.name.lowercase(),
         campgroundId = (ref as? ProviderRef.RecGov)?.recgovId,
         mapId =

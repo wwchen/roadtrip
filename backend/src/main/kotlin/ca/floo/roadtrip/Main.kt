@@ -34,7 +34,7 @@ import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
-import ca.floo.roadtrip.service.availability.AvailabilityQueryServiceImpl
+import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
@@ -230,8 +230,8 @@ fun Application.module() {
             availability = availability,
             snapshotFreshnessTtl = availabilitySnapshotFreshnessTtl,
         )
-    val availabilityQueryService =
-        AvailabilityQueryServiceImpl(
+    val availabilityService =
+        AvailabilityServiceImpl(
             providerRefs = campsiteProviders,
             reservablesRepo = reservablesRepo,
             composer = reservableAvailabilityComposer,
@@ -331,7 +331,7 @@ fun Application.module() {
         geocodeRoutes(mapboxGeocoder)
         healthRoutes()
         availabilityRoutes(
-            routeService = availabilityQueryService,
+            routeService = availabilityService,
         )
         adminIngestRoutes(ingestController, ctx)
         // Static site. /web/* and /data/* serve directly from the repo
