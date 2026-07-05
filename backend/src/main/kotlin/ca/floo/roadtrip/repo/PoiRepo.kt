@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.db.generated.tables.ImportRuns.Companion.IMPORT_RUNS
 import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
 import ca.floo.roadtrip.models.domain.Address
 import ca.floo.roadtrip.models.domain.Poi
@@ -47,6 +46,7 @@ class Upsert(
     private val ctx: DSLContext,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
+    private val importRuns = ImportRunRepo(ctx)
 
     data class Result(
         val runId: Long,
@@ -65,19 +65,10 @@ class Upsert(
     ): Result {
         require(sources.isNotEmpty()) { "must specify at least one source for sweep scope" }
 
-        val now = OffsetDateTime.now(ZoneOffset.UTC)
         // Use the sorted source list as the import_runs.source label.
         // Sweep scope is `sources` (multi-source merges share one run).
         val runLabel = sources.sorted().joinToString(",")
-        val runId =
-            ctx
-                .insertInto(IMPORT_RUNS)
-                .set(IMPORT_RUNS.SOURCE, runLabel)
-                .set(IMPORT_RUNS.STATUS, "started")
-                .set(IMPORT_RUNS.STARTED_AT, now)
-                .returningResult(IMPORT_RUNS.ID)
-                .fetchOne()!!
-                .value1()!!
+        val runId = importRuns.start(runLabel)
         log.info("import_runs id={} sources={} started", runId, runLabel)
 
         try {
@@ -107,13 +98,7 @@ class Upsert(
             val swept = sweep(sources, runId)
             log.info("swept {} rows (soft-deleted) from sources={}", swept, runLabel)
 
-            ctx
-                .update(IMPORT_RUNS)
-                .set(IMPORT_RUNS.STATUS, "completed")
-                .set(IMPORT_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-                .set(IMPORT_RUNS.SEEN_COUNT, seen)
-                .where(IMPORT_RUNS.ID.eq(runId))
-                .execute()
+            importRuns.complete(runId, seen)
 
             return Result(runId, seen, swept)
         } catch (e: Exception) {
@@ -209,15 +194,7 @@ class Upsert(
     private fun fail(
         runId: Long,
         notes: String,
-    ) {
-        ctx
-            .update(IMPORT_RUNS)
-            .set(IMPORT_RUNS.STATUS, "failed")
-            .set(IMPORT_RUNS.COMPLETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .set(IMPORT_RUNS.NOTES, notes)
-            .where(IMPORT_RUNS.ID.eq(runId))
-            .execute()
-    }
+    ) = importRuns.fail(runId, notes)
 
     /** provider_ref JSONB. Only Campground variants carry it; null otherwise. */
     private fun providerRefJsonFor(poi: Poi): JSONB? =
