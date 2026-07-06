@@ -1,9 +1,24 @@
 <configuration>
     <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
         <!-- JSON lines so Alloy/Loki can parse fields (incl. MDC run_id) with `| json`.
+             LogstashEncoder emits the FULLY FORMATTED message (SLF4J `{}`
+             placeholders interpolated) — unlike Logback's built-in JsonEncoder,
+             which logged the raw pattern plus a separate `arguments` array and
+             left "Poller: GET availability {}/{}" in the Logs/Search dashboard.
+             Field names are pinned to the shape that dashboard's `| json` queries
+             read: `level`, `loggerName`, and `mdc` as a nested object.
              Trades away human-friendly local `docker logs`/Tilt output; an
              env-conditional dev-vs-prod encoder is a possible follow-up. -->
-        <encoder class="ch.qos.logback.classic.encoder.JsonEncoder"/>
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder">
+            <fieldNames>
+                <timestamp>timestamp</timestamp>
+                <logger>loggerName</logger>
+                <thread>threadName</thread>
+                <mdc>mdc</mdc>
+                <version>[ignore]</version>
+                <levelValue>[ignore]</levelValue>
+            </fieldNames>
+        </encoder>
     </appender>
     <root level="INFO">
         <appender-ref ref="STDOUT"/>

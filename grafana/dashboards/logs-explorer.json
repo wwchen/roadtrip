@@ -320,7 +320,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | loggerName=~\"$logger\" |~ \"$search\" [$__auto]))",
+          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | level!=\"\" | loggerName=~\"$logger\" |~ \"$search\" [$__auto]))",
           "legendFormat": "{{level}}",
           "queryType": "range",
           "refId": "A"
@@ -470,7 +470,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | loggerName=~\"$logger\" |~ \"$search\" [$__range]))",
+          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | level!=\"\" | loggerName=~\"$logger\" |~ \"$search\" [$__range]))",
           "instant": true,
           "format": "table",
           "queryType": "instant",
