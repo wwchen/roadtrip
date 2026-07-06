@@ -118,7 +118,7 @@ class AspiraJoinByNameEtl(
                 inventory = dto.inventoryEnvelopes,
                 dictionaryPayload = dto.dictionaryPayload,
             )
-        val bookingCtaRefsByResourceLocationId = canonicalBookingCtaRefs(dto.inventoryEnvelopes)
+        val bookingCtaRefsByResourceLocationId = canonicalBookingCtaRefs(dto.inventoryEnvelopes, dto.dictionaryPayload)
 
         // Build one merged name index: normalized name → first (lat, lon).
         // Geometry entries are walked in declared order, so the YAML's
@@ -293,12 +293,17 @@ class AspiraJoinByNameEtl(
             ),
         )
 
-    private fun canonicalBookingCtaRefs(inventory: List<ca.floo.roadtrip.models.metadata.Envelope>): Map<Long, AspiraBookingCtaRef> {
+    private fun canonicalBookingCtaRefs(
+        inventory: List<ca.floo.roadtrip.models.metadata.Envelope>,
+        dictionaryPayload: JsonObject?,
+    ): Map<Long, AspiraBookingCtaRef> {
+        val bookableByCategoryId = AspiraInventoryCategories.bookableFlagByCategoryId(dictionaryPayload)
         val refs = mutableMapOf<Long, AspiraBookingCtaRef>()
         for (envelope in inventory) {
             val payload = envelope.payload as? JsonObject ?: continue
             for ((_, raw) in payload) {
                 val obj = raw as? JsonObject ?: continue
+                if (!AspiraInventoryCategories.isBookableResource(obj, bookableByCategoryId)) continue
                 val resourceLocationId = obj.longValue("resourceLocationId") ?: continue
                 val mapId = obj.mapIds().minOrNull() ?: continue
                 val current = refs[resourceLocationId]

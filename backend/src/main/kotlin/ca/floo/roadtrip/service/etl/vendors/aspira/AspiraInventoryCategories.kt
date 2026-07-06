@@ -58,9 +58,7 @@ object AspiraInventoryCategories {
             for ((_, raw) in payload) {
                 val obj = raw as? JsonObject ?: continue
                 val resLoc = obj["resourceLocationId"]?.jsonPrimitive?.contentOrNull?.toLongOrNull() ?: continue
-                val categoryId = obj["resourceCategoryId"]?.jsonPrimitive?.intOrNull
-                val bookable = categoryId?.let { bookableByCategoryId[it] } ?: true
-                flagsByResLoc.getOrPut(resLoc) { mutableListOf() }.add(bookable)
+                flagsByResLoc.getOrPut(resLoc) { mutableListOf() }.add(isBookableResource(obj, bookableByCategoryId))
             }
         }
 
@@ -74,7 +72,7 @@ object AspiraInventoryCategories {
      * `showResourceCapacityOnline`. Missing flag defaults to bookable (`true`)
      * so an under-specified dictionary never drops sites.
      */
-    private fun bookableFlagByCategoryId(dictionaryPayload: JsonObject?): Map<Int, Boolean> {
+    fun bookableFlagByCategoryId(dictionaryPayload: JsonObject?): Map<Int, Boolean> {
         val categories =
             dictionaryPayload
                 ?.get("resource_categories") as? JsonArray
@@ -86,5 +84,14 @@ object AspiraInventoryCategories {
             out[id] = category["showResourceCapacityOnline"]?.jsonPrimitive?.booleanOrNull ?: true
         }
         return out
+    }
+
+    fun isBookableResource(
+        resource: JsonObject,
+        bookableByCategoryId: Map<Int, Boolean>,
+    ): Boolean {
+        if (bookableByCategoryId.isEmpty()) return true
+        val categoryId = resource["resourceCategoryId"]?.jsonPrimitive?.intOrNull
+        return categoryId?.let { bookableByCategoryId[it] } ?: true
     }
 }
