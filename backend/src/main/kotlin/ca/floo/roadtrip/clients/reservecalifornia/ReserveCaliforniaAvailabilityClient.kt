@@ -13,6 +13,7 @@ import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 import kotlinx.serialization.json.put
+import org.slf4j.LoggerFactory
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
@@ -21,7 +22,7 @@ import java.time.Duration
 import java.time.Instant
 import java.time.LocalDate
 
-interface ReserveCaliforniaAvailabilityClient {
+interface ReserveCaliforniaAvailabilityClient : AutoCloseable {
     suspend fun fetchGrid(
         facilityId: Long,
         startDate: LocalDate,
@@ -29,12 +30,16 @@ interface ReserveCaliforniaAvailabilityClient {
         minDate: LocalDate,
         maxDate: LocalDate,
     ): ReserveCaliforniaGridAvailability
+
+    override fun close() {}
 }
 
 class HttpReserveCaliforniaAvailabilityClient(
     private val rdrBaseUrl: String = "https://california-rdr.prod.cali.rd12.recreation-management.tylerapp.com/rdr",
     private val client: HttpClient = defaultClient(),
 ) : ReserveCaliforniaAvailabilityClient {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     override suspend fun fetchGrid(
         facilityId: Long,
         startDate: LocalDate,
@@ -89,6 +94,7 @@ class HttpReserveCaliforniaAvailabilityClient(
                 .header("tenantId", TENANT_ID)
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build()
+        log.info("reservecalifornia POST {}", url)
         val resp =
             try {
                 client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()

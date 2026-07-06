@@ -4,7 +4,9 @@ import ca.floo.roadtrip.clients.aspira.HttpAspiraAvailabilityClient
 import ca.floo.roadtrip.clients.cache.RouteCache
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
-import ca.floo.roadtrip.clients.recgov.HttpAvailabilityClient
+import ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient
+import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.http.cacheOptionsFor
@@ -51,6 +53,7 @@ import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
+import ca.floo.roadtrip.service.reservation.ReservationProviderClients
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
 import ca.floo.roadtrip.service.scheduler.PollerBackfill
@@ -98,9 +101,13 @@ fun Application.module() {
     // bootstrapped DB or a fresh database.
     migrate(ds)
     val ctx = dsl(ds)
-    val persistentCache = ApiCacheRepo(ctx)
-    val recgovAvailabilityClient = HttpAvailabilityClient()
-    val recgovAvailabilityTtl = appConfig.cache.ttlFor(ApiCacheEntity.RECGOV_AVAILABILITY)
+    val reservationProviderClients =
+        ReservationProviderClients(
+            recgovClient = HttpRecgovAvailabilityClient(),
+            aspiraClient = HttpAspiraAvailabilityClient(),
+            reserveAmericaClient = HttpReserveAmericaAvailabilityClient(),
+            reserveCaliforniaClient = HttpReserveCaliforniaAvailabilityClient(),
+        )
 
     // ROADTRIP_STATIC_DIR points at the repo checkout when running locally
     // (gradle run) or at /app/static inside the container (bind-mounted from
@@ -112,24 +119,22 @@ fun Application.module() {
     // browser. Endpoints respond 503 if unset; the rest of the app is
     // unaffected.
     val mapboxToken = System.getenv("MAPBOX_TOKEN")
-    val mapboxDirections = MapboxDirections(token = mapboxToken)
     val mapboxGeocoder = MapboxGeocoder(token = mapboxToken)
     // /api/route seeds the cache; /api/pois/on-route reads it for corridor
     // filtering so the FE doesn't have to ship a turf.buffer polygon over
     // the wire. See RouteCache.kt.
     val routeCache =
         RouteCache(
-            mapboxDirections,
+            MapboxDirections(token = mapboxToken),
             ttl = appConfig.cache.ttlFor(ApiCacheEntity.ROUTE),
-            persistentCache = persistentCache,
+            persistentCache = ApiCacheRepo(ctx),
         )
 
     // POI registry — config/poi-registry.yaml is the source of truth for
     // the per-data_source fetch recipes and the per-poi_data ETL chains.
     // Validates + topo-sorts the DAG at boot; refuses to start on duplicate
     // slugs, dangling inputs, forward references, or cycles.
-    val registryFile = File(staticDir, "config/poi-registry.yaml")
-    val poiRegistry = PoiRegistry.load(registryFile)
+    val poiRegistry = PoiRegistry.load(File(staticDir, "config/poi-registry.yaml"))
 
     // Ingestion controller (RFC 0004 / issue #44) — observability + remote
     // trigger layer around the data-fetch (Python scripts) + data-import
@@ -184,23 +189,14 @@ fun Application.module() {
         }
     }
 
-    // Aspira NextGen availability (Parks Canada / WA State / BC Discover Camping).
-    // Process-wide singleton; the client owns the 1.5s mutex against Aspira's
-    // Azure WAF. See ca/floo/roadtrip/aspira/AspiraAvailabilityClient.kt.
-    val aspiraClient = HttpAspiraAvailabilityClient()
-    val aspiraAvailabilityTtl = appConfig.cache.ttlFor(ApiCacheEntity.ASPIRA_AVAILABILITY)
-    val reserveAmericaAvailabilityTtl =
-        appConfig.cache.ttlFor(ApiCacheEntity.RESERVEAMERICA_AVAILABILITY)
-    val reserveCaliforniaAvailabilityTtl =
-        appConfig.cache.ttlFor(ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY)
     // Reservation-provider port registry: one adapter per upstream reservation
-    // system, dispatched by `pois.source`. Routes consume the registry; they
-    // never see vendor types. See docs/reservation-providers.md.
+    // system, dispatched by `pois.source`. Main owns outbound HTTP client
+    // construction; the factory owns registry-source -> adapter mapping. Routes
+    // consume the registry and never see vendor types. See docs/reservation-providers.md.
     val reservationProviderRegistry =
         ReservationProviderRegistryFactory.build(
             registry = poiRegistry,
-            recgovClient = recgovAvailabilityClient,
-            aspiraClient = aspiraClient,
+            clients = reservationProviderClients,
         )
 
     val reservablesRepo = ReservableRepo(ctx)
@@ -215,26 +211,26 @@ fun Application.module() {
             reservationProviders = reservationProviderRegistry,
             dateResolver = availabilityDateResolver,
         )
-    val availabilitySnapshotFreshnessTtl: (ReservationProviderId) -> java.time.Duration = { providerId ->
-        when (providerId) {
-            ReservationProviderId.RECGOV -> recgovAvailabilityTtl
-            ReservationProviderId.ASPIRA -> aspiraAvailabilityTtl
-            ReservationProviderId.RESERVEAMERICA -> reserveAmericaAvailabilityTtl
-            ReservationProviderId.RESERVECALIFORNIA -> reserveCaliforniaAvailabilityTtl
-        }
-    }
-    val reservableAvailabilityComposer =
-        ReservableAvailabilityComposer(
-            targets = availabilityTargets,
-            dateResolver = availabilityDateResolver,
-            availability = availability,
-            snapshotFreshnessTtl = availabilitySnapshotFreshnessTtl,
-        )
     val availabilityService =
         AvailabilityServiceImpl(
             providerRefs = campsiteProviders,
             reservablesRepo = reservablesRepo,
-            composer = reservableAvailabilityComposer,
+            composer =
+                ReservableAvailabilityComposer(
+                    targets = availabilityTargets,
+                    dateResolver = availabilityDateResolver,
+                    availability = availability,
+                    snapshotFreshnessTtl = { providerId ->
+                        appConfig.cache.ttlFor(
+                            when (providerId) {
+                                ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY
+                                ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY
+                                ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY
+                                ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY
+                            },
+                        )
+                    },
+                ),
             dateResolver = availabilityDateResolver,
         )
     val availabilityWatchService = AvailabilityWatchService(ctx, reservablesRepo, availabilityTargets)
@@ -245,15 +241,13 @@ fun Application.module() {
     // rows. Cancelled on app shutdown so tests don't leak threads.
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     val availabilityPollers = AvailabilityPollerRepo(ctx)
-    val pollerMembership = AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), availabilityTargets)
     // Boot backfill: link any active watch left without poller membership by
     // the V28 cutover. Idempotent — a no-op once everything is linked. Runs
     // after Flyway (migrate(ds), above) and before the scheduler starts.
-    PollerBackfill(ctx, pollerMembership).run()
+    PollerBackfill(ctx, AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), availabilityTargets)).run()
     // Durable, Postgres-backed per-vendor fetch governor. Per-vendor bucket
     // capacity/refill come from the env (ROADTRIP_VENDOR_RATELIMIT_*), defaulting
     // to a conservative code-level bucket for unconfigured vendors.
-    val vendorRateLimiter = VendorRateLimiter(VendorRateLimitConfig.fromEnv(), ds)
     val slackNotifications = SlackNotificationServiceImpl(appConfig.slack)
     val watchAlertDispatcher =
         WatchAlertDispatcher(
@@ -266,26 +260,23 @@ fun Application.module() {
             grafanaRootUrl = appConfig.grafana?.rootUrl,
             appRootUrl = appConfig.webApp?.rootUrl,
         )
-    val pollExecutor =
-        AvailabilityPollExecutor(
-            pollers = availabilityPollers,
-            reservablesRepo = reservablesRepo,
-            batcher = CatalogAvailabilityBatcher(),
-            availability = availability,
-            runs = AvailabilityRunRepo(ctx),
-            dateResolver = availabilityDateResolver,
-            targets = availabilityTargets,
-            fetchCalls = AvailabilityFetchCallRepo(ctx),
-            limiter = vendorRateLimiter,
-            alertDispatcher = watchAlertDispatcher,
-        )
-    val availabilityScheduler =
-        Scheduler(
-            repo = availabilityPollers,
-            handler = pollExecutor::handle,
-            name = "availability",
-        )
-    availabilityScheduler.start(schedulerScope)
+    Scheduler(
+        repo = availabilityPollers,
+        handler =
+            AvailabilityPollExecutor(
+                pollers = availabilityPollers,
+                reservablesRepo = reservablesRepo,
+                batcher = CatalogAvailabilityBatcher(),
+                availability = availability,
+                runs = AvailabilityRunRepo(ctx),
+                dateResolver = availabilityDateResolver,
+                targets = availabilityTargets,
+                fetchCalls = AvailabilityFetchCallRepo(ctx),
+                limiter = VendorRateLimiter(VendorRateLimitConfig.fromEnv(), ds),
+                alertDispatcher = watchAlertDispatcher,
+            )::handle,
+        name = "availability",
+    ).start(schedulerScope)
     // Elapsed-watch teardown runs on its own cadence, not on the poll tick:
     // marks elapsed watches done, drops their poller links, deactivates
     // orphaned pollers. Reads are correct without it (liveness is derived); it
@@ -293,7 +284,7 @@ fun Application.module() {
     WatchReaper(availabilityPollers).start(schedulerScope)
     environment.monitor.subscribe(ApplicationStopping) {
         schedulerScope.cancel()
-        recgovAvailabilityClient.close()
+        reservationProviderClients.close()
         slackNotifications.close()
     }
 

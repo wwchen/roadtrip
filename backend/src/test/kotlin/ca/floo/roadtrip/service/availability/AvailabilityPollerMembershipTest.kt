@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
@@ -143,9 +144,10 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         override val capabilities: ReservationProviderCapabilities = ReservationProviderCapabilities.UNSUPPORTED
 
         override suspend fun availability(
-            req: ca.floo.roadtrip.service.reservation.AvailabilityRequest,
-        ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch =
-            throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
     }
 
     private val fakeDateContext = PoiDateContext(timeZone = ZoneId.of("UTC"), earliestDate = LocalDate.now())

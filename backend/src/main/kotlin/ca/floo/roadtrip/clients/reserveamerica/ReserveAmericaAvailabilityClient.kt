@@ -4,6 +4,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import org.slf4j.LoggerFactory
 import java.net.CookieManager
 import java.net.CookiePolicy
 import java.net.URI
@@ -18,35 +19,39 @@ import java.time.LocalDate
 import java.time.format.DateTimeFormatter
 import java.util.Locale
 
-fun interface ReserveAmericaAvailabilityClient {
+fun interface ReserveAmericaAvailabilityClient : AutoCloseable {
     suspend fun fetch(
+        host: String,
         contractCode: String,
         parkId: String,
         startDate: LocalDate,
         endDate: LocalDate,
     ): ReserveAmericaAvailability
+
+    override fun close() {}
 }
 
 class HttpReserveAmericaAvailabilityClient(
-    private val host: String,
     private val client: HttpClient = defaultClient(),
 ) : ReserveAmericaAvailabilityClient {
+    private val log = LoggerFactory.getLogger(javaClass)
     private val sessionMutex = Mutex()
-    private var sessionPrimed = false
+    private val primedHosts = mutableSetOf<String>()
 
     override suspend fun fetch(
+        host: String,
         contractCode: String,
         parkId: String,
         startDate: LocalDate,
         endDate: LocalDate,
     ): ReserveAmericaAvailability {
-        primeSession()
+        primeSession(host)
         val observedAt = Instant.now()
         val statuses = linkedMapOf<String, MutableMap<LocalDate, AvailabilityStatus>>()
         var cursor = startDate
         while (cursor.isBefore(endDate)) {
             val pageEnd = minOf(cursor.plusDays(MATRIX_DAYS.toLong()), endDate)
-            fetchWindow(contractCode, parkId, cursor, pageEnd, statuses)
+            fetchWindow(host, contractCode, parkId, cursor, pageEnd, statuses)
             cursor = pageEnd
         }
         return ReserveAmericaAvailability(
@@ -60,6 +65,7 @@ class HttpReserveAmericaAvailabilityClient(
     }
 
     private suspend fun fetchWindow(
+        host: String,
         contractCode: String,
         parkId: String,
         startDate: LocalDate,
@@ -69,7 +75,7 @@ class HttpReserveAmericaAvailabilityClient(
         var startIdx = 0
         var totalSites: Int? = null
         while (totalSites == null || startIdx < totalSites) {
-            val html = get(matrixUrl(contractCode, parkId, startDate, startIdx))
+            val html = get(host, matrixUrl(host, contractCode, parkId, startDate, startIdx))
             val page = ReserveAmericaAvailabilityParser.parse(html, startDate, endDate)
             merge(out, page.statuses)
             if (totalSites == null) {
@@ -90,16 +96,18 @@ class HttpReserveAmericaAvailabilityClient(
         }
     }
 
-    private suspend fun primeSession() {
-        if (sessionPrimed) return
+    private suspend fun primeSession(host: String) {
         sessionMutex.withLock {
-            if (sessionPrimed) return@withLock
-            get("https://$host/welcome.do")
-            sessionPrimed = true
+            if (host in primedHosts) return@withLock
+            get(host, "https://$host/welcome.do")
+            primedHosts += host
         }
     }
 
-    private suspend fun get(url: String): String {
+    private suspend fun get(
+        host: String,
+        url: String,
+    ): String {
         val req =
             HttpRequest
                 .newBuilder(URI.create(url))
@@ -110,6 +118,7 @@ class HttpReserveAmericaAvailabilityClient(
                 .header("Referer", "https://$host/")
                 .GET()
                 .build()
+        log.info("reserveamerica GET host={} url={}", host, url)
         val resp =
             try {
                 client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
@@ -123,6 +132,7 @@ class HttpReserveAmericaAvailabilityClient(
     }
 
     private fun matrixUrl(
+        host: String,
         contractCode: String,
         parkId: String,
         startDate: LocalDate,

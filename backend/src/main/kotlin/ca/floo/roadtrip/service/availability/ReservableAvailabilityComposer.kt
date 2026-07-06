@@ -8,7 +8,6 @@ import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -84,12 +83,10 @@ internal class ReservableAvailabilityComposer(
                         ),
                     ) {
                         provider.catalogAvailability(
-                            CatalogAvailabilityRequest(
-                                ref = parentRef,
-                                reservables = rows.map { it.toCatalogReservableRef() },
-                                startDate = windows.fetch.startDate,
-                                endDate = windows.fetch.endDate,
-                            ),
+                            ref = parentRef,
+                            reservables = rows.map { it.toCatalogReservableRef() },
+                            startDate = windows.fetch.startDate,
+                            endDate = windows.fetch.endDate,
                         )
                     }
                 },

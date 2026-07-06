@@ -499,9 +499,9 @@ class AvailabilityPollerRepo(
      * two concurrent callers race in Postgres, not in the JVM — exactly one
      * wins the UPDATE. The scheduler's normal claim loop picks the poller up on
      * its next tick like any other due poller; there is no force-specific
-     * fetch path (PR1 already fetches with `force = true` unconditionally, and
-     * PR4's governor still gates every fetch — force pull draws tokens, no
-     * bypass).
+     * fetch path. The provider adapter is only called when the poller has
+     * already decided to fetch, and the governor still gates every fetch — force
+     * pull draws tokens, no bypass.
      *
      * Returns [ForcePullResult.Accepted] with the new `next_run_at`,
      * [ForcePullResult.Cooldown] with the remaining wait when still cooling

@@ -8,10 +8,8 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.AvailabilityClient
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
-import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
@@ -28,7 +26,8 @@ import java.time.temporal.ChronoUnit
 class ReserveCaliforniaReservationProvider(
     private val client: ReserveCaliforniaAvailabilityClient,
     private val clock: Clock = Clock.systemUTC(),
-) : ReservationProvider {
+) : ReservationProvider,
+    AvailabilityClient {
     override val id: ReservationProviderId = ReservationProviderId.RESERVECALIFORNIA
 
     override val capabilities: ReservationProviderCapabilities =
@@ -39,10 +38,14 @@ class ReserveCaliforniaReservationProvider(
             maxPollWindowDays = MAX_POLL_WINDOW_DAYS,
         )
 
-    override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
-        val ref = reserveCaliforniaRefOrThrow(req.ref)
-        val grids = fetchFacilities(ref, req.startDate, req.endDate)
-        val dates = dates(req.startDate, req.endDate)
+    override suspend fun availability(
+        ref: ProviderRef,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch {
+        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(ref)
+        val grids = fetchFacilities(reserveCaliforniaRef, startDate, endDate)
+        val dates = dates(startDate, endDate)
         val observations =
             grids.flatMap { grid ->
                 grid.statuses.flatMap { (unitId, byDate) ->
@@ -54,19 +57,24 @@ class ReserveCaliforniaReservationProvider(
                     )
                 }
             }
-        return batch(ref, req.startDate, req.endDate, observations)
+        return batch(reserveCaliforniaRef, startDate, endDate, observations)
     }
 
-    override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
-        val ref = reserveCaliforniaRefOrThrow(req.ref)
-        val grids = fetchFacilities(ref, req.startDate, req.endDate)
+    override suspend fun catalogAvailability(
+        ref: ProviderRef,
+        reservables: List<CatalogReservableRef>,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch {
+        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(ref)
+        val grids = fetchFacilities(reserveCaliforniaRef, startDate, endDate)
         val byUnit =
             grids
                 .flatMap { grid -> grid.statuses.map { (unitId, byDate) -> unitId to (grid.observedAt to byDate) } }
                 .toMap()
-        val dates = dates(req.startDate, req.endDate)
+        val dates = dates(startDate, endDate)
         val observations =
-            req.reservables.flatMap { reservable ->
+            reservables.flatMap { reservable ->
                 val found = byUnit[reservable.vendorId]
                 observationsForReservable(
                     rid = reservable.rid,
@@ -75,22 +83,24 @@ class ReserveCaliforniaReservationProvider(
                     observedAt = found?.first ?: observedAt(grids),
                 )
             }
-        return batch(ref, req.startDate, req.endDate, observations)
+        return batch(reserveCaliforniaRef, startDate, endDate, observations)
     }
 
-    override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
-        val ref = reserveCaliforniaRefOrThrow(req.ref)
+    override suspend fun reservableAvailability(
+        ref: ProviderRef,
+        vendorId: String,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch {
+        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(ref)
         val result =
             catalogAvailability(
-                CatalogAvailabilityRequest(
-                    ref = ref,
-                    reservables = listOf(CatalogReservableRef(rid = rid(req.vendorId), vendorId = req.vendorId)),
-                    startDate = req.startDate,
-                    endDate = req.endDate,
-                    force = req.force,
-                ),
+                ref = reserveCaliforniaRef,
+                reservables = listOf(CatalogReservableRef(rid = rid(vendorId), vendorId = vendorId)),
+                startDate = startDate,
+                endDate = endDate,
             )
-        return result.copy(reservableId = rid(req.vendorId))
+        return result.copy(reservableId = rid(vendorId))
     }
 
     private suspend fun fetchFacilities(

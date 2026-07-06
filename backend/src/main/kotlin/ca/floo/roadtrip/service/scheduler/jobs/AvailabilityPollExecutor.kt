@@ -16,7 +16,6 @@ import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.parentRefKey
 import ca.floo.roadtrip.service.availability.toCatalogReservableRef
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
 import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
 import kotlinx.coroutines.slf4j.MDCContext
 import kotlinx.coroutines.withContext
@@ -178,13 +177,10 @@ internal class AvailabilityPollExecutor(
                         windowFor = windowFor,
                         fetch = { parentRef, provider, rows, windows ->
                             provider.catalogAvailability(
-                                CatalogAvailabilityRequest(
-                                    ref = parentRef,
-                                    reservables = rows.map { it.toCatalogReservableRef() },
-                                    startDate = windows.fetch.startDate,
-                                    endDate = windows.fetch.endDate,
-                                    force = true,
-                                ),
+                                ref = parentRef,
+                                reservables = rows.map { it.toCatalogReservableRef() },
+                                startDate = windows.fetch.startDate,
+                                endDate = windows.fetch.endDate,
                             )
                         },
                     )

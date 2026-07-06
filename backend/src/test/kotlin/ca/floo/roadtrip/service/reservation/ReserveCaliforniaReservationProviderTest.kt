@@ -61,15 +61,13 @@ class ReserveCaliforniaReservationProviderTest {
 
             val batch =
                 provider.catalogAvailability(
-                    CatalogAvailabilityRequest(
-                        ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
-                        reservables =
-                            listOf(
-                                CatalogReservableRef(rid = "site:reservecalifornia:43793", vendorId = "43793"),
-                            ),
-                        startDate = LocalDate.parse("2026-12-15"),
-                        endDate = LocalDate.parse("2026-12-18"),
-                    ),
+                    ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
+                    reservables =
+                        listOf(
+                            CatalogReservableRef(rid = "site:reservecalifornia:43793", vendorId = "43793"),
+                        ),
+                    startDate = LocalDate.parse("2026-12-15"),
+                    endDate = LocalDate.parse("2026-12-18"),
                 )
 
             assertEquals(ReservationProviderId.RESERVECALIFORNIA, provider.id)
@@ -119,12 +117,10 @@ class ReserveCaliforniaReservationProviderTest {
             val provider = ReserveCaliforniaReservationProvider(client)
 
             provider.catalogAvailability(
-                CatalogAvailabilityRequest(
-                    ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
-                    reservables = emptyList(),
-                    startDate = LocalDate.parse("2026-12-15"),
-                    endDate = LocalDate.parse("2026-12-16"),
-                ),
+                ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
+                reservables = emptyList(),
+                startDate = LocalDate.parse("2026-12-15"),
+                endDate = LocalDate.parse("2026-12-16"),
             )
 
             assertTrue(maxActiveRequests.get() > 1, "facility grid requests should overlap")
@@ -143,15 +139,13 @@ class ReserveCaliforniaReservationProviderTest {
 
             val batch =
                 provider.catalogAvailability(
-                    CatalogAvailabilityRequest(
-                        ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = emptyList()),
-                        reservables =
-                            listOf(
-                                CatalogReservableRef(rid = "site:reservecalifornia:43793", vendorId = "43793"),
-                            ),
-                        startDate = LocalDate.parse("2026-12-15"),
-                        endDate = LocalDate.parse("2026-12-17"),
-                    ),
+                    ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = emptyList()),
+                    reservables =
+                        listOf(
+                            CatalogReservableRef(rid = "site:reservecalifornia:43793", vendorId = "43793"),
+                        ),
+                    startDate = LocalDate.parse("2026-12-15"),
+                    endDate = LocalDate.parse("2026-12-17"),
                 )
 
             assertEquals(listOf(fixed, fixed), batch.observations.map { it.observedAt })

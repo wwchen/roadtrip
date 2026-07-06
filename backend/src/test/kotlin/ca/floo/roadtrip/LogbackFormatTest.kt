@@ -31,7 +31,7 @@ class LogbackFormatTest {
             }
             MDC.put("run_id", "12345")
             LoggerFactory
-                .getLogger("ca.floo.roadtrip.clients.recgov.HttpAvailabilityClient")
+                .getLogger("ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient")
                 .info("Poller: GET availability {}/{}", "232447", "2026-09-01")
             MDC.clear()
         } finally {
@@ -47,7 +47,7 @@ class LogbackFormatTest {
             "message not interpolated: $line",
         )
         assertTrue(
-            line.contains("\"loggerName\":\"ca.floo.roadtrip.clients.recgov.HttpAvailabilityClient\""),
+            line.contains("\"loggerName\":\"ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient\""),
             "loggerName field missing/renamed: $line",
         )
         assertTrue(line.contains("\"level\":\"INFO\""), "level field missing: $line")

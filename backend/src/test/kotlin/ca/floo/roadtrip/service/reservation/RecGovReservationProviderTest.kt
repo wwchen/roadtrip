@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.recgov.Campsite
+import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
@@ -47,18 +47,16 @@ class RecGovReservationProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    CatalogAvailabilityRequest(
-                        ref = ProviderRef.RecGov("232447"),
-                        reservables =
-                            listOf(
-                                CatalogReservableRef(
-                                    rid = "site:recgov:330257",
-                                    vendorId = "330257",
-                                ),
+                    ref = ProviderRef.RecGov("232447"),
+                    reservables =
+                        listOf(
+                            CatalogReservableRef(
+                                rid = "site:recgov:330257",
+                                vendorId = "330257",
                             ),
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-02"),
-                    ),
+                        ),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
                 )
 
             val observation = batch.observations.single()
@@ -104,12 +102,10 @@ class RecGovReservationProviderTest {
 
             val batch =
                 adapter.reservableAvailability(
-                    ReservableAvailabilityRequest(
-                        ref = ProviderRef.RecGov("232447"),
-                        vendorId = "330257",
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-02"),
-                    ),
+                    ref = ProviderRef.RecGov("232447"),
+                    vendorId = "330257",
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
                 )
 
             assertEquals("site:recgov:330257", batch.reservableId)
@@ -158,11 +154,9 @@ class RecGovReservationProviderTest {
 
             val batch =
                 adapter.availability(
-                    AvailabilityRequest(
-                        ref = ProviderRef.RecGov("232447"),
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-03"),
-                    ),
+                    ref = ProviderRef.RecGov("232447"),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
                 )
 
             val dates = availabilityDatesFromObservations(batch)
@@ -191,8 +185,13 @@ class RecGovReservationProviderTest {
     }
 }
 
-private fun fakeRecgovClient(fetcher: suspend (campgroundId: String, monthStart: String) -> Map<String, Campsite>): AvailabilityClient =
-    object : AvailabilityClient {
+private fun fakeRecgovClient(
+    fetcher: suspend (
+        campgroundId: String,
+        monthStart: String,
+    ) -> Map<String, Campsite>,
+): RecGovAvailabilityClient =
+    object : RecGovAvailabilityClient {
         override suspend fun fetchMonth(
             campgroundId: String,
             monthStart: String,

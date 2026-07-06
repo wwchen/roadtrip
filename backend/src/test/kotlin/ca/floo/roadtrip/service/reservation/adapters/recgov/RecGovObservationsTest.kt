@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.reservation.adapters.recgov
 
-import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.recgov.Campsite
+import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
 import kotlinx.coroutines.runBlocking
@@ -43,8 +43,8 @@ class RecGovObservationsTest {
     /** today + offset → "2026-MM-DDT00:00:00Z" — rec.gov's keying shape. */
     private fun futureKey(offsetDays: Long): String = today.plusDays(offsetDays).toString() + "T00:00:00Z"
 
-    private fun clientReturning(map: Map<String, Campsite>): AvailabilityClient =
-        object : AvailabilityClient {
+    private fun clientReturning(map: Map<String, Campsite>): RecGovAvailabilityClient =
+        object : RecGovAvailabilityClient {
             override suspend fun fetchMonth(
                 campgroundId: String,
                 monthStart: String,
@@ -54,7 +54,7 @@ class RecGovObservationsTest {
     private fun parseJson(body: String): JsonObject = Json.parseToJsonElement(body).jsonObject
 
     private fun classify(
-        client: AvailabilityClient,
+        client: RecGovAvailabilityClient,
         recgovId: String = "232447",
         days: Int = 7,
     ): JsonObject {
@@ -233,7 +233,7 @@ class RecGovObservationsTest {
     @Test
     fun `upstream error propagates so route layer can 503`() {
         val client =
-            object : AvailabilityClient {
+            object : RecGovAvailabilityClient {
                 override suspend fun fetchMonth(
                     campgroundId: String,
                     monthStart: String,

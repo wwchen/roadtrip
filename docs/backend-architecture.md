@@ -78,7 +78,9 @@ ca.floo.roadtrip
 ├── clients                  # outbound network only
 │   ├── mapbox/MapboxDirections.kt
 │   ├── mapbox/MapboxGeocoder.kt
-│   ├── recgov/AvailabilityClient.kt
+│   ├── recgov/RecGovAvailabilityClient.kt
+│   ├── reserveamerica/ReserveAmericaAvailabilityClient.kt
+│   ├── reservecalifornia/ReserveCaliforniaAvailabilityClient.kt
 │   ├── cache/RecGovAvailabilityCache.kt
 │   ├── cache/AspiraAvailabilityCache.kt
 │   ├── cache/RouteCache.kt
@@ -171,6 +173,7 @@ file-by-file relocation.
 | `route/MapboxDirections.kt` | `clients/mapbox/MapboxDirections.kt` |
 | `route/RouteCache.kt` | `clients/cache/RouteCache.kt` |
 | `geocode/MapboxGeocoder.kt` | `clients/mapbox/MapboxGeocoder.kt` |
+| `recgov/AvailabilityClient.kt` | `clients/recgov/RecGovAvailabilityClient.kt` |
 | `aspira/AspiraAvailabilityClient.kt` | `clients/aspira/AspiraAvailabilityClient.kt` |
 | `aspira/AspiraAvailabilityRoutes.kt` | folded into `routes/AvailabilityRoutes.kt` + `service/availability/AvailabilityService.kt` |
 | `aspira/CachedAspiraAvailability.kt` | split: `clients/cache/AspiraAvailabilityCache.kt` + `service/api/AspiraAvailabilityService.kt` |
