@@ -1,5 +1,6 @@
 package ca.floo.roadtrip
 
+import ca.floo.roadtrip.clients.DateStringFormatter
 import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.joran.JoranConfigurator
 import org.junit.jupiter.api.Test
@@ -7,6 +8,7 @@ import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import java.io.ByteArrayOutputStream
 import java.io.PrintStream
+import java.time.LocalDate
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
@@ -32,18 +34,23 @@ class LogbackFormatTest {
             MDC.put("run_id", "12345")
             LoggerFactory
                 .getLogger("ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient")
-                .info("Poller: GET availability {}/{}", "232447", "2026-09-01")
+                .info(
+                    "recgov GET availability campground={} month={} attempt={}",
+                    "232447",
+                    DateStringFormatter.month(LocalDate.parse("2026-09-01")),
+                    1,
+                )
             MDC.clear()
         } finally {
             System.out.flush()
             System.setOut(original)
         }
 
-        val line = captured.toString("UTF-8").lineSequence().first { it.contains("Poller") }
+        val line = captured.toString("UTF-8").lineSequence().first { it.contains("recgov GET availability") }
         original.println("CAPTURED LOG LINE: $line")
 
         assertTrue(
-            line.contains("\"message\":\"Poller: GET availability 232447/2026-09-01\""),
+            line.contains("\"message\":\"recgov GET availability campground=232447 month=2026/September attempt=1\""),
             "message not interpolated: $line",
         )
         assertTrue(
