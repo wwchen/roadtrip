@@ -4,9 +4,9 @@
 // day for a POI. Opened from a reserved (non-available) matrix cell in the
 // campground drawer. The backend watch is POI-level and single-day.
 //
-// Today this is a one-tap confirm (no config). The body is laid out so future
-// trigger configuration (selectable Slack channel, an ATC action alongside
-// Slack) can be added without a redesign: the note line becomes a field group.
+// Today this is a quick confirm with one trigger option. The body is laid out
+// so future trigger configuration (selectable Slack channel, an ATC action
+// alongside Slack) can be added without a redesign.
 //
 // Pure-ish widget: it owns its own busy/error state and re-renders in place;
 // the parent (availability-week.js) supplies onSet / onRemove / onClose and
@@ -20,13 +20,19 @@ import { escapeHtml } from '../core.js';
  * @param {string}   args.poiName
  * @param {string}   args.date          YYYY-MM-DD (the watched day).
  * @param {boolean}  args.watching      Whether a watch already exists.
- * @param {() => Promise<void>} args.onSet
+ * @param {boolean}  [args.stopWhenFound]
+ * @param {(options: { stopWhenFound: boolean }) => Promise<void>} args.onSet
  * @param {() => Promise<void>} args.onRemove
  * @param {() => void}          args.onClose
  */
 export function mountWatchPopover(host, args) {
   const { poiName, date, onSet, onRemove, onClose } = args;
-  let state = { watching: !!args.watching, busy: false, error: null };
+  let state = {
+    watching: !!args.watching,
+    stopWhenFound: args.stopWhenFound !== false,
+    busy: false,
+    error: null,
+  };
 
   function rerender() {
     host.innerHTML = renderPopover({ poiName, date, ...state });
@@ -46,10 +52,10 @@ export function mountWatchPopover(host, args) {
     try {
       if (state.watching) {
         await onRemove?.();
-        state = { watching: false, busy: false, error: null };
+        state = { ...state, watching: false, busy: false, error: null };
       } else {
-        await onSet?.();
-        state = { watching: true, busy: false, error: null };
+        await onSet?.({ stopWhenFound: state.stopWhenFound });
+        state = { ...state, watching: true, busy: false, error: null };
       }
       rerender();
     } catch (err) {
@@ -64,12 +70,20 @@ export function mountWatchPopover(host, args) {
     onClose();
   }
 
+  function onChange(e) {
+    const tgt = e.target;
+    if (!(tgt instanceof HTMLInputElement)) return;
+    if (!tgt.classList.contains('cg-watch-pop-stop')) return;
+    state = { ...state, stopWhenFound: tgt.checked, error: null };
+  }
+
   function onKey(e) {
     if (e.key === 'Escape') onClose();
   }
 
   rerender();
   host.addEventListener('click', onClick);
+  host.addEventListener('change', onChange);
   // Defer document listeners a tick so the opening click doesn't close it.
   setTimeout(() => {
     document.addEventListener('click', onDocClick);
@@ -79,13 +93,14 @@ export function mountWatchPopover(host, args) {
   return {
     dispose() {
       host.removeEventListener('click', onClick);
+      host.removeEventListener('change', onChange);
       document.removeEventListener('click', onDocClick);
       document.removeEventListener('keydown', onKey);
     },
   };
 }
 
-function renderPopover({ poiName, date, watching, busy, error }) {
+function renderPopover({ poiName, date, watching, stopWhenFound, busy, error }) {
   const dateLabel = new Date(`${date}T00:00:00Z`).toLocaleDateString('en-US', {
     weekday: 'short',
     month: 'short',
@@ -101,6 +116,22 @@ function renderPopover({ poiName, date, watching, busy, error }) {
       : 'Set watch';
   const actionClass = watching ? 'cg-btn-secondary' : 'cg-btn-primary';
   const errorHtml = error ? `<div class="cg-watch-pop-error">${escapeHtml(error)}</div>` : '';
+  const stopWhenFoundHtml = watching ? '' : `
+      <label class="cg-watch-pop-option">
+        <span class="cg-watch-pop-option-text">
+          <span class="cg-watch-pop-option-title">Stop when found</span>
+          <span class="cg-watch-pop-option-help">Turn this watch off after the first alert.</span>
+        </span>
+        <span class="cg-watch-pop-switch">
+          <input
+            type="checkbox"
+            class="cg-watch-pop-stop"
+            ${stopWhenFound ? 'checked' : ''}
+            ${busy ? 'disabled' : ''}
+          >
+          <span class="cg-watch-pop-switch-track" aria-hidden="true"></span>
+        </span>
+      </label>`;
   return `
     <div class="cg-watch-pop" role="dialog" aria-label="Availability watch">
       <div class="cg-watch-pop-head">
@@ -108,6 +139,7 @@ function renderPopover({ poiName, date, watching, busy, error }) {
         <button type="button" class="cg-watch-pop-close" aria-label="Close">×</button>
       </div>
       <div class="cg-watch-pop-date">${escapeHtml(dateLabel)}</div>
+      ${stopWhenFoundHtml}
       <button
         type="button"
         class="cg-btn ${actionClass} cg-watch-pop-action"
