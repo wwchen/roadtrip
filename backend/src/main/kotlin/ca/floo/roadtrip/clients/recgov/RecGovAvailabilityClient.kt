@@ -18,6 +18,9 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 /**
  * rec.gov availability fetch surface. The HTTP-backed implementation
@@ -56,7 +59,7 @@ class HttpRecgovAvailabilityClient(
                 if (gap < minGapMs) delay(minGapMs - gap)
                 lastCallAt = System.currentTimeMillis()
             }
-            log.info("recgov GET availability campground={} month={} attempt={}", campgroundId, monthStart, attempt + 1)
+            log.info("recgov GET availability campground={} month={} attempt={}", campgroundId, logMonth(monthStart), attempt + 1)
             val resp = client.get(url)
             if (resp.status == HttpStatusCode.TooManyRequests) {
                 if (attempt >= retryDelaysMs.size) {
@@ -153,3 +156,11 @@ private fun JsonPrimitive.contentOrNull(): String? =
 private fun JsonPrimitive.intOrNull(): Int? = content.toIntOrNull()
 
 private fun HttpStatusCode.isSuccess(): Boolean = value in 200..299
+
+private fun logMonth(monthStart: String): String =
+    runCatching { LocalDate.parse(monthStart).format(LOG_MONTH_FORMATTER) }
+        .getOrDefault(monthStart)
+
+private val LOG_MONTH_FORMATTER: DateTimeFormatter = DateTimeFormatter.ofPattern(LOG_MONTH_PATTERN, Locale.ENGLISH)
+
+private const val LOG_MONTH_PATTERN = "yyyy/MMMM"
