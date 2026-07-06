@@ -42,13 +42,10 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "## 🔎 Logs / Search\nBackend logs, filterable by **class** (`$logger`, regex on `loggerName`), **level** (`$level`), and a free-text / regex **line filter** (`$search`). Filters are query-time `| json`, so partial values match everything. Tip: click a class in *Top classes* to scope the whole page to it. Other JSON fields (`thread`, `mdc.run_id`, …) show under a row's **Detected fields** — expand a line to see them."
+        "content": "## 🔎 Logs / Search\nBackend logs as a **Datadog-style stream** — columns: **Date · Level · Logger · Message · Context**. Filter by **class** (`$logger`, regex on `loggerName`), **level** (`$level`), and a free-text / regex **line filter** (`$search`). Click a class in *Top classes* (or a **Logger** cell) to scope the whole page to it. Non-JSON JVM boot warnings are dropped via `| __error__=\"\"`, so the level panels no longer show a pipeline error."
       }
     },
     {
-      "type": "logs",
-      "id": 2,
-      "title": "Backend logs",
       "datasource": {
         "type": "loki",
         "uid": "roadtrip-loki"
@@ -57,27 +54,222 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 3
+        "y": 10
+      },
+      "id": 2,
+      "type": "table",
+      "title": "Backend logs",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true,
+            "align": "left",
+            "cellOptions": {
+              "type": "auto",
+              "wrapText": false
+            },
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "level"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ERROR": {
+                        "color": "#F2495C",
+                        "index": 0,
+                        "text": "ERROR"
+                      },
+                      "WARN": {
+                        "color": "#FF9830",
+                        "index": 1,
+                        "text": "WARN"
+                      },
+                      "INFO": {
+                        "color": "#5794F2",
+                        "index": 2,
+                        "text": "INFO"
+                      },
+                      "DEBUG": {
+                        "color": "#8E8E8E",
+                        "index": 3,
+                        "text": "DEBUG"
+                      },
+                      "TRACE": {
+                        "color": "#B877D9",
+                        "index": 4,
+                        "text": "TRACE"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "logger"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Filter logs to this class",
+                    "url": "/d/logs-explorer/logs-explorer?${__url_time_range}&var-container=${container}&var-level=${level}&var-logger=${__data.fields.loggerName}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "loggerName"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "message"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto",
+                  "wrapText": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "context"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "Date",
+            "desc": true
+          }
+        ]
       },
       "pluginVersion": "12.4.4",
-      "options": {
-        "showTime": true,
-        "showLabels": false,
-        "wrapLogMessage": true,
-        "prettifyLogMessage": true,
-        "enableLogDetails": true,
-        "dedupStrategy": "none",
-        "sortOrder": "Descending"
-      },
       "targets": [
         {
           "datasource": {
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "{container=~\"$container\"} | json | level=~\"$level\", loggerName=~\"$logger\" |~ \"$search\"",
+          "expr": "{container=~\"$container\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` | level=~\"$level\", loggerName=~\"$logger\" |~ \"$search\"",
           "queryType": "range",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "labels"
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(Time|level|logger|loggerName|message|context)$"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "renameByName": {
+              "Time": "Date",
+              "level": "Level",
+              "logger": "Logger",
+              "message": "Message",
+              "context": "Context"
+            },
+            "indexByName": {
+              "Time": 0,
+              "level": 1,
+              "logger": 2,
+              "context": 3,
+              "message": 4,
+              "loggerName": 5
+            }
+          }
         }
       ]
     },
@@ -93,7 +285,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 19
+        "y": 3
       },
       "pluginVersion": "12.4.4",
       "options": {
@@ -128,7 +320,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | loggerName=~\"$logger\" |~ \"$search\" [$__auto]))",
+          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | level!=\"\" | loggerName=~\"$logger\" |~ \"$search\" [$__auto]))",
           "legendFormat": "{{level}}",
           "queryType": "range",
           "refId": "A"
@@ -212,7 +404,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "topk(20, sum by (loggerName) (count_over_time({container=~\"$container\"} | json | level=~\"$level\" |~ \"$search\" [$__range])))",
+          "expr": "topk(20, sum by (loggerName) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | level=~\"$level\" |~ \"$search\" [$__range])))",
           "instant": true,
           "format": "table",
           "queryType": "instant",
@@ -278,7 +470,7 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | loggerName=~\"$logger\" |~ \"$search\" [$__range]))",
+          "expr": "sum by (level) (count_over_time({container=~\"$container\"} | json | __error__=\"\" | level!=\"\" | loggerName=~\"$logger\" |~ \"$search\" [$__range]))",
           "instant": true,
           "format": "table",
           "queryType": "instant",
@@ -287,9 +479,6 @@
       ]
     },
     {
-      "type": "logs",
-      "id": 6,
-      "title": "Warnings & errors only",
       "datasource": {
         "type": "loki",
         "uid": "roadtrip-loki"
@@ -300,25 +489,220 @@
         "x": 0,
         "y": 36
       },
-      "pluginVersion": "12.4.4",
-      "options": {
-        "showTime": true,
-        "showLabels": false,
-        "wrapLogMessage": true,
-        "prettifyLogMessage": true,
-        "enableLogDetails": true,
-        "dedupStrategy": "none",
-        "sortOrder": "Descending"
+      "id": 6,
+      "type": "table",
+      "title": "Warnings & errors only",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "filterable": true,
+            "align": "left",
+            "cellOptions": {
+              "type": "auto",
+              "wrapText": false
+            },
+            "inspect": true
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "level"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ERROR": {
+                        "color": "#F2495C",
+                        "index": 0,
+                        "text": "ERROR"
+                      },
+                      "WARN": {
+                        "color": "#FF9830",
+                        "index": 1,
+                        "text": "WARN"
+                      },
+                      "INFO": {
+                        "color": "#5794F2",
+                        "index": 2,
+                        "text": "INFO"
+                      },
+                      "DEBUG": {
+                        "color": "#8E8E8E",
+                        "index": 3,
+                        "text": "DEBUG"
+                      },
+                      "TRACE": {
+                        "color": "#B877D9",
+                        "index": 4,
+                        "text": "TRACE"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "logger"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Filter logs to this class",
+                    "url": "/d/logs-explorer/logs-explorer?${__url_time_range}&var-container=${container}&var-level=${level}&var-logger=${__data.fields.loggerName}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "loggerName"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "message"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto",
+                  "wrapText": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "context"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json"
+                }
+              }
+            ]
+          }
+        ]
       },
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "footer": {
+          "show": false,
+          "reducer": [
+            "sum"
+          ],
+          "fields": ""
+        },
+        "sortBy": [
+          {
+            "displayName": "Date",
+            "desc": true
+          }
+        ]
+      },
+      "pluginVersion": "12.4.4",
       "targets": [
         {
           "datasource": {
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "{container=~\"$container\"} | json | level=~\"WARN|ERROR\", loggerName=~\"$logger\" |~ \"$search\"",
+          "expr": "{container=~\"$container\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` | level=~\"WARN|ERROR\", loggerName=~\"$logger\" |~ \"$search\"",
           "queryType": "range",
           "refId": "A"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "labels"
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(Time|level|logger|loggerName|message|context)$"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "renameByName": {
+              "Time": "Date",
+              "level": "Level",
+              "logger": "Logger",
+              "message": "Message",
+              "context": "Context"
+            },
+            "indexByName": {
+              "Time": 0,
+              "level": 1,
+              "logger": 2,
+              "context": 3,
+              "message": 4,
+              "loggerName": 5
+            }
+          }
         }
       ]
     }

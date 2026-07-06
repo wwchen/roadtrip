@@ -305,7 +305,10 @@ poi_data:
         inputs: [aspira-maps-wa]
       - slug: aspira-wa-pins
         adapter: AspiraJoinByNameEtl
-        inputs: [aspira-leaves-wa, uscampgrounds]
+        # inventory + dictionaries feed the same data-driven non-bookable
+        # filter. WA's dictionary marks every category bookable today, so
+        # nothing is dropped — the ETL reflects what WA's data shows.
+        inputs: [aspira-leaves-wa, uscampgrounds, aspira-inventory-wa, aspira-dictionaries-wa]
         args:
           host: washington.goingtocamp.com
           state_filter: WA
@@ -320,7 +323,10 @@ poi_data:
         inputs: [aspira-maps-bc]
       - slug: aspira-bc-pins
         adapter: AspiraJoinByNameEtl
-        inputs: [aspira-leaves-bc, bcparks-strapi]
+        # inventory + dictionaries feed the same data-driven non-bookable
+        # filter. BC's dictionary marks every category bookable today, so
+        # nothing is dropped — the ETL reflects what BC's data shows.
+        inputs: [aspira-leaves-bc, bcparks-strapi, aspira-inventory-bc, aspira-dictionaries-bc]
         args:
           host: camping.bcparks.ca
 
@@ -334,7 +340,11 @@ poi_data:
         inputs: [aspira-maps-pc]
       - slug: aspira-pc-pins
         adapter: AspiraJoinByNameEtl
-        inputs: [aspira-leaves-pc, apca-accommodation, apca-places]
+        # inventory + dictionaries drive the non-bookable filter: a
+        # resourceLocationId whose inventory is entirely non-bookable categories
+        # (Aspira's showResourceCapacityOnline=false — parking, guided hikes,
+        # shuttles) is dropped. Data-driven, no curated category list.
+        inputs: [aspira-leaves-pc, apca-accommodation, apca-places, aspira-inventory-pc, aspira-dictionaries-pc]
         args:
           host: reservation.pc.gc.ca
           parent_name_fallback: true

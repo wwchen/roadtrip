@@ -232,7 +232,6 @@ fun Application.module() {
                     },
                 ),
             dateResolver = availabilityDateResolver,
-            reservationProviders = reservationProviderRegistry,
         )
     val availabilityWatchService = AvailabilityWatchService(ctx, reservablesRepo, availabilityTargets)
 

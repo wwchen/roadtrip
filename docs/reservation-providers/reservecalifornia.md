@@ -405,8 +405,8 @@ Open questions before implementation:
 - Whether to ETL all facilities per place up front or call `search/place` at
   availability time and cache the facility list.
 - Whether a single POI should represent the whole `PlaceId` or one row per
-  `FacilityId`. The current UI can render synthetic catalogless sites, but
-  real labels and filters are better if `reservables` rows are imported.
+  `FacilityId`. A POI needs imported `reservables` rows to show availability —
+  there is no live render-only fallback for POIs without a catalog.
 - How to handle `FacilityTypeNew == 2` open-camping grids and
   `FacilityBehaviourType == 2` time-based grids.
 - Rate limits and WAF behavior. Anonymous read calls worked during the probe,
