@@ -37,6 +37,7 @@ const WEEK_DAYS = 7;
 const SKELETON_RENDER_DELAY_MS = 150;
 const STALE_THRESHOLD_MIN = 10;
 const CALENDAR_MAX_DAYS_OUT = 365;
+const DEFAULT_STOP_WHEN_FOUND = true;
 
 /**
  * Mount the availability table into the host element. Returns a controller with a
@@ -599,14 +600,16 @@ function openWatchPopover(ctx, anchorEl, date) {
 
   const endDate = stayEndDate(ctx, date);
   const key = watchWindowKey(date, endDate);
+  const existingWatch = ctx.watchesByWindow.get(key);
   const poiName = ctx.feature?.properties?.name || 'this campground';
 
   const controller = mountWatchPopover(host, {
     poiName,
     date,
-    watching: ctx.watchesByWindow.has(key),
-    onSet: async () => {
-      const payload = buildWatchPayload(ctx, date, endDate);
+    watching: Boolean(existingWatch),
+    stopWhenFound: watchStopWhenFound(existingWatch),
+    onSet: async ({ stopWhenFound } = {}) => {
+      const payload = buildWatchPayload(ctx, date, endDate, { stopWhenFound });
       const created = await createWatch(payload, { signal: ctx.signal });
       ctx.watchesByWindow.set(key, created.watch || { ...payload, id: created.id });
       notifyWatchesChanged();
@@ -901,7 +904,7 @@ async function toggleWatch(ctx, button) {
   }
 }
 
-function buildWatchPayload(ctx, date, endDate) {
+function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WHEN_FOUND } = {}) {
   return {
     poi_id: Number(ctx.poiId),
     reservable_filters: {},
@@ -913,8 +916,14 @@ function buildWatchPayload(ctx, date, endDate) {
     // (e.g. 'atc') get added alongside it when trigger config lands.
     trigger_kinds: ['slack_notify'],
     trigger_config: {},
-    stop_when_triggered: true,
+    stop_when_triggered: stopWhenFound,
   };
+}
+
+function watchStopWhenFound(watch) {
+  if (!watch) return DEFAULT_STOP_WHEN_FOUND;
+  const value = watch.stop_when_triggered ?? watch.stopWhenTriggered;
+  return value == null ? DEFAULT_STOP_WHEN_FOUND : Boolean(value);
 }
 
 // ---- helpers --------------------------------------------------------------
