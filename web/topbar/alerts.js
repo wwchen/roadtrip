@@ -349,23 +349,23 @@ async function onClick(e) {
 function injectAlertsStyles() {
   if (document.getElementById('tb-alerts-styles')) return;
   const css = `
-  #tb-alerts { display: none; border-top: 1px solid var(--cg-border); }
+  #tb-alerts { display: none; border-top: 1px solid var(--rt-border); }
   #tb-alerts.visible { display: block; }
   .tb-alerts-bar {
     width: 100%;
     display: flex; align-items: center; gap: 8px;
     padding: 8px 12px;
     background: transparent; border: 0; cursor: pointer;
-    color: var(--cg-text); font: inherit; font-size: 12px; text-align: left;
+    color: var(--rt-text); font: inherit; font-size: 12px; text-align: left;
   }
-  .tb-alerts-bar:hover { background: var(--cg-bg-hover); }
+  .tb-alerts-bar:hover { background: var(--rt-fill-hover); }
   .tb-alerts-bell { flex-shrink: 0; }
   .tb-alerts-label { flex: 1; min-width: 0; font-weight: 500; }
   .tb-alerts-chevron { flex-shrink: 0; transition: transform 150ms ease; }
   .tb-alerts-bar[aria-expanded="true"] .tb-alerts-chevron { transform: rotate(180deg); }
   .tb-alerts-table {
     max-height: min(40vh, 320px); overflow-y: auto;
-    border-top: 1px solid var(--cg-border);
+    border-top: 1px solid var(--rt-border);
     font-size: 12px; font-variant-numeric: tabular-nums;
   }
   .tb-alerts-row {
@@ -373,44 +373,44 @@ function injectAlertsStyles() {
     grid-template-columns: minmax(0,1.4fr) auto auto minmax(0,1fr) auto;
     align-items: center; gap: 8px;
     padding: 7px 12px;
-    border-bottom: 1px solid var(--cg-border);
+    border-bottom: 1px solid var(--rt-border);
     cursor: pointer;
   }
   .tb-alerts-row:last-child { border-bottom: 0; }
-  .tb-alerts-row:hover:not(.tb-alerts-header) { background: var(--cg-bg-hover); }
+  .tb-alerts-row:hover:not(.tb-alerts-header) { background: var(--rt-fill-hover); }
   .tb-alerts-header {
     cursor: default;
-    color: var(--cg-faint);
+    color: var(--rt-faint);
     font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
   }
   .tb-alerts-header:hover { background: transparent; }
   .tb-alerts-row.is-paused, .tb-alerts-row.is-done { opacity: 0.55; }
-  .tb-alerts-poi { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--cg-text); }
-  .tb-alerts-date, .tb-alerts-trigger { white-space: nowrap; color: var(--cg-muted); }
+  .tb-alerts-poi { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--rt-text); }
+  .tb-alerts-date, .tb-alerts-trigger { white-space: nowrap; color: var(--rt-muted); }
   .tb-alerts-slack { width: 14px; height: 14px; vertical-align: -2px; }
-  .tb-alerts-checked { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--cg-muted); }
-  .tb-alerts-err { color: var(--cg-warn, #f1a04a); }
-  .tb-alerts-faint { color: var(--cg-faint); }
+  .tb-alerts-checked { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--rt-muted); }
+  .tb-alerts-err { color: var(--rt-warn); }
+  .tb-alerts-faint { color: var(--rt-faint); }
   .tb-alerts-actions { display: flex; gap: 2px; justify-self: end; }
   .tb-alerts-act {
     width: 24px; height: 24px;
-    background: transparent; border: 0; color: var(--cg-faint);
+    background: transparent; border: 0; color: var(--rt-faint);
     border-radius: 4px; cursor: pointer; font-size: 12px;
     display: grid; place-items: center;
   }
-  .tb-alerts-act:hover { background: var(--cg-bg-hover); color: var(--cg-text); }
-  .tb-alerts-del:hover { color: var(--cg-error); }
+  .tb-alerts-act:hover { background: var(--rt-fill-hover); color: var(--rt-text); }
+  .tb-alerts-del:hover { color: var(--rt-error); }
   .tb-alerts-act:disabled { opacity: 0.5; cursor: wait; }
   /* Deep-link focus: the row a Slack card pointed at, and the control it named. */
-  .tb-alerts-row.is-focus { background: var(--cg-bg-hover); box-shadow: inset 2px 0 0 var(--cg-accent, #4a9eff); }
-  .tb-alerts-act.is-armed { color: var(--cg-text); animation: tb-alerts-pulse 1.2s ease-in-out infinite; }
-  .tb-alerts-del.is-armed { color: var(--cg-error); }
+  .tb-alerts-row.is-focus { background: var(--rt-fill-hover); box-shadow: inset 2px 0 0 var(--rt-brand); }
+  .tb-alerts-act.is-armed { color: var(--rt-text); animation: tb-alerts-pulse 1.2s ease-in-out infinite; }
+  .tb-alerts-del.is-armed { color: var(--rt-error); }
   @keyframes tb-alerts-pulse {
-    0%, 100% { transform: scale(1); background: var(--cg-bg-hover); }
-    50% { transform: scale(1.18); background: var(--cg-accent, #4a9eff); }
+    0%, 100% { transform: scale(1); background: var(--rt-fill-hover); }
+    50% { transform: scale(1.18); background: var(--rt-brand); }
   }
   @media (prefers-reduced-motion: reduce) {
-    .tb-alerts-act.is-armed { animation: none; background: var(--cg-bg-hover); }
+    .tb-alerts-act.is-armed { animation: none; background: var(--rt-fill-hover); }
   }
   .tb-alerts-status {
     width: 24px; height: 24px;

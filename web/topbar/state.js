@@ -1,6 +1,6 @@
 // Shared constants + mutable trip state for the topbar module.
 
-export const ROUTE_COLOR = '#4285F4';   // Google-Maps-blue
+export const ROUTE_COLOR = '#3b82f6';   // --rt-brand (see web/design-system/tokens.css)
 export const GEOCODE_DEBOUNCE_MS = 220;
 export const MAX_STOPS = 25;
 

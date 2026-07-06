@@ -536,7 +536,7 @@ function updateSiteColumnResize(ctx, event) {
   if (!active) return;
   const nextWidth = clampSiteColumnWidth(active.startWidth + event.clientX - active.startX);
   ctx.siteColumnWidth = nextWidth;
-  active.scroll?.style.setProperty('--cg-site-column-width', `${nextWidth}px`);
+  active.scroll?.style.setProperty('--rt-site-column-width', `${nextWidth}px`);
 }
 
 function endSiteColumnResize(ctx) {
@@ -961,7 +961,7 @@ function saveSiteColumnWidth(width) {
 function applyMatrixViewportWidth(ctx) {
   const scroll = ctx.host.querySelector('.cg-site-matrix-scroll');
   if (!(scroll instanceof HTMLElement)) return;
-  scroll.style.setProperty('--cg-site-matrix-viewport-width', `${scroll.clientWidth}px`);
+  scroll.style.setProperty('--rt-site-matrix-viewport-width', `${scroll.clientWidth}px`);
 }
 
 function captureMatrixScroll(ctx) {
