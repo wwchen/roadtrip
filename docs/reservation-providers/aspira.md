@@ -108,15 +108,24 @@ park's already-correct campground POIs.
 A leaf can also carry a `resourceLocationId` and still not be a campground:
 `/api/maps` mounts activities (parking, guided hikes, shuttles, day-use
 buses) as sibling leaves, and their names sometimes match park geometry.
-Those are dropped by cross-referencing the inventory: a `resourceLocationId`
-whose `/api/resourcelocation/resources` catalog is made up **entirely** of
-non-overnight resource categories is not a campground. The category names
-are tenant-specific (PC's "Parking" is not WA's "Day Use Facility"), so the
-blocklist is the per-tenant `non_bookable_categories` arg in
-`poi-registry.yaml` — set for PC today; WA/BC set none and are unaffected. A
-`resourceLocationId` that mixes any bookable category (Campsite, Yurt,
-oTENTik, …) with a non-bookable one is kept (e.g. Fundy's "Headquarters"
-node, which fronts 100+ real campsites).
+Those are dropped by cross-referencing the inventory against the dictionary's
+own `showResourceCapacityOnline` flag: each `resource_categories[]` entry sets
+it `true` for overnight-stay categories (Campsite, Yurt, oTENTik, Backcountry
+Site, …) and `false` for activity categories. A `resourceLocationId` whose
+`/api/resourcelocation/resources` catalog is made up **entirely** of
+`showResourceCapacityOnline: false` categories is dropped. This is data-driven,
+not a curated list — a new activity category Aspira ships is caught
+automatically, and a new stay category is kept automatically.
+
+The filter is wired identically for all three tenants (inventory +
+dictionaries as ETL inputs). Parks Canada sets the flag on its activity
+categories, so PC drops them; Washington and BC currently mark every category
+bookable, so nothing is dropped there — the ETL reflects what each tenant's
+data actually shows. A `resourceLocationId` that mixes any bookable category
+with a non-bookable one is kept (e.g. Fundy's "Headquarters" node, which
+fronts 100+ real campsites). "Daily Fishing" is kept too: PC files it as a
+`showResourceCapacityOnline: true` capacity booking, so the data says it is a
+standard reservable.
 
 ### `GET /api/availability/map`
 

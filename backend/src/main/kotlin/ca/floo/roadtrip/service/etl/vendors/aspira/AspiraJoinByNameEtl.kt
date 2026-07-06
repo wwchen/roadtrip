@@ -103,27 +103,19 @@ class AspiraJoinByNameEtl(
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
 
-        // Config-driven non-bookable filter. A leaf whose resourceLocationId's
-        // inventory is made up entirely of non-bookable categories (Parking,
-        // Guided Hike, Shuttle, Day Use Bus, …) is a park activity mount, not a
-        // campground — drop it even though its name may match geometry. The
-        // category taxonomy is tenant-specific, so the blocklist comes from the
-        // `non_bookable_categories` arg and the inventory + dictionary inputs.
-        // A tenant that declares neither gets an empty set and is unaffected —
-        // this stays input-driven, never branches on the tenant slug.
-        val nonBookableCategories =
-            ctx
-                .argFor(etlSlug, "non_bookable_categories")
-                ?.split(',')
-                ?.map { it.trim() }
-                ?.filter { it.isNotEmpty() }
-                ?.toSet()
-                .orEmpty()
+        // Non-bookable filter, driven by the fetched data (no curated list). A
+        // leaf whose resourceLocationId's inventory holds only non-bookable
+        // categories — Aspira's own `showResourceCapacityOnline: false`, set on
+        // parking / guided hikes / shuttles / day-use buses — is a park
+        // activity mount, not a campground, so it is dropped even when its name
+        // matches geometry. Empty when a tenant declares no inventory +
+        // dictionary inputs, or when its dictionary marks everything bookable
+        // (WA/BC today) — then nothing is dropped, faithfully reflecting that
+        // that tenant's data marks nothing as non-bookable.
         val nonBookableResLocs =
             AspiraInventoryCategories.nonBookableResourceLocationIds(
                 inventory = dto.inventoryEnvelopes,
                 dictionaryPayload = dto.dictionaryPayload,
-                nonBookableCategories = nonBookableCategories,
             )
 
         // Build one merged name index: normalized name → first (lat, lon).
