@@ -180,6 +180,42 @@ ETL fetcher. The reservable catalog comes from
 returns empty for parent leaves whose children carry the actual
 sites, so it's an unreliable enumeration source.
 
+### `GET /api/occupancy`
+
+Stay-level booking search for one `resourceLocationId`. The endpoint
+accepts a wider `[startDate, endDate]` span plus `nights=1`, but the
+response is still flat: one `resourceOccupancy[]` row per resource, not
+one row per resource per arrival date. That makes it useful for a
+specific stay search, but not as the default source for our per-day
+availability grid or availability-history writes.
+
+```
+GET https://{host}/api/occupancy
+  ?resourceLocationId={int}
+  &startDate=YYYY-MM-DD
+  &endDate=YYYY-MM-DD
+  &nights=1
+  &bookingCategoryId=0
+  &equipmentCategoryId=-32768
+  &subEquipmentCategoryId=-32768
+
+→ 200 application/json
+{
+  "resourceLocationId": -2147483558,
+  "startDate": "2026-07-18T00:00:00",
+  "endDate": "2026-07-21T00:00:00",
+  "resourceOccupancy": [
+    {"resourceId": -2147477470, "occupancy": 0, "filtered": false, "availability": 1}
+  ],
+  "mapOccupancy": [
+    {"mapId": -2147483358, "availability": 2}
+  ]
+}
+```
+
+Used for: opt-in stay-level checks only. Normal catalog availability uses
+`/api/availability/map` so callers get independent per-day observations.
+
 ### `GET /api/resourcelocation/resources`
 
 **The named-site catalog.** This is the endpoint we were missing

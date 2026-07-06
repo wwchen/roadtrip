@@ -20,14 +20,87 @@ import kotlin.test.assertTrue
 
 class AspiraReservationProviderTest {
     @Test
-    fun `aspira catalog availability uses occupancy search when resource location is known`() =
+    fun `aspira catalog availability uses map resource status by default when resource location is known`() =
+        runBlocking {
+            var mapFetches = 0
+            var occupancyFetches = 0
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, start, end ->
+                        mapFetches++
+                        assertEquals(-2147483615, mapId)
+                        assertEquals(LocalDate.parse("2026-06-17"), start)
+                        assertEquals(LocalDate.parse("2026-06-18"), end)
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink = emptyMap(),
+                            byResource =
+                                mapOf(
+                                    "100" to listOf(1, 1),
+                                    "200" to listOf(5, 5),
+                                ),
+                        )
+                    },
+                    onFetchOccupancy = { _, _, _, _ ->
+                        occupancyFetches++
+                        error("occupancy should not be fetched for the default per-day catalog path")
+                    },
+                )
+            val adapter =
+                AspiraReservationProvider(
+                    tenant =
+                        AspiraTenant(
+                            host = "reservation.pc.gc.ca",
+                            vendorCode = "aspira_pc",
+                            bookingHorizonDays = 365,
+                        ),
+                    client = client,
+                )
+
+            val batch =
+                adapter.catalogAvailability(
+                    ref =
+                        ProviderRef.Aspira(
+                            transactionLocationId = -2147483630,
+                            mapId = -2147483388,
+                            resourceLocationId = -2147483624,
+                        ),
+                    reservables =
+                        listOf(
+                            CatalogReservableRef(
+                                rid = "site:aspira_pc:100",
+                                vendorId = "100",
+                                mapId = -2147483615,
+                                resourceLocationId = -2147483624,
+                            ),
+                            CatalogReservableRef(
+                                rid = "site:aspira_pc:200",
+                                vendorId = "200",
+                                mapId = -2147483615,
+                                resourceLocationId = -2147483624,
+                            ),
+                        ),
+                    startDate = LocalDate.parse("2026-06-17"),
+                    endDate = LocalDate.parse("2026-06-19"),
+                )
+
+            val byRid = batch.observations.filter { it.date == LocalDate.parse("2026-06-17") }.associateBy { it.reservableId }
+            assertEquals(1, mapFetches)
+            assertEquals(0, occupancyFetches)
+            assertEquals(AvailabilityStatus.AVAILABLE, byRid["site:aspira_pc:100"]!!.status)
+            assertEquals(AvailabilityStatus.CLOSED, byRid["site:aspira_pc:200"]!!.status)
+        }
+
+    @Test
+    fun `aspira catalog availability can opt into occupancy search`() =
         runBlocking {
             var mapFetches = 0
             val client =
                 fakeAspiraClient(
                     onFetch = { _, _, _, _ ->
                         mapFetches++
-                        error("map availability should not be fetched when occupancy is available")
+                        error("map availability should not be fetched when occupancy is explicitly enabled")
                     },
                     onFetchOccupancy = { _, resourceLocationId, start, end ->
                         assertEquals(-2147483624, resourceLocationId)
@@ -52,6 +125,7 @@ class AspiraReservationProviderTest {
                             bookingHorizonDays = 365,
                         ),
                     client = client,
+                    occupancyEnabled = true,
                 )
 
             val batch =

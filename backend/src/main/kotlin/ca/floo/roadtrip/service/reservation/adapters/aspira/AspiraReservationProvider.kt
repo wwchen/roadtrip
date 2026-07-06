@@ -41,11 +41,11 @@ class AspiraReservationProvider(
     private val client: AspiraAvailabilityClient,
     /**
      * When true, catalog availability with a known `resourceLocationId` uses
-     * the per-arrival-day `/api/occupancy` search; otherwise it reads the
-     * `/api/availability/map` resource statuses. Defaults to true; tests pin
-     * to the map path by passing `false`.
+     * the per-arrival-day `/api/occupancy` search. The normal per-day catalog
+     * path uses `/api/availability/map`, because occupancy is a stay-level
+     * search result and does not return one status row per arrival date.
      */
-    private val occupancyEnabled: Boolean = true,
+    private val occupancyEnabled: Boolean = false,
 ) : ReservationProvider,
     AvailabilityClient {
     override val id: ReservationProviderId = ReservationProviderId.ASPIRA
