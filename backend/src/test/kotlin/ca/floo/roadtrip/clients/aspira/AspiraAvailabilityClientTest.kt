@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.clients.aspira
 
-import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
+import ca.floo.roadtrip.models.metadata.aspira.AspiraResourceAvailability
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -19,8 +19,8 @@ class AspiraAvailabilityClientTest {
                       },
                       "resourceAvailabilities": {
                         "-2147478966": [
+                          { "resourceId": -2147478966, "availability": 0 },
                           { "resourceId": -2147478966, "availability": 1 },
-                          { "resourceId": -2147478966, "availability": 5 },
                           { "resourceId": -2147478966 }
                         ]
                       }
@@ -31,6 +31,6 @@ class AspiraAvailabilityClientTest {
 
         assertEquals(listOf(1, 6), parsed.parkRollup)
         assertEquals(listOf(1, 5), parsed.byMapLink["-2147483515"])
-        assertEquals(listOf(1, 5, AspiraStatus.NO_DATA), parsed.byResource["-2147478966"])
+        assertEquals(listOf(0, 1, AspiraResourceAvailability.UNKNOWN), parsed.byResource["-2147478966"])
     }
 }

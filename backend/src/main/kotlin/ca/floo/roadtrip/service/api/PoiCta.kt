@@ -36,7 +36,7 @@ internal class PoiCta(
     }
 
     fun computeCta(row: PoiDetailRow): PoiCtaSchema? {
-        val providerRef = row.providerRefJson?.let { ProviderRefParser.parse(it) }
+        val providerRef = (row.ctaProviderRefJson ?: row.providerRefJson)?.let { ProviderRefParser.parse(it) }
         val infoUrl = row.infoUrl?.takeIf { it.isNotBlank() }
         return providers.firstNotNullOfOrNull { it.reserveCta(providerRef, infoUrl) }
             ?: infoUrl?.let {

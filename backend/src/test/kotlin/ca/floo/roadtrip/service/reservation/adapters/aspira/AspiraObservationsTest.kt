@@ -39,7 +39,7 @@ class AspiraObservationsTest {
                             mapId = mapId,
                             parkRollup = emptyList(),
                             byMapLink = emptyMap(),
-                            byResource = mapOf("-2147478966" to listOf(1, 1, 5)),
+                            byResource = mapOf("-2147478966" to listOf(0, 0, 1)),
                         )
                     },
                 )
@@ -74,8 +74,8 @@ class AspiraObservationsTest {
                             byMapLink = emptyMap(),
                             byResource =
                                 mapOf(
-                                    "-2147478966" to listOf(1, 1),
-                                    "-2147478967" to listOf(1, 5),
+                                    "-2147478966" to listOf(0, 0),
+                                    "-2147478967" to listOf(0, 1),
                                 ),
                         )
                     },
@@ -114,8 +114,8 @@ class AspiraObservationsTest {
                                     byMapLink = emptyMap(),
                                     byResource =
                                         mapOf(
-                                            "a" to listOf(1, 1),
-                                            "b" to listOf(5, 1),
+                                            "a" to listOf(0, 0),
+                                            "b" to listOf(1, 0),
                                         ),
                                 )
                             -202 ->
@@ -123,7 +123,7 @@ class AspiraObservationsTest {
                                     mapId = mapId,
                                     parkRollup = emptyList(),
                                     byMapLink = emptyMap(),
-                                    byResource = mapOf("c" to listOf(1, 5)),
+                                    byResource = mapOf("c" to listOf(0, 1)),
                                 )
                             else ->
                                 AspiraAvailability(
@@ -161,6 +161,54 @@ class AspiraObservationsTest {
             )
             assertEquals(4, dto.availability[0].reservableStatuses!!.size)
             assertEquals(4, dto.availability[1].reservableStatuses!!.size)
+        }
+
+    @Test
+    fun `aspira catalog availability uses resource availability code family`() =
+        runBlocking {
+            val client =
+                fakeAspiraClient(
+                    onFetch = { _, mapId, _, _ ->
+                        AspiraAvailability(
+                            mapId = mapId,
+                            parkRollup = emptyList(),
+                            byMapLink = emptyMap(),
+                            byResource =
+                                mapOf(
+                                    "available" to listOf(0),
+                                    "unavailable" to listOf(1),
+                                    "blocked" to listOf(4),
+                                ),
+                        )
+                    },
+                )
+
+            val dto =
+                availabilityResponseFromObservations(
+                    fetchAspiraCatalogObservations(
+                        client = client,
+                        host = "reservation.pc.gc.ca",
+                        parentMapId = -999,
+                        reservables =
+                            listOf(
+                                AspiraCatalogReservable("site:aspira_pc:available", "available", -101),
+                                AspiraCatalogReservable("site:aspira_pc:unavailable", "unavailable", -101),
+                                AspiraCatalogReservable("site:aspira_pc:blocked", "blocked", -101),
+                            ),
+                        startDate = LocalDate.parse("2026-07-09"),
+                        endDate = LocalDate.parse("2026-07-10"),
+                    ),
+                )
+
+            assertEquals(listOf("site:aspira_pc:available"), dto.availability.single().availableReservableIds)
+            assertEquals(
+                mapOf(
+                    "site:aspira_pc:available" to AvailabilityStatus.AVAILABLE,
+                    "site:aspira_pc:blocked" to AvailabilityStatus.RESERVED,
+                    "site:aspira_pc:unavailable" to AvailabilityStatus.RESERVED,
+                ),
+                dto.availability.single().reservableStatuses,
+            )
         }
 
     @Test

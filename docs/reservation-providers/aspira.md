@@ -65,6 +65,13 @@ Three layers of identity:
   and the key our `AspiraAvailabilityClient` looks up at request time
   in `/api/availability/map`'s `resourceAvailabilities` block.
 
+`pois.provider_ref` is the POI identity/join ref, not necessarily the best
+booking-grid deep link. Some Parks Canada campground POIs use a container
+`mapId`, while their sites live under child grid maps. `AspiraJoinByNameEtl`
+therefore stores `properties.upstream.booking_cta_provider_ref` when the
+inventory exposes child `mapIds[]`; the POI drawer uses that for the primary
+booking CTA and keeps `provider_ref` stable for joins and provider dispatch.
+
 ## Endpoint catalog
 
 ### `GET /api/maps`
@@ -154,13 +161,13 @@ GET https://{host}/api/availability/map
     ...
   },
   "resourceAvailabilities": {
-    "-2147482882": [{"availability":1}, {"availability":3}, ...],
+    "-2147482882": [{"availability":0}, {"availability":1}, ...],
     ...                                       // per-individual-site, one status per day
   }
 }
 ```
 
-Status codes (see `AspiraStatus.kt`):
+Map and map-link status codes (see `AspiraStatus.kt`):
 
 | Code | Meaning |
 |---|---|
@@ -172,6 +179,11 @@ Status codes (see `AspiraStatus.kt`):
 | 6 | available |
 | 7 | available |
 | unknown | unknown |
+
+Resource rows use a different code family (see
+`AspiraResourceAvailability.kt`): `0` is bookable, nonzero codes are not
+bookable for the requested date/equipment search, and a missing availability
+field is stored as an internal unknown sentinel.
 
 Used for: drawer week grid, bulk score endpoint, alert poller. Called
 at request time by `AspiraAvailabilityClient`; not captured by an

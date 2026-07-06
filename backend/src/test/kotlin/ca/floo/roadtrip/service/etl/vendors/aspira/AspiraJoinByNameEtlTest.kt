@@ -211,6 +211,56 @@ class AspiraJoinByNameEtlTest {
         assertEquals("exact", extras["match_kind"]!!.jsonPrimitive.content)
     }
 
+    @Test
+    fun `extras materialize canonical booking CTA ref from inventory child maps`() {
+        val leaf =
+            AspiraLeaf(
+                name = "Two Jack Lakeside",
+                transactionLocationId = 1005L,
+                mapId = -2147483026L,
+                resourceLocationId = 9002L,
+                parentName = "Banff",
+            )
+        val inventory =
+            """
+            {
+              "c1":{"resourceLocationId":9002,"resourceCategoryId":100,"mapIds":[-2147483645]},
+              "d1":{"resourceLocationId":9002,"resourceCategoryId":100,"mapIds":[-2147483639]}
+            }
+            """.trimIndent()
+
+        val poi = AspiraJoinByNameEtl(slug).transform(dtoWith(leaf, inventory, categoryDict), ctx).single()
+
+        val bookingRef = poi.extras!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
+        assertEquals("1005", bookingRef["transactionLocationId"]!!.jsonPrimitive.content)
+        assertEquals("-2147483645", bookingRef["mapId"]!!.jsonPrimitive.content)
+        assertEquals("9002", bookingRef["resourceLocationId"]!!.jsonPrimitive.content)
+    }
+
+    @Test
+    fun `booking CTA ref prefers bookable inventory maps over non-bookable maps`() {
+        val leaf =
+            AspiraLeaf(
+                name = "Two Jack Lakeside",
+                transactionLocationId = 1005L,
+                mapId = -2147483026L,
+                resourceLocationId = 9002L,
+                parentName = "Banff",
+            )
+        val inventory =
+            """
+            {
+              "parking":{"resourceLocationId":9002,"resourceCategoryId":200,"mapIds":[-2147483650]},
+              "camp":{"resourceLocationId":9002,"resourceCategoryId":100,"mapIds":[-2147483645]}
+            }
+            """.trimIndent()
+
+        val poi = AspiraJoinByNameEtl(slug).transform(dtoWith(leaf, inventory, categoryDict), ctx).single()
+
+        val bookingRef = poi.extras!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
+        assertEquals("-2147483645", bookingRef["mapId"]!!.jsonPrimitive.content)
+    }
+
     // A campground leaf whose own name misses geometry but whose parent park
     // centroid matches. This is the load-bearing correctness claim of the
     // change: dropping park-container leaves is only safe because each park's
