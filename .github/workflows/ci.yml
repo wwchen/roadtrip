@@ -32,6 +32,7 @@ jobs:
               - 'gradlew'
               - 'gradlew.bat'
               - 'settings.gradle.kts'
+              - 'codecov.yml'
               - '.github/workflows/ci.yml'
             smoke:
               - 'backend/**'
