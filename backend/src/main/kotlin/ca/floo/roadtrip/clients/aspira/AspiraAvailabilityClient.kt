@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.clients.aspira
 
 import ca.floo.roadtrip.clients.DateStringFormatter
+import ca.floo.roadtrip.models.metadata.aspira.AspiraResourceAvailability
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
@@ -52,8 +53,9 @@ import java.time.LocalDate
  *       }
  *     }
  *
- * Status codes (observed across multiple parks; documented in [AspiraStatus]):
+ * Map status codes (observed across multiple parks; documented in [AspiraStatus]):
  *   1=available, 3=partial, 5=closed, 6=mostly-booked, 7=mixed/some-avail, 0=no-data
+ * Resource rows use a separate code family, documented in [AspiraResourceAvailability].
  *
  * Azure WAF gates aggressive use — a 30-day query for one park is fine, but
  * looping 50 parks back-to-back triggers a CAPTCHA challenge. The mutex below
@@ -242,7 +244,7 @@ class HttpAspiraAvailabilityClient(
                         ?.get("availability")
                         ?.jsonPrimitive
                         ?.intOrNull
-                        ?: AspiraStatus.NO_DATA
+                        ?: AspiraResourceAvailability.UNKNOWN
                 }
             } ?: emptyMap()
         return AspiraAvailability(

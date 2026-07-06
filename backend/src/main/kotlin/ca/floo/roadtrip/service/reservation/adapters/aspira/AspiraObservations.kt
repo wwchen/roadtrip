@@ -8,6 +8,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.metadata.aspira.AspiraResourceAvailability
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.service.api.availabilityErrorDto
 import io.ktor.http.HttpStatusCode
@@ -225,7 +226,7 @@ private fun observationsFromResourceDays(
             reservableId = reservableId,
             date = start.plusDays(d.toLong()),
             observedAt = observedAt,
-            status = statusAt(resourceDays, d),
+            status = resourceStatusAt(resourceDays, d),
         )
     }
 
@@ -257,7 +258,7 @@ private fun observationsFromLinkedResourceCatalog(
                 reservableId = resource.rid,
                 date = start.plusDays(d.toLong()),
                 observedAt = resource.observedAt,
-                status = resource.days?.let { statusAt(it, d) } ?: AvailabilityStatus.UNKNOWN,
+                status = resource.days?.let { resourceStatusAt(it, d) } ?: AvailabilityStatus.UNKNOWN,
             )
         }
     }
@@ -274,8 +275,8 @@ private fun observationsFromOccupancyCatalogArrivalDay(
         val status =
             when {
                 occupancy == null -> AvailabilityStatus.UNKNOWN
-                occupancy.availability == ASPIRA_OCCUPANCY_AVAILABLE && !occupancy.filtered -> AvailabilityStatus.AVAILABLE
-                else -> AvailabilityStatus.RESERVED
+                occupancy.filtered -> AvailabilityStatus.RESERVED
+                else -> AspiraResourceAvailability.classify(occupancy.availability)
             }
         ReservableDayObservation(
             reservableId = resource.rid,
@@ -298,8 +299,6 @@ private data class CatalogResourceDays(
     val days: List<Int>?,
     val observedAt: Instant,
 )
-
-private const val ASPIRA_OCCUPANCY_AVAILABLE = 0
 
 private fun observationsFromIndexedStatusRows(
     rows: List<List<Int>>,
@@ -326,6 +325,16 @@ private fun statusAt(
 ): AvailabilityStatus =
     if (offset < statuses.size) {
         AspiraStatus.classify(statuses[offset])
+    } else {
+        AvailabilityStatus.UNKNOWN
+    }
+
+private fun resourceStatusAt(
+    statuses: List<Int>,
+    offset: Int,
+): AvailabilityStatus =
+    if (offset < statuses.size) {
+        AspiraResourceAvailability.classify(statuses[offset])
     } else {
         AvailabilityStatus.UNKNOWN
     }

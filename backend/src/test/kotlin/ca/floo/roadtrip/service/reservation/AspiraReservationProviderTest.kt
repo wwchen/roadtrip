@@ -37,8 +37,8 @@ class AspiraReservationProviderTest {
                             byMapLink = emptyMap(),
                             byResource =
                                 mapOf(
-                                    "100" to listOf(1, 1),
-                                    "200" to listOf(5, 5),
+                                    "100" to listOf(0, 0),
+                                    "200" to listOf(1, 1),
                                 ),
                         )
                     },
@@ -89,7 +89,7 @@ class AspiraReservationProviderTest {
             assertEquals(1, mapFetches)
             assertEquals(0, occupancyFetches)
             assertEquals(AvailabilityStatus.AVAILABLE, byRid["site:aspira_pc:100"]!!.status)
-            assertEquals(AvailabilityStatus.CLOSED, byRid["site:aspira_pc:200"]!!.status)
+            assertEquals(AvailabilityStatus.RESERVED, byRid["site:aspira_pc:200"]!!.status)
         }
 
     @Test
@@ -173,7 +173,7 @@ class AspiraReservationProviderTest {
                             byMapLink = emptyMap(),
                             byResource =
                                 mapOf(
-                                    "100" to List(7) { 1 },
+                                    "100" to List(7) { 0 },
                                 ),
                         )
                     },
@@ -226,7 +226,7 @@ class AspiraReservationProviderTest {
                             mapId = mapId,
                             parkRollup = emptyList(),
                             byMapLink = emptyMap(),
-                            byResource = mapOf("-2147478966" to listOf(1)),
+                            byResource = mapOf("-2147478966" to listOf(0)),
                         )
                     },
                 )
