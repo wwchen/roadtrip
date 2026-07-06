@@ -6,8 +6,8 @@ import ca.floo.roadtrip.models.domain.Reservable
 import java.time.LocalDate
 
 /**
- * Primary port for "give me this campground's availability." One adapter per
- * upstream reservation system (rec.gov, Aspira NextGen instance, ReserveAmerica, …).
+ * Primary reservation-provider port. One adapter per upstream reservation
+ * system (rec.gov, Aspira NextGen instance, ReserveAmerica, …).
  *
  * Availability services consume this interface; routes stay at the HTTP
  * boundary and never branch on `ProviderRef` variants directly. See
@@ -23,7 +23,7 @@ import java.time.LocalDate
  *   - rate-limit accounting (cross-adapter; lives above the port)
  *   - HTTP response shaping (service/API layer rolls observations into DTOs)
  */
-interface ReservationProvider {
+interface ReservationProvider : AvailabilityClient {
     /** Stable identity. Mapped from `pois.source` + `provider_ref` shape by the registry. */
     val id: ReservationProviderId
 
@@ -36,7 +36,11 @@ interface ReservationProvider {
      * @throws ReservationProviderError on upstream failure (rate limit, WAF block,
      *   5xx, parse error, or unsupported capability).
      */
-    suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch
+    override suspend fun availability(
+        ref: ProviderRef,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch
 
     /**
      * POI-scoped availability narrowed to the catalog rows linked to the POI.
@@ -44,15 +48,12 @@ interface ReservationProvider {
      * default delegates to [availability]. Providers with a parent/child map
      * split can override this to classify the actual linked resources.
      */
-    suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch =
-        availability(
-            AvailabilityRequest(
-                ref = req.ref,
-                startDate = req.startDate,
-                endDate = req.endDate,
-                force = req.force,
-            ),
-        )
+    override suspend fun catalogAvailability(
+        ref: ProviderRef,
+        reservables: List<CatalogReservableRef>,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch = availability(ref, startDate, endDate)
 
     /**
      * Per-day availability for one reservable under a campground. Providers
@@ -65,8 +66,12 @@ interface ReservationProvider {
      *
      * @throws ReservationProviderError on upstream failure or unsupported provider.
      */
-    suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
-        throw ReservationProviderError.Unsupported("reservableAvailability", id)
+    override suspend fun reservableAvailability(
+        ref: ProviderRef,
+        vendorId: String,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch = throw ReservationProviderError.Unsupported("reservableAvailability", id)
 
     /**
      * User-facing booking URL *template* for [reservable] under a campground
@@ -100,42 +105,9 @@ interface ReservationProvider {
     ): String? = bookingUrlTemplate(reservable, parentRef)?.let { BookingUrlTemplate.fill(it, date, date.plusDays(1)) }
 }
 
-/**
- * Single-id availability request.
- *
- * `force=true` busts the adapter's cache.
- */
-data class AvailabilityRequest(
-    val ref: ProviderRef,
-    val startDate: LocalDate,
-    val endDate: LocalDate,
-    val force: Boolean = false,
-)
-
-data class CatalogAvailabilityRequest(
-    val ref: ProviderRef,
-    val reservables: List<CatalogReservableRef>,
-    val startDate: LocalDate,
-    val endDate: LocalDate,
-    val force: Boolean = false,
-)
-
 data class CatalogReservableRef(
     val rid: String,
     val vendorId: String,
     val mapId: Long? = null,
     val resourceLocationId: Long? = null,
-)
-
-/**
- * Single-reservable availability request. [vendorId] is the opaque
- * reservables.vendor_id for the adapter's upstream (rec.gov campsite id,
- * Aspira resource id, etc.).
- */
-data class ReservableAvailabilityRequest(
-    val ref: ProviderRef,
-    val vendorId: String,
-    val startDate: LocalDate,
-    val endDate: LocalDate,
-    val force: Boolean = false,
 )

@@ -10,9 +10,7 @@ import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.SharedDbTest
-import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
@@ -29,6 +27,13 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertTrue
+
+private typealias CatalogAvailabilityHandler = (
+    ProviderRef,
+    List<CatalogReservableRef>,
+    LocalDate,
+    LocalDate,
+) -> AvailabilityObservationBatch
 
 /**
  * Tests for [ReservableAvailabilityComposer.availabilityFor] and its delegation
@@ -73,17 +78,17 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
             // Two rids under different parent refs → two fetch groups. Each rid's
             // response must carry only its own observations, keyed to its rid.
             val provider =
-                fakeProvider { req ->
+                fakeProvider { _, reservables, startDate, endDate ->
                     // Group A (site 100) is AVAILABLE; group B (site 200) is RESERVED.
                     val status =
-                        if (req.reservables.single().rid ==
+                        if (reservables.single().rid ==
                             "site:recgov:100"
                         ) {
                             AvailabilityStatus.AVAILABLE
                         } else {
                             AvailabilityStatus.RESERVED
                         }
-                    batchFor(req, status)
+                    batchFor(reservables, startDate, endDate, status)
                 }
             val targetA = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
             val targetB = resolvedTarget("site:recgov:200", provider = provider, parentRef = ProviderRef.RecGov("200"))
@@ -138,10 +143,10 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
             var fetchedStart: LocalDate? = null
             var fetchedEnd: LocalDate? = null
             val provider =
-                fakeProvider(maxPollWindowDays = 30, bookingHorizonDays = 365) { req ->
-                    fetchedStart = req.startDate
-                    fetchedEnd = req.endDate
-                    batchFor(req, AvailabilityStatus.AVAILABLE)
+                fakeProvider(maxPollWindowDays = 30, bookingHorizonDays = 365) { _, reservables, startDate, endDate ->
+                    fetchedStart = startDate
+                    fetchedEnd = endDate
+                    batchFor(reservables, startDate, endDate, AvailabilityStatus.AVAILABLE)
                 }
             val target = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
             val composer = composer(listOf(target), availability = null)
@@ -186,7 +191,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
             // null batch. On the live read path that must NOT become a 404 —
             // the old behavior (provider error propagates out of the composer so the
             // route maps it to 503) must be preserved.
-            val provider = fakeProvider { throw ReservationProviderError.RateLimited(RuntimeException("429")) }
+            val provider = fakeProvider { _, _, _, _ -> throw ReservationProviderError.RateLimited(RuntimeException("429")) }
             val target = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
             val composer = composer(listOf(target), availability = null)
 
@@ -258,24 +263,28 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
     private fun fakeProvider(
         maxPollWindowDays: Int = 60,
         bookingHorizonDays: Int = 180,
-        onCatalog: (CatalogAvailabilityRequest) -> AvailabilityObservationBatch = { batchFor(it, AvailabilityStatus.AVAILABLE) },
+        onCatalog: CatalogAvailabilityHandler = { _, reservables, startDate, endDate ->
+            batchFor(reservables, startDate, endDate, AvailabilityStatus.AVAILABLE)
+        },
     ): FakeProvider = FakeProvider(maxPollWindowDays, bookingHorizonDays, onCatalog)
 
     /** Build a batch that reports [status] for every requested reservable on every day in the window. */
     private fun batchFor(
-        req: CatalogAvailabilityRequest,
+        reservables: List<CatalogReservableRef>,
+        startDate: LocalDate,
+        endDate: LocalDate,
         status: AvailabilityStatus,
     ): AvailabilityObservationBatch {
         val observedAt = Instant.now()
-        val dates = (0 until ChronoUnit.DAYS.between(req.startDate, req.endDate)).map { req.startDate.plusDays(it) }
+        val dates = (0 until ChronoUnit.DAYS.between(startDate, endDate)).map { startDate.plusDays(it) }
         val observations =
-            req.reservables.flatMap { ref ->
+            reservables.flatMap { ref ->
                 dates.map { date -> ReservableDayObservation(ref.rid, date, observedAt, status) }
             }
         return AvailabilityObservationBatch(
             provider = "recgov",
-            startDate = req.startDate,
-            endDate = req.endDate,
+            startDate = startDate,
+            endDate = endDate,
             observations = observations,
             cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
         )
@@ -292,7 +301,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
     private class FakeProvider(
         maxPollWindowDays: Int,
         bookingHorizonDays: Int,
-        private val onCatalog: (CatalogAvailabilityRequest) -> AvailabilityObservationBatch,
+        private val onCatalog: CatalogAvailabilityHandler,
     ) : ReservationProvider {
         var catalogCalls = 0
 
@@ -305,15 +314,20 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
                 maxPollWindowDays = maxPollWindowDays,
             )
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =
-            throw UnsupportedOperationException("catalogAvailability is the batched path")
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("catalogAvailability is the batched path")
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
+        override suspend fun catalogAvailability(
+            ref: ProviderRef,
+            reservables: List<CatalogReservableRef>,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch {
             catalogCalls++
-            return onCatalog(req)
+            return onCatalog(ref, reservables, startDate, endDate)
         }
-
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
-            throw UnsupportedOperationException("composer uses catalogAvailability")
     }
 }

@@ -1,7 +1,9 @@
 package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
+import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -14,7 +16,11 @@ class ReservationProviderRegistryTest {
     ) : ReservationProvider {
         override val capabilities: ReservationProviderCapabilities = ReservationProviderCapabilities.UNSUPPORTED
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch = error("not used in this test")
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = error("not used in this test")
     }
 
     @Test

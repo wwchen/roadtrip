@@ -8,9 +8,6 @@ import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
@@ -141,14 +138,11 @@ class CatalogAvailabilityBatcherTest {
                     maxPollWindowDays = 60,
                 )
 
-            override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =
-                throw UnsupportedOperationException("not used by fetchByGroup tests")
-
-            override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch =
-                throw UnsupportedOperationException("fetchByGroup drives fetch via the lambda, not the provider")
-
-            override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
-                throw UnsupportedOperationException("not used by fetchByGroup tests")
+            override suspend fun availability(
+                ref: ProviderRef,
+                startDate: LocalDate,
+                endDate: LocalDate,
+            ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by fetchByGroup tests")
         }
 
     private fun reservable(rid: String): Reservable =

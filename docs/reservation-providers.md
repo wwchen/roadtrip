@@ -23,7 +23,9 @@ whether the abstraction is right.
 
 ```
 service/reservation/
-├── ReservationProvider.kt          # availability port (mandatory)
+├── AvailabilityClient.kt           # normalized availability operations
+├── ReservationProviderClients.kt   # boot-time vendor client set + lifecycle
+├── ReservationProvider.kt          # availability + provider metadata port
 ├── ReservationProviderId.kt        # enum/provider identity
 ├── ReservationProviderRegistry.kt  # forPoi(row) → adapter
 ├── ReservationProviderCapabilities.kt
@@ -31,12 +33,28 @@ service/reservation/
 └── adapters/
     ├── recgov/                 # availability
     ├── aspira/                 # availability
-    └── reserveamerica/         # availability
+    ├── reserveamerica/         # availability
+    └── reservecalifornia/      # availability
 ```
 
 `models.ProviderRef` (sealed class with `RecGov` / `Aspira` / `ReserveAmerica`
 variants) is the wire shape. Adapters take a `ProviderRef` of their
 matching variant and the registry guarantees the dispatch is correct.
+
+Every vendor adapter class implements both `AvailabilityClient` and
+`ReservationProvider`: `AvailabilityClient` is the shared normalized
+availability contract, while `ReservationProvider` adds identity,
+capabilities, and booking-link metadata. Raw HTTP clients under `clients/`
+stay vendor-specific because their upstream request and response shapes are
+genuinely different. The adapter boundary is where those shapes become
+provider-neutral `AvailabilityObservationBatch` values.
+
+Boot wiring passes those vendor-specific HTTP clients as one
+`ReservationProviderClients` set. Every vendor client interface is
+`AutoCloseable` with a default no-op close; implementations that actually own
+closeable resources, such as RecGov's Ktor client, override it. `Main` closes
+the set, not an individual vendor, so transport lifecycle does not leak through
+the reservation-provider abstraction.
 
 The availability orchestration that consumes this port lives one layer above:
 
@@ -71,9 +89,9 @@ drawer can hide affordances the provider doesn't support.
 
 | Action | Required interface | Notes |
 |---|---|---|
-| Per-day availability for a window | `ReservationProvider.availability(AvailabilityRequest)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
-| Catalog availability for linked reservables | `ReservationProvider.catalogAvailability(CatalogAvailabilityRequest)` | POI/rids path uses this so the returned availability is narrowed to known catalog rows. |
-| Reservable availability | `ReservationProvider.reservableAvailability(ReservableAvailabilityRequest)` | Narrow projection for a single reservable. Currently unused: availability is always requested by collection (POI), so the port method has no live caller since the single-reservable endpoint was retired. Kept as a capability; remove if it stays dead. |
+| Per-day availability for a window | `AvailabilityClient.availability(ref, startDate, endDate)` | Drives provider-level availability. Adapters fetch upstream directly; the decision to serve stored data or call the adapter live is handled above it by `AvailabilityLoader`, reading current state from the `availability` interval table. |
+| Catalog availability for linked reservables | `AvailabilityClient.catalogAvailability(ref, reservables, startDate, endDate)` | POI/rids path uses this so the returned availability is narrowed to known catalog rows. |
+| Reservable availability | `AvailabilityClient.reservableAvailability(ref, vendorId, startDate, endDate)` | Narrow projection for a single reservable. Currently unused: availability is always requested by collection (POI), so the port method has no live caller since the single-reservable endpoint was retired. Kept as a capability; remove if it stays dead. |
 | Capability probe | `ReservationProvider.capabilities` | Static per adapter; cheap. |
 | Watch evaluation on poll | watch evaluator | `same_site` requires one site bookable across all N nights; `any_combination` succeeds if at least one site is open per night. |
 | Record availability history | poller writes status-run rows to the `availability` interval table | Provider-agnostic; uses `AvailabilityObservationBatch` observations. |
@@ -118,7 +136,7 @@ This shape gives us three properties that hold regardless of UI changes:
 
 Adapters do not own polling cadence — the platform poller does. The poller
 uses `AvailabilityTargetResolver` to resolve the same provider target as live
-availability, then calls the provider through the same request models.
+availability, then calls the provider through the same availability port.
 Cadence, backoff, dedup, and the "should we poll right now" decision all live
 above the adapter, inside the generic poller.
 

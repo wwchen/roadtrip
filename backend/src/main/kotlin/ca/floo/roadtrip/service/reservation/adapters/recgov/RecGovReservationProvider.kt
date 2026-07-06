@@ -1,16 +1,16 @@
 package ca.floo.roadtrip.service.reservation.adapters.recgov
 
-import ca.floo.roadtrip.clients.recgov.AvailabilityClient
+import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.AvailabilityClient
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import java.time.LocalDate
 
 /**
  * rec.gov adapter. Vendor-specific error translation lives here; routes only
@@ -20,8 +20,9 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderId
  * the `availability` interval table.
  */
 class RecGovReservationProvider(
-    private val client: AvailabilityClient,
-) : ReservationProvider {
+    private val client: RecGovAvailabilityClient,
+) : ReservationProvider,
+    AvailabilityClient {
     override val id: ReservationProviderId = ReservationProviderId.RECGOV
 
     override val capabilities: ReservationProviderCapabilities =
@@ -32,50 +33,57 @@ class RecGovReservationProvider(
             maxPollWindowDays = RECGOV_MAX_POLL_WINDOW_DAYS,
         )
 
-    override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
-        val recgovId = recgovIdOrThrow(req.ref)
+    override suspend fun availability(
+        ref: ProviderRef,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch {
+        val recgovId = recgovIdOrThrow(ref)
         return runWithErrorMapping {
             fetchRecgovAvailabilityObservations(
                 client = client,
                 recgovId = recgovId,
-                startDate = req.startDate,
-                endDate = req.endDate,
+                startDate = startDate,
+                endDate = endDate,
             )
         }
     }
 
-    override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
-        if (req.reservables.isEmpty()) {
-            return availability(
-                AvailabilityRequest(
-                    ref = req.ref,
-                    startDate = req.startDate,
-                    endDate = req.endDate,
-                    force = req.force,
-                ),
-            )
+    override suspend fun catalogAvailability(
+        ref: ProviderRef,
+        reservables: List<CatalogReservableRef>,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch {
+        if (reservables.isEmpty()) {
+            return availability(ref, startDate, endDate)
         }
-        val recgovId = recgovIdOrThrow(req.ref)
+        val recgovId = recgovIdOrThrow(ref)
         return runWithErrorMapping {
             fetchRecgovCatalogObservations(
                 client = client,
                 recgovId = recgovId,
-                campsiteIds = req.reservables.map { it.vendorId }.toSet(),
-                startDate = req.startDate,
-                endDate = req.endDate,
+                campsiteIds = reservables.map { it.vendorId }.toSet(),
+                startDate = startDate,
+                endDate = endDate,
             )
         }
     }
 
-    override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
-        val recgovId = recgovIdOrThrow(req.ref)
+    override suspend fun reservableAvailability(
+        ref: ProviderRef,
+        vendorId: String,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch {
+        val recgovId = recgovIdOrThrow(ref)
         return runWithErrorMapping {
             fetchRecgovReservableObservations(
                 client = client,
                 recgovId = recgovId,
-                campsiteId = req.vendorId,
-                startDate = req.startDate,
-                endDate = req.endDate,
+                campsiteId = vendorId,
+                startDate = startDate,
+                endDate = endDate,
             )
         }
     }

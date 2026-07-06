@@ -1,11 +1,5 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.clients.recgov.AvailabilityClient
-import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
-import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
@@ -27,19 +21,12 @@ import ca.floo.roadtrip.service.reservation.adapters.reservecalifornia.ReserveCa
 object ReservationProviderRegistryFactory {
     fun build(
         registry: PoiRegistry,
-        recgovClient: AvailabilityClient,
-        aspiraClient: AspiraAvailabilityClient,
-        reserveAmericaClientFactory: (ReserveAmericaTenant) -> ReserveAmericaAvailabilityClient = { tenant ->
-            HttpReserveAmericaAvailabilityClient(host = tenant.host)
-        },
-        reserveCaliforniaClientFactory: () -> ReserveCaliforniaAvailabilityClient = {
-            HttpReserveCaliforniaAvailabilityClient()
-        },
+        clients: ReservationProviderClients,
     ): ReservationProviderRegistry {
         val adaptersBySource = mutableMapOf<String, ReservationProvider>()
 
         // RecGov — single adapter instance shared across every recgov source.
-        val recgov = RecGovReservationProvider(client = recgovClient)
+        val recgov = RecGovReservationProvider(client = clients.recgovClient)
         for (source in registry.recgovSources()) {
             adaptersBySource[source] = recgov
         }
@@ -60,7 +47,7 @@ object ReservationProviderRegistryFactory {
                             )
                     AspiraReservationProvider(
                         tenant = tenant,
-                        client = aspiraClient,
+                        client = clients.aspiraClient,
                     )
                 }
             adaptersBySource[source] = adapter
@@ -78,13 +65,13 @@ object ReservationProviderRegistryFactory {
             adaptersBySource[config.source] =
                 ReserveAmericaReservationProvider(
                     tenant = tenant,
-                    client = reserveAmericaClientFactory(tenant),
+                    client = clients.reserveAmericaClient,
                 )
         }
 
         val reserveCaliforniaSources = registry.reserveCaliforniaSources()
         if (reserveCaliforniaSources.isNotEmpty()) {
-            val reserveCalifornia = ReserveCaliforniaReservationProvider(client = reserveCaliforniaClientFactory())
+            val reserveCalifornia = ReserveCaliforniaReservationProvider(client = clients.reserveCaliforniaClient)
             for (source in reserveCaliforniaSources) {
                 adaptersBySource[source] = reserveCalifornia
             }

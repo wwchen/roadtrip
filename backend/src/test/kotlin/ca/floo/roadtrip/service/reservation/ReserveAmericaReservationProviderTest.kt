@@ -17,7 +17,8 @@ class ReserveAmericaReservationProviderTest {
     fun `catalog availability parses reserveamerica matrix and narrows to requested reservables`() =
         runBlocking {
             val client =
-                ReserveAmericaAvailabilityClient { _, _, startDate, _ ->
+                ReserveAmericaAvailabilityClient { host, _, _, startDate, _ ->
+                    assertEquals("newyorkstateparks.reserveamerica.com", host)
                     assertEquals(LocalDate.parse("2026-06-22"), startDate)
                     ReserveAmericaAvailability(
                         contractCode = "NY",
@@ -54,15 +55,13 @@ class ReserveAmericaReservationProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    CatalogAvailabilityRequest(
-                        ref = ProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"),
-                        reservables =
-                            listOf(
-                                CatalogReservableRef(rid = "site:reserveamerica_ny:253488", vendorId = "253488"),
-                            ),
-                        startDate = LocalDate.parse("2026-06-22"),
-                        endDate = LocalDate.parse("2026-06-24"),
-                    ),
+                    ref = ProviderRef.ReserveAmerica(contractCode = "NY", parkId = "489"),
+                    reservables =
+                        listOf(
+                            CatalogReservableRef(rid = "site:reserveamerica_ny:253488", vendorId = "253488"),
+                        ),
+                    startDate = LocalDate.parse("2026-06-22"),
+                    endDate = LocalDate.parse("2026-06-24"),
                 )
 
             assertEquals(ReservationProviderId.RESERVEAMERICA, adapter.id)

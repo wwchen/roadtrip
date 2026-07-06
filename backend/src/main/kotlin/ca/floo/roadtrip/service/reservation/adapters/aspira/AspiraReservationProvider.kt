@@ -5,13 +5,13 @@ import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.AvailabilityClient
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 
 /**
@@ -46,7 +46,8 @@ class AspiraReservationProvider(
      * to the map path by passing `false`.
      */
     private val occupancyEnabled: Boolean = true,
-) : ReservationProvider {
+) : ReservationProvider,
+    AvailabilityClient {
     override val id: ReservationProviderId = ReservationProviderId.ASPIRA
 
     override val capabilities: ReservationProviderCapabilities =
@@ -59,25 +60,34 @@ class AspiraReservationProvider(
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
         )
 
-    override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
-        val mapId = mapIdOrThrow(req.ref)
+    override suspend fun availability(
+        ref: ProviderRef,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch {
+        val mapId = mapIdOrThrow(ref)
         return runWithErrorMapping {
             fetchAspiraAvailabilityObservations(
                 client = client,
                 host = tenant.host,
                 mapId = mapId,
-                startDate = req.startDate,
-                endDate = req.endDate,
+                startDate = startDate,
+                endDate = endDate,
                 reservableVendor = tenant.vendorCode,
             )
         }
     }
 
-    override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
-        val ref = aspiraRefOrThrow(req.ref)
-        val parentMapId = mapIdOrThrow(ref.mapId)
+    override suspend fun catalogAvailability(
+        ref: ProviderRef,
+        reservables: List<CatalogReservableRef>,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch {
+        val aspiraRef = aspiraRefOrThrow(ref)
+        val parentMapId = mapIdOrThrow(aspiraRef.mapId)
         val targets =
-            req.reservables.map {
+            reservables.map {
                 AspiraCatalogReservable(
                     rid = it.rid,
                     resourceId = it.vendorId,
@@ -86,7 +96,7 @@ class AspiraReservationProvider(
                 )
             }
         val resourceLocationId =
-            ref.resourceLocationId?.let { intOrThrow("resourceLocationId", it) }
+            aspiraRef.resourceLocationId?.let { intOrThrow("resourceLocationId", it) }
                 ?: targets.mapNotNull { it.resourceLocationId }.distinct().singleOrNull()
         return runWithErrorMapping {
             if (occupancyEnabled && resourceLocationId != null) {
@@ -96,8 +106,8 @@ class AspiraReservationProvider(
                     parentMapId = parentMapId,
                     resourceLocationId = resourceLocationId,
                     reservables = targets,
-                    today = req.startDate,
-                    days = ChronoUnit.DAYS.between(req.startDate, req.endDate).toInt(),
+                    today = startDate,
+                    days = ChronoUnit.DAYS.between(startDate, endDate).toInt(),
                 )
             } else {
                 fetchAspiraCatalogObservations(
@@ -105,8 +115,8 @@ class AspiraReservationProvider(
                     host = tenant.host,
                     parentMapId = parentMapId,
                     reservables = targets,
-                    startDate = req.startDate,
-                    endDate = req.endDate,
+                    startDate = startDate,
+                    endDate = endDate,
                 )
             }
         }
@@ -121,17 +131,22 @@ class AspiraReservationProvider(
         parentRef: ProviderRef,
     ): String? = AspiraBookingUrl.templateFor(tenant.host, reservable.providerRef, parentRef)
 
-    override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
-        val mapId = mapIdOrThrow(req.ref)
+    override suspend fun reservableAvailability(
+        ref: ProviderRef,
+        vendorId: String,
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): AvailabilityObservationBatch {
+        val mapId = mapIdOrThrow(ref)
         return runWithErrorMapping {
             fetchAspiraResourceObservations(
                 client = client,
                 host = tenant.host,
                 mapId = mapId,
-                resourceId = req.vendorId,
+                resourceId = vendorId,
                 reservableVendor = tenant.vendorCode,
-                startDate = req.startDate,
-                endDate = req.endDate,
+                startDate = startDate,
+                endDate = endDate,
             )
         }
     }

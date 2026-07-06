@@ -31,10 +31,8 @@ import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
-import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.BookingUrlTemplate
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
@@ -378,36 +376,41 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 maxPollWindowDays = maxPollWindowDays,
             )
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =
-            throw UnsupportedOperationException("not used")
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
+        override suspend fun catalogAvailability(
+            ref: ProviderRef,
+            reservables: List<CatalogReservableRef>,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch {
             calls++
-            lastStart = req.startDate
-            lastEnd = req.endDate
-            lastReservableCount = req.reservables.size
+            lastStart = startDate
+            lastEnd = endDate
+            lastReservableCount = reservables.size
             mdcRunIdDuringCall = MDC.get("run_id")
             val observedAt = Instant.now()
             val observations =
-                req.reservables.map { ref ->
+                reservables.map { reservable ->
                     ReservableDayObservation(
-                        reservableId = ref.rid,
-                        date = observationDate ?: req.startDate,
+                        reservableId = reservable.rid,
+                        date = observationDate ?: startDate,
                         observedAt = observedAt,
                         status = status,
                     )
                 }
             return AvailabilityObservationBatch(
                 provider = "recgov",
-                startDate = req.startDate,
-                endDate = req.endDate,
+                startDate = startDate,
+                endDate = endDate,
                 observations = observations,
                 cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
             )
         }
-
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
-            throw UnsupportedOperationException("not used")
 
         override fun bookingUrlTemplate(
             reservable: Reservable,
@@ -425,14 +428,18 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 maxPollWindowDays = 60,
             )
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch =
-            throw UnsupportedOperationException("not used")
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch =
-            throw ReservationProviderError.RateLimited(RuntimeException("429"))
-
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch =
-            throw UnsupportedOperationException("not used")
+        override suspend fun catalogAvailability(
+            ref: ProviderRef,
+            reservables: List<CatalogReservableRef>,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw ReservationProviderError.RateLimited(RuntimeException("429"))
     }
 
     // A window well in the future so both watches are fully live under the

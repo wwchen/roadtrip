@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.reservation.adapters.recgov
 
-import ca.floo.roadtrip.clients.recgov.AvailabilityClient
 import ca.floo.roadtrip.clients.recgov.Campsite
+import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.models.api.AvailabilityErrorDto
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
@@ -55,7 +55,7 @@ internal fun monthsCovering(
  * not public/provider availability.
  */
 internal suspend fun fetchRecgovAvailabilityObservations(
-    client: AvailabilityClient,
+    client: RecGovAvailabilityClient,
     recgovId: String,
     startDate: LocalDate,
     endDate: LocalDate,
@@ -90,7 +90,7 @@ internal suspend fun fetchRecgovAvailabilityObservations(
  * classify only the matching POI sites without a per-site upstream loop.
  */
 internal suspend fun fetchRecgovCatalogObservations(
-    client: AvailabilityClient,
+    client: RecGovAvailabilityClient,
     recgovId: String,
     campsiteIds: Set<String>,
     startDate: LocalDate,
@@ -126,7 +126,7 @@ internal suspend fun fetchRecgovCatalogObservations(
  * narrow projection.
  */
 internal suspend fun fetchRecgovReservableObservations(
-    client: AvailabilityClient,
+    client: RecGovAvailabilityClient,
     recgovId: String,
     campsiteId: String,
     startDate: LocalDate,

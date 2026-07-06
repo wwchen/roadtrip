@@ -21,23 +21,25 @@ import java.nio.charset.StandardCharsets
 
 /**
  * rec.gov availability fetch surface. The HTTP-backed implementation
- * ([HttpAvailabilityClient]) hits the monthly availability endpoint with a
+ * ([HttpRecgovAvailabilityClient]) hits the monthly availability endpoint with a
  * global throttle and 429 backoff. Mirrors poller.js verbatim: 1.5s minimum
  * gap between calls, 3s/6s/12s retries on 429. Tests pass fakes.
  */
-interface AvailabilityClient {
+interface RecGovAvailabilityClient : AutoCloseable {
     suspend fun fetchMonth(
         campgroundId: String,
         monthStart: String,
     ): Map<String, Campsite>
+
+    override fun close() {}
 }
 
-class HttpAvailabilityClient(
+class HttpRecgovAvailabilityClient(
     private val client: HttpClient = defaultClient(),
     private val minGapMs: Long = 1500,
     private val retryDelaysMs: List<Long> = listOf(3_000, 6_000, 12_000),
-) : AvailabilityClient {
-    private val log = LoggerFactory.getLogger(HttpAvailabilityClient::class.java)
+) : RecGovAvailabilityClient {
+    private val log = LoggerFactory.getLogger(HttpRecgovAvailabilityClient::class.java)
     private val mutex = Mutex()
 
     @Volatile private var lastCallAt: Long = 0
@@ -48,13 +50,13 @@ class HttpAvailabilityClient(
     ): Map<String, Campsite> {
         val isoMonth = URLEncoder.encode("${monthStart}T00:00:00.000Z", StandardCharsets.UTF_8)
         val url = "$AVAIL_BASE/$campgroundId/month?start_date=$isoMonth"
-        log.info("Poller: GET availability {}/{}", campgroundId, monthStart)
         for ((attempt, delayMs) in (listOf(0L) + retryDelaysMs).withIndex()) {
             mutex.withLock {
                 val gap = System.currentTimeMillis() - lastCallAt
                 if (gap < minGapMs) delay(minGapMs - gap)
                 lastCallAt = System.currentTimeMillis()
             }
+            log.info("recgov GET availability campground={} month={} attempt={}", campgroundId, monthStart, attempt + 1)
             val resp = client.get(url)
             if (resp.status == HttpStatusCode.TooManyRequests) {
                 if (attempt >= retryDelaysMs.size) {
@@ -73,7 +75,7 @@ class HttpAvailabilityClient(
         return emptyMap()
     }
 
-    fun close() = client.close()
+    override fun close() = client.close()
 
     companion object {
         const val AVAIL_BASE = "https://www.recreation.gov/api/camps/availability/campground"
@@ -140,9 +142,7 @@ private fun parseCampsites(body: String): Map<String, Campsite> {
 }
 
 private fun JsonPrimitive.contentOrNull(): String? =
-    if (this is JsonPrimitive &&
-        this.isString
-    ) {
+    if (this.isString) {
         content
     } else if (content == "null") {
         null

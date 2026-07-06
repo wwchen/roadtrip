@@ -967,14 +967,8 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.reservation.Reserva
         )
 
     override suspend fun availability(
-        req: ca.floo.roadtrip.service.reservation.AvailabilityRequest,
-    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-
-    override suspend fun catalogAvailability(
-        req: ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest,
-    ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
-
-    override suspend fun reservableAvailability(
-        req: ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest,
+        ref: ca.floo.roadtrip.models.domain.ProviderRef,
+        startDate: java.time.LocalDate,
+        endDate: java.time.LocalDate,
     ): ca.floo.roadtrip.models.availability.AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
 }

@@ -56,31 +56,29 @@ class AspiraReservationProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    CatalogAvailabilityRequest(
-                        ref =
-                            ProviderRef.Aspira(
-                                transactionLocationId = -2147483630,
-                                mapId = -2147483388,
+                    ref =
+                        ProviderRef.Aspira(
+                            transactionLocationId = -2147483630,
+                            mapId = -2147483388,
+                            resourceLocationId = -2147483624,
+                        ),
+                    reservables =
+                        listOf(
+                            CatalogReservableRef(
+                                rid = "site:aspira_pc:100",
+                                vendorId = "100",
+                                mapId = -2147483615,
                                 resourceLocationId = -2147483624,
                             ),
-                        reservables =
-                            listOf(
-                                CatalogReservableRef(
-                                    rid = "site:aspira_pc:100",
-                                    vendorId = "100",
-                                    mapId = -2147483615,
-                                    resourceLocationId = -2147483624,
-                                ),
-                                CatalogReservableRef(
-                                    rid = "site:aspira_pc:200",
-                                    vendorId = "200",
-                                    mapId = -2147483615,
-                                    resourceLocationId = -2147483624,
-                                ),
+                            CatalogReservableRef(
+                                rid = "site:aspira_pc:200",
+                                vendorId = "200",
+                                mapId = -2147483615,
+                                resourceLocationId = -2147483624,
                             ),
-                        startDate = LocalDate.parse("2026-06-17"),
-                        endDate = LocalDate.parse("2026-06-18"),
-                    ),
+                        ),
+                    startDate = LocalDate.parse("2026-06-17"),
+                    endDate = LocalDate.parse("2026-06-18"),
                 )
 
             val byRid = batch.observations.associateBy { it.reservableId }
@@ -120,25 +118,23 @@ class AspiraReservationProviderTest {
 
             val batch =
                 adapter.catalogAvailability(
-                    CatalogAvailabilityRequest(
-                        ref =
-                            ProviderRef.Aspira(
-                                transactionLocationId = -2147483630,
-                                mapId = -2147483388,
-                                resourceLocationId = null,
+                    ref =
+                        ProviderRef.Aspira(
+                            transactionLocationId = -2147483630,
+                            mapId = -2147483388,
+                            resourceLocationId = null,
+                        ),
+                    reservables =
+                        listOf(
+                            CatalogReservableRef(
+                                rid = "site:aspira_pc:100",
+                                vendorId = "100",
+                                mapId = -2147483615,
+                                resourceLocationId = -2147483624,
                             ),
-                        reservables =
-                            listOf(
-                                CatalogReservableRef(
-                                    rid = "site:aspira_pc:100",
-                                    vendorId = "100",
-                                    mapId = -2147483615,
-                                    resourceLocationId = -2147483624,
-                                ),
-                            ),
-                        startDate = LocalDate.parse("2026-06-17"),
-                        endDate = LocalDate.parse("2026-06-18"),
-                    ),
+                        ),
+                    startDate = LocalDate.parse("2026-06-17"),
+                    endDate = LocalDate.parse("2026-06-18"),
                 )
 
             val observation = batch.observations.single()
@@ -177,17 +173,15 @@ class AspiraReservationProviderTest {
                 val adapter = AspiraReservationProvider(tenant = tenant, client = client)
                 val batch =
                     adapter.reservableAvailability(
-                        ReservableAvailabilityRequest(
-                            ref =
-                                ProviderRef.Aspira(
-                                    transactionLocationId = -2147483648,
-                                    mapId = -2147483516,
-                                    resourceLocationId = -2147483515,
-                                ),
-                            vendorId = "-2147478966",
-                            startDate = LocalDate.parse("2026-07-01"),
-                            endDate = LocalDate.parse("2026-07-02"),
-                        ),
+                        ref =
+                            ProviderRef.Aspira(
+                                transactionLocationId = -2147483648,
+                                mapId = -2147483516,
+                                resourceLocationId = -2147483515,
+                            ),
+                        vendorId = "-2147478966",
+                        startDate = LocalDate.parse("2026-07-01"),
+                        endDate = LocalDate.parse("2026-07-02"),
                     )
 
                 assertEquals("site:$vendor:-2147478966", batch.reservableId)
@@ -227,16 +221,14 @@ class AspiraReservationProviderTest {
 
             val batch =
                 adapter.availability(
-                    AvailabilityRequest(
-                        ref =
-                            ProviderRef.Aspira(
-                                transactionLocationId = -2147483630,
-                                mapId = -2147483388,
-                                resourceLocationId = null,
-                            ),
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-03"),
-                    ),
+                    ref =
+                        ProviderRef.Aspira(
+                            transactionLocationId = -2147483630,
+                            mapId = -2147483388,
+                            resourceLocationId = null,
+                        ),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-03"),
                 )
 
             val dates = availabilityDatesFromObservations(batch)

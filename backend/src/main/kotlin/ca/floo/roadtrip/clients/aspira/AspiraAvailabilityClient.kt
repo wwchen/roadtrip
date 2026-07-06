@@ -62,7 +62,7 @@ import java.time.LocalDate
  * HttpPlainText plugin auto-adds `Accept-Charset: UTF-8` and Aspira's WAF
  * rejects requests carrying that header (real browsers don't send it).
  */
-interface AspiraAvailabilityClient {
+interface AspiraAvailabilityClient : AutoCloseable {
     suspend fun fetch(
         host: String,
         mapId: Int,
@@ -76,6 +76,8 @@ interface AspiraAvailabilityClient {
         startDate: LocalDate,
         endDate: LocalDate,
     ): AspiraOccupancy
+
+    override fun close() {}
 }
 
 class HttpAspiraAvailabilityClient(
@@ -113,7 +115,6 @@ class HttpAspiraAvailabilityClient(
                     "&partySize=${AspiraSearchDefaults.DEFAULT_PEOPLE_COUNT}" +
                     "&equipmentCategoryId=${AspiraSearchDefaults.ANY_EQUIPMENT_CATEGORY_ID}" +
                     "&subEquipmentCategoryId=${AspiraSearchDefaults.ANY_SUB_EQUIPMENT_CATEGORY_ID}"
-            log.debug("aspira GET {}", url)
             val req =
                 HttpRequest
                     .newBuilder(URI.create(url))
@@ -126,6 +127,13 @@ class HttpAspiraAvailabilityClient(
                     .header("Referer", "https://$host/")
                     .GET()
                     .build()
+            log.info(
+                "aspira GET availability host={} mapId={} startDate={} endDate={}",
+                host,
+                mapId,
+                startDate,
+                endDate,
+            )
             val resp =
                 try {
                     client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
@@ -177,7 +185,6 @@ class HttpAspiraAvailabilityClient(
                         "bookingUid" to "",
                         "groupHoldUid" to "",
                     )
-            log.debug("aspira occupancy GET {}", url)
             val req =
                 HttpRequest
                     .newBuilder(URI.create(url))
@@ -187,6 +194,13 @@ class HttpAspiraAvailabilityClient(
                     .header("Referer", "https://$host/")
                     .GET()
                     .build()
+            log.info(
+                "aspira GET occupancy host={} resourceLocationId={} startDate={} endDate={}",
+                host,
+                resourceLocationId,
+                startDate,
+                endDate,
+            )
             val resp =
                 try {
                     client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()

@@ -13,9 +13,7 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.ReservableAvailabilityComposer
-import ca.floo.roadtrip.service.reservation.AvailabilityRequest
-import ca.floo.roadtrip.service.reservation.CatalogAvailabilityRequest
-import ca.floo.roadtrip.service.reservation.ReservableAvailabilityRequest
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
@@ -997,36 +995,50 @@ class ReservableRoutesTest : SharedDbTest() {
                 maxPollWindowDays = 60,
             )
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: java.time.LocalDate,
+            endDate: java.time.LocalDate,
+        ): AvailabilityObservationBatch {
             availabilityCalls++
-            val ref = req.ref as ProviderRef.RecGov
+            val recGovRef = ref as ProviderRef.RecGov
             return fakeResponse(
-                startDate = req.startDate,
-                endDate = req.endDate,
-                campgroundId = ref.recgovId,
+                startDate = startDate,
+                endDate = endDate,
+                campgroundId = recGovRef.recgovId,
                 reservableId = null,
             )
         }
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
+        override suspend fun catalogAvailability(
+            ref: ProviderRef,
+            reservables: List<CatalogReservableRef>,
+            startDate: java.time.LocalDate,
+            endDate: java.time.LocalDate,
+        ): AvailabilityObservationBatch {
             catalogAvailabilityCalls++
-            val ref = req.ref as ProviderRef.RecGov
+            val recGovRef = ref as ProviderRef.RecGov
             return fakeResponse(
-                startDate = req.startDate,
-                endDate = req.endDate,
-                campgroundId = ref.recgovId,
+                startDate = startDate,
+                endDate = endDate,
+                campgroundId = recGovRef.recgovId,
                 reservableId = null,
-                availableIds = req.reservables.map { it.rid },
+                availableIds = reservables.map { it.rid },
             )
         }
 
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
+        override suspend fun reservableAvailability(
+            ref: ProviderRef,
+            vendorId: String,
+            startDate: java.time.LocalDate,
+            endDate: java.time.LocalDate,
+        ): AvailabilityObservationBatch {
             reservableAvailabilityCalls++
             return fakeResponse(
-                startDate = req.startDate,
-                endDate = req.endDate,
+                startDate = startDate,
+                endDate = endDate,
                 campgroundId = null,
-                reservableId = "site:recgov:${req.vendorId}",
+                reservableId = "site:recgov:$vendorId",
             )
         }
 
@@ -1078,36 +1090,50 @@ class ReservableRoutesTest : SharedDbTest() {
                 maxPollWindowDays = 60,
             )
 
-        override suspend fun availability(req: AvailabilityRequest): AvailabilityObservationBatch {
-            val ref = req.ref as ProviderRef.Aspira
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: java.time.LocalDate,
+            endDate: java.time.LocalDate,
+        ): AvailabilityObservationBatch {
+            val aspiraRef = ref as ProviderRef.Aspira
             return fakeResponse(
-                startDate = req.startDate,
-                endDate = req.endDate,
-                mapId = ref.mapId.toString(),
+                startDate = startDate,
+                endDate = endDate,
+                mapId = aspiraRef.mapId.toString(),
                 reservableId = null,
                 availableIds = emptyList(),
             )
         }
 
-        override suspend fun catalogAvailability(req: CatalogAvailabilityRequest): AvailabilityObservationBatch {
-            val ref = req.ref as ProviderRef.Aspira
+        override suspend fun catalogAvailability(
+            ref: ProviderRef,
+            reservables: List<CatalogReservableRef>,
+            startDate: java.time.LocalDate,
+            endDate: java.time.LocalDate,
+        ): AvailabilityObservationBatch {
+            val aspiraRef = ref as ProviderRef.Aspira
             return fakeResponse(
-                startDate = req.startDate,
-                endDate = req.endDate,
-                mapId = ref.mapId.toString(),
+                startDate = startDate,
+                endDate = endDate,
+                mapId = aspiraRef.mapId.toString(),
                 reservableId = null,
-                availableIds = req.reservables.map { it.rid },
+                availableIds = reservables.map { it.rid },
             )
         }
 
-        override suspend fun reservableAvailability(req: ReservableAvailabilityRequest): AvailabilityObservationBatch {
-            val ref = req.ref as ProviderRef.Aspira
+        override suspend fun reservableAvailability(
+            ref: ProviderRef,
+            vendorId: String,
+            startDate: java.time.LocalDate,
+            endDate: java.time.LocalDate,
+        ): AvailabilityObservationBatch {
+            val aspiraRef = ref as ProviderRef.Aspira
             return fakeResponse(
-                startDate = req.startDate,
-                endDate = req.endDate,
-                mapId = ref.mapId.toString(),
-                reservableId = "site:aspira_wa:${req.vendorId}",
-                availableIds = listOf("site:aspira_wa:${req.vendorId}"),
+                startDate = startDate,
+                endDate = endDate,
+                mapId = aspiraRef.mapId.toString(),
+                reservableId = "site:aspira_wa:$vendorId",
+                availableIds = listOf("site:aspira_wa:$vendorId"),
             )
         }
 

@@ -6,7 +6,6 @@ import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
-import ca.floo.roadtrip.service.reservation.AvailabilityRequest
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import java.time.LocalDate
@@ -125,11 +124,9 @@ private suspend fun cataloglessProviderAvailability(
         )
     val batch =
         provider.availability(
-            AvailabilityRequest(
-                ref = ref,
-                startDate = window.startDate,
-                endDate = window.endDate,
-            ),
+            ref = ref,
+            startDate = window.startDate,
+            endDate = window.endDate,
         )
     // Render-only fallback for POIs without linked reservables. Availability
     // persistence currently happens through AvailabilityLoader once catalog
