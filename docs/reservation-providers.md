@@ -19,6 +19,11 @@ This doc is the contract. **A new reservation provider is a new file under
 else outside that directory should change.** That rule is the test of
 whether the abstraction is right.
 
+For the implementation checklist, use
+[adding-a-reservation-provider.md](adding-a-reservation-provider.md). This file
+explains the abstraction; the onboarding doc walks through the code, config,
+tests, and operational wiring for a new provider.
+
 ## Layout
 
 ```

@@ -1,9 +1,22 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.clients.cache.RouteCache
-import ca.floo.roadtrip.clients.mapbox.RouteResponse
 import ca.floo.roadtrip.clients.mapbox.RoutingException
+import ca.floo.roadtrip.models.api.CorridorFeatureDto
+import ca.floo.roadtrip.models.api.CorridorPropertiesDto
+import ca.floo.roadtrip.models.api.RouteErrorDto
+import ca.floo.roadtrip.models.api.RouteFeatureCollectionDto
+import ca.floo.roadtrip.models.api.RouteFeatureDto
+import ca.floo.roadtrip.models.api.RouteLegDto
+import ca.floo.roadtrip.models.api.RouteLineGeometryDto
+import ca.floo.roadtrip.models.api.RoutePropertiesDto
+import ca.floo.roadtrip.models.routing.RouteResponse
 import ca.floo.roadtrip.repo.RouteCorridorRepo
+import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
+import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
+import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
+import ca.floo.roadtrip.service.routing.RouteCache
+import ca.floo.roadtrip.service.routing.lineStringGeoJson
+import ca.floo.roadtrip.service.routing.routeCorridorRadiusMeters
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
@@ -11,11 +24,8 @@ import io.ktor.server.response.respondText
 import io.ktor.server.routing.Route
 import io.ktor.server.routing.get
 import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.encodeToJsonElement
 import org.jooq.DSLContext
 import org.jooq.exception.DataAccessException
@@ -218,58 +228,6 @@ internal fun routeResponseFeatureCollection(
     }
     return RouteFeatureCollectionDto(features = features)
 }
-
-@Serializable
-internal data class RouteFeatureCollectionDto(
-    val type: String = "FeatureCollection",
-    val features: List<JsonElement>,
-)
-
-@Serializable
-private data class RouteFeatureDto(
-    val type: String = "Feature",
-    val geometry: RouteLineGeometryDto,
-    val properties: RoutePropertiesDto,
-)
-
-@Serializable
-private data class CorridorFeatureDto(
-    val type: String = "Feature",
-    val geometry: JsonElement,
-    val properties: CorridorPropertiesDto,
-)
-
-@Serializable
-private data class RouteLineGeometryDto(
-    val type: String = "LineString",
-    val coordinates: List<List<Double>>,
-)
-
-@Serializable
-private data class RoutePropertiesDto(
-    @SerialName("distance_m") val distanceMeters: Double,
-    @SerialName("duration_s") val durationSeconds: Double,
-    val legs: List<RouteLegDto>,
-    val waypoints: List<List<Double>>,
-)
-
-@Serializable
-private data class RouteLegDto(
-    @SerialName("distance_m") val distanceMeters: Double,
-    @SerialName("duration_s") val durationSeconds: Double,
-)
-
-@Serializable
-private data class CorridorPropertiesDto(
-    val role: String = "corridor",
-    @SerialName("radius_miles") val radiusMiles: Double,
-)
-
-@Serializable
-private data class RouteErrorDto(
-    val error: String,
-    val detail: String,
-)
 
 private suspend fun ApplicationCall.respondRouteError(
     error: String,

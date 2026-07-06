@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.clients.mapbox.RouteLeg
-import ca.floo.roadtrip.clients.mapbox.RouteResponse
+import ca.floo.roadtrip.models.routing.RouteLeg
+import ca.floo.roadtrip.models.routing.RouteResponse
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.jsonArray

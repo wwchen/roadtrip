@@ -11,7 +11,10 @@ import java.nio.charset.StandardCharsets
  * re-spelled at a call site.
  */
 internal object RecGovBookingUrl {
+    private const val CAMPGROUND_URL = "https://www.recreation.gov/camping/campgrounds"
     private const val CAMPSITE_URL = "https://www.recreation.gov/camping/campsites"
+
+    fun campground(recgovId: String): String = "$CAMPGROUND_URL/${urlEncode(recgovId)}"
 
     /** Booking-page template for the campsite [vendorId], with window placeholders. */
     fun template(vendorId: String): String =

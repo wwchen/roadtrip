@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.clients.cache.RouteCache
 import ca.floo.roadtrip.clients.mapbox.RoutingException
 import ca.floo.roadtrip.models.api.ApiErrorSchema
 import ca.floo.roadtrip.models.api.PointGeometrySchema
@@ -13,6 +12,12 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.OnRoutePoiRepo
 import ca.floo.roadtrip.repo.OnRouteRow
 import ca.floo.roadtrip.repo.RouteCorridorRepo
+import ca.floo.roadtrip.service.routing.MAX_ROUTE_CORRIDOR_RADIUS_MILES
+import ca.floo.roadtrip.service.routing.MAX_ROUTE_WAYPOINTS
+import ca.floo.roadtrip.service.routing.MIN_ROUTE_CORRIDOR_RADIUS_MILES
+import ca.floo.roadtrip.service.routing.RouteCache
+import ca.floo.roadtrip.service.routing.lineStringGeoJson
+import ca.floo.roadtrip.service.routing.routeCorridorRadiusMeters
 import io.github.smiley4.ktorswaggerui.dsl.routing.post
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode

@@ -1,8 +1,8 @@
-package ca.floo.roadtrip.clients.cache
+package ca.floo.roadtrip.service.routing
 
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
-import ca.floo.roadtrip.clients.mapbox.RouteLeg
-import ca.floo.roadtrip.clients.mapbox.RouteResponse
+import ca.floo.roadtrip.models.routing.RouteLeg
+import ca.floo.roadtrip.models.routing.RouteResponse
 import ca.floo.roadtrip.repo.InMemoryPersistentCache
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.Test

@@ -23,6 +23,8 @@ data class AspiraTenant(
     val host: String,
     val vendorCode: String,
     val bookingHorizonDays: Int,
+    val bookingSystemLabel: String = "Aspira NextGen",
+    val ctaLabel: String? = null,
 )
 
 object AspiraTenants {
@@ -43,16 +45,22 @@ object AspiraTenants {
                 host = "reservation.pc.gc.ca",
                 vendorCode = "aspira_pc",
                 bookingHorizonDays = DEFAULT_HORIZON_DAYS,
+                bookingSystemLabel = "Aspira NextGen (Parks Canada)",
+                ctaLabel = "Reserve on parks.canada.ca",
             ),
             AspiraTenant(
                 host = "camping.bcparks.ca",
                 vendorCode = "aspira_bc",
                 bookingHorizonDays = DEFAULT_HORIZON_DAYS,
+                bookingSystemLabel = "Aspira NextGen (BC Parks)",
+                ctaLabel = "Book on BC Parks",
             ),
             AspiraTenant(
                 host = "washington.goingtocamp.com",
                 vendorCode = "aspira_wa",
                 bookingHorizonDays = DEFAULT_HORIZON_DAYS,
+                bookingSystemLabel = "Aspira NextGen (WA State Parks)",
+                ctaLabel = "Book WA State Park",
             ),
         )
 

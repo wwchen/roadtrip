@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.clients.mapbox
 
+import ca.floo.roadtrip.models.routing.GeocodeResult
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.defaultRequest
@@ -113,14 +114,6 @@ class MapboxGeocoder(
             }
     }
 }
-
-data class GeocodeResult(
-    val id: String,
-    val placeName: String,
-    val lng: Double,
-    val lat: Double,
-    val placeType: String,
-)
 
 class GeocodeException(
     message: String,

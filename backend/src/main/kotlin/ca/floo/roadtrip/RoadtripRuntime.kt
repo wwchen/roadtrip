@@ -1,0 +1,239 @@
+package ca.floo.roadtrip
+
+import ca.floo.roadtrip.clients.aspira.HttpAspiraAvailabilityClient
+import ca.floo.roadtrip.clients.mapbox.MapboxDirections
+import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
+import ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient
+import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
+import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.config.ApiCacheEntity
+import ca.floo.roadtrip.config.AppConfig
+import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.repo.ApiCacheRepo
+import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
+import ca.floo.roadtrip.repo.AvailabilityPollerRepo
+import ca.floo.roadtrip.repo.AvailabilityRepo
+import ca.floo.roadtrip.repo.AvailabilityRunRepo
+import ca.floo.roadtrip.repo.AvailabilityWatchRepo
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.DbConfig
+import ca.floo.roadtrip.repo.PoiServingRepo
+import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.dataSourceFor
+import ca.floo.roadtrip.repo.dsl
+import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
+import ca.floo.roadtrip.service.availability.AvailabilityService
+import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
+import ca.floo.roadtrip.service.availability.AvailabilityWatchService
+import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
+import ca.floo.roadtrip.service.availability.CoordinateTimeZones
+import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.ReservableAvailabilityComposer
+import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
+import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
+import ca.floo.roadtrip.service.etl.framework.IngestController
+import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
+import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
+import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
+import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
+import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
+import ca.floo.roadtrip.service.reservation.ReservationProviderClients
+import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
+import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
+import ca.floo.roadtrip.service.routing.RouteCache
+import ca.floo.roadtrip.service.scheduler.PollerBackfill
+import ca.floo.roadtrip.service.scheduler.WatchReaper
+import ca.floo.roadtrip.service.scheduler.framework.Scheduler
+import ca.floo.roadtrip.service.scheduler.jobs.AvailabilityPollExecutor
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import org.jooq.DSLContext
+import java.io.File
+import javax.sql.DataSource
+
+internal data class RoadtripBootContext(
+    val appConfig: AppConfig,
+    val dataSource: DataSource,
+    val ctx: DSLContext,
+    val reservationProviderClients: ReservationProviderClients,
+    val staticDir: File,
+    val mapboxGeocoder: MapboxGeocoder,
+    val routeCache: RouteCache,
+    val poiRegistry: PoiRegistry,
+    val ingestController: IngestController,
+)
+
+internal class RoadtripRuntime(
+    val boot: RoadtripBootContext,
+    val reservationProviderRegistry: ReservationProviderRegistry,
+    val availabilityDateResolver: AvailabilityDateResolver,
+    val availabilityService: AvailabilityService,
+    val availabilityWatchService: AvailabilityWatchService,
+    val watchAlertDispatcher: WatchAlertDispatcher,
+    val schedulerScope: CoroutineScope,
+    private val slackNotifications: SlackNotificationServiceImpl,
+) {
+    val appConfig: AppConfig get() = boot.appConfig
+    val ctx: DSLContext get() = boot.ctx
+    val staticDir: File get() = boot.staticDir
+    val mapboxGeocoder: MapboxGeocoder get() = boot.mapboxGeocoder
+    val routeCache: RouteCache get() = boot.routeCache
+    val poiRegistry: PoiRegistry get() = boot.poiRegistry
+    val ingestController: IngestController get() = boot.ingestController
+
+    fun close() {
+        schedulerScope.cancel()
+        boot.reservationProviderClients.close()
+        slackNotifications.close()
+    }
+}
+
+internal fun createRoadtripBootContext(): RoadtripBootContext {
+    val appConfig = AppConfig.fromEnv()
+    val ds = dataSourceFor(DbConfig.fromEnv())
+    migrate(ds)
+    val ctx = dsl(ds)
+    val reservationProviderClients =
+        ReservationProviderClients(
+            recgovClient = HttpRecgovAvailabilityClient(),
+            aspiraClient = HttpAspiraAvailabilityClient(),
+            reserveAmericaClient = HttpReserveAmericaAvailabilityClient(),
+            reserveCaliforniaClient = HttpReserveCaliforniaAvailabilityClient(),
+        )
+
+    val staticDir = File(System.getenv("ROADTRIP_STATIC_DIR") ?: ".")
+    val mapboxToken = System.getenv("MAPBOX_TOKEN")
+    val mapboxGeocoder = MapboxGeocoder(token = mapboxToken)
+    val routeCache =
+        RouteCache(
+            MapboxDirections(token = mapboxToken),
+            ttl = appConfig.cache.ttlFor(ApiCacheEntity.ROUTE),
+            persistentCache = ApiCacheRepo(ctx),
+        )
+
+    val poiRegistry = PoiRegistry.load(File(staticDir, "config/poi-registry.yaml"))
+
+    sweepStaleIngestRuns(ctx)
+    val ingestController =
+        IngestController(
+            ctx = ctx,
+            etl =
+                EtlOrchestrator(
+                    ctx,
+                    File(staticDir, "data/raw"),
+                    poiRegistry,
+                ),
+            fetchTargets = fetchTargetsFromRegistry(poiRegistry, staticDir),
+            importTargets = importTargetsFromRegistry(poiRegistry),
+            workingDir = staticDir,
+        )
+
+    return RoadtripBootContext(
+        appConfig = appConfig,
+        dataSource = ds,
+        ctx = ctx,
+        reservationProviderClients = reservationProviderClients,
+        staticDir = staticDir,
+        mapboxGeocoder = mapboxGeocoder,
+        routeCache = routeCache,
+        poiRegistry = poiRegistry,
+        ingestController = ingestController,
+    )
+}
+
+internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
+    val reservationProviderRegistry =
+        ReservationProviderRegistryFactory.build(
+            registry = boot.poiRegistry,
+            clients = boot.reservationProviderClients,
+        )
+
+    val reservablesRepo = ReservableRepo(boot.ctx)
+    val campsiteProviders = CampsiteProviderRepo(boot.ctx)
+    val availability = AvailabilityRepo(boot.ctx)
+    val availabilityDateResolver = AvailabilityDateResolver()
+    CoordinateTimeZones.warmUp()
+    val availabilityTargets =
+        DbAvailabilityTargetResolver(
+            providerRefs = campsiteProviders,
+            reservablesRepo = reservablesRepo,
+            reservationProviders = reservationProviderRegistry,
+            dateResolver = availabilityDateResolver,
+        )
+    val availabilityService =
+        AvailabilityServiceImpl(
+            providerRefs = campsiteProviders,
+            reservablesRepo = reservablesRepo,
+            composer =
+                ReservableAvailabilityComposer(
+                    targets = availabilityTargets,
+                    dateResolver = availabilityDateResolver,
+                    availability = availability,
+                    snapshotFreshnessTtl = { providerId ->
+                        boot.appConfig.cache.ttlFor(
+                            when (providerId) {
+                                ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY
+                                ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY
+                                ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY
+                                ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY
+                            },
+                        )
+                    },
+                ),
+            dateResolver = availabilityDateResolver,
+        )
+    val availabilityWatchService = AvailabilityWatchService(boot.ctx, reservablesRepo, availabilityTargets)
+
+    val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    val availabilityPollers = AvailabilityPollerRepo(boot.ctx)
+    PollerBackfill(boot.ctx, AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), availabilityTargets)).run()
+
+    val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
+    val watchAlertDispatcher =
+        WatchAlertDispatcher(
+            slack = slackNotifications,
+            scopeResolver = WatchScopeResolver(reservablesRepo),
+            watches = AvailabilityWatchRepo(boot.ctx),
+            targets = availabilityTargets,
+            pois = PoiServingRepo(boot.ctx),
+            availability = availability,
+            grafanaRootUrl = boot.appConfig.grafana?.rootUrl,
+            appRootUrl = boot.appConfig.webApp?.rootUrl,
+        )
+    Scheduler(
+        repo = availabilityPollers,
+        handler =
+            AvailabilityPollExecutor(
+                pollers = availabilityPollers,
+                reservablesRepo = reservablesRepo,
+                batcher = CatalogAvailabilityBatcher(),
+                availability = availability,
+                runs = AvailabilityRunRepo(boot.ctx),
+                dateResolver = availabilityDateResolver,
+                targets = availabilityTargets,
+                fetchCalls = AvailabilityFetchCallRepo(boot.ctx),
+                limiter = VendorRateLimiter(VendorRateLimitConfig.fromEnv(), boot.dataSource),
+                alertDispatcher = watchAlertDispatcher,
+            )::handle,
+        name = "availability",
+    ).start(schedulerScope)
+    WatchReaper(availabilityPollers).start(schedulerScope)
+
+    return RoadtripRuntime(
+        boot = boot,
+        reservationProviderRegistry = reservationProviderRegistry,
+        availabilityDateResolver = availabilityDateResolver,
+        availabilityService = availabilityService,
+        availabilityWatchService = availabilityWatchService,
+        watchAlertDispatcher = watchAlertDispatcher,
+        schedulerScope = schedulerScope,
+        slackNotifications = slackNotifications,
+    )
+}

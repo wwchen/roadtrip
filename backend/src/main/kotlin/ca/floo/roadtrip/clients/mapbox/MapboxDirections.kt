@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.clients.mapbox
 
+import ca.floo.roadtrip.models.routing.RouteLeg
+import ca.floo.roadtrip.models.routing.RouteResponse
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.defaultRequest
@@ -7,7 +9,6 @@ import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.statement.bodyAsText
 import io.ktor.http.encodeURLPathPart
-import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
@@ -133,22 +134,6 @@ class MapboxDirections(
             }
     }
 }
-
-/** Driving route. coordinates is `[[lng,lat], [lng,lat], ...]` GeoJSON-style. */
-@Serializable
-data class RouteResponse(
-    val coordinates: List<List<Double>>,
-    val distanceMeters: Double,
-    val durationSeconds: Double,
-    val legs: List<RouteLeg>,
-)
-
-/** Per-leg summary (one entry per segment between adjacent waypoints). */
-@Serializable
-data class RouteLeg(
-    val distanceMeters: Double,
-    val durationSeconds: Double,
-)
 
 /** Any routing failure. Caller maps to HTTP. */
 class RoutingException(

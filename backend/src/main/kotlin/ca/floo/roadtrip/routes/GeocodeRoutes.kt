@@ -1,9 +1,9 @@
 package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.clients.mapbox.GeocodeException
-import ca.floo.roadtrip.clients.mapbox.GeocodeResult
 import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.models.api.ApiErrorSchema
+import ca.floo.roadtrip.models.routing.GeocodeResult
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
