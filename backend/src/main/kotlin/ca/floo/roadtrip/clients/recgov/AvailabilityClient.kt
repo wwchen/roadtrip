@@ -18,6 +18,7 @@ import kotlinx.serialization.json.JsonPrimitive
 import org.slf4j.LoggerFactory
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.time.YearMonth
 
 /**
  * rec.gov availability fetch surface. The HTTP-backed implementation
@@ -48,7 +49,9 @@ class HttpAvailabilityClient(
     ): Map<String, Campsite> {
         val isoMonth = URLEncoder.encode("${monthStart}T00:00:00.000Z", StandardCharsets.UTF_8)
         val url = "$AVAIL_BASE/$campgroundId/month?start_date=$isoMonth"
-        log.info("Poller: GET availability {}/{}", campgroundId, monthStart)
+        val monthEnd = YearMonth.parse(monthStart.substring(0, 7)).atEndOfMonth().toString()
+        val window = "$monthStart..$monthEnd"
+        log.info("Poller: GET availability {} [{}]", campgroundId, window)
         for ((attempt, delayMs) in (listOf(0L) + retryDelaysMs).withIndex()) {
             mutex.withLock {
                 val gap = System.currentTimeMillis() - lastCallAt
@@ -58,15 +61,15 @@ class HttpAvailabilityClient(
             val resp = client.get(url)
             if (resp.status == HttpStatusCode.TooManyRequests) {
                 if (attempt >= retryDelaysMs.size) {
-                    throw RuntimeException("rec.gov 429 after ${retryDelaysMs.size} retries on $campgroundId/$monthStart")
+                    throw RuntimeException("rec.gov 429 after ${retryDelaysMs.size} retries on $campgroundId [$window]")
                 }
                 val wait = retryDelaysMs[attempt]
-                log.warn("429 rate limit on {}/{} — retrying in {}s", campgroundId, monthStart, wait / 1000)
+                log.warn("429 rate limit on {} [{}] — retrying in {}s", campgroundId, window, wait / 1000)
                 delay(wait)
                 continue
             }
             if (!resp.status.isSuccess()) {
-                throw RuntimeException("rec.gov ${resp.status} on $campgroundId/$monthStart: ${resp.bodyAsText().take(200)}")
+                throw RuntimeException("rec.gov ${resp.status} on $campgroundId [$window]: ${resp.bodyAsText().take(200)}")
             }
             return parseCampsites(resp.bodyAsText())
         }

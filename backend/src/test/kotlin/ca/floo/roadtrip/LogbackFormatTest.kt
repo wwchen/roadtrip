@@ -32,7 +32,7 @@ class LogbackFormatTest {
             MDC.put("run_id", "12345")
             LoggerFactory
                 .getLogger("ca.floo.roadtrip.clients.recgov.HttpAvailabilityClient")
-                .info("Poller: GET availability {}/{}", "232447", "2026-09-01")
+                .info("Poller: GET availability {} [{}]", "232447", "2026-09-01..2026-09-30")
             MDC.clear()
         } finally {
             System.out.flush()
@@ -43,7 +43,7 @@ class LogbackFormatTest {
         original.println("CAPTURED LOG LINE: $line")
 
         assertTrue(
-            line.contains("\"message\":\"Poller: GET availability 232447/2026-09-01\""),
+            line.contains("\"message\":\"Poller: GET availability 232447 [2026-09-01..2026-09-30]\""),
             "message not interpolated: $line",
         )
         assertTrue(
