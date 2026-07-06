@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.clients.reserveamerica
 
+import ca.floo.roadtrip.clients.DateStringFormatter
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
@@ -75,6 +76,15 @@ class HttpReserveAmericaAvailabilityClient(
         var startIdx = 0
         var totalSites: Int? = null
         while (totalSites == null || startIdx < totalSites) {
+            log.info(
+                "reserveamerica GET availability host={} contractCode={} parkId={} startDate={} endDate={} startIdx={}",
+                host,
+                contractCode,
+                parkId,
+                DateStringFormatter.date(startDate),
+                DateStringFormatter.date(endDate),
+                startIdx,
+            )
             val html = get(host, matrixUrl(host, contractCode, parkId, startDate, startIdx))
             val page = ReserveAmericaAvailabilityParser.parse(html, startDate, endDate)
             merge(out, page.statuses)
@@ -118,7 +128,6 @@ class HttpReserveAmericaAvailabilityClient(
                 .header("Referer", "https://$host/")
                 .GET()
                 .build()
-        log.info("reserveamerica GET host={} url={}", host, url)
         val resp =
             try {
                 client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()
