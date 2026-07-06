@@ -18,6 +18,21 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [
+        "roadtrip"
+      ],
+      "targetBlank": false,
+      "title": "All dashboards",
+      "tooltip": "",
+      "type": "dashboards"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {
@@ -28,7 +43,7 @@
         "x": 0,
         "y": 0
       },
-      "id": 14,
+      "id": 20,
       "title": "Run",
       "type": "row"
     },
@@ -260,7 +275,274 @@
         "x": 0,
         "y": 12
       },
-      "id": 15,
+      "id": 21,
+      "title": "Logs",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "roadtrip-loki"
+      },
+      "description": "Backend log lines whose structured MDC context contains this run_id.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto",
+              "wrapText": false
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": true
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "level"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "DEBUG": {
+                        "color": "#8E8E8E",
+                        "index": 3,
+                        "text": "DEBUG"
+                      },
+                      "ERROR": {
+                        "color": "#F2495C",
+                        "index": 0,
+                        "text": "ERROR"
+                      },
+                      "INFO": {
+                        "color": "#5794F2",
+                        "index": 2,
+                        "text": "INFO"
+                      },
+                      "TRACE": {
+                        "color": "#B877D9",
+                        "index": 4,
+                        "text": "TRACE"
+                      },
+                      "WARN": {
+                        "color": "#FF9830",
+                        "index": 1,
+                        "text": "WARN"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "log_run_id"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 80
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "logger"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "message"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto",
+                  "wrapText": false
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "context"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 320
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Message",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 625
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 13,
+        "w": 24,
+        "x": 0,
+        "y": 13
+      },
+      "id": 19,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Date"
+          }
+        ]
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "roadtrip-loki"
+          },
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "{container=~\"$container\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\", log_run_id=\"mdc.run_id\" | __error__=\"\" | log_run_id=\"${run_id}\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` |~ \"$log_search\"",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Run logs (mdc.run_id = $run_id)",
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "labels"
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(Time|level|logger|loggerName|message|context|log_run_id)$"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "loggerName": true
+            },
+            "includeByName": {},
+            "indexByName": {
+              "Time": 0,
+              "context": 5,
+              "level": 1,
+              "log_run_id": 2,
+              "logger": 3,
+              "loggerName": 6,
+              "message": 4
+            },
+            "renameByName": {
+              "Time": "Date",
+              "context": "Context",
+              "level": "Level",
+              "log_run_id": "Run ID",
+              "logger": "Logger",
+              "message": "Message"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 22,
       "title": "Related",
       "type": "row"
     },
@@ -360,7 +642,7 @@
         "h": 16,
         "w": 12,
         "x": 0,
-        "y": 13
+        "y": 27
       },
       "id": 5,
       "options": {
@@ -535,7 +817,7 @@
         "h": 16,
         "w": 12,
         "x": 12,
-        "y": 13
+        "y": 27
       },
       "id": 13,
       "options": {
@@ -621,9 +903,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 29
+        "y": 43
       },
-      "id": 16,
+      "id": 23,
       "title": "Snapshots produced by this run",
       "type": "row"
     },
@@ -724,7 +1006,7 @@
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 44
       },
       "id": 7,
       "options": {
@@ -891,7 +1173,7 @@
         "h": 11,
         "w": 24,
         "x": 0,
-        "y": 42
+        "y": 56
       },
       "id": 8,
       "options": {
@@ -921,9 +1203,9 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 67
       },
-      "id": 17,
+      "id": 24,
       "title": "History (this poller's runs)",
       "type": "row"
     },
@@ -1030,7 +1312,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 54
+        "y": 68
       },
       "id": 12,
       "options": {
@@ -1071,6 +1353,112 @@
       ],
       "title": "Recent runs for this poller",
       "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 78
+      },
+      "id": 25,
+      "title": "Fetch calls",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(date|_at)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 79
+      },
+      "id": 26,
+      "options": {
+        "cellHeight": "sm",
+        "enablePagination": true,
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  fc.created_at,\n  fc.provider,\n  fc.parent_ref,\n  fc.reservable_count,\n  fc.window_start,\n  fc.window_end,\n  fc.outcome,\n  fc.duration_ms,\n  fc.error\nFROM availability_fetch_call fc\nWHERE fc.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY fc.created_at DESC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Fetch calls for this run",
+      "type": "table"
     }
   ],
   "preload": false,
@@ -1079,6 +1467,8 @@
   "tags": [
     "roadtrip",
     "availability",
+    "logs",
+    "loki",
     "watch"
   ],
   "templating": {
@@ -1106,6 +1496,32 @@
         "skipUrlSync": false,
         "sort": 0,
         "type": "query"
+      },
+      {
+        "current": {
+          "text": "roadtrip-backend.*",
+          "value": "roadtrip-backend.*"
+        },
+        "description": "Container name regex used by the run-scoped Loki log panel.",
+        "hide": 0,
+        "label": "Log container",
+        "name": "container",
+        "query": "roadtrip-backend.*",
+        "skipUrlSync": false,
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "description": "Optional LogQL line regex applied after the run_id filter.",
+        "hide": 0,
+        "label": "Log text / regex",
+        "name": "log_search",
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox"
       }
     ]
   },

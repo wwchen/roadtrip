@@ -18,6 +18,21 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [
+        "roadtrip"
+      ],
+      "targetBlank": false,
+      "title": "All dashboards",
+      "tooltip": "",
+      "type": "dashboards"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {
@@ -632,6 +647,219 @@
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
+      "description": "Counts selected-POI reservables by latest known status at each observation time for the selected target date.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "sites",
+            "axisPlacement": "auto",
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 25,
+            "gradientMode": "none",
+            "hideFrom": {
+              "legend": false,
+              "tooltip": false,
+              "viz": false
+            },
+            "insertNulls": false,
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "normal"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "available"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#73BF69",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "first_come"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#FF9830",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reserved"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "booked"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#F2495C",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "closed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#6C737A",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unknown"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "#8E8E8E",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 62
+      },
+      "id": 10,
+      "options": {
+        "annotations": {
+          "clustering": -1,
+          "multiLane": false
+        },
+        "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "displayMode": "table",
+          "enableFacetedFilter": false,
+          "overflow": "ellipsis",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "hideZeros": false,
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "WITH target_date_input AS (\n  SELECT CASE\n    WHEN ${target_date:sqlstring} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'\n      THEN ${target_date:sqlstring}::date\n    ELSE current_date\n  END AS target_date\n),\nscoped AS (\n  SELECT r.id AS reservable_id\n  FROM reservables r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n),\nobservations AS (\n  SELECT\n    s.id,\n    s.reservable_id,\n    s.status::text AS status,\n    s.last_observed_at\n  FROM availability s\n  JOIN scoped sc ON sc.reservable_id = s.reservable_id\n  JOIN target_date_input target ON target.target_date = s.target_date\n),\nbounds AS (\n  SELECT\n    min(o.last_observed_at) AS first_observed_at,\n    greatest(\n      min(o.last_observed_at),\n      least((target.target_date + interval '1 day')::timestamptz, now())\n    ) AS last_axis_at\n  FROM target_date_input target\n  LEFT JOIN observations o ON true\n  GROUP BY target.target_date\n),\npoints AS (\n  SELECT DISTINCT last_observed_at AS time\n  FROM observations\n  UNION\n  SELECT first_observed_at AS time\n  FROM bounds\n  WHERE first_observed_at IS NOT NULL\n  UNION\n  SELECT last_axis_at AS time\n  FROM bounds\n  WHERE last_axis_at IS NOT NULL\n),\nstatuses(status, sort_order) AS (\n  VALUES\n    ('available', 1),\n    ('first_come', 2),\n    ('reserved', 3),\n    ('booked', 4),\n    ('closed', 5),\n    ('unknown', 6)\n),\nsite_status_at_point AS (\n  SELECT\n    p.time,\n    coalesce(latest.status, 'unknown') AS status\n  FROM points p\n  CROSS JOIN scoped sc\n  LEFT JOIN LATERAL (\n    SELECT o.status\n    FROM observations o\n    WHERE o.reservable_id = sc.reservable_id\n      AND o.last_observed_at <= p.time\n    ORDER BY o.last_observed_at DESC, o.id DESC\n    LIMIT 1\n  ) latest ON true\n),\nstatus_counts AS (\n  SELECT\n    time,\n    status,\n    count(*)::double precision AS value\n  FROM site_status_at_point\n  GROUP BY time, status\n)\nSELECT\n  p.time,\n  st.status AS metric,\n  coalesce(c.value, 0)::double precision AS value\nFROM points p\nCROSS JOIN statuses st\nLEFT JOIN status_counts c ON c.time = p.time AND c.status = st.status\nORDER BY p.time ASC, st.sort_order ASC;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Availability history for target date",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "description": "Status key: A = available, FC = first come, R = reserved, B = booked, C = closed, ? = unknown. Click a site or day cell to open Reservable / Detail.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -654,27 +882,33 @@
               "options": {
                 "available": {
                   "color": "green",
-                  "index": 0
+                  "index": 0,
+                  "text": "A"
                 },
                 "booked": {
                   "color": "red",
-                  "index": 3
+                  "index": 3,
+                  "text": "B"
                 },
                 "closed": {
                   "color": "dark-gray",
-                  "index": 4
+                  "index": 4,
+                  "text": "C"
                 },
                 "first_come": {
                   "color": "orange",
-                  "index": 1
+                  "index": 1,
+                  "text": "FC"
                 },
                 "reserved": {
                   "color": "red",
-                  "index": 2
+                  "index": 2,
+                  "text": "R"
                 },
                 "unknown": {
                   "color": "text",
-                  "index": 5
+                  "index": 5,
+                  "text": "?"
                 }
               },
               "type": "value"
@@ -706,7 +940,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "site"
+              "options": "site / day"
             },
             "properties": [
               {
@@ -738,7 +972,7 @@
           {
             "matcher": {
               "id": "byRegexp",
-              "options": "^\\d{2}-\\d{2}"
+              "options": "^\\d{4}-\\d{2}-\\d{2}$"
             },
             "properties": [
               {
@@ -746,8 +980,8 @@
                 "value": [
                   {
                     "targetBlank": false,
-                    "title": "Open Reservable / Detail",
-                    "url": "/d/reservable-detail/reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
+                    "title": "Show history for this date",
+                    "url": "/d/poi-reservables/poi-reservables?var-poi_name=${poi_name}&var-poi_id=${poi_id}&var-target_date=${__field.name}&var-poi_category=${poi_category}"
                   }
                 ]
               }
@@ -759,7 +993,7 @@
         "h": 16,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 70
       },
       "id": 9,
       "options": {
@@ -783,7 +1017,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT r.id AS reservable_id,\n         coalesce(r.loop || ' / ', '') || coalesce(r.name, r.vendor_id) AS label\n  FROM reservables r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n),\nlatest_per_day AS (\n  SELECT DISTINCT ON (s.reservable_id, s.target_date)\n         s.reservable_id,\n         s.target_date,\n         s.status::text AS observed_status\n  FROM availability s\n  JOIN scoped sc ON sc.reservable_id = s.reservable_id\n  WHERE s.target_date >= current_date\n    AND s.target_date <  current_date + interval '30 days'\n  ORDER BY s.reservable_id, s.target_date, s.last_observed_at DESC, s.id DESC\n)\nSELECT\n  format('[%s] %s', sc.reservable_id, sc.label) AS site,\n  to_char(l.target_date, 'MM-DD Dy')             AS day,\n  l.observed_status                              AS status\nFROM latest_per_day l\nJOIN scoped sc ON sc.reservable_id = l.reservable_id\nORDER BY sc.label, l.target_date;",
+          "rawSql": "WITH scoped AS (\n  SELECT r.id AS reservable_id,\n         coalesce(r.loop || ' / ', '') || coalesce(r.name, r.vendor_id) AS label\n  FROM reservables r\n  JOIN reservable_pois rp ON rp.reservable_id = r.id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n),\nlatest_per_day AS (\n  SELECT DISTINCT ON (s.reservable_id, s.target_date)\n         s.reservable_id,\n         s.target_date,\n         s.status::text AS observed_status\n  FROM availability s\n  JOIN scoped sc ON sc.reservable_id = s.reservable_id\n  WHERE s.target_date >= current_date\n    AND s.target_date <  current_date + interval '30 days'\n  ORDER BY s.reservable_id, s.target_date, s.last_observed_at DESC, s.id DESC\n)\nSELECT\n  format('[%s] %s', sc.reservable_id, sc.label) AS site,\n  to_char(l.target_date, 'YYYY-MM-DD')           AS day,\n  l.observed_status                              AS status\nFROM latest_per_day l\nJOIN scoped sc ON sc.reservable_id = l.reservable_id\nORDER BY sc.label, l.target_date;",
           "refId": "A"
         }
       ],
@@ -800,7 +1034,7 @@
         {
           "id": "extractFields",
           "options": {
-            "format": "regex",
+            "format": "regexp",
             "keepSourceField": false,
             "regex": "^\\[(?<reservable_id>\\d+)\\] (?<site>.+)$",
             "source": "site\\day"
@@ -826,6 +1060,9 @@
   "preload": false,
   "refresh": "",
   "schemaVersion": 42,
+  "tags": [
+    "roadtrip"
+  ],
   "templating": {
     "list": [
       {
@@ -967,6 +1204,55 @@
         "regexApplyTo": "value",
         "skipUrlSync": false,
         "sort": 3,
+        "type": "query"
+      },
+      {
+        "allowCustomValue": true,
+        "current": {
+          "text": "2026-07-10",
+          "value": "2026-07-10"
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "definition": "SELECT\n  to_char(d::date, 'YYYY-MM-DD') AS __text,\n  to_char(d::date, 'YYYY-MM-DD') AS __value\nFROM generate_series(\n  current_date,\n  current_date + interval '29 days',\n  interval '1 day'\n) AS d\nORDER BY d ASC",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Target date",
+        "multi": false,
+        "name": "target_date",
+        "options": [],
+        "query": {
+          "editorMode": "code",
+          "format": "table",
+          "query": "SELECT\n  to_char(d::date, 'YYYY-MM-DD') AS __text,\n  to_char(d::date, 'YYYY-MM-DD') AS __value\nFROM generate_series(\n  current_date,\n  current_date + interval '29 days',\n  interval '1 day'\n) AS d\nORDER BY d ASC",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  to_char(d::date, 'YYYY-MM-DD') AS __text,\n  to_char(d::date, 'YYYY-MM-DD') AS __value\nFROM generate_series(\n  current_date,\n  current_date + interval '29 days',\n  interval '1 day'\n) AS d\nORDER BY d ASC",
+          "refId": "SQLVariableQueryEditor-VariableQuery",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        },
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
         "type": "query"
       },
       {

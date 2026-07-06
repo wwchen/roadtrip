@@ -1,4 +1,4 @@
-.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks companion grafana-export
+.PHONY: help run data-fetch data-import reset-db qa install install-hooks _ensure-hooks companion grafana-export grafana-sync-links
 
 PORT       ?= 8765
 BACKEND_IMAGE ?= roadtrip/backend
@@ -26,6 +26,7 @@ help:
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
 	@echo "  make grafana-export   Snapshot UI-edited dashboards back to grafana/dashboards/*.json"
+	@echo "  make grafana-sync-links  Apply shared Grafana dashboard navigation links"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
@@ -125,3 +126,6 @@ _ensure-hooks:
 # UID list overridable via env vars; see scripts/export_grafana_dashboards.py.
 grafana-export:
 	./scripts/export_grafana_dashboards.py
+
+grafana-sync-links:
+	./scripts/sync_grafana_dashboard_links.py

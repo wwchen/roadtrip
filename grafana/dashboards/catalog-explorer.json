@@ -7,6 +7,19 @@
   "graphTooltip": 0,
   "links": [
     {
+      "asDropdown": true,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [
+        "roadtrip"
+      ],
+      "targetBlank": false,
+      "title": "All dashboards",
+      "tooltip": "",
+      "type": "dashboards"
+    },
+    {
       "asDropdown": false,
       "icon": "external link",
       "includeVars": true,

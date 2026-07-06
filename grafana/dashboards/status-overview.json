@@ -20,28 +20,17 @@
   "graphTooltip": 0,
   "links": [
     {
-      "asDropdown": false,
-      "icon": "external link",
+      "asDropdown": true,
+      "icon": "dashboard",
       "includeVars": false,
       "keepTime": false,
-      "tags": [],
+      "tags": [
+        "roadtrip"
+      ],
       "targetBlank": false,
-      "title": "Ingest & Catalog Freshness",
+      "title": "All dashboards",
       "tooltip": "",
-      "type": "link",
-      "url": "/d/ingest-catalog-freshness/ingest-catalog-freshness"
-    },
-    {
-      "asDropdown": false,
-      "icon": "external link",
-      "includeVars": false,
-      "keepTime": false,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Watch drill-down",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/reservable-watch-drill/reservable-watch-drill"
+      "type": "dashboards"
     },
     {
       "asDropdown": false,
@@ -54,19 +43,6 @@
       "tooltip": "",
       "type": "link",
       "url": "/d/poller-run-detail/poller-run-detail"
-    },
-    {
-      "asDropdown": true,
-      "icon": "dashboard",
-      "includeVars": false,
-      "keepTime": false,
-      "tags": [
-        "roadtrip"
-      ],
-      "targetBlank": false,
-      "title": "All Roadtrip dashboards",
-      "tooltip": "",
-      "type": "dashboards"
     }
   ],
   "liveNow": false,
@@ -349,16 +325,6 @@
             },
             "properties": [
               {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Open Ingest & Catalog Freshness (this target)",
-                    "url": "/d/ingest-catalog-freshness/ingest-catalog-freshness?${__url_time_range}&var-target=${__data.fields.target}"
-                  }
-                ]
-              },
-              {
                 "id": "custom.width",
                 "value": 393
               }
@@ -438,12 +404,202 @@
       "type": "table"
     },
     {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "aborted": {
+                        "color": "red",
+                        "index": 4
+                      },
+                      "active": {
+                        "color": "green",
+                        "index": 2
+                      },
+                      "blocked": {
+                        "color": "red",
+                        "index": 5
+                      },
+                      "completed": {
+                        "color": "green",
+                        "index": 0
+                      },
+                      "done": {
+                        "color": "blue",
+                        "index": 9
+                      },
+                      "failed": {
+                        "color": "red",
+                        "index": 3
+                      },
+                      "noop": {
+                        "color": "text",
+                        "index": 10
+                      },
+                      "ok": {
+                        "color": "green",
+                        "index": 1
+                      },
+                      "paused": {
+                        "color": "yellow",
+                        "index": 7
+                      },
+                      "rate_limited": {
+                        "color": "yellow",
+                        "index": 8
+                      },
+                      "started": {
+                        "color": "yellow",
+                        "index": 6
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 520
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "target"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 393
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(duration|age)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(_at|age)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 17
+      },
+      "id": 20,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  child.id,\n  child.parent_run_id,\n  parent.target,\n  parent.phase AS run_kind,\n  child.phase,\n  child.phase_kind,\n  child.status,\n  child.started_at,\n  child.completed_at,\n  EXTRACT(EPOCH FROM (COALESCE(child.completed_at, now()) - child.started_at)) * 1000 AS duration,\n  child.exit_code,\n  child.counts,\n  child.notes\nFROM ingest_runs child\nLEFT JOIN ingest_runs parent ON parent.id = child.parent_run_id\nWHERE $__timeFilter(child.started_at)\n  AND child.phase_kind <> 'target'\n  AND (\n    child.status IN ('failed', 'aborted')\n    OR (child.status = 'started' AND child.started_at < now() - interval '30 minutes')\n  )\nORDER BY child.started_at DESC, child.id DESC\nLIMIT 300;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Failed or stuck ingest phases",
+      "type": "table"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 17
+        "y": 25
       },
       "id": 16,
       "title": "② Availability polling — what got fetched",
@@ -474,7 +630,7 @@
         "h": 4,
         "w": 12,
         "x": 0,
-        "y": 18
+        "y": 26
       },
       "id": 6,
       "options": {
@@ -585,7 +741,7 @@
         "h": 4,
         "w": 12,
         "x": 12,
-        "y": 18
+        "y": 26
       },
       "id": 7,
       "options": {
@@ -620,6 +776,157 @@
       ],
       "title": "Runs & fetches (dashboard time range)",
       "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "poller_status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "dormant": {
+                        "color": "text",
+                        "index": 3
+                      },
+                      "due_now": {
+                        "color": "yellow",
+                        "index": 1
+                      },
+                      "in_flight": {
+                        "color": "blue",
+                        "index": 0
+                      },
+                      "waiting": {
+                        "color": "green",
+                        "index": 2
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "poller_id"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Open Poller Detail",
+                    "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/(_at|_until)/",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 12,
+        "x": 0,
+        "y": 30
+      },
+      "id": 19,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "\nSELECT\n  p.id AS poller_id,\n  CASE\n    WHEN NOT p.active THEN 'dormant'\n    WHEN p.claimed_until IS NOT NULL AND p.claimed_until >= now() THEN 'in_flight'\n    WHEN p.next_run_at <= now() THEN 'due_now'\n    ELSE 'waiting'\n  END AS poller_status,\n  count(DISTINCT wp.watch_id) AS watches,\n  p.provider,\n  p.parent_ref,\n  p.poi_id,\n  p.next_run_at,\n  p.claimed_until,\n  p.last_run_at,\n  p.last_force_pull_at\nFROM availability_poller p\nLEFT JOIN availability_watch_poller wp ON wp.poller_id = p.id\nGROUP BY\n  p.id,\n  p.active,\n  p.claimed_until,\n  p.next_run_at,\n  p.provider,\n  p.parent_ref,\n  p.poi_id,\n  p.last_run_at,\n  p.last_force_pull_at\nORDER BY\n  (p.active AND p.claimed_until IS NOT NULL AND p.claimed_until >= now()) DESC,\n  (p.active AND p.next_run_at <= now()\n    AND (p.claimed_until IS NULL OR p.claimed_until < now())) DESC,\n  p.active DESC,\n  p.next_run_at ASC NULLS LAST,\n  p.id DESC\nLIMIT 300;",
+          "refId": "A",
+          "sql": {
+            "columns": [
+              {
+                "parameters": [],
+                "type": "function"
+              }
+            ],
+            "groupBy": [
+              {
+                "property": {
+                  "type": "string"
+                },
+                "type": "groupBy"
+              }
+            ],
+            "limit": 50
+          }
+        }
+      ],
+      "title": "Pollers",
+      "type": "table"
     },
     {
       "datasource": {
@@ -748,7 +1055,7 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "watch_id"
+              "options": "poller_id"
             },
             "properties": [
               {
@@ -756,8 +1063,8 @@
                 "value": [
                   {
                     "targetBlank": false,
-                    "title": "Open Watch drill-down",
-                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-poller_id=$__all&var-run_id=$__all"
+                    "title": "Open Poller Detail",
+                    "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
                   }
                 ]
               }
@@ -793,9 +1100,9 @@
       },
       "gridPos": {
         "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 22
+        "w": 12,
+        "x": 12,
+        "y": 30
       },
       "id": 8,
       "options": {
@@ -812,7 +1119,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "\n  SELECT\n    wp.watch_id,\n    r.poller_id,\n    r.id AS run_id,\n    r.status AS run_status,\n    r.snapshot_count,\n    r.duration_ms AS duration,\n    r.error,\n    r.started_at,\n    r.completed_at,\n    CASE\n      WHEN count(wt.*) = 0 THEN NULL\n      WHEN count(*) FILTER (WHERE wt.poi_id IS NOT NULL) > 0\n       AND count(*) FILTER (WHERE wt.reservable_id IS NOT NULL) > 0 THEN 'mixed'\n      WHEN count(*) FILTER (WHERE wt.poi_id IS NOT NULL) > 0 THEN 'poi'\n      ELSE 'reservable'\n    END AS scope,\n    array_remove(array_agg(DISTINCT wt.poi_id), NULL) AS poi_ids,\n    array_remove(array_agg(DISTINCT wt.reservable_id), NULL) AS reservable_ids\n  FROM availability_run r\n  JOIN availability_poller pl ON pl.id = r.poller_id\n  LEFT JOIN availability_watch_poller wp ON wp.poller_id = pl.id\n  LEFT JOIN availability_watch w ON w.id = wp.watch_id\n  LEFT JOIN availability_watch_target wt ON wt.watch_id = w.id\n  WHERE $__timeFilter(r.started_at)\n  GROUP BY\n    wp.watch_id,\n    r.poller_id,\n    r.id,\n    r.status,\n    r.snapshot_count,\n    r.duration_ms,\n    r.error,\n    r.started_at,\n    r.completed_at\n  ORDER BY r.started_at DESC, r.id DESC\n  LIMIT 300;",
+          "rawSql": "\nSELECT\n  r.id AS run_id,\n  r.poller_id,\n  r.status AS run_status,\n  r.snapshot_count,\n  count(fc.id) AS fetch_calls,\n  count(fc.id) FILTER (WHERE fc.outcome = 'rate_limited') AS rate_limited,\n  r.duration_ms AS duration,\n  r.error,\n  r.started_at,\n  r.completed_at\nFROM availability_run r\nLEFT JOIN availability_fetch_call fc ON fc.run_id = r.id\nWHERE $__timeFilter(r.started_at)\nGROUP BY\n  r.id,\n  r.poller_id,\n  r.status,\n  r.snapshot_count,\n  r.duration_ms,\n  r.error,\n  r.started_at,\n  r.completed_at\nORDER BY r.started_at DESC, r.id DESC\nLIMIT 300;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -900,7 +1207,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 32
+        "y": 40
       },
       "id": 9,
       "options": {
@@ -944,7 +1251,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 39
+        "y": 47
       },
       "id": 17,
       "title": "③ Watches — what's being watched",
@@ -975,7 +1282,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 40
+        "y": 48
       },
       "id": 11,
       "options": {
@@ -1114,24 +1421,6 @@
           },
           {
             "matcher": {
-              "id": "byName",
-              "options": "watch_id"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Open Watch drill-down",
-                    "url": "/d/reservable-watch-drill/reservable-watch-drill?${__url_time_range}&var-watch_id=${__data.fields.watch_id}&var-poller_id=$__all&var-run_id=$__all"
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": {
               "id": "byRegexp",
               "options": "/(date|_at)/",
               "scope": "series"
@@ -1149,7 +1438,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 44
+        "y": 52
       },
       "id": 12,
       "options": {
@@ -1196,7 +1485,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 61
       },
       "id": 18,
       "title": "④ Logs — drill in",
@@ -1207,27 +1496,214 @@
         "type": "loki",
         "uid": "roadtrip-loki"
       },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": true,
+            "wrapText": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 180
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "level"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 70
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "DEBUG": {
+                        "color": "#8E8E8E",
+                        "index": 3,
+                        "text": "DEBUG"
+                      },
+                      "ERROR": {
+                        "color": "#F2495C",
+                        "index": 0,
+                        "text": "ERROR"
+                      },
+                      "INFO": {
+                        "color": "#5794F2",
+                        "index": 2,
+                        "text": "INFO"
+                      },
+                      "TRACE": {
+                        "color": "#B877D9",
+                        "index": 4,
+                        "text": "TRACE"
+                      },
+                      "WARN": {
+                        "color": "#FF9830",
+                        "index": 1,
+                        "text": "WARN"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "logger"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 260
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Filter logs to this class",
+                    "url": "/d/logs-explorer/logs-explorer?${__url_time_range}&var-container=roadtrip-backend.*&var-level=$__all&var-logger=${__data.fields.loggerName}&var-search=$log_filter"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "loggerName"
+            },
+            "properties": [
+              {
+                "id": "custom.hideFrom.viz",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "message"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.wrapText",
+                "value": false
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "context"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 300
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Logger",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 184
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Message",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 702
+              }
+            ]
+          }
+        ]
+      },
       "gridPos": {
         "h": 12,
         "w": 24,
         "x": 0,
-        "y": 54
+        "y": 62
       },
       "id": 14,
       "options": {
-        "dedupStrategy": "none",
-        "enableInfiniteScrolling": false,
-        "enableLogDetails": true,
-        "prettifyLogMessage": true,
-        "showControls": false,
-        "showFieldSelector": false,
-        "showLabels": false,
-        "showLevel": true,
-        "showTime": true,
-        "sortOrder": "Descending",
-        "timestampResolution": "ms",
-        "unwrappedColumns": false,
-        "wrapLogMessage": true
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Date"
+          }
+        ]
       },
       "pluginVersion": "13.1.0",
       "targets": [
@@ -1238,13 +1714,51 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{container=\"roadtrip-backend-1\"} |~ \"$log_filter\"",
+          "expr": "{container=~\"roadtrip-backend.*\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` |~ \"$log_filter\"",
           "queryType": "range",
           "refId": "A"
         }
       ],
       "title": "Backend logs (filter with $log_filter — e.g. a run id)",
-      "type": "logs"
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "source": "labels"
+          }
+        },
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(Time|level|logger|loggerName|message|context)$"
+            }
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {},
+            "includeByName": {},
+            "indexByName": {
+              "Time": 0,
+              "context": 4,
+              "level": 1,
+              "logger": 2,
+              "loggerName": 5,
+              "message": 3
+            },
+            "renameByName": {
+              "Time": "Date",
+              "context": "Context",
+              "level": "Level",
+              "logger": "Logger",
+              "message": "Message"
+            }
+          }
+        }
+      ],
+      "type": "table"
     }
   ],
   "preload": false,
