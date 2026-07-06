@@ -313,8 +313,8 @@ tasks.named<com.github.jengelman.gradle.plugins.shadow.tasks.ShadowJar>("shadowJ
     mergeServiceFiles()
 }
 
-// Exclude generated jOOQ classes and main entrypoints from coverage so the
-// number reflects code we actually own + can test.
+// Exclude generated jOOQ classes and application entrypoints/composition from
+// coverage so the number reflects code we actually own + can test.
 kover {
     reports {
         filters {
@@ -322,6 +322,10 @@ kover {
                 packages("ca.floo.roadtrip.db.generated", "ca.floo.roadtrip.db.generated.*")
                 classes(
                     "ca.floo.roadtrip.MainKt",
+                    "ca.floo.roadtrip.RoadtripBootContext",
+                    "ca.floo.roadtrip.RoadtripRuntime",
+                    "ca.floo.roadtrip.RoadtripRuntimeKt",
+                    "ca.floo.roadtrip.RoadtripRoutingKt*",
                     "ca.floo.campsite.recgov.booker.tools.*",
                 )
             }

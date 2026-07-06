@@ -1,10 +1,10 @@
 package ca.floo.roadtrip.routes
 
-import ca.floo.roadtrip.clients.cache.RouteCache
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
-import ca.floo.roadtrip.clients.mapbox.RouteResponse
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.models.routing.RouteResponse
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.service.routing.RouteCache
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
