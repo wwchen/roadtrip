@@ -5,7 +5,21 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
-  "links": [],
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [
+        "roadtrip"
+      ],
+      "targetBlank": false,
+      "title": "All dashboards",
+      "tooltip": "",
+      "type": "dashboards"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {

@@ -25,7 +25,7 @@ help:
 	@echo "  make data-import      Import data/ files into Postgres (TARGET=<row name> for one). Routes by YAML section (poi_data / reservable_data / poi_reservable_joiner)."
 	@echo "  make reset-db         Drop/recreate the local schema and Flyway history for a full migration replay."
 	@echo "  make qa               Playwright smoke against local stack (requires backend up)"
-	@echo "  make grafana-export   Snapshot UI-edited dashboards back to grafana/dashboards/*.json"
+	@echo "  make grafana-export   Snapshot UI-edited dashboards and apply shared links"
 	@echo ""
 	@echo "Stack startup: \`tilt up\` (full dev) or \`make run\` (backend only)."
 
@@ -120,8 +120,10 @@ _ensure-hooks:
 	  { git config core.hooksPath .githooks 2>/dev/null && echo "git hooks installed (.githooks/)"; } || true
 
 # Snapshot Grafana dashboards from the running container into
-# grafana/dashboards/*.json. Workflow: edit in the UI (allowUiUpdates=true
-# in dev), then `make grafana-export` before committing. UID, password, and
-# UID list overridable via env vars; see scripts/export_grafana_dashboards.py.
+# grafana/dashboards/*.json, then apply shared dashboard navigation links.
+# Workflow: edit in the UI (allowUiUpdates=true in dev), then
+# `make grafana-export` before committing. UID, password, and UID list
+# overridable via env vars; see scripts/export_grafana_dashboards.py.
 grafana-export:
 	./scripts/export_grafana_dashboards.py
+	./scripts/sync_grafana_dashboard_links.py

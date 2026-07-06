@@ -18,6 +18,21 @@
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [
+        "roadtrip"
+      ],
+      "targetBlank": false,
+      "title": "All dashboards",
+      "tooltip": "",
+      "type": "dashboards"
+    }
+  ],
   "liveNow": false,
   "panels": [
     {
@@ -843,7 +858,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.last_observed_at,\n  s.target_date,\n  s.status::text AS observed_status,\n  (s.status = 'available') AS available,\n  s.run_id,\n  ar.status AS run_status\nFROM availability s\nLEFT JOIN availability_run ar ON ar.id = s.run_id\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n  AND $__timeFilter(s.last_observed_at)\nORDER BY s.last_observed_at DESC, s.target_date ASC, s.id DESC;",
+          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.last_observed_at,\n  s.target_date,\n  s.status::text AS observed_status,\n  (s.status = 'available') AS available,\n  s.run_id,\n  ar.status AS run_status\nFROM availability s\nLEFT JOIN availability_run ar ON ar.id = s.run_id\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\nORDER BY s.last_observed_at DESC, s.target_date ASC, s.id DESC\nLIMIT 500;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -875,38 +890,66 @@
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic"
           },
           "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "status",
             "axisPlacement": "auto",
-            "fillOpacity": 70,
+            "axisSoftMax": 4,
+            "axisSoftMin": 0,
+            "barAlignment": 0,
+            "barWidthFactor": 0.6,
+            "drawStyle": "line",
+            "fillOpacity": 10,
+            "gradientMode": "none",
             "hideFrom": {
               "legend": false,
               "tooltip": false,
               "viz": false
             },
             "insertNulls": false,
-            "lineWidth": 0,
-            "spanNulls": false
+            "lineInterpolation": "stepAfter",
+            "lineWidth": 1,
+            "pointSize": 5,
+            "scaleDistribution": {
+              "type": "linear"
+            },
+            "showPoints": "never",
+            "showValues": false,
+            "spanNulls": false,
+            "stacking": {
+              "group": "A",
+              "mode": "none"
+            },
+            "thresholdsStyle": {
+              "mode": "off"
+            }
           },
           "mappings": [
             {
               "options": {
-                "closed": {
-                  "color": "red",
-                  "index": 0
+                "0": {
+                  "index": 0,
+                  "text": "unknown"
                 },
-                "open": {
-                  "color": "green",
-                  "index": 2
+                "1": {
+                  "index": 1,
+                  "text": "closed"
                 },
-                "reserved": {
-                  "color": "orange",
-                  "index": 3
+                "2": {
+                  "index": 2,
+                  "text": "reserved"
                 },
-                "unknown": {
-                  "color": "text",
-                  "index": 1
+                "3": {
+                  "index": 3,
+                  "text": "first come"
+                },
+                "4": {
+                  "index": 4,
+                  "text": "available"
                 }
               },
               "type": "value"
@@ -931,23 +974,23 @@
       },
       "id": 17,
       "options": {
-        "alignValue": "left",
         "annotations": {
           "clustering": -1,
           "multiLane": false
         },
         "legend": {
+          "calcs": [
+            "lastNotNull"
+          ],
           "displayMode": "list",
+          "enableFacetedFilter": false,
           "overflow": "ellipsis",
           "placement": "bottom",
           "showLegend": true
         },
-        "mergeValues": true,
-        "rowHeight": 0.9,
-        "showValue": "auto",
         "tooltip": {
           "hideZeros": false,
-          "mode": "single",
+          "mode": "multi",
           "sort": "none"
         }
       },
@@ -961,7 +1004,7 @@
           "editorMode": "code",
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "  SELECT\n    s.last_observed_at AS \"time\",\n    s.target_date::TEXT as metric,\n    s.status        AS value\n  FROM availability s\n  WHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\n    AND $__timeFilter(s.last_observed_at)\n  ORDER BY s.target_date ASC, s.last_observed_at ASC;",
+          "rawSql": "SELECT\n  s.last_observed_at AS \"time\",\n  s.target_date::text AS metric,\n  CASE coalesce(s.status::text, 'unknown')\n    WHEN 'available' THEN 4\n    WHEN 'first_come' THEN 3\n    WHEN 'reserved' THEN 2\n    WHEN 'booked' THEN 2\n    WHEN 'closed' THEN 1\n    ELSE 0\n  END::double precision AS value\nFROM availability s\nWHERE s.reservable_id = NULLIF(${reservable_id:sqlstring}, '')::bigint\nORDER BY s.target_date ASC, s.last_observed_at ASC, s.id ASC;",
           "refId": "A",
           "sql": {
             "columns": [
@@ -983,21 +1026,7 @@
         }
       ],
       "title": "Latest availability by target date",
-      "transformations": [
-        {
-          "id": "partitionByValues",
-          "options": {
-            "fields": [
-              "metric"
-            ],
-            "keepFields": false,
-            "naming": {
-              "asLabels": false
-            }
-          }
-        }
-      ],
-      "type": "state-timeline"
+      "type": "timeseries"
     },
     {
       "datasource": {
@@ -1462,6 +1491,9 @@
   "preload": false,
   "refresh": "",
   "schemaVersion": 42,
+  "tags": [
+    "roadtrip"
+  ],
   "templating": {
     "list": [
       {

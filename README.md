@@ -31,10 +31,9 @@ Grafana UI; those saves live in the local `grafana-data` volume and are not
 written back to `grafana/dashboards/*.json`.
 Provisioned dashboards include a catalog explorer
 (`/d/roadtrip-catalog-explorer/roadtrip-catalog-explorer`) that covers POIs,
-reservables, and snapshot-backed availability, plus POI detail, POIs with
-reservables, Tesla Supercharger detail/stats, reservable detail/stats, DB
-stats, ingest/catalog freshness, provider cache audit, watch/scheduler health,
-and API/SQL equivalence.
+reservables, and snapshot-backed availability, plus status overview, POI
+detail, POIs with reservables, Tesla Supercharger detail/stats, reservable
+detail/stats, DB stats, watch/scheduler health, and API/SQL equivalence.
 Tilt UI is at <http://localhost:10350>.
 
 Plain `make run` remains the fastest backend-only loop: it starts Postgres in

@@ -13,6 +13,8 @@ import json
 import sys
 from pathlib import Path
 
+from grafana_dashboard_links import has_roadtrip_tag, has_shared_dashboard_links
+
 
 def is_single_quoted_sql_literal(value: str) -> bool:
     return len(value) >= 2 and value.startswith("'") and value.endswith("'")
@@ -25,6 +27,10 @@ def main() -> int:
     for path in sorted(dashboard_dir.glob("*.json")):
         dashboard = json.loads(path.read_text())
         uid = dashboard.get("uid", path.name)
+        if not has_shared_dashboard_links(dashboard):
+            failures.append(f"{uid}: missing shared dashboard links")
+        if not has_roadtrip_tag(dashboard):
+            failures.append(f"{uid}: missing roadtrip dashboard tag")
         for variable in dashboard.get("templating", {}).get("list", []):
             if not variable.get("includeAll"):
                 continue
@@ -53,7 +59,7 @@ def main() -> int:
             print(failure, file=sys.stderr)
         return 1
 
-    print("Grafana dashboard allValue settings are SQL-safe.")
+    print("Grafana dashboard provisioning files are valid.")
     return 0
 
 

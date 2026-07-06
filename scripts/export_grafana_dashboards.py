@@ -27,6 +27,8 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+from grafana_dashboard_links import apply_shared_dashboard_links
+
 REPO = Path(__file__).resolve().parents[1]
 DASHBOARD_DIR = REPO / "grafana" / "dashboards"
 
@@ -51,7 +53,7 @@ def normalize(dashboard: dict, canonical_uid: str) -> dict:
     dashboard["uid"] = canonical_uid
     dashboard["version"] = 1
     dashboard["editable"] = True
-    return dashboard
+    return apply_shared_dashboard_links(dashboard)
 
 
 def discover_tracked() -> dict[str, Path]:
@@ -68,7 +70,14 @@ def discover_tracked() -> dict[str, Path]:
 
 
 def render(dashboard: dict) -> str:
-    return json.dumps(dashboard, indent=2, ensure_ascii=False) + "\n"
+    return json.dumps(dashboard, indent=2, ensure_ascii=False, sort_keys=True) + "\n"
+
+
+def json_equivalent(left: str, right: str) -> bool:
+    try:
+        return json.loads(left) == json.loads(right)
+    except json.JSONDecodeError:
+        return False
 
 
 def main() -> int:
@@ -122,7 +131,7 @@ def main() -> int:
 
         new_text = render(normalize(payload["dashboard"], uid))
         existing = path.read_text() if path.exists() else None
-        if existing == new_text:
+        if existing == new_text or (existing is not None and json_equivalent(existing, new_text)):
             unchanged += 1
             continue
         path.write_text(new_text)
