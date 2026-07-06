@@ -54,6 +54,22 @@ class PoiCtaTest {
     }
 
     @Test
+    fun `aspira CTA uses linked reservable map when POI map is only a container`() {
+        val out =
+            cta.computeCta(
+                row(
+                    providerRefJson = """{"transactionLocationId":4189,"mapId":-2147483026,"resourceLocationId":-2147483640}""",
+                    ctaProviderRefJson = """{"transactionLocationId":4189,"mapId":-2147483645,"resourceLocationId":-2147483640}""",
+                    infoUrl = "https://reservation.pc.gc.ca/",
+                ),
+            )
+        val url = out?.url
+        assertNotNull(url)
+        assertTrue(url.contains("mapId=-2147483645"), url)
+        assertTrue(!url.contains("mapId=-2147483026"), url)
+    }
+
+    @Test
     fun `aspira BC parks gets BC Parks label`() {
         val out =
             cta.computeCta(
@@ -186,6 +202,7 @@ class PoiCtaTest {
 
     private fun row(
         providerRefJson: String? = null,
+        ctaProviderRefJson: String? = null,
         infoUrl: String? = null,
     ): PoiDetailRow =
         PoiDetailRow(
@@ -204,5 +221,6 @@ class PoiCtaTest {
             providerRefJson = providerRefJson,
             geomJson = """{"type":"Point","coordinates":[-121.5,40.0]}""",
             propertiesJson = "{}",
+            ctaProviderRefJson = ctaProviderRefJson,
         )
 }

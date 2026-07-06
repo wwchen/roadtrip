@@ -44,6 +44,7 @@ internal data class PoiDetailRow(
     val providerRefJson: String? = null,
     val geomJson: String,
     val propertiesJson: String,
+    val ctaProviderRefJson: String? = null,
 )
 
 internal data class PoiSearchHit(
@@ -97,18 +98,40 @@ internal class PoiServingRepo(
         val r =
             ctx.fetchOne(
                 """
-                SELECT id, source, source_id, category, subcategory, agency, name,
-                       region, country,
-                       ST_X(ST_PointOnSurface(geom)) AS lng,
-                       ST_Y(ST_PointOnSurface(geom)) AS lat,
-                       unit_name, reserve_url, phone, info_url,
-                       address::text AS address_text,
-                       provider_ref::text AS provider_ref_text,
-                       ST_AsGeoJSON(geom) AS geom_json,
-                       properties::text AS properties_text
-                FROM pois
-                WHERE id = ?
-                  AND deleted_at IS NULL
+                SELECT p.id, p.source, p.source_id, p.category, p.subcategory, p.agency, p.name,
+                       p.region, p.country,
+                       ST_X(ST_PointOnSurface(p.geom)) AS lng,
+                       ST_Y(ST_PointOnSurface(p.geom)) AS lat,
+                       p.unit_name, p.reserve_url, p.phone, p.info_url,
+                       p.address::text AS address_text,
+                       p.provider_ref::text AS provider_ref_text,
+                       cta.provider_ref::text AS cta_provider_ref_text,
+                       ST_AsGeoJSON(p.geom) AS geom_json,
+                       p.properties::text AS properties_text
+                FROM pois p
+                LEFT JOIN LATERAL (
+                    SELECT jsonb_build_object(
+                        'transactionLocationId', p.provider_ref->'transactionLocationId',
+                        'mapId', child.map_id,
+                        'resourceLocationId', COALESCE(child.resource_location_id, p.provider_ref->'resourceLocationId')
+                    ) AS provider_ref
+                    FROM (
+                        SELECT r.provider_ref->'mapId' AS map_id,
+                               r.provider_ref->'resourceLocationId' AS resource_location_id,
+                               (r.provider_ref->>'mapId')::bigint AS sort_map_id
+                        FROM reservable_pois rp
+                        JOIN reservables r ON r.id = rp.reservable_id
+                        WHERE rp.poi_id = p.id
+                          AND r.type = 'site'
+                          AND r.vendor LIKE 'aspira\_%' ESCAPE '\'
+                          AND r.provider_ref->>'mapId' IS NOT NULL
+                        ORDER BY sort_map_id ASC, r.name ASC
+                        LIMIT 1
+                    ) child
+                    WHERE jsonb_exists(p.provider_ref, 'transactionLocationId')
+                ) cta ON TRUE
+                WHERE p.id = ?
+                  AND p.deleted_at IS NULL
                 """.trimIndent(),
                 poiId,
             ) ?: return null
@@ -132,6 +155,7 @@ internal class PoiServingRepo(
             providerRefJson = r.get("provider_ref_text") as String?,
             geomJson = r.get("geom_json") as String,
             propertiesJson = r.get("properties_text") as String,
+            ctaProviderRefJson = r.get("cta_provider_ref_text") as String?,
         )
     }
 
