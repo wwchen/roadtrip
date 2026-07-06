@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.clients.reservecalifornia
 
+import ca.floo.roadtrip.clients.DateStringFormatter
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import kotlinx.coroutines.future.await
 import kotlinx.serialization.json.Json
@@ -49,6 +50,14 @@ class HttpReserveCaliforniaAvailabilityClient(
     ): ReserveCaliforniaGridAvailability {
         val observedAt = Instant.now()
         val body = gridRequestBody(facilityId, startDate, endDate, minDate, maxDate)
+        log.info(
+            "reservecalifornia POST availability facilityId={} startDate={} endDate={} minDate={} maxDate={}",
+            facilityId,
+            DateStringFormatter.date(startDate),
+            DateStringFormatter.date(endDate),
+            DateStringFormatter.date(minDate),
+            DateStringFormatter.date(maxDate),
+        )
         val payload = postJson("$rdrBaseUrl/search/grid", body)
         return ReserveCaliforniaGridParser.parse(payload, observedAt)
     }
@@ -94,7 +103,6 @@ class HttpReserveCaliforniaAvailabilityClient(
                 .header("tenantId", TENANT_ID)
                 .POST(HttpRequest.BodyPublishers.ofString(body))
                 .build()
-        log.info("reservecalifornia POST {}", url)
         val resp =
             try {
                 client.sendAsync(req, HttpResponse.BodyHandlers.ofString()).await()

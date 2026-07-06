@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.clients.aspira
 
+import ca.floo.roadtrip.clients.DateStringFormatter
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
 import kotlinx.coroutines.future.await
 import kotlinx.coroutines.sync.Mutex
@@ -131,8 +132,8 @@ class HttpAspiraAvailabilityClient(
                 "aspira GET availability host={} mapId={} startDate={} endDate={}",
                 host,
                 mapId,
-                startDate,
-                endDate,
+                DateStringFormatter.date(startDate),
+                DateStringFormatter.date(endDate),
             )
             val resp =
                 try {
@@ -198,8 +199,8 @@ class HttpAspiraAvailabilityClient(
                 "aspira GET occupancy host={} resourceLocationId={} startDate={} endDate={}",
                 host,
                 resourceLocationId,
-                startDate,
-                endDate,
+                DateStringFormatter.date(startDate),
+                DateStringFormatter.date(endDate),
             )
             val resp =
                 try {

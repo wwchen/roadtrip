@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.clients.recgov
 
+import ca.floo.roadtrip.clients.DateStringFormatter
 import io.ktor.client.HttpClient
 import io.ktor.client.engine.cio.CIO
 import io.ktor.client.plugins.HttpRequestRetry
@@ -48,6 +49,7 @@ class HttpRecgovAvailabilityClient(
         campgroundId: String,
         monthStart: String,
     ): Map<String, Campsite> {
+        val monthLabel = DateStringFormatter.month(monthStart)
         val isoMonth = URLEncoder.encode("${monthStart}T00:00:00.000Z", StandardCharsets.UTF_8)
         val url = "$AVAIL_BASE/$campgroundId/month?start_date=$isoMonth"
         for ((attempt, delayMs) in (listOf(0L) + retryDelaysMs).withIndex()) {
@@ -56,19 +58,19 @@ class HttpRecgovAvailabilityClient(
                 if (gap < minGapMs) delay(minGapMs - gap)
                 lastCallAt = System.currentTimeMillis()
             }
-            log.info("recgov GET availability campground={} month={} attempt={}", campgroundId, monthStart, attempt + 1)
+            log.info("recgov GET availability campground={} month={} attempt={}", campgroundId, monthLabel, attempt + 1)
             val resp = client.get(url)
             if (resp.status == HttpStatusCode.TooManyRequests) {
                 if (attempt >= retryDelaysMs.size) {
-                    throw RuntimeException("rec.gov 429 after ${retryDelaysMs.size} retries on $campgroundId/$monthStart")
+                    throw RuntimeException("rec.gov 429 after ${retryDelaysMs.size} retries on $campgroundId/$monthLabel")
                 }
                 val wait = retryDelaysMs[attempt]
-                log.warn("429 rate limit on {}/{} — retrying in {}s", campgroundId, monthStart, wait / 1000)
+                log.warn("429 rate limit on {}/{} — retrying in {}s", campgroundId, monthLabel, wait / 1000)
                 delay(wait)
                 continue
             }
             if (!resp.status.isSuccess()) {
-                throw RuntimeException("rec.gov ${resp.status} on $campgroundId/$monthStart: ${resp.bodyAsText().take(200)}")
+                throw RuntimeException("rec.gov ${resp.status} on $campgroundId/$monthLabel: ${resp.bodyAsText().take(200)}")
             }
             return parseCampsites(resp.bodyAsText())
         }
