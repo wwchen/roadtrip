@@ -189,7 +189,7 @@ reservable), but the poller does not issue one upstream call per reservable.
 `catalogAvailability` call per group — so N reservables under one campground
 become one upstream call. This is what fixed the old per-site rate-limit
 fan-out. Call-shaping stays inside each adapter (months for rec.gov, the park
-matrix for ReserveAmerica, map/occupancy for Aspira); the batcher and poller
+matrix for ReserveAmerica, per-day map calls for Aspira); the batcher and poller
 never branch on vendor, they only group and dispatch.
 
 `availability_fetch_call` is the trace table for this grouping: one row per

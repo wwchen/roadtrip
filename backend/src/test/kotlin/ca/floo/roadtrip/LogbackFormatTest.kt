@@ -3,6 +3,7 @@ package ca.floo.roadtrip
 import ch.qos.logback.classic.LoggerContext
 import ch.qos.logback.classic.joran.JoranConfigurator
 import org.junit.jupiter.api.Test
+import org.junit.jupiter.api.parallel.Isolated
 import org.slf4j.LoggerFactory
 import org.slf4j.MDC
 import java.io.ByteArrayOutputStream
@@ -15,6 +16,7 @@ import kotlin.test.assertTrue
  * `| json`: the message must be FULLY FORMATTED (no raw `{}` pattern), and the
  * `level` / `loggerName` / nested `mdc` field names must stay stable.
  */
+@Isolated("Reconfigures the global Logback context and System.out")
 class LogbackFormatTest {
     @Test
     fun `json logs carry formatted message, loggerName, level, nested mdc`() {
