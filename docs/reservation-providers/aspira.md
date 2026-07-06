@@ -65,6 +65,13 @@ Three layers of identity:
   and the key our `AspiraAvailabilityClient` looks up at request time
   in `/api/availability/map`'s `resourceAvailabilities` block.
 
+`pois.provider_ref` is the POI identity/join ref, not necessarily the best
+booking-grid deep link. Some Parks Canada campground POIs use a container
+`mapId`, while their sites live under child grid maps. `AspiraJoinByNameEtl`
+therefore stores `properties.upstream.booking_cta_provider_ref` when the
+inventory exposes child `mapIds[]`; the POI drawer uses that for the primary
+booking CTA and keeps `provider_ref` stable for joins and provider dispatch.
+
 ## Endpoint catalog
 
 ### `GET /api/maps`

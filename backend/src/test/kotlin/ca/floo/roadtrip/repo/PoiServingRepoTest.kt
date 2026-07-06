@@ -20,7 +20,8 @@ class PoiServingRepoTest : SharedDbTest() {
     fun `detail row derives Aspira CTA ref from linked child map`() {
         val poiId =
             seedPoi(
-                """{"transactionLocationId":-2147483647,"mapId":-2147483026,"resourceLocationId":-2147483640}""",
+                providerRefJson = """{"transactionLocationId":-2147483647,"mapId":-2147483026,"resourceLocationId":-2147483640}""",
+                propertiesJson = """{"upstream":{"booking_cta_provider_ref":null}}""",
             )
         val laterMap =
             seedReservable(
@@ -48,7 +49,39 @@ class PoiServingRepoTest : SharedDbTest() {
         assertEquals("-2147483640", ctaRef["resourceLocationId"]!!.jsonPrimitive.content)
     }
 
-    private fun seedPoi(providerRefJson: String): Long =
+    @Test
+    fun `detail row prefers materialized Aspira CTA ref from POI properties`() {
+        val poiId =
+            seedPoi(
+                providerRefJson = """{"transactionLocationId":-2147483647,"mapId":-2147483026,"resourceLocationId":-2147483640}""",
+                propertiesJson =
+                    """
+                    {"upstream":{"booking_cta_provider_ref":{
+                      "transactionLocationId":-2147483647,
+                      "mapId":-2147483645,
+                      "resourceLocationId":-2147483640
+                    }}}
+                    """.trimIndent(),
+            )
+        val fallbackMap =
+            seedReservable(
+                vendorId = "-2147479446",
+                name = "1",
+                providerRefJson = """{"mapId":-2147483639,"resourceLocationId":-2147483640}""",
+            )
+        link(fallbackMap, poiId)
+
+        val row = PoiServingRepo(ctx).fetchPoiById(poiId)
+
+        assertNotNull(row)
+        val ctaRef = Json.parseToJsonElement(row.ctaProviderRefJson!!).jsonObject
+        assertEquals("-2147483645", ctaRef["mapId"]!!.jsonPrimitive.content)
+    }
+
+    private fun seedPoi(
+        providerRefJson: String,
+        propertiesJson: String = "{}",
+    ): Long =
         ctx
             .fetchOne(
                 """
@@ -58,12 +91,13 @@ class PoiServingRepoTest : SharedDbTest() {
                 ) VALUES (
                     ?, 'lake-louise', 'campground', 'federal', 'Parks Canada', 'Lake Louise Campground',
                     ST_SetSRID(ST_MakePoint(-116.18, 51.42), 4326),
-                    'AB', 'CA', '{}'::jsonb, ?::jsonb, 'https://reservation.pc.gc.ca/',
+                    'AB', 'CA', ?::jsonb, ?::jsonb, 'https://reservation.pc.gc.ca/',
                     '2026-07-06 00:00:00+00'::timestamptz
                 )
                 RETURNING id
                 """.trimIndent(),
                 SOURCE,
+                propertiesJson,
                 providerRefJson,
             )!!
             .get("id", Long::class.java)

@@ -105,7 +105,10 @@ internal class PoiServingRepo(
                        p.unit_name, p.reserve_url, p.phone, p.info_url,
                        p.address::text AS address_text,
                        p.provider_ref::text AS provider_ref_text,
-                       cta.provider_ref::text AS cta_provider_ref_text,
+                       COALESCE(
+                           NULLIF(p.properties->'upstream'->'booking_cta_provider_ref', 'null'::jsonb),
+                           cta.provider_ref
+                       )::text AS cta_provider_ref_text,
                        ST_AsGeoJSON(p.geom) AS geom_json,
                        p.properties::text AS properties_text
                 FROM pois p
@@ -129,7 +132,7 @@ internal class PoiServingRepo(
                         LIMIT 1
                     ) child
                     WHERE jsonb_exists(p.provider_ref, 'transactionLocationId')
-                ) cta ON TRUE
+                ) cta ON NULLIF(p.properties->'upstream'->'booking_cta_provider_ref', 'null'::jsonb) IS NULL
                 WHERE p.id = ?
                   AND p.deleted_at IS NULL
                 """.trimIndent(),

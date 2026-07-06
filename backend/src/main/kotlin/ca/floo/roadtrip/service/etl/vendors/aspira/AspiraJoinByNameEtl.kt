@@ -18,6 +18,7 @@ import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.longOrNull
 import org.slf4j.LoggerFactory
 import java.time.Instant
 
@@ -117,6 +118,7 @@ class AspiraJoinByNameEtl(
                 inventory = dto.inventoryEnvelopes,
                 dictionaryPayload = dto.dictionaryPayload,
             )
+        val bookingCtaRefsByResourceLocationId = canonicalBookingCtaRefs(dto.inventoryEnvelopes)
 
         // Build one merged name index: normalized name → first (lat, lon).
         // Geometry entries are walked in declared order, so the YAML's
@@ -240,7 +242,13 @@ class AspiraJoinByNameEtl(
                     ratingReviews = null,
                     subcategory = subcategory,
                     agency = agency,
-                    extras = leafExtras(leaf, host, matchKind),
+                    extras =
+                        leafExtras(
+                            leaf = leaf,
+                            host = host,
+                            matchKind = matchKind,
+                            bookingCtaRef = leaf.resourceLocationId?.let { bookingCtaRefsByResourceLocationId[it] },
+                        ),
                 )
         }
 
@@ -264,6 +272,7 @@ class AspiraJoinByNameEtl(
         leaf: AspiraLeaf,
         host: String,
         matchKind: String,
+        bookingCtaRef: AspiraBookingCtaRef?,
     ): JsonElement =
         aspiraExtrasJson.encodeToJsonElement(
             AspiraLeafExtrasDto(
@@ -273,8 +282,43 @@ class AspiraJoinByNameEtl(
                 resourceLocationId = leaf.resourceLocationId,
                 parentName = leaf.parentName,
                 matchKind = matchKind,
+                bookingCtaProviderRef =
+                    bookingCtaRef?.let {
+                        AspiraBookingCtaProviderRefDto(
+                            transactionLocationId = leaf.transactionLocationId,
+                            mapId = it.mapId,
+                            resourceLocationId = it.resourceLocationId,
+                        )
+                    },
             ),
         )
+
+    private fun canonicalBookingCtaRefs(inventory: List<ca.floo.roadtrip.models.metadata.Envelope>): Map<Long, AspiraBookingCtaRef> {
+        val refs = mutableMapOf<Long, AspiraBookingCtaRef>()
+        for (envelope in inventory) {
+            val payload = envelope.payload as? JsonObject ?: continue
+            for ((_, raw) in payload) {
+                val obj = raw as? JsonObject ?: continue
+                val resourceLocationId = obj.longValue("resourceLocationId") ?: continue
+                val mapId = obj.mapIds().minOrNull() ?: continue
+                val current = refs[resourceLocationId]
+                if (current == null || mapId < current.mapId) {
+                    refs[resourceLocationId] = AspiraBookingCtaRef(mapId = mapId, resourceLocationId = resourceLocationId)
+                }
+            }
+        }
+        return refs
+    }
+
+    private fun JsonObject.longValue(key: String): Long? =
+        this[key]
+            ?.jsonPrimitive
+            ?.longOrNull
+
+    private fun JsonObject.mapIds(): List<Long> =
+        (this["mapIds"] as? kotlinx.serialization.json.JsonArray)
+            ?.mapNotNull { it.jsonPrimitive.longOrNull }
+            ?: emptyList()
 
     private fun detectGeometrySource(
         slug: String,
@@ -316,6 +360,19 @@ private data class AspiraLeafExtrasDto(
     @SerialName("resource_location_id") val resourceLocationId: Long?,
     @SerialName("parent_name") val parentName: String?,
     @SerialName("match_kind") val matchKind: String,
+    @SerialName("booking_cta_provider_ref") val bookingCtaProviderRef: AspiraBookingCtaProviderRefDto?,
+)
+
+@Serializable
+private data class AspiraBookingCtaProviderRefDto(
+    val transactionLocationId: Long,
+    val mapId: Long,
+    val resourceLocationId: Long,
+)
+
+private data class AspiraBookingCtaRef(
+    val mapId: Long,
+    val resourceLocationId: Long,
 )
 
 // ---- DTO + per-source strategies ------------------------------------------
