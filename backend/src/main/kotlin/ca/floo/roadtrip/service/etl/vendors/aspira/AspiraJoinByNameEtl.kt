@@ -31,8 +31,12 @@ import java.time.Instant
 //   WA → uscampgrounds.info CSV (state column 12)
 //   BC → BC Parks Strapi (already provincial-shape; protectedAreaName)
 //   PC → APCA ArcGIS Accommodation (campground points) + Places
-//        (per-park polygon centroids, falls back when a leaf is a parent
-//        park rather than a specific campground)
+//        (per-park polygon centroids). A campground leaf whose own name
+//        misses geometry falls back to its parent park's centroid via
+//        parent_name. Park-container leaves themselves are dropped before
+//        emission (see the resourceLocationId gate in transform), so the
+//        centroid now only backstops campground leaves, never emits a
+//        park-level pin.
 //
 // One ETL class. Inputs are declared in YAML; this class dispatches on
 // the slug shape (recognized via the envelope contents) at parse time.
@@ -60,16 +64,26 @@ class AspiraJoinByNameEtl(
         }
         val leaves = leavesPayload ?: error("$etlSlug: no AspiraLeavesPayload input declared")
 
-        // Data_source-typed inputs become geometry sources, in declaration
-        // order so the YAML's `inputs:` order doubles as a preference order.
+        // The inventory + dictionary captures (when declared) drive the
+        // non-bookable-node filter, not geometry — pull them out first so
+        // detectGeometrySource never sees them.
+        val inventorySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("inventory") }
+        val dictionarySlug = inputs.dataSourceSlugs().firstOrNull { it.contains("dictionaries") }
+
+        // Remaining data_source-typed inputs become geometry sources, in
+        // declaration order so the YAML's `inputs:` order doubles as a
+        // preference order.
         val geomEntries =
-            inputs.dataSourceSlugs().map { slug ->
-                slug to detectGeometrySource(slug, inputs.envelopes(slug))
-            }
+            inputs
+                .dataSourceSlugs()
+                .filter { it != inventorySlug && it != dictionarySlug }
+                .map { slug -> slug to detectGeometrySource(slug, inputs.envelopes(slug)) }
 
         return AspiraJoinDto(
             leaves = leaves,
             geomSources = geomEntries,
+            inventoryEnvelopes = inventorySlug?.let { inputs.envelopes(it) } ?: emptyList(),
+            dictionaryPayload = dictionarySlug?.let { inputs.envelope(it).payload as? JsonObject },
             fetchedAt = Instant.now(),
         )
     }
@@ -88,6 +102,21 @@ class AspiraJoinByNameEtl(
         val host = ctx.argFor(etlSlug, "host") ?: error("$etlSlug: missing args.host")
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
+
+        // Non-bookable filter, driven by the fetched data (no curated list). A
+        // leaf whose resourceLocationId's inventory holds only non-bookable
+        // categories — Aspira's own `showResourceCapacityOnline: false`, set on
+        // parking / guided hikes / shuttles / day-use buses — is a park
+        // activity mount, not a campground, so it is dropped even when its name
+        // matches geometry. Empty when a tenant declares no inventory +
+        // dictionary inputs, or when its dictionary marks everything bookable
+        // (WA/BC today) — then nothing is dropped, faithfully reflecting that
+        // that tenant's data marks nothing as non-bookable.
+        val nonBookableResLocs =
+            AspiraInventoryCategories.nonBookableResourceLocationIds(
+                inventory = dto.inventoryEnvelopes,
+                dictionaryPayload = dto.dictionaryPayload,
+            )
 
         // Build one merged name index: normalized name → first (lat, lon).
         // Geometry entries are walked in declared order, so the YAML's
@@ -115,9 +144,40 @@ class AspiraJoinByNameEtl(
         var fuzzy = 0
         var viaParent = 0
         var miss = 0
+        var skippedContainer = 0
+        var skippedNonBookable = 0
         val missSamples = mutableListOf<String>()
 
         for (leaf in dto.leaves.leaves) {
+            // Campground-level model: a POI is one bookable campground node.
+            // Aspira's /api/maps also carries park-level container nodes
+            // (Banff, Jasper, …) and park-scoped activity mounts. Those have
+            // no resourceLocationId — they are not a bookable resource
+            // location, so they are not campgrounds. Emitting them layered a
+            // duplicate park POI on top of the park's already-correct
+            // campground POIs (each real campground is a mapLink carrying its
+            // own resourceLocationId). Skip container nodes here; their child
+            // campgrounds carry the coordinates and the parent-name fallback
+            // keeps every park represented on the map.
+            //
+            // Tenant-wide (WA/BC/PC share this ETL). Verified against all
+            // three /api/maps captures that the only null-resourceLocationId
+            // leaves are park containers (Camano Island WA, Wells Gray BC,
+            // 23 PC parks), and that none of them link a reservable via the
+            // joiner's source_id (Rule A) or resourceLocationId (Rule B)
+            // rules — so dropping them orphans nothing.
+            if (leaf.resourceLocationId == null) {
+                skippedContainer++
+                continue
+            }
+            // Non-bookable activity node (parking, guided hike, shuttle, …):
+            // its resourceLocationId's inventory holds no overnight-stay
+            // resource. Drop it — a booking id + a name-match don't make a
+            // campground.
+            if (leaf.resourceLocationId in nonBookableResLocs) {
+                skippedNonBookable++
+                continue
+            }
             val nk = normalize(leaf.name)
             var coords: Pair<Double, Double>? = byName[nk]
             var matchKind = "exact"
@@ -185,13 +245,16 @@ class AspiraJoinByNameEtl(
         }
 
         log.info(
-            "$etlSlug: {} leaves → {} pois (exact={} fuzzy={} parent={} miss={}; sample misses: {})",
+            "$etlSlug: {} leaves → {} pois " +
+                "(exact={} fuzzy={} parent={} miss={} skippedContainer={} skippedNonBookable={}; sample misses: {})",
             dto.leaves.leaves.size,
             pois.size,
             exact,
             fuzzy,
             viaParent,
             miss,
+            skippedContainer,
+            skippedNonBookable,
             missSamples.take(5),
         )
         return pois
@@ -260,6 +323,10 @@ private data class AspiraLeafExtrasDto(
 data class AspiraJoinDto(
     val leaves: AspiraLeavesPayload,
     val geomSources: List<Pair<String, GeometrySource>>,
+    /** Per-park `/api/resourcelocation/resources` envelopes, empty when the tenant declares no inventory input. */
+    val inventoryEnvelopes: List<ca.floo.roadtrip.models.metadata.Envelope> = emptyList(),
+    /** Tenant `/api/resourcecategory` dictionary payload, null when not declared. */
+    val dictionaryPayload: JsonObject? = null,
     val fetchedAt: Instant,
 )
 

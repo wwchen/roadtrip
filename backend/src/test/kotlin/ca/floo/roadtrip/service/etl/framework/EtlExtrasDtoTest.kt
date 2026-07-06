@@ -133,7 +133,11 @@ class EtlExtrasDtoTest {
     }
 
     @Test
-    fun `aspira extras preserve explicit null ids and names`() {
+    fun `aspira extras preserve explicit null parent name`() {
+        // An emitted aspira POI always carries a non-null resourceLocationId
+        // (leaves without one are park containers, dropped by
+        // AspiraJoinByNameEtl before emission). parent_name stays nullable, so
+        // it is the field that exercises explicitNulls serialization here.
         val poi =
             AspiraJoinByNameEtl("aspira-bc-pins")
                 .transform(
@@ -147,7 +151,7 @@ class EtlExtrasDtoTest {
                                             name = "Lakeside Campground",
                                             transactionLocationId = 11,
                                             mapId = 22,
-                                            resourceLocationId = null,
+                                            resourceLocationId = 33,
                                             parentName = null,
                                         ),
                                     ),
@@ -162,7 +166,7 @@ class EtlExtrasDtoTest {
         assertEquals("camping.bcparks.ca", extras["host"]!!.jsonPrimitive.content)
         assertEquals(11, extras["transaction_location_id"]!!.jsonPrimitive.int)
         assertEquals(22, extras["map_id"]!!.jsonPrimitive.int)
-        assertEquals(JsonNull, extras["resource_location_id"])
+        assertEquals(33, extras["resource_location_id"]!!.jsonPrimitive.int)
         assertEquals(JsonNull, extras["parent_name"])
         assertEquals("exact", extras["match_kind"]!!.jsonPrimitive.content)
     }
