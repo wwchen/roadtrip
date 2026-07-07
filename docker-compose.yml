@@ -93,6 +93,8 @@ services:
       # Availability alerts (PR6). Unset SLACK_* => alerts disabled (no-op).
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
       - SLACK_ALERT_CHANNEL=${SLACK_ALERT_CHANNEL:-}
+      # https://docs.slack.dev/interactivity/implementing-shortcuts/#scope_permissions
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
       # Grafana host for the dashboard deep link in alerts; same var + default
       # as the grafana service's GF_SERVER_ROOT_URL so they can't disagree.
       - GRAFANA_ROOT_URL=${GRAFANA_ROOT_URL:-https://roadtrip.floo.ca/dash/}
