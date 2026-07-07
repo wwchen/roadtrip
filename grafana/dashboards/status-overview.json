@@ -110,7 +110,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "Requests"
+                "value": "2xx"
               }
             ]
           },
@@ -122,7 +122,7 @@
             "properties": [
               {
                 "id": "displayName",
-                "value": "2xx"
+                "value": "3xx"
               }
             ]
           },
@@ -185,8 +185,8 @@
         ]
       },
       "gridPos": {
-        "h": 4,
-        "w": 12,
+        "h": 13,
+        "w": 3,
         "x": 0,
         "y": 4
       },
@@ -215,7 +215,9 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" [$__range])) or vector(0)",
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"2[0-9][0-9]\" [$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "requests",
           "queryType": "instant",
@@ -226,7 +228,9 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"2[0-9][0-9]\" [$__range])) or vector(0)",
+          "direction": "backward",
+          "editorMode": "code",
+          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"3[0-9][0-9]\" [$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "2xx",
           "queryType": "instant",
@@ -237,6 +241,8 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
+          "direction": "backward",
+          "editorMode": "code",
           "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"4[0-9][0-9]\" [$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "4xx",
@@ -248,6 +254,8 @@
             "type": "loki",
             "uid": "roadtrip-loki"
           },
+          "direction": "backward",
+          "editorMode": "code",
           "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"5[0-9][0-9]\" [$__range])) or vector(0)",
           "instant": true,
           "legendFormat": "5xx",
@@ -257,124 +265,6 @@
       ],
       "title": "HTTP API traffic",
       "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "roadtrip-loki"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "filterable": true,
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "path"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 340
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "status"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 90
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "method"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 90
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 4
-      },
-      "id": 35,
-      "options": {
-        "cellHeight": "sm",
-        "showHeader": true
-      },
-      "pluginVersion": "13.1.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "editorMode": "code",
-          "expr": "topk(15, sum by (method, path, status) (count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" [$__range])))",
-          "format": "table",
-          "instant": true,
-          "queryType": "instant",
-          "refId": "A"
-        }
-      ],
-      "title": "Top HTTP API paths",
-      "transformations": [
-        {
-          "id": "labelsToFields",
-          "options": {}
-        },
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "renameByName": {
-              "Value": "Calls",
-              "Value #A": "Calls"
-            }
-          }
-        }
-      ],
-      "type": "table"
     },
     {
       "datasource": {
@@ -432,10 +322,10 @@
         }
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
+        "h": 7,
+        "w": 10,
+        "x": 3,
+        "y": 4
       },
       "id": 34,
       "options": {
@@ -473,6 +363,143 @@
       ],
       "title": "HTTP API calls by status",
       "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "roadtrip-loki"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": true,
+            "footer": {
+              "reducers": []
+            },
+            "inspect": false
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": 0
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "path"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 340
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 77
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "method"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 90
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Calls",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 77
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 11,
+        "x": 13,
+        "y": 4
+      },
+      "id": 35,
+      "options": {
+        "cellHeight": "sm",
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Calls"
+          }
+        ]
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "roadtrip-loki"
+          },
+          "editorMode": "code",
+          "expr": "topk(15, sum by (method, path, status) (count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" [$__range])))",
+          "format": "table",
+          "instant": true,
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "Top HTTP API paths",
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {}
+        },
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "renameByName": {
+              "Value": "Calls",
+              "Value #A": "Calls"
+            }
+          }
+        }
+      ],
+      "type": "table"
     },
     {
       "datasource": {
@@ -569,8 +596,8 @@
       "gridPos": {
         "h": 6,
         "w": 12,
-        "x": 12,
-        "y": 10
+        "x": 3,
+        "y": 11
       },
       "id": 36,
       "options": {
@@ -645,7 +672,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 16
+        "y": 17
       },
       "id": 38,
       "title": "② Availability polling — what got fetched",
@@ -676,7 +703,7 @@
         "h": 4,
         "w": 12,
         "x": 0,
-        "y": 17
+        "y": 18
       },
       "id": 6,
       "options": {
@@ -822,7 +849,7 @@
         "h": 6,
         "w": 24,
         "x": 0,
-        "y": 21
+        "y": 22
       },
       "id": 19,
       "options": {
@@ -938,7 +965,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 28
       },
       "id": 7,
       "options": {
@@ -968,7 +995,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH successful_run_fetches AS (\n  SELECT DISTINCT\n    ap.poi_id,\n    fc.run_id\n  FROM availability_run ar\n  JOIN availability_poller ap ON ap.id = ar.poller_id\n  JOIN availability_fetch_call fc ON fc.run_id = ar.id\n  WHERE $__timeFilter(ar.started_at)\n    AND fc.outcome = 'ok'\n),\navailability_run_targets AS (\n  SELECT DISTINCT\n    f.poi_id,\n    rp.reservable_id\n  FROM successful_run_fetches f\n  JOIN reservable_pois rp ON rp.poi_id = f.poi_id\n  JOIN reservables r ON r.id = rp.reservable_id\n  WHERE r.deleted_at IS NULL\n    AND r.type = 'site'\n)\nSELECT\n  (SELECT count(*) FROM availability_run WHERE $__timeFilter(started_at)) AS runs,\n  (SELECT count(*) FROM availability_run\n     WHERE $__timeFilter(started_at) AND status = 'failed') AS failed_runs,\n  (SELECT count(*) FROM availability_fetch_call\n     WHERE $__timeFilter(created_at) AND outcome = 'rate_limited') AS rate_limited,\n  (SELECT COALESCE(sum(snapshot_count),0) FROM availability_run\n     WHERE $__timeFilter(started_at)) AS snapshots,\n  (SELECT count(DISTINCT poi_id)\n     FROM availability_run_targets) AS \"poi updated\",\n  (SELECT count(DISTINCT reservable_id)\n     FROM availability_run_targets) AS \"reservables updated\",\n  (SELECT count(*) FROM availability\n     WHERE $__timeFilter(last_observed_at) AND previous_id > 0) AS db_updates,\n  (SELECT count(*) FROM availability\n     WHERE $__timeFilter(last_observed_at)) AS total_db_updates;",
+          "rawSql": "WITH successful_run_fetches AS (\n  SELECT DISTINCT\n    ap.poi_id,\n    fc.run_id\n  FROM availability_run ar\n  JOIN availability_poller ap ON ap.id = ar.poller_id\n  JOIN availability_fetch_call fc ON fc.run_id = ar.id\n  WHERE $__timeFilter(ar.started_at)\n    AND fc.outcome = 'ok'\n),\navailability_run_targets AS (\n  SELECT DISTINCT\n    f.poi_id,\n    rp.reservable_id\n  FROM successful_run_fetches f\n  JOIN reservable_pois rp ON rp.poi_id = f.poi_id\n  JOIN reservables r ON r.id = rp.reservable_id\n  WHERE r.deleted_at IS NULL\n    AND r.type = 'site'\n)\nSELECT\n  (SELECT count(*) FROM availability_run WHERE $__timeFilter(started_at)) AS runs,\n  (SELECT count(*) FROM availability_run\n     WHERE $__timeFilter(started_at) AND status = 'failed') AS failed_runs,\n  (SELECT count(*) FROM availability_fetch_call\n     WHERE $__timeFilter(created_at) AND outcome = 'rate_limited') AS rate_limited,\n  (SELECT COALESCE(sum(snapshot_count),0) FROM availability_run\n     WHERE $__timeFilter(started_at)) AS snapshots,\n  (SELECT count(DISTINCT poi_id)\n     FROM availability_run_targets) AS \"campgrounds updated\",\n  (SELECT count(DISTINCT reservable_id)\n     FROM availability_run_targets) AS \"campsites updated\",\n  (SELECT count(*) FROM availability\n     WHERE $__timeFilter(last_observed_at) AND previous_id > 0) AS \"availability updates\";",
           "refId": "A",
           "sql": {
             "columns": [
@@ -1166,7 +1193,7 @@
         "h": 10,
         "w": 12,
         "x": 0,
-        "y": 31
+        "y": 32
       },
       "id": 8,
       "options": {
@@ -1490,7 +1517,7 @@
         "h": 10,
         "w": 12,
         "x": 12,
-        "y": 31
+        "y": 32
       },
       "id": 21,
       "options": {
@@ -1596,7 +1623,7 @@
         "h": 7,
         "w": 24,
         "x": 0,
-        "y": 41
+        "y": 42
       },
       "id": 9,
       "options": {
@@ -1640,7 +1667,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 48
+        "y": 49
       },
       "id": 39,
       "title": "③ Watches — what's being watched",
@@ -1671,7 +1698,7 @@
         "h": 4,
         "w": 24,
         "x": 0,
-        "y": 49
+        "y": 50
       },
       "id": 11,
       "options": {
@@ -1827,7 +1854,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 53
+        "y": 54
       },
       "id": 12,
       "options": {
@@ -1874,7 +1901,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 62
+        "y": 63
       },
       "id": 40,
       "panels": [
@@ -2013,7 +2040,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 63
+            "y": 64
           },
           "id": 30,
           "options": {
@@ -2229,7 +2256,7 @@
             "h": 4,
             "w": 12,
             "x": 12,
-            "y": 63
+            "y": 64
           },
           "id": 27,
           "options": {
@@ -2433,7 +2460,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 67
+            "y": 68
           },
           "id": 31,
           "options": {
@@ -2644,7 +2671,7 @@
             "h": 8,
             "w": 12,
             "x": 12,
-            "y": 67
+            "y": 68
           },
           "id": 29,
           "options": {
@@ -2747,7 +2774,7 @@
             "h": 4,
             "w": 12,
             "x": 0,
-            "y": 71
+            "y": 72
           },
           "id": 28,
           "options": {
@@ -2799,7 +2826,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 63
+        "y": 64
       },
       "id": 41,
       "panels": [
@@ -2881,7 +2908,7 @@
             "h": 4,
             "w": 24,
             "x": 0,
-            "y": 64
+            "y": 65
           },
           "id": 3,
           "options": {
@@ -3084,7 +3111,7 @@
             "h": 9,
             "w": 24,
             "x": 0,
-            "y": 68
+            "y": 69
           },
           "id": 4,
           "options": {
@@ -3274,7 +3301,7 @@
             "h": 8,
             "w": 24,
             "x": 0,
-            "y": 77
+            "y": 78
           },
           "id": 20,
           "options": {
@@ -3325,7 +3352,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 64
+        "y": 65
       },
       "id": 42,
       "panels": [
@@ -3530,7 +3557,7 @@
             "h": 12,
             "w": 24,
             "x": 0,
-            "y": 65
+            "y": 66
           },
           "id": 14,
           "options": {
