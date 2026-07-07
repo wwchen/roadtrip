@@ -132,7 +132,49 @@ alerts sorted to the bottom; Slack deep-link focuses its row with an accent bar.
 4. Verify layers panel, drawers, availability views against the reference page.
 5. Commit (e.g. `git add web/design-system && git commit -m "Add design system tokens (v1.0)"`).
 
+## Slack watch notifications
+See `roadtrip-slack-notifications.html` for the redesigned watch alerts. These
+replace the current emoji-link messages. Five states, each keyed by the Slack
+attachment **color bar** (the one styling lever Slack gives us):
+
+| State | Bar color | Emoji | Primary action |
+|---|---|---|---|
+| Sites available | `#4cb96a` | 🏕️ | Reserve (URL button → Recreation.gov) |
+| Watching (idle) | `#3b82f6` | 👀 | — |
+| Paused | `#8a8f96` | ⏸ | Resume |
+| Window expiring | `#f1a04a` | ⏳ | Extend window |
+| Check failed | `#f56565` | ⚠️ | Retry now |
+
+**Block Kit implementation (adjusted to real API constraints):**
+- Bar = legacy `attachments[].color`; put all blocks inside the attachment.
+- Actions = an `actions` block of `button` elements. **Reserve** = URL button
+  (no backend). Pause/Resume/Delete/Retry/Extend = interactive buttons with
+  `action_id` (your app handles the payload). Slack only supports
+  `default` / `primary` (green) / `danger` (red) button styles — the main CTA is
+  `primary`, destructive is `danger`. There is **no brand-blue filled button**.
+- Fields = a `section` with a 2-col `fields` array; bold labels with `*…*`.
+- Site list = one `section` of mrkdwn bullets, capped at 3 + "N more" (no shaded
+  box — Slack sections have no background fill; use `•` or `🟢` bullets).
+- Sub-line ("checked just now", "auto-expires…") = a `context` block.
+- Set `unfurl_links:false` on `chat.postMessage` to suppress the giant
+  Recreation.gov photo unfurl.
+- **Not possible:** colored heading text (mrkdwn can't color body text — emoji +
+  bar carry state), shaded card backgrounds, custom fonts/radii/button spacing.
+
+Suggested code location: wherever the watch alert payloads are built today
+(search for the current "watch dashboard" / "pause watch" message strings).
+
+**Ready-to-send payloads:** `slack-blockkit-payloads.js` exports one
+`chat.postMessage` argument object per state (available / watching / paused /
+expiring / error), validated against Block Kit rules. Replace the `{{...}}`
+placeholders (`channel`, `watchId`, `siteId`, `appUrl`) server-side, and wire the
+interactive `action_id`s (`watch_pause`, `watch_resume`, `watch_delete`,
+`watch_extend`, `watch_keep`, `watch_retry`, `open_grid`, `open_map`) into your
+Slack interactivity handler. `reserve_site` is a URL button — no handler needed.
+
 ## Files in this bundle
 - `tokens.css` — ship verbatim (source of truth)
 - `roadtrip-design-system.html` — offline visual reference
+- `roadtrip-slack-notifications.html` — offline Slack notification reference
+- `slack-blockkit-payloads.js` — ready-to-send `chat.postMessage` payloads (5 states)
 - `design-system-README.md` — short in-repo readme to include alongside the tokens
