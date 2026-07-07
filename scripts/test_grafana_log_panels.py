@@ -15,10 +15,20 @@ def dashboard(name: str) -> dict[str, Any]:
 
 
 def panel_by_title(dashboard_doc: dict[str, Any], title: str) -> dict[str, Any]:
-    for panel in dashboard_doc["panels"]:
+    for panel in panels_in(dashboard_doc):
         if panel.get("title") == title:
             return panel
     raise AssertionError(f"missing panel {title!r}")
+
+
+def panels_in(dashboard_doc: dict[str, Any]) -> list[dict[str, Any]]:
+    panels: list[dict[str, Any]] = []
+    for panel in dashboard_doc.get("panels", []):
+        if not isinstance(panel, dict):
+            continue
+        panels.append(panel)
+        panels.extend(panels_in(panel))
+    return panels
 
 
 class GrafanaLogPanelTest(unittest.TestCase):

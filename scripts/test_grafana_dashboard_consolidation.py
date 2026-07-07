@@ -22,8 +22,18 @@ def dashboard(name: str) -> dict[str, Any]:
     return json.loads((DASHBOARD_DIR / name).read_text())
 
 
+def panels_in(dashboard_doc: dict[str, Any]) -> list[dict[str, Any]]:
+    panels: list[dict[str, Any]] = []
+    for panel in dashboard_doc.get("panels", []):
+        if not isinstance(panel, dict):
+            continue
+        panels.append(panel)
+        panels.extend(panels_in(panel))
+    return panels
+
+
 def panel_titles(dashboard_doc: dict[str, Any]) -> set[str]:
-    return {panel.get("title", "") for panel in dashboard_doc.get("panels", [])}
+    return {panel.get("title", "") for panel in panels_in(dashboard_doc)}
 
 
 def all_dashboard_text() -> str:
