@@ -93,6 +93,12 @@ services:
       # Availability alerts (PR6). Unset SLACK_* => alerts disabled (no-op).
       - SLACK_BOT_TOKEN=${SLACK_BOT_TOKEN:-}
       - SLACK_ALERT_CHANNEL=${SLACK_ALERT_CHANNEL:-}
+      # Slack Basic Info → App Credentials → Signing Secret. When set, the
+      # backend registers POST /api/slack/interactivity and verifies HMAC-SHA256
+      # request signatures from Slack's Interactivity Request URL. Unset =>
+      # outbound Slack still works, but interactive Pause/Delete buttons on
+      # watch cards flash "app not configured for interactive responses".
+      - SLACK_SIGNING_SECRET=${SLACK_SIGNING_SECRET:-}
       # Grafana host for the dashboard deep link in alerts; same var + default
       # as the grafana service's GF_SERVER_ROOT_URL so they can't disagree.
       - GRAFANA_ROOT_URL=${GRAFANA_ROOT_URL:-https://roadtrip.floo.ca/dash/}
