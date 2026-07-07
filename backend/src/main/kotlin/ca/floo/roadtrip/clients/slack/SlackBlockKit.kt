@@ -44,6 +44,7 @@ data class SlackTextDto(
 data class SlackAttachmentDto(
     val color: String,
     val blocks: List<SlackBlockDto>,
+    val fallback: String? = null,
 )
 
 /** A Slack button element used inside an `actions` block. Buttons render both

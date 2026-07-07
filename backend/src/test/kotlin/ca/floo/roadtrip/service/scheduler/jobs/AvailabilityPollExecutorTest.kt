@@ -281,6 +281,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             responseUrl: String,
             notice: WatchStatusNotice,
         ): Boolean = result
+
+        override suspend fun postResponseStaleWatch(
+            responseUrl: String,
+            watchId: Long,
+        ): Boolean = result
     }
 
     private fun targetsFor(provider: ReservationProvider): DbAvailabilityTargetResolver =

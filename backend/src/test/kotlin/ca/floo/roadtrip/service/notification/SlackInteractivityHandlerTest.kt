@@ -68,7 +68,13 @@ class SlackInteractivityHandlerTest {
             val notice: WatchStatusNotice,
         )
 
+        data class StaleResponse(
+            val url: String,
+            val watchId: Long,
+        )
+
         val responses = mutableListOf<Response>()
+        val staleResponses = mutableListOf<StaleResponse>()
 
         override suspend fun sendWatchStatus(
             notice: WatchStatusNotice,
@@ -89,6 +95,14 @@ class SlackInteractivityHandlerTest {
             notice: WatchStatusNotice,
         ): Boolean {
             responses += Response(responseUrl, notice)
+            return true
+        }
+
+        override suspend fun postResponseStaleWatch(
+            responseUrl: String,
+            watchId: Long,
+        ): Boolean {
+            staleResponses += StaleResponse(responseUrl, watchId)
             return true
         }
     }
@@ -198,16 +212,27 @@ class SlackInteractivityHandlerTest {
         }
 
     @Test
-    fun `a stale card whose watch is gone drops the mutation without a Slack post`() =
+    fun `a stale pause card whose watch is gone replaces the card with a stale-watch notice`() =
         runBlocking {
             val fakes = FakeWatches(emptyMap()) // watch 42 already deleted
             val slack = FakeSlack()
             SlackInteractivityHandler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_PAUSE))
 
-            // FakeWatches records the call for observability, but setStatus
-            // returned null, so no response_url post fires.
             assertEquals(listOf(42L to WatchStatus.PAUSED), fakes.statusCalls)
             assertTrue(slack.responses.isEmpty())
+            assertEquals(listOf(FakeSlack.StaleResponse(responseUrl, 42L)), slack.staleResponses)
+        }
+
+    @Test
+    fun `a stale delete card whose watch is gone replaces the card with a stale-watch notice`() =
+        runBlocking {
+            val fakes = FakeWatches(emptyMap()) // watch 42 already deleted
+            val slack = FakeSlack()
+            SlackInteractivityHandler(fakes, slack).handle(payload(SlackWatchCard.ACTION_WATCH_DELETE))
+
+            assertEquals(listOf(42L), fakes.deleteCalls)
+            assertTrue(slack.responses.isEmpty())
+            assertEquals(listOf(FakeSlack.StaleResponse(responseUrl, 42L)), slack.staleResponses)
         }
 
     @Test

@@ -95,6 +95,11 @@ class SlackInteractivityRoutesTest {
             responseUrl: String,
             notice: WatchStatusNotice,
         ) = true
+
+        override suspend fun postResponseStaleWatch(
+            responseUrl: String,
+            watchId: Long,
+        ) = true
     }
 
     @Test
