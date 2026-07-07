@@ -36,6 +36,13 @@ def panel_titles(dashboard_doc: dict[str, Any]) -> set[str]:
     return {panel.get("title", "") for panel in panels_in(dashboard_doc)}
 
 
+def panel_by_title(dashboard_doc: dict[str, Any], title: str) -> dict[str, Any]:
+    for panel in panels_in(dashboard_doc):
+        if panel.get("title") == title:
+            return panel
+    raise AssertionError(f"missing panel {title!r}")
+
+
 def all_dashboard_text() -> str:
     return "\n".join(path.read_text() for path in sorted(DASHBOARD_DIR.glob("*.json")))
 
@@ -59,6 +66,29 @@ class GrafanaDashboardConsolidationTest(unittest.TestCase):
         self.assertFalse(RETIRED_INGEST_CATALOG_PATH.exists())
         self.assertNotIn(RETIRED_INGEST_CATALOG_URL, all_dashboard_text())
         self.assertIn("Failed or stuck ingest phases", status_overview_titles)
+
+    def test_status_overview_transition_dates_are_plain_dates(self) -> None:
+        transitions_panel = panel_by_title(
+            dashboard("status-overview.json"),
+            "Recent availability transitions",
+        )
+        raw_sql = transitions_panel["targets"][0]["rawSql"]
+
+        self.assertIn("a.target_date::text AS date", raw_sql)
+        self.assertNotIn("a.target_date,", raw_sql)
+
+    def test_status_overview_runs_panel_includes_catalog_update_counts(self) -> None:
+        runs_panel = panel_by_title(
+            dashboard("status-overview.json"),
+            "Runs & fetches (dashboard time range)",
+        )
+        raw_sql = runs_panel["targets"][0]["rawSql"]
+
+        self.assertIn('FROM pois\n     WHERE $__timeFilter(updated_at)) AS "poi updated"', raw_sql)
+        self.assertIn(
+            'FROM reservables\n     WHERE $__timeFilter(updated_at)) AS "reservables updated"',
+            raw_sql,
+        )
 
     def test_provider_cache_audit_dashboard_is_retired(self) -> None:
         db_stats_titles = panel_titles(dashboard("db-stats.json"))

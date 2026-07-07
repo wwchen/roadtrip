@@ -966,7 +966,7 @@
               "editorMode": "code",
               "format": "table",
               "rawQuery": true,
-              "rawSql": "SELECT\n  (SELECT count(*) FROM availability_run WHERE $__timeFilter(started_at)) AS runs,\n  (SELECT count(*) FROM availability_run\n     WHERE $__timeFilter(started_at) AND status = 'failed') AS failed_runs,\n  (SELECT count(*) FROM availability_fetch_call\n     WHERE $__timeFilter(created_at) AND outcome = 'rate_limited') AS rate_limited,\n  (SELECT COALESCE(sum(snapshot_count),0) FROM availability_run\n     WHERE $__timeFilter(started_at)) AS snapshots,\n  (SELECT count(*) FROM availability \n     WHERE $__timeFilter(last_observed_at) AND previous_id > 0) AS db_updates,\n  (SELECT count(*) FROM availability \n     WHERE $__timeFilter(last_observed_at)) AS total_db_updates;",
+              "rawSql": "SELECT\n  (SELECT count(*) FROM availability_run WHERE $__timeFilter(started_at)) AS runs,\n  (SELECT count(*) FROM availability_run\n     WHERE $__timeFilter(started_at) AND status = 'failed') AS failed_runs,\n  (SELECT count(*) FROM availability_fetch_call\n     WHERE $__timeFilter(created_at) AND outcome = 'rate_limited') AS rate_limited,\n  (SELECT COALESCE(sum(snapshot_count),0) FROM availability_run\n     WHERE $__timeFilter(started_at)) AS snapshots,\n  (SELECT count(*) FROM pois\n     WHERE $__timeFilter(updated_at)) AS \"poi updated\",\n  (SELECT count(*) FROM reservables\n     WHERE $__timeFilter(updated_at)) AS \"reservables updated\",\n  (SELECT count(*) FROM availability \n     WHERE $__timeFilter(last_observed_at) AND previous_id > 0) AS db_updates,\n  (SELECT count(*) FROM availability \n     WHERE $__timeFilter(last_observed_at)) AS total_db_updates;",
               "refId": "A",
               "sql": {
                 "columns": [
@@ -1506,7 +1506,7 @@
               "editorMode": "code",
               "format": "table",
               "rawQuery": true,
-              "rawSql": "SELECT\n  a.last_observed_at AS transitioned_at,\n  r.loop || ' / ' || r.name AS reservable_name,\n  a.target_date,\n  prev.status AS from_status,\n  a.status AS to_status,\n  a.run_id\nFROM availability a\nLEFT JOIN availability prev ON prev.id = a.previous_id\nJOIN reservables r ON r.id = a.reservable_id\nWHERE $__timeFilter(a.last_observed_at)\n  AND a.previous_id IS NOT NULL\nORDER BY a.last_observed_at DESC, a.id DESC\nLIMIT 100;",
+              "rawSql": "SELECT\n  a.last_observed_at AS transitioned_at,\n  r.loop || ' / ' || r.name AS reservable_name,\n  a.target_date::text AS date,\n  prev.status AS from_status,\n  a.status AS to_status,\n  a.run_id\nFROM availability a\nLEFT JOIN availability prev ON prev.id = a.previous_id\nJOIN reservables r ON r.id = a.reservable_id\nWHERE $__timeFilter(a.last_observed_at)\n  AND a.previous_id IS NOT NULL\nORDER BY a.last_observed_at DESC, a.id DESC\nLIMIT 100;",
               "refId": "A",
               "sql": {
                 "columns": [
