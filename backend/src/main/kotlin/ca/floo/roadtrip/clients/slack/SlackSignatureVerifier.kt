@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.clients.slack
 
+import org.slf4j.LoggerFactory
 import java.time.Clock
 import java.time.Duration
 import java.time.Instant
@@ -17,15 +18,18 @@ import javax.crypto.spec.SecretKeySpec
  * missing/malformed headers as unverifiable. The bot token stays outbound-only:
  * this verifier is the only trust boundary for inbound interactivity.
  *
- * All rejections collapse to a single [Result.Rejected] outcome; callers don't
- * differentiate stale-vs-bad-signature (both are "not Slack" as far as the
- * endpoint is concerned) and the timing-attack surface stays flat.
+ * The endpoint answers a single 401 for every failure (no oracle), but the
+ * verifier logs *why* it rejected at INFO — the header shape and clock drift
+ * are what an operator needs to see when Slack's saved Request URL check fails
+ * or an ngrok tunnel's URL is talking to the wrong signing secret.
  */
 class SlackSignatureVerifier(
     private val signingSecret: String,
     private val clock: Clock = Clock.systemUTC(),
     private val replayWindow: Duration = DEFAULT_REPLAY_WINDOW,
 ) {
+    private val log = LoggerFactory.getLogger(javaClass)
+
     sealed interface Result {
         data object Verified : Result
 
@@ -43,15 +47,55 @@ class SlackSignatureVerifier(
         signatureHeader: String?,
         body: ByteArray,
     ): Result {
-        val ts = timestampHeader?.toLongOrNull() ?: return Result.Rejected
-        val sig = signatureHeader?.takeIf { it.startsWith(SIGNATURE_PREFIX) } ?: return Result.Rejected
+        val ts = timestampHeader?.toLongOrNull()
+        if (ts == null) {
+            log.info(
+                "Slack signature verify FAILED: missing/non-numeric X-Slack-Request-Timestamp (present={}, value={})",
+                timestampHeader != null,
+                timestampHeader?.let { "\"${it.take(32)}\"" } ?: "null",
+            )
+            return Result.Rejected
+        }
+        val sig = signatureHeader
+        if (sig == null || !sig.startsWith(SIGNATURE_PREFIX)) {
+            log.info(
+                "Slack signature verify FAILED: missing/malformed X-Slack-Signature (present={}, starts-with-v0={})",
+                sig != null,
+                sig?.startsWith(SIGNATURE_PREFIX) ?: false,
+            )
+            return Result.Rejected
+        }
 
         val now = clock.instant()
         val requestAt = Instant.ofEpochSecond(ts)
-        if (Duration.between(requestAt, now).abs() > replayWindow) return Result.Rejected
+        val drift = Duration.between(requestAt, now)
+        if (drift.abs() > replayWindow) {
+            log.info(
+                "Slack signature verify FAILED: timestamp outside {}-min replay window (drift={}s, request_ts={}, now={})",
+                replayWindow.toMinutes(),
+                drift.seconds,
+                requestAt,
+                now,
+            )
+            return Result.Rejected
+        }
 
         val expected = SIGNATURE_PREFIX + hmacSha256Hex(signingSecret, "v0:$ts:".toByteArray(Charsets.UTF_8) + body)
-        return if (constantTimeEquals(expected, sig)) Result.Verified else Result.Rejected
+        return if (constantTimeEquals(expected, sig)) {
+            log.info("Slack signature verify OK: ts={}, drift={}s, body_bytes={}", requestAt, drift.seconds, body.size)
+            Result.Verified
+        } else {
+            log.info(
+                "Slack signature verify FAILED: signature mismatch (body_bytes={}, drift={}s, expected_prefix={}, got_prefix={}) " +
+                    "— usually means the SLACK_SIGNING_SECRET env doesn't match the app's Basic Info signing secret, " +
+                    "or a proxy re-encoded the body.",
+                body.size,
+                drift.seconds,
+                expected.take(8),
+                sig.take(8),
+            )
+            Result.Rejected
+        }
     }
 
     companion object {

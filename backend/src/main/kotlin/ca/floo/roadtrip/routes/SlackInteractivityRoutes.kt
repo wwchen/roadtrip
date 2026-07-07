@@ -40,6 +40,12 @@ private const val SLACK_TIMESTAMP_HEADER = "X-Slack-Request-Timestamp"
  * Registered from [ca.floo.roadtrip.RoadtripRouting] only when a signing
  * secret is configured, so the endpoint is absent (404) on a Slack-disabled
  * install rather than answering 401 to every probe.
+ *
+ * Logs every request at INFO with enough detail to diagnose a mis-configured
+ * app: whether Slack's headers arrived, whether the signature verified,
+ * whether the payload parsed, and which `action_id` was routed. No secrets
+ * or raw payload text hit the logs — only sizes, header presence, and the
+ * public action id.
  */
 internal fun Route.slackInteractivityRoute(
     verifier: SlackSignatureVerifier,
@@ -50,26 +56,53 @@ internal fun Route.slackInteractivityRoute(
         val body = call.receiveText()
         val timestamp = call.request.headers[SLACK_TIMESTAMP_HEADER]
         val signature = call.request.headers[SLACK_SIGNATURE_HEADER]
+        val remoteHost = call.request.local.remoteHost
+        val userAgent = call.request.headers["User-Agent"] ?: "-"
+
+        log.info(
+            "Slack interactivity POST: remote={}, ua={}, body_bytes={}, X-Slack-Request-Timestamp={}, X-Slack-Signature={}",
+            remoteHost,
+            userAgent,
+            body.length,
+            timestamp ?: "<missing>",
+            signature?.let { "${it.take(11)}…" } ?: "<missing>",
+        )
 
         val verified = verifier.verify(timestamp, signature, body.toByteArray(StandardCharsets.UTF_8))
         if (verified != SlackSignatureVerifier.Result.Verified) {
+            // Verifier already logged the specific reason at INFO — mirror the
+            // 401 so tail-following one log line is enough.
+            log.info("Slack interactivity → 401 (signature verify failed)")
             call.respondText("", status = HttpStatusCode.Unauthorized)
             return@post
         }
 
         val payloadJson = extractPayloadField(body)
         if (payloadJson == null) {
-            log.warn("Slack interactivity request had no 'payload' form field")
+            log.warn("Slack interactivity → 400: no 'payload' form field in body of {} bytes", body.length)
             call.respondText("", status = HttpStatusCode.BadRequest)
             return@post
         }
 
         val payload = SlackInteractivityHandler.parse(payloadJson)
         if (payload == null) {
-            log.warn("Slack interactivity payload could not be parsed as block_actions JSON")
+            log.warn(
+                "Slack interactivity → 400: 'payload' field is not a block_actions JSON (payload_bytes={})",
+                payloadJson.length,
+            )
             call.respondText("", status = HttpStatusCode.BadRequest)
             return@post
         }
+
+        val actionIds = payload.actions.map { it.actionId }
+        val values = payload.actions.map { it.value ?: "-" }
+        log.info(
+            "Slack interactivity → 200, dispatching type={} actions={} values={} response_url_present={}",
+            payload.type,
+            actionIds,
+            values,
+            payload.responseUrl != null,
+        )
 
         // Ack Slack first, mutate + update the card async — Slack's own guidance
         // is "reply within 3s"; a repo update + response_url roundtrip can eat
@@ -80,7 +113,7 @@ internal fun Route.slackInteractivityRoute(
                 .onFailure {
                     log.warn(
                         "Slack interactivity handler failed for action(s) {}: {}",
-                        payload.actions.map { it.actionId },
+                        actionIds,
                         it.message,
                     )
                 }
