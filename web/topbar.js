@@ -304,8 +304,8 @@ function injectStyles() {
     left: 10px;
     z-index: 5;
     width: min(420px, calc(100vw - 80px));
-    background: var(--cg-surface);
-    border: 1px solid var(--cg-border);
+    background: var(--rt-surface);
+    border: 1px solid var(--rt-border);
     border-radius: 10px;
     box-shadow: 0 6px 20px rgba(0,0,0,0.40);
     -webkit-font-smoothing: antialiased;
@@ -317,18 +317,18 @@ function injectStyles() {
 
   .tb-row {
     display: flex; align-items: center; gap: 8px;
-    background: var(--cg-bg-subtle);
-    border: 1px solid var(--cg-border-strong);
+    background: var(--rt-fill-subtle);
+    border: 1px solid var(--rt-border-strong);
     border-radius: 8px;
     padding: 0 6px 0 10px;
     transition: border-color 100ms ease, background 100ms ease, opacity 120ms ease;
   }
   .tb-row:focus-within {
-    border-color: var(--cg-accent);
-    background: var(--cg-bg-hover);
+    border-color: var(--rt-brand);
+    background: var(--rt-fill-hover);
   }
   .tb-row.dragging { opacity: 0.4; }
-  .tb-row.drop-target { border-color: var(--cg-accent); border-style: dashed; }
+  .tb-row.drop-target { border-color: var(--rt-brand); border-style: dashed; }
   .tb-row[draggable="true"] { cursor: grab; }
   .tb-row[draggable="true"]:active { cursor: grabbing; }
   .tb-row[draggable="true"] .tb-input { cursor: text; }
@@ -337,38 +337,38 @@ function injectStyles() {
     flex-shrink: 0;
     width: 12px; height: 12px;
     border-radius: 50%;
-    background: var(--cg-accent);
-    box-shadow: 0 0 0 2px var(--cg-bg-subtle);
+    background: var(--rt-brand);
+    box-shadow: 0 0 0 2px var(--rt-fill-subtle);
   }
   .tb-icon.via  { background: #e0a543; border-radius: 2px; }
   .tb-icon.last { background: ${ROUTE_COLOR}; border-radius: 2px; }
 
   .tb-input {
     flex: 1; min-width: 0;
-    background: transparent; color: var(--cg-text);
+    background: transparent; color: var(--rt-text);
     border: 0; outline: none;
     padding: 9px 0;
     font-size: 13px; font-family: inherit;
   }
-  .tb-input::placeholder { color: var(--cg-faint); }
+  .tb-input::placeholder { color: var(--rt-faint); }
 
   .tb-x {
     flex-shrink: 0;
     width: 24px; height: 24px;
-    background: transparent; border: 0; color: var(--cg-faint);
+    background: transparent; border: 0; color: var(--rt-faint);
     border-radius: 4px; cursor: pointer;
     display: grid; place-items: center;
   }
-  .tb-x:hover { color: var(--cg-error); background: var(--cg-bg-hover); }
+  .tb-x:hover { color: var(--rt-error); background: var(--rt-fill-hover); }
 
   .tb-locate {
     flex-shrink: 0;
     width: 24px; height: 24px;
-    background: transparent; border: 0; color: var(--cg-faint);
+    background: transparent; border: 0; color: var(--rt-faint);
     border-radius: 4px; cursor: pointer;
     display: grid; place-items: center;
   }
-  .tb-locate:hover { color: var(--cg-accent); background: var(--cg-bg-hover); }
+  .tb-locate:hover { color: var(--rt-brand); background: var(--rt-fill-hover); }
   .tb-locate:disabled { opacity: 0.55; cursor: wait; }
 
   /* Action row */
@@ -377,20 +377,20 @@ function injectStyles() {
   #tb-add {
     flex-shrink: 0;
     background: transparent;
-    border: 1px dashed var(--cg-border-strong);
-    color: var(--cg-muted);
+    border: 1px dashed var(--rt-border-strong);
+    color: var(--rt-muted);
     padding: 6px 10px; border-radius: 6px;
     font-size: 12px; font-family: inherit;
     cursor: pointer;
     transition: color 100ms, border-color 100ms;
   }
-  #tb-add:hover { color: var(--cg-accent); border-color: var(--cg-accent); }
+  #tb-add:hover { color: var(--rt-brand); border-color: var(--rt-brand); }
   #tb-add[hidden] { display: none; }
 
   #tb-route-summary {
     flex: 0 1 auto;
     min-width: 0;
-    color: var(--cg-text);
+    color: var(--rt-text);
     font-size: 11px;
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
@@ -399,7 +399,7 @@ function injectStyles() {
   }
   #tb-route-summary:empty { display: none; }
   #tb-route-summary .tb-stat-sep {
-    color: var(--cg-faint);
+    color: var(--rt-faint);
     margin: 0 6px;
   }
   .tb-actions-spacer {
@@ -409,15 +409,15 @@ function injectStyles() {
 
   .tb-icon-btn {
     width: 36px; height: 36px;
-    background: var(--cg-bg-subtle);
-    border: 1px solid var(--cg-border-strong);
-    color: var(--cg-text);
+    background: var(--rt-fill-subtle);
+    border: 1px solid var(--rt-border-strong);
+    color: var(--rt-text);
     border-radius: 8px;
     cursor: pointer;
     display: grid; place-items: center;
     transition: background 100ms, border-color 100ms;
   }
-  .tb-icon-btn:hover { background: var(--cg-bg-hover); border-color: var(--cg-accent); }
+  .tb-icon-btn:hover { background: var(--rt-fill-hover); border-color: var(--rt-brand); }
   .tb-icon-btn.primary {
     background: ${ROUTE_COLOR};
     border-color: ${ROUTE_COLOR};
@@ -429,23 +429,23 @@ function injectStyles() {
   /* Dropdown */
   #tb-dropdown {
     max-height: 320px; overflow-y: auto;
-    border-top: 1px solid var(--cg-border);
+    border-top: 1px solid var(--rt-border);
     padding: 4px;
     display: none;
   }
   #tb-dropdown.open { display: block; }
   .tb-section {
     font-size: 9px; text-transform: uppercase; letter-spacing: 0.06em;
-    color: var(--cg-faint);
+    color: var(--rt-faint);
     padding: 6px 8px 2px;
   }
   .tb-result {
     display: flex; align-items: center; gap: 8px;
     padding: 7px 8px; cursor: pointer;
-    color: var(--cg-text); font-size: 12px;
+    color: var(--rt-text); font-size: 12px;
     border-radius: 6px;
   }
-  .tb-result:hover, .tb-result.active { background: var(--cg-bg-hover); }
+  .tb-result:hover, .tb-result.active { background: var(--rt-fill-hover); }
   .tb-kind {
     flex-shrink: 0;
     font-size: 9px; text-transform: uppercase;
@@ -454,31 +454,31 @@ function injectStyles() {
     min-width: 28px; text-align: center;
   }
   .tb-name { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .tb-sub { color: var(--cg-muted); font-size: 11px; }
+  .tb-sub { color: var(--rt-muted); font-size: 11px; }
 
   /* Status */
   #tb-status {
     padding: 6px 12px;
-    font-size: 11px; color: var(--cg-muted);
-    border-top: 1px solid var(--cg-border);
+    font-size: 11px; color: var(--rt-muted);
+    border-top: 1px solid var(--rt-border);
     display: none;
   }
   #tb-status.visible { display: block; }
-  #tb-status.error { color: var(--cg-error); }
+  #tb-status.error { color: var(--rt-error); }
   #tb-status .tb-stat-num { color: ${ROUTE_COLOR}; font-weight: 600; }
-  #tb-status .tb-stat-sep { color: var(--cg-faint); margin: 0 8px; }
+  #tb-status .tb-stat-sep { color: var(--rt-faint); margin: 0 8px; }
 
   /* Corridor radius slider — visible inside the campgrounds collapsible. */
   #tb-corridor {
     display: none;
     align-items: center;
     gap: 10px;
-    font-size: 11px; color: var(--cg-muted);
+    font-size: 11px; color: var(--rt-muted);
   }
   #tb-corridor.visible { display: flex; }
   #tb-corridor label { white-space: nowrap; }
   #tb-corridor .tb-corridor-value {
-    color: var(--cg-text);
+    color: var(--rt-text);
     font-variant-numeric: tabular-nums;
     min-width: 44px;
     text-align: right;
@@ -494,7 +494,7 @@ function injectStyles() {
   #tb-results {
     display: none;
     flex-direction: column;
-    border-top: 1px solid var(--cg-border);
+    border-top: 1px solid var(--rt-border);
     max-height: min(50vh, 480px);
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -507,17 +507,17 @@ function injectStyles() {
   .tb-results-head {
     position: sticky; top: 0; z-index: 1;
     padding: 8px 12px;
-    background: var(--cg-surface);
-    border-bottom: 1px solid var(--cg-border);
+    background: var(--rt-surface);
+    border-bottom: 1px solid var(--rt-border);
     display: flex; align-items: center; gap: 6px;
     font-size: 11px; text-transform: uppercase; letter-spacing: 0.06em;
-    color: var(--cg-muted); font-weight: 600;
+    color: var(--rt-muted); font-weight: 600;
     cursor: pointer;
     user-select: none;
   }
-  .tb-results-head:hover { color: var(--cg-text); }
+  .tb-results-head:hover { color: var(--rt-text); }
   .tb-results-head .tb-results-count {
-    color: var(--cg-faint); font-weight: 400; text-transform: none; letter-spacing: 0;
+    color: var(--rt-faint); font-weight: 400; text-transform: none; letter-spacing: 0;
     font-size: 11px;
     flex: 1;
   }
@@ -534,8 +534,8 @@ function injectStyles() {
     flex-direction: column;
     gap: 8px;
     padding: 8px 12px;
-    border-bottom: 1px solid var(--cg-border);
-    background: var(--cg-surface);
+    border-bottom: 1px solid var(--rt-border);
+    background: var(--rt-surface);
   }
   #tb-results-cards {
     display: flex;
@@ -544,12 +544,12 @@ function injectStyles() {
   .tb-card {
     display: flex; gap: 10px;
     padding: 10px 12px;
-    border-bottom: 1px solid var(--cg-border);
+    border-bottom: 1px solid var(--rt-border);
     cursor: pointer;
     transition: background 100ms ease;
   }
   .tb-card:last-child { border-bottom: 0; }
-  .tb-card:hover { background: var(--cg-bg-hover); }
+  .tb-card:hover { background: var(--rt-fill-hover); }
   .tb-card-dot {
     flex-shrink: 0;
     width: 10px; height: 10px; margin-top: 5px;
@@ -566,20 +566,20 @@ function injectStyles() {
   .tb-card-name {
     flex: 1;
     min-width: 0;
-    color: var(--cg-text);
+    color: var(--rt-text);
     font-size: 13px; font-weight: 500; line-height: 1.3;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
   }
   .tb-card-location {
     flex-shrink: 0;
-    color: var(--cg-muted);
+    color: var(--rt-muted);
     font-size: 11px;
     line-height: 1.3;
     font-weight: 500;
     white-space: nowrap;
   }
   .tb-card-sub {
-    color: var(--cg-muted);
+    color: var(--rt-muted);
     font-size: 11px; line-height: 1.4;
     margin-top: 2px;
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -587,16 +587,16 @@ function injectStyles() {
   .tb-card-meta {
     display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
     margin-top: 4px;
-    font-size: 11px; color: var(--cg-faint);
+    font-size: 11px; color: var(--rt-faint);
     font-variant-numeric: tabular-nums;
   }
   .tb-card-dist { color: ${ROUTE_COLOR}; font-weight: 500; }
   .tb-card-rating { color: #f5a623; font-weight: 500; }
-  .tb-card-sites { color: var(--cg-muted); }
-  .tb-card-season { color: var(--cg-muted); }
+  .tb-card-sites { color: var(--rt-muted); }
+  .tb-card-season { color: var(--rt-muted); }
   .tb-card-empty {
     padding: 14px 12px;
-    color: var(--cg-muted); font-size: 12px;
+    color: var(--rt-muted); font-size: 12px;
     text-align: center;
   }
 
@@ -1426,7 +1426,7 @@ function showRouteSummary() {
   // Per-leg breakdown is only useful for 3+ stops; it stays in the status
   // slot below. Hide status entirely for the simple 2-stop case.
   if (legs.length > 1) {
-    let body = '<div style="font-size:10px; color:var(--cg-faint);">';
+    let body = '<div style="font-size:10px; color:var(--rt-faint);">';
     legs.forEach((l, i) => {
       const km = (l.distance_m / 1000).toFixed(0);
       const min = Math.round(l.duration_s / 60);
@@ -1465,7 +1465,7 @@ function syncMarkers() {
       return;
     }
     const role = (i === 0) ? 'origin' : (i === trip.stops.length - 1 ? 'last' : 'via');
-    const color = role === 'origin' ? 'var(--cg-accent)' :
+    const color = role === 'origin' ? 'var(--rt-brand)' :
       (role === 'last' ? ROUTE_COLOR : '#e0a543');
     const shape = role === 'last' ? 'square' : 'circle';
     const label = role === 'origin' ? 'A' :

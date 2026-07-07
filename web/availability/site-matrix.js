@@ -321,9 +321,9 @@ function selectAriaLabel(key) {
 
 function matrixScrollStyle(siteColumnWidth, dateCount) {
   const datesWidth = Math.max(1, dateCount) * 66;
-  const props = [`--cg-site-dates-width: ${datesWidth}px;`];
+  const props = [`--rt-site-dates-width: ${datesWidth}px;`];
   if (typeof siteColumnWidth === 'number' && Number.isFinite(siteColumnWidth)) {
-    props.push(`--cg-site-column-width: ${Math.round(siteColumnWidth)}px;`);
+    props.push(`--rt-site-column-width: ${Math.round(siteColumnWidth)}px;`);
   }
   return ` style="${props.join(' ')}"`;
 }

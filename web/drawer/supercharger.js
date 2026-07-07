@@ -245,12 +245,12 @@ function renderBusyHours(ap, siteTz) {
   const bars = today.map((v, h) => {
     const ratio = v / peak;
     const height = 4 + Math.round(ratio * 24);
-    const color = ratio >= 0.85 ? 'var(--cg-warn, #c0392b)'
-      : ratio >= 0.5 ? 'var(--cg-accent, #2e7d32)'
-      : 'var(--cg-muted, #888)';
+    const color = ratio >= 0.85 ? 'var(--rt-error)'
+      : ratio >= 0.5 ? 'var(--rt-warn)'
+      : 'var(--rt-avail)';
     const tip = `${formatHourLabel(h)} · ${Math.round(v * 100)}% busy`;
     const outline = h === nowHour
-      ? 'outline:2px solid var(--cg-warn, #c0392b);outline-offset:1px;'
+      ? 'outline:2px solid var(--rt-brand);outline-offset:1px;'
       : '';
     return `<span class="sc-bar" title="${escapeHtml(tip)}" style="height:${height}px;background:${color};${outline}"></span>`;
   }).join('');
