@@ -1,17 +1,16 @@
 package ca.floo.roadtrip.service.notification
 
-import ca.floo.roadtrip.clients.slack.LinkSpec
-import ca.floo.roadtrip.clients.slack.SlackBlockDto
+import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlocks
+import ca.floo.roadtrip.clients.slack.SlackButtonSpec
 
 /**
- * Maps a [WatchStatusNotice] to the Slack watch-status card — a
- * notification-fallback string plus the Block Kit body (header, scope / window
- * fields, a one-line status, and the dashboard deep-links). The Block Kit
- * sibling of the old single mrkdwn line, and a parallel to
- * [SlackContentAvailabilityRenderer]: the one place watch-status domain data
- * becomes Slack content, so the notification service owns the mapping and the
- * dispatcher only supplies data.
+ * Maps a [WatchStatusNotice] to the Slack watch-status card — a notification
+ * fallback string plus the attachment-wrapped Block Kit body: a color-bar
+ * accent keyed to the state (blue while watching, gray while paused, green on
+ * done, gray on stopped), a headline, scope / window fields, a one-line
+ * status, an actions row of buttons (whichever pause / resume / delete apply,
+ * plus map / grid deep-links per POI), and a context sub-line.
  *
  * Text is clamped to Slack's per-element limits ([FIELD_TEXT_MAX],
  * [SECTION_TEXT_MAX]); an over-long site name would otherwise make
@@ -22,14 +21,12 @@ object SlackContentWatchStatusRenderer {
     private const val FIELD_TEXT_MAX = 2000
     private const val SECTION_TEXT_MAX = 3000
 
-    /** Deep-link labels are kept short for readability, not a Slack limit. */
-    private const val LINK_LABEL_MAX = 75
-
     /**
      * Renders [notice] into the fallback text (shown in notifications / by
-     * clients that don't render blocks) paired with the Block Kit body.
+     * clients that don't render blocks) paired with the attachment-wrapped
+     * card.
      */
-    fun render(notice: WatchStatusNotice): Pair<String, List<SlackBlockDto>> {
+    fun render(notice: WatchStatusNotice): Pair<String, List<SlackAttachmentDto>> {
         val window = "${notice.startDate} → ${notice.endDate}"
 
         // Scope reads as the single site, the whole campground, or a plural
@@ -46,67 +43,139 @@ object SlackContentWatchStatusRenderer {
 
         val blocks =
             buildList {
-                add(SlackBlocks.header(headerFor(notice.state)))
+                add(SlackBlocks.section("*${headerFor(notice.state)}*"))
                 add(
                     SlackBlocks.fields(
                         listOf(
-                            // Clamp the whole field (label + value): Slack's limit is on
-                            // the field's text object, not just the value.
                             truncate("*$fieldLabel*\n$fieldValue", FIELD_TEXT_MAX),
-                            "*Window*\n$window",
+                            "*Window*\n`$window`",
                         ),
                     ),
                 )
                 add(SlackBlocks.section(truncate(statusLine(notice.state), SECTION_TEXT_MAX)))
-                addAll(linkSections(notice))
-                addAll(WatchControlLinksRenderer.sections(notice.controls))
+                buttons(notice).takeIf { it.isNotEmpty() }?.let { add(SlackBlocks.actions(it)) }
+                add(SlackBlocks.context(contextLine(notice.state)))
             }
 
-        return fallback(notice, scopePlain(notice), window) to blocks
+        val attachment = SlackAttachmentDto(color = colorFor(notice.state), blocks = blocks)
+        return fallback(notice, scopePlain(notice), window) to listOf(attachment)
     }
 
-    /** Big plain-text card title. Emoji leads so the message reads at a glance. */
+    /** Big headline. Emoji leads so the message reads at a glance. */
     private fun headerFor(state: WatchStatusNotice.State): String =
         when (state) {
             WatchStatusNotice.State.WATCHING, WatchStatusNotice.State.UNCHECKED -> "👀 Watching for openings"
-            WatchStatusNotice.State.PAUSED -> "⏸️ Watch paused"
+            WatchStatusNotice.State.PAUSED -> "⏸ Watch paused"
             WatchStatusNotice.State.DONE -> "✅ Watch complete"
             WatchStatusNotice.State.STOPPED -> "🛑 Watch stopped"
+        }
+
+    /** The color bar keyed to state per the design system. WATCHING is the
+     *  interactive-blue (`--rt-brand`), DONE the availability-green, PAUSED /
+     *  STOPPED the neutral gray, matching the spec's five-state palette. */
+    private fun colorFor(state: WatchStatusNotice.State): String =
+        when (state) {
+            WatchStatusNotice.State.WATCHING, WatchStatusNotice.State.UNCHECKED -> SlackWatchCard.COLOR_WATCHING
+            WatchStatusNotice.State.PAUSED, WatchStatusNotice.State.STOPPED -> SlackWatchCard.COLOR_MUTED
+            WatchStatusNotice.State.DONE -> SlackWatchCard.COLOR_AVAIL
         }
 
     /** The one-line status sentence under the fields. */
     private fun statusLine(state: WatchStatusNotice.State): String =
         when (state) {
-            WatchStatusNotice.State.WATCHING -> "Nothing available right now — I'll alert the moment a site opens."
-            WatchStatusNotice.State.UNCHECKED -> "Availability not checked yet — I'll alert the moment a site opens."
-            WatchStatusNotice.State.PAUSED -> "Paused — I won't alert until this watch is resumed."
+            WatchStatusNotice.State.WATCHING -> "Nothing open right now — I'll ping you the moment a site frees up."
+            WatchStatusNotice.State.UNCHECKED -> "Availability not checked yet — I'll ping you the moment a site opens."
+            WatchStatusNotice.State.PAUSED -> "Paused — I won't alert until you resume this watch."
             WatchStatusNotice.State.DONE -> "This watch is complete — no more alerts."
             WatchStatusNotice.State.STOPPED -> "Deleted — I've stopped watching and won't alert again."
         }
 
-    /** The deep-links as sections of inline mrkdwn hyperlinks, or empty when the
-     *  watch carries none (both hosts unconfigured, or no POI-scoped targets).
-     *  One link for the watch dashboard, then a map + grid link per watched POI.
-     *  A single POI reads plainly ("view on map", "availability grid"); several
-     *  are suffixed with the POI id so each link is distinguishable. Links are
-     *  chunked to Slack's per-section cap so a many-POI watch can't be rejected.
-     *  The `url` binding lives here, never in the domain [WatchStatusNotice]. */
-    private fun linkSections(notice: WatchStatusNotice): List<SlackBlockDto> {
-        val single = notice.poiLinks.size == 1
-        val links =
-            buildList {
-                notice.dashboardUrl?.let { add(LinkSpec(truncate("📊 watch dashboard", LINK_LABEL_MAX), it)) }
-                notice.poiLinks.forEach { poi ->
-                    val suffix = if (single) "" else " ${poi.poiId}"
-                    poi.mapUrl?.let { add(LinkSpec(truncate("🗺 view on map$suffix", LINK_LABEL_MAX), it)) }
-                    poi.gridUrl?.let { add(LinkSpec(truncate("🗓 availability grid$suffix", LINK_LABEL_MAX), it)) }
-                }
+    /** The muted sub-line under the actions row. Kept generic (no exact
+     *  timestamp) since the renderer doesn't know when the poller last ran. */
+    private fun contextLine(state: WatchStatusNotice.State): String =
+        when (state) {
+            WatchStatusNotice.State.WATCHING -> "Armed · checking on the watch's cadence"
+            WatchStatusNotice.State.UNCHECKED -> "Armed · first check pending"
+            WatchStatusNotice.State.PAUSED -> "No further alerts until this watch is resumed"
+            WatchStatusNotice.State.DONE -> "This watch fired and stopped itself"
+            WatchStatusNotice.State.STOPPED -> "This watch was deleted"
+        }
+
+    /** The applicable action buttons for the state. Live watches offer Pause +
+     *  Delete; paused ones offer a green Resume + Delete; done watches offer
+     *  Delete; a just-stopped card is terminal (no buttons). Grid / map deep-
+     *  links per POI slot in ahead of the mutation buttons when their host is
+     *  configured. */
+    private fun buttons(notice: WatchStatusNotice): List<SlackButtonSpec> {
+        if (notice.state == WatchStatusNotice.State.STOPPED) return emptyList()
+        val out = mutableListOf<SlackButtonSpec>()
+        // Interactive controls first — the primary action for the state — so
+        // the eye lands on Resume when paused, Pause when watching, etc.
+        when (notice.state) {
+            WatchStatusNotice.State.WATCHING, WatchStatusNotice.State.UNCHECKED ->
+                out +=
+                    SlackButtonSpec(
+                        label = "⏸ Pause",
+                        actionId = SlackWatchCard.ACTION_WATCH_PAUSE,
+                        value = notice.watchId.toString(),
+                    )
+            WatchStatusNotice.State.PAUSED ->
+                out +=
+                    SlackButtonSpec(
+                        label = "▶ Resume",
+                        actionId = SlackWatchCard.ACTION_WATCH_RESUME,
+                        value = notice.watchId.toString(),
+                        style = SlackButtonSpec.Style.PRIMARY,
+                    )
+            WatchStatusNotice.State.DONE, WatchStatusNotice.State.STOPPED -> Unit
+        }
+        // Deep-links (URL buttons). Slack caps an actions row at 25 buttons —
+        // we're always well under, but multi-POI watches stay ordered by id
+        // so the row is deterministic across renders.
+        notice.poiLinks.forEach { poi ->
+            poi.gridUrl?.let {
+                out +=
+                    SlackButtonSpec(
+                        label = if (notice.poiLinks.size > 1) "Grid ${poi.poiId}" else "Availability grid",
+                        actionId = SlackWatchCard.ACTION_OPEN_GRID,
+                        url = it,
+                        value = notice.watchId.toString(),
+                    )
             }
-        return links.chunked(SlackBlocks.LINKS_MAX_PER_SECTION).map(SlackBlocks::links)
+            poi.mapUrl?.let {
+                out +=
+                    SlackButtonSpec(
+                        label = if (notice.poiLinks.size > 1) "Map ${poi.poiId}" else "View on map",
+                        actionId = SlackWatchCard.ACTION_OPEN_MAP,
+                        url = it,
+                        value = notice.watchId.toString(),
+                    )
+            }
+        }
+        notice.dashboardUrl?.let {
+            out +=
+                SlackButtonSpec(
+                    label = "📊 Dashboard",
+                    actionId = SlackWatchCard.ACTION_OPEN_DASHBOARD,
+                    url = it,
+                    value = notice.watchId.toString(),
+                )
+        }
+        // Delete is always available (except on the terminal STOPPED card,
+        // handled above) — it's the escape hatch and stays as the danger CTA.
+        out += SlackContentAvailabilityRenderer.deleteButton(notice.watchId, deleteSubject(notice))
+        return out
     }
 
-    /** Notification-fallback line — keeps the pre-blocks phrasing so it reads as
-     *  a full sentence wherever blocks aren't rendered. */
+    private fun deleteSubject(notice: WatchStatusNotice): String =
+        when {
+            notice.siteName != null -> notice.siteName
+            notice.campgroundName != null -> notice.campgroundName
+            else -> "these alerts"
+        }
+
+    /** Notification-fallback line — reads as a full sentence wherever blocks
+     *  aren't rendered. */
     private fun fallback(
         notice: WatchStatusNotice,
         scope: String,
@@ -118,7 +187,7 @@ object SlackContentWatchStatusRenderer {
             WatchStatusNotice.State.UNCHECKED ->
                 "👀 Watching $scope for $window — availability not checked yet. I'll alert the moment a site opens."
             WatchStatusNotice.State.PAUSED ->
-                "⏸️ Paused watching $scope for $window — I won't alert until it's resumed."
+                "⏸ Paused watching $scope for $window — I won't alert until it's resumed."
             WatchStatusNotice.State.DONE ->
                 "✅ Done watching $scope for $window."
             WatchStatusNotice.State.STOPPED ->

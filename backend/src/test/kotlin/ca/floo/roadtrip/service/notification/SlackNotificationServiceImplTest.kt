@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.notification
 
+import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.clients.slack.SlackClient
 import ca.floo.roadtrip.config.SlackConfig
@@ -21,16 +22,35 @@ class SlackNotificationServiceImplTest {
             val channel: String,
             val text: String,
             val blocks: List<SlackBlockDto>?,
+            val attachments: List<SlackAttachmentDto>?,
+        )
+
+        data class Response(
+            val responseUrl: String,
+            val text: String,
+            val attachments: List<SlackAttachmentDto>?,
         )
 
         val posts = mutableListOf<Post>()
+        val responses = mutableListOf<Response>()
 
         override suspend fun postMessage(
             channel: String,
             text: String,
             blocks: List<SlackBlockDto>?,
+            attachments: List<SlackAttachmentDto>?,
         ): Boolean {
-            posts += Post(channel, text, blocks)
+            posts += Post(channel, text, blocks, attachments)
+            return result
+        }
+
+        override suspend fun postResponse(
+            responseUrl: String,
+            text: String,
+            blocks: List<SlackBlockDto>?,
+            attachments: List<SlackAttachmentDto>?,
+        ): Boolean {
+            responses += Response(responseUrl, text, attachments)
             return result
         }
     }
@@ -42,6 +62,7 @@ class SlackNotificationServiceImplTest {
 
     private fun watchStatus(state: WatchStatusNotice.State = WatchStatusNotice.State.WATCHING) =
         WatchStatusNotice(
+            watchId = 1L,
             state = state,
             siteCount = 235,
             siteName = null,
@@ -61,7 +82,7 @@ class SlackNotificationServiceImplTest {
         )
 
     @Test
-    fun `sendWatchStatus renders blocks to the given channel and returns the client result`() =
+    fun `sendWatchStatus renders an attachment to the given channel and returns the client result`() =
         runBlocking {
             val client = RecordingSlackClient(result = true)
             val ok = service(client).sendWatchStatus(watchStatus(), "#camping")
@@ -71,7 +92,9 @@ class SlackNotificationServiceImplTest {
             val post = client.posts.single()
             assertEquals("#camping", post.channel)
             assertTrue(post.text.contains("Watching"), post.text)
-            assertTrue(!post.blocks.isNullOrEmpty(), "watch-status send carries Block Kit blocks")
+            // The new design wraps blocks in an attachment (color bar); a bare
+            // blocks send would miss the color and violate the spec.
+            assertTrue(!post.attachments.isNullOrEmpty(), "watch-status send carries an attachment")
         }
 
     @Test
@@ -90,11 +113,12 @@ class SlackNotificationServiceImplTest {
         }
 
     @Test
-    fun `sendWatchOpenings renders blocks and forwards them to the client`() =
+    fun `sendWatchOpenings renders an attachment and forwards it to the client`() =
         runBlocking {
             val client = RecordingSlackClient()
             val ok =
                 service(client).sendWatchOpenings(
+                    watchId = 42L,
                     startDate = LocalDate.of(2026, 8, 1),
                     endDate = LocalDate.of(2026, 8, 3),
                     openings =
@@ -115,18 +139,34 @@ class SlackNotificationServiceImplTest {
             assertTrue(ok)
             val post = client.posts.single()
             assertEquals("#camping", post.channel)
-            assertTrue(post.text.contains("campsite"), post.text)
-            assertTrue(!post.blocks.isNullOrEmpty(), "openings send carries Block Kit blocks")
+            assertTrue(post.text.contains("just opened"), post.text)
+            assertTrue(!post.attachments.isNullOrEmpty(), "openings send carries an attachment")
         }
 
     @Test
     fun `sendWatchOpenings sends nothing when there are no openings`() =
         runBlocking {
             val client = RecordingSlackClient()
-            val ok = service(client).sendWatchOpenings(LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 3), emptyList())
+            val ok = service(client).sendWatchOpenings(1L, LocalDate.of(2026, 8, 1), LocalDate.of(2026, 8, 3), emptyList())
 
             assertFalse(ok)
             assertTrue(client.posts.isEmpty())
+        }
+
+    @Test
+    fun `postResponseWatchStatus posts an attachment to the response_url and reports client result`() =
+        runBlocking {
+            val client = RecordingSlackClient(result = true)
+            val ok =
+                service(
+                    client,
+                ).postResponseWatchStatus("https://hooks.slack/actions/xyz", watchStatus(state = WatchStatusNotice.State.PAUSED))
+
+            assertTrue(ok)
+            val resp = client.responses.single()
+            assertEquals("https://hooks.slack/actions/xyz", resp.responseUrl)
+            assertTrue(resp.text.contains("Paused"), resp.text)
+            assertTrue(!resp.attachments.isNullOrEmpty(), "in-place update needs the same attachment shape")
         }
 
     @Test
@@ -137,10 +177,12 @@ class SlackNotificationServiceImplTest {
             assertFalse(service.sendWatchStatus(watchStatus(), channel = "#camping"))
             assertFalse(
                 service.sendWatchOpenings(
+                    1L,
                     LocalDate.of(2026, 8, 1),
                     LocalDate.of(2026, 8, 3),
                     listOf(WatchOpening("Site 100", null, null, LocalDate.of(2026, 8, 1), null, null, null)),
                 ),
             )
+            assertFalse(service.postResponseWatchStatus("https://hooks.slack/actions/xyz", watchStatus()))
         }
 }

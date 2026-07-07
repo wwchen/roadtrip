@@ -6,6 +6,7 @@ import ca.floo.roadtrip.clients.mapbox.MapboxGeocoder
 import ca.floo.roadtrip.clients.recgov.HttpRecgovAvailabilityClient
 import ca.floo.roadtrip.clients.reserveamerica.HttpReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.HttpReserveCaliforniaAvailabilityClient
+import ca.floo.roadtrip.clients.slack.SlackSignatureVerifier
 import ca.floo.roadtrip.config.ApiCacheEntity
 import ca.floo.roadtrip.config.AppConfig
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
@@ -38,7 +39,9 @@ import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.importTargetsFromRegistry
 import ca.floo.roadtrip.service.etl.framework.sweepStaleIngestRuns
+import ca.floo.roadtrip.service.notification.SlackInteractivityHandler
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
+import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.ReservationProviderClients
@@ -57,6 +60,14 @@ import kotlinx.coroutines.cancel
 import org.jooq.DSLContext
 import java.io.File
 import javax.sql.DataSource
+
+/** Pair of the signature verifier + the handler; wired only when the Slack
+ *  app is configured with a signing secret. Null on a Slack-disabled install
+ *  so the interactivity endpoint is absent (404) rather than answering 401. */
+internal data class SlackInteractivityWiring(
+    val verifier: SlackSignatureVerifier,
+    val handler: SlackInteractivityHandler,
+)
 
 internal data class RoadtripBootContext(
     val appConfig: AppConfig,
@@ -78,6 +89,7 @@ internal class RoadtripRuntime(
     val availabilityWatchService: AvailabilityWatchService,
     val watchAlertDispatcher: WatchAlertDispatcher,
     val schedulerScope: CoroutineScope,
+    val slackInteractivity: SlackInteractivityWiring?,
     private val slackNotifications: SlackNotificationServiceImpl,
 ) {
     val appConfig: AppConfig get() = boot.appConfig
@@ -207,6 +219,37 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             grafanaRootUrl = boot.appConfig.grafana?.rootUrl,
             appRootUrl = boot.appConfig.webApp?.rootUrl,
         )
+    // Interactivity wiring only exists when the Slack app is configured with a
+    // signing secret — no secret means we can't verify inbound requests, so
+    // the endpoint stays unregistered rather than accepting unverifiable input.
+    val slackInteractivity =
+        boot.appConfig.slack?.signingSecret?.let { secret ->
+            val watchRepo = AvailabilityWatchRepo(boot.ctx)
+            val watchesPort =
+                object : SlackInteractivityHandler.Watches {
+                    override fun setStatus(
+                        id: Long,
+                        status: ca.floo.roadtrip.service.availability.WatchStatus,
+                    ) = availabilityWatchService.update(id, AvailabilityWatchRepo.UpdateInput(status = status))
+
+                    override fun snapshotAndDelete(id: Long): AvailabilityWatchRepo.Watch? {
+                        // Snapshot pre-delete so the goodbye card can still resolve
+                        // POI names / dates — mirrors the HTTP delete route which
+                        // captures the row before the FK cascade drops its links.
+                        val snapshot = watchRepo.findById(id) ?: return null
+                        return if (availabilityWatchService.delete(id)) snapshot else null
+                    }
+
+                    override fun buildStatusNotice(
+                        watch: AvailabilityWatchRepo.Watch,
+                        state: WatchStatusNotice.State,
+                    ) = watchAlertDispatcher.statusNoticeForWatch(watch, state)
+                }
+            SlackInteractivityWiring(
+                verifier = SlackSignatureVerifier(secret),
+                handler = SlackInteractivityHandler(watches = watchesPort, slack = slackNotifications),
+            )
+        }
     Scheduler(
         repo = availabilityPollers,
         handler =
@@ -234,6 +277,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         availabilityWatchService = availabilityWatchService,
         watchAlertDispatcher = watchAlertDispatcher,
         schedulerScope = schedulerScope,
+        slackInteractivity = slackInteractivity,
         slackNotifications = slackNotifications,
     )
 }

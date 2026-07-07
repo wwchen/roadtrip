@@ -1,8 +1,17 @@
 package ca.floo.roadtrip.service.notification
 
+import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.time.LocalDate
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SlackContentWatchStatusRendererTest {
@@ -10,12 +19,13 @@ class SlackContentWatchStatusRendererTest {
     private val end = LocalDate.of(2026, 7, 12)
 
     private fun notice(
+        watchId: Long = 42,
         state: WatchStatusNotice.State = WatchStatusNotice.State.WATCHING,
         siteCount: Int = 235,
         siteName: String? = null,
         siteLoop: String? = null,
         campgroundName: String? = null,
-        dashboardUrl: String? = "https://grafana.test/d/reservable-watch-drill?var-watch_id=1",
+        dashboardUrl: String? = "https://grafana.test/d/reservable-watch-drill?var-watch_id=42",
         poiLinks: List<WatchStatusNotice.PoiLink> =
             listOf(
                 WatchStatusNotice.PoiLink(
@@ -25,6 +35,7 @@ class SlackContentWatchStatusRendererTest {
                 ),
             ),
     ) = WatchStatusNotice(
+        watchId = watchId,
         state = state,
         siteCount = siteCount,
         siteName = siteName,
@@ -36,84 +47,118 @@ class SlackContentWatchStatusRendererTest {
         poiLinks = poiLinks,
     )
 
-    private fun header(blocks: List<SlackBlockDto>) = blocks.first { it.type == "header" }.text!!.text
+    private fun attach(rendered: Pair<String, List<SlackAttachmentDto>>): SlackAttachmentDto {
+        assertEquals(1, rendered.second.size, "watch status card is one attachment")
+        return rendered.second.single()
+    }
 
-    /** Every renderable string: fallback + each block's text and fields. Deep-links
-     *  render as `<url|label>` markup inside section text, so both label and url
-     *  are already captured by the section-text append. */
-    private fun allText(pair: Pair<String, List<SlackBlockDto>>) =
+    private fun blocks(rendered: Pair<String, List<SlackAttachmentDto>>): List<SlackBlockDto> = attach(rendered).blocks
+
+    /** Every renderable string: fallback + each block's text/fields + button
+     *  labels and URLs — so a single search can assert a payload piece is
+     *  present without knowing whether it landed as text or a button. */
+    private fun allText(rendered: Pair<String, List<SlackAttachmentDto>>): String =
         buildString {
-            append(pair.first)
-            pair.second.forEach { b ->
+            append(rendered.first)
+            blocks(rendered).forEach { b ->
                 b.text?.let { append('\n').append(it.text) }
                 b.fields?.forEach { append('\n').append(it.text) }
+                // Actions/context elements are heterogeneous JsonElements; flatten
+                // any string values (button label, url, action_id, mrkdwn text)
+                // into the dump. `text` is a nested object on a button but a
+                // plain string on a context element, so type-check both shapes.
+                b.elements?.jsonArray?.forEach { e ->
+                    val obj = e.jsonObject
+                    when (val t = obj["text"]) {
+                        is JsonObject -> (t["text"] as? JsonPrimitive)?.contentIfString()?.let { append('\n').append(it) }
+                        is JsonPrimitive -> t.contentIfString()?.let { append('\n').append(it) }
+                        else -> Unit
+                    }
+                    (obj["url"] as? JsonPrimitive)?.contentIfString()?.let { append('\n').append(it) }
+                    (obj["action_id"] as? JsonPrimitive)?.contentIfString()?.let { append('\n').append(it) }
+                    (obj["value"] as? JsonPrimitive)?.contentIfString()?.let { append('\n').append(it) }
+                }
             }
         }
 
-    @Test
-    fun `watching state renders a header, scope count, window, and dashboard links`() {
-        val rendered = SlackContentWatchStatusRenderer.render(notice())
-        val (fallback, blocks) = rendered
+    private fun JsonPrimitive.contentIfString(): String? = if (isString) content else null
 
-        assertTrue(blocks.any { it.type == "header" }, "status card leads with a header block")
-        assertTrue(header(blocks).contains("Watching"), header(blocks))
+    @Test
+    fun `watching state renders a blue color bar with header, scope, window, and deep-link buttons`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice())
+        assertEquals(SlackWatchCard.COLOR_WATCHING, attach(rendered).color, "watching = blue --rt-brand bar")
+
         val text = allText(rendered)
+        assertTrue(text.contains("Watching for openings"), text)
         assertTrue(text.contains("235"), text)
         assertTrue(text.contains("2026-07-11 → 2026-07-12"), text)
-        assertTrue(text.contains("nothing available right now"), fallback)
-        assertTrue(text.contains("/d/reservable-watch-drill"), text)
+        assertTrue(text.lowercase().contains("nothing open right now"), rendered.first)
+        // Deep-link buttons render as URL buttons in the actions row, not
+        // mrkdwn hyperlinks embedded in a section.
+        assertTrue(text.contains("Availability grid"), text)
         assertTrue(text.contains("/d/availability-cell-matrix"), text)
-        assertTrue(text.contains("?poi=7"), "carries the web-app POI map link")
-        assertTrue(text.contains("view on map"), text)
+        assertTrue(text.contains("View on map"), text)
+        assertTrue(text.contains("?poi=7"), text)
     }
 
     @Test
-    fun `deep-links render as sections of mrkdwn hyperlinks, not interactive buttons`() {
-        val blocks = SlackContentWatchStatusRenderer.render(notice()).second
-        // No actions/button blocks: those fire an interaction payload Slack would
-        // flag on an app with no interactivity endpoint. Links live in section text.
-        assertTrue(blocks.none { it.type == "actions" }, "deep-links must not render as interactive buttons")
-        val linkText =
-            blocks
-                .filter { it.type == "section" && it.text != null }
-                .map { it.text!!.text }
-                .filter { it.contains("<http") }
-                .joinToString("\n")
-        assertTrue(linkText.contains("watch dashboard"), linkText)
-        assertTrue(linkText.contains("view on map"), linkText)
-        assertTrue(linkText.contains("availability grid"), linkText)
-        // Rendered as a Slack hyperlink `<url|label>` targeting the web-app POI.
-        assertTrue(linkText.contains("<https://app.test/?poi=7|"), linkText)
+    fun `watching card exposes Pause and Delete as interactive buttons and no Resume`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice())
+        val actions = blocks(rendered).single { it.type == "actions" }.elements!!.jsonArray
+        val actionIds = actions.map { it.jsonObject["action_id"]!!.jsonPrimitive.content }.toSet()
+
+        assertTrue(SlackWatchCard.ACTION_WATCH_PAUSE in actionIds, "pause available while watching")
+        assertTrue(SlackWatchCard.ACTION_WATCH_DELETE in actionIds, "delete is always the escape hatch")
+        assertTrue(SlackWatchCard.ACTION_WATCH_RESUME !in actionIds, "resume is nonsensical while watching")
     }
 
     @Test
-    fun `unchecked state reports availability not checked yet`() {
-        val text = allText(SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.UNCHECKED)))
-        assertTrue(text.contains("not checked yet"), text)
+    fun `paused state renders a gray bar and a Resume primary button in place of Pause`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.PAUSED))
+        assertEquals(SlackWatchCard.COLOR_MUTED, attach(rendered).color, "paused = gray bar")
+
+        val actions = blocks(rendered).single { it.type == "actions" }.elements!!.jsonArray
+        val resume = actions.map { it.jsonObject }.single { it["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_WATCH_RESUME }
+        // Resume is the primary CTA when a watch is paused — Slack's `primary`
+        // green button style (there is no brand-blue filled button in Slack).
+        assertEquals("primary", resume["style"]?.jsonPrimitive?.content)
+        assertTrue(actions.none { it.jsonObject["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_WATCH_PAUSE })
     }
 
     @Test
-    fun `paused state reports paused and won't alert`() {
-        val (fallback, blocks) = SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.PAUSED))
-        assertTrue(header(blocks).contains("paused"), header(blocks))
-        assertTrue(fallback.contains("Paused"), fallback)
+    fun `done state renders a green bar and only a Delete button`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.DONE))
+        assertEquals(SlackWatchCard.COLOR_AVAIL, attach(rendered).color)
+
+        val actionIds =
+            blocks(rendered)
+                .single { it.type == "actions" }
+                .elements!!
+                .jsonArray
+                .mapNotNull { it.jsonObject["action_id"]?.jsonPrimitive?.content }
+        assertTrue(SlackWatchCard.ACTION_WATCH_DELETE in actionIds)
+        assertTrue(SlackWatchCard.ACTION_WATCH_PAUSE !in actionIds)
+        assertTrue(SlackWatchCard.ACTION_WATCH_RESUME !in actionIds)
     }
 
     @Test
-    fun `done state reports completion`() {
-        val (fallback, blocks) = SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.DONE))
-        assertTrue(header(blocks).contains("complete"), header(blocks))
-        assertTrue(fallback.contains("Done"), fallback)
+    fun `stopped state renders a gray bar and no actions row (terminal card)`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.STOPPED))
+        assertEquals(SlackWatchCard.COLOR_MUTED, attach(rendered).color)
+        assertTrue(blocks(rendered).none { it.type == "actions" }, "stopped card is terminal — no buttons")
+        assertTrue(allText(rendered).contains("Watch stopped"), allText(rendered))
+    }
+
+    @Test
+    fun `unchecked state renders like watching (blue bar) and reports first check pending`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.UNCHECKED))
+        assertEquals(SlackWatchCard.COLOR_WATCHING, attach(rendered).color)
+        assertTrue(allText(rendered).contains("not checked yet"), allText(rendered))
     }
 
     @Test
     fun `a single-site watch names the site and its loop instead of a count`() {
-        val text =
-            allText(
-                SlackContentWatchStatusRenderer.render(
-                    notice(siteCount = 1, siteName = "072", siteLoop = "Upper Pines"),
-                ),
-            )
+        val text = allText(SlackContentWatchStatusRenderer.render(notice(siteCount = 1, siteName = "072", siteLoop = "Upper Pines")))
         assertTrue(text.contains("072"), text)
         assertTrue(text.contains("Upper Pines"), text)
         assertTrue(!text.contains("1 sites"), text)
@@ -121,30 +166,44 @@ class SlackContentWatchStatusRendererTest {
 
     @Test
     fun `a whole-campground watch names the campground instead of a raw site count`() {
-        val (fallback, blocks) = SlackContentWatchStatusRenderer.render(notice(siteCount = 360, campgroundName = "Deception Pass"))
-        val text = allText(fallback to blocks)
+        val text = allText(SlackContentWatchStatusRenderer.render(notice(siteCount = 360, campgroundName = "Deception Pass")))
         assertTrue(text.contains("Campground"), text)
         assertTrue(text.contains("Deception Pass"), text)
         assertTrue(!text.contains("360"), "campground scope shouldn't surface the raw site count")
     }
 
     @Test
-    fun `stopped state reports the watch was deleted`() {
-        val (fallback, blocks) = SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.STOPPED))
-        assertTrue(header(blocks).contains("stopped"), header(blocks))
-        assertTrue(fallback.contains("Stopped"), fallback)
+    fun `an active watch card has no mrkdwn hyperlinks — deep links are URL buttons`() {
+        // The old design embedded <url|label> hyperlinks in section text; the
+        // new design promotes them to Block Kit URL buttons so the card
+        // matches the design system's actions-row layout.
+        val sectionText =
+            blocks(SlackContentWatchStatusRenderer.render(notice()))
+                .filter { it.type == "section" && it.text != null }
+                .joinToString("\n") { it.text!!.text }
+        assertTrue(!sectionText.contains("<http"), "no <url|label> hyperlinks in section text: $sectionText")
     }
 
     @Test
-    fun `no configured hosts renders no link section`() {
+    fun `no configured hosts renders no deep-link buttons`() {
         val rendered = SlackContentWatchStatusRenderer.render(notice(dashboardUrl = null, poiLinks = emptyList()))
         val text = allText(rendered)
         assertTrue(!text.contains("/d/"), "no Grafana links when unconfigured")
         assertTrue(!text.contains("?poi="), "no map links when the web app is unconfigured")
+        // The actions row still carries the mutation buttons (Pause + Delete)
+        // — the deep-link absence must not drop them.
+        val actionIds =
+            blocks(rendered)
+                .single { it.type == "actions" }
+                .elements!!
+                .jsonArray
+                .mapNotNull { it.jsonObject["action_id"]?.jsonPrimitive?.content }
+        assertTrue(SlackWatchCard.ACTION_WATCH_PAUSE in actionIds)
+        assertTrue(SlackWatchCard.ACTION_WATCH_DELETE in actionIds)
     }
 
     @Test
-    fun `a POI with only a map link (Grafana unconfigured) still links to the map`() {
+    fun `a POI with only a map link (Grafana unconfigured) still exposes the map button`() {
         val rendered =
             SlackContentWatchStatusRenderer.render(
                 notice(
@@ -158,55 +217,38 @@ class SlackContentWatchStatusRendererTest {
     }
 
     @Test
-    fun `an active watch renders pause and delete control links but not resume`() {
-        val controls =
-            WatchControlLinks(
-                pauseUrl = "https://app.test/?alert=1&alert_action=pause",
-                deleteUrl = "https://app.test/?alert=1&alert_action=delete",
-            )
-        val text = allText(SlackContentWatchStatusRenderer.render(notice().copy(controls = controls)))
-        assertTrue(text.contains("pause watch"), text)
-        assertTrue(text.contains("alert_action=pause"), text)
-        assertTrue(text.contains("delete watch"), text)
-        assertTrue(text.contains("alert_action=delete"), text)
-        assertTrue(!text.contains("resume watch"), text)
+    fun `every interactive button carries the watchId in value so the endpoint can route`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice(watchId = 1234))
+        val actions = blocks(rendered).single { it.type == "actions" }.elements!!.jsonArray
+        val interactive =
+            actions.map { it.jsonObject }.filter { it["url"] == null }
+        assertTrue(interactive.isNotEmpty(), "at least one interactive button")
+        interactive.forEach { btn ->
+            assertEquals("1234", btn["value"]!!.jsonPrimitive.content, "value must carry the watchId for routing")
+        }
     }
 
     @Test
-    fun `a paused watch renders resume and delete control links but not pause`() {
-        val controls =
-            WatchControlLinks(
-                resumeUrl = "https://app.test/?alert=1&alert_action=resume",
-                deleteUrl = "https://app.test/?alert=1&alert_action=delete",
-            )
-        val text =
-            allText(
-                SlackContentWatchStatusRenderer.render(
-                    notice(state = WatchStatusNotice.State.PAUSED).copy(controls = controls),
-                ),
-            )
-        assertTrue(text.contains("resume watch"), text)
-        assertTrue(text.contains("delete watch"), text)
-        assertTrue(!text.contains("pause watch"), text)
+    fun `Delete button is danger-styled and carries a confirm dialog`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice())
+        val actions = blocks(rendered).single { it.type == "actions" }.elements!!.jsonArray
+        val del = actions.map { it.jsonObject }.single { it["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_WATCH_DELETE }
+        assertEquals("danger", del["style"]?.jsonPrimitive?.content, "delete uses Slack's danger red")
+        assertNotNull(del["confirm"], "delete must have a confirm dialog so a stray tap doesn't lose the watch")
     }
 
     @Test
-    fun `control links render as hyperlinks, not interactive buttons`() {
-        val controls = WatchControlLinks(pauseUrl = "https://app.test/?alert=1&alert_action=pause")
-        val blocks = SlackContentWatchStatusRenderer.render(notice().copy(controls = controls)).second
-        assertTrue(blocks.none { it.type == "actions" }, "controls must not render as interactive buttons")
-        val linkText =
-            blocks
-                .filter { it.type == "section" && it.text != null }
-                .map { it.text!!.text }
-                .joinToString("\n")
-        assertTrue(linkText.contains("<https://app.test/?alert=1&alert_action=pause|"), linkText)
-    }
-
-    @Test
-    fun `no controls (default) renders no control links`() {
-        val text = allText(SlackContentWatchStatusRenderer.render(notice()))
-        assertTrue(!text.contains("alert_action="), text)
+    fun `card ends with a muted context sub-line describing the watch state`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice())
+        val ctx = blocks(rendered).lastOrNull { it.type == "context" }
+        assertNotNull(ctx, "context sub-line missing")
+        val ctxText =
+            ctx.elements!!
+                .jsonArray
+                .first()
+                .jsonObject["text"]!!
+                .jsonPrimitive.content
+        assertTrue(ctxText.contains("Armed"), ctxText)
     }
 
     @Test
@@ -214,10 +256,33 @@ class SlackContentWatchStatusRendererTest {
         val longName = "x".repeat(5_000)
         val rendered = SlackContentWatchStatusRenderer.render(notice(siteCount = 1, siteName = longName))
         val field =
-            rendered.second
+            blocks(rendered)
                 .first { it.type == "section" && it.fields != null }
                 .fields!!
                 .first { it.text.contains("x") }
         assertTrue(field.text.length <= 2_000, "field was ${field.text.length} chars")
+    }
+
+    @Test
+    fun `fallback text still reads as a complete sentence`() {
+        val (fallback, _) = SlackContentWatchStatusRenderer.render(notice())
+        // Slack notifications show this fallback on mobile push, in Do Not
+        // Disturb, and in any client that doesn't render blocks. Must survive
+        // block-less rendering with the state clearly readable.
+        assertTrue(fallback.contains("Watching"), fallback)
+        assertTrue(fallback.contains("235"), fallback)
+        assertTrue(fallback.contains("2026-07-11"), fallback)
+    }
+
+    @Test
+    fun `null dashboardUrl doesn't emit a dashboard button`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice(dashboardUrl = null))
+        val actions = blocks(rendered).single { it.type == "actions" }.elements!!.jsonArray
+        assertNull(
+            actions.map { it.jsonObject }.firstOrNull {
+                it["action_id"]?.jsonPrimitive?.content ==
+                    SlackWatchCard.ACTION_OPEN_DASHBOARD
+            },
+        )
     }
 }
