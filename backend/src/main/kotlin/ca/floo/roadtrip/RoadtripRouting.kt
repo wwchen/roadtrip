@@ -11,6 +11,7 @@ import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
 import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
+import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.routing.openApiSpec
@@ -92,6 +93,13 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             runtime.watchAlertDispatcher,
             runtime.schedulerScope,
         )
+        // Inbound Slack interactivity is only registered when the app is
+        // configured with a signing secret; an unset secret means we can't
+        // verify anything, so leave the route absent (404) rather than
+        // answering 401 to every probe.
+        runtime.slackInteractivity?.let { wiring ->
+            slackInteractivityRoute(wiring.verifier, wiring.handler, runtime.schedulerScope)
+        }
         availabilityDashboardRoutes(runtime.ctx)
         poisOnRouteRoutes(runtime.ctx, runtime.routeCache, runtime.poiRegistry)
         routeRoutes(runtime.routeCache, runtime.ctx)

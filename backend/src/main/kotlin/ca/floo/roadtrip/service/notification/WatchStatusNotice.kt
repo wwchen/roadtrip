@@ -7,21 +7,25 @@ import java.time.LocalDate
  * [SlackNotificationService.sendWatchStatus] to render as a Slack status card.
  * Unlike [WatchOpening] (a real opening), this carries no availability — it
  * tells the user the watch is live, paused, or done. Every field is plain
- * domain data, including the dashboard deep-link URLs: the notification layer
- * owns turning them into Block Kit and never reaches back into the availability
- * domain, and this type never surfaces Slack's `<url|label>` markup.
+ * domain data, including the dashboard deep-link URLs and any per-POI links:
+ * the notification layer owns turning them into Block Kit buttons and never
+ * reaches back into the availability domain.
  *
- * Scope is one of: a single named site ([siteName] set), a whole campground
- * ([campgroundName] set — the watch covers every site in one POI), or a plural
- * count ([siteName] and [campgroundName] null); the renderer labels and formats
- * accordingly.
+ * [watchId] is echoed into every interactive button's `value` so the Slack
+ * interactivity handler (see
+ * [ca.floo.roadtrip.routes.SlackInteractivityRoute]) can identify the target
+ * watch on pause / resume / delete without trusting the client for a routing
+ * key. Scope is one of: a single named site ([siteName] set), a whole
+ * campground ([campgroundName] set — the watch covers every site in one POI),
+ * or a plural count ([siteName] and [campgroundName] null); the renderer
+ * labels and formats accordingly.
  *
- * [controls] carries the pause/resume/delete deep-links for this watch — which
- * ones apply depends on [state] (an active watch pauses, a paused one resumes,
- * neither on a stopped one). Defaults to no controls so an unconfigured host
- * simply omits them.
+ * The applicable controls come from [state] alone — an active watch pauses, a
+ * paused one resumes, a done one only deletes — so callers no longer pass a
+ * separate control-links object.
  */
 data class WatchStatusNotice(
+    val watchId: Long,
     val state: State,
     val siteCount: Int,
     val siteName: String?,
@@ -31,7 +35,6 @@ data class WatchStatusNotice(
     val endDate: LocalDate,
     val dashboardUrl: String?,
     val poiLinks: List<PoiLink>,
-    val controls: WatchControlLinks = WatchControlLinks(),
 ) {
     /** Which status card to render. [WATCHING] and [UNCHECKED] are both live
      *  (actively watching); they differ only in whether the cube has an

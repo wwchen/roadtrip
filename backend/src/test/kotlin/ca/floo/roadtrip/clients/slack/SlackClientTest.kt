@@ -53,6 +53,64 @@ class SlackClientTest {
         }
 
     @Test
+    fun `unfurls are disabled on every chat_postMessage`() =
+        runBlocking {
+            val capture = mutableMapOf<String, String?>()
+            val notifier = notifierReturning(HttpStatusCode.OK, """{"ok":true}""", capture)
+
+            notifier.postMessage("#camping", "hi")
+
+            // The spec is explicit: no giant Recreation.gov photo unfurl below a
+            // watch card. Both flags default off; the wire body must confirm it.
+            assertTrue(capture["body"]!!.contains("\"unfurl_links\":false"), capture["body"])
+            assertTrue(capture["body"]!!.contains("\"unfurl_media\":false"), capture["body"])
+        }
+
+    @Test
+    fun `attachments serialize as a top-level array with color and blocks`() =
+        runBlocking {
+            val capture = mutableMapOf<String, String?>()
+            val notifier = notifierReturning(HttpStatusCode.OK, """{"ok":true}""", capture)
+
+            notifier.postMessage(
+                "#camping",
+                "fallback",
+                attachments =
+                    listOf(
+                        SlackAttachmentDto(
+                            color = "#4cb96a",
+                            blocks = listOf(SlackBlocks.header("hello")),
+                        ),
+                    ),
+            )
+
+            val body = capture["body"]!!
+            // The color bar is the whole point of using attachments — it must
+            // survive serialization and sit under the attachment, not the top
+            // level of the message.
+            assertTrue(body.contains("\"attachments\":["), body)
+            assertTrue(body.contains("\"color\":\"#4cb96a\""), body)
+            assertTrue(body.contains("\"header\""), body)
+        }
+
+    @Test
+    fun `postResponse posts to the exact response_url with no bearer token and replace_original set`() =
+        runBlocking {
+            val capture = mutableMapOf<String, String?>()
+            val notifier = notifierReturning(HttpStatusCode.OK, "ok", capture)
+
+            val ok = notifier.postResponse("https://hooks.slack.test/actions/abc", "updated")
+
+            assertTrue(ok)
+            assertEquals("https://hooks.slack.test/actions/abc", capture["url"])
+            // Response-URL posts are unauthenticated (the URL itself is the
+            // capability token) — a stray Bearer would be a leak into a URL we
+            // don't control.
+            assertEquals(null, capture["auth"])
+            assertTrue(capture["body"]!!.contains("\"replace_original\":true"), capture["body"])
+        }
+
+    @Test
     fun `returns false without throwing when Slack replies ok false`() =
         runBlocking {
             val notifier = notifierReturning(HttpStatusCode.OK, """{"ok":false,"error":"channel_not_found"}""")

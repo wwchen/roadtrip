@@ -80,6 +80,27 @@ class AppConfigTest {
 
         assertEquals("xoxb-abc", slack?.botToken)
         assertEquals("#camping", slack?.defaultChannel)
+        assertEquals(null, slack?.signingSecret)
+    }
+
+    @Test
+    fun `slack signing secret is trimmed and populated when set, null when absent or blank`() {
+        val enabled =
+            AppConfig
+                .fromEnv(
+                    mapOf(
+                        "SLACK_BOT_TOKEN" to "xoxb-a",
+                        "SLACK_ALERT_CHANNEL" to "#c",
+                        "SLACK_SIGNING_SECRET" to "  s3cr3t  ",
+                    ),
+                ).slack
+        assertEquals("s3cr3t", enabled?.signingSecret)
+
+        val blank =
+            AppConfig
+                .fromEnv(mapOf("SLACK_BOT_TOKEN" to "xoxb-a", "SLACK_ALERT_CHANNEL" to "#c", "SLACK_SIGNING_SECRET" to "   "))
+                .slack
+        assertEquals(null, blank?.signingSecret)
     }
 
     @Test

@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
+import ca.floo.roadtrip.clients.slack.SlackAttachmentDto
 import ca.floo.roadtrip.clients.slack.SlackBlockDto
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
@@ -26,7 +27,6 @@ import ca.floo.roadtrip.service.notification.SlackContentAvailabilityRenderer
 import ca.floo.roadtrip.service.notification.SlackContentWatchStatusRenderer
 import ca.floo.roadtrip.service.notification.SlackNotificationService
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
-import ca.floo.roadtrip.service.notification.WatchControlLinks
 import ca.floo.roadtrip.service.notification.WatchOpening
 import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
@@ -219,18 +219,19 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
     }
 
-    /** One recorded send: the resolved channel, the fallback text, and the Block
-     *  Kit blocks (both the openings alert and the status messages carry them). */
+    /** One recorded send: the resolved channel, the fallback text, and the
+     *  Block Kit body (an attachment-wrapped card since the design system move;
+     *  blocks are inside each attachment). */
     private data class Post(
         val channel: String?,
         val text: String,
-        val blocks: List<SlackBlockDto>?,
+        val attachments: List<SlackAttachmentDto>?,
     ) {
+        val blocks: List<SlackBlockDto>? get() = attachments?.flatMap { it.blocks }
+
         /** Everything a reader would see: fallback text + every block's text and
-         *  fields. Deep-links render as `<url|label>` markup inside section text,
-         *  so both label and url are captured by the section-text append. Lets
-         *  content assertions ignore whether a string landed in the fallback or a
-         *  block. */
+         *  fields. Deep-links now render as URL buttons inside actions blocks,
+         *  so the button label + url flow through the `elements` JsonArray. */
         val allText: String
             get() =
                 buildString {
@@ -238,6 +239,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     blocks?.forEach { b ->
                         b.text?.let { append('\n').append(it.text) }
                         b.fields?.forEach { append('\n').append(it.text) }
+                        b.elements?.let { append('\n').append(it.toString()) }
                     }
                 }
     }
@@ -257,22 +259,28 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             notice: WatchStatusNotice,
             channel: String?,
         ): Boolean {
-            val (fallback, blocks) = SlackContentWatchStatusRenderer.render(notice)
-            posts += Post(channel = channel ?: defaultChannel, text = fallback, blocks = blocks)
+            val (fallback, attachments) = SlackContentWatchStatusRenderer.render(notice)
+            posts += Post(channel = channel ?: defaultChannel, text = fallback, attachments = attachments)
             return result
         }
 
         override suspend fun sendWatchOpenings(
+            watchId: Long,
             startDate: LocalDate,
             endDate: LocalDate,
             openings: List<WatchOpening>,
             channel: String?,
-            controls: WatchControlLinks?,
+            appRootUrl: String?,
         ): Boolean {
-            val (fallback, blocks) = SlackContentAvailabilityRenderer.openings(startDate, endDate, openings, controls)
-            posts += Post(channel = channel ?: defaultChannel, text = fallback, blocks = blocks)
+            val (fallback, attachments) = SlackContentAvailabilityRenderer.openings(watchId, startDate, endDate, openings, appRootUrl)
+            posts += Post(channel = channel ?: defaultChannel, text = fallback, attachments = attachments)
             return result
         }
+
+        override suspend fun postResponseWatchStatus(
+            responseUrl: String,
+            notice: WatchStatusNotice,
+        ): Boolean = result
     }
 
     private fun targetsFor(provider: ReservationProvider): DbAvailabilityTargetResolver =
@@ -557,11 +565,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals(1, notifier.posts.size)
             val post = notifier.posts.single()
             assertEquals("#camping", post.channel)
-            assertTrue(post.allText.contains("Campsites Available"), post.allText)
+            assertTrue(post.allText.contains("just opened"), post.allText)
             assertTrue(post.allText.contains("Site 100"), post.allText)
             // The booking link comes from the provider (adapter), not the dispatcher.
             assertTrue(post.allText.contains("https://example.test/book/100"), post.allText)
-            // The openings alert is Block Kit with no Grafana links — those stay on
+            // The openings alert carries no Grafana dashboard link — those stay on
             // the informational status messages.
             assertTrue(!post.allText.contains("/d/"), post.allText)
         }
@@ -652,13 +660,15 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals(1, notifier.posts.size)
             val post = notifier.posts.single()
             assertEquals("#camping", post.channel)
-            assertTrue(post.allText.contains("Campsites Available"), post.allText)
+            assertTrue(post.allText.contains("just opened"), post.allText)
             assertTrue(post.allText.contains("Site 100"), post.allText)
             assertTrue(post.allText.contains("https://example.test/book/100"), post.allText)
-            // An active watch's alert offers pause + delete deep-links into the app, never resume.
-            assertTrue(post.allText.contains("$APP_ROOT_URL/?alert=$watchId&alert_action=pause"), post.allText)
-            assertTrue(post.allText.contains("$APP_ROOT_URL/?alert=$watchId&alert_action=delete"), post.allText)
-            assertTrue(!post.allText.contains("alert_action=resume"), post.allText)
+            // An active watch's alert offers pause + delete as interactive buttons
+            // (block_actions payload carries the action_id + watchId value); no
+            // resume, since the watch is already active.
+            assertTrue(post.allText.contains("watch_pause"), post.allText)
+            assertTrue(post.allText.contains("watch_delete"), post.allText)
+            assertTrue(!post.allText.contains("watch_resume"), post.allText)
         }
 
     @Test
@@ -762,11 +772,12 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertEquals(1, notifier.posts.size)
             val text = notifier.posts.single().allText
             assertTrue(text.contains("Paused"), text)
-            assertTrue(!text.contains("Campsites Available"), text)
-            // A paused watch's status card offers resume + delete, never pause.
-            assertTrue(text.contains("$APP_ROOT_URL/?alert=$watchId&alert_action=resume"), text)
-            assertTrue(text.contains("$APP_ROOT_URL/?alert=$watchId&alert_action=delete"), text)
-            assertTrue(!text.contains("alert_action=pause"), text)
+            assertTrue(!text.contains("just opened"), text)
+            // A paused watch's status card offers resume + delete as interactive
+            // buttons (block_actions with action_id + watchId value), never pause.
+            assertTrue(text.contains("watch_resume"), text)
+            assertTrue(text.contains("watch_delete"), text)
+            assertTrue(!text.contains("watch_pause"), text)
         }
 
     @Test
