@@ -77,18 +77,26 @@ class GrafanaDashboardConsolidationTest(unittest.TestCase):
         self.assertIn("a.target_date::text AS date", raw_sql)
         self.assertNotIn("a.target_date,", raw_sql)
 
-    def test_status_overview_runs_panel_includes_catalog_update_counts(self) -> None:
+    def test_status_overview_runs_panel_counts_availability_updates(self) -> None:
         runs_panel = panel_by_title(
             dashboard("status-overview.json"),
             "Runs & fetches (dashboard time range)",
         )
         raw_sql = runs_panel["targets"][0]["rawSql"]
 
-        self.assertIn('FROM pois\n     WHERE $__timeFilter(updated_at)) AS "poi updated"', raw_sql)
         self.assertIn(
-            'FROM reservables\n     WHERE $__timeFilter(updated_at)) AS "reservables updated"',
+            "count(DISTINCT rp.poi_id)\n     FROM availability a\n"
+            "     JOIN reservable_pois rp ON rp.reservable_id = a.reservable_id\n"
+            '     WHERE $__timeFilter(a.last_observed_at)) AS "poi updated"',
             raw_sql,
         )
+        self.assertIn(
+            "count(DISTINCT a.reservable_id)\n     FROM availability a\n"
+            '     WHERE $__timeFilter(a.last_observed_at)) AS "reservables updated"',
+            raw_sql,
+        )
+        self.assertNotIn("FROM pois\n     WHERE $__timeFilter(updated_at)", raw_sql)
+        self.assertNotIn("FROM reservables\n     WHERE $__timeFilter(updated_at)", raw_sql)
 
     def test_provider_cache_audit_dashboard_is_retired(self) -> None:
         db_stats_titles = panel_titles(dashboard("db-stats.json"))
