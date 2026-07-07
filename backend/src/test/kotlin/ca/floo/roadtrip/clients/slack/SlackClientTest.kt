@@ -9,10 +9,15 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.content.OutgoingContent
 import io.ktor.http.headersOf
 import kotlinx.coroutines.runBlocking
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SlackClientTest {
@@ -36,6 +41,8 @@ class SlackClientTest {
             }
         return SlackClient(config, HttpClient(engine))
     }
+
+    private fun jsonBody(capture: Map<String, String?>) = Json.parseToJsonElement(capture["body"]!!).jsonObject
 
     @Test
     fun `posts to chat_postMessage with bearer token and channel, returns true on ok`() =
@@ -67,7 +74,7 @@ class SlackClientTest {
         }
 
     @Test
-    fun `attachments serialize as a top-level array with color and blocks`() =
+    fun `attachment posts keep fallback inside the attachment and omit visible top-level text`() =
         runBlocking {
             val capture = mutableMapOf<String, String?>()
             val notifier = notifierReturning(HttpStatusCode.OK, """{"ok":true}""", capture)
@@ -84,13 +91,15 @@ class SlackClientTest {
                     ),
             )
 
-            val body = capture["body"]!!
+            val body = jsonBody(capture)
             // The color bar is the whole point of using attachments — it must
             // survive serialization and sit under the attachment, not the top
             // level of the message.
-            assertTrue(body.contains("\"attachments\":["), body)
-            assertTrue(body.contains("\"color\":\"#4cb96a\""), body)
-            assertTrue(body.contains("\"header\""), body)
+            assertNull(body["text"], "attachment cards should not render duplicate top-level text")
+            val attachment = body["attachments"]!!.jsonArray.single().jsonObject
+            assertEquals("fallback", attachment["fallback"]!!.jsonPrimitive.content)
+            assertEquals("#4cb96a", attachment["color"]!!.jsonPrimitive.content)
+            assertTrue(attachment["blocks"].toString().contains("header"), attachment.toString())
         }
 
     @Test
@@ -108,6 +117,27 @@ class SlackClientTest {
             // don't control.
             assertEquals(null, capture["auth"])
             assertTrue(capture["body"]!!.contains("\"replace_original\":true"), capture["body"])
+        }
+
+    @Test
+    fun `response_url attachment updates omit top-level text and keep attachment fallback`() =
+        runBlocking {
+            val capture = mutableMapOf<String, String?>()
+            val notifier = notifierReturning(HttpStatusCode.OK, "ok", capture)
+
+            val ok =
+                notifier.postResponse(
+                    "https://hooks.slack.test/actions/abc",
+                    "updated fallback",
+                    attachments = listOf(SlackAttachmentDto(color = "#626770", blocks = listOf(SlackBlocks.header("updated card")))),
+                )
+
+            assertTrue(ok)
+            val body = jsonBody(capture)
+            assertNull(body["text"], "edited attachment cards should not render duplicate top-level text")
+            val attachment = body["attachments"]!!.jsonArray.single().jsonObject
+            assertEquals("updated fallback", attachment["fallback"]!!.jsonPrimitive.content)
+            assertEquals("true", body["replace_original"]!!.jsonPrimitive.content)
         }
 
     @Test

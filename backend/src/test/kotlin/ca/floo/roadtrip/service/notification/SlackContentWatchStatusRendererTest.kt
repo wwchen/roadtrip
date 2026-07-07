@@ -83,6 +83,13 @@ class SlackContentWatchStatusRendererTest {
 
     private fun JsonPrimitive.contentIfString(): String? = if (isString) content else null
 
+    private fun actionIds(rendered: Pair<String, List<SlackAttachmentDto>>): List<String> =
+        blocks(rendered)
+            .single { it.type == "actions" }
+            .elements!!
+            .jsonArray
+            .mapNotNull { it.jsonObject["action_id"]?.jsonPrimitive?.content }
+
     @Test
     fun `watching state renders a blue color bar with header, scope, window, and deep-link buttons`() {
         val rendered = SlackContentWatchStatusRenderer.render(notice())
@@ -123,6 +130,22 @@ class SlackContentWatchStatusRendererTest {
         // green button style (there is no brand-blue filled button in Slack).
         assertEquals("primary", resume["style"]?.jsonPrimitive?.content)
         assertTrue(actions.none { it.jsonObject["action_id"]?.jsonPrimitive?.content == SlackWatchCard.ACTION_WATCH_PAUSE })
+    }
+
+    @Test
+    fun `paused status card keeps Resume in the same slot where Pause lived`() {
+        val rendered = SlackContentWatchStatusRenderer.render(notice(state = WatchStatusNotice.State.PAUSED))
+
+        assertEquals(
+            listOf(
+                SlackWatchCard.ACTION_OPEN_GRID,
+                SlackWatchCard.ACTION_OPEN_MAP,
+                SlackWatchCard.ACTION_OPEN_DASHBOARD,
+                SlackWatchCard.ACTION_WATCH_RESUME,
+                SlackWatchCard.ACTION_WATCH_DELETE,
+            ),
+            actionIds(rendered),
+        )
     }
 
     @Test

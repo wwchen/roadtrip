@@ -170,6 +170,21 @@ class SlackNotificationServiceImplTest {
         }
 
     @Test
+    fun `postResponseStaleWatch replaces the card with a muted buttonless notice`() =
+        runBlocking {
+            val client = RecordingSlackClient(result = true)
+            val ok = service(client).postResponseStaleWatch("https://hooks.slack/actions/xyz", watchId = 42L)
+
+            assertTrue(ok)
+            val resp = client.responses.single()
+            assertEquals("https://hooks.slack/actions/xyz", resp.responseUrl)
+            assertTrue(resp.text.contains("Watch no longer exists"), resp.text)
+            val attachment = resp.attachments?.single()
+            assertEquals(SlackWatchCard.COLOR_MUTED, attachment?.color)
+            assertTrue(attachment?.blocks?.none { it.type == "actions" } == true)
+        }
+
+    @Test
     fun `a disabled service (null config) sends nothing and returns false`() =
         runBlocking {
             val service = SlackNotificationServiceImpl(config = null)
@@ -184,5 +199,6 @@ class SlackNotificationServiceImplTest {
                 ),
             )
             assertFalse(service.postResponseWatchStatus("https://hooks.slack/actions/xyz", watchStatus()))
+            assertFalse(service.postResponseStaleWatch("https://hooks.slack/actions/xyz", watchId = 42L))
         }
 }

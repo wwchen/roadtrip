@@ -70,6 +70,18 @@ class SlackNotificationServiceImpl(
         return client.postResponse(responseUrl, fallback, attachments = attachments)
     }
 
+    override suspend fun postResponseStaleWatch(
+        responseUrl: String,
+        watchId: Long,
+    ): Boolean {
+        val (fallback, attachments) = SlackContentStaleWatchRenderer.render(watchId)
+        if (client == null) {
+            log.warn("Slack disabled; stale response_url update skipped: {}", fallback)
+            return false
+        }
+        return client.postResponse(responseUrl, fallback, attachments = attachments)
+    }
+
     /** The single send gate: no-ops (logging why) when Slack is disabled,
      *  otherwise posts [text] plus [attachments] to [channel] or the default. */
     private suspend fun send(

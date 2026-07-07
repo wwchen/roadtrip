@@ -111,6 +111,8 @@ internal class SlackInteractivityHandler(
         val updated = watches.setStatus(watchId, newStatus)
         if (updated == null) {
             log.warn("Slack interactivity {} for missing watch {} (stale card?)", action.actionId, watchId)
+            val ok = slack.postResponseStaleWatch(responseUrl, watchId)
+            log.info("Slack interactivity {} missing watch={} stale response_url update ok={}", action.actionId, watchId, ok)
             return
         }
         val ok = slack.postResponseWatchStatus(responseUrl, watches.buildStatusNotice(updated, newNoticeState))
@@ -130,6 +132,8 @@ internal class SlackInteractivityHandler(
         val snapshot = watches.snapshotAndDelete(watchId)
         if (snapshot == null) {
             log.warn("Slack interactivity delete for missing watch {} (stale card or already deleted?)", watchId)
+            val ok = slack.postResponseStaleWatch(responseUrl, watchId)
+            log.info("Slack interactivity delete missing watch={} stale response_url update ok={}", watchId, ok)
             return
         }
         val ok = slack.postResponseWatchStatus(responseUrl, watches.buildStatusNotice(snapshot, WatchStatusNotice.State.STOPPED))

@@ -87,7 +87,12 @@ open class SlackClient(
         val body =
             slackJson.encodeToString(
                 SlackPostMessageDto.serializer(),
-                SlackPostMessageDto(channel = channel, text = text, blocks = blocks, attachments = attachments),
+                SlackPostMessageDto(
+                    channel = channel,
+                    text = text.takeIf { attachments.isNullOrEmpty() },
+                    blocks = blocks,
+                    attachments = attachments.withFallback(text),
+                ),
             )
         val resp =
             client.post(SLACK_POST_MESSAGE_URL) {
@@ -116,7 +121,12 @@ open class SlackClient(
                 // replace_original overwrites the card the button lived on rather
                 // than posting a followup — the whole point of the response URL
                 // for a pause/resume/delete confirmation.
-                SlackResponseMessageDto(text = text, blocks = blocks, attachments = attachments, replaceOriginal = true),
+                SlackResponseMessageDto(
+                    text = text.takeIf { attachments.isNullOrEmpty() },
+                    blocks = blocks,
+                    attachments = attachments.withFallback(text),
+                    replaceOriginal = true,
+                ),
             )
         val resp =
             client.post(responseUrl) {
@@ -130,6 +140,11 @@ open class SlackClient(
 
     /** Releases the underlying HTTP client. Call on app shutdown. */
     fun close() = client.close()
+
+    private fun List<SlackAttachmentDto>?.withFallback(text: String): List<SlackAttachmentDto>? =
+        this?.mapIndexed { index, attachment ->
+            if (index == 0 && attachment.fallback == null) attachment.copy(fallback = text) else attachment
+        }
 }
 
 private const val SLACK_POST_MESSAGE_URL = "https://slack.com/api/chat.postMessage"
@@ -138,7 +153,7 @@ private const val SLACK_REQUEST_TIMEOUT_MS = 8_000L
 @Serializable
 private data class SlackPostMessageDto(
     val channel: String,
-    val text: String,
+    val text: String? = null,
     val blocks: List<SlackBlockDto>? = null,
     val attachments: List<SlackAttachmentDto>? = null,
     // Turn OFF Slack's giant photo/link previews so a Recreation.gov Reserve URL
@@ -151,7 +166,7 @@ private data class SlackPostMessageDto(
 
 @Serializable
 private data class SlackResponseMessageDto(
-    val text: String,
+    val text: String? = null,
     val blocks: List<SlackBlockDto>? = null,
     val attachments: List<SlackAttachmentDto>? = null,
     @SerialName("replace_original")

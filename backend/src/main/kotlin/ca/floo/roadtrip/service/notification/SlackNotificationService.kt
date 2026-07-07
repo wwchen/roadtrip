@@ -50,4 +50,14 @@ interface SlackNotificationService {
         responseUrl: String,
         notice: WatchStatusNotice,
     ): Boolean
+
+    /**
+     * Replaces a clicked Slack card whose watch id no longer resolves. This is
+     * the stale-card path for deleted/reset watches: no mutation happened, but
+     * the user still gets immediate feedback and the dead buttons disappear.
+     */
+    suspend fun postResponseStaleWatch(
+        responseUrl: String,
+        watchId: Long,
+    ): Boolean
 }

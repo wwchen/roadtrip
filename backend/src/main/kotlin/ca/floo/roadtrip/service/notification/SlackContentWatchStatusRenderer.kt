@@ -109,26 +109,23 @@ object SlackContentWatchStatusRenderer {
     private fun buttons(notice: WatchStatusNotice): List<SlackButtonSpec> {
         if (notice.state == WatchStatusNotice.State.STOPPED) return emptyList()
         val out = mutableListOf<SlackButtonSpec>()
-        // Interactive controls first — the primary action for the state — so
-        // the eye lands on Resume when paused, Pause when watching, etc.
-        when (notice.state) {
-            WatchStatusNotice.State.WATCHING, WatchStatusNotice.State.UNCHECKED ->
-                out +=
+        val stateButton =
+            when (notice.state) {
+                WatchStatusNotice.State.WATCHING, WatchStatusNotice.State.UNCHECKED ->
                     SlackButtonSpec(
                         label = "⏸ Pause",
                         actionId = SlackWatchCard.ACTION_WATCH_PAUSE,
                         value = notice.watchId.toString(),
                     )
-            WatchStatusNotice.State.PAUSED ->
-                out +=
+                WatchStatusNotice.State.PAUSED ->
                     SlackButtonSpec(
                         label = "▶ Resume",
                         actionId = SlackWatchCard.ACTION_WATCH_RESUME,
                         value = notice.watchId.toString(),
                         style = SlackButtonSpec.Style.PRIMARY,
                     )
-            WatchStatusNotice.State.DONE, WatchStatusNotice.State.STOPPED -> Unit
-        }
+                WatchStatusNotice.State.DONE, WatchStatusNotice.State.STOPPED -> null
+            }
         // Deep-links (URL buttons). Slack caps an actions row at 25 buttons —
         // we're always well under, but multi-POI watches stay ordered by id
         // so the row is deterministic across renders.
@@ -161,6 +158,10 @@ object SlackContentWatchStatusRenderer {
                     value = notice.watchId.toString(),
                 )
         }
+        // Match the openings alert's muscle memory: navigation first, the
+        // Pause/Resume state action next, and Delete last. That keeps the
+        // state-toggle button from jumping to the far left after Slack edits.
+        stateButton?.let { out += it }
         // Delete is always available (except on the terminal STOPPED card,
         // handled above) — it's the escape hatch and stays as the danger CTA.
         out += SlackContentAvailabilityRenderer.deleteButton(notice.watchId, deleteSubject(notice))
