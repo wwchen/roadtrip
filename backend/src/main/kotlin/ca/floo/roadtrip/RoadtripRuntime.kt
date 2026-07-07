@@ -58,8 +58,11 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import org.jooq.DSLContext
+import org.slf4j.LoggerFactory
 import java.io.File
 import javax.sql.DataSource
+
+private val log = LoggerFactory.getLogger("ca.floo.roadtrip.RoadtripRuntime")
 
 /** Pair of the signature verifier + the handler; wired only when the Slack
  *  app is configured with a signing secret. Null on a Slack-disabled install
@@ -245,10 +248,22 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                         state: WatchStatusNotice.State,
                     ) = watchAlertDispatcher.statusNoticeForWatch(watch, state)
                 }
+            log.info(
+                "Slack interactivity ENABLED: signing secret set ({} chars), POST /api/slack/interactivity is live",
+                secret.length,
+            )
             SlackInteractivityWiring(
                 verifier = SlackSignatureVerifier(secret),
                 handler = SlackInteractivityHandler(watches = watchesPort, slack = slackNotifications),
             )
+        } ?: run {
+            val reason =
+                when {
+                    boot.appConfig.slack == null -> "Slack is disabled (no SLACK_BOT_TOKEN / SLACK_ALERT_CHANNEL)"
+                    else -> "SLACK_SIGNING_SECRET is not set — outbound Slack works, but the interactivity endpoint stays unregistered"
+                }
+            log.info("Slack interactivity DISABLED: {}", reason)
+            null
         }
     Scheduler(
         repo = availabilityPollers,

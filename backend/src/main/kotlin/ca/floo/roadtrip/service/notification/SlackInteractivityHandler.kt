@@ -67,8 +67,16 @@ internal class SlackInteractivityHandler(
      *  launched off the route thread) already ack'd 200 to Slack and can't
      *  surface a delayed error to the user. */
     suspend fun handle(payload: BlockActionsPayload) {
-        val action = payload.actions.firstOrNull() ?: return
-        val responseUrl = payload.responseUrl ?: return
+        val action = payload.actions.firstOrNull()
+        if (action == null) {
+            log.info("Slack interactivity handler: payload had no actions, dropping")
+            return
+        }
+        val responseUrl = payload.responseUrl
+        if (responseUrl == null) {
+            log.info("Slack interactivity handler: payload had no response_url, dropping (action={})", action.actionId)
+            return
+        }
         when (action.actionId) {
             SlackWatchCard.ACTION_WATCH_PAUSE ->
                 mutateWatchStatus(action, responseUrl, WatchStatus.PAUSED, WatchStatusNotice.State.PAUSED)
@@ -83,8 +91,8 @@ internal class SlackInteractivityHandler(
             SlackWatchCard.ACTION_OPEN_GRID,
             SlackWatchCard.ACTION_OPEN_MAP,
             SlackWatchCard.ACTION_OPEN_DASHBOARD,
-            -> Unit
-            else -> log.warn("Ignoring Slack interactivity with unknown action_id={}", action.actionId)
+            -> log.info("Slack interactivity handler: URL button {} — silent ack (redirect happened client-side)", action.actionId)
+            else -> log.warn("Slack interactivity handler: unknown action_id={}, dropping", action.actionId)
         }
     }
 
@@ -96,15 +104,17 @@ internal class SlackInteractivityHandler(
     ) {
         val watchId = action.value?.toLongOrNull()
         if (watchId == null) {
-            log.warn("Slack interactivity {} without a numeric watch id in value", action.actionId)
+            log.warn("Slack interactivity {} without a numeric watch id in value (raw={})", action.actionId, action.value)
             return
         }
+        log.info("Slack interactivity {} → applying status={} to watch {}", action.actionId, newStatus, watchId)
         val updated = watches.setStatus(watchId, newStatus)
         if (updated == null) {
-            log.warn("Slack interactivity {} for missing watch {}", action.actionId, watchId)
+            log.warn("Slack interactivity {} for missing watch {} (stale card?)", action.actionId, watchId)
             return
         }
-        slack.postResponseWatchStatus(responseUrl, watches.buildStatusNotice(updated, newNoticeState))
+        val ok = slack.postResponseWatchStatus(responseUrl, watches.buildStatusNotice(updated, newNoticeState))
+        log.info("Slack interactivity {} watch={} response_url update ok={}", action.actionId, watchId, ok)
     }
 
     private suspend fun deleteWatch(
@@ -113,15 +123,17 @@ internal class SlackInteractivityHandler(
     ) {
         val watchId = action.value?.toLongOrNull()
         if (watchId == null) {
-            log.warn("Slack interactivity delete without a numeric watch id in value")
+            log.warn("Slack interactivity delete without a numeric watch id in value (raw={})", action.value)
             return
         }
+        log.info("Slack interactivity delete → snapshotting + deleting watch {}", watchId)
         val snapshot = watches.snapshotAndDelete(watchId)
         if (snapshot == null) {
-            log.warn("Slack interactivity delete for missing watch {}", watchId)
+            log.warn("Slack interactivity delete for missing watch {} (stale card or already deleted?)", watchId)
             return
         }
-        slack.postResponseWatchStatus(responseUrl, watches.buildStatusNotice(snapshot, WatchStatusNotice.State.STOPPED))
+        val ok = slack.postResponseWatchStatus(responseUrl, watches.buildStatusNotice(snapshot, WatchStatusNotice.State.STOPPED))
+        log.info("Slack interactivity delete watch={} response_url update ok={}", watchId, ok)
     }
 
     companion object {
