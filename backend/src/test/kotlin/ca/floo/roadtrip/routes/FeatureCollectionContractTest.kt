@@ -183,6 +183,33 @@ class FeatureCollectionContractTest {
     }
 
     @Test
+    fun `single feature detail — campground raw links promote to info CTA`() {
+        val link = "https://www.fs.usda.gov/recarea/tahoe/recarea/?recid=80728"
+        val row =
+            PoiDetailRow(
+                id = 3503,
+                source = "campground",
+                sourceId = "lake-of-the-woods-campground-192",
+                category = "campground",
+                subcategory = null,
+                name = "Lake Of The Woods Campground",
+                region = null,
+                unitName = null,
+                reserveUrl = null,
+                phone = null,
+                infoUrl = null,
+                addressJson = null,
+                geomJson = """{"type":"Point","coordinates":[-120.391227722,39.503097534]}""",
+                propertiesJson = """{"links":[{"url":"$link","title":"Lake of the Woods"}]}""",
+            )
+
+        val out = encodePoiFeatureJson(poiDetailFeature(row))
+
+        assert(out.contains(""""info_url":"$link""""))
+        assert(out.contains(""""cta":{"url":"$link","label":"Park info on fs.usda.gov","kind":"info"}"""))
+    }
+
+    @Test
     fun `single feature detail — availability support is provider agnostic`() {
         val row =
             PoiDetailRow(
