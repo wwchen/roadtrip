@@ -150,29 +150,59 @@ jobs:
           done
           echo "backend failed to start"; tail -100 backend.log; exit 1
 
-      # Seed pois with a tiny fixture so the serving smoke has rows to render.
+      # Seed the canonical catalog with a tiny fixture so the serving smoke has
+      # rows to render.
       # The new ETL pipeline is pinned out of CI for now (it needs upstream
       # auth + WAF-shaped fetches that don't fit here); this row gives the
       # FE a Banff/Parks-Canada-shaped Aspira pin which matches what the
       # smoke clicks on. Fetch + import remain exercisable locally via Tilt.
-      - name: Seed pois with smoke fixture
+      - name: Seed canonical catalog with smoke fixture
         run: |
           PGPASSWORD=roadtrip psql -h localhost -U roadtrip -d roadtrip <<'SQL'
-          INSERT INTO pois (
-              source, source_id, category, name, geom, region, country,
-              info_url, fetched_at, provider_ref, properties
-          ) VALUES (
-              'aspira-pc-pins', 'aspira-fixture-tunnel-mountain',
-              'campground', 'Tunnel Mountain - Village 1',
-              ST_SetSRID(ST_GeomFromGeoJSON(
-                  '{"type":"Point","coordinates":[-115.5309, 51.1917]}'
-              ), 4326),
-              'AB', 'CA',
-              'https://reservation.pc.gc.ca/',
-              now(),
-              '{"transactionLocationId":-2147483648,"mapId":-2147483622,"resourceLocationId":-2147483646}'::jsonb,
-              '{"subcategory":"federal","upstream":{"host":"reservation.pc.gc.ca","match_kind":"fixture"}}'::jsonb
-          );
+          WITH campground AS (
+              INSERT INTO campgrounds (
+                  name, kind, location, management, reservation_url, source_payload
+              ) VALUES (
+                  'Tunnel Mountain - Village 1',
+                  'federal',
+                  '{"region":"AB","country":"CA"}'::jsonb,
+                  '{"agency":"Parks Canada"}'::jsonb,
+                  'https://reservation.pc.gc.ca/',
+                  '{"upstream":{"host":"reservation.pc.gc.ca","match_kind":"fixture"}}'::jsonb
+              )
+              RETURNING id
+          ),
+          vendor_ref AS (
+              INSERT INTO vendor_refs (
+                  vendor, entity_type, external_id, external_name, source_url, payload
+              ) VALUES (
+                  'aspira-pc-pins',
+                  'campground',
+                  'aspira-fixture-tunnel-mountain',
+                  'Tunnel Mountain - Village 1',
+                  'https://reservation.pc.gc.ca/',
+                  '{"transactionLocationId":-2147483648,"mapId":-2147483622,"resourceLocationId":-2147483646}'::jsonb
+              )
+              RETURNING id
+          ),
+          linked_vendor_ref AS (
+              INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, is_primary)
+              SELECT campground.id, vendor_ref.id, true
+              FROM campground, vendor_ref
+          ),
+          poi AS (
+              INSERT INTO pois (poi_type, geom)
+              VALUES (
+                  'campground',
+                  ST_SetSRID(ST_GeomFromGeoJSON(
+                      '{"type":"Point","coordinates":[-115.5309, 51.1917]}'
+                  ), 4326)
+              )
+              RETURNING id
+          )
+          INSERT INTO poi_campgrounds (poi_id, campground_id)
+          SELECT poi.id, campground.id
+          FROM poi, campground;
           SQL
 
       # Chromium is a fixed-version (~150MB) download the install task otherwise

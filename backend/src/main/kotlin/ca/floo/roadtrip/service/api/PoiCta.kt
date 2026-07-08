@@ -31,15 +31,14 @@ internal class PoiCta(
     // a string for the drawer footer.
     fun bookingSystem(row: PoiDetailRow): String? {
         val providerRef = row.providerRefJson?.let { ProviderRefParser.parse(it) }
-        val infoUrl = row.infoUrl?.takeIf { it.isNotBlank() }
-        return providers.firstNotNullOfOrNull { it.bookingSystem(providerRef, infoUrl) }
+        val upstreamUrl = row.providerUrl()
+        return providers.firstNotNullOfOrNull { it.bookingSystem(providerRef, upstreamUrl) }
     }
 
     fun computeCta(row: PoiDetailRow): PoiCtaSchema? {
         val providerRef = (row.ctaProviderRefJson ?: row.providerRefJson)?.let { ProviderRefParser.parse(it) }
-        val infoUrl = row.infoUrl?.takeIf { it.isNotBlank() }
-        return providers.firstNotNullOfOrNull { it.reserveCta(providerRef, infoUrl) }
-            ?: infoUrl?.let {
+        return providers.firstNotNullOfOrNull { it.reserveCta(providerRef, row.providerUrl()) }
+            ?: row.infoUrl?.takeIf { it.isNotBlank() }?.let {
                 PoiCtaSchema(
                     url = it,
                     label = ExternalInfoLinkLabels.forUrl(it),
@@ -47,4 +46,9 @@ internal class PoiCta(
                 )
             }
     }
+
+    private fun PoiDetailRow.providerUrl(): String? =
+        reserveUrl
+            ?.takeIf { it.isNotBlank() }
+            ?: infoUrl?.takeIf { it.isNotBlank() }
 }
