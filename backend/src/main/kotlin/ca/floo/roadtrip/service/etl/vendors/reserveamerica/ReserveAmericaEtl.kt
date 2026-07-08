@@ -1,20 +1,24 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
-import ca.floo.roadtrip.models.domain.Poi
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.pointGeoJson
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.time.Instant
 
 // ReserveAmerica (Active Network) tenant park pages → Poi.Campground.
@@ -31,7 +35,7 @@ import java.time.Instant
 // would shake out as a validation drop, not silent corruption.
 class ReserveAmericaEtl(
     override val etlSlug: String = "alberta-provincial",
-) : SourceEtl<ReserveAmericaDto, List<Poi.Campground>> {
+) : SourceEtl<ReserveAmericaDto, CampgroundEtlOutput> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): ReserveAmericaDto {
@@ -57,38 +61,35 @@ class ReserveAmericaEtl(
     override fun transform(
         dto: ReserveAmericaDto,
         ctx: TransformCtx,
-    ): List<Poi.Campground> {
+    ): CampgroundEtlOutput {
         val bucket = ctx.subcategoryFor(etlSlug)
         val settings = ReserveAmericaSettings.from(ctx, etlSlug)
-        return dto.parks.map { park ->
-            val name = displayName(park.name, settings.titleSuffix)
-            Poi.Campground(
-                source = etlSlug,
-                sourceId = "${settings.sourceIdPrefix}-${park.parkId}",
-                name = name,
-                geomGeoJson = pointGeoJson(park.lon, park.lat),
-                region = settings.region,
-                country = settings.country,
-                phone = park.phone,
-                address = null,
-                infoUrl = park.infoUrl,
-                fetchedAt = dto.fetchedAt,
-                lastVerified = null,
-                providerRef = providerRef(settings, park),
-                amenities = emptyList(),
-                activities = emptyList(),
-                sites = null,
-                season = null,
-                near = null,
-                description = park.description,
-                photoUrl = park.photoUrl,
-                cellCoverage = null,
-                ratingReviews = null,
-                subcategory = bucket,
-                agency = settings.agency,
-                extras = parkExtras(park, name, settings.contract),
-            )
-        }
+        return CampgroundEtlOutput(
+            campgrounds =
+                dto.parks.map { park ->
+                    val name = displayName(park.name, settings.titleSuffix)
+                    val vendorRefId = "${settings.sourceIdPrefix}-${park.parkId}"
+                    val parkExtras = parkExtras(park, name, settings.contract)
+                    CampgroundEtlRecord(
+                        vendor = etlSlug,
+                        vendorRefId = vendorRefId,
+                        name = name,
+                        latitude = park.lat,
+                        longitude = park.lon,
+                        kind = bucket,
+                        mediumDescription = park.description,
+                        location = locationPayload(park, settings),
+                        reservationUrl = park.infoUrl,
+                        links = park.infoUrl?.let(::linksPayload),
+                        photos = park.photoUrl?.let(::photoPayload),
+                        management = managementPayload(settings.agency),
+                        metadata = parkExtras,
+                        sourceUrl = park.infoUrl,
+                        sourcePayload = parkExtras,
+                        vendorRefPayload = providerRefPayload(settings, park),
+                    )
+                },
+        )
     }
 
     /**
@@ -193,18 +194,52 @@ class ReserveAmericaEtl(
         }
     }
 
-    private fun providerRef(
+    private fun providerRefPayload(
         settings: ReserveAmericaSettings,
         park: ParsedPark,
-    ): ProviderRef? =
+    ): JsonObject? =
         when (settings.provider.lowercase()) {
             "reserveamerica" ->
-                ProviderRef.ReserveAmerica(
-                    contractCode = settings.contract,
-                    parkId = park.parkId.toString(),
-                )
+                buildJsonObject {
+                    put(RESERVE_AMERICA_CONTRACT_CODE_KEY, settings.contract)
+                    put(RESERVE_AMERICA_PARK_ID_KEY, park.parkId.toString())
+                }
             "none", "" -> null
             else -> error("$etlSlug: unsupported ReserveAmerica provider='${settings.provider}'")
+        }
+
+    private fun locationPayload(
+        park: ParsedPark,
+        settings: ReserveAmericaSettings,
+    ): JsonObject =
+        buildJsonObject {
+            put("latitude", park.lat)
+            put("longitude", park.lon)
+            put("region", settings.region)
+            put("country", settings.country)
+        }
+
+    private fun linksPayload(url: String): JsonElement =
+        buildJsonArray {
+            add(
+                buildJsonObject {
+                    put("url", url)
+                },
+            )
+        }
+
+    private fun photoPayload(url: String): JsonElement =
+        buildJsonArray {
+            add(
+                buildJsonObject {
+                    put("url", url)
+                },
+            )
+        }
+
+    private fun managementPayload(agency: String): JsonObject =
+        buildJsonObject {
+            put("agency", agency)
         }
 
     companion object {
@@ -215,6 +250,8 @@ class ReserveAmericaEtl(
         private val OG_IMAGE = Regex("""og:image"\s+content='([^']+)'""")
         private val OG_URL = Regex("""og:url"\s+content='([^']+)'""")
         private val TELEPHONE = Regex("""itemprop="telephone"[^>]*>([^<]+)""")
+        private const val RESERVE_AMERICA_CONTRACT_CODE_KEY = "contract_code"
+        private const val RESERVE_AMERICA_PARK_ID_KEY = "park_id"
     }
 }
 

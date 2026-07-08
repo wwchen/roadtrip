@@ -360,8 +360,8 @@ class EtlOrchestrator(
     companion object {
         // Runnable ETLs. Old wide-POI and retired-reservable imports are
         // intentionally not exposed here; admin import targets use this map
-        // to decide what can run. Campflare is enabled because it writes
-        // through the canonical catalog repo.
+        // to decide what can run. Campflare and Canada sources are enabled
+        // because they write through the canonical catalog repo.
         val registry: Map<String, SourceEtl<*, *>> =
             mapOf(
                 "campflare-campgrounds" to
@@ -370,72 +370,21 @@ class EtlOrchestrator(
                 "campflare-campsites" to
                     ca.floo.roadtrip.service.etl.vendors.campflare
                         .CampflareCampsitesEtl(),
-                "planet-fitness" to
-                    ca.floo.roadtrip.service.etl.vendors.osmpf
-                        .PlanetFitnessEtl(),
-                "tesla-superchargers" to
-                    ca.floo.roadtrip.service.etl.vendors.tesla
-                        .TeslaIndexEtl(),
-            )
-
-        // Retained vendor adapters. This keeps the parsing/transform code in
-        // tree while making it explicit that the old registry rows are no-op
-        // until canonical campgrounds/campsites upsert support lands.
-        val disabledVendorRegistry: Map<String, SourceEtl<*, *>> =
-            mapOf(
-                "bcparks-strapi" to
-                    ca.floo.roadtrip.service.etl.vendors.bcparks
-                        .BcParksStrapiEtl(),
-                "alberta-provincial" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaEtl(),
-                "new-york-state-parks" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaEtl("new-york-state-parks"),
-                "california-state-parks" to
-                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
-                        .ReserveCaliforniaEtl("california-state-parks"),
-                // RIDB (recreation.gov backend) — one ETL covers every
-                // publishing agency (NPS, USFS, BLM, USACE, FWS, BOR, TVA, …).
-                // Per-facility agency stamped on Poi.Campground.agency at
-                // transform time from ORGANIZATION[0].OrgName.
-                "federal-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecGovCampgroundsEtl("federal-campgrounds"),
-                // Aspira NextGen — one leaf-walker + one join-by-name
-                // emitter per tenant. Both classes take the slug as a
-                // constructor arg so a fourth tenant is two YAML rows +
-                // two registry lines.
-                "aspira-leaves-wa" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraLeavesEtl("aspira-leaves-wa"),
                 "aspira-leaves-bc" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraLeavesEtl("aspira-leaves-bc"),
-                "aspira-leaves-pc" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraLeavesEtl("aspira-leaves-pc"),
-                "aspira-wa-pins" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraJoinByNameEtl("aspira-wa-pins"),
                 "aspira-bc-pins" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraJoinByNameEtl("aspira-bc-pins"),
+                "aspira-leaves-pc" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraLeavesEtl("aspira-leaves-pc"),
                 "aspira-pc-pins" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraJoinByNameEtl("aspira-pc-pins"),
-                "federal-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecGovCampsitesEtl("federal-campsites"),
-                "aspira-wa-resources" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraResourcesEtl(
-                            etlSlug = "aspira-wa-resources",
-                            mapsInputSlug = "aspira-maps-wa",
-                            inventoryInputSlug = "aspira-inventory-wa",
-                            dictionariesInputSlug = "aspira-dictionaries-wa",
-                            vendor = "aspira_wa",
-                        ),
+                "alberta-provincial" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaEtl(),
                 "aspira-bc-resources" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraResourcesEtl(
@@ -457,6 +406,57 @@ class EtlOrchestrator(
                 "alberta-provincial-park-sites" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
                         .ReserveAmericaSitesEtl("alberta-provincial-park-sites", "ABPP"),
+                "planet-fitness" to
+                    ca.floo.roadtrip.service.etl.vendors.osmpf
+                        .PlanetFitnessEtl(),
+                "tesla-superchargers" to
+                    ca.floo.roadtrip.service.etl.vendors.tesla
+                        .TeslaIndexEtl(),
+            )
+
+        // Retained vendor adapters. This keeps the parsing/transform code in
+        // tree while making it explicit that the old registry rows are no-op
+        // until canonical campgrounds/campsites upsert support lands.
+        val disabledVendorRegistry: Map<String, SourceEtl<*, *>> =
+            mapOf(
+                "bcparks-strapi" to
+                    ca.floo.roadtrip.service.etl.vendors.bcparks
+                        .BcParksStrapiEtl(),
+                "new-york-state-parks" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaEtl("new-york-state-parks"),
+                "california-state-parks" to
+                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
+                        .ReserveCaliforniaEtl("california-state-parks"),
+                // RIDB (recreation.gov backend) — one ETL covers every
+                // publishing agency (NPS, USFS, BLM, USACE, FWS, BOR, TVA, …).
+                // Per-facility agency stamped on Poi.Campground.agency at
+                // transform time from ORGANIZATION[0].OrgName.
+                "federal-campgrounds" to
+                    ca.floo.roadtrip.service.etl.vendors.recgov
+                        .RecGovCampgroundsEtl("federal-campgrounds"),
+                // Aspira NextGen — one leaf-walker + one join-by-name
+                // emitter per tenant. Both classes take the slug as a
+                // constructor arg so a fourth tenant is two YAML rows +
+                // two registry lines.
+                "aspira-leaves-wa" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraLeavesEtl("aspira-leaves-wa"),
+                "aspira-wa-pins" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraJoinByNameEtl("aspira-wa-pins"),
+                "federal-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.recgov
+                        .RecGovCampsitesEtl("federal-campsites"),
+                "aspira-wa-resources" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraResourcesEtl(
+                            etlSlug = "aspira-wa-resources",
+                            mapsInputSlug = "aspira-maps-wa",
+                            inventoryInputSlug = "aspira-inventory-wa",
+                            dictionariesInputSlug = "aspira-dictionaries-wa",
+                            vendor = "aspira_wa",
+                        ),
                 "new-york-state-park-sites" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
                         .ReserveAmericaSitesEtl("new-york-state-park-sites", "NY"),
