@@ -14,8 +14,8 @@
 #    is dependency order — entry N may only reference data_source slugs OR
 #    earlier `etls:` siblings in the SAME row via `inputs:`. Cycles, forward
 #    references, and cross-row etl refs are rejected at boot.
-#    `enabled: false` skips the row in fan-out import; per-name imports still
-#    run it on request.
+#    `enabled: false` omits the row from admin import targets until the row
+#    is explicitly re-enabled.
 #
 # Reservation provider info is NOT in this file. ETLs that need it construct
 # their ProviderRef variant directly from upstream rows and per-tenant args
