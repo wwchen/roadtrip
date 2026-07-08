@@ -34,6 +34,8 @@
   - Upsert campgrounds, link vendor refs, and resolve campground by vendor ref.
 - `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/CampsiteCatalogRepo.kt`
   - Upsert campsites, link vendor refs, and resolve campsite by vendor ref.
+- `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/TeslaSuperchargerCatalogRepo.kt`
+  - Upsert typed Tesla Supercharger rows, link Tesla vendor refs, and resolve superchargers by Tesla slug.
 - `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/PoiCatalogRepo.kt`
   - Upsert POI wrappers and typed POI join rows.
 - `backend/src/test/kotlin/ca/floo/roadtrip/repo/catalog/*Test.kt`
@@ -131,6 +133,74 @@ class CanonicalCatalogSchemaTest {
                     "vendor_refs",
                 ),
                 tables,
+            )
+        }
+    }
+
+    @Test
+    fun `tesla superchargers table has typed operational columns`() {
+        SharedTestDb.withDb { ctx ->
+            val columns =
+                ctx.fetch(
+                    """
+                    SELECT column_name
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND table_name = 'tesla_superchargers'
+                      AND column_name IN (
+                        'location_slug',
+                        'location_guid',
+                        'common_site_name',
+                        'site_status',
+                        'access_type',
+                        'open_to_public',
+                        'open_to_non_teslas',
+                        'trailer_friendly',
+                        'twenty_four_seven',
+                        'stall_count',
+                        'max_power_kw',
+                        'address',
+                        'region',
+                        'country',
+                        'time_zone',
+                        'amenities',
+                        'hardware_counts',
+                        'pricebooks',
+                        'availability_profile',
+                        'info_url',
+                        'index_payload',
+                        'detail_payload'
+                      )
+                    ORDER BY column_name
+                    """.trimIndent(),
+                ).map { it.get("column_name", String::class.java) }
+
+            assertEquals(
+                listOf(
+                    "access_type",
+                    "address",
+                    "amenities",
+                    "availability_profile",
+                    "common_site_name",
+                    "country",
+                    "detail_payload",
+                    "hardware_counts",
+                    "index_payload",
+                    "info_url",
+                    "location_guid",
+                    "location_slug",
+                    "max_power_kw",
+                    "open_to_non_teslas",
+                    "open_to_public",
+                    "pricebooks",
+                    "region",
+                    "site_status",
+                    "stall_count",
+                    "time_zone",
+                    "trailer_friendly",
+                    "twenty_four_seven",
+                ),
+                columns,
             )
         }
     }
@@ -299,13 +369,44 @@ CREATE TABLE poi_campgrounds (
 );
 
 CREATE TABLE tesla_superchargers (
-  id             BIGSERIAL PRIMARY KEY,
-  name           TEXT NOT NULL,
-  source_payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
-  deleted_at     TIMESTAMPTZ
+  id                   BIGSERIAL PRIMARY KEY,
+  name                 TEXT NOT NULL,
+  location_slug        TEXT NOT NULL,
+  location_guid        TEXT,
+  common_site_name     TEXT,
+  site_status          TEXT,
+  access_type          TEXT,
+  open_to_public       BOOLEAN,
+  open_to_non_teslas   BOOLEAN,
+  trailer_friendly     BOOLEAN,
+  twenty_four_seven    BOOLEAN,
+  stall_count          INTEGER NOT NULL DEFAULT 0,
+  max_power_kw         INTEGER NOT NULL DEFAULT 0,
+  address              JSONB NOT NULL DEFAULT '{}'::jsonb,
+  region               TEXT,
+  country              CHAR(2),
+  time_zone            TEXT,
+  amenities            JSONB NOT NULL DEFAULT '[]'::jsonb,
+  hardware_counts      JSONB NOT NULL DEFAULT '{}'::jsonb,
+  pricebooks           JSONB NOT NULL DEFAULT '[]'::jsonb,
+  availability_profile JSONB NOT NULL DEFAULT '{}'::jsonb,
+  info_url             TEXT,
+  index_payload        JSONB NOT NULL DEFAULT '{}'::jsonb,
+  detail_payload       JSONB NOT NULL DEFAULT '{}'::jsonb,
+  created_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at           TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at           TIMESTAMPTZ,
+  CHECK (location_slug <> ''),
+  CHECK (stall_count >= 0),
+  CHECK (max_power_kw >= 0)
 );
+
+CREATE UNIQUE INDEX tesla_superchargers_location_slug_uidx
+  ON tesla_superchargers (location_slug);
+
+CREATE INDEX tesla_superchargers_active_country_idx
+  ON tesla_superchargers (country, region)
+  WHERE deleted_at IS NULL;
 
 CREATE TABLE poi_tesla_superchargers (
   poi_id          BIGINT PRIMARY KEY REFERENCES pois(id) ON DELETE CASCADE,
@@ -508,6 +609,33 @@ data class CampsiteInput(
     val sourcePayload: JsonObject,
 )
 
+data class TeslaSuperchargerInput(
+    val primaryRef: VendorRefInput,
+    val name: String,
+    val locationSlug: String,
+    val locationGuid: String?,
+    val commonSiteName: String?,
+    val siteStatus: String?,
+    val accessType: String?,
+    val openToPublic: Boolean?,
+    val openToNonTeslas: Boolean?,
+    val trailerFriendly: Boolean?,
+    val twentyFourSeven: Boolean?,
+    val stallCount: Int,
+    val maxPowerKw: Int,
+    val address: JsonElement,
+    val region: String?,
+    val country: String?,
+    val timeZone: String?,
+    val amenities: JsonElement,
+    val hardwareCounts: JsonElement,
+    val pricebooks: JsonElement,
+    val availabilityProfile: JsonElement,
+    val infoUrl: String?,
+    val indexPayload: JsonObject,
+    val detailPayload: JsonObject,
+)
+
 data class PoiWrapperInput(
     val poiType: CatalogEntityType,
     val latitude: Double,
@@ -541,6 +669,7 @@ git commit -m "feat: add canonical catalog models"
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/VendorRefRepo.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/CampgroundCatalogRepo.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/CampsiteCatalogRepo.kt`
+- Create: `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/TeslaSuperchargerCatalogRepo.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/PoiCatalogRepo.kt`
 - Create: `backend/src/test/kotlin/ca/floo/roadtrip/repo/catalog/CatalogRepoTest.kt`
 
@@ -556,9 +685,11 @@ import ca.floo.roadtrip.models.catalog.CampsiteInput
 import ca.floo.roadtrip.models.catalog.CatalogEntityType
 import ca.floo.roadtrip.models.catalog.CatalogVendor
 import ca.floo.roadtrip.models.catalog.PoiWrapperInput
+import ca.floo.roadtrip.models.catalog.TeslaSuperchargerInput
 import ca.floo.roadtrip.models.catalog.VendorRefInput
 import ca.floo.roadtrip.repo.SharedTestDb
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.jupiter.api.Assertions.assertEquals
@@ -662,6 +793,74 @@ class CatalogRepoTest {
             assertNotNull(poiId)
         }
     }
+
+    @Test
+    fun `tesla supercharger resolves by vendor ref and joins to poi wrapper`() {
+        SharedTestDb.withDb { ctx ->
+            val vendorRefs = VendorRefRepo(ctx)
+            val superchargers = TeslaSuperchargerCatalogRepo(ctx, vendorRefs)
+            val pois = PoiCatalogRepo(ctx)
+
+            val ref =
+                VendorRefInput(
+                    vendor = CatalogVendor.TESLA,
+                    entityType = CatalogEntityType.TESLA_SUPERCHARGER,
+                    externalId = "westhartfordsupercharger",
+                )
+            val superchargerId =
+                superchargers.upsert(
+                    TeslaSuperchargerInput(
+                        primaryRef = ref,
+                        name = "West Hartford, CT",
+                        locationSlug = "westhartfordsupercharger",
+                        locationGuid = null,
+                        commonSiteName = "Corbins Corner Shopping Center",
+                        siteStatus = "open",
+                        accessType = "Public",
+                        openToPublic = true,
+                        openToNonTeslas = false,
+                        trailerFriendly = false,
+                        twentyFourSeven = true,
+                        stallCount = 8,
+                        maxPowerKw = 150,
+                        address =
+                            buildJsonObject {
+                                put("city", JsonPrimitive("West Hartford"))
+                                put("state", JsonPrimitive("CT"))
+                                put("countryCode", JsonPrimitive("US"))
+                            },
+                        region = "CT",
+                        country = "US",
+                        timeZone = "America/New_York",
+                        amenities =
+                            buildJsonArray {
+                                add(JsonPrimitive("AMENITIES_RESTROOMS"))
+                            },
+                        hardwareCounts = buildJsonObject {},
+                        pricebooks = buildJsonArray {},
+                        availabilityProfile = buildJsonObject {},
+                        infoUrl = "https://www.tesla.com/findus?location=westhartfordsupercharger",
+                        indexPayload = JsonObject(emptyMap()),
+                        detailPayload = JsonObject(emptyMap()),
+                    ),
+                )
+
+            val poiId =
+                pois.upsertTeslaSuperchargerPoi(
+                    superchargerId = superchargerId,
+                    input =
+                        PoiWrapperInput(
+                            poiType = CatalogEntityType.TESLA_SUPERCHARGER,
+                            latitude = 41.72603,
+                            longitude = -72.76248,
+                            metadata = buildJsonObject {},
+                        ),
+                )
+
+            assertEquals(superchargerId, superchargers.findIdByVendorRef(CatalogVendor.TESLA, "westhartfordsupercharger"))
+            assertNotNull(poiId)
+        }
+    }
 }
 ```
 
@@ -733,7 +932,7 @@ class VendorRefRepo(
 
 - [ ] **Step 4: Implement catalog repos**
 
-Create `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/CampgroundCatalogRepo.kt`, `CampsiteCatalogRepo.kt`, and `PoiCatalogRepo.kt` with upsert methods matching the tests. Use jOOQ generated tables, `onConflict(...).doUpdate()`, and return canonical IDs. All SQL and jOOQ table references stay in these repo classes.
+Create `backend/src/main/kotlin/ca/floo/roadtrip/repo/catalog/CampgroundCatalogRepo.kt`, `CampsiteCatalogRepo.kt`, `TeslaSuperchargerCatalogRepo.kt`, and `PoiCatalogRepo.kt` with upsert methods matching the tests. Use jOOQ generated tables, `onConflict(...).doUpdate()`, and return canonical IDs. All SQL and jOOQ table references stay in these repo classes.
 
 Required method signatures:
 
@@ -755,10 +954,19 @@ class CampsiteCatalogRepo(
     fun findIdByVendorRef(vendor: CatalogVendor, externalId: String): Long?
 }
 
+class TeslaSuperchargerCatalogRepo(
+    private val ctx: DSLContext,
+    private val vendorRefs: VendorRefRepo,
+) {
+    fun upsert(input: TeslaSuperchargerInput): Long
+    fun findIdByVendorRef(vendor: CatalogVendor, externalId: String): Long?
+}
+
 class PoiCatalogRepo(
     private val ctx: DSLContext,
 ) {
     fun upsertCampgroundPoi(campgroundId: Long, input: PoiWrapperInput): Long
+    fun upsertTeslaSuperchargerPoi(superchargerId: Long, input: PoiWrapperInput): Long
 }
 ```
 
