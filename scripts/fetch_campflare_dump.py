@@ -85,7 +85,7 @@ def write_dump_envelopes(
     if chunk_size <= 0:
         raise ValueError("chunk_size must be positive")
     ts = ts or utc_ts()
-    request_headers = {AUTH_HEADER: REDACTED if authorization_header else REDACTED}
+    request_headers = {AUTH_HEADER: REDACTED} if authorization_header else {}
     decompressed = gzip.decompress(compressed_body)
     written: list[Path] = []
     chunk: list[dict] = []
@@ -140,7 +140,7 @@ def main() -> int:
         if not dump_url:
             raise RuntimeError(f"Campflare manifest did not include {args.kind}.url")
         err(f"fetching Campflare {args.kind} dump")
-        status, response_headers, body = http_get_bytes(dump_url, {AUTH_HEADER: api_key}, timeout=1800)
+        status, response_headers, body = http_get_bytes(dump_url, {}, timeout=1800)
         if status != 200:
             raise RuntimeError(f"Campflare {args.kind} dump failed with HTTP {status}")
         written = write_dump_envelopes(
@@ -149,7 +149,7 @@ def main() -> int:
             dump_url=dump_url,
             compressed_body=body,
             response_headers=response_headers,
-            authorization_header=api_key,
+            authorization_header="",
             chunk_size=args.chunk_size,
         )
     except Exception as e:  # noqa: BLE001
