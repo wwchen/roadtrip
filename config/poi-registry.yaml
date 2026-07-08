@@ -360,7 +360,8 @@ poi_data:
         args:
           contract: ABPP
           host: shop.albertaparks.ca
-          booking_horizon_days: "270"
+          booking_horizon_value: "270"
+          booking_horizon_unit: day
           provider: reserveamerica
 
   - name: New York State Parks
@@ -374,7 +375,8 @@ poi_data:
         args:
           contract: NY
           host: newyorkstateparks.reserveamerica.com
-          booking_horizon_days: "270"
+          booking_horizon_value: "270"
+          booking_horizon_unit: day
           region: NY
           country: US
           provider: reserveamerica

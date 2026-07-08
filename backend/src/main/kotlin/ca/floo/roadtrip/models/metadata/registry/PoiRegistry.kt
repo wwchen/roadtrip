@@ -8,6 +8,14 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
 
+private const val RESERVEAMERICA_PROVIDER = "reserveamerica"
+private const val RESERVEAMERICA_PROVIDER_ARG = "provider"
+private const val RESERVEAMERICA_CONTRACT_ARG = "contract"
+private const val RESERVEAMERICA_HOST_ARG = "host"
+private const val BOOKING_HORIZON_CONFIG_KEY = "booking_horizon"
+private const val BOOKING_HORIZON_VALUE_ARG = "booking_horizon_value"
+private const val BOOKING_HORIZON_UNIT_ARG = "booking_horizon_unit"
+
 // In-memory representation of config/poi-registry.yaml.
 //
 // Four sections:
@@ -360,26 +368,19 @@ data class PoiRegistry(
         poiData
             .mapNotNull { row -> row.etls.lastOrNull() }
             .filter { it.adapter == "ReserveAmericaEtl" }
-            .filter { (it.args["provider"] ?: "reserveamerica").lowercase() == "reserveamerica" }
+            .filter { it.isReserveAmericaProvider() }
             .map { terminal ->
                 val contract =
-                    terminal.args["contract"]
+                    terminal.args[RESERVEAMERICA_CONTRACT_ARG]
                         ?: error("ReserveAmerica source '${terminal.slug}' is missing args.contract")
                 val host =
-                    terminal.args["host"]
+                    terminal.args[RESERVEAMERICA_HOST_ARG]
                         ?: error("ReserveAmerica source '${terminal.slug}' is missing args.host")
-                val horizon =
-                    terminal.args["booking_horizon_days"]
-                        ?.toIntOrNull()
-                        ?: error("ReserveAmerica source '${terminal.slug}' has invalid args.booking_horizon_days")
-                require(horizon > 0) {
-                    "ReserveAmerica source '${terminal.slug}' args.booking_horizon_days must be positive"
-                }
                 ReserveAmericaSourceConfig(
                     source = terminal.slug,
                     host = host,
                     contractCode = contract,
-                    bookingHorizonDays = horizon,
+                    bookingHorizon = terminal.requireCapabilityLimit(BOOKING_HORIZON_CONFIG_KEY),
                 )
             }
 
@@ -395,8 +396,50 @@ data class ReserveAmericaSourceConfig(
     val source: String,
     val host: String,
     val contractCode: String,
-    val bookingHorizonDays: Int,
+    val bookingHorizon: RegistryCapabilityLimit,
 )
+
+data class RegistryCapabilityLimit(
+    val value: Int,
+    val unit: RegistryCapabilityTimeUnit,
+)
+
+enum class RegistryCapabilityTimeUnit {
+    DAY,
+    MONTH,
+    ;
+
+    companion object {
+        fun fromConfigValue(value: String): RegistryCapabilityTimeUnit? =
+            when (value.trim().uppercase()) {
+                "DAY", "DAYS" -> DAY
+
+                "MONTH", "MONTHS" -> MONTH
+
+                else -> null
+            }
+    }
+}
+
+private fun EtlEntry.requireCapabilityLimit(key: String): RegistryCapabilityLimit {
+    val valueArg = "${key}_value"
+    val unitArg = "${key}_unit"
+    val value =
+        args[valueArg]?.toIntOrNull()
+            ?: error("ReserveAmerica source '$slug' has invalid args.$valueArg")
+    require(value > 0) {
+        "ReserveAmerica source '$slug' args.$valueArg must be positive"
+    }
+    val unit =
+        args[unitArg]?.let { RegistryCapabilityTimeUnit.fromConfigValue(it) }
+            ?: error("ReserveAmerica source '$slug' has invalid args.$unitArg")
+    return RegistryCapabilityLimit(value = value, unit = unit)
+}
+
+private fun EtlEntry.isReserveAmericaProvider(): Boolean {
+    val provider = args[RESERVEAMERICA_PROVIDER_ARG] ?: RESERVEAMERICA_PROVIDER
+    return provider.lowercase() == RESERVEAMERICA_PROVIDER
+}
 
 private fun detectCycles(edges: Map<String, Set<String>>): List<List<String>> {
     val visited = mutableSetOf<String>()

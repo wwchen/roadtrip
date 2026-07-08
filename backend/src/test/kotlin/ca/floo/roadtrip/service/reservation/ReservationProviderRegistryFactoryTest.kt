@@ -46,7 +46,8 @@ class ReservationProviderRegistryFactoryTest {
                                                         mapOf(
                                                             "contract" to "ZZ",
                                                             "host" to "example.reserveamerica.test",
-                                                            "booking_horizon_days" to "123",
+                                                            "booking_horizon_value" to "123",
+                                                            "booking_horizon_unit" to "day",
                                                             "provider" to "reserveamerica",
                                                         ),
                                                 ),

@@ -380,7 +380,8 @@ class PoiRegistryValidatorTest {
                         args:
                           contract: ZZ
                           host: example.reserveamerica.test
-                          booking_horizon_days: "123"
+                          booking_horizon_value: "123"
+                          booking_horizon_unit: day
                           provider: reserveamerica
                 """.trimIndent(),
             )
@@ -391,7 +392,7 @@ class PoiRegistryValidatorTest {
                     source = "test-reserveamerica-parks",
                     host = "example.reserveamerica.test",
                     contractCode = "ZZ",
-                    bookingHorizonDays = 123,
+                    bookingHorizon = RegistryCapabilityLimit(123, RegistryCapabilityTimeUnit.DAY),
                 ),
             ),
             r.reserveAmericaSources(),

@@ -1,6 +1,8 @@
 package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.models.metadata.registry.RegistryCapabilityLimit
+import ca.floo.roadtrip.models.metadata.registry.RegistryCapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
 import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
@@ -60,7 +62,7 @@ object ReservationProviderRegistryFactory {
                     source = config.source,
                     host = config.host,
                     contractCode = config.contractCode,
-                    bookingHorizon = CapabilityLimit(config.bookingHorizonDays, CapabilityTimeUnit.DAY),
+                    bookingHorizon = config.bookingHorizon.toCapabilityLimit(),
                 )
             adaptersBySource[config.source] =
                 ReserveAmericaReservationProvider(
@@ -100,3 +102,13 @@ object ReservationProviderRegistryFactory {
         // YAML source is harmless (the adapter just won't be exercised).
     }
 }
+
+private fun RegistryCapabilityLimit.toCapabilityLimit(): CapabilityLimit =
+    CapabilityLimit(
+        value = value,
+        unit =
+            when (unit) {
+                RegistryCapabilityTimeUnit.DAY -> CapabilityTimeUnit.DAY
+                RegistryCapabilityTimeUnit.MONTH -> CapabilityTimeUnit.MONTH
+            },
+    )
