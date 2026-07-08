@@ -249,6 +249,39 @@ class CanonicalCatalogSchemaTest {
     }
 
     @Test
+    fun `availability watch targets reference canonical poi and campsite tables`() {
+        SharedTestDb.withDb { ctx ->
+            val refs =
+                ctx.fetch(
+                    """
+                    SELECT
+                      tc.table_name || '.' || kcu.column_name || '->' || ccu.table_name || '.' || ccu.column_name AS ref
+                    FROM information_schema.table_constraints tc
+                    JOIN information_schema.key_column_usage kcu
+                      ON tc.constraint_name = kcu.constraint_name
+                     AND tc.table_schema = kcu.table_schema
+                    JOIN information_schema.constraint_column_usage ccu
+                      ON ccu.constraint_name = tc.constraint_name
+                     AND ccu.table_schema = tc.table_schema
+                    WHERE tc.constraint_type = 'FOREIGN KEY'
+                      AND tc.table_schema = 'public'
+                      AND tc.table_name = 'availability_watch_target'
+                      AND kcu.column_name IN ('poi_id', 'campsite_id')
+                    ORDER BY ref
+                    """.trimIndent(),
+                ).map { it.get("ref", String::class.java) }
+
+            assertEquals(
+                listOf(
+                    "availability_watch_target.campsite_id->campsites.id",
+                    "availability_watch_target.poi_id->pois.id",
+                ),
+                refs,
+            )
+        }
+    }
+
+    @Test
     fun `reservable catalog tables and identity columns are retired`() {
         SharedTestDb.withDb { ctx ->
             val oldTables =
@@ -458,6 +491,10 @@ CREATE TABLE pois (
 
 CREATE INDEX pois_active_type_idx ON pois (poi_type) WHERE deleted_at IS NULL;
 CREATE INDEX pois_geom_gix ON pois USING GIST (geom);
+
+ALTER TABLE availability_watch_target
+  ADD CONSTRAINT availability_watch_target_poi_id_fkey
+  FOREIGN KEY (poi_id) REFERENCES pois(id) ON DELETE CASCADE;
 
 CREATE TABLE poi_campgrounds (
   poi_id        BIGINT PRIMARY KEY REFERENCES pois(id) ON DELETE CASCADE,
