@@ -258,9 +258,23 @@ class ReservableRepo(
               WHERE cvr.campsite_id = c.id
                 AND vr.entity_type = 'campsite'
                 AND vr.deleted_at IS NULL
-              ORDER BY cvr.is_primary DESC, cvr.vendor_ref_id ASC
+              ORDER BY
+                CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
+                cvr.is_primary DESC,
+                cvr.vendor_ref_id ASC
               LIMIT 1
             ) primary_ref ON true
+            """.trimIndent()
+
+        private fun providerRefShapeSql(payloadExpression: String): String =
+            """
+            (
+              jsonb_exists($payloadExpression, 'recgov_id')
+              OR (jsonb_exists($payloadExpression, 'mapId') AND jsonb_exists($payloadExpression, 'transactionLocationId'))
+              OR jsonb_exists($payloadExpression, 'park_id')
+              OR jsonb_exists($payloadExpression, 'facility_id')
+              OR jsonb_exists($payloadExpression, 'place_id')
+            )
             """.trimIndent()
     }
 }

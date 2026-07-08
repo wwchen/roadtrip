@@ -27,6 +27,7 @@ internal data class PoiRow(
 internal data class PoiDetailRow(
     val id: Long,
     val source: String,
+    val providerSource: String? = null,
     val sourceId: String,
     val category: String,
     val subcategory: String?,
@@ -99,8 +100,9 @@ internal class PoiServingRepo(
             ctx.fetchOne(
                 """
                 SELECT p.id,
-                       p.poi_type AS source,
-                       COALESCE(gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
+                       COALESCE(primary_gvr.vendor, p.poi_type) AS source,
+                       provider_gvr.vendor AS provider_source,
+                       COALESCE(primary_gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
                        p.poi_type AS category,
                        cg.kind AS subcategory,
                        cg.management->>'agency' AS agency,
@@ -114,15 +116,36 @@ internal class PoiServingRepo(
                        COALESCE(cg.contact->>'phone', pf.phone) AS phone,
                        COALESCE(ts.info_url, pf.info_url, cg.links->0->>'url') AS info_url,
                        COALESCE(cg.location, ts.address, pf.address, '{}'::jsonb)::text AS address_text,
-                       gvr.payload::text AS provider_ref_text,
+                       provider_gvr.payload::text AS provider_ref_text,
                        NULL::text AS cta_provider_ref_text,
                        ST_AsGeoJSON(p.geom) AS geom_json,
                        COALESCE(to_jsonb(cg), to_jsonb(ts), to_jsonb(pf), '{}'::jsonb)::text AS properties_text
                 FROM pois p
                 LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
                 LEFT JOIN campgrounds cg ON cg.id = pc.campground_id
-                LEFT JOIN campground_vendor_refs cgvr ON cgvr.campground_id = cg.id AND cgvr.is_primary
-                LEFT JOIN vendor_refs gvr ON gvr.id = cgvr.vendor_ref_id AND gvr.deleted_at IS NULL
+                LEFT JOIN LATERAL (
+                  SELECT vr.vendor, vr.external_id, vr.payload
+                  FROM campground_vendor_refs cvr
+                  JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+                  WHERE cvr.campground_id = cg.id
+                    AND vr.entity_type = 'campground'
+                    AND vr.deleted_at IS NULL
+                  ORDER BY cvr.is_primary DESC, cvr.vendor_ref_id ASC
+                  LIMIT 1
+                ) primary_gvr ON true
+                LEFT JOIN LATERAL (
+                  SELECT vr.vendor, vr.payload
+                  FROM campground_vendor_refs cvr
+                  JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+                  WHERE cvr.campground_id = cg.id
+                    AND vr.entity_type = 'campground'
+                    AND vr.deleted_at IS NULL
+                  ORDER BY
+                    CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
+                    cvr.is_primary DESC,
+                    cvr.vendor_ref_id ASC
+                  LIMIT 1
+                ) provider_gvr ON true
                 LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
                 LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
                 LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
@@ -135,6 +158,7 @@ internal class PoiServingRepo(
         return PoiDetailRow(
             id = (r.get("id") as Number).toLong(),
             source = r.get("source") as String,
+            providerSource = r.get("provider_source") as String?,
             sourceId = r.get("source_id") as String,
             category = r.get("category") as String,
             subcategory = r.get("subcategory") as String?,
@@ -345,3 +369,14 @@ private fun splitPoiSearchTerms(q: String): List<String> =
         .filter { it.isNotEmpty() }
 
 private fun escapeLikePattern(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+private fun providerRefShapeSql(payloadExpression: String): String =
+    """
+    (
+      jsonb_exists($payloadExpression, 'recgov_id')
+      OR (jsonb_exists($payloadExpression, 'mapId') AND jsonb_exists($payloadExpression, 'transactionLocationId'))
+      OR jsonb_exists($payloadExpression, 'park_id')
+      OR jsonb_exists($payloadExpression, 'facility_id')
+      OR jsonb_exists($payloadExpression, 'place_id')
+    )
+    """.trimIndent()
