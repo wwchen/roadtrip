@@ -1011,7 +1011,7 @@ function openBackendPoiDrawer(result) {
 function enablePoiToggle(category, feature) {
   let id = null;
   if (category === 'campground') {
-    const cat = feature?.properties?.subcategory || feature?.properties?.category || 'federal';
+    const cat = campgroundLayerCategory(feature?.properties?.subcategory || feature?.properties?.category);
     id = `f-cg-${cat === 'other' ? 'federal' : cat}`;
   } else if (category === 'national-park') id = 'f-np';
   else if (category === 'state-park') id = 'f-sp';

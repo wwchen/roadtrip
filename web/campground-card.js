@@ -13,9 +13,18 @@
 
 import { escapeHtml } from './core.js';
 
-/** Parse properties.amenities (array) → string[]; safe on bad input. */
+/** Parse properties.amenities (legacy array or canonical object) → string[]. */
 export function parseAmenities(p) {
-  return parseStringList(p.amenities);
+  const value = p.amenities;
+  if (Array.isArray(value)) return parseStringList(value);
+  if (!value || typeof value !== 'object') return [];
+  const out = [];
+  for (const [key, raw] of Object.entries(value)) {
+    if (key === 'toilets' && value.toilet_kind) continue;
+    const label = amenityLabel(key, raw);
+    if (label) out.push(label);
+  }
+  return out;
 }
 
 /** Parse properties.activities (array) → string[]; safe on bad input. */
@@ -30,7 +39,7 @@ function parseStringList(value) {
 
 /** Parse properties.cell_coverage → object or null. */
 export function parseCellCoverage(p) {
-  const value = p.cell_coverage;
+  const value = p.cell_coverage || p.cell_service;
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 }
 
@@ -46,21 +55,24 @@ export function amenitiesPillsHTML(amenities) {
   return `<div class="pills">${amenities.map(a => `<span class="pill">${escapeHtml(a)}</span>`).join('')}</div>`;
 }
 
-const CARRIER_LABEL = { verizon: 'Verizon', att: 'AT&T', tmobile: 'T-Mobile', sprint: 'Sprint' };
+const CARRIER_LABEL = { verizon: 'Verizon', att: 'AT&T', tmobile: 'T-Mobile', sprint: 'Sprint', uscell: 'US Cellular' };
 /**
  * Render per-carrier cell-signal chips. cc is `{verizon: [avg, count], ...}`
  * where avg is rec.gov's 0–4 scale. Sorts by signal strength desc.
  */
 export function cellCoveragePillsHTML(cc) {
   if (!cc) return '';
-  const entries = Object.entries(cc);
+  const entries = Object.entries(cc)
+    .map(([k, v]) => [k, normalizeCellValue(v)])
+    .filter(([, v]) => v && Number.isFinite(v.avg));
   if (!entries.length) return '';
-  entries.sort((a, b) => b[1][0] - a[1][0]);
+  entries.sort((a, b) => b[1].avg - a[1].avg);
   return '<div class="cell">' + entries.map(([k, v]) => {
-    const [avg, cnt] = v;
+    const { avg, count } = v;
     const bucket = Math.max(0, Math.min(4, Math.round(avg)));
     const label = CARRIER_LABEL[k] || k;
-    return `<span class="cell-pill" data-bucket="${bucket}" title="${cnt} reports"><span class="carrier">${label}</span><span class="val">${avg.toFixed(1)}</span></span>`;
+    const title = Number.isFinite(count) ? ` title="${count} reports"` : '';
+    return `<span class="cell-pill" data-bucket="${bucket}"${title}><span class="carrier">${label}</span><span class="val">${avg.toFixed(1)}</span></span>`;
   }).join('') + '</div>';
 }
 
@@ -187,6 +199,12 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
   if (p.cta?.url) {
     url = p.cta.url;
     label = p.cta.label;
+  } else if (p.reserve_url || p.reservation_url) {
+    url = p.reserve_url || p.reservation_url;
+    label = reserveUrlLabel(url);
+  } else if (p.info_url || p.website) {
+    url = p.info_url || p.website;
+    label = 'Visit website';
   } else if (p.reservable === false) {
     // No CTA, marked FCFS — there's nothing to link to.
     return `<span class="${btnClass} ${btnClass}-disabled">First-come, first-served</span>`;
@@ -204,6 +222,72 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
     }
   }
   return `<a class="${btnClass} ${btnClass}-primary" href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+}
+
+const AMENITY_LABELS = {
+  camp_store: 'Camp store',
+  dump_station: 'Dump station',
+  electric_hookups: 'Electric hookups',
+  fires_allowed: 'Fires allowed',
+  pets_allowed: 'Pets allowed',
+  sewer_hookups: 'Sewer hookups',
+  showers: 'Showers',
+  toilets: 'Toilets',
+  trash: 'Trash',
+  water: 'Water',
+  water_hookups: 'Water hookups',
+  wifi: 'Wi-Fi',
+};
+const NEGATIVE_AMENITY_LABELS = {
+  electric_hookups: 'No electric hookups',
+  sewer_hookups: 'No sewer hookups',
+  showers: 'No showers',
+  water: 'No water',
+  water_hookups: 'No water hookups',
+};
+
+function amenityLabel(key, value) {
+  if (value === null || value === undefined) return '';
+  if (key === 'toilet_kind' && typeof value === 'string' && value.trim()) {
+    return `${titleCase(value)} toilets`;
+  }
+  if (value === true) return AMENITY_LABELS[key] || titleCase(key);
+  if (value === false) return NEGATIVE_AMENITY_LABELS[key] || '';
+  if (typeof value === 'string' && value.trim()) return `${AMENITY_LABELS[key] || titleCase(key)}: ${value.trim()}`;
+  return '';
+}
+
+function normalizeCellValue(value) {
+  if (Array.isArray(value)) {
+    const avg = Number(value[0]);
+    const count = Number(value[1]);
+    return { avg, count };
+  }
+  const avg = Number(value);
+  return { avg, count: NaN };
+}
+
+function reserveUrlLabel(url) {
+  const host = urlHost(url);
+  if (host.endsWith('recreation.gov')) return 'View on recreation.gov';
+  if (host.endsWith('reserveamerica.com')) return 'View on ReserveAmerica';
+  if (host.endsWith('reservecalifornia.com')) return 'View on ReserveCalifornia';
+  if (host.endsWith('parks.canada.ca') || host.endsWith('pc.gc.ca')) return 'View on Parks Canada';
+  return 'Reserve';
+}
+
+function urlHost(url) {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function titleCase(value) {
+  return String(value)
+    .replace(/_/g, ' ')
+    .replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 }
 
 /**
