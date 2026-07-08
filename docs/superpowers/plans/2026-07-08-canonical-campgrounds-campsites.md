@@ -68,7 +68,7 @@
 - `backend/src/main/kotlin/ca/floo/roadtrip/repo/OnRoutePoiRepo.kt`
   - Read on-route POIs through typed joins.
 - `backend/src/main/kotlin/ca/floo/roadtrip/routes/ReservableRoutes.kt`
-  - Retire old reservable routes with explicit `410 Gone` responses after the frontend stops calling them.
+  - Delete the old reservable routes entirely once the frontend and tests use canonical campsite APIs.
 - `backend/src/main/kotlin/ca/floo/roadtrip/service/reservation/*`
   - Resolve availability targets through `vendor_refs` and canonical `campsite_id` instead of `ReservableId`.
 - `web/availability/*`
@@ -1850,7 +1850,7 @@ data class PoiWrapperPropertiesSchema(
 )
 ```
 
-Keep old DTOs only where routes still need compatibility during the frontend transition.
+Remove old reservable/RID DTO usage as each route moves to canonical campsite identity.
 
 - [ ] **Step 4: Rewrite serving repo queries**
 
@@ -1905,10 +1905,10 @@ git commit -m "feat: serve pois from canonical wrapper joins"
 ### Task 9: Retire RID/Reservable Site API in Favor of Campsite IDs
 
 **Files:**
-- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/routes/ReservableRoutes.kt`
+- Delete: `backend/src/main/kotlin/ca/floo/roadtrip/routes/ReservableRoutes.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/routes/CampsiteRoutes.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/models/api/CampsiteSchemas.kt`
-- Modify: `backend/src/test/kotlin/ca/floo/roadtrip/routes/ReservableRoutesTest.kt`
+- Delete: `backend/src/test/kotlin/ca/floo/roadtrip/routes/ReservableRoutesTest.kt`
 - Create: `backend/src/test/kotlin/ca/floo/roadtrip/routes/CampsiteRoutesTest.kt`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/RoadtripRuntime.kt`
 
@@ -2000,7 +2000,7 @@ fun Route.campsiteRoutes(ctx: DSLContext) {
 }
 ```
 
-- [ ] **Step 5: Wire route in runtime**
+- [ ] **Step 5: Wire campsite route and remove reservable route registration**
 
 In `RoadtripRuntime.kt`, call:
 
@@ -2008,29 +2008,21 @@ In `RoadtripRuntime.kt`, call:
 campsiteRoutes(ctx)
 ```
 
-next to current API route registration.
+next to current API route registration, and remove any `reservableRoutes(...)` registration/import.
 
-- [ ] **Step 6: Keep old reservable route compatibility explicit**
+- [ ] **Step 6: Delete old reservable route code**
 
-In `ReservableRoutes.kt`, return `410 Gone` for endpoints that the frontend no longer calls:
-
-```kotlin
-call.respondReservableError(
-    error = "reservables_deprecated",
-    status = HttpStatusCode.Gone,
-    detail = "Use /api/campgrounds/{campground_id}/campsites.",
-)
-```
+Delete `ReservableRoutes.kt` and `ReservableRoutesTest.kt`. Do not leave compatibility handlers for `/api/reservables` or RID-based site endpoints.
 
 - [ ] **Step 7: Run route tests**
 
 Run:
 
 ```bash
-./gradlew --no-daemon test --tests ca.floo.roadtrip.routes.CampsiteRoutesTest --tests ca.floo.roadtrip.routes.ReservableRoutesTest
+./gradlew --no-daemon test --tests ca.floo.roadtrip.routes.CampsiteRoutesTest
 ```
 
-Expected: PASS after updating legacy expectations.
+Expected: PASS.
 
 - [ ] **Step 8: Commit**
 
