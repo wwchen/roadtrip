@@ -5,6 +5,8 @@ import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import java.time.LocalDate
 
 private const val EMPTY_WINDOW_DEFAULT_DAYS = 7
@@ -110,7 +112,7 @@ private fun displayWindow(
             startDate = startDate,
             endDate = endDate,
             context = dateContext,
-            bookingHorizonDays = EMPTY_WINDOW_HORIZON_DAYS,
+            bookingHorizon = CapabilityLimit(EMPTY_WINDOW_HORIZON_DAYS, CapabilityTimeUnit.DAY),
             maxDays = EMPTY_WINDOW_MAX_DAYS,
             defaultDays = EMPTY_WINDOW_DEFAULT_DAYS,
         )

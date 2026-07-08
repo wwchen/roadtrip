@@ -3,7 +3,6 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -29,23 +28,6 @@ internal class AvailabilityDateResolver(
         val localDate = localNow.toLocalDate()
         return if (localNow.toLocalTime().isBefore(cutoff)) localDate else localDate.plusDays(1)
     }
-
-    fun resolveWindow(
-        startDate: LocalDate?,
-        endDate: LocalDate?,
-        context: PoiDateContext,
-        bookingHorizonDays: Int,
-        maxDays: Int,
-        defaultDays: Int,
-    ): ResolvedDateWindow =
-        resolveWindow(
-            startDate = startDate,
-            endDate = endDate,
-            context = context,
-            bookingHorizon = CapabilityLimit(bookingHorizonDays, CapabilityTimeUnit.DAY),
-            maxDays = maxDays,
-            defaultDays = defaultDays,
-        )
 
     fun resolveWindow(
         startDate: LocalDate?,
@@ -84,19 +66,6 @@ internal class AvailabilityDateResolver(
      * anchor is already at/after the horizon, so the batcher skips the group
      * and makes no upstream call.
      */
-    fun wideWindow(
-        anchor: LocalDate,
-        context: PoiDateContext,
-        maxPollWindowDays: Int,
-        bookingHorizonDays: Int,
-    ): ResolvedDateWindow? =
-        wideWindow(
-            anchor = anchor,
-            context = context,
-            maxPollWindowDays = maxPollWindowDays,
-            bookingHorizon = CapabilityLimit(bookingHorizonDays, CapabilityTimeUnit.DAY),
-        )
-
     fun wideWindow(
         anchor: LocalDate,
         context: PoiDateContext,
@@ -148,17 +117,6 @@ internal class AvailabilityDateResolver(
      * an unsupported vendor with a zero poll window or horizon, so the batcher
      * skips the group and makes no upstream call.
      */
-    fun resolvePollingWindow(
-        context: PoiDateContext,
-        maxPollWindowDays: Int,
-        bookingHorizonDays: Int,
-    ): ResolvedDateWindow? =
-        resolvePollingWindow(
-            context = context,
-            maxPollWindowDays = maxPollWindowDays,
-            bookingHorizon = CapabilityLimit(bookingHorizonDays, CapabilityTimeUnit.DAY),
-        )
-
     fun resolvePollingWindow(
         context: PoiDateContext,
         maxPollWindowDays: Int,

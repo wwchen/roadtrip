@@ -21,12 +21,14 @@ class AvailabilityDateResolverTest {
     private fun resolverAt(instant: String): AvailabilityDateResolver =
         AvailabilityDateResolver(clock = Clock.fixed(Instant.parse(instant), ZoneOffset.UTC))
 
+    private fun dayLimit(days: Int): CapabilityLimit = CapabilityLimit(days, CapabilityTimeUnit.DAY)
+
     @Test
     fun `polling window starts at the earliest bookable date and spans the vendor cap`() {
         val resolver = resolverAt("2026-07-04T00:00:00Z")
         val context = resolver.context(lat = null, lng = null)
 
-        val window = resolver.resolvePollingWindow(context, maxPollWindowDays = 60, bookingHorizonDays = 180)!!
+        val window = resolver.resolvePollingWindow(context, maxPollWindowDays = 60, bookingHorizon = dayLimit(180))!!
 
         assertEquals(context.earliestDate, window.startDate)
         assertEquals(60L, ChronoUnit.DAYS.between(window.startDate, window.endDate))
@@ -37,15 +39,15 @@ class AvailabilityDateResolverTest {
         val resolver = resolverAt("2026-07-04T00:00:00Z")
         val context = resolver.context(lat = null, lng = null)
 
-        val window = resolver.resolvePollingWindow(context, maxPollWindowDays = 90, bookingHorizonDays = 30)!!
+        val window = resolver.resolvePollingWindow(context, maxPollWindowDays = 90, bookingHorizon = dayLimit(30))!!
 
         assertEquals(30L, ChronoUnit.DAYS.between(window.startDate, window.endDate))
     }
 
     @Test
     fun `window slides forward with the clock`() {
-        val early = resolverAt("2026-07-04T00:00:00Z").let { it.resolvePollingWindow(it.context(null, null), 60, 180)!! }
-        val later = resolverAt("2026-07-11T00:00:00Z").let { it.resolvePollingWindow(it.context(null, null), 60, 180)!! }
+        val early = resolverAt("2026-07-04T00:00:00Z").let { it.resolvePollingWindow(it.context(null, null), 60, dayLimit(180))!! }
+        val later = resolverAt("2026-07-11T00:00:00Z").let { it.resolvePollingWindow(it.context(null, null), 60, dayLimit(180))!! }
 
         assertEquals(7L, ChronoUnit.DAYS.between(early.startDate, later.startDate))
     }
@@ -55,8 +57,8 @@ class AvailabilityDateResolverTest {
         val resolver = resolverAt("2026-07-04T00:00:00Z")
         val context = resolver.context(lat = null, lng = null)
 
-        assertNull(resolver.resolvePollingWindow(context, maxPollWindowDays = 0, bookingHorizonDays = 180))
-        assertNull(resolver.resolvePollingWindow(context, maxPollWindowDays = 60, bookingHorizonDays = 0))
+        assertNull(resolver.resolvePollingWindow(context, maxPollWindowDays = 0, bookingHorizon = dayLimit(180)))
+        assertNull(resolver.resolvePollingWindow(context, maxPollWindowDays = 60, bookingHorizon = dayLimit(0)))
     }
 
     @Test
@@ -64,8 +66,8 @@ class AvailabilityDateResolverTest {
         val resolver = resolverAt("2026-07-04T00:00:00Z")
         val context = resolver.context(lat = null, lng = null)
 
-        val wide = resolver.wideWindow(context.earliestDate, context, maxPollWindowDays = 60, bookingHorizonDays = 180)!!
-        val polling = resolver.resolvePollingWindow(context, maxPollWindowDays = 60, bookingHorizonDays = 180)!!
+        val wide = resolver.wideWindow(context.earliestDate, context, maxPollWindowDays = 60, bookingHorizon = dayLimit(180))!!
+        val polling = resolver.resolvePollingWindow(context, maxPollWindowDays = 60, bookingHorizon = dayLimit(180))!!
 
         assertEquals(polling.startDate, wide.startDate)
         assertEquals(polling.endDate, wide.endDate)
@@ -77,7 +79,7 @@ class AvailabilityDateResolverTest {
         val context = resolver.context(lat = null, lng = null)
         val anchor = context.earliestDate.plusDays(90)
 
-        val wide = resolver.wideWindow(anchor, context, maxPollWindowDays = 30, bookingHorizonDays = 365)!!
+        val wide = resolver.wideWindow(anchor, context, maxPollWindowDays = 30, bookingHorizon = dayLimit(365))!!
 
         assertEquals(anchor, wide.startDate)
         assertEquals(30L, ChronoUnit.DAYS.between(wide.startDate, wide.endDate))
@@ -89,7 +91,7 @@ class AvailabilityDateResolverTest {
         val context = resolver.context(lat = null, lng = null)
         val pastAnchor = context.earliestDate.minusDays(10)
 
-        val wide = resolver.wideWindow(pastAnchor, context, maxPollWindowDays = 30, bookingHorizonDays = 365)!!
+        val wide = resolver.wideWindow(pastAnchor, context, maxPollWindowDays = 30, bookingHorizon = dayLimit(365))!!
 
         assertEquals(context.earliestDate, wide.startDate)
     }
@@ -101,7 +103,7 @@ class AvailabilityDateResolverTest {
         val horizonEnd = context.earliestDate.plusDays(30)
         val anchor = context.earliestDate.plusDays(20)
 
-        val wide = resolver.wideWindow(anchor, context, maxPollWindowDays = 60, bookingHorizonDays = 30)!!
+        val wide = resolver.wideWindow(anchor, context, maxPollWindowDays = 60, bookingHorizon = dayLimit(30))!!
 
         assertEquals(horizonEnd, wide.endDate)
     }
@@ -136,7 +138,7 @@ class AvailabilityDateResolverTest {
                         endDate = LocalDate.parse("2026-07-12"),
                     ),
                 context = context,
-                bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                bookingHorizon = dayLimit(365),
                 fetchWindowCap = CapabilityLimit(14, CapabilityTimeUnit.DAY),
             )!!
 
@@ -157,7 +159,7 @@ class AvailabilityDateResolverTest {
                         endDate = LocalDate.parse("2026-07-18"),
                     ),
                 context = context,
-                bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                bookingHorizon = dayLimit(365),
                 fetchWindowCap = CapabilityLimit(14, CapabilityTimeUnit.DAY),
             )!!
 
@@ -170,7 +172,7 @@ class AvailabilityDateResolverTest {
         val resolver = resolverAt("2026-07-04T00:00:00Z")
         val context = resolver.context(lat = null, lng = null)
 
-        assertNull(resolver.wideWindow(context.earliestDate, context, maxPollWindowDays = 0, bookingHorizonDays = 180))
-        assertNull(resolver.wideWindow(context.earliestDate.plusDays(180), context, maxPollWindowDays = 60, bookingHorizonDays = 180))
+        assertNull(resolver.wideWindow(context.earliestDate, context, maxPollWindowDays = 0, bookingHorizon = dayLimit(180)))
+        assertNull(resolver.wideWindow(context.earliestDate.plusDays(180), context, maxPollWindowDays = 60, bookingHorizon = dayLimit(180)))
     }
 }
