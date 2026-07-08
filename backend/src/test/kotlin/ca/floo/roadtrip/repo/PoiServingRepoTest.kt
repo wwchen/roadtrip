@@ -54,6 +54,34 @@ class PoiServingRepoTest : SharedDbTest() {
         assertNull(row.ctaProviderRefJson)
     }
 
+    @Test
+    fun `detail row projects first campground link as info URL`() {
+        val link = "https://www.fs.usda.gov/recarea/tahoe/recarea/?recid=80728"
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "lake-of-the-woods-campground-192",
+                name = "Lake Of The Woods Campground",
+                lon = -120.391227722,
+                lat = 39.503097534,
+                source = SOURCE,
+                subcategory = null,
+                agency = "USDA Forest Service",
+                region = null,
+                country = null,
+                providerRefJson = """{"campflare_id":"lake-of-the-woods-campground-192"}""",
+            )
+        ctx.execute(
+            "UPDATE campgrounds SET links = ?::jsonb WHERE id = ?",
+            """[{"url":"$link","title":"Lake of the Woods"}]""",
+            fixture.catalogId,
+        )
+
+        val row = PoiServingRepo(ctx).fetchPoiById(fixture.poiId)
+
+        assertNotNull(row)
+        assertEquals(link, row.infoUrl)
+    }
+
     private fun seedPoi(
         providerRefJson: String,
         propertiesJson: String = "{}",
