@@ -13,6 +13,7 @@
 
 import { state, distanceKm, formatDistance, escapeHtml, flattenHydratedPoi } from '../core.js';
 import {
+  campgroundParentParkName,
   parseActivities,
   parseAmenities,
   parseCellCoverage,
@@ -166,11 +167,12 @@ function renderShell(f, signal) {
   // from the POI DTO; raw is only used for secondary upstream details.
   const decor = upstreamDecorations(p.upstream);
 
-  // Subline: parent park (RIDB RECAREA[0].RecAreaName when present, else
-  // legacy parent_name / typeLabel) → region → distance.
-  const parent = decor.parentName || p.parent_name || p.typeLabel || '';
+  // Parent context: explicit upstream parent first, then strong official-link
+  // titles such as "Deception Pass State Park". The campground name remains
+  // the title; this only clarifies which park or land unit contains it.
+  const parent = decor.parentName || p.parent_name || campgroundParentParkName(p) || p.typeLabel || '';
   const region = p.state || p.country || '';
-  const subline = [parent, region].filter(Boolean).join(' · ');
+  const subline = [region].filter(Boolean).join(' · ');
   const distLine = state.userLocation
     ? formatDistance(distanceKm(state.userLocation.lat, state.userLocation.lng, lat, lng))
     : '';
@@ -242,6 +244,7 @@ function renderShell(f, signal) {
     ${hero}
     <header class="cg-drawer-head">
       <h2>${escapeHtml(p.name)}</h2>
+      ${parent ? `<div class="cg-park-subtitle">${escapeHtml(parent)}</div>` : ''}
       ${agency ? `<div class="cg-agency-subtitle">${escapeHtml(agency)}</div>` : ''}
       ${sub ? `<div class="cg-sub">${escapeHtml(sub)}</div>` : ''}
       ${verdict ? `<div class="cg-verdict-row">${verdict}</div>` : ''}
