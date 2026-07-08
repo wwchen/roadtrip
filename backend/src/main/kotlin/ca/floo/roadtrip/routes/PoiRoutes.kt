@@ -31,7 +31,6 @@ import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
@@ -353,8 +352,6 @@ internal fun poiDetailFeature(
 ): PoiDetailFeatureSchema {
     val raw = Json.parseToJsonElement(r.propertiesJson)
     val rawObject = raw as? JsonObject ?: JsonObject(emptyMap())
-    val infoUrl = r.infoUrl ?: rawObject.firstLinkUrl()
-    val ctaRow = if (infoUrl == r.infoUrl) r else r.copy(infoUrl = infoUrl)
     val dateContext =
         if (r.category == "campground") {
             dateResolver.context(lat = r.lat, lng = r.lng)
@@ -379,14 +376,14 @@ internal fun poiDetailFeature(
                 unitName = r.unitName,
                 reserveUrl = r.reserveUrl,
                 phone = r.phone,
-                infoUrl = infoUrl,
+                infoUrl = r.infoUrl,
                 address = r.addressJson?.let { Json.parseToJsonElement(it) },
                 description = rawObject.stringProperty("description"),
                 photoUrl = rawObject.stringProperty("photo_url"),
                 providerRef = r.providerRefJson?.let { Json.parseToJsonElement(it) },
                 availabilitySupported = availabilitySupported.takeIf { it },
-                cta = PoiCta.Default.computeCta(ctaRow),
-                bookingSystem = PoiCta.Default.bookingSystem(ctaRow),
+                cta = PoiCta.Default.computeCta(r),
+                bookingSystem = PoiCta.Default.bookingSystem(r),
                 raw = raw,
             ),
     )
@@ -397,13 +394,6 @@ private fun JsonObject.stringProperty(key: String): String? =
         ?.contentOrNull
         ?.trim()
         ?.takeIf { it.isNotEmpty() }
-
-private fun JsonObject.firstLinkUrl(): String? =
-    (this["links"] as? JsonArray)
-        ?.firstNotNullOfOrNull { (it as? JsonObject)?.stringProperty("url") }
-        ?: (this["source_payload"] as? JsonObject)
-            ?.let { sourcePayload -> sourcePayload["links"] as? JsonArray }
-            ?.firstNotNullOfOrNull { (it as? JsonObject)?.stringProperty("url") }
 
 private fun providerRefShapeSupportsAvailability(r: PoiDetailRow): Boolean =
     r.category == "campground" &&
