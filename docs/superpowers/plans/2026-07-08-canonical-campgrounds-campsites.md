@@ -12,13 +12,14 @@
 
 ## Scope Decisions
 
-- Build new canonical tables and route/repo code beside the current tables.
+- Replace the old catalog tables and route/repo code with the canonical model.
 - Do not migrate old `pois` or `reservables` data. This is an intentional destructive catalog reset for local/dev databases and any rebuildable environment.
 - Do not soft-delete old rows as part of this plan.
 - Do not merge Campflare with old US raw RecGov/ReserveAmerica/ReserveCalifornia/Aspira data.
 - Do not solve cross-vendor campsite identity resolution in v1.
 - Use deterministic vendor refs only. If a source owns a row, that source writes the canonical row and its vendor refs.
 - V1 owning campground/site sources are Campflare for US coverage and Canada ETLs for Canadian coverage.
+- This plan owns retirement of `reservables`, `reservable_pois`, `ReservableId`, and RID-string API/UI/dashboard identity. Canonical site identity is `campsites.id`, exposed as `campsite_id`.
 
 ## File Structure
 
@@ -67,11 +68,11 @@
 - `backend/src/main/kotlin/ca/floo/roadtrip/repo/OnRoutePoiRepo.kt`
   - Read on-route POIs through typed joins.
 - `backend/src/main/kotlin/ca/floo/roadtrip/routes/ReservableRoutes.kt`
-  - Deprecate old reservable routes or leave them disabled behind no-op responses after the frontend stops calling them.
+  - Retire old reservable routes with explicit `410 Gone` responses after the frontend stops calling them.
 - `backend/src/main/kotlin/ca/floo/roadtrip/service/reservation/*`
-  - Resolve availability targets through `vendor_refs` instead of `ReservableId`.
+  - Resolve availability targets through `vendor_refs` and canonical `campsite_id` instead of `ReservableId`.
 - `web/availability/*`
-  - Replace `rid` usage with canonical numeric `campsite_id`.
+  - Replace `rid` and legacy reservable identity usage with canonical numeric `campsite_id`.
 - `grafana/dashboards/catalog-explorer.json`
   - Replace old `pois` + `reservables` explorer SQL with canonical POI wrapper, campground, campsite, and vendor-ref joins.
 - `grafana/dashboards/poi-detail.json`
@@ -246,6 +247,63 @@ class CanonicalCatalogSchemaTest {
             assertEquals(1, constraintCount)
         }
     }
+
+    @Test
+    fun `reservable catalog tables and identity columns are retired`() {
+        SharedTestDb.withDb { ctx ->
+            val oldTables =
+                ctx.fetch(
+                    """
+                    SELECT table_name
+                    FROM information_schema.tables
+                    WHERE table_schema = 'public'
+                      AND table_name IN ('reservables', 'reservable_pois')
+                    ORDER BY table_name
+                    """.trimIndent(),
+                ).map { it.get("table_name", String::class.java) }
+
+            val oldColumns =
+                ctx.fetch(
+                    """
+                    SELECT table_name || '.' || column_name AS old_column
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND (
+                        (table_name = 'availability' AND column_name = 'reservable_id')
+                        OR (table_name = 'availability_watch_target' AND column_name = 'reservable_id')
+                        OR (table_name = 'availability_watch' AND column_name = 'reservable_filters')
+                      )
+                    ORDER BY old_column
+                    """.trimIndent(),
+                ).map { it.get("old_column", String::class.java) }
+
+            val newColumns =
+                ctx.fetch(
+                    """
+                    SELECT table_name || '.' || column_name AS new_column
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND (
+                        (table_name = 'availability' AND column_name = 'campsite_id')
+                        OR (table_name = 'availability_watch_target' AND column_name = 'campsite_id')
+                        OR (table_name = 'availability_watch' AND column_name = 'campsite_filters')
+                      )
+                    ORDER BY new_column
+                    """.trimIndent(),
+                ).map { it.get("new_column", String::class.java) }
+
+            assertEquals(emptyList<String>(), oldTables)
+            assertEquals(emptyList<String>(), oldColumns)
+            assertEquals(
+                listOf(
+                    "availability.campsite_id",
+                    "availability_watch.campsite_filters",
+                    "availability_watch_target.campsite_id",
+                ),
+                newColumns,
+            )
+        }
+    }
 }
 ```
 
@@ -267,6 +325,9 @@ Create `backend/src/main/resources/db/migration/V38__canonical_catalog.sql`:
 -- Intentional catalog reset: the old polymorphic POI/reservable model is being replaced.
 -- Do not run this against a production database unless the release plan explicitly allows
 -- dropping and rebuilding catalog data from source ETLs.
+TRUNCATE TABLE availability, availability_watch_target, availability_watch, availability_poller
+  RESTART IDENTITY CASCADE;
+
 DROP TABLE IF EXISTS reservable_pois CASCADE;
 DROP TABLE IF EXISTS reservables CASCADE;
 DROP TABLE IF EXISTS pois CASCADE;
@@ -343,6 +404,20 @@ CREATE TABLE campsites (
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   deleted_at            TIMESTAMPTZ
 );
+
+ALTER TABLE availability RENAME COLUMN reservable_id TO campsite_id;
+ALTER TABLE availability
+  ADD CONSTRAINT availability_campsite_id_fkey
+  FOREIGN KEY (campsite_id) REFERENCES campsites(id) ON DELETE CASCADE;
+ALTER INDEX availability_current_idx RENAME TO availability_campsite_current_idx;
+
+ALTER TABLE availability_watch_target RENAME COLUMN reservable_id TO campsite_id;
+ALTER TABLE availability_watch_target
+  ADD CONSTRAINT availability_watch_target_campsite_id_fkey
+  FOREIGN KEY (campsite_id) REFERENCES campsites(id) ON DELETE CASCADE;
+ALTER INDEX availability_watch_target_reservable_idx RENAME TO availability_watch_target_campsite_idx;
+
+ALTER TABLE availability_watch RENAME COLUMN reservable_filters TO campsite_filters;
 
 CREATE TABLE campground_vendor_refs (
   campground_id BIGINT NOT NULL REFERENCES campgrounds(id) ON DELETE CASCADE,
@@ -1827,7 +1902,7 @@ git commit -m "feat: serve pois from canonical wrapper joins"
 
 ---
 
-### Task 9: Replace RID/Reservable Site API with Campsite IDs
+### Task 9: Retire RID/Reservable Site API in Favor of Campsite IDs
 
 **Files:**
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/routes/ReservableRoutes.kt`
@@ -2066,7 +2141,7 @@ git commit -m "feat: resolve availability through vendor refs"
 
 ---
 
-### Task 11: Update Frontend Away From RID
+### Task 11: Update Frontend to Canonical Campsite IDs
 
 **Files:**
 - Modify: `web/availability/site-list.js`
@@ -2211,6 +2286,7 @@ BANNED_SQL_PATTERNS = [
     re.compile(r"\bFROM\s+reservables\b", re.IGNORECASE),
     re.compile(r"\bJOIN\s+reservables\b", re.IGNORECASE),
     re.compile(r"\breservable_pois\b", re.IGNORECASE),
+    re.compile(r"\breservable_id\b", re.IGNORECASE),
     re.compile(r"\bp\.category\b", re.IGNORECASE),
     re.compile(r"\bp\.source_id\b", re.IGNORECASE),
     re.compile(r"\bp\.properties\b", re.IGNORECASE),
@@ -2219,6 +2295,7 @@ BANNED_SQL_PATTERNS = [
 
 BANNED_LINKS = [
     "/d/reservable-detail/",
+    "var-reservable_id",
     "var-reservable_rid",
 ]
 
@@ -2352,7 +2429,7 @@ to:
 /d/campsite-detail/campsite-detail?var-campsite_id=${...}
 ```
 
-Remove all `var-reservable_rid` links.
+Remove all `var-reservable_id` and `var-reservable_rid` links.
 
 - [ ] **Step 4: Update catalog explorer and POI detail SQL to canonical joins**
 
@@ -2381,7 +2458,7 @@ WITH canonical_pois AS (
   LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
   LEFT JOIN campgrounds c ON c.id = pc.campground_id AND c.deleted_at IS NULL
   LEFT JOIN campsites cs ON cs.campground_id = c.id AND cs.deleted_at IS NULL
-  LEFT JOIN availability a ON a.reservable_id = cs.id
+  LEFT JOIN availability a ON a.campsite_id = cs.id
   LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
   LEFT JOIN tesla_superchargers ts ON ts.id = pts.supercharger_id AND ts.deleted_at IS NULL
   LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
@@ -2433,7 +2510,7 @@ JOIN campgrounds cg ON cg.id = pc.campground_id
 JOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL
 LEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary
 LEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-LEFT JOIN availability a ON a.reservable_id = cs.id
+LEFT JOIN availability a ON a.campsite_id = cs.id
 WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'
   AND pc.poi_id::text = ${poi_id:sqlstring}
 GROUP BY cs.id, cg.id, vr.id
@@ -2588,12 +2665,12 @@ FROM (
 ORDER BY exact_rows DESC;
 ```
 
-In `grafana/dashboards/status-overview.json`, `poller-detail.json`, and `poller-run-detail.json`, keep `availability.reservable_id` only as the physical availability column name, but alias it as campsite identity in dashboard output:
+In `grafana/dashboards/status-overview.json`, `poller-detail.json`, and `poller-run-detail.json`, use `availability.campsite_id` directly and remove old reservable column names from titles, field overrides, and links:
 
 ```sql
 SELECT
   a.last_observed_at AS transitioned_at,
-  a.reservable_id AS campsite_id,
+  a.campsite_id,
   cs.loop_name || ' / ' || cs.name AS campsite_name,
   a.target_date::text AS date,
   prev.status AS from_status,
@@ -2601,7 +2678,7 @@ SELECT
   a.run_id
 FROM availability a
 LEFT JOIN availability prev ON prev.id = a.previous_id
-JOIN campsites cs ON cs.id = a.reservable_id
+JOIN campsites cs ON cs.id = a.campsite_id
 WHERE $__timeFilter(a.last_observed_at)
   AND a.previous_id IS NOT NULL
 ORDER BY a.last_observed_at DESC, a.id DESC
