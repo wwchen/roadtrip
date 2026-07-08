@@ -458,18 +458,7 @@ class CanonicalCatalogRepo(
                     campgroundId,
                 )?.get("poi_id", Long::class.java)
         if (existingPoiId == null) {
-            val poiId =
-                ctx
-                    .fetchOne(
-                        """
-                        INSERT INTO pois (poi_type, geom)
-                        VALUES ('campground', ST_SetSRID(ST_MakePoint(?, ?), 4326))
-                        RETURNING id
-                        """.trimIndent(),
-                        longitude,
-                        latitude,
-                    )!!
-                    .get("id", Long::class.java)
+            val poiId = insertPoi(CAMPGROUND_POI_TYPE, longitude, latitude)
             ctx.execute(
                 "INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)",
                 poiId,
@@ -884,6 +873,12 @@ class CanonicalCatalogRepo(
     companion object {
         private const val CAMPGROUND_ENTITY = "campground"
         private const val CAMPSITE_ENTITY = "campsite"
+        // pois.poi_type values. Kept distinct from the *_ENTITY vendor_ref
+        // discriminators — the two namespaces happen to collide today for
+        // campgrounds ("campground" appears in both) but they mean different
+        // things and can diverge if we ever add a POI wrapper type that isn't
+        // a canonical entity type (e.g. multi-entity wrappers).
+        private const val CAMPGROUND_POI_TYPE = "campground"
         private const val TESLA_SUPERCHARGER_POI_TYPE = "tesla_supercharger"
         private const val PLANET_FITNESS_LOCATION_POI_TYPE = "planet_fitness_location"
         private const val EMPTY_JSON_OBJECT = "{}"
