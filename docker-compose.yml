@@ -53,6 +53,7 @@ services:
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
       - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
       - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
+      - GRAFANA_DB_REPAIR_DROP=${GRAFANA_DB_REPAIR_DROP:-false}
     depends_on:
       postgres:
         condition: service_healthy
@@ -64,6 +65,7 @@ services:
       - /docker-entrypoint-initdb.d/create-grafana-reader.sh
     volumes:
       - ./grafana/db/create-grafana-reader.sh:/docker-entrypoint-initdb.d/create-grafana-reader.sh:ro
+      - grafana-data:/var/lib/grafana
 
   # Kotlin/Ktor backend. Serves the entire site:
   #   - GET /                       → index.html (map)

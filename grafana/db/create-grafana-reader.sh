@@ -6,6 +6,41 @@ set -eu
 : "${POSTGRES_PASSWORD:=roadtrip}"
 : "${GRAFANA_DB_USER:=grafana_reader}"
 : "${GRAFANA_DB_PASSWORD:=roadtrip}"
+: "${GRAFANA_DATA_DIR:=/var/lib/grafana}"
+: "${GRAFANA_DB_REPAIR_DROP:=false}"
+
+is_truthy() {
+  case "$1" in
+    1 | true | TRUE | yes | YES | on | ON) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+drop_grafana_sqlite_state_if_requested() {
+  if ! is_truthy "$GRAFANA_DB_REPAIR_DROP"; then
+    return 0
+  fi
+
+  if [ ! -d "$GRAFANA_DATA_DIR" ]; then
+    echo "Grafana data dir does not exist, skipping repair drop: $GRAFANA_DATA_DIR"
+    return 0
+  fi
+
+  echo "Dropping Grafana SQLite state in $GRAFANA_DATA_DIR"
+  for path in \
+    "$GRAFANA_DATA_DIR/grafana.db" \
+    "$GRAFANA_DATA_DIR/grafana.db-shm" \
+    "$GRAFANA_DATA_DIR/grafana.db-wal" \
+    "$GRAFANA_DATA_DIR/grafana-apiserver" \
+    "$GRAFANA_DATA_DIR/unified-search"
+  do
+    if [ -e "$path" ]; then
+      rm -rf "$path"
+    fi
+  done
+}
+
+drop_grafana_sqlite_state_if_requested
 
 export PGPASSWORD="$POSTGRES_PASSWORD"
 
