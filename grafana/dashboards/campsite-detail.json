@@ -7,6 +7,18 @@
   "graphTooltip": 0,
   "links": [
     {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "🚦 Status Overview",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/status-overview/roadtrip-status-overview"
+    },
+    {
       "asDropdown": true,
       "icon": "dashboard",
       "includeVars": false,

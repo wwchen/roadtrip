@@ -92,7 +92,9 @@ class GrafanaDashboardExportTest(unittest.TestCase):
 
         normalized = normalize(dashboard, "catalog-explorer")
 
-        self.assertEqual(1, len(SHARED_DASHBOARD_LINKS))
+        self.assertEqual(2, len(SHARED_DASHBOARD_LINKS))
+        self.assertEqual("🚦 Status Overview", SHARED_DASHBOARD_LINKS[0]["title"])
+        self.assertEqual("/d/status-overview/roadtrip-status-overview", SHARED_DASHBOARD_LINKS[0]["url"])
         self.assertEqual(SHARED_DASHBOARD_LINKS, normalized["links"][: len(SHARED_DASHBOARD_LINKS)])
         self.assertEqual([custom_link], normalized["links"][len(SHARED_DASHBOARD_LINKS) :])
         self.assertIn("roadtrip", normalized["tags"])
@@ -130,6 +132,11 @@ class GrafanaDashboardExportTest(unittest.TestCase):
             "type": "link",
             "url": "/old-status",
         }
+        stale_emoji_status_link = {
+            "title": "🚦 Status Overview",
+            "type": "link",
+            "url": "/old-emoji-status",
+        }
         stale_watch_link = {
             "title": "Watch drill-down",
             "type": "link",
@@ -152,6 +159,7 @@ class GrafanaDashboardExportTest(unittest.TestCase):
             "title": "Logs",
             "links": [
                 stale_status_link,
+                stale_emoji_status_link,
                 stale_watch_link,
                 stale_dropdown,
                 stale_all_dashboards,
@@ -163,7 +171,7 @@ class GrafanaDashboardExportTest(unittest.TestCase):
         self.assertEqual(SHARED_DASHBOARD_LINKS, normalized["links"])
 
     def test_all_dashboards_link_is_tag_driven_not_curated(self) -> None:
-        dropdown = SHARED_DASHBOARD_LINKS[0]
+        dropdown = SHARED_DASHBOARD_LINKS[1]
 
         self.assertEqual("All dashboards", dropdown["title"])
         self.assertEqual("dashboards", dropdown["type"])

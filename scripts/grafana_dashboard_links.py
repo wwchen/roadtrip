@@ -9,6 +9,18 @@ RETIRED_SHARED_DASHBOARD_NAV_PANEL_ID = 100000
 
 SHARED_DASHBOARD_LINKS: list[dict[str, Any]] = [
     {
+        "asDropdown": False,
+        "icon": "dashboard",
+        "includeVars": False,
+        "keepTime": False,
+        "tags": [],
+        "targetBlank": False,
+        "title": "🚦 Status Overview",
+        "tooltip": "",
+        "type": "link",
+        "url": "/d/status-overview/roadtrip-status-overview",
+    },
+    {
         "asDropdown": True,
         "icon": "dashboard",
         "includeVars": False,
@@ -25,6 +37,7 @@ SHARED_LINK_TITLES = {link["title"] for link in SHARED_DASHBOARD_LINKS}
 RETIRED_SHARED_LINK_TITLES = {
     "All Roadtrip dashboards",
     "Status Overview",
+    "🚦 Status Overview",
     "Watch drill-down",
 }
 

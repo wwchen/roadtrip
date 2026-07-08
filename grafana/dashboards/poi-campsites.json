@@ -7,6 +7,18 @@
   "graphTooltip": 0,
   "links": [
     {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "🚦 Status Overview",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/status-overview/roadtrip-status-overview"
+    },
+    {
       "asDropdown": true,
       "icon": "dashboard",
       "includeVars": false,
@@ -145,8 +157,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#2CA02C"
+                  "fixedColor": "#2CA02C",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -160,8 +172,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#D62728"
+                  "fixedColor": "#D62728",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -175,8 +187,8 @@
               {
                 "id": "color",
                 "value": {
-                  "mode": "fixed",
-                  "fixedColor": "#7F7F7F"
+                  "fixedColor": "#7F7F7F",
+                  "mode": "fixed"
                 }
               }
             ]
@@ -213,20 +225,14 @@
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
+      "description": "Status key: A = available, FC = first come, R = reserved, B = booked, C = closed, ? = unknown",
       "fieldConfig": {
         "defaults": {
           "mappings": [
             {
-              "type": "value",
               "options": {
                 "available": {
                   "text": "A"
-                },
-                "first_come": {
-                  "text": "FC"
-                },
-                "reserved": {
-                  "text": "R"
                 },
                 "booked": {
                   "text": "B"
@@ -234,10 +240,17 @@
                 "closed": {
                   "text": "C"
                 },
+                "first_come": {
+                  "text": "FC"
+                },
+                "reserved": {
+                  "text": "R"
+                },
                 "unknown": {
                   "text": "?"
                 }
-              }
+              },
+              "type": "value"
             }
           ]
         },
@@ -303,18 +316,17 @@
         }
       ],
       "title": "Availability grid (next 30 days)",
-      "type": "table",
-      "description": "Status key: A = available, FC = first come, R = reserved, B = booked, C = closed, ? = unknown",
       "transformations": [
         {
           "id": "extractFields",
           "options": {
             "format": "regexp",
-            "source": "status_key",
-            "regexp": "(?<status>.*)"
+            "regexp": "(?<status>.*)",
+            "source": "status_key"
           }
         }
-      ]
+      ],
+      "type": "table"
     }
   ],
   "refresh": false,
@@ -327,6 +339,7 @@
   "templating": {
     "list": [
       {
+        "allowCustomValue": true,
         "current": {
           "text": "",
           "value": ""
@@ -337,10 +350,10 @@
         "options": [],
         "query": "",
         "skipUrlSync": false,
-        "type": "textbox",
-        "allowCustomValue": true
+        "type": "textbox"
       },
       {
+        "allowCustomValue": true,
         "current": {
           "text": "",
           "value": ""
@@ -351,10 +364,10 @@
         "options": [],
         "query": "",
         "skipUrlSync": false,
-        "type": "textbox",
-        "allowCustomValue": true
+        "type": "textbox"
       },
       {
+        "allowCustomValue": true,
         "current": {
           "text": "",
           "value": ""
@@ -365,10 +378,10 @@
         "options": [],
         "query": "",
         "skipUrlSync": false,
-        "type": "textbox",
-        "allowCustomValue": true
+        "type": "textbox"
       },
       {
+        "allowCustomValue": true,
         "current": {
           "text": "",
           "value": ""
@@ -379,10 +392,10 @@
         "options": [],
         "query": "",
         "skipUrlSync": false,
-        "type": "textbox",
-        "allowCustomValue": true
+        "type": "textbox"
       },
       {
+        "allowCustomValue": true,
         "current": {
           "text": "",
           "value": ""
@@ -393,10 +406,10 @@
         "options": [],
         "query": "",
         "skipUrlSync": false,
-        "type": "textbox",
-        "allowCustomValue": true
+        "type": "textbox"
       },
       {
+        "allValue": "'__all'",
         "allowCustomValue": true,
         "current": {
           "text": "All",
@@ -424,8 +437,7 @@
         "regexApplyTo": "value",
         "skipUrlSync": false,
         "sort": 0,
-        "type": "query",
-        "allValue": "'__all'"
+        "type": "query"
       }
     ]
   },
