@@ -52,13 +52,20 @@ function normalizeAgency(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+export function campgroundLayerCategory(value) {
+  const category = typeof value === 'string' ? value.trim() : '';
+  if (!category || category === 'campground' || category === 'null') return 'other';
+  return CG_SUBCATEGORIES.includes(category) ? category : 'other';
+}
+
 function effectiveCampgroundCategory(category) {
-  return category === 'other' ? 'federal' : category;
+  const layerCategory = campgroundLayerCategory(category);
+  return layerCategory === 'other' ? 'federal' : layerCategory;
 }
 
 function featureCampgroundCategory(props) {
   const category = props?.category === 'campground' ? props?.subcategory : props?.category;
-  return effectiveCampgroundCategory(category || 'other');
+  return effectiveCampgroundCategory(category);
 }
 
 function agencySelection(category) {

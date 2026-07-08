@@ -62,23 +62,21 @@ class PlanetFitnessEtlTest {
     }
 
     @Test
-    fun `transform produces Poi#PlanetFitness with stable source value and source_id`() {
+    fun `transform produces canonical Planet Fitness locations with stable location ids`() {
         val envelope = RawCapture.parseEnvelope(fixtureFile())
         val etl = PlanetFitnessEtl()
         val dto = etl.parse(bundle(envelope))
-        val pois = etl.transform(dto, transformCtx)
+        val locations = etl.transform(dto, transformCtx).locations
 
-        assertEquals(5, pois.size, "fixture has 5 elements, all valid")
-        for (p in pois) {
+        assertEquals(5, locations.size, "fixture has 5 elements, all valid")
+        for (p in locations) {
             assertTrue(
-                p.sourceId.matches(Regex("^(node|way|relation)-\\d+$")),
-                "unexpected sourceId=${p.sourceId}",
+                p.locationId.matches(Regex("^(node|way|relation)-\\d+$")),
+                "unexpected locationId=${p.locationId}",
             )
-            assertEquals("planet-fitness", p.source)
-            assertEquals("Planet Fitness", p.agency)
             assertEquals("US", p.country)
-            assertNotNull(p.geomGeoJson)
-            assertTrue(p.geomGeoJson.contains("\"Point\""))
+            assertNotNull(p.latitude)
+            assertNotNull(p.longitude)
         }
     }
 
@@ -87,9 +85,9 @@ class PlanetFitnessEtlTest {
         val envelope = RawCapture.parseEnvelope(fixtureFile())
         val etl = PlanetFitnessEtl()
         val dto = etl.parse(bundle(envelope))
-        val pois = etl.transform(dto, transformCtx)
+        val locations = etl.transform(dto, transformCtx).locations
 
-        val withoutPhone = pois.filter { it.phone == null }
+        val withoutPhone = locations.filter { it.phone == null }
         assertTrue(
             withoutPhone.isNotEmpty(),
             "expected at least one fixture element without phone (got all-with-phone, fixture is too clean)",

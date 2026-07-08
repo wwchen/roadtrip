@@ -424,10 +424,8 @@ poi_data:
         inputs: [osm-pf]
 
   - name: Tesla Superchargers
-    # Akamai blocks the fetch; fan-out import would just see stale data
-    # if the cache is missing. Trigger explicitly via per-name import
-    # when the cache is fresh.
-    enabled: false
+    # Akamai can block fresh fetches; import uses cached tesla-index and
+    # side-loaded tesla-locations captures when present.
     category: supercharger
     agency: Tesla
     etls:

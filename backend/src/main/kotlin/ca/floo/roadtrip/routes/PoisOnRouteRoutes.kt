@@ -183,7 +183,8 @@ private data class OnRouteRequestDto(
             categories
                 ?.mapNotNull {
                     it.trim().takeIf { category -> category.isNotEmpty() }
-                }?.takeIf { it.isNotEmpty() }
+                }?.let(::canonicalPoiCategories)
+                ?.takeIf { it.isNotEmpty() }
         return OnRouteRequest(
             waypoints = waypoints.mapIndexed { index, waypoint -> waypoint.validated(index) },
             radiusMiles = radius,

@@ -12,6 +12,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.Test
 import java.io.File
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 
 class CampflareCampgroundsEtlTest {
     @Test
@@ -76,6 +77,27 @@ class CampflareCampgroundsEtlTest {
             )
 
         assertEquals(listOf("ok"), out.campgrounds.map { it.vendorRefId })
+    }
+
+    @Test
+    fun `treats JSON null string fields as absent`() {
+        val etl = CampflareCampgroundsEtl()
+        val out =
+            etl.transform(
+                etl.parse(
+                    bundle(
+                        "campflare-campgrounds",
+                        """
+                        [
+                          {"id":"json-null-kind","name":"Null Kind","kind":null,"location":{"latitude":1,"longitude":2}}
+                        ]
+                        """.trimIndent(),
+                    ),
+                ),
+                transformCtx(),
+            )
+
+        assertNull(out.campgrounds.single().kind)
     }
 
     private fun bundle(

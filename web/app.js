@@ -18,6 +18,7 @@ import {
   setNPData,
   setSPData,
   synthesizeClick,
+  campgroundLayerCategory,
 } from './layers.js';
 import { initSearch, getSearchIndex } from './search.js';
 import { closeDrawer } from './drawer/chrome.js';
@@ -197,9 +198,10 @@ map.on('style.load', () => {
 // (so the schema is one row in Postgres) but the rest of the webapp predates
 // that — keep the boundary here and the inside stays simple.
 //
-// For campgrounds: `subcategory` is federal/state/local/provincial — the
-// value the legend toggles + circle-color match against. Promote it to the
-// top-level `category` so layers.js filter expressions stay simple.
+// For campgrounds: promote known legacy agency buckets to the top-level
+// `category` so layers.js filter expressions stay simple. Canonical
+// campground kinds from Campflare (e.g. "established") are not layer
+// buckets, so they render as "other".
 //
 // Slim path (POST /api/pois): properties carries category, subcategory,
 // and agency. We rewrite category here for the legend filter; everything
@@ -211,8 +213,8 @@ map.on('style.load', () => {
 // shape matches what popups read.
 function flattenPoi(f) {
   const p = f.properties || {};
-  if (p.category === 'campground' && p.subcategory) {
-    return { ...f, properties: { ...p, category: p.subcategory } };
+  if (p.category === 'campground') {
+    return { ...f, properties: { ...p, category: campgroundLayerCategory(p.subcategory) } };
   }
   return f;
 }
@@ -293,9 +295,9 @@ async function load() {
       const c = raw.properties?.category;
       if (c === 'national-park') np.push(f);
       else if (c === 'state-park') sp.push(f);
-      else if (c === 'planet-fitness') pf.push(f);
+      else if (c === 'planet_fitness_location' || c === 'planet-fitness') pf.push(f);
       else if (c === 'campground') cg.push(f);
-      else if (c === 'supercharger') sc.push(f);
+      else if (c === 'tesla_supercharger' || c === 'supercharger') sc.push(f);
     }
     setNPData({ type: 'FeatureCollection', features: np });
     setSPData({ type: 'FeatureCollection', features: sp });
@@ -362,7 +364,7 @@ async function load() {
     // Defaults: just the point-geom layers. Park polygons (NP/SP) are
     // expensive to ship and clutter at low zoom — leave them out for now;
     // a follow-up will reintroduce them via a separate tile/render path.
-    const cats = ['planet-fitness', 'supercharger'];
+    const cats = ['planet_fitness_location', 'tesla_supercharger'];
     if (wantCG) cats.push('campground');
 
     const currentBbox = [west, south, east, north];

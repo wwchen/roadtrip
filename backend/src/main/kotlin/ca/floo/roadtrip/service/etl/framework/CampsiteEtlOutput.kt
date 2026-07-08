@@ -5,11 +5,9 @@ import kotlinx.serialization.json.JsonElement
 /**
  * Canonical output for vendor campsite catalog ETLs.
  *
- * These adapters are intentionally not wired into runnable import phases yet:
- * old `reservable_data` ingestion is disabled until the canonical campground
- * writer lands. Keeping the output in canonical terms lets the vendor parsing
- * code compile and evolve without preserving the removed `reservables` table
- * contract.
+ * Vendor adapters emit these DTOs instead of the retired wide `pois` and
+ * `reservables` contracts. The orchestrator persists terminal outputs through
+ * typed catalog tables and lean POI wrappers.
  */
 data class CampsiteEtlOutput(
     val campsites: List<CampsiteEtlRecord>,
@@ -17,6 +15,14 @@ data class CampsiteEtlOutput(
 
 data class CampgroundEtlOutput(
     val campgrounds: List<CampgroundEtlRecord>,
+)
+
+data class TeslaSuperchargerEtlOutput(
+    val superchargers: List<TeslaSuperchargerEtlRecord>,
+)
+
+data class PlanetFitnessLocationEtlOutput(
+    val locations: List<PlanetFitnessLocationEtlRecord>,
 )
 
 data class CampgroundEtlRecord(
@@ -85,4 +91,47 @@ data class CampsiteEtlRecord(
     val vendorRefPayload: JsonElement? = null,
 )
 
+data class TeslaSuperchargerEtlRecord(
+    val locationSlug: String,
+    val commonSiteName: String,
+    val latitude: Double,
+    val longitude: Double,
+    val locationGuid: String? = null,
+    val siteStatus: String = DEFAULT_TESLA_SITE_STATUS,
+    val accessType: String? = null,
+    val openToPublic: Boolean = true,
+    val openToNonTeslas: Boolean? = null,
+    val trailerFriendly: Boolean? = null,
+    val twentyFourSeven: Boolean? = null,
+    val stallCount: Int? = null,
+    val maxPowerKw: Int? = null,
+    val address: JsonElement? = null,
+    val region: String? = null,
+    val country: String? = null,
+    val timeZone: String? = null,
+    val amenities: JsonElement? = null,
+    val hardwareCounts: JsonElement? = null,
+    val pricebooks: JsonElement? = null,
+    val availabilityProfile: JsonElement? = null,
+    val infoUrl: String? = null,
+    val indexPayload: JsonElement? = null,
+    val detailPayload: JsonElement? = null,
+)
+
+data class PlanetFitnessLocationEtlRecord(
+    val locationId: String,
+    val name: String,
+    val latitude: Double,
+    val longitude: Double,
+    val address: JsonElement? = null,
+    val region: String? = null,
+    val country: String? = null,
+    val phone: String? = null,
+    val infoUrl: String? = null,
+    val amenities: JsonElement? = null,
+    val payload: JsonElement? = null,
+)
+
 const val DEFAULT_CAMPSITE_KIND = "site"
+
+const val DEFAULT_TESLA_SITE_STATUS = "open"

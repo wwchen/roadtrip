@@ -1,26 +1,28 @@
 package ca.floo.roadtrip.service.etl.vendors.tesla
 
-import ca.floo.roadtrip.models.domain.Poi
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.DEFAULT_TESLA_SITE_STATUS
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
+import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlOutput
+import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlRecord
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.pointGeoJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.io.File
 import java.time.Instant
 
-// Tesla bulk locations feed → Poi.Supercharger.
+// Tesla bulk locations feed → canonical tesla_superchargers.
 //
 // Capture path: data/raw/tesla-index/<ts>.json (single envelope).
 // Upstream: https://www.tesla.com/api/findus/get-locations covers every
@@ -34,15 +36,15 @@ import java.time.Instant
 // render with placeholder fields — the index alone is enough to put a
 // pin on the map. The cache lifetime is governed by the offline
 // fetch worker; rows go stale gracefully.
-class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
+class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
     override val etlSlug = "tesla-superchargers"
 
     override fun parse(inputs: InputBundle): TeslaIndexDto {
         val envelope = inputs.soleEnvelopes().single()
         val raw = json.decodeFromJsonElement(TeslaIndexEnvelope.serializer(), envelope.payload)
         // Two passes: typed for the hot fields + raw JsonObject by slug
-        // for the full payload. Drives Poi.Supercharger.extras so the
-        // drawer's "Upstream data" accordion has every Tesla index field.
+        // for the full payload. Drives tesla_superchargers.index_payload so
+        // the drawer's "Upstream data" accordion has every Tesla index field.
         val rawBySlug = mutableMapOf<String, JsonObject>()
         val rawArr =
             envelope.payload.jsonObject["data"]
@@ -70,27 +72,27 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
     override fun transform(
         dto: TeslaIndexDto,
         ctx: TransformCtx,
-    ): List<Poi.Supercharger> {
+    ): TeslaSuperchargerEtlOutput {
         // tesla-locations is laid out as data/raw/tesla-locations/
         // <slug>/<UTC-ts>.json (one subdir per supercharger), which doesn't
         // fit the InputBundle's flat list-of-envelopes contract. Side-load
         // from ctx.rawDir directly; the YAML keeps it as a sibling
         // data_source so fetch + cache-clear flows still address it.
         val locationsDir = File(ctx.rawDir, "tesla-locations")
-        val agency = ctx.requiredConstantAgency(etlSlug)
-        return dto.rows.mapNotNull { row ->
-            val rawIndex = row.locationUrlSlug?.let { dto.rawBySlug[it] }
-            transformRow(row, rawIndex, dto.fetchedAt, locationsDir, agency)
-        }
+        return TeslaSuperchargerEtlOutput(
+            superchargers =
+                dto.rows.mapNotNull { row ->
+                    val rawIndex = row.locationUrlSlug?.let { dto.rawBySlug[it] }
+                    transformRow(row, rawIndex, locationsDir)
+                },
+        )
     }
 
     private fun transformRow(
         row: TeslaIndexRow,
         rawIndex: JsonObject?,
-        fetchedAt: Instant,
         locationsDir: File,
-        agency: String,
-    ): Poi.Supercharger? {
+    ): TeslaSuperchargerEtlRecord? {
         // Filter mirrors scripts/fetch_tesla_locations.py:na_supercharger_slugs.
         // Trust supercharger_function over location_type — Tesla's bulk index
         // sometimes labels real Supercharger sites with surprising types
@@ -114,30 +116,23 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
 
         val (region, country) = regionCountryOf(detail)
 
-        return Poi.Supercharger(
-            source = etlSlug,
-            sourceId = sanitizeSlug(slug),
-            name = name,
-            geomGeoJson = pointGeoJson(lon, lat),
+        return TeslaSuperchargerEtlRecord(
+            locationSlug = sanitizeSlug(slug),
+            commonSiteName = name,
+            latitude = lat,
+            longitude = lon,
+            siteStatus = sf.siteStatus?.takeIf { it.isNotBlank() } ?: DEFAULT_TESLA_SITE_STATUS,
+            accessType = detail?.accessType?.takeIf { it.isNotBlank() },
+            openToNonTeslas = detail?.openToNonTeslas,
+            stallCount = detail?.publicStallCount,
+            maxPowerKw = detail?.maxPowerKw,
+            address = addressJson(addressOf(detail)),
             region = region,
             country = country,
-            phone = null,
-            address = addressOf(detail),
             infoUrl = "https://www.tesla.com/findus?location=$slug",
-            fetchedAt = fetchedAt,
-            lastVerified = null,
-            agency = agency,
-            stallCount = detail?.publicStallCount ?: 0,
-            maxPowerKw = detail?.maxPowerKw ?: 0,
-            facility = detail?.accessType?.takeIf { it.isNotBlank() },
-            pricebooks = detail?.effectivePricebooks ?: emptyList(),
-            extras =
-                json.encodeToJsonElement(
-                    TeslaExtrasDto(
-                        index = rawIndex ?: JsonNull,
-                        detail = rawDetail ?: JsonNull,
-                    ),
-                ),
+            pricebooks = JsonArray(detail?.effectivePricebooks ?: emptyList()),
+            indexPayload = rawIndex,
+            detailPayload = rawDetail,
         )
     }
 
@@ -197,6 +192,17 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, List<Poi.Supercharger>> {
         )
     }
 
+    private fun addressJson(address: ca.floo.roadtrip.models.domain.Address?): JsonElement? {
+        address ?: return null
+        return buildJsonObject {
+            address.street?.let { put("street", it) }
+            address.city?.let { put("city", it) }
+            address.state?.let { put("state", it) }
+            address.postcode?.let { put("postcode", it) }
+            address.country?.let { put("country", it) }
+        }
+    }
+
     // location_url_slug values include slashes and uppercase ('AmsterdamNL')
     // that the source_id CHECK constraint (^[a-z0-9:_-]+$) rejects.
     private fun sanitizeSlug(s: String): String = s.lowercase().replace(Regex("[^a-z0-9_:-]+"), "-").trim('-')
@@ -244,12 +250,6 @@ data class TeslaIndexDto(
     val rows: List<TeslaIndexRow>,
     val rawBySlug: Map<String, JsonObject>,
     val fetchedAt: Instant,
-)
-
-@Serializable
-private data class TeslaExtrasDto(
-    val index: JsonElement,
-    val detail: JsonElement,
 )
 
 // Tesla per-slug detail envelope shape: payload.data.data.{name, address, …}.
