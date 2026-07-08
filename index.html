@@ -1646,6 +1646,91 @@
   .cg-details > * + * { margin-top: 10px; }
   .cg-details > summary + * { margin-top: 12px; }
   .cg-sites { font-size: 12px; color: var(--rt-muted); }
+  .cg-structured-details {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .cg-detail-group h4 {
+    margin: 0 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--rt-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+  }
+  .cg-detail-grid {
+    display: grid;
+    grid-template-columns: minmax(92px, 0.42fr) minmax(0, 1fr);
+    gap: 6px 12px;
+    font-size: 12px;
+    line-height: 1.4;
+  }
+  .cg-detail-row { display: contents; }
+  .cg-detail-label { color: var(--rt-muted); }
+  .cg-detail-value {
+    color: var(--rt-text);
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  .cg-detail-value a,
+  .cg-detail-link {
+    color: var(--rt-brand);
+    text-decoration: none;
+  }
+  .cg-detail-value a:hover,
+  .cg-detail-link:hover { text-decoration: underline; }
+  .cg-link-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .cg-detail-link {
+    display: inline-flex;
+    align-items: center;
+    min-height: 28px;
+    max-width: 100%;
+    padding: 5px 8px;
+    border-radius: 6px;
+    background: var(--rt-fill-subtle);
+    border: 1px solid var(--rt-border);
+    font-size: 12px;
+    overflow-wrap: anywhere;
+  }
+  .cg-alert-list {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+  .cg-alert-item {
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: rgba(241,160,74,0.10);
+    border: 1px solid rgba(241,160,74,0.22);
+    color: var(--rt-text);
+    font-size: 12px;
+    line-height: 1.45;
+  }
+  .cg-alert-item strong {
+    display: block;
+    color: var(--rt-warn);
+    font-weight: 600;
+    margin-bottom: 2px;
+  }
+  .cg-connection {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    margin: 0 6px 4px 0;
+  }
+  .cg-connection code {
+    padding: 2px 4px;
+    border-radius: 4px;
+    background: var(--rt-fill-subtle);
+    color: var(--rt-muted);
+    font-family: var(--rt-mono);
+    font-size: 11px;
+  }
 
   /* Upstream raw-data dump. Same accordion treatment as cg-details. */
   .cg-upstream summary {
