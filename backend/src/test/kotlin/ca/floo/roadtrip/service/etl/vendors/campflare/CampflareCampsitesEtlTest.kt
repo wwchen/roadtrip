@@ -95,7 +95,7 @@ class CampflareCampsitesEtlTest {
 
     private fun transformCtx(): TransformCtx =
         TransformCtx.load(
-            rawDir = File("build/tmp/campflare-campsites-etl-test-raw"),
+            rawDir = File("build/tmp/cf-campsites-etl-test-raw"),
             registry = PoiRegistry(dataSources = emptyList(), poiData = emptyList()),
         )
 
