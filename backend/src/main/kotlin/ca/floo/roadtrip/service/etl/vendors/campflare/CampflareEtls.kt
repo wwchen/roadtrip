@@ -38,9 +38,9 @@ class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput>
     private fun campgroundRecord(raw: JsonObject): CampgroundEtlRecord? {
         val id = raw.stringField("id") ?: return null
         val name = raw.stringField("name") ?: return null
-        val location = raw.objectField("location")
-        val latitude = location?.doubleField("latitude") ?: return null
-        val longitude = location.doubleField("longitude") ?: return null
+        val location = raw.objectField("location") ?: return null
+        val latitude = normalizedLatitude(location.doubleField("latitude")) ?: return null
+        val longitude = normalizedLongitude(location.doubleField("longitude")) ?: return null
         return CampgroundEtlRecord(
             vendor = CAMPFLARE_VENDOR,
             vendorRefId = id,
@@ -110,8 +110,8 @@ class CampflareCampsitesEtl : SourceEtl<List<JsonObject>, CampsiteEtlOutput> {
             name = name,
             kind = kind,
             loopName = raw.stringField("loop_name"),
-            latitude = raw.doubleField("latitude"),
-            longitude = raw.doubleField("longitude"),
+            latitude = normalizedLatitude(raw.doubleField("latitude")),
+            longitude = normalizedLongitude(raw.doubleField("longitude")),
             reservationUrl = raw.stringField("reservation_url"),
             equipment = raw.arrayField("equipment"),
             kindListed = raw.stringField("kind_listed"),
@@ -170,7 +170,27 @@ private fun JsonObject.objectField(name: String): JsonObject? = this[name] as? J
 
 private fun JsonObject.arrayField(name: String): JsonElement? = this[name]?.takeIf { runCatching { it.jsonArray }.isSuccess }
 
+private fun normalizedLatitude(value: Double?): Double? = normalizedCoordinate(value, LATITUDE_MIN, LATITUDE_MAX)
+
+private fun normalizedLongitude(value: Double?): Double? = normalizedCoordinate(value, LONGITUDE_MIN, LONGITUDE_MAX)
+
+private fun normalizedCoordinate(
+    value: Double?,
+    min: Double,
+    max: Double,
+): Double? {
+    if (value == null) return null
+    if (value in min..max) return value
+    val scaled = value / E6_COORDINATE_SCALE
+    return scaled.takeIf { it in min..max }
+}
+
 private const val CAMPFLARE_VENDOR = "campflare"
 private const val CAMPGROUNDS_ETL_SLUG = "campflare-campgrounds"
 private const val CAMPSITES_ETL_SLUG = "campflare-campsites"
 private const val CAMPGROUND_API_URL = "https://api.campflare.com/v2/campground"
+private const val LATITUDE_MIN = -90.0
+private const val LATITUDE_MAX = 90.0
+private const val LONGITUDE_MIN = -180.0
+private const val LONGITUDE_MAX = 180.0
+private const val E6_COORDINATE_SCALE = 1_000_000.0

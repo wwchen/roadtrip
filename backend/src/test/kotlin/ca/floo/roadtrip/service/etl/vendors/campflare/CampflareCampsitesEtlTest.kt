@@ -76,6 +76,42 @@ class CampflareCampsitesEtlTest {
         assertEquals(listOf("ok"), out.campsites.map { it.vendorRefId })
     }
 
+    @Test
+    fun `normalizes E6 campsite coordinates when dump mixes coordinate scales`() {
+        val etl = CampflareCampsitesEtl()
+        val out =
+            etl.transform(
+                etl.parse(
+                    bundle(
+                        """
+                        [
+                          {
+                            "id":"scaled-lon",
+                            "campground_id":"cg",
+                            "name":"Cabin 5",
+                            "kind":"cabin",
+                            "latitude":29.740556,
+                            "longitude":-91853611
+                          },
+                          {
+                            "id":"scaled-lat",
+                            "campground_id":"cg",
+                            "name":"Site 25",
+                            "kind":"standard",
+                            "latitude":31957925,
+                            "longitude":-91.20201
+                          }
+                        ]
+                        """.trimIndent(),
+                    ),
+                ),
+                transformCtx(),
+            )
+
+        assertEquals(-91.853611, out.campsites.single { it.vendorRefId == "scaled-lon" }.longitude)
+        assertEquals(31.957925, out.campsites.single { it.vendorRefId == "scaled-lat" }.latitude)
+    }
+
     private fun bundle(payloadJson: String): InputBundle =
         InputBundle(
             rawCaptures = linkedMapOf("campflare-campsites" to listOf(envelope(payloadJson))),
