@@ -35,17 +35,24 @@ class CampsiteProviderRepo(
                       ON pc.poi_id = p.id
                     JOIN campgrounds cg
                       ON cg.id = pc.campground_id
-                    JOIN campground_vendor_refs cvr
-                      ON cvr.campground_id = cg.id
-                     AND cvr.is_primary
-                    JOIN vendor_refs vr
-                      ON vr.id = cvr.vendor_ref_id
+                    JOIN LATERAL (
+                      SELECT ref.vendor, ref.payload
+                      FROM campground_vendor_refs cvr
+                      JOIN vendor_refs ref
+                        ON ref.id = cvr.vendor_ref_id
+                      WHERE cvr.campground_id = cg.id
+                        AND ref.entity_type = 'campground'
+                        AND ref.deleted_at IS NULL
+                      ORDER BY
+                        CASE WHEN ${providerRefShapeSql("ref.payload")} THEN 1 ELSE 0 END DESC,
+                        cvr.is_primary DESC,
+                        cvr.vendor_ref_id ASC
+                      LIMIT 1
+                    ) vr ON true
                     WHERE p.id = ?
                       AND p.deleted_at IS NULL
                       AND p.poi_type = 'campground'
                       AND cg.deleted_at IS NULL
-                      AND vr.entity_type = 'campground'
-                      AND vr.deleted_at IS NULL
                     """.trimIndent(),
                     poiId,
                 ) ?: return null
@@ -126,17 +133,24 @@ class CampsiteProviderRepo(
               ON pc.poi_id = p.id
             JOIN campgrounds cg
               ON cg.id = pc.campground_id
-            JOIN campground_vendor_refs cvr
-              ON cvr.campground_id = cg.id
-             AND cvr.is_primary
-            JOIN vendor_refs vr
-              ON vr.id = cvr.vendor_ref_id
+            JOIN LATERAL (
+              SELECT ref.vendor, ref.payload
+              FROM campground_vendor_refs cvr
+              JOIN vendor_refs ref
+                ON ref.id = cvr.vendor_ref_id
+              WHERE cvr.campground_id = cg.id
+                AND ref.entity_type = 'campground'
+                AND ref.deleted_at IS NULL
+              ORDER BY
+                CASE WHEN ${providerRefShapeSql("ref.payload")} THEN 1 ELSE 0 END DESC,
+                cvr.is_primary DESC,
+                cvr.vendor_ref_id ASC
+              LIMIT 1
+            ) vr ON true
             WHERE p.id IN ($placeholders)
               AND p.deleted_at IS NULL
               AND p.poi_type = 'campground'
               AND cg.deleted_at IS NULL
-              AND vr.entity_type = 'campground'
-              AND vr.deleted_at IS NULL
             """.trimIndent()
 
         val out = mutableMapOf<Long, CampsiteProviderRefRow>()
@@ -154,4 +168,15 @@ class CampsiteProviderRepo(
         }
         return out
     }
+
+    private fun providerRefShapeSql(payloadExpression: String): String =
+        """
+        (
+          jsonb_exists($payloadExpression, 'recgov_id')
+          OR (jsonb_exists($payloadExpression, 'mapId') AND jsonb_exists($payloadExpression, 'transactionLocationId'))
+          OR jsonb_exists($payloadExpression, 'park_id')
+          OR jsonb_exists($payloadExpression, 'facility_id')
+          OR jsonb_exists($payloadExpression, 'place_id')
+        )
+        """.trimIndent()
 }

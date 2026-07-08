@@ -44,6 +44,7 @@ import {
   upstreamHTML,
 } from './shared.js';
 import { requestPoiDetail } from '../api/poi-api.js';
+import { mountAvailabilityWeek } from '../availability/availability-week.js';
 
 // Tracks the currently mounted week component so we can dispose it on
 // re-render (pin-reselect, hydration completing, retry). Disposal kills
@@ -260,11 +261,12 @@ function renderShell(f, signal) {
   mountedWeek?.dispose();
   mountedWeek = null;
 
+  if (hasAvailability) {
+    const host = content.querySelector('.cg-availability-mount');
+    if (host) mountedWeek = mountAvailabilityWeek(host, f, { signal });
+  }
 }
 
-function availabilitySupported(_p) {
-  // The old per-POI reservables availability route was retired with the
-  // canonical campsite catalog reset. Re-enable when the drawer reads
-  // canonical campsite availability instead of RID streams.
-  return false;
+function availabilitySupported(p) {
+  return p?.availability_supported === true || p?.availabilitySupported === true;
 }

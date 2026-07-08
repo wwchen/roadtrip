@@ -121,7 +121,18 @@ class CanonicalCatalogRepo(
                 sourceUrl = record.sourceUrl,
                 payload = record.vendorRefPayload,
             )
-        val campgroundId = campgroundIdForVendorRef(vendorRefId)
+        val additionalVendorRefIds =
+            record.additionalVendorRefs.map { ref ->
+                upsertVendorRef(
+                    vendor = ref.vendor,
+                    entityType = CAMPGROUND_ENTITY,
+                    externalId = ref.vendorRefId,
+                    externalName = record.name,
+                    sourceUrl = ref.sourceUrl,
+                    payload = ref.payload,
+                )
+            }
+        val campgroundId = firstCampgroundIdForVendorRefs(listOf(vendorRefId) + additionalVendorRefIds)
         val persistedCampgroundId =
             if (campgroundId == null) {
                 insertCampground(record)
@@ -129,7 +140,10 @@ class CanonicalCatalogRepo(
                 updateCampground(campgroundId, record)
                 campgroundId
             }
-        linkCampgroundVendorRef(persistedCampgroundId, vendorRefId)
+        linkCampgroundVendorRef(persistedCampgroundId, vendorRefId, primary = true)
+        for (secondaryVendorRefId in additionalVendorRefIds) {
+            linkCampgroundVendorRef(persistedCampgroundId, secondaryVendorRefId, primary = false)
+        }
         upsertCampgroundPoi(persistedCampgroundId, record.longitude, record.latitude)
         return true
     }
@@ -149,7 +163,18 @@ class CanonicalCatalogRepo(
                 sourceUrl = record.reservationUrl,
                 payload = record.vendorRefPayload,
             )
-        val campsiteId = campsiteIdForVendorRef(vendorRefId)
+        val additionalVendorRefIds =
+            record.additionalVendorRefs.map { ref ->
+                upsertVendorRef(
+                    vendor = ref.vendor,
+                    entityType = CAMPSITE_ENTITY,
+                    externalId = ref.vendorRefId,
+                    externalName = record.name,
+                    sourceUrl = ref.sourceUrl,
+                    payload = ref.payload,
+                )
+            }
+        val campsiteId = firstCampsiteIdForVendorRefs(listOf(vendorRefId) + additionalVendorRefIds)
         val persistedCampsiteId =
             if (campsiteId == null) {
                 insertCampsite(campgroundId, record)
@@ -157,7 +182,10 @@ class CanonicalCatalogRepo(
                 updateCampsite(campsiteId, campgroundId, record)
                 campsiteId
             }
-        linkCampsiteVendorRef(persistedCampsiteId, vendorRefId)
+        linkCampsiteVendorRef(persistedCampsiteId, vendorRefId, primary = true)
+        for (secondaryVendorRefId in additionalVendorRefIds) {
+            linkCampsiteVendorRef(persistedCampsiteId, secondaryVendorRefId, primary = false)
+        }
         return true
     }
 
@@ -220,6 +248,13 @@ class CanonicalCatalogRepo(
                 vendorRefId,
             )?.get("campground_id", Long::class.java)
 
+    private fun firstCampgroundIdForVendorRefs(vendorRefIds: List<Long>): Long? {
+        for (vendorRefId in vendorRefIds.distinct()) {
+            campgroundIdForVendorRef(vendorRefId)?.let { return it }
+        }
+        return null
+    }
+
     private fun campgroundIdForVendor(
         vendor: String,
         externalId: String,
@@ -246,6 +281,13 @@ class CanonicalCatalogRepo(
                 "SELECT campsite_id FROM campsite_vendor_refs WHERE vendor_ref_id = ?",
                 vendorRefId,
             )?.get("campsite_id", Long::class.java)
+
+    private fun firstCampsiteIdForVendorRefs(vendorRefIds: List<Long>): Long? {
+        for (vendorRefId in vendorRefIds.distinct()) {
+            campsiteIdForVendorRef(vendorRefId)?.let { return it }
+        }
+        return null
+    }
 
     private fun teslaSuperchargerIdForLocationSlug(locationSlug: String): Long? =
         ctx
@@ -379,21 +421,28 @@ class CanonicalCatalogRepo(
     private fun linkCampgroundVendorRef(
         campgroundId: Long,
         vendorRefId: Long,
+        primary: Boolean,
     ) {
-        ctx.execute(
-            "UPDATE campground_vendor_refs SET is_primary = false, updated_at = now() WHERE campground_id = ? AND vendor_ref_id <> ?",
-            campgroundId,
-            vendorRefId,
-        )
+        if (primary) {
+            ctx.execute(
+                "UPDATE campground_vendor_refs SET is_primary = false, updated_at = now() WHERE campground_id = ? AND vendor_ref_id <> ?",
+                campgroundId,
+                vendorRefId,
+            )
+        }
         ctx.execute(
             """
             INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, is_primary, updated_at)
-            VALUES (?, ?, true, now())
+            VALUES (?, ?, ?, now())
             ON CONFLICT (campground_id, vendor_ref_id)
-            DO UPDATE SET is_primary = true, updated_at = now()
+            DO UPDATE SET
+              is_primary = CASE WHEN ? THEN true ELSE campground_vendor_refs.is_primary END,
+              updated_at = now()
             """.trimIndent(),
             campgroundId,
             vendorRefId,
+            primary,
+            primary,
         )
     }
 
@@ -801,21 +850,28 @@ class CanonicalCatalogRepo(
     private fun linkCampsiteVendorRef(
         campsiteId: Long,
         vendorRefId: Long,
+        primary: Boolean,
     ) {
-        ctx.execute(
-            "UPDATE campsite_vendor_refs SET is_primary = false, updated_at = now() WHERE campsite_id = ? AND vendor_ref_id <> ?",
-            campsiteId,
-            vendorRefId,
-        )
+        if (primary) {
+            ctx.execute(
+                "UPDATE campsite_vendor_refs SET is_primary = false, updated_at = now() WHERE campsite_id = ? AND vendor_ref_id <> ?",
+                campsiteId,
+                vendorRefId,
+            )
+        }
         ctx.execute(
             """
             INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id, is_primary, updated_at)
-            VALUES (?, ?, true, now())
+            VALUES (?, ?, ?, now())
             ON CONFLICT (campsite_id, vendor_ref_id)
-            DO UPDATE SET is_primary = true, updated_at = now()
+            DO UPDATE SET
+              is_primary = CASE WHEN ? THEN true ELSE campsite_vendor_refs.is_primary END,
+              updated_at = now()
             """.trimIndent(),
             campsiteId,
             vendorRefId,
+            primary,
+            primary,
         )
     }
 

@@ -13,10 +13,25 @@ export function resetOverlay(sourceIds, layerIds) {
   for (const id of sourceIds) if (map.getSource(id)) map.removeSource(id);
 }
 
-export function bindCursor(layerId) {
+const cursorHandlers = new Map();
+
+export function rebindLayerHandler(type, layerId, handler) {
   const { map } = state;
-  map.on('mouseenter', layerId, () => map.getCanvas().style.cursor = 'pointer');
-  map.on('mouseleave', layerId, () => map.getCanvas().style.cursor = '');
+  map.off(type, layerId, handler);
+  map.on(type, layerId, handler);
+}
+
+export function bindCursor(layerId) {
+  let handlers = cursorHandlers.get(layerId);
+  if (!handlers) {
+    handlers = {
+      enter: () => { state.map.getCanvas().style.cursor = 'pointer'; },
+      leave: () => { state.map.getCanvas().style.cursor = ''; },
+    };
+    cursorHandlers.set(layerId, handlers);
+  }
+  rebindLayerHandler('mouseenter', layerId, handlers.enter);
+  rebindLayerHandler('mouseleave', layerId, handlers.leave);
 }
 
 // SC are pre-filtered to OPEN-only at fetch time, so the runtime layer
@@ -47,6 +62,31 @@ const cgKnownAgencies = Object.fromEntries(
 const cgFilterListeners = new Set();
 let lastCgGeojson = CG_EMPTY_FC;
 let cgFilterControlsBound = false;
+
+function openFirstCampgroundFeature(e) {
+  const f = e.features?.[0];
+  if (f) openCampgroundDrawer(f);
+}
+
+function openNationalParkFeature(e) {
+  const f = e.features?.[0];
+  if (f) openParkDrawer('np', f, e.lngLat);
+}
+
+function openStateParkFeature(e) {
+  const f = e.features?.[0];
+  if (f) openParkDrawer('sp', f, e.lngLat);
+}
+
+function openFirstPlanetFitnessFeature(e) {
+  const f = e.features?.[0];
+  if (f) openPlanetFitnessDrawer(f);
+}
+
+function openFirstSuperchargerFeature(e) {
+  const f = e.features?.[0];
+  if (f) openSuperchargerDrawer(f);
+}
 
 function normalizeAgency(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -314,10 +354,7 @@ export function installCGLayer(geojson) {
   // Bind to the hit layer (transparent, generous radius); MapLibre dispatches
   // to the topmost matching layer, so the underlying visual layer never sees
   // the click.
-  map.on('click', 'cg-points-hit', (e) => {
-    const f = e.features[0];
-    openCampgroundDrawer(f);
-  });
+  rebindLayerHandler('click', 'cg-points-hit', openFirstCampgroundFeature);
   bindCursor('cg-points-hit');
 
   if (state.bound.cg) return;
@@ -442,13 +479,10 @@ export function installParkLayers(np, sp) {
   };
   applyParkVis();
 
-  const parkClick = (kind) => (e) => {
-    openParkDrawer(kind, e.features[0], e.lngLat);
-  };
-  map.on('click', 'np-fill', parkClick('np'));
-  map.on('click', 'sp-fill', parkClick('sp'));
-  map.on('click', 'np-pts-hit',  parkClick('np'));
-  map.on('click', 'sp-pts-hit',  parkClick('sp'));
+  rebindLayerHandler('click', 'np-fill', openNationalParkFeature);
+  rebindLayerHandler('click', 'sp-fill', openStateParkFeature);
+  rebindLayerHandler('click', 'np-pts-hit', openNationalParkFeature);
+  rebindLayerHandler('click', 'sp-pts-hit', openStateParkFeature);
   for (const id of ['np-fill', 'sp-fill', 'np-pts-hit', 'sp-pts-hit']) bindCursor(id);
 
   if (state.bound.np) return;
@@ -488,10 +522,7 @@ export function installPFLayer(geojson) {
   };
   applyPFVis();
 
-  map.on('click', 'pf-points-hit', (e) => {
-    const f = e.features[0];
-    openPlanetFitnessDrawer(f);
-  });
+  rebindLayerHandler('click', 'pf-points-hit', openFirstPlanetFitnessFeature);
   bindCursor('pf-points-hit');
 
   if (state.bound.pf) return;
@@ -526,9 +557,7 @@ export function installSCLayer(geojson) {
   });
   updateFilter();
 
-  map.on('click', 'sc-points-hit', (e) => {
-    openSuperchargerDrawer(e.features[0]);
-  });
+  rebindLayerHandler('click', 'sc-points-hit', openFirstSuperchargerFeature);
   bindCursor('sc-points-hit');
 
   if (state.bound.sc) return;

@@ -1,5 +1,4 @@
-// Retired reservable-by-date availability matrix for the campground drawer.
-// Kept unmounted until the view is rebuilt on canonical campsite catalog data.
+// Campsite-by-date availability matrix for the campground drawer.
 
 import { escapeHtml } from '../core.js';
 import { renderSiteDetail } from './site-detail.js';

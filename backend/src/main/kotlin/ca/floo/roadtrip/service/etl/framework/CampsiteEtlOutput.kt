@@ -57,6 +57,7 @@ data class CampgroundEtlRecord(
     val sourceUrl: String? = null,
     val sourcePayload: JsonElement? = null,
     val vendorRefPayload: JsonElement? = null,
+    val additionalVendorRefs: List<CatalogVendorRefEtlRecord> = emptyList(),
 )
 
 data class CampsiteEtlRecord(
@@ -89,6 +90,14 @@ data class CampsiteEtlRecord(
     val photos: JsonElement? = null,
     val sourcePayload: JsonElement? = null,
     val vendorRefPayload: JsonElement? = null,
+    val additionalVendorRefs: List<CatalogVendorRefEtlRecord> = emptyList(),
+)
+
+data class CatalogVendorRefEtlRecord(
+    val vendor: String,
+    val vendorRefId: String,
+    val sourceUrl: String? = null,
+    val payload: JsonElement? = null,
 )
 
 data class TeslaSuperchargerEtlRecord(

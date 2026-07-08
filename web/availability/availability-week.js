@@ -8,14 +8,14 @@
 // Render is split into pure modules:
 //   - day-detail.js         — selected-day panel + alert / reserve CTAs.
 //   - site-list.js          — all-site catalog or selected-day availability.
-//   - site-matrix.js        — reservable rows crossed with visible dates.
+//   - site-matrix.js        — campsite rows crossed with visible dates.
 //
 // The drawer chrome (chrome.js) supplies the AbortSignal and active-feature
 // guard; see openCampgroundDrawer in drawer/campground.js.
 
 import { escapeHtml } from '../core.js';
-import { requestPoiReservablesAvailability } from '../api/availability-api.js';
-import { fetchPoiReservables } from '../api/reservable-api.js';
+import { requestPoiCampsitesAvailability } from '../api/availability-api.js';
+import { fetchPoiCampsites } from '../api/reservable-api.js';
 import { createWatch, deleteWatch, listWatches } from '../api/watches-api.js';
 import { renderDayDetail } from './day-detail.js';
 import { renderSiteMatrix, renderSiteMatrixSkeleton } from './site-matrix.js';
@@ -106,9 +106,6 @@ function makeContext(host, feature, signal) {
     error: null,
     watchesByWindow: new Map(),
     skeletonTimer: null,
-    // Retired drawer matrix state. The old per-POI reservable endpoints are
-    // no longer mounted; this module stays unmounted until campsite-scoped
-    // availability is rebuilt on the canonical catalog.
     sitesState: 'loading',
     sites: [],
     sitesError: null,
@@ -682,7 +679,7 @@ async function fetchWeek(ctx) {
   const startDate = localYmd(ctx.weekStart);
   const endDate = localYmd(addLocalDays(ctx.weekStart, WEEK_DAYS));
   try {
-    const resp = await requestPoiReservablesAvailability(ctx.poiId, {
+    const resp = await requestPoiCampsitesAvailability(ctx.poiId, {
       startDate,
       endDate,
       signal: ctx.signal,
@@ -698,7 +695,7 @@ async function fetchWeek(ctx) {
     }
     const json = await resp.json();
     if (requestSeq !== ctx.weekRequestSeq) return;
-    const fused = fusePoiReservablesAvailability(json, startDate, endDate);
+    const fused = fusePoiCampsitesAvailability(json, startDate, endDate);
     ctx.cacheBlock = fused.cacheBlock;
     if (fused.state === 'empty') {
       ctx.state = 'empty';
@@ -722,21 +719,20 @@ async function fetchWeek(ctx) {
   }
 }
 
-// Fuse the BE response (one envelope per reservable) into the per-day
-// classifications the matrix renders. Server-side classification ran a single
-// rollup over all reservables; the new endpoint hands us the streams and lets
-// the FE decide how to combine them. Same rollup rules:
+// Fuse the BE response (one envelope per campsite) into the per-day
+// classifications the matrix renders. The endpoint hands us the streams and
+// lets the FE decide how to combine them. Same rollup rules:
 //   - status: available > first_come > unknown > reserved > closed > unknown
 //   - reservable_statuses: { rid → status } for the matrix tooltip
 //   - available_reservable_ids: rids that are bookable that day
 //
 // state shortcut:
-//   - reservables: []          → 'empty' (POI has no online-bookable sites)
-//   - every reservable closed_for_season → 'closed_for_season' (carry a
-//     season block from the first reservable that has one)
+//   - campsites: []          → 'empty' (POI has no online-bookable sites)
+//   - every campsite closed_for_season → 'closed_for_season' (carry a season
+//     block from the first campsite that has one)
 //   - else                     → 'success'
-function fusePoiReservablesAvailability(json, startDate, endDate) {
-  const reservables = Array.isArray(json?.reservables) ? json.reservables : [];
+function fusePoiCampsitesAvailability(json, startDate, endDate) {
+  const reservables = Array.isArray(json?.campsites) ? json.campsites : [];
   if (reservables.length === 0) {
     return {
       state: 'empty',
@@ -827,13 +823,13 @@ async function fetchSites(ctx) {
   ctx.sitesError = null;
   rerender(ctx);
   try {
-    const json = await fetchPoiReservables(ctx.poiId, {
+    const json = await fetchPoiCampsites(ctx.poiId, {
       signal: ctx.signal,
     });
     if (ctx.signal?.aborted) return;
     if (requestSeq !== ctx.sitesRequestSeq) return;
     ctx.sitesState = 'success';
-    ctx.sites = Array.isArray(json?.reservables) ? json.reservables : [];
+    ctx.sites = Array.isArray(json?.campsites) ? json.campsites : [];
     rerender(ctx);
   } catch (e) {
     if (e.name === 'AbortError') return;

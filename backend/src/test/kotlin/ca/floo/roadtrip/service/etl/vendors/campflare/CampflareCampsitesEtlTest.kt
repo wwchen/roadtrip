@@ -47,10 +47,19 @@ class CampflareCampsitesEtlTest {
                 .jsonObject["name"]!!
                 .jsonPrimitive
                 .content
+        val recgovRef = row.additionalVendorRefs.single()
         assertEquals("Tent", equipmentName)
         assertEquals(6, row.maxPeople)
         assertEquals("upper-pines-campground-447", parentCampgroundId)
         assertEquals("Site 001", sourceName)
+        assertEquals("recgov", recgovRef.vendor)
+        assertEquals("001", recgovRef.vendorRefId)
+        assertEquals(
+            "001",
+            recgovRef.payload!!
+                .jsonObject["recgov_id"]!!
+                .jsonPrimitive.content,
+        )
     }
 
     @Test
