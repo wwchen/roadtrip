@@ -412,10 +412,10 @@ poi_data:
         inputs: [tesla-index]
 
 # ============================================================================
-# reservable_data — reservable catalogs (RFC 0008). Each row's terminal etl
-# emits ReservableEtlOutput; the orchestrator upserts via ReservableRepo.
-# No POI knowledge in these ETLs — see poi_reservable_joiner below for
-# the linking concern.
+# reservable_data — legacy campsite catalog declarations. These vendor
+# adapters are kept in code and migrated to canonical campsite output, but the
+# section is disabled until the canonical campgrounds/campsites writer lands.
+# No new data should be written to the removed reservables table.
 # ============================================================================
 reservable_data:
   - name: Federal Campsites
@@ -475,13 +475,10 @@ reservable_data:
         inputs: [reserveamerica-campsites-ny]
 
 # ============================================================================
-# poi_reservable_joiner — link rows in the reservable_pois table. Each row
-# names one adapter class from the joiner registry. Adapters read both
-# tables, emit (reservable_id, poi_id) pairs, and the orchestrator inserts
-# them via ReservableRepo.linkToPoi (idempotent ON CONFLICT DO NOTHING).
-#
-# Joiners are independent of ETL runs — re-running picks up new pairs as
-# rows appear in pois/reservables.
+# poi_reservable_joiner — legacy parent resolver declarations. The adapter
+# names remain for compatibility with the registry shape, but canonicalized
+# code resolves campsite_id → campground_id through vendor_refs and remains
+# disabled until the new catalog writer/reconciler uses it.
 # ============================================================================
 poi_reservable_joiner:
   - name: Federal Campsites → Federal Campgrounds

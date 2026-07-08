@@ -150,6 +150,9 @@ ALTER TABLE availability_watch_target
 ALTER TABLE availability_watch
   RENAME COLUMN reservable_filters TO campsite_filters;
 
+ALTER TABLE availability_fetch_call
+  RENAME COLUMN reservable_count TO campsite_count;
+
 ALTER INDEX IF EXISTS availability_current_idx
   RENAME TO availability_campsite_current_idx;
 

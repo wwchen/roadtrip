@@ -13,14 +13,7 @@ import kotlin.test.assertTrue
 class AvailabilityWatchRepoTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability_run")
-        ctx.execute("DELETE FROM availability_watch_poller")
-        ctx.execute("DELETE FROM availability_poller")
-        ctx.execute("DELETE FROM availability_watch_target")
-        ctx.execute("DELETE FROM availability_watch")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     private fun insertPoller(poiId: Long): Long =
@@ -59,21 +52,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
 
     private fun insertPoi(): Long {
         val sourceId = "poi-repo-${poiSeq++}"
-        return ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
-                ) VALUES (
-                    'test', ?, 'campground', 'Upper Pines',
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
-                ) RETURNING id
-                """.trimIndent(),
-                sourceId,
-            )!!
-            .get("id", Long::class.java)
+        return ctx.seedCatalogPoi(sourceId = sourceId, name = "Upper Pines", lon = -119.56, lat = 37.74).poiId
     }
 
     private fun createInput(targets: List<AvailabilityWatchTargetRepo.TargetInput>): AvailabilityWatchRepo.CreateInput =

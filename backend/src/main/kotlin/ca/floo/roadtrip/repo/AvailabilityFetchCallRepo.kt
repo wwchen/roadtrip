@@ -18,7 +18,7 @@ class AvailabilityFetchCallRepo(
         val runId: Long,
         val provider: String,
         val parentRef: String,
-        val reservableCount: Int,
+        val campsiteCount: Int,
         val windowStart: LocalDate,
         val windowEnd: LocalDate,
         val outcome: String,
@@ -35,7 +35,7 @@ class AvailabilityFetchCallRepo(
             .set(AVAILABILITY_FETCH_CALL.RUN_ID, call.runId)
             .set(AVAILABILITY_FETCH_CALL.PROVIDER, call.provider)
             .set(AVAILABILITY_FETCH_CALL.PARENT_REF, call.parentRef)
-            .set(AVAILABILITY_FETCH_CALL.RESERVABLE_COUNT, call.reservableCount)
+            .set(AVAILABILITY_FETCH_CALL.CAMPSITE_COUNT, call.campsiteCount)
             .set(AVAILABILITY_FETCH_CALL.WINDOW_START, call.windowStart)
             .set(AVAILABILITY_FETCH_CALL.WINDOW_END, call.windowEnd)
             .set(AVAILABILITY_FETCH_CALL.OUTCOME, call.outcome)
@@ -60,7 +60,7 @@ class AvailabilityFetchCallRepo(
             runId = r.get(AVAILABILITY_FETCH_CALL.RUN_ID)!!,
             provider = r.get(AVAILABILITY_FETCH_CALL.PROVIDER)!!,
             parentRef = r.get(AVAILABILITY_FETCH_CALL.PARENT_REF)!!,
-            reservableCount = r.get(AVAILABILITY_FETCH_CALL.RESERVABLE_COUNT)!!,
+            campsiteCount = r.get(AVAILABILITY_FETCH_CALL.CAMPSITE_COUNT)!!,
             windowStart = r.get(AVAILABILITY_FETCH_CALL.WINDOW_START)!!,
             windowEnd = r.get(AVAILABILITY_FETCH_CALL.WINDOW_END)!!,
             outcome = r.get(AVAILABILITY_FETCH_CALL.OUTCOME)!!,

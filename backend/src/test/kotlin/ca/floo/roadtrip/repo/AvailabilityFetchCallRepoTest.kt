@@ -12,31 +12,10 @@ import kotlin.test.assertFailsWith
 class AvailabilityFetchCallRepoTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability_fetch_call")
-        ctx.execute("DELETE FROM availability_run")
-        ctx.execute("DELETE FROM availability_watch_poller")
-        ctx.execute("DELETE FROM availability_poller")
-        ctx.execute("DELETE FROM availability_watch")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
-    private fun seedPoi(): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
-                ) VALUES (
-                    'test', 'p1', 'campground', 'Upper Pines',
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
-                ) RETURNING id
-                """.trimIndent(),
-            )!!
-            .get("id", Long::class.java)
+    private fun seedPoi(): Long = ctx.seedCatalogPoi(sourceId = "p1", name = "Upper Pines", lon = -119.56, lat = 37.74).poiId
 
     /** Seeds a poller for (recgov, 232447) rooted at [poiId]. Returns its id. */
     private fun seedPoller(poiId: Long): Long =
@@ -59,7 +38,7 @@ class AvailabilityFetchCallRepoTest : SharedDbTest() {
                 runId = runId,
                 provider = "recgov",
                 parentRef = "232447",
-                reservableCount = 235,
+                campsiteCount = 235,
                 windowStart = LocalDate.parse("2026-07-17"),
                 windowEnd = LocalDate.parse("2026-07-31"),
                 outcome = "rate_limited",
@@ -70,7 +49,7 @@ class AvailabilityFetchCallRepoTest : SharedDbTest() {
         val rows = repo.listForRun(runId)
         assertEquals(1, rows.size)
         assertEquals("rate_limited", rows[0].outcome)
-        assertEquals(235, rows[0].reservableCount)
+        assertEquals(235, rows[0].campsiteCount)
         assertEquals("recgov", rows[0].provider)
         assertEquals("232447", rows[0].parentRef)
         assertEquals(LocalDate.parse("2026-07-17"), rows[0].windowStart)
@@ -91,7 +70,7 @@ class AvailabilityFetchCallRepoTest : SharedDbTest() {
                     runId = runId,
                     provider = "recgov",
                     parentRef = "232447",
-                    reservableCount = 1,
+                    campsiteCount = 1,
                     windowStart = LocalDate.parse("2026-07-17"),
                     windowEnd = LocalDate.parse("2026-07-31"),
                     outcome = "bogus",

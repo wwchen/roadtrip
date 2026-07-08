@@ -4,6 +4,8 @@ import ca.floo.roadtrip.clients.mapbox.MapboxDirections
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.models.routing.RouteResponse
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.routing.RouteCache
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -38,7 +40,7 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
 
     @BeforeEach
     fun reset() {
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
         ctx.execute("DELETE FROM import_runs")
     }
 
@@ -354,25 +356,16 @@ class PoisOnRouteRoutesTest : SharedDbTest() {
 
     private fun seed(rows: List<TestRow>) {
         for (r in rows) {
-            ctx.execute(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, provider_ref, agency, fetched_at
-                ) VALUES (
-                    ?, ?, ?, ?,
-                    ST_SetSRID(ST_GeomFromGeoJSON(?), 4326),
-                    ?::jsonb,
-                    ?,
-                    '2026-06-01 00:00:00+00'::timestamptz
-                )
-                """.trimIndent(),
-                r.source,
-                r.sourceId,
-                r.category,
-                r.name,
-                r.geomGeoJson,
-                r.providerRefJson,
-                r.agency,
+            ctx.seedCatalogPoi(
+                sourceId = r.sourceId,
+                name = r.name,
+                lon = 0.0,
+                lat = 0.0,
+                poiType = r.category,
+                source = r.source,
+                providerRefJson = r.providerRefJson,
+                agency = r.agency,
+                geomGeoJson = r.geomGeoJson,
             )
         }
     }

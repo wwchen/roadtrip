@@ -297,7 +297,7 @@ internal class PoiServingRepo(
                                  PARTITION BY
                                    floor((ST_X(ST_Centroid(p.geom)) - ?) / ?)::int,
                                    floor((ST_Y(ST_Centroid(p.geom)) - ?) / ?)::int
-                                 ORDER BY id
+                                 ORDER BY p.id
                                ) AS rn
                         FROM pois p
                         LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id

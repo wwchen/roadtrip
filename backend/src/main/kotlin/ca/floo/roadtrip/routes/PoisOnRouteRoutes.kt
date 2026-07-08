@@ -45,6 +45,7 @@ private val onRouteJson =
     }
 
 private val onRouteLog = LoggerFactory.getLogger("PoisOnRouteRoutes")
+private val DEFAULT_ON_ROUTE_POI_TYPES = listOf("campground", "tesla_supercharger", "planet_fitness_location")
 
 // POST /api/pois/on-route
 //
@@ -56,12 +57,7 @@ fun Route.poisOnRouteRoutes(
     routeCache: RouteCache,
     registry: PoiRegistry,
 ) {
-    val defaultCategories: List<String> =
-        registry
-            .enabledPoiData()
-            .map { it.category }
-            .toSet()
-            .toList()
+    val defaultCategories: List<String> = DEFAULT_ON_ROUTE_POI_TYPES
     val onRoutePoiRepo = OnRoutePoiRepo(ctx)
     val routeCorridorRepo = RouteCorridorRepo(ctx)
 

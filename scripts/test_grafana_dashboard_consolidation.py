@@ -67,17 +67,14 @@ class GrafanaDashboardConsolidationTest(unittest.TestCase):
         self.assertFalse(RETIRED_PROVIDER_CACHE_PATH.exists())
         self.assertNotIn(RETIRED_PROVIDER_CACHE_URL, all_dashboard_text())
         self.assertIn("API cache by namespace", db_stats_titles)
-        self.assertIn(
-            "Availability Provider Cache For Selected Reservable",
-            catalog_explorer_titles,
-        )
+        self.assertIn("Availability Provider Cache For Selected Campsite", catalog_explorer_titles)
 
     def test_availability_matrix_dashboard_is_retired(self) -> None:
-        poi_reservables_titles = panel_titles(dashboard("poi-reservables.json"))
+        poi_campsites_titles = panel_titles(dashboard("poi-campsites.json"))
 
         self.assertFalse(RETIRED_AVAILABILITY_MATRIX_PATH.exists())
         self.assertNotIn(RETIRED_AVAILABILITY_MATRIX_URL, all_dashboard_text())
-        self.assertIn("Availability grid (next 30 days)", poi_reservables_titles)
+        self.assertIn("Availability grid (next 30 days)", poi_campsites_titles)
 
 
 if __name__ == "__main__":

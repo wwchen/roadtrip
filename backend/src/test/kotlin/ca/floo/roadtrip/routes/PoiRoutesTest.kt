@@ -2,6 +2,8 @@ package ca.floo.roadtrip.routes
 
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCatalogPoi
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -29,7 +31,7 @@ class PoiRoutesTest : SharedDbTest() {
 
     @BeforeEach
     fun reset() {
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
         ctx.execute("DELETE FROM import_runs")
     }
 
@@ -97,8 +99,8 @@ class PoiRoutesTest : SharedDbTest() {
             seed(
                 listOf(
                     row("camp-1", "Camp A", -123.0, 49.0, "campground"),
-                    row("park-1", "State Park A", -123.05, 49.05, "state-park"),
-                    row("pf-1", "PF Vancouver", -123.1, 49.1, "planet-fitness"),
+                    row("tesla-1", "Tesla Vancouver", -123.05, 49.05, "tesla_supercharger"),
+                    row("pf-1", "PF Vancouver", -123.1, 49.1, "planet_fitness_location"),
                 ),
             )
             application { routing { poiRoutes(ctx, testRegistry) } }
@@ -106,7 +108,7 @@ class PoiRoutesTest : SharedDbTest() {
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-120,51", categories = listOf("campground", "state-park")))
+                    setBody(body("-125,47,-120,51", categories = listOf("campground", "tesla_supercharger")))
                 }
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val cats =
@@ -117,7 +119,7 @@ class PoiRoutesTest : SharedDbTest() {
                             .jsonObject["category"]!!
                             .jsonPrimitive.content
                     }.toSet()
-            assertEquals(setOf("campground", "state-park"), cats)
+            assertEquals(setOf("campground", "tesla_supercharger"), cats)
         }
 
     @Test
@@ -126,7 +128,7 @@ class PoiRoutesTest : SharedDbTest() {
             seed(
                 listOf(
                     row("nps-camp", "National Park Camp", -123.0, 49.0, "campground", agency = "National Park Service"),
-                    row("pf-1", "PF Vancouver", -123.1, 49.1, "planet-fitness"),
+                    row("pf-1", "PF Vancouver", -123.1, 49.1, "planet_fitness_location"),
                 ),
             )
             application { routing { poiRoutes(ctx, testRegistry) } }
@@ -134,7 +136,7 @@ class PoiRoutesTest : SharedDbTest() {
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-120,51", categories = listOf("campground", "planet-fitness")))
+                    setBody(body("-125,47,-120,51", categories = listOf("campground", "planet_fitness_location")))
                 }
             val features = Json.parseToJsonElement(resp.bodyAsText()).jsonObject["features"]!!.jsonArray
             val campgroundProps =
@@ -150,7 +152,7 @@ class PoiRoutesTest : SharedDbTest() {
                     .first {
                         it.jsonObject["properties"]!!
                             .jsonObject["category"]!!
-                            .jsonPrimitive.content == "planet-fitness"
+                            .jsonPrimitive.content == "planet_fitness_location"
                     }.jsonObject["properties"]!!
                     .jsonObject
 
@@ -342,7 +344,7 @@ class PoiRoutesTest : SharedDbTest() {
             seed(
                 listOf(
                     row("cg-1", "Camp", -123.0, 49.0, "campground"),
-                    row("sp-1", "Park", -123.05, 49.05, "state-park"),
+                    row("tesla-1", "Tesla", -123.05, 49.05, "tesla_supercharger"),
                 ),
             )
             application { routing { poiRoutes(ctx, testRegistry) } }
@@ -352,7 +354,7 @@ class PoiRoutesTest : SharedDbTest() {
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-120,51", categories = listOf("campground", "state-park"), zoom = 4))
+                    setBody(body("-125,47,-120,51", categories = listOf("campground", "tesla_supercharger"), zoom = 4))
                 }
             val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val cats =
@@ -363,7 +365,7 @@ class PoiRoutesTest : SharedDbTest() {
                             .jsonObject["category"]!!
                             .jsonPrimitive.content
                     }.toSet()
-            assertEquals(setOf("state-park"), cats)
+            assertEquals(setOf("tesla_supercharger"), cats)
         }
 
     @Test
@@ -400,8 +402,8 @@ class PoiRoutesTest : SharedDbTest() {
             seed(
                 listOf(
                     row("upper-camp", "Upper Pines Campground", -119.56, 37.74, "campground"),
-                    row("upper-pf", "Upper Planet Fitness", -119.40, 37.70, "planet-fitness"),
-                    row("upper-sc", "Upper Supercharger", -119.30, 37.80, "supercharger"),
+                    row("upper-pf", "Upper Planet Fitness", -119.40, 37.70, "planet_fitness_location"),
+                    row("upper-sc", "Upper Supercharger", -119.30, 37.80, "tesla_supercharger"),
                 ),
             )
             application { routing { poiRoutes(ctx, testRegistry) } }
@@ -422,13 +424,13 @@ class PoiRoutesTest : SharedDbTest() {
             seed(
                 listOf(
                     row("upper-camp", "Upper Pines Campground", -119.56, 37.74, "campground"),
-                    row("upper-pf", "Upper Planet Fitness", -119.40, 37.70, "planet-fitness"),
-                    row("upper-sc", "Upper Supercharger", -119.30, 37.80, "supercharger"),
+                    row("upper-pf", "Upper Planet Fitness", -119.40, 37.70, "planet_fitness_location"),
+                    row("upper-sc", "Upper Supercharger", -119.30, 37.80, "tesla_supercharger"),
                 ),
             )
             application { routing { poiRoutes(ctx, testRegistry) } }
 
-            val resp = client.get("/api/pois/search?q=upper&categories=campground,supercharger&limit=10")
+            val resp = client.get("/api/pois/search?q=upper&categories=campground,tesla_supercharger&limit=10")
             assertEquals(HttpStatusCode.OK, resp.status)
             val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val cats =
@@ -437,21 +439,21 @@ class PoiRoutesTest : SharedDbTest() {
                     .map {
                         it.jsonObject["category"]!!.jsonPrimitive.content
                     }.toSet()
-            assertEquals(setOf("campground", "supercharger"), cats)
+            assertEquals(setOf("campground", "tesla_supercharger"), cats)
         }
 
     @Test
     fun `per-category limit gives each category its own slot budget`() =
         testApplication {
-            // Seed 50 PF + 50 CG + 50 SP all in tight bbox. With per-cat limit
+            // Seed 50 PF + 50 CG + 50 Tesla rows all in tight bbox. With per-cat limit
             // of POI_LIMIT/3 = 666, each category returns all 50 of its rows
             // (no starvation).
             val rows =
                 buildList {
                     repeat(50) { i ->
-                        add(row("pf-$i", "PF $i", -123.0 + i * 0.0001, 49.0, "planet-fitness"))
+                        add(row("pf-$i", "PF $i", -123.0 + i * 0.0001, 49.0, "planet_fitness_location"))
                         add(row("cg-$i", "CG $i", -122.9 + i * 0.0001, 49.0, "campground"))
-                        add(row("sp-$i", "SP $i", -122.8 + i * 0.0001, 49.0, "state-park"))
+                        add(row("tesla-$i", "Tesla $i", -122.8 + i * 0.0001, 49.0, "tesla_supercharger"))
                     }
                 }
             seed(rows)
@@ -460,7 +462,7 @@ class PoiRoutesTest : SharedDbTest() {
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-120,51", categories = listOf("planet-fitness", "campground", "state-park")))
+                    setBody(body("-125,47,-120,51", categories = listOf("planet_fitness_location", "campground", "tesla_supercharger")))
                 }
             val parsed = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val byCat = mutableMapOf<String, Int>()
@@ -471,9 +473,9 @@ class PoiRoutesTest : SharedDbTest() {
                         .jsonPrimitive.content
                 byCat[c] = (byCat[c] ?: 0) + 1
             }
-            assertEquals(50, byCat["planet-fitness"])
+            assertEquals(50, byCat["planet_fitness_location"])
             assertEquals(50, byCat["campground"])
-            assertEquals(50, byCat["state-park"])
+            assertEquals(50, byCat["tesla_supercharger"])
         }
 
     @Test
@@ -489,7 +491,7 @@ class PoiRoutesTest : SharedDbTest() {
                 listOf(
                     TestRow(
                         sourceId = "poly-1",
-                        category = "state-park",
+                        category = "campground",
                         name = "Polygon Park",
                         geomGeoJson = polygonGeoJson,
                         region = "BC",
@@ -499,12 +501,12 @@ class PoiRoutesTest : SharedDbTest() {
             )
             application { routing { poiRoutes(ctx, testRegistry) } }
 
-            // state-park isn't in the default category set today (the
-            // PAD-US sources are disabled), so explicitly request it.
+            // Explicitly request campgrounds so this exercises the canonical
+            // wrapper category rather than the default set.
             val resp =
                 client.post("/api/pois") {
                     contentType(ContentType.Application.Json)
-                    setBody(body("-125,47,-120,51", categories = listOf("state-park")))
+                    setBody(body("-125,47,-120,51", categories = listOf("campground")))
                 }
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val feat = body["features"]!!.jsonArray.single().jsonObject
@@ -571,26 +573,17 @@ class PoiRoutesTest : SharedDbTest() {
         // ST_SetSRID(ST_GeomFromGeoJSON(...), 4326) so the SRID matches the
         // pois.geom column declaration.
         for (r in rows) {
-            ctx.execute(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom,
-                    agency, region, unit_name, properties, fetched_at
-                ) VALUES (
-                    ?, ?, ?, ?,
-                    ST_SetSRID(ST_GeomFromGeoJSON(?), 4326),
-                    ?, ?, ?, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
-                )
-                """.trimIndent(),
-                "test",
-                r.sourceId,
-                r.category,
-                r.name,
-                r.geomGeoJson,
-                r.agency,
-                r.region,
-                r.unitName,
-                r.properties,
+            ctx.seedCatalogPoi(
+                sourceId = r.sourceId,
+                name = r.name,
+                lon = 0.0,
+                lat = 0.0,
+                poiType = r.category,
+                agency = r.agency,
+                region = r.region,
+                propertiesJson = r.properties,
+                geomGeoJson = r.geomGeoJson,
+                subcategory = r.unitName,
             )
         }
     }

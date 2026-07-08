@@ -17,6 +17,9 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampsite
+import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
@@ -55,16 +58,7 @@ import kotlin.test.assertTrue
 class AvailabilityPollExecutorTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability")
-        ctx.execute("DELETE FROM availability_fetch_call")
-        ctx.execute("DELETE FROM availability_run")
-        ctx.execute("DELETE FROM availability_watch_target")
-        ctx.execute("DELETE FROM availability_watch_poller")
-        ctx.execute("DELETE FROM availability_poller")
-        ctx.execute("DELETE FROM availability_watch")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
@@ -75,47 +69,32 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         cadenceOverrideSec: Int? = null,
     ): Long =
         ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at, cadence_override_sec
-                ) VALUES (
-                    'test', ?, 'campground', 'Upper Pines',
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz, ?
-                ) RETURNING id
-                """.trimIndent(),
-                "poi-$campgroundId",
-                """{"recgov_id": "$campgroundId"}""",
-                cadenceOverrideSec,
-            )!!
-            .get("id", Long::class.java)
+            .seedCatalogPoi(
+                sourceId = "poi-$campgroundId",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "test",
+                providerRefJson = """{"recgov_id": "$campgroundId"}""",
+                cadenceOverrideSec = cadenceOverrideSec,
+            ).poiId
 
     /** Seeds one child reservable (site) linked to [poiId]. Returns its db id. */
     private fun seedReservable(
         poiId: Long,
         siteId: String,
-    ): Long {
-        val reservableId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO reservables (type, vendor, vendor_id, name, source)
-                    VALUES ('site', 'recgov', ?, ?, 'test')
-                    RETURNING id
-                    """.trimIndent(),
-                    siteId,
-                    "Site $siteId",
-                )!!
-                .get("id", Long::class.java)
-        ctx.execute(
-            "INSERT INTO reservable_pois (reservable_id, poi_id) VALUES (?, ?)",
-            reservableId,
-            poiId,
+    ): Long =
+        ctx.seedCampsite(
+            campgroundId = campgroundIdFor(poiId),
+            vendor = "recgov",
+            vendorId = siteId,
+            name = "Site $siteId",
         )
-        return reservableId
-    }
+
+    private fun campgroundIdFor(poiId: Long): Long =
+        ctx
+            .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
+            .get("campground_id", Long::class.java)
 
     /** Seeds an ACTIVE poi-scoped watch. Returns its id. A NULL [cadenceSec]
      *  means "no watch-level cadence override" (V34), exercising the fall-through
@@ -173,7 +152,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     endDate,
                 )!!
                 .get("id", Long::class.java)
-        ctx.execute("INSERT INTO availability_watch_target (watch_id, reservable_id) VALUES (?, ?)", watchId, reservableId)
+        ctx.execute("INSERT INTO availability_watch_target (watch_id, campsite_id) VALUES (?, ?)", watchId, reservableId)
         return watchId
     }
 
@@ -495,7 +474,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
             assertEquals(1, fetchCalls.size)
             assertEquals("ok", fetchCalls[0].outcome)
-            assertEquals(3, fetchCalls[0].reservableCount)
+            assertEquals(3, fetchCalls[0].campsiteCount)
             assertEquals("232447", fetchCalls[0].parentRef)
         }
 
@@ -519,7 +498,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
             val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
             assertEquals(1, fetchCalls.size)
-            assertEquals(3, fetchCalls[0].reservableCount, "fetches the parent catalog, not just the watched site")
+            assertEquals(3, fetchCalls[0].campsiteCount, "fetches the parent catalog, not just the watched site")
         }
 
     // --- Alerts (PR6): cube edge -> Slack notify ---
