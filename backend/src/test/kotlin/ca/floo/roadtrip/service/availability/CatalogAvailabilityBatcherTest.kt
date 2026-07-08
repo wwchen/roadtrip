@@ -8,6 +8,8 @@ import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
@@ -134,8 +136,9 @@ class CatalogAvailabilityBatcherTest {
                 ReservationProviderCapabilities(
                     supportsAvailability = true,
                     supportsAlerts = true,
-                    bookingHorizonDays = 180,
                     maxPollWindowDays = 60,
+                    bookingHorizon = CapabilityLimit(180, CapabilityTimeUnit.DAY),
+                    fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
                 )
 
             override suspend fun availability(

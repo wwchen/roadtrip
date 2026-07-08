@@ -58,9 +58,8 @@ class AspiraReservationProvider(
             // Alert poller is rec.gov-only today; Aspira polling is planned
             // (see RFC 0007). Keep this honest until the poller adapter lands.
             supportsAlerts = false,
-            bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
-            bookingHorizon = CapabilityLimit(tenant.bookingHorizonDays, CapabilityTimeUnit.DAY),
+            bookingHorizon = tenant.bookingHorizon,
             fetchWindowCap = CapabilityLimit(ASPIRA_MAX_POLL_WINDOW_DAYS, CapabilityTimeUnit.DAY),
         )
 

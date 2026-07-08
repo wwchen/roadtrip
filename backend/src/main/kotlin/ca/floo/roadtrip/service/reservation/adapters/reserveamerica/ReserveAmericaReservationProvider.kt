@@ -25,7 +25,7 @@ data class ReserveAmericaTenant(
     val source: String,
     val host: String,
     val contractCode: String,
-    val bookingHorizonDays: Int,
+    val bookingHorizon: CapabilityLimit,
 )
 
 /**
@@ -49,9 +49,8 @@ class ReserveAmericaReservationProvider(
             // The live endpoint can support polling, but watches stay off until
             // cadence and upstream load limits are validated for Active Network.
             supportsAlerts = false,
-            bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = RESERVEAMERICA_MAX_POLL_WINDOW_DAYS,
-            bookingHorizon = CapabilityLimit(tenant.bookingHorizonDays, CapabilityTimeUnit.DAY),
+            bookingHorizon = tenant.bookingHorizon,
             fetchWindowCap = CapabilityLimit(RESERVEAMERICA_FETCH_WINDOW_DAYS, CapabilityTimeUnit.DAY),
         )
 

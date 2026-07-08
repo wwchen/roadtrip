@@ -21,26 +21,20 @@ data class ReservationProviderCapabilities(
     /** Can be polled in the background to drive watches. */
     val supportsAlerts: Boolean,
     /**
-     * Compatibility day fallback for older date-window call sites. New
-     * availability flows should use [bookingHorizon], which preserves the
-     * upstream's native unit and exact calendar behavior.
-     */
-    val bookingHorizonDays: Int,
-    /**
      * Widest window, in days, the poller asks this vendor for in a single
-     * tick. This is a **load knob**, distinct from [bookingHorizonDays] (how
-     * far the upstream exposes): the poller always polls `[today, today +
-     * maxPollWindowDays)` — clamped to the horizon — independent of any
-     * watch's dates. A watch gates *whether* a poller runs (reference count),
-     * never *how wide* it fetches. Keep it inside a single upstream fetch
-     * shape (e.g. rec.gov shapes calls by month) so one tick doesn't fan out
-     * into ungoverned sub-calls. Zero means "don't poll" (unsupported stub).
+     * tick. This is a load knob, distinct from [bookingHorizon] (how far the
+     * upstream exposes): the poller always polls `[today, today +
+     * maxPollWindowDays)` — clamped to the horizon — independent of any watch's
+     * dates. A watch gates *whether* a poller runs (reference count), never
+     * *how wide* it fetches. Keep it inside a single upstream fetch shape
+     * (e.g. rec.gov shapes calls by month) so one tick doesn't fan out into
+     * ungoverned sub-calls. Zero means "don't poll" (unsupported stub).
      */
     val maxPollWindowDays: Int,
     /** User/operator-facing booking horizon in the vendor's native unit. */
-    val bookingHorizon: CapabilityLimit = CapabilityLimit(bookingHorizonDays, CapabilityTimeUnit.DAY),
+    val bookingHorizon: CapabilityLimit,
     /** User/operator-facing single upstream fetch window cap. */
-    val fetchWindowCap: CapabilityLimit = CapabilityLimit(maxPollWindowDays, CapabilityTimeUnit.DAY),
+    val fetchWindowCap: CapabilityLimit,
 ) {
     companion object {
         /** Reasonable starting point for a stub — can be flipped on as features land. */
@@ -48,8 +42,9 @@ data class ReservationProviderCapabilities(
             ReservationProviderCapabilities(
                 supportsAvailability = false,
                 supportsAlerts = false,
-                bookingHorizonDays = 0,
                 maxPollWindowDays = 0,
+                bookingHorizon = CapabilityLimit(0, CapabilityTimeUnit.DAY),
+                fetchWindowCap = CapabilityLimit(0, CapabilityTimeUnit.DAY),
             )
     }
 }

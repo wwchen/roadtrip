@@ -60,7 +60,7 @@ object ReservationProviderRegistryFactory {
                     source = config.source,
                     host = config.host,
                     contractCode = config.contractCode,
-                    bookingHorizonDays = config.bookingHorizonDays,
+                    bookingHorizon = CapabilityLimit(config.bookingHorizonDays, CapabilityTimeUnit.DAY),
                 )
             adaptersBySource[config.source] =
                 ReserveAmericaReservationProvider(

@@ -13,6 +13,8 @@ import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -962,8 +964,9 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.reservation.Reserva
         ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities(
             supportsAvailability = true,
             supportsAlerts = true,
-            bookingHorizonDays = 180,
             maxPollWindowDays = 60,
+            bookingHorizon = CapabilityLimit(180, CapabilityTimeUnit.DAY),
+            fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
         )
 
     override suspend fun availability(

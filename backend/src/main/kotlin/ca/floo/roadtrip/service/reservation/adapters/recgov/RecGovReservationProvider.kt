@@ -31,7 +31,6 @@ class RecGovReservationProvider(
         ReservationProviderCapabilities(
             supportsAvailability = true,
             supportsAlerts = true,
-            bookingHorizonDays = recgovBookingHorizonDays(),
             maxPollWindowDays = RECGOV_MAX_POLL_WINDOW_DAYS,
             bookingHorizon = CapabilityLimit(RECGOV_BOOKING_HORIZON_MONTHS, CapabilityTimeUnit.MONTH),
             fetchWindowCap = CapabilityLimit(RECGOV_FETCH_WINDOW_MONTHS, CapabilityTimeUnit.MONTH),
@@ -137,12 +136,6 @@ class RecGovReservationProvider(
         private const val RECGOV_BOOKING_HORIZON_MONTHS: Int = 6
 
         /**
-         * Legacy compatibility for day-only callers. Real availability paths
-         * use [RECGOV_BOOKING_HORIZON_MONTHS] through the native capability.
-         */
-        private const val LEGACY_DAYS_PER_RECGOV_HORIZON_MONTH: Int = 30
-
-        /**
          * Widest single-tick poll window. rec.gov shapes availability calls by
          * calendar month, so 60 days keeps a tick to ~2-3 month calls — the
          * same magnitude as the previous global cap, now anchored at today and
@@ -150,7 +143,5 @@ class RecGovReservationProvider(
          */
         private const val RECGOV_MAX_POLL_WINDOW_DAYS: Int = 60
         private const val RECGOV_FETCH_WINDOW_MONTHS: Int = 1
-
-        private fun recgovBookingHorizonDays(): Int = RECGOV_BOOKING_HORIZON_MONTHS * LEGACY_DAYS_PER_RECGOV_HORIZON_MONTH
     }
 }

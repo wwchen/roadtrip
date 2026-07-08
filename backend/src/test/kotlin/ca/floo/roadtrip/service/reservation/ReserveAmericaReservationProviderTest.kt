@@ -22,7 +22,7 @@ class ReserveAmericaReservationProviderTest {
                         source = "new-york-state-parks",
                         host = "newyorkstateparks.reserveamerica.com",
                         contractCode = "NY",
-                        bookingHorizonDays = 270,
+                        bookingHorizon = CapabilityLimit(270, CapabilityTimeUnit.DAY),
                     ),
                 client = ReserveAmericaAvailabilityClient { _, _, _, _, _ -> error("not used") },
             )
@@ -71,7 +71,7 @@ class ReserveAmericaReservationProviderTest {
                             source = "new-york-state-parks",
                             host = "newyorkstateparks.reserveamerica.com",
                             contractCode = "NY",
-                            bookingHorizonDays = 270,
+                            bookingHorizon = CapabilityLimit(270, CapabilityTimeUnit.DAY),
                         ),
                     client = client,
                 )

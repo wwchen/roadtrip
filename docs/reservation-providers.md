@@ -82,8 +82,6 @@ data class ReservationProviderCapabilities(
     val supportsAvailability: Boolean,
     /** Can we poll for openings and notify on match? */
     val supportsAlerts: Boolean,
-    /** Compatibility fallback for older day-only callers. */
-    val bookingHorizonDays: Int,
     /** Operational max days the poller requests per tick. */
     val maxPollWindowDays: Int,
     /** Exact booking horizon in the upstream's native unit. */
@@ -95,12 +93,11 @@ data class ReservationProviderCapabilities(
 
 The API can surface this struct for the campground behind a POI so the
 drawer can hide affordances the provider doesn't support. Availability
-windowing uses `bookingHorizon`, not `bookingHorizonDays`, so month-based
-vendors keep calendar-month behavior instead of being rounded into fixed days.
-The requested day range is the target window; upstream reads use
-`fetchWindowCap` to snap that target to stable provider buckets (for example,
-14-day epoch buckets for ReserveAmerica), then slice returned observations back
-to the target range.
+windowing uses `bookingHorizon` directly, so month-based vendors keep
+calendar-month behavior instead of being rounded into fixed days. The requested
+day range is the target window; upstream reads use `fetchWindowCap` to snap
+that target to stable provider buckets (for example, 14-day epoch buckets for
+ReserveAmerica), then slice returned observations back to the target range.
 
 Current native limits:
 

@@ -1,5 +1,8 @@
 package ca.floo.roadtrip.service.reservation.adapters.aspira
 
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
+
 /**
  * Per-tenant Aspira NextGen configuration. One row per upstream host.
  *
@@ -13,8 +16,8 @@ package ca.floo.roadtrip.service.reservation.adapters.aspira
  * for sites under that tenant. ReservableId disallows ':' in vendor, so
  * use underscore-separated tenant codes (`aspira_pc`, `aspira_bc`, …).
  *
- * `bookingHorizonDays` is the rolling booking window the upstream
- * exposes. Eventually this should come from each tenant's
+ * `bookingHorizon` is the rolling booking window the upstream exposes.
+ * Eventually this should come from each tenant's
  * `/api/dateschedule/resourcelocationid` response so changes don't
  * require a deploy; for now it's a per-tenant constant since the
  * value is stable and identical across tenants.
@@ -22,14 +25,14 @@ package ca.floo.roadtrip.service.reservation.adapters.aspira
 data class AspiraTenant(
     val host: String,
     val vendorCode: String,
-    val bookingHorizonDays: Int,
+    val bookingHorizon: CapabilityLimit,
     val bookingSystemLabel: String = "Aspira NextGen",
     val ctaLabel: String? = null,
 )
 
 object AspiraTenants {
     /** Aspira NextGen typical horizon. */
-    private const val DEFAULT_HORIZON_DAYS: Int = 365
+    private val DEFAULT_BOOKING_HORIZON: CapabilityLimit = CapabilityLimit(365, CapabilityTimeUnit.DAY)
 
     /**
      * The tenant table. Order does not matter; lookup is by host.
@@ -44,21 +47,21 @@ object AspiraTenants {
             AspiraTenant(
                 host = "reservation.pc.gc.ca",
                 vendorCode = "aspira_pc",
-                bookingHorizonDays = DEFAULT_HORIZON_DAYS,
+                bookingHorizon = DEFAULT_BOOKING_HORIZON,
                 bookingSystemLabel = "Aspira NextGen (Parks Canada)",
                 ctaLabel = "Reserve on parks.canada.ca",
             ),
             AspiraTenant(
                 host = "camping.bcparks.ca",
                 vendorCode = "aspira_bc",
-                bookingHorizonDays = DEFAULT_HORIZON_DAYS,
+                bookingHorizon = DEFAULT_BOOKING_HORIZON,
                 bookingSystemLabel = "Aspira NextGen (BC Parks)",
                 ctaLabel = "Book on BC Parks",
             ),
             AspiraTenant(
                 host = "washington.goingtocamp.com",
                 vendorCode = "aspira_wa",
-                bookingHorizonDays = DEFAULT_HORIZON_DAYS,
+                bookingHorizon = DEFAULT_BOOKING_HORIZON,
                 bookingSystemLabel = "Aspira NextGen (WA State Parks)",
                 ctaLabel = "Book WA State Park",
             ),

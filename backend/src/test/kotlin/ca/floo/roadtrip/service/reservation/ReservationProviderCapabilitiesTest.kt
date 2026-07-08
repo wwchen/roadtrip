@@ -29,7 +29,12 @@ class ReservationProviderCapabilitiesTest {
 
         val aspira =
             AspiraReservationProvider(
-                tenant = AspiraTenant(host = "reservation.pc.gc.ca", vendorCode = "aspira_pc", bookingHorizonDays = 365),
+                tenant =
+                    AspiraTenant(
+                        host = "reservation.pc.gc.ca",
+                        vendorCode = "aspira_pc",
+                        bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                    ),
                 client = stubAspiraClient(),
             ).capabilities
         assertEquals(CapabilityLimit(365, CapabilityTimeUnit.DAY), aspira.bookingHorizon)
@@ -42,7 +47,7 @@ class ReservationProviderCapabilitiesTest {
                         source = "new-york-state-parks",
                         host = "newyorkstateparks.reserveamerica.com",
                         contractCode = "NY",
-                        bookingHorizonDays = 270,
+                        bookingHorizon = CapabilityLimit(270, CapabilityTimeUnit.DAY),
                     ),
                 client = stubReserveAmericaClient(),
             ).capabilities

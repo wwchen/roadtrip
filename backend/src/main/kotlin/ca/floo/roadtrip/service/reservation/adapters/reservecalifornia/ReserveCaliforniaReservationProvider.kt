@@ -36,7 +36,6 @@ class ReserveCaliforniaReservationProvider(
         ReservationProviderCapabilities(
             supportsAvailability = true,
             supportsAlerts = false,
-            bookingHorizonDays = BOOKING_HORIZON_DAYS,
             maxPollWindowDays = MAX_POLL_WINDOW_DAYS,
             bookingHorizon = CapabilityLimit(BOOKING_HORIZON_DAYS, CapabilityTimeUnit.DAY),
             fetchWindowCap = CapabilityLimit(MAX_POLL_WINDOW_DAYS, CapabilityTimeUnit.DAY),

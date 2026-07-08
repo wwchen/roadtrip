@@ -387,8 +387,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
-                bookingHorizonDays = 3650,
                 maxPollWindowDays = maxPollWindowDays,
+                bookingHorizon = CapabilityLimit(3650, CapabilityTimeUnit.DAY),
+                fetchWindowCap = CapabilityLimit(maxPollWindowDays, CapabilityTimeUnit.DAY),
             )
 
         override suspend fun availability(
@@ -444,8 +445,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
-                bookingHorizonDays = 3650,
                 maxPollWindowDays = 60,
+                bookingHorizon = CapabilityLimit(3650, CapabilityTimeUnit.DAY),
+                fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
             )
 
         override suspend fun availability(
@@ -463,7 +465,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     }
 
     // A window well in the future so both watches are fully live under the
-    // target-local clamp; provider bookingHorizonDays is set high enough to cover it.
+    // target-local clamp; provider bookingHorizon is set high enough to cover it.
     private val farStart = LocalDate.now(ZoneOffset.UTC).plusYears(1)
 
     @Test

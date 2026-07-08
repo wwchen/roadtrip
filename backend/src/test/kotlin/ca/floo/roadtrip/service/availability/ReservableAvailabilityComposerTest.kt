@@ -10,6 +10,8 @@ import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
@@ -143,7 +145,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
             var fetchedStart: LocalDate? = null
             var fetchedEnd: LocalDate? = null
             val provider =
-                fakeProvider(maxPollWindowDays = 30, bookingHorizonDays = 365) { _, reservables, startDate, endDate ->
+                fakeProvider(maxPollWindowDays = 30, bookingHorizon = dayLimit(365)) { _, reservables, startDate, endDate ->
                     fetchedStart = startDate
                     fetchedEnd = endDate
                     batchFor(reservables, startDate, endDate, AvailabilityStatus.AVAILABLE)
@@ -169,7 +171,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
     @Test
     fun `rejects a request wider than the vendor poll window`() =
         runBlocking {
-            val provider = fakeProvider(maxPollWindowDays = 30, bookingHorizonDays = 365)
+            val provider = fakeProvider(maxPollWindowDays = 30, bookingHorizon = dayLimit(365))
             val target = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
             val composer = composer(listOf(target), availability = null)
 
@@ -262,11 +264,13 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
 
     private fun fakeProvider(
         maxPollWindowDays: Int = 60,
-        bookingHorizonDays: Int = 180,
+        bookingHorizon: CapabilityLimit = dayLimit(180),
         onCatalog: CatalogAvailabilityHandler = { _, reservables, startDate, endDate ->
             batchFor(reservables, startDate, endDate, AvailabilityStatus.AVAILABLE)
         },
-    ): FakeProvider = FakeProvider(maxPollWindowDays, bookingHorizonDays, onCatalog)
+    ): FakeProvider = FakeProvider(maxPollWindowDays, bookingHorizon, onCatalog)
+
+    private fun dayLimit(days: Int): CapabilityLimit = CapabilityLimit(days, CapabilityTimeUnit.DAY)
 
     /** Build a batch that reports [status] for every requested reservable on every day in the window. */
     private fun batchFor(
@@ -300,7 +304,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
 
     private class FakeProvider(
         maxPollWindowDays: Int,
-        bookingHorizonDays: Int,
+        bookingHorizon: CapabilityLimit,
         private val onCatalog: CatalogAvailabilityHandler,
     ) : ReservationProvider {
         var catalogCalls = 0
@@ -310,8 +314,9 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
             ReservationProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
-                bookingHorizonDays = bookingHorizonDays,
                 maxPollWindowDays = maxPollWindowDays,
+                bookingHorizon = bookingHorizon,
+                fetchWindowCap = CapabilityLimit(maxPollWindowDays, CapabilityTimeUnit.DAY),
             )
 
         override suspend fun availability(

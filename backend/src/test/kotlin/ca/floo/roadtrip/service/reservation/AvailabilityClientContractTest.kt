@@ -34,7 +34,7 @@ class AvailabilityClientContractTest {
                         AspiraTenant(
                             host = "reservation.pc.gc.ca",
                             vendorCode = "aspira_pc",
-                            bookingHorizonDays = 365,
+                            bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
                         ),
                     client = stubAspiraClient(),
                 ),
@@ -44,7 +44,7 @@ class AvailabilityClientContractTest {
                             source = "new-york-state-parks",
                             host = "newyorkstateparks.reserveamerica.com",
                             contractCode = "NY",
-                            bookingHorizonDays = 270,
+                            bookingHorizon = CapabilityLimit(270, CapabilityTimeUnit.DAY),
                         ),
                     client = stubReserveAmericaClient(),
                 ),
