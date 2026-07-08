@@ -21,7 +21,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 import java.time.Instant
 
-// ReserveAmerica (Active Network) tenant park pages → Poi.Campground.
+// ReserveAmerica (Active Network) tenant park pages → canonical campgrounds.
 //
 // Capture path: data/raw/reserveamerica-<tenant>/<ts>/{directory-X-NNN.json,
 // park-<id>.json}. The directory pages are by-letter index lists; the

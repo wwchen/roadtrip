@@ -14,7 +14,6 @@ import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
-import kotlin.test.assertTrue
 
 class RegistryTargetsTest {
     @Test
@@ -128,7 +127,7 @@ class RegistryTargetsTest {
     }
 
     @Test
-    fun `production import fan-out includes Canada canonical campground and campsite sources`() {
+    fun `production import fan-out includes every configured canonical catalog source`() {
         val registry =
             PoiRegistry.load(
                 File(System.getProperty("user.dir"))
@@ -136,22 +135,33 @@ class RegistryTargetsTest {
                     .canonicalFile,
             )
 
-        val targets = importTargetsFromRegistry(registry).keys
-
-        assertTrue("BC Provincial Parks" in targets)
-        assertTrue("Parks Canada" in targets)
-        assertTrue("Alberta Provincial Parks" in targets)
-        assertTrue("BC Aspira Resources" in targets)
-        assertTrue("Parks Canada Aspira Resources" in targets)
-        assertTrue("Alberta Provincial Park Sites" in targets)
-        assertFalse("Federal Campgrounds" in targets)
-        assertFalse("Federal Campsites" in targets)
-        assertFalse("Washington State Parks" in targets)
-        assertFalse("Washington Aspira Resources" in targets)
-        assertFalse("New York State Parks" in targets)
-        assertFalse("New York State Park Sites" in targets)
-        assertFalse("California State Parks" in targets)
-        assertFalse("California State Park Sites" in targets)
+        assertEquals(
+            listOf(
+                "Campflare Campgrounds",
+                "Federal Campgrounds",
+                "Washington State Parks",
+                "BC Provincial Parks",
+                "Parks Canada",
+                "Alberta Provincial Parks",
+                "New York State Parks",
+                "California State Parks",
+                "Planet Fitness",
+                "Tesla Superchargers",
+                "Campflare Campsites",
+                "Federal Campsites",
+                "Washington Aspira Resources",
+                "BC Aspira Resources",
+                "Parks Canada Aspira Resources",
+                "California State Park Sites",
+                "Alberta Provincial Park Sites",
+                "New York State Park Sites",
+            ),
+            importTargetsFromRegistry(registry).keys.toList(),
+        )
+        assertFalse("Federal Campsites → Federal Campgrounds" in importTargetsFromRegistry(registry).keys)
+        assertFalse("Aspira Resources → Aspira Pins" in importTargetsFromRegistry(registry).keys)
+        assertFalse("ReserveCalifornia Sites → California State Parks" in importTargetsFromRegistry(registry).keys)
+        assertFalse("ReserveAmerica Sites → Alberta + NY Parks" in importTargetsFromRegistry(registry).keys)
     }
 
     private fun source(

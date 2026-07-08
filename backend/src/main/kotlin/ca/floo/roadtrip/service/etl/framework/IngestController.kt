@@ -81,7 +81,7 @@ class IngestController(
     /** All targets across both fetch and import maps (de-duplicated). */
     fun knownTargets(): Set<String> = fetchTargets.keys + importTargets.keys
 
-    /** Fan-out targets for [kind]. Import order is significant: joiners run after data rows. */
+    /** Fan-out targets for [kind]. Import order is the registry-derived execution order. */
     fun fanOutTargets(kind: RunKind): List<String> =
         when (kind) {
             RunKind.FETCH -> fetchTargets.keys.toList()
@@ -227,9 +227,8 @@ class IngestController(
     // -- Import phases (data/raw/ + data/etl-out/ → Postgres) -----------------
     //
     // The phase carries a row's display name + which YAML section it
-    // came from. The orchestrator walks the section's ETL chain (poi_data
-    // / reservable_data) or runs the matching joiner adapter
-    // (poi_reservable_joiner).
+    // came from. The orchestrator walks the section's ETL chain
+    // (poi_data / reservable_data); retired joiner rows remain unsupported.
     //
     // Each branch writes a section-specific counts DTO so dashboards can
     // render whichever fields are populated; the legacy `seen`/`swept`/
@@ -304,9 +303,8 @@ private data class FetchPhaseCountsDto(
  * Counts written into `ingest_runs.counts` (JSONB) for one import phase.
  * Section-specific fields are nullable; readers ignore the ones they
  * don't care about. Existing dashboards keyed off `seen`/`swept`/
- * `import_run_id` keep working. Reservable phases now carry their
- * reservable import run id; joiner phases report stale-link deletes in
- * both `swept` and `stale_links_deleted`.
+ * `import_run_id` keep working. Reservable phases carry their campsite
+ * import run id; retired joiner fields remain nullable compatibility slots.
  */
 @Serializable
 private data class ImportPhaseCountsDto(

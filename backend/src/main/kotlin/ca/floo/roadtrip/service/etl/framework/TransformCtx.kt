@@ -7,11 +7,8 @@ import java.io.File
 // Read-only context handed to ETL transformers. Today: the raw-capture
 // directory plus per-terminal-etl metadata sourced from the YAML.
 //
-// Reservation provider info is no longer here — the legacy provider FK
-// path was dropped (V8) because the dispatch path the FK was meant to
-// power never landed; the FE reads pois.provider_ref (JSONB)
-// directly. ETLs that need a ProviderRef just construct the sealed variant
-// directly with values from their args:.
+// Reservation provider info is no longer here — ETLs persist provider-ready
+// JSON in vendor_refs payloads using values from upstream rows and args.
 class TransformCtx private constructor(
     private val subcategoryByEtlSlug: Map<String, String?>,
     private val agencyByEtlSlug: Map<String, AgencyConfig?>,

@@ -3,14 +3,14 @@ package ca.floo.roadtrip.service.etl.framework
 import org.jooq.DSLContext
 
 /**
- * Disabled legacy import hook for vendor-specific campsite parent resolution.
+ * Retired legacy import hook for vendor-specific campsite parent resolution.
  *
  * The registry section is still named `poi_reservable_joiner` for YAML
  * compatibility, but the removed `reservables` / `reservable_pois` tables are
- * not part of this contract anymore. Canonicalized adapters discover
- * `(campsite_id, campground_id)` pairs using `campsites`, `campgrounds`, and
- * `vendor_refs`; the orchestrator keeps this phase disabled until the
- * canonical catalog writer/reconciler lands.
+ * not part of this contract anymore. Canonical campsite ETLs emit
+ * `parentVendor` and `parentVendorRefId`; CanonicalCatalogRepo resolves those
+ * against `vendor_refs` during upsert, so the orchestrator keeps this phase
+ * out of import fan-out.
  */
 interface PoiReservableJoiner {
     /** Adapter identifier; matches the YAML `adapter:` field. */

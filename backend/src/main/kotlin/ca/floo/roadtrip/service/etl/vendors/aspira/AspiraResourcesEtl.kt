@@ -52,9 +52,9 @@ import org.slf4j.LoggerFactory
  * children carry the actual sites. Inventory enumerates every
  * reservable site under a park regardless, so the catalog is complete.
  *
- * **No POI knowledge.** Linking these reservables to their parent
- * Aspira POI is the joiner's job. Resources land in the catalog with
- * synthetic `_parent_*` fields the joiner reads to find the right POI.
+ * Parent linking is explicit on every emitted row: the tenant vendor maps to
+ * the matching Aspira campground ETL slug and `parentVendorRefId` is derived
+ * from the parent campground provider-ref IDs.
  *
  * Vendor strings: `aspira_wa` / `aspira_bc` / `aspira_pc` — ReservableId
  * disallows colons in the vendor field, so the per-tenant suffix uses
@@ -238,7 +238,7 @@ class AspiraResourcesEtl(
      * Build the `raw` JSON we persist on the reservable. The per-resource
      * upstream availability array is intentionally *not* stored — that's
      * availability data and lives elsewhere. We keep the catalog signal:
-     * who this resource is, how to find its parent POI, and the
+     * who this resource is, how to find its parent campground, and the
      * inventory attributes the booking SPA shows.
      */
     private fun buildResourceRaw(
@@ -250,8 +250,8 @@ class AspiraResourcesEtl(
             put("resource_id", inv.resourceId)
             // Parent linkage: prefer leaf metadata when we matched
             // mapIds[0] to a known leaf. Fall back to the
-            // resourceLocationId from the inventory record itself so
-            // the joiner has *something* to match POIs by.
+            // resourceLocationId from the inventory record itself so parent
+            // refs still resolve whenever the inventory carries enough IDs.
             if (leaf != null) {
                 put("_parent_aspira_map_id", leaf.mapId)
                 put("_parent_aspira_txn_loc", leaf.transactionLocationId)

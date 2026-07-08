@@ -1,16 +1,12 @@
 package ca.floo.roadtrip.service.etl.framework
 
-import ca.floo.roadtrip.models.domain.Poi
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.models.metadata.registry.AgencyConfig
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
-import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CanonicalCatalogRepo
 import ca.floo.roadtrip.repo.NoCaptureException
 import ca.floo.roadtrip.repo.RawCapture
-import ca.floo.roadtrip.repo.Upsert
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
@@ -18,7 +14,7 @@ import org.slf4j.LoggerFactory
 import java.io.File
 
 private const val DISABLED_JOINER_IMPORT_MESSAGE =
-    "vendor campsite parent joiners are disabled until canonical campground/campsite reconciliation is wired"
+    "vendor campsite parent joiners are retired; canonical campsite ETLs resolve parents through vendor refs"
 
 // Orchestrates one poi_data/reservable_data row's ETL chain end-to-end.
 //
@@ -36,8 +32,6 @@ private const val DISABLED_JOINER_IMPORT_MESSAGE =
 //        - CampsiteEtlOutput   -> canonical campsites
 //        - TeslaSuperchargerEtlOutput -> canonical Tesla locations + lean POI wrappers
 //        - PlanetFitnessLocationEtlOutput -> canonical PF locations + lean POI wrappers
-//        - List<Poi.*>         -> retired wide-POI path, only for disabled
-//          legacy adapters/tests
 //
 // The DAG-level ordering across multiple poi_data rows is the caller's
 // problem (today: per-row imports, no cross-row composition). Within a row,
@@ -53,7 +47,6 @@ class EtlOrchestrator(
     private val etlRegistry: Map<String, SourceEtl<*, *>> = registry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
-    private val upsert = Upsert(ctx)
     private val catalogRepo = CanonicalCatalogRepo(ctx)
 
     /**
@@ -103,7 +96,6 @@ class EtlOrchestrator(
             rowName = row.name,
             sectionLabel = "poi_data",
             etls = row.etls,
-            poiDataEntry = row,
         )
     }
 
@@ -119,7 +111,6 @@ class EtlOrchestrator(
                 rowName = row.name,
                 sectionLabel = "reservable_data",
                 etls = row.etls,
-                poiDataEntry = null,
             )
         return ReservableStats(
             reservableDataName = row.name,
@@ -135,7 +126,6 @@ class EtlOrchestrator(
         rowName: String,
         sectionLabel: String,
         etls: List<EtlEntry>,
-        poiDataEntry: PoiDataEntry?,
     ): Stats {
         val transformCtx = TransformCtx.load(rawDir, poiRegistry)
 
@@ -162,7 +152,7 @@ class EtlOrchestrator(
 
             val bundle = buildBundle(entry.inputs, intermediateOutputs)
             if (isTerminal) {
-                terminalStats = runTerminal(rowName, sectionLabel, poiDataEntry, etl, bundle, transformCtx)
+                terminalStats = runTerminal(rowName, sectionLabel, etl, bundle, transformCtx)
             } else {
                 intermediateOutputs[entry.slug] = runIntermediate(etl, bundle, transformCtx)
             }
@@ -177,7 +167,6 @@ class EtlOrchestrator(
     private fun runTerminal(
         rowName: String,
         sectionLabel: String,
-        poiDataEntry: PoiDataEntry?,
         etl: SourceEtl<*, *>,
         bundle: InputBundle,
         transformCtx: TransformCtx,
@@ -214,20 +203,6 @@ class EtlOrchestrator(
                     catalogRepo.upsertTeslaSuperchargers(output.superchargers, source = concrete.etlSlug)
                 is PlanetFitnessLocationEtlOutput ->
                     catalogRepo.upsertPlanetFitnessLocations(output.locations, source = concrete.etlSlug)
-                is List<*> -> {
-                    val pois = output.filterIsInstance<Poi>()
-                    check(pois.size == output.size) {
-                        "terminal '${concrete.etlSlug}' returned unsupported List element type"
-                    }
-                    poiDataEntry?.let { validateAgencyConfig(it, pois) }
-                    val legacy = upsert.run(setOf(concrete.etlSlug), pois)
-                    CanonicalCatalogRepo.Result(
-                        runId = legacy.runId,
-                        seenCount = legacy.seenCount,
-                        upsertedCount = legacy.seenCount,
-                        sweptCount = legacy.sweptCount,
-                    )
-                }
                 else -> error("terminal '${concrete.etlSlug}' returned unsupported output ${output::class.qualifiedName}")
             }
         val transformedCount = outputCount(output)
@@ -255,39 +230,8 @@ class EtlOrchestrator(
             is CampsiteEtlOutput -> output.campsites.size
             is TeslaSuperchargerEtlOutput -> output.superchargers.size
             is PlanetFitnessLocationEtlOutput -> output.locations.size
-            is List<*> -> output.size
             else -> 0
         }
-
-    private fun validateAgencyConfig(
-        row: PoiDataEntry,
-        pois: List<Poi>,
-    ) {
-        when (val agency = row.agency) {
-            null -> return
-            is AgencyConfig.Constant -> {
-                val mismatched = pois.count { it.agency != agency.value }
-                check(mismatched == 0) {
-                    "poi_data '${row.name}' agency=${agency.value} but $mismatched terminal POI(s) had a different agency"
-                }
-            }
-            is AgencyConfig.DerivedFromField -> {
-                // Per-row null tolerance: upstream feeds (e.g. RIDB) ship occasional
-                // rows with the agency path missing or non-scalar. We log the count
-                // rather than aborting the whole import — a single bad row mustn't
-                // sink the dataset.
-                val missing = pois.count { it.agency.isNullOrBlank() }
-                if (missing > 0) {
-                    log.warn(
-                        "poi_data '{}' agency derived_from_field={} produced {} terminal POI(s) with null agency",
-                        row.name,
-                        agency.field,
-                        missing,
-                    )
-                }
-            }
-        }
-    }
 
     @Suppress("UNCHECKED_CAST")
     private fun runIntermediate(
@@ -358,10 +302,9 @@ class EtlOrchestrator(
     }
 
     companion object {
-        // Runnable ETLs. Old wide-POI and retired-reservable imports are
-        // intentionally not exposed here; admin import targets use this map
-        // to decide what can run. Campflare and Canada sources are enabled
-        // because they write through the canonical catalog repo.
+        // Runnable ETLs. Admin import targets use this map to decide what can
+        // run; every configured campground/campsite vendor row exposed here
+        // writes through the canonical catalog repo.
         val registry: Map<String, SourceEtl<*, *>> =
             mapOf(
                 "campflare-campgrounds" to
@@ -370,6 +313,18 @@ class EtlOrchestrator(
                 "campflare-campsites" to
                     ca.floo.roadtrip.service.etl.vendors.campflare
                         .CampflareCampsitesEtl(),
+                "bcparks-strapi" to
+                    ca.floo.roadtrip.service.etl.vendors.bcparks
+                        .BcParksStrapiEtl(),
+                "federal-campgrounds" to
+                    ca.floo.roadtrip.service.etl.vendors.recgov
+                        .RecGovCampgroundsEtl("federal-campgrounds"),
+                "aspira-leaves-wa" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraLeavesEtl("aspira-leaves-wa"),
+                "aspira-wa-pins" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraJoinByNameEtl("aspira-wa-pins"),
                 "aspira-leaves-bc" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraLeavesEtl("aspira-leaves-bc"),
@@ -385,6 +340,24 @@ class EtlOrchestrator(
                 "alberta-provincial" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
                         .ReserveAmericaEtl(),
+                "new-york-state-parks" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaEtl("new-york-state-parks"),
+                "california-state-parks" to
+                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
+                        .ReserveCaliforniaEtl("california-state-parks"),
+                "federal-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.recgov
+                        .RecGovCampsitesEtl("federal-campsites"),
+                "aspira-wa-resources" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraResourcesEtl(
+                            etlSlug = "aspira-wa-resources",
+                            mapsInputSlug = "aspira-maps-wa",
+                            inventoryInputSlug = "aspira-inventory-wa",
+                            dictionariesInputSlug = "aspira-dictionaries-wa",
+                            vendor = "aspira_wa",
+                        ),
                 "aspira-bc-resources" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraResourcesEtl(
@@ -403,63 +376,21 @@ class EtlOrchestrator(
                             dictionariesInputSlug = "aspira-dictionaries-pc",
                             vendor = "aspira_pc",
                         ),
+                "california-state-park-sites" to
+                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
+                        .ReserveCaliforniaSitesEtl("california-state-park-sites"),
                 "alberta-provincial-park-sites" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
                         .ReserveAmericaSitesEtl("alberta-provincial-park-sites", "ABPP"),
+                "new-york-state-park-sites" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaSitesEtl("new-york-state-park-sites", "NY"),
                 "planet-fitness" to
                     ca.floo.roadtrip.service.etl.vendors.osmpf
                         .PlanetFitnessEtl(),
                 "tesla-superchargers" to
                     ca.floo.roadtrip.service.etl.vendors.tesla
                         .TeslaIndexEtl(),
-            )
-
-        // Retained vendor adapters. This keeps the parsing/transform code in
-        // tree while making it explicit that the old registry rows are no-op
-        // until canonical campgrounds/campsites upsert support lands.
-        val disabledVendorRegistry: Map<String, SourceEtl<*, *>> =
-            mapOf(
-                "bcparks-strapi" to
-                    ca.floo.roadtrip.service.etl.vendors.bcparks
-                        .BcParksStrapiEtl(),
-                "new-york-state-parks" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaEtl("new-york-state-parks"),
-                "california-state-parks" to
-                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
-                        .ReserveCaliforniaEtl("california-state-parks"),
-                // RIDB (recreation.gov backend) — one ETL covers every
-                // publishing agency (NPS, USFS, BLM, USACE, FWS, BOR, TVA, …).
-                // Per-facility agency stamped on Poi.Campground.agency at
-                // transform time from ORGANIZATION[0].OrgName.
-                "federal-campgrounds" to
-                    ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecGovCampgroundsEtl("federal-campgrounds"),
-                // Aspira NextGen — one leaf-walker + one join-by-name
-                // emitter per tenant. Both classes take the slug as a
-                // constructor arg so a fourth tenant is two YAML rows +
-                // two registry lines.
-                "aspira-leaves-wa" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraLeavesEtl("aspira-leaves-wa"),
-                "aspira-wa-pins" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraJoinByNameEtl("aspira-wa-pins"),
-                "federal-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecGovCampsitesEtl("federal-campsites"),
-                "aspira-wa-resources" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraResourcesEtl(
-                            etlSlug = "aspira-wa-resources",
-                            mapsInputSlug = "aspira-maps-wa",
-                            inventoryInputSlug = "aspira-inventory-wa",
-                            dictionariesInputSlug = "aspira-dictionaries-wa",
-                            vendor = "aspira_wa",
-                        ),
-                "new-york-state-park-sites" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaSitesEtl("new-york-state-park-sites", "NY"),
             )
     }
 }

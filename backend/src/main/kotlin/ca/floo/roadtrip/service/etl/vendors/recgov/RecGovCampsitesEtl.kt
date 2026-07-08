@@ -22,15 +22,12 @@ import kotlinx.serialization.json.put
  * envelopes captured by `scripts/fetch_recgov_campsites.py` and emits one
  * reservable per campsite.
  *
- * **No POI knowledge.** Linking reservables to their parent campground
- * POI is the joiner's job (see [PoiReservableJoiner], wired in PR 4 as
- * `RecgovPoiReservableJoiner`). Keeping the ETL POI-agnostic means it
- * doesn't need to know how rec.gov campgrounds get keyed in `pois`
- * (today: `pois.source = federal-campgrounds`, `source_id = FacilityID`).
+ * Parent linking is explicit on every emitted row: `parentVendor` is the
+ * federal campground ETL slug and `parentVendorRefId` is `recgov-{FacilityID}`.
+ * CanonicalCatalogRepo resolves that pair through campground vendor refs.
  *
- * The full upstream campsite blob is preserved verbatim in `raw` for the
- * joiner to read and for forensic queries — RFC 0008's data trust
- * principle. The joiner uses `raw->>'campsite_id'` as the join key.
+ * The full upstream campsite blob is preserved verbatim in `sourcePayload`
+ * for forensic queries — RFC 0008's data trust principle.
  *
  * Multi-part input: the fetcher writes one file per facility under
  * `data/raw/recgov-campsites/<ts>/facility-<id>.json`. We get all of
@@ -60,10 +57,8 @@ class RecGovCampsitesEtl(
         val campsites = mutableListOf<CampsiteEtlRecord>()
         for (envelope in dto) {
             // FacilityID lives in the captured request URL path. The
-            // upstream campsite blob doesn't carry it; we need it for the
-            // joiner to match against pois.source_id. Inject it as a
-            // synthetic key on each campsite's `raw` so the joiner has
-            // a stable place to read it.
+            // upstream campsite blob doesn't carry it, but parent resolution
+            // needs it for `parentVendorRefId = recgov-{FacilityID}`.
             val facilityId = parseFacilityIdFromUrl(envelope.request.url) ?: continue
             val payload = envelope.payload as? JsonObject ?: continue
             val rawCampsites = payload["campsites"] as? JsonObject ?: continue

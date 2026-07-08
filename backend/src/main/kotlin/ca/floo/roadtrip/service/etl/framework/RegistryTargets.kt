@@ -13,15 +13,14 @@ import java.io.File
 //   - fetchTargets: one Target per data_sources row. Target.name is the
 //     data_source slug. Used by POST /api/admin/data/fetch/<slug> and the
 //     fan-out endpoint POST /api/admin/data/fetch.
-//   - importTargets: one Target per poi_data, reservable_data, and
-//     poi_reservable_joiner row. Map insertion order is the fan-out order:
-//     POIs first, reservables second, joiners last.
+//   - importTargets: one Target per runnable poi_data and reservable_data row.
+//     Joiner rows remain declared for historical context but are not runnable
+//     because canonical campsite ETLs now carry parent vendor refs directly.
 //
 // Adding a new runnable import: append an enabled registry row and register
 // the ETL adapter(s) in EtlOrchestrator.registry. If a row is disabled or its
 // ETL slugs are absent from that registry, no import target is created. This
-// keeps legacy vendor rows declared in YAML while omitting them from import
-// fan-out and admin status until they write through the canonical catalog.
+// omits only rows whose adapter is not wired into the canonical registry.
 fun fetchTargetsFromRegistry(
     registry: PoiRegistry,
     repoRoot: File,
@@ -66,7 +65,7 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
     val implemented = EtlOrchestrator.registry.keys
     val implementedJoiners = emptySet<String>()
 
-    // poi_data — produces Poi rows.
+    // poi_data — produces canonical POI-backed catalog rows.
     for (row in registry.poiData) {
         if (!row.enabled) {
             log.info("poi_data '{}' is disabled - omitting import target", row.name)
@@ -75,7 +74,7 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
         val unwiredSlugs = row.etls.map { it.slug }.filterNot { it in implemented }
         if (unwiredSlugs.isNotEmpty()) {
             log.warn(
-                "poi_data '{}' has disabled or unwired etl slugs {} - omitting import target until canonical writers land",
+                "poi_data '{}' has disabled or unwired etl slugs {} - omitting import target",
                 row.name,
                 unwiredSlugs,
             )
@@ -96,8 +95,8 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
             )
     }
 
-    // reservable_data — legacy section retained as disabled campsite catalog
-    // declarations until canonical campgrounds/campsites writers replace it.
+    // reservable_data — produces canonical campsite rows linked to parent
+    // campgrounds by vendor refs.
     for (row in registry.reservableData) {
         if (!row.enabled) {
             log.info("reservable_data '{}' is disabled - omitting import target", row.name)
@@ -106,7 +105,7 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
         val unwiredSlugs = row.etls.map { it.slug }.filterNot { it in implemented }
         if (unwiredSlugs.isNotEmpty()) {
             log.warn(
-                "reservable_data '{}' has disabled or unwired etl slugs {} - omitting import target until canonical writers land",
+                "reservable_data '{}' has disabled or unwired etl slugs {} - omitting import target",
                 row.name,
                 unwiredSlugs,
             )
@@ -127,9 +126,8 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
             )
     }
 
-    // poi_reservable_joiner — legacy section retained as disabled campsite
-    // parent-resolver declarations. Re-enable only after it writes canonical
-    // campsite/campground relationships.
+    // poi_reservable_joiner — retired parent resolvers. Keep omitted from
+    // fan-out; canonical campsite rows carry parent refs themselves.
     for (row in registry.poiReservableJoiners) {
         if (!row.enabled) {
             log.info("poi_reservable_joiner '{}' is disabled - omitting import target", row.name)

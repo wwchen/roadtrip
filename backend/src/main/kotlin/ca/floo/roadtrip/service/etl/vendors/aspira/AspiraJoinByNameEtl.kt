@@ -25,7 +25,7 @@ import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.time.Instant
 
-// Aspira leaves + heterogeneous geometry sources → Poi.Campground.
+// Aspira leaves + heterogeneous geometry sources → canonical campgrounds.
 //
 // `/api/maps` carries booking IDs but no lat/lng (the SPA renders against
 // pixel-coord image maps, not geographic). To put a pin on the map we
@@ -168,9 +168,8 @@ class AspiraJoinByNameEtl(
             // Tenant-wide (WA/BC/PC share this ETL). Verified against all
             // three /api/maps captures that the only null-resourceLocationId
             // leaves are park containers (Camano Island WA, Wells Gray BC,
-            // 23 PC parks), and that none of them link a reservable via the
-            // joiner's source_id (Rule A) or resourceLocationId (Rule B)
-            // rules — so dropping them orphans nothing.
+            // 23 PC parks), and that resources carry parent refs through real
+            // campground leaves — so dropping containers orphans nothing.
             if (leaf.resourceLocationId == null) {
                 skippedContainer++
                 continue
