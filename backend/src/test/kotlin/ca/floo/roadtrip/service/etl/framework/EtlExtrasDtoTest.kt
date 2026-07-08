@@ -35,7 +35,7 @@ import kotlin.test.assertNull
 class EtlExtrasDtoTest {
     @Test
     fun `reserve america extras serialize through dto with sparse optional fields`() {
-        val poi =
+        val campground =
             ReserveAmericaEtl()
                 .transform(
                     ReserveAmericaDto(
@@ -55,9 +55,10 @@ class EtlExtrasDtoTest {
                         fetchedAt = FETCHED_AT,
                     ),
                     transformCtx(),
-                ).single()
+                ).campgrounds
+                .single()
 
-        val extras = poi.extras!!.jsonObject
+        val extras = campground.metadata!!.jsonObject
         assertEquals(123, extras["park_id"]!!.jsonPrimitive.int)
         assertEquals("Writing-on-Stone Provincial Park", extras["name"]!!.jsonPrimitive.content)
         assertEquals(49.083, extras["latitude"]!!.jsonPrimitive.double)
@@ -145,7 +146,7 @@ class EtlExtrasDtoTest {
         // (leaves without one are park containers, dropped by
         // AspiraJoinByNameEtl before emission). parent_name stays nullable, so
         // it is the field that exercises explicitNulls serialization here.
-        val poi =
+        val campground =
             AspiraJoinByNameEtl("aspira-bc-pins")
                 .transform(
                     AspiraJoinDto(
@@ -167,9 +168,10 @@ class EtlExtrasDtoTest {
                         fetchedAt = FETCHED_AT,
                     ),
                     transformCtx(),
-                ).single()
+                ).campgrounds
+                .single()
 
-        val extras = poi.extras!!.jsonObject
+        val extras = campground.metadata!!.jsonObject
         assertEquals("camping.bcparks.ca", extras["host"]!!.jsonPrimitive.content)
         assertEquals(11, extras["transaction_location_id"]!!.jsonPrimitive.int)
         assertEquals(22, extras["map_id"]!!.jsonPrimitive.int)

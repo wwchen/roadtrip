@@ -13,6 +13,8 @@ import org.jooq.impl.DSL
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class RegistryTargetsTest {
     @Test
@@ -123,6 +125,33 @@ class RegistryTargetsTest {
             listOf("Runnable Campgrounds", "Runnable Campsites"),
             importTargetsFromRegistry(registry).keys.toList(),
         )
+    }
+
+    @Test
+    fun `production import fan-out includes Canada canonical campground and campsite sources`() {
+        val registry =
+            PoiRegistry.load(
+                File(System.getProperty("user.dir"))
+                    .resolve("../config/poi-registry.yaml")
+                    .canonicalFile,
+            )
+
+        val targets = importTargetsFromRegistry(registry).keys
+
+        assertTrue("BC Provincial Parks" in targets)
+        assertTrue("Parks Canada" in targets)
+        assertTrue("Alberta Provincial Parks" in targets)
+        assertTrue("BC Aspira Resources" in targets)
+        assertTrue("Parks Canada Aspira Resources" in targets)
+        assertTrue("Alberta Provincial Park Sites" in targets)
+        assertFalse("Federal Campgrounds" in targets)
+        assertFalse("Federal Campsites" in targets)
+        assertFalse("Washington State Parks" in targets)
+        assertFalse("Washington Aspira Resources" in targets)
+        assertFalse("New York State Parks" in targets)
+        assertFalse("New York State Park Sites" in targets)
+        assertFalse("California State Parks" in targets)
+        assertFalse("California State Park Sites" in targets)
     }
 
     private fun source(
