@@ -20,6 +20,7 @@
 - Use deterministic vendor refs only. If a source owns a row, that source writes the canonical row and its vendor refs.
 - V1 owning campground/site sources are Campflare for US coverage and Canada ETLs for Canadian coverage.
 - This plan owns retirement of `reservables`, `reservable_pois`, `ReservableId`, and RID-string API/UI/dashboard identity. Canonical site identity is `campsites.id`, exposed as `campsite_id`.
+- Do not backfill old POI, reservable, availability, or watch identity. New `poi_id` values point at new canonical wrapper rows, and old availability/watch state is disposable.
 
 ## File Structure
 
@@ -361,6 +362,8 @@ Create `backend/src/main/resources/db/migration/V38__canonical_catalog.sql`:
 TRUNCATE TABLE availability, availability_watch_target, availability_watch, availability_poller
   RESTART IDENTITY CASCADE;
 
+-- No backfill: old poi_id and reservable_id values pointed at the retired catalog.
+-- New rows will target the canonical catalog after ETLs reload source data.
 DROP TABLE IF EXISTS reservable_pois CASCADE;
 DROP TABLE IF EXISTS reservables CASCADE;
 DROP TABLE IF EXISTS pois CASCADE;
