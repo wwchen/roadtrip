@@ -20,27 +20,6 @@ import org.jooq.Record
 class ReservableRepo(
     private val ctx: DSLContext,
 ) {
-    data class ImportResult(
-        val runId: Long,
-        val seenCount: Int,
-        val sweptCount: Int,
-    )
-
-    data class Input(
-        val rid: ReservableId,
-        val name: String?,
-        val loop: String?,
-        val siteType: String?,
-        val raw: JsonElement?,
-        val tags: JsonElement? = null,
-        val providerRef: JsonElement? = null,
-    )
-
-    data class LinkInput(
-        val reservableId: Long,
-        val poiId: Long,
-    )
-
     data class SearchFilters(
         val rids: List<ReservableId> = emptyList(),
         val types: List<ReservableType> = emptyList(),
@@ -170,29 +149,6 @@ class ReservableRepo(
             )
     }
 
-    fun upsert(
-        input: Input,
-        source: String = input.rid.vendor,
-        runId: Long? = null,
-    ): Long = unsupportedWrite("upsert")
-
-    fun runImport(
-        source: String,
-        inputs: List<Input>,
-    ): ImportResult = unsupportedWrite("runImport")
-
-    fun linkToPoi(
-        reservableId: Long,
-        poiId: Long,
-    ): Int = unsupportedWrite("linkToPoi")
-
-    fun linkToPois(inputs: List<LinkInput>): Int = unsupportedWrite("linkToPois")
-
-    fun unlinkFromPoi(
-        reservableId: Long,
-        poiId: Long,
-    ): Int = unsupportedWrite("unlinkFromPoi")
-
     internal fun fromRecord(r: Record): Reservable {
         val vendor = r.get("vendor", String::class.java) ?: CANONICAL_VENDOR
         val externalId = r.get("external_id", String::class.java) ?: r.get("id", Long::class.java).toString()
@@ -212,11 +168,6 @@ class ReservableRepo(
         raw
             ?.takeIf { it != "null" }
             ?.let { Json.parseToJsonElement(it) }
-
-    private fun unsupportedWrite(operation: String): Nothing =
-        throw UnsupportedOperationException(
-            "ReservableRepo.$operation is retired with the reservables table; write canonical campsites instead",
-        )
 
     private companion object {
         private const val CANONICAL_VENDOR = "canonical"
@@ -264,17 +215,6 @@ class ReservableRepo(
                 cvr.vendor_ref_id ASC
               LIMIT 1
             ) primary_ref ON true
-            """.trimIndent()
-
-        private fun providerRefShapeSql(payloadExpression: String): String =
-            """
-            (
-              jsonb_exists($payloadExpression, 'recgov_id')
-              OR (jsonb_exists($payloadExpression, 'mapId') AND jsonb_exists($payloadExpression, 'transactionLocationId'))
-              OR jsonb_exists($payloadExpression, 'park_id')
-              OR jsonb_exists($payloadExpression, 'facility_id')
-              OR jsonb_exists($payloadExpression, 'place_id')
-            )
             """.trimIndent()
     }
 }

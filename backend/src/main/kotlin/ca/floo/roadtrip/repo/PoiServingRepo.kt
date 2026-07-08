@@ -371,13 +371,3 @@ private fun splitPoiSearchTerms(q: String): List<String> =
 
 private fun escapeLikePattern(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
-private fun providerRefShapeSql(payloadExpression: String): String =
-    """
-    (
-      jsonb_exists($payloadExpression, 'recgov_id')
-      OR (jsonb_exists($payloadExpression, 'mapId') AND jsonb_exists($payloadExpression, 'transactionLocationId'))
-      OR jsonb_exists($payloadExpression, 'park_id')
-      OR jsonb_exists($payloadExpression, 'facility_id')
-      OR jsonb_exists($payloadExpression, 'place_id')
-    )
-    """.trimIndent()
