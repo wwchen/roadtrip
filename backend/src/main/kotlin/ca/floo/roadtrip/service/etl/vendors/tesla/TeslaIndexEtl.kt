@@ -79,13 +79,27 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
         // from ctx.rawDir directly; the YAML keeps it as a sibling
         // data_source so fetch + cache-clear flows still address it.
         val locationsDir = File(ctx.rawDir, "tesla-locations")
-        return TeslaSuperchargerEtlOutput(
-            superchargers =
-                dto.rows.mapNotNull { row ->
-                    val rawIndex = row.locationUrlSlug?.let { dto.rawBySlug[it] }
-                    transformRow(row, rawIndex, locationsDir)
-                },
-        )
+        val superchargers =
+            dto.rows.mapNotNull { row ->
+                val rawIndex = row.locationUrlSlug?.let { dto.rawBySlug[it] }
+                transformRow(row, rawIndex, locationsDir)
+            }
+        // sanitizeSlug is lossy (case-fold + non-alnum → `-`); two distinct
+        // upstream slugs can collapse to the same DB key and overwrite via
+        // ON CONFLICT. Detect and fail rather than silently drop rows.
+        val bySlug = superchargers.groupBy { it.locationSlug }
+        val collisions = bySlug.filterValues { it.size > 1 }
+        if (collisions.isNotEmpty()) {
+            val sample =
+                collisions.entries.take(3).joinToString("; ") { (slug, group) ->
+                    "$slug ← [${group.joinToString(", ") { it.commonSiteName }}]"
+                }
+            error(
+                "tesla-index: ${collisions.size} sanitized location_slug collision(s) — " +
+                    "distinct upstream slugs collapsing to the same key. Sample: $sample",
+            )
+        }
+        return TeslaSuperchargerEtlOutput(superchargers = superchargers)
     }
 
     private fun transformRow(

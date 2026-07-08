@@ -48,7 +48,10 @@ private fun orderedDataSources(sources: List<DataSourceEntry>): List<DataSourceE
         require(src.slug !in visiting) { "depends_on cycle on ${src.slug}" }
         visiting += src.slug
         for (dep in src.dependsOn) {
-            bySlug[dep]?.let { visit(it) }
+            val resolved =
+                bySlug[dep]
+                    ?: error("data_source '${src.slug}' depends_on unknown slug '$dep' - typo or renamed dependency")
+            visit(resolved)
         }
         visiting -= src.slug
         visited += src.slug

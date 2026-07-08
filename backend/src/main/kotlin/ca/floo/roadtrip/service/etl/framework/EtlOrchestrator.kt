@@ -68,6 +68,7 @@ class EtlOrchestrator(
         val runId: Long,
         val parsed: Int,
         val upserted: Int,
+        val skipped: Int,
         val swept: Int,
     )
 
@@ -118,6 +119,7 @@ class EtlOrchestrator(
             runId = stats.upsertResult.runId,
             parsed = stats.parsed,
             upserted = stats.upsertResult.upsertedCount,
+            skipped = stats.upsertResult.skippedCount,
             swept = stats.upsertResult.sweptCount,
         )
     }
@@ -176,21 +178,8 @@ class EtlOrchestrator(
         val validated =
             when (val v = concrete.validate(dto)) {
                 is ValidationResult.Ok -> v.dto
-                is ValidationResult.Bad -> {
-                    log.warn("{} '{}' terminal validation failed: {}", sectionLabel, rowName, v.errors)
-                    return Stats(
-                        poiDataName = rowName,
-                        terminalEtlSlug = concrete.etlSlug,
-                        parsed = 0,
-                        transformed = 0,
-                        upsertResult =
-                            CanonicalCatalogRepo.Result(
-                                runId = -1L,
-                                seenCount = 0,
-                                upsertedCount = 0,
-                            ),
-                    )
-                }
+                is ValidationResult.Bad ->
+                    error("$sectionLabel '$rowName' terminal '${concrete.etlSlug}' validation failed: ${v.errors}")
             }
         val output = concrete.transform(validated, transformCtx)
         val ups =
@@ -207,14 +196,24 @@ class EtlOrchestrator(
             }
         val transformedCount = outputCount(output)
         log.info(
-            "{} '{}' terminal slug={} transformed={} upserted={} swept={}",
+            "{} '{}' terminal slug={} transformed={} upserted={} skipped={} swept={}",
             sectionLabel,
             rowName,
             concrete.etlSlug,
             transformedCount,
             ups.upsertedCount,
+            ups.skippedCount,
             ups.sweptCount,
         )
+        if (ups.skippedCount > 0) {
+            log.warn(
+                "{} '{}' terminal slug={} skipped {} records (missing parent vendor ref or other row-level guard)",
+                sectionLabel,
+                rowName,
+                concrete.etlSlug,
+                ups.skippedCount,
+            )
+        }
         return Stats(
             poiDataName = rowName,
             terminalEtlSlug = concrete.etlSlug,
@@ -403,5 +402,12 @@ class EtlOrchestrator(
  */
 @Suppress("UNCHECKED_CAST")
 private fun serializerForValue(value: Any): kotlinx.serialization.KSerializer<Any> =
-    kotlinx.serialization.serializer(value::class.java)
-        as kotlinx.serialization.KSerializer<Any>
+    runCatching {
+        kotlinx.serialization.serializer(value::class.java) as kotlinx.serialization.KSerializer<Any>
+    }.getOrElse { cause ->
+        throw IllegalStateException(
+            "intermediate ETL output type ${value::class.qualifiedName} has no kotlinx.serialization serializer; " +
+                "add @Serializable to the OUT class or provide an explicit serializer",
+            cause,
+        )
+    }

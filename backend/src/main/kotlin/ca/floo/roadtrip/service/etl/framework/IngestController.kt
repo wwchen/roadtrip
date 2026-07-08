@@ -259,6 +259,7 @@ class IngestController(
                                 swept = stats.swept,
                                 terminalEtl = stats.terminalEtlSlug,
                                 upsertedReservables = stats.upserted,
+                                skippedReservables = stats.skipped,
                             ),
                         ),
                     )
@@ -313,6 +314,7 @@ private data class ImportPhaseCountsDto(
     val swept: Int,
     @SerialName("terminal_etl") val terminalEtl: String,
     @SerialName("upserted_reservables") val upsertedReservables: Int? = null,
+    @SerialName("skipped_reservables") val skippedReservables: Int? = null,
     @SerialName("created_links") val createdLinks: Int? = null,
     @SerialName("stale_links_deleted") val staleLinksDeleted: Int? = null,
 )
