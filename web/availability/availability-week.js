@@ -106,10 +106,9 @@ function makeContext(host, feature, signal) {
     error: null,
     watchesByWindow: new Map(),
     skeletonTimer: null,
-    // Catalog (RFC 0008): the per-POI reservable list the BE serves at
-    // /api/poi/{id}/reservables. When a day is selected, the week response's
-    // available_reservable_ids filters this list to the sites available for
-    // that date. The two fetches run in parallel.
+    // Retired drawer matrix state. The old per-POI reservable endpoints are
+    // no longer mounted; this module stays unmounted until campsite-scoped
+    // availability is rebuilt on the canonical catalog.
     sitesState: 'loading',
     sites: [],
     sitesError: null,

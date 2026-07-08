@@ -11,7 +11,7 @@ import ca.floo.roadtrip.models.api.AvailabilityWatchResponse
 import ca.floo.roadtrip.models.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchTargetSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
-import ca.floo.roadtrip.models.api.ReservableSchema
+import ca.floo.roadtrip.models.api.CampsiteSummarySchema
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
@@ -97,7 +97,7 @@ internal fun Route.availabilityWatchRoutes(
         request {
             queryParameter<String>("status") { description = "active | paused | done" }
             queryParameter<Long>("poi_id") { description = "Filter to watches scoped to this POI." }
-            queryParameter<Long>("reservable_id") { description = "Filter to watches scoped to this reservable." }
+            queryParameter<Long>("campsite_id") { description = "Filter to watches scoped to this campsite." }
             queryParameter<Int>("limit") { description = "Page size, default 100, max 500." }
             queryParameter<Int>("offset") { description = "Page offset, default 0." }
         }
@@ -113,14 +113,14 @@ internal fun Route.availabilityWatchRoutes(
                     ?: return@get call.respondError("invalid_status", HttpStatusCode.BadRequest, "status must be active, paused, or done")
             }
         val poiId = call.request.queryParameters["poi_id"]?.toLongOrNull()
-        val reservableId = call.request.queryParameters["reservable_id"]?.toLongOrNull()
+        val campsiteId = call.request.queryParameters["campsite_id"]?.toLongOrNull()
         val limit = (call.request.queryParameters["limit"]?.toIntOrNull() ?: DEFAULT_LIST_LIMIT).coerceIn(1, MAX_LIST_LIMIT)
         val offset =
             call.request.queryParameters["offset"]
                 ?.toIntOrNull()
                 ?.coerceAtLeast(0) ?: 0
-        val rows = watches.list(status, poiId, reservableId, limit, offset)
-        val total = watches.count(status, poiId, reservableId)
+        val rows = watches.list(status, poiId, campsiteId, limit, offset)
+        val total = watches.count(status, poiId, campsiteId)
         call.respondJson(
             AvailabilityWatchListResponse(
                 total = total,
@@ -168,7 +168,7 @@ internal fun Route.availabilityWatchRoutes(
                 return@post call.respondError("invalid_body", HttpStatusCode.BadRequest, e.message)
             }
         val resolved =
-            when (val r = resolveCreateScope(req, reservablesRepo)) {
+            when (val r = resolveCreateScope(req)) {
                 is ResolveResult.Err -> return@post call.respondError(r.error, HttpStatusCode.BadRequest, r.detail)
                 is ResolveResult.Ok -> r
             }
@@ -181,7 +181,7 @@ internal fun Route.availabilityWatchRoutes(
             watchService.create(
                 AvailabilityWatchRepo.CreateInput(
                     targets = resolved.targets,
-                    reservableFilters = req.reservableFilters,
+                    reservableFilters = req.campsiteFilters,
                     startDate = dateWindow.first,
                     endDate = dateWindow.second,
                     cadenceSec = req.cadenceSec,
@@ -252,7 +252,7 @@ internal fun Route.availabilityWatchRoutes(
                 id,
                 AvailabilityWatchRepo.UpdateInput(
                     targets = updateTargets,
-                    reservableFilters = req.reservableFilters,
+                    reservableFilters = req.campsiteFilters,
                     startDate = dateWindow?.first,
                     endDate = dateWindow?.second,
                     cadenceSec = req.cadenceSec,
@@ -294,7 +294,7 @@ internal fun Route.availabilityWatchRoutes(
 
     get("/api/availability/watches/{id}/heatmap", {
         tags = listOf("availability")
-        summary = "(child reservable × date) heatmap of latest snapshot statuses for a watch"
+        summary = "(child campsite × date) heatmap of latest snapshot statuses for a watch"
         request {
             pathParameter<Long>("id") { description = "Watch id." }
         }
@@ -338,8 +338,7 @@ internal fun Route.availabilityWatchRoutes(
             val key = r.loop?.takeIf { it.isNotBlank() }
             rowsByLoop.getOrPut(key) { mutableListOf() } +=
                 AvailabilityWatchHeatmapRow(
-                    reservableId = r.id,
-                    reservableRid = r.rid.encode(),
+                    campsiteId = r.id,
                     name = r.name,
                     cells = rowCells,
                 )
@@ -372,7 +371,7 @@ private sealed class ResolveResult {
 
 /**
  * Validates a `targets` array: it must be non-empty, and each target must
- * set exactly one of `poi_id`/`reservable_id`. Shared by create and update so
+ * set exactly one of `poi_id`/`campsite_id`. Shared by create and update so
  * both reject malformed target sets with a clean 400 `invalid_scope` instead
  * of letting bad input reach the service layer.
  */
@@ -380,47 +379,32 @@ private fun validateTargets(targets: List<AvailabilityWatchTargetSchema>): Resol
     if (targets.isEmpty()) return ResolveResult.Err("invalid_scope", "targets must be non-empty")
     val resolved = mutableListOf<AvailabilityWatchTargetRepo.TargetInput>()
     for (t in targets) {
-        if ((t.poiId == null) == (t.reservableId == null)) {
-            return ResolveResult.Err("invalid_scope", "each target must set exactly one of poi_id/reservable_id")
+        if ((t.poiId == null) == (t.campsiteId == null)) {
+            return ResolveResult.Err("invalid_scope", "each target must set exactly one of poi_id/campsite_id")
         }
-        resolved += AvailabilityWatchTargetRepo.TargetInput(poiId = t.poiId, reservableId = t.reservableId)
+        resolved += AvailabilityWatchTargetRepo.TargetInput(poiId = t.poiId, reservableId = t.campsiteId)
     }
     return ResolveResult.Ok(resolved)
 }
 
 /**
  * Builds the target list for create/update from either the preferred
- * `targets` array or the legacy single-scope fields (`poi_id`,
- * `reservable_id`, `reservable_rid`) — exactly one of the two shapes must be
- * present. Legacy fields are sugar for a one-element `targets` list so the
- * existing calendar UI keeps working unmodified.
+ * `targets` array or the single-scope fields (`poi_id`, `campsite_id`) —
+ * exactly one of the two shapes must be present.
  */
-private fun resolveCreateScope(
-    req: AvailabilityWatchCreateRequest,
-    reservablesRepo: ReservableRepo,
-): ResolveResult {
-    val legacyKeysSet = listOf(req.poiId, req.reservableId, req.reservableRid).count { it != null }
-    val hasTargets = req.targets != null
-    if (hasTargets && legacyKeysSet > 0) {
-        return ResolveResult.Err("invalid_scope", "specify either targets or poi_id/reservable_id/reservable_rid, not both")
+private fun resolveCreateScope(req: AvailabilityWatchCreateRequest): ResolveResult {
+    val singleScopeKeysSet = listOf(req.poiId, req.campsiteId).count { it != null }
+    val targets = req.targets
+    if (targets != null && singleScopeKeysSet > 0) {
+        return ResolveResult.Err("invalid_scope", "specify either targets or poi_id/campsite_id, not both")
     }
-    if (hasTargets) {
-        return validateTargets(req.targets!!)
+    if (targets != null) {
+        return validateTargets(targets)
     }
-    if (legacyKeysSet != 1) {
-        return ResolveResult.Err("invalid_scope", "exactly one of targets, poi_id, reservable_id, or reservable_rid must be set")
+    if (singleScopeKeysSet != 1) {
+        return ResolveResult.Err("invalid_scope", "exactly one of targets, poi_id, or campsite_id must be set")
     }
-    if (req.reservableRid != null) {
-        val parsed =
-            ca.floo.roadtrip.models.domain.ReservableId
-                .parse(req.reservableRid)
-                ?: return ResolveResult.Err("invalid_reservable_rid", "could not parse reservable_rid '${req.reservableRid}'")
-        val resolvedReservable =
-            reservablesRepo.findByRid(parsed)
-                ?: return ResolveResult.Err("reservable_not_found", "no reservable with rid ${req.reservableRid}")
-        return ResolveResult.Ok(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = null, reservableId = resolvedReservable.id)))
-    }
-    return ResolveResult.Ok(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = req.poiId, reservableId = req.reservableId)))
+    return ResolveResult.Ok(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = req.poiId, reservableId = req.campsiteId)))
 }
 
 /**
@@ -469,31 +453,29 @@ private fun datesInWindow(
 
 private fun Watch.toSchema(reservablesRepo: ReservableRepo): AvailabilityWatchSchema {
     val firstTarget = targets.firstOrNull()
-    val singleReservable =
+    val singleCampsite =
         firstTarget
             ?.reservableId
             ?.takeIf { targets.size == 1 }
             ?.let { reservablesRepo.findById(it) }
             ?.let { r ->
-                ReservableSchema(
-                    rid = r.rid.encode(),
-                    type = r.rid.type.encode(),
-                    vendor = r.rid.vendor,
-                    vendorId = r.rid.vendorId,
+                CampsiteSummarySchema(
+                    id = r.id,
                     name = r.name,
                     loop = r.loop,
-                    siteType = r.siteType,
+                    kind = r.siteType,
                     poiIds = emptyList(),
                     raw = r.raw,
+                    tags = r.tags,
                 )
             }
     return AvailabilityWatchSchema(
         id = id,
-        targets = targets.map { AvailabilityWatchTargetSchema(poiId = it.poiId, reservableId = it.reservableId) },
+        targets = targets.map { AvailabilityWatchTargetSchema(poiId = it.poiId, campsiteId = it.reservableId) },
         poiId = firstTarget?.poiId,
-        reservableId = firstTarget?.reservableId,
-        reservable = singleReservable,
-        reservableFilters = reservableFilters,
+        campsiteId = firstTarget?.reservableId,
+        campsite = singleCampsite,
+        campsiteFilters = reservableFilters,
         startDate = startDate.toString(),
         endDate = endDate.toString(),
         cadenceSec = cadenceSec,

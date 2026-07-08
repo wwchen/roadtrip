@@ -8,20 +8,15 @@ import kotlinx.serialization.json.JsonObject
 @Serializable
 data class AvailabilityWatchTargetSchema(
     @SerialName("poi_id") val poiId: Long? = null,
-    @SerialName("reservable_id") val reservableId: Long? = null,
+    @SerialName("campsite_id") val campsiteId: Long? = null,
 )
 
 @Serializable
 data class AvailabilityWatchCreateRequest(
-    // Preferred shape: an explicit target set. When omitted, the legacy
-    // single-scope fields below are read as sugar for a one-element list —
-    // kept so the existing calendar UI (web/availability/availability-week.js)
-    // does not need to change in this PR.
     val targets: List<AvailabilityWatchTargetSchema>? = null,
     @SerialName("poi_id") val poiId: Long? = null,
-    @SerialName("reservable_id") val reservableId: Long? = null,
-    @SerialName("reservable_rid") val reservableRid: String? = null,
-    @SerialName("reservable_filters") val reservableFilters: JsonObject = JsonObject(emptyMap()),
+    @SerialName("campsite_id") val campsiteId: Long? = null,
+    @SerialName("campsite_filters") val campsiteFilters: JsonObject = JsonObject(emptyMap()),
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,
     // NULL means "no watch-level cadence override" — the resolver falls
@@ -34,11 +29,8 @@ data class AvailabilityWatchCreateRequest(
 
 @Serializable
 data class AvailabilityWatchUpdateRequest(
-    // Same targets-or-legacy-fields shape as create. Absent `targets` AND
-    // absent poi_id/reservable_id/reservable_rid means "leave the target set
-    // untouched" (maps to UpdateInput.targets = null).
     val targets: List<AvailabilityWatchTargetSchema>? = null,
-    @SerialName("reservable_filters") val reservableFilters: JsonObject? = null,
+    @SerialName("campsite_filters") val campsiteFilters: JsonObject? = null,
     @SerialName("start_date") val startDate: String? = null,
     @SerialName("end_date") val endDate: String? = null,
     @SerialName("cadence_sec") val cadenceSec: Int? = null,
@@ -52,13 +44,10 @@ data class AvailabilityWatchUpdateRequest(
 data class AvailabilityWatchSchema(
     val id: Long,
     val targets: List<AvailabilityWatchTargetSchema>,
-    // Derived convenience fields (first target) so existing consumers
-    // (web/availability/availability-week.js reads `w.poi_id`) keep working
-    // without a UI change in this PR. New consumers should read `targets`.
     @SerialName("poi_id") val poiId: Long? = null,
-    @SerialName("reservable_id") val reservableId: Long? = null,
-    val reservable: ReservableSchema? = null,
-    @SerialName("reservable_filters") val reservableFilters: JsonObject,
+    @SerialName("campsite_id") val campsiteId: Long? = null,
+    val campsite: CampsiteSummarySchema? = null,
+    @SerialName("campsite_filters") val campsiteFilters: JsonObject,
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,
     // NULL when the watch carries no cadence override (falls through to the
@@ -102,8 +91,7 @@ data class AvailabilityWatchHeatmapCell(
 
 @Serializable
 data class AvailabilityWatchHeatmapRow(
-    @SerialName("reservable_id") val reservableId: Long,
-    @SerialName("reservable_rid") val reservableRid: String,
+    @SerialName("campsite_id") val campsiteId: Long,
     val name: String? = null,
     val cells: List<AvailabilityWatchHeatmapCell>,
 )

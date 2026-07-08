@@ -68,7 +68,7 @@ data class AvailabilityRunsListResponse(
 
 @Serializable
 data class AvailabilitySnapshotSchema(
-    @SerialName("reservable_id") val reservableId: Long? = null,
+    @SerialName("campsite_id") val campsiteId: Long? = null,
     @SerialName("run_id") val runId: Long? = null,
     @SerialName("target_date") val targetDate: String,
     @SerialName("observed_from") val observedFrom: String? = null,
@@ -95,6 +95,6 @@ data class AvailabilitySnapshotStatsSchema(
 
 @Serializable
 data class AvailabilitySnapshotsSummaryResponse(
-    @SerialName("reservable_rid") val reservableRid: String,
+    @SerialName("campsite_id") val campsiteId: Long,
     val stats: List<AvailabilitySnapshotStatsSchema>,
 )
