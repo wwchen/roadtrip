@@ -1078,6 +1078,19 @@ API_BASE = "https://api.campflare.com/v2"
 FETCHER = "fetch_campflare_dump.py"
 FETCHER_VERSION = "1"
 DEFAULT_PAGE_SIZE = 5000
+ROOT = Path(__file__).resolve().parent.parent
+ENV_PATH = ROOT / ".env"
+
+
+def load_env() -> None:
+    if not ENV_PATH.exists():
+        return
+    for line in ENV_PATH.read_text().splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        os.environ.setdefault(key.strip(), value.strip().strip('"').strip("'"))
 
 
 def part_name(index: int) -> str:
@@ -1110,9 +1123,10 @@ def download(url: str, dest: Path) -> None:
 
 
 def run(source: str, kind: str, page_size: int) -> None:
+    load_env()
     api_key = os.environ.get("CAMPFLARE_API_KEY")
     if not api_key:
-        raise SystemExit("CAMPFLARE_API_KEY is required")
+        raise SystemExit("CAMPFLARE_API_KEY is required; set it in the environment or repo-root .env")
     src = load_source(source)
     manifest = http_get_json(f"{API_BASE}/dumps/latest", api_key)
     entry = manifest[kind]
@@ -2146,12 +2160,12 @@ Run:
 
 Expected: PASS.
 
-- [ ] **Step 3: Fetch Campflare dump using `CAMPFLARE_API_KEY`**
+- [ ] **Step 3: Fetch Campflare dump using `CAMPFLARE_API_KEY` from env or `.env`**
 
 Run:
 
 ```bash
-# Assumes CAMPFLARE_API_KEY is exported in the shell.
+# Assumes CAMPFLARE_API_KEY is exported or present in repo-root .env.
 python3 scripts/fetch_campflare_dump.py --source campflare-campgrounds --kind campgrounds
 python3 scripts/fetch_campflare_dump.py --source campflare-campsites --kind campsites
 ```
