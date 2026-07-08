@@ -7,14 +7,16 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CanonicalCatalogRepo
 import ca.floo.roadtrip.repo.NoCaptureException
 import ca.floo.roadtrip.repo.RawCapture
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraPoiReservableJoiner
+import ca.floo.roadtrip.service.etl.vendors.recgov.RecgovPoiReservableJoiner
+import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaPoiReservableJoiner
+import ca.floo.roadtrip.service.etl.vendors.reservecalifornia.ReserveCaliforniaPoiReservableJoiner
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
+import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
 import java.io.File
-
-private const val DISABLED_JOINER_IMPORT_MESSAGE =
-    "vendor campsite parent joiners are retired; canonical campsite ETLs resolve parents through vendor refs"
 
 // Orchestrates one poi_data/reservable_data row's ETL chain end-to-end.
 //
@@ -45,6 +47,12 @@ class EtlOrchestrator(
      * registry under [Companion.registry]; overridable for tests.
      */
     private val etlRegistry: Map<String, SourceEtl<*, *>> = registry,
+    /**
+     * Joiner adapter map keyed by YAML `adapter:` name. Defaults to the
+     * production registry under [Companion.joinerRegistry]; overridable
+     * for tests.
+     */
+    private val joinerRegistry: Map<String, PoiReservableJoiner> = Companion.joinerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val catalogRepo = CanonicalCatalogRepo(ctx)
@@ -163,7 +171,75 @@ class EtlOrchestrator(
         return terminalStats!!
     }
 
-    fun runJoiner(name: String): JoinerStats = throw UnsupportedOperationException("$DISABLED_JOINER_IMPORT_MESSAGE: $name")
+    /**
+     * Run a poi_reservable_joiner row by name. The joiner walks the canonical
+     * schema through its vendor-specific predicates (typically campsite
+     * vendor refs → campground vendor refs) and returns a list of
+     * (campsite_id, campground_id) pairs it believes are correct.
+     *
+     * `campsites.campground_id` is the durable parent link; where a
+     * discovered pair disagrees with the current value we reparent the
+     * campsite. A campsite not in the joiner's result set is out of scope
+     * for that joiner and its parent is left alone — vendor scoping in
+     * each adapter's WHERE clause is what prevents one joiner from
+     * clobbering another vendor's rows.
+     *
+     * This is a reconciliation pass: if `upsertCampsite` already resolved
+     * the correct parent via `parentVendorRefId`, the UPDATE matches zero
+     * rows and `linksInserted = 0`. It earns its keep when vendor payloads
+     * shift over time (Aspira leaf reassignment, rec.gov facility moves)
+     * or when future cross-vendor merges expose a better parent than the
+     * source-of-truth ETL saw at write time.
+     */
+    fun runJoiner(name: String): JoinerStats {
+        val row =
+            poiRegistry.poiReservableJoinerByName(name)
+                ?: error("no poi_reservable_joiner row with name='$name'")
+        val joiner =
+            joinerRegistry[row.adapter]
+                ?: error("no joiner adapter registered for '${row.adapter}'")
+
+        log.info("joiner '{}' starting adapter={}", row.name, row.adapter)
+        val links = joiner.discoverLinks(JoinerCtx(ctx = ctx, args = row.args))
+        val reparented =
+            ctx.transactionResult { cfg ->
+                val tx = DSL.using(cfg)
+                var affected = 0
+                for (link in links) {
+                    affected +=
+                        tx.execute(
+                            "UPDATE campsites SET campground_id = ? WHERE id = ? AND campground_id <> ?",
+                            link.campgroundId,
+                            link.campsiteId,
+                            link.campgroundId,
+                        )
+                }
+                affected
+            }
+        val staleDeleted = joiner.sweepStaleLinks(JoinerCtx(ctx = ctx, args = row.args))
+        log.info(
+            "joiner '{}' adapter={} discovered={} reparented={} stale_deleted={}",
+            row.name,
+            row.adapter,
+            links.size,
+            reparented,
+            staleDeleted,
+        )
+        if (reparented > 0) {
+            log.warn(
+                "joiner '{}' reparented {} campsite(s) — upsert-time parent didn't match vendor-ref lookup",
+                row.name,
+                reparented,
+            )
+        }
+        return JoinerStats(
+            joinerName = row.name,
+            adapter = row.adapter,
+            linksDiscovered = links.size,
+            linksInserted = reparented,
+            staleLinksDeleted = staleDeleted,
+        )
+    }
 
     @Suppress("UNCHECKED_CAST")
     private fun runTerminal(
@@ -391,6 +467,18 @@ class EtlOrchestrator(
                     ca.floo.roadtrip.service.etl.vendors.tesla
                         .TeslaIndexEtl(),
             )
+
+        // Runnable joiner adapters keyed by YAML `adapter:` name. Kept
+        // separate from `registry` because joiners don't emit typed ETL
+        // output; they mutate campsite parent links directly through
+        // discoverLinks + a reparent UPDATE in runJoiner.
+        val joinerRegistry: Map<String, PoiReservableJoiner> =
+            listOf(
+                RecgovPoiReservableJoiner(),
+                AspiraPoiReservableJoiner(),
+                ReserveAmericaPoiReservableJoiner(),
+                ReserveCaliforniaPoiReservableJoiner(),
+            ).associateBy { it.adapter }
     }
 }
 
