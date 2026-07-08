@@ -274,7 +274,7 @@ internal class AvailabilityPollExecutor(
                     runId = runId,
                     provider = providerId.lowercase(),
                     parentRef = parentRefKey(r.parentRef),
-                    reservableCount = r.reservables.size,
+                    campsiteCount = r.reservables.size,
                     windowStart = r.window!!.startDate,
                     windowEnd = r.window.endDate,
                     outcome = r.outcome.name.lowercase(),

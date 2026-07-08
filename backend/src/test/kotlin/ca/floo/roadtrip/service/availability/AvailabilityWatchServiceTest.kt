@@ -8,6 +8,9 @@ import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampsite
+import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
@@ -22,52 +25,35 @@ import kotlin.test.assertTrue
 class AvailabilityWatchServiceTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability_watch_target")
-        ctx.execute("DELETE FROM availability_watch_poller")
-        ctx.execute("DELETE FROM availability_poller")
-        ctx.execute("DELETE FROM availability_watch")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     private fun seedPoi(campgroundId: String): Long =
         ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
-                ) VALUES (
-                    'test', ?, 'campground', 'Upper Pines',
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
-                ) RETURNING id
-                """.trimIndent(),
-                "poi-$campgroundId",
-                """{"recgov_id": "$campgroundId"}""",
-            )!!
-            .get("id", Long::class.java)
+            .seedCatalogPoi(
+                sourceId = "poi-$campgroundId",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "test",
+                providerRefJson = """{"recgov_id": "$campgroundId"}""",
+            ).poiId
 
     private fun seedReservable(
         poiId: Long,
         siteId: String,
-    ): Long {
-        val id =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO reservables (type, vendor, vendor_id, name, source)
-                    VALUES ('site', 'recgov', ?, ?, 'test')
-                    RETURNING id
-                    """.trimIndent(),
-                    siteId,
-                    "Site $siteId",
-                )!!
-                .get("id", Long::class.java)
-        ctx.execute("INSERT INTO reservable_pois (reservable_id, poi_id) VALUES (?, ?)", id, poiId)
-        return id
-    }
+    ): Long =
+        ctx.seedCampsite(
+            campgroundId = campgroundIdFor(poiId),
+            vendor = "recgov",
+            vendorId = siteId,
+            name = "Site $siteId",
+        )
+
+    private fun campgroundIdFor(poiId: Long): Long =
+        ctx
+            .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
+            .get("campground_id", Long::class.java)
 
     private fun service(): AvailabilityWatchService {
         val reservablesRepo = ReservableRepo(ctx)

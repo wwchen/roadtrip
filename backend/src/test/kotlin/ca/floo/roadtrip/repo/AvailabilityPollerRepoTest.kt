@@ -15,33 +15,12 @@ import kotlin.test.assertTrue
 class AvailabilityPollerRepoTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability_run")
-        ctx.execute("DELETE FROM availability_watch_target")
-        ctx.execute("DELETE FROM availability_watch_poller")
-        ctx.execute("DELETE FROM availability_poller")
-        ctx.execute("DELETE FROM availability_watch")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
 
-    private fun insertPoi(): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
-                ) VALUES (
-                    'test', 'p1', 'campground', 'Upper Pines',
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
-                ) RETURNING id
-                """.trimIndent(),
-            )!!
-            .get("id", Long::class.java)
+    private fun insertPoi(): Long = ctx.seedCatalogPoi(sourceId = "p1", name = "Upper Pines", lon = -119.56, lat = 37.74).poiId
 
     /** Inserts an `availability_watch` row that is active with a future end_date. */
     private fun insertActiveWatch(
@@ -313,7 +292,7 @@ class AvailabilityPollerRepoTest : SharedDbTest() {
         repo.forcePull(pollerId, forceAt, cooldown = Duration.ofSeconds(30))
         val second = repo.forcePull(pollerId, forceAt.plusSeconds(5), cooldown = Duration.ofSeconds(30))
         assertTrue(second is AvailabilityPollerRepo.ForcePullResult.Cooldown)
-        val remaining = (second as AvailabilityPollerRepo.ForcePullResult.Cooldown).retryAfterSec
+        val remaining = second.retryAfterSec
         assertEquals(25L, remaining) // 30s cooldown - 5s elapsed
     }
 

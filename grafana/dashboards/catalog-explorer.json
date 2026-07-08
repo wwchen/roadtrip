@@ -18,30 +18,6 @@
       "title": "All dashboards",
       "tooltip": "",
       "type": "dashboards"
-    },
-    {
-      "asDropdown": false,
-      "icon": "external link",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "POI Detail",
-      "tooltip": "Open selected POI detail dashboard",
-      "type": "link",
-      "url": "/d/poi-detail/roadtrip-poi-detail"
-    },
-    {
-      "asDropdown": false,
-      "icon": "external link",
-      "includeVars": true,
-      "keepTime": true,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Reservable Detail",
-      "tooltip": "Open selected reservable detail dashboard",
-      "type": "link",
-      "url": "/d/reservable-detail/roadtrip-reservable-detail"
     }
   ],
   "liveNow": false,
@@ -56,7 +32,7 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 5,
+        "h": 7,
         "w": 24,
         "x": 0,
         "y": 0
@@ -65,15 +41,17 @@
       "options": {
         "showHeader": true
       },
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH filtered_pois AS (SELECT p.id FROM pois p WHERE p.deleted_at IS NULL AND (${poi_name_search:sqlstring} = '' OR p.name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN p.id::text = ${poi_id_search:sqlstring} ELSE false END AND (${poi_category:sqlstring} IN ('', '__all') OR p.category IN (${poi_category:sqlstring}))), filtered_reservables AS (SELECT r.id FROM reservables r WHERE (${show_deleted_reservables:sqlstring} = 'true' OR r.deleted_at IS NULL) AND (${reservable_type:sqlstring} IN ('', 'all') OR r.type = ${reservable_type:sqlstring}) AND (${reservable_vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${reservable_vendor:sqlstring})) AND (${reservable_search:sqlstring} = '' OR r.type || ':' || r.vendor || ':' || r.vendor_id ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.name, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.loop, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.site_type, '') ILIKE '%' || ${reservable_search:sqlstring} || '%') AND (${site_type_search:sqlstring} = '' OR coalesce(r.site_type, '') ILIKE '%' || ${site_type_search:sqlstring} || '%')) SELECT (SELECT count(*) FROM filtered_pois) AS matching_pois, (SELECT count(*) FROM filtered_pois fp WHERE EXISTS (SELECT 1 FROM reservable_pois rp JOIN reservables r ON r.id = rp.reservable_id WHERE rp.poi_id = fp.id AND r.deleted_at IS NULL)) AS matching_pois_with_reservables, (SELECT count(*) FROM filtered_reservables) AS matching_reservables, (SELECT count(*) FROM availability s JOIN filtered_reservables fr ON fr.id = s.reservable_id WHERE s.last_observed_at >= now() - (${observed_days_back:sqlstring} || ' days')::interval) AS snapshot_rows_in_observed_window, (SELECT max(s.last_observed_at) FROM availability s JOIN filtered_reservables fr ON fr.id = s.reservable_id) AS latest_availability_observed_at;",
+          "rawSql": "SELECT *\nFROM (\n  VALUES\n    ('pois',                         (SELECT count(*)::bigint FROM pois)),\n    ('active_pois',                  (SELECT count(*)::bigint FROM pois WHERE deleted_at IS NULL)),\n    ('campgrounds',                  (SELECT count(*)::bigint FROM campgrounds)),\n    ('active_campgrounds',           (SELECT count(*)::bigint FROM campgrounds WHERE deleted_at IS NULL)),\n    ('campsites',                    (SELECT count(*)::bigint FROM campsites)),\n    ('active_campsites',             (SELECT count(*)::bigint FROM campsites WHERE deleted_at IS NULL)),\n    ('vendor_refs',                  (SELECT count(*)::bigint FROM vendor_refs)),\n    ('campground_vendor_refs',       (SELECT count(*)::bigint FROM campground_vendor_refs)),\n    ('campsite_vendor_refs',         (SELECT count(*)::bigint FROM campsite_vendor_refs)),\n    ('tesla_superchargers',          (SELECT count(*)::bigint FROM tesla_superchargers)),\n    ('planet_fitness_locations',     (SELECT count(*)::bigint FROM planet_fitness_locations)),\n    ('availability',                 (SELECT count(*)::bigint FROM availability)),\n    ('availability_watch',           (SELECT count(*)::bigint FROM availability_watch)),\n    ('availability_poller',          (SELECT count(*)::bigint FROM availability_poller)),\n    ('availability_run',             (SELECT count(*)::bigint FROM availability_run)),\n    ('ingest_runs',                  (SELECT count(*)::bigint FROM ingest_runs)),\n    ('import_runs',                  (SELECT count(*)::bigint FROM import_runs)),\n    ('api_cache_metadata',           (SELECT count(*)::bigint FROM grafana_api_cache_metadata))\n) AS counts(table_name, exact_rows)\nORDER BY exact_rows DESC;",
           "refId": "A"
         }
       ],
@@ -90,130 +68,26 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
-        "w": 12,
+        "h": 10,
+        "w": 24,
         "x": 0,
-        "y": 5
+        "y": 7
       },
       "id": 2,
       "options": {
-        "basemap": {
-          "config": {},
-          "name": "Layer 0",
-          "type": "default"
-        },
-        "controls": {
-          "mouseWheelZoom": true,
-          "showAttribution": true,
-          "showDebug": false,
-          "showMeasure": false,
-          "showScale": false,
-          "showZoom": true
-        },
-        "layers": [
-          {
-            "config": {
-              "showLegend": true,
-              "style": {
-                "color": {
-                  "fixed": "dark-green"
-                },
-                "opacity": 0.8,
-                "size": {
-                  "fixed": 7,
-                  "max": 16,
-                  "min": 2
-                }
-              }
-            },
-            "location": {
-              "latitude": "lat",
-              "longitude": "lng",
-              "mode": "coords"
-            },
-            "name": "POIs",
-            "tooltip": true,
-            "type": "markers"
-          }
-        ],
-        "tooltip": {
-          "mode": "details"
-        },
-        "view": {
-          "allLayers": true,
-          "id": "fit",
-          "lat": 49,
-          "lon": -123,
-          "zoom": 5
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT p.id AS poi_id, p.name, p.category, p.subcategory, p.source, p.source_id, p.region, ST_X(ST_Centroid(p.geom)) AS lng, ST_Y(ST_Centroid(p.geom)) AS lat, count(DISTINCT r.id) AS reservable_count, max(s.last_observed_at) AS latest_availability_observed_at FROM pois p LEFT JOIN reservable_pois rp ON rp.poi_id = p.id LEFT JOIN reservables r ON r.id = rp.reservable_id AND r.deleted_at IS NULL LEFT JOIN availability s ON s.reservable_id = r.id WHERE p.deleted_at IS NULL AND (${poi_name_search:sqlstring} = '' OR p.name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN p.id::text = ${poi_id_search:sqlstring} ELSE false END AND (${poi_category:sqlstring} IN ('', '__all') OR p.category IN (${poi_category:sqlstring})) GROUP BY p.id ORDER BY p.name ASC, p.id ASC LIMIT 1000;",
-          "refId": "A"
-        }
-      ],
-      "title": "POI Map",
-      "type": "geomap"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "poi_id"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Select POI Here",
-                    "url": "/d/catalog-explorer/roadtrip-catalog-explorer?var-poi_id=${__value.raw}"
-                  },
-                  {
-                    "targetBlank": false,
-                    "title": "Open POI Detail",
-                    "url": "/d/poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 12,
-        "x": 12,
-        "y": 5
-      },
-      "id": 3,
-      "options": {
         "showHeader": true
       },
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT p.id AS poi_id, p.name, p.category, p.subcategory, p.source, p.source_id, p.region, count(DISTINCT r.id) AS reservable_count, max(s.last_observed_at) AS latest_availability_observed_at, bool_or(s.status = 'available') FILTER (WHERE s.last_observed_at >= now() - (${observed_days_back:sqlstring} || ' days')::interval) AS any_available_in_window FROM pois p LEFT JOIN reservable_pois rp ON rp.poi_id = p.id LEFT JOIN reservables r ON r.id = rp.reservable_id AND r.deleted_at IS NULL LEFT JOIN availability s ON s.reservable_id = r.id WHERE p.deleted_at IS NULL AND (${poi_name_search:sqlstring} = '' OR p.name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN p.id::text = ${poi_id_search:sqlstring} ELSE false END AND (${poi_category:sqlstring} IN ('', '__all') OR p.category IN (${poi_category:sqlstring})) GROUP BY p.id ORDER BY p.name ASC, p.id ASC LIMIT 500;",
+          "rawSql": "WITH canonical_pois AS (\n  SELECT\n    p.id AS poi_id,\n    p.poi_type,\n    COALESCE(cg.name, ts.common_site_name, pf.name) AS name,\n    COALESCE(cg.location->>'region', ts.region, pf.region) AS region,\n    COALESCE(cg.location->>'country', ts.country::text, pf.country::text) AS country,\n    ST_X(ST_Centroid(p.geom)) AS lng,\n    ST_Y(ST_Centroid(p.geom)) AS lat,\n    pc.campground_id,\n    pts.tesla_supercharger_id,\n    ppf.planet_fitness_location_id,\n    cg.status AS campground_status,\n    ts.site_status AS tesla_site_status,\n    ts.stall_count,\n    ts.max_power_kw,\n    count(DISTINCT cs.id) AS campsite_count,\n    max(a.last_observed_at) AS latest_availability_observed_at\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\n  LEFT JOIN availability a ON a.campsite_id = cs.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  WHERE p.deleted_at IS NULL\n  GROUP BY p.id, p.poi_type, cg.id, ts.id, pf.id, pc.campground_id, pts.tesla_supercharger_id, ppf.planet_fitness_location_id\n)\nSELECT *\nFROM canonical_pois\nWHERE (${poi_name:sqlstring} = '' OR name ILIKE '%' || ${poi_name:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id:sqlstring} = '' THEN true\n    WHEN ${poi_id:sqlstring} ~ '^[0-9]+$' THEN poi_id::text = ${poi_id:sqlstring}\n    ELSE false\n  END\n  AND (${poi_type:sqlstring} IN ('', '__all') OR poi_type IN (${poi_type:sqlstring}))\nORDER BY name ASC NULLS LAST, poi_id ASC\nLIMIT 1000;",
           "refId": "A"
         }
       ],
@@ -230,28 +104,66 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 6,
+        "h": 9,
         "w": 24,
         "x": 0,
         "y": 17
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  cs.id AS campsite_id,\n  cs.campground_id,\n  cg.name AS campground_name,\n  cs.loop_name,\n  cs.name,\n  cs.kind,\n  cs.kind_listed,\n  cs.max_people,\n  cs.max_rv_length,\n  cs.max_trailer_length,\n  vr.vendor,\n  vr.external_id AS vendor_ref_id,\n  max(a.last_observed_at) AS latest_availability_observed_at,\n  bool_or(a.status = 'available') FILTER (WHERE a.last_observed_at >= now() - interval '7 days') AS any_available_last_7d\nFROM poi_campgrounds pc\nJOIN campgrounds cg ON cg.id = pc.campground_id\nJOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nLEFT JOIN availability a ON a.campsite_id = cs.id\nWHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n  AND pc.poi_id::text = ${poi_id:sqlstring}\nGROUP BY cs.id, cg.id, vr.id\nORDER BY cs.loop_name NULLS LAST, cs.name NULLS LAST, cs.id ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Campsites For Selected POI",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
       },
       "id": 4,
       "options": {
         "showHeader": true
       },
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT p.id AS poi_id, p.source, p.source_id, p.category, p.subcategory, p.name, p.region, p.country, p.unit_name, p.reserve_url, p.phone, p.info_url, p.fetched_at, p.updated_at, count(DISTINCT r.id) AS linked_reservables, max(s.last_observed_at) AS latest_availability_observed_at, now() - max(s.last_observed_at) AS latest_availability_age, p.provider_ref, p.properties AS raw_properties FROM pois p LEFT JOIN reservable_pois rp ON rp.poi_id = p.id LEFT JOIN reservables r ON r.id = rp.reservable_id AND r.deleted_at IS NULL LEFT JOIN availability s ON s.reservable_id = r.id WHERE ${poi_id:sqlstring} ~ '^[0-9]+$' AND p.id::text = ${poi_id:sqlstring} GROUP BY p.id;",
+          "rawSql": "SELECT\n  cs.id AS campsite_id,\n  cg.id AS campground_id,\n  cg.name AS campground_name,\n  cs.name,\n  cs.loop_name,\n  cs.kind,\n  cs.kind_listed,\n  cs.max_people,\n  cs.max_cars,\n  cs.max_rv_length,\n  cs.max_trailer_length,\n  cs.electric_hookups,\n  cs.water_hookups,\n  cs.sewer_hookups,\n  cs.ada_accessible,\n  cs.pull_through,\n  cs.equipment,\n  cs.price,\n  cs.schedule,\n  vr.vendor,\n  vr.external_id AS vendor_ref_id,\n  cs.source_payload,\n  cs.updated_at,\n  cs.deleted_at\nFROM campsites cs\nJOIN campgrounds cg ON cg.id = cs.campground_id\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND cs.id::text = ${campsite_id:sqlstring};",
           "refId": "A"
         }
       ],
-      "title": "Selected POI Header",
+      "title": "Selected Campsite Header",
       "type": "table"
     },
     {
@@ -261,55 +173,33 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rid"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Select Reservable Here",
-                    "url": "/d/catalog-explorer/roadtrip-catalog-explorer?var-reservable_rid=${__value.raw}"
-                  },
-                  {
-                    "targetBlank": false,
-                    "title": "Open Reservable Detail",
-                    "url": "/d/reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
-        "h": 10,
+        "h": 9,
         "w": 24,
         "x": 0,
-        "y": 23
+        "y": 34
       },
       "id": 5,
       "options": {
         "showHeader": true
       },
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT r.id AS reservable_id, r.type || ':' || r.vendor || ':' || r.vendor_id AS rid, r.type, r.vendor, r.vendor_id, r.name, r.loop, r.site_type, r.source, r.updated_at, r.deleted_at, max(s.last_observed_at) AS latest_availability_observed_at, count(s.id) FILTER (WHERE s.last_observed_at >= now() - (${observed_days_back:sqlstring} || ' days')::interval) AS snapshots_in_window, bool_or(s.status = 'available') FILTER (WHERE s.last_observed_at >= now() - (${observed_days_back:sqlstring} || ' days')::interval) AS any_available_in_window, r.tags FROM reservable_pois rp JOIN reservables r ON r.id = rp.reservable_id LEFT JOIN availability s ON s.reservable_id = r.id WHERE ${poi_id:sqlstring} ~ '^[0-9]+$' AND rp.poi_id::text = ${poi_id:sqlstring} AND (${show_deleted_reservables:sqlstring} = 'true' OR r.deleted_at IS NULL) AND (${reservable_type:sqlstring} IN ('', 'all') OR r.type = ${reservable_type:sqlstring}) AND (${reservable_vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${reservable_vendor:sqlstring})) AND (${reservable_search:sqlstring} = '' OR r.type || ':' || r.vendor || ':' || r.vendor_id ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.name, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.loop, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.site_type, '') ILIKE '%' || ${reservable_search:sqlstring} || '%') AND (${site_type_search:sqlstring} = '' OR coalesce(r.site_type, '') ILIKE '%' || ${site_type_search:sqlstring} || '%') GROUP BY r.id ORDER BY r.loop NULLS LAST, r.name NULLS LAST, rid ASC;",
+          "rawSql": "SELECT\n  s.id AS snapshot_id,\n  s.campsite_id,\n  s.run_id,\n  s.target_date,\n  s.status::text AS status,\n  (s.status = 'available') AS available,\n  s.last_observed_at,\n  lag(s.last_observed_at) OVER (PARTITION BY s.campsite_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from\nFROM availability s\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND s.campsite_id::text = ${campsite_id:sqlstring}\nORDER BY s.last_observed_at DESC, s.id DESC\nLIMIT 500;",
           "refId": "A"
         }
       ],
-      "title": "Reservables For Selected POI",
+      "title": "Latest Availability For Selected Campsite",
       "type": "table"
     },
     {
@@ -319,393 +209,41 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rid"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Select Reservable Here",
-                    "url": "/d/catalog-explorer/roadtrip-catalog-explorer?var-reservable_rid=${__value.raw}&var-rid_scope=all"
-                  },
-                  {
-                    "targetBlank": false,
-                    "title": "Open Reservable Detail",
-                    "url": "/d/reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
-        "h": 10,
+        "h": 8,
         "w": 24,
         "x": 0,
-        "y": 33
+        "y": 43
       },
       "id": 6,
       "options": {
         "showHeader": true
       },
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH filtered AS (SELECT r.* FROM reservables r WHERE (${show_deleted_reservables:sqlstring} = 'true' OR r.deleted_at IS NULL) AND (${reservable_type:sqlstring} IN ('', 'all') OR r.type = ${reservable_type:sqlstring}) AND (${reservable_vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${reservable_vendor:sqlstring})) AND (${reservable_search:sqlstring} = '' OR r.type || ':' || r.vendor || ':' || r.vendor_id ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.name, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.loop, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.site_type, '') ILIKE '%' || ${reservable_search:sqlstring} || '%') AND (${site_type_search:sqlstring} = '' OR coalesce(r.site_type, '') ILIKE '%' || ${site_type_search:sqlstring} || '%') ORDER BY r.type ASC, r.vendor ASC, r.name NULLS LAST, r.vendor_id ASC LIMIT 500) SELECT f.id AS reservable_id, f.type || ':' || f.vendor || ':' || f.vendor_id AS rid, f.type, f.vendor, f.vendor_id, f.name, f.loop, f.site_type, f.source, f.updated_at, f.deleted_at, string_agg(DISTINCT p.id::text || ' - ' || p.name, '; ') FILTER (WHERE p.id IS NOT NULL) AS linked_pois, max(s.last_observed_at) AS latest_availability_observed_at, bool_or(s.status = 'available') FILTER (WHERE s.last_observed_at >= now() - (${observed_days_back:sqlstring} || ' days')::interval) AS any_available_in_window, f.tags FROM filtered f LEFT JOIN reservable_pois rp ON rp.reservable_id = f.id LEFT JOIN pois p ON p.id = rp.poi_id AND p.deleted_at IS NULL LEFT JOIN availability s ON s.reservable_id = f.id GROUP BY f.id, f.type, f.vendor, f.vendor_id, f.name, f.loop, f.site_type, f.source, f.updated_at, f.deleted_at, f.tags ORDER BY f.type ASC, f.vendor ASC, f.name NULLS LAST, f.vendor_id ASC;",
+          "rawSql": "SELECT\n  namespace,\n  cache_key,\n  status,\n  fetched_at,\n  expires_at,\n  error\nFROM grafana_api_cache_metadata\nWHERE (${campsite_id:sqlstring} = '' OR cache_key ILIKE '%' || ${campsite_id:sqlstring} || '%')\nORDER BY fetched_at DESC NULLS LAST\nLIMIT 200;",
           "refId": "A"
         }
       ],
-      "title": "Reservable Catalog Search",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "linked_poi_ids"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Open POI Detail",
-                    "url": "/d/poi-detail/roadtrip-poi-detail?var-poi_id=${__value.raw}"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 43
-      },
-      "id": 7,
-      "options": {
-        "showHeader": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH selected AS (SELECT r.* FROM reservables r WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}), linked AS (SELECT rp.reservable_id, string_agg(p.id::text, ', ' ORDER BY p.id) AS linked_poi_ids, string_agg(p.id::text || ' - ' || p.name, '; ' ORDER BY p.name, p.id) AS linked_pois FROM reservable_pois rp JOIN pois p ON p.id = rp.poi_id WHERE p.deleted_at IS NULL GROUP BY rp.reservable_id) SELECT s.id AS reservable_id, s.type || ':' || s.vendor || ':' || s.vendor_id AS rid, s.type, s.vendor, s.vendor_id, s.name, s.loop, s.site_type, s.source, s.created_at, s.updated_at, s.deleted_at, now() - s.updated_at AS catalog_age, linked.linked_poi_ids, linked.linked_pois, s.provider_ref, s.tags, s.raw FROM selected s LEFT JOIN linked ON linked.reservable_id = s.id;",
-          "refId": "A"
-        }
-      ],
-      "title": "Selected Reservable Header",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 49
-      },
-      "id": 8,
-      "options": {
-        "showHeader": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH selected AS (SELECT id FROM reservables WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}), latest AS (SELECT DISTINCT ON (s.target_date) s.target_date, s.status::text AS observed_status, (s.status = 'available') AS available, s.last_observed_at, now() - s.last_observed_at AS observation_age, s.run_id, ar.status AS run_status FROM availability s LEFT JOIN availability_run ar ON ar.id = s.run_id WHERE s.reservable_id = (SELECT id FROM selected) AND s.last_observed_at >= now() - (${observed_days_back:sqlstring} || ' days')::interval AND CASE WHEN ${target_start_date:sqlstring} = '' THEN true WHEN ${target_start_date:sqlstring} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN s.target_date >= NULLIF(${target_start_date:sqlstring}, '')::date ELSE false END AND CASE WHEN ${target_end_date:sqlstring} = '' THEN true WHEN ${target_end_date:sqlstring} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN s.target_date < NULLIF(${target_end_date:sqlstring}, '')::date ELSE false END ORDER BY s.target_date, s.last_observed_at DESC, s.id DESC) SELECT target_date, observed_status, available, last_observed_at, observation_age, run_id, run_status FROM latest ORDER BY target_date ASC;",
-          "refId": "A"
-        }
-      ],
-      "title": "Latest Availability For Selected Reservable",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "description": "Each row is a reservation target date. Each cell is the status from one observation time, so this shows whether a selected reservable's availability changed over recent fetches.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "custom": {
-            "fillOpacity": 70,
-            "lineWidth": 0,
-            "spanNulls": false
-          },
-          "mappings": [
-            {
-              "options": {
-                "0": {
-                  "color": "gray",
-                  "index": 0,
-                  "text": "Unknown"
-                },
-                "1": {
-                  "color": "dark-gray",
-                  "index": 1,
-                  "text": "Closed"
-                },
-                "2": {
-                  "color": "red",
-                  "index": 2,
-                  "text": "Reserved"
-                },
-                "3": {
-                  "color": "orange",
-                  "index": 3,
-                  "text": "First come"
-                },
-                "4": {
-                  "color": "green",
-                  "index": 4,
-                  "text": "Available"
-                }
-              },
-              "type": "value"
-            }
-          ],
-          "noValue": "No observation",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "gray",
-                "value": null
-              },
-              {
-                "color": "dark-gray",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 2
-              },
-              {
-                "color": "orange",
-                "value": 3
-              },
-              {
-                "color": "green",
-                "value": 4
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 49
-      },
-      "id": 9,
-      "options": {
-        "colWidth": 0.75,
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "rowHeight": 0.8,
-        "showValue": "auto",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "time_series",
-          "rawQuery": true,
-          "rawSql": "WITH selected AS (SELECT id FROM reservables WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}) SELECT s.last_observed_at AS time, s.target_date::text AS metric, CASE COALESCE(s.status::text, 'unknown') WHEN 'available' THEN 4 WHEN 'first_come' THEN 3 WHEN 'reserved' THEN 2 WHEN 'booked' THEN 2 WHEN 'closed' THEN 1 ELSE 0 END AS value FROM availability s WHERE s.reservable_id = (SELECT id FROM selected) AND s.last_observed_at >= now() - (${observed_days_back:sqlstring} || ' days')::interval AND CASE WHEN ${target_start_date:sqlstring} = '' THEN true WHEN ${target_start_date:sqlstring} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN s.target_date >= NULLIF(${target_start_date:sqlstring}, '')::date ELSE false END AND CASE WHEN ${target_end_date:sqlstring} = '' THEN true WHEN ${target_end_date:sqlstring} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN s.target_date < NULLIF(${target_end_date:sqlstring}, '')::date ELSE false END ORDER BY s.last_observed_at ASC, s.target_date ASC;",
-          "refId": "A"
-        }
-      ],
-      "title": "Availability Status Grid By Target Date",
-      "type": "status-history"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rid"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Select Reservable Here",
-                    "url": "/d/catalog-explorer/roadtrip-catalog-explorer?var-reservable_rid=${__value.raw}"
-                  },
-                  {
-                    "targetBlank": false,
-                    "title": "Open Reservable Detail",
-                    "url": "/d/reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__data.fields.reservable_id}"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 57
-      },
-      "id": 10,
-      "options": {
-        "showHeader": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH linked AS (SELECT r.id AS reservable_id, r.type || ':' || r.vendor || ':' || r.vendor_id AS rid, r.name, r.loop, r.site_type FROM reservable_pois rp JOIN reservables r ON r.id = rp.reservable_id WHERE ${poi_id:sqlstring} ~ '^[0-9]+$' AND rp.poi_id::text = ${poi_id:sqlstring} AND (${show_deleted_reservables:sqlstring} = 'true' OR r.deleted_at IS NULL) AND (${reservable_type:sqlstring} IN ('', 'all') OR r.type = ${reservable_type:sqlstring}) AND (${reservable_vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${reservable_vendor:sqlstring})) AND (${reservable_search:sqlstring} = '' OR r.type || ':' || r.vendor || ':' || r.vendor_id ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.name, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.loop, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.site_type, '') ILIKE '%' || ${reservable_search:sqlstring} || '%') AND (${site_type_search:sqlstring} = '' OR coalesce(r.site_type, '') ILIKE '%' || ${site_type_search:sqlstring} || '%')), latest AS (SELECT DISTINCT ON (l.reservable_id, s.target_date) l.rid, l.name, l.loop, l.site_type, s.target_date, s.status::text AS observed_status, (s.status = 'available') AS available, s.last_observed_at, now() - s.last_observed_at AS observation_age, s.run_id FROM linked l JOIN availability s ON s.reservable_id = l.reservable_id WHERE s.last_observed_at >= now() - (${observed_days_back:sqlstring} || ' days')::interval AND CASE WHEN ${target_start_date:sqlstring} = '' THEN true WHEN ${target_start_date:sqlstring} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN s.target_date >= NULLIF(${target_start_date:sqlstring}, '')::date ELSE false END AND CASE WHEN ${target_end_date:sqlstring} = '' THEN true WHEN ${target_end_date:sqlstring} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN s.target_date < NULLIF(${target_end_date:sqlstring}, '')::date ELSE false END ORDER BY l.reservable_id, s.target_date, s.last_observed_at DESC, s.id DESC) SELECT rid, name, loop, site_type, target_date, observed_status, available, last_observed_at, observation_age, run_id FROM latest ORDER BY target_date ASC, loop NULLS LAST, name NULLS LAST, rid ASC LIMIT 1000;",
-          "refId": "A"
-        }
-      ],
-      "title": "Selected POI Latest Availability",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 67
-      },
-      "id": 11,
-      "options": {
-        "showHeader": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH selected AS (SELECT id FROM reservables WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}) SELECT s.id AS snapshot_id, s.run_id, ar.status AS run_status, s.last_observed_at, s.target_date, s.status::text AS observed_status, (s.status = 'available') AS available FROM availability s LEFT JOIN availability_run ar ON ar.id = s.run_id WHERE s.reservable_id = (SELECT id FROM selected) AND s.last_observed_at >= now() - (${observed_days_back:sqlstring} || ' days')::interval AND CASE WHEN ${target_start_date:sqlstring} = '' THEN true WHEN ${target_start_date:sqlstring} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN s.target_date >= NULLIF(${target_start_date:sqlstring}, '')::date ELSE false END AND CASE WHEN ${target_end_date:sqlstring} = '' THEN true WHEN ${target_end_date:sqlstring} ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' THEN s.target_date < NULLIF(${target_end_date:sqlstring}, '')::date ELSE false END ORDER BY s.last_observed_at DESC, s.target_date ASC, s.id DESC LIMIT 300;",
-          "refId": "A"
-        }
-      ],
-      "title": "Recent Snapshot Rows For Selected Reservable",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 77
-      },
-      "id": 12,
-      "options": {
-        "showHeader": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH selected AS (SELECT vendor_id, provider_ref->>'mapId' AS map_id, provider_ref->>'resourceLocationId' AS resource_location_id FROM reservables WHERE type || ':' || vendor || ':' || vendor_id = ${reservable_rid:sqlstring}), needles AS (SELECT value FROM selected CROSS JOIN LATERAL (VALUES (vendor_id), (map_id), (resource_location_id)) AS raw(value) WHERE value IS NOT NULL AND value <> '') SELECT namespace, cache_key, created_at, expires_at, now() - created_at AS age, expires_at - now() AS freshness_remaining, expires_at <= now() AS expired, payload_bytes FROM grafana_api_cache_metadata WHERE namespace IN ('recgov_availability', 'aspira_availability', 'aspira_occupancy') AND EXISTS (SELECT 1 FROM needles WHERE grafana_api_cache_metadata.cache_key ILIKE '%' || needles.value || '%') ORDER BY created_at DESC LIMIT 100;",
-          "refId": "A"
-        }
-      ],
-      "title": "Availability Provider Cache For Selected Reservable",
+      "title": "Availability Provider Cache For Selected Campsite",
       "type": "table"
     }
   ],
-  "refresh": "",
-  "schemaVersion": 39,
+  "refresh": false,
+  "schemaVersion": 41,
   "tags": [
     "roadtrip",
-    "catalog",
-    "poi",
-    "reservable",
-    "availability"
+    "catalog"
   ],
   "templating": {
     "list": [
@@ -714,65 +252,31 @@
           "text": "",
           "value": ""
         },
-        "name": "poi_name_search",
+        "hide": 0,
+        "label": "POI name",
+        "name": "poi_name",
+        "options": [],
         "query": "",
-        "type": "textbox"
+        "skipUrlSync": false,
+        "type": "textbox",
+        "allowCustomValue": true
       },
       {
         "current": {
           "text": "",
           "value": ""
         },
-        "name": "poi_id_search",
-        "query": "",
-        "type": "textbox"
-      },
-      {
-        "allValue": "'__all'",
-        "current": {
-          "text": "All",
-          "value": "$__all"
-        },
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
-        },
-        "includeAll": true,
-        "name": "poi_category",
-        "query": "SELECT DISTINCT category AS __text, category AS __value FROM pois WHERE deleted_at IS NULL ORDER BY category ASC",
-        "refresh": 1,
-        "type": "query"
-      },
-      {
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
-        },
+        "hide": 0,
+        "label": "POI id",
         "name": "poi_id",
-        "query": "WITH matches AS (SELECT p.id::text || ' - ' || p.name || ' [' || p.category || ']' AS __text, p.id::text AS __value, p.name, p.id FROM pois p WHERE p.deleted_at IS NULL AND (${poi_name_search:sqlstring} = '' OR p.name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN p.id::text = ${poi_id_search:sqlstring} ELSE false END AND (${poi_category:sqlstring} IN ('', '__all') OR p.category IN (${poi_category:sqlstring})) ORDER BY p.name ASC, p.id ASC LIMIT 500) SELECT __text, __value FROM matches UNION ALL SELECT 'No matching POI' AS __text, '__none' AS __value WHERE NOT EXISTS (SELECT 1 FROM matches)",
-        "refresh": 1,
-        "type": "query"
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox",
+        "allowCustomValue": true
       },
       {
-        "current": {
-          "text": "selected_poi",
-          "value": "selected_poi"
-        },
-        "name": "rid_scope",
-        "query": "selected_poi,all",
-        "type": "custom"
-      },
-      {
-        "current": {
-          "text": "all",
-          "value": "all"
-        },
-        "name": "reservable_type",
-        "query": "all,site",
-        "type": "custom"
-      },
-      {
-        "allValue": "'__all'",
+        "allowCustomValue": true,
         "current": {
           "text": "All",
           "value": "$__all"
@@ -781,75 +285,56 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "definition": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
+        "hide": 0,
         "includeAll": true,
-        "name": "reservable_vendor",
-        "query": "SELECT DISTINCT vendor AS __text, vendor AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY vendor ASC",
+        "label": "POI type",
+        "multi": false,
+        "name": "poi_type",
+        "options": [],
+        "query": {
+          "query": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
+        },
         "refresh": 1,
-        "type": "query"
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query",
+        "allValue": "'__all'"
       },
       {
+        "allowCustomValue": true,
         "current": {
           "text": "",
           "value": ""
         },
-        "name": "reservable_search",
-        "query": "",
-        "type": "textbox"
-      },
-      {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "name": "site_type_search",
-        "query": "",
-        "type": "textbox"
-      },
-      {
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "name": "reservable_rid",
-        "query": "WITH matches AS (SELECT r.type || ':' || r.vendor || ':' || r.vendor_id AS rid, coalesce(r.name, 'unnamed') AS display_name, r.loop, r.vendor_id FROM reservables r WHERE r.deleted_at IS NULL AND (${reservable_type:sqlstring} IN ('', 'all') OR r.type = ${reservable_type:sqlstring}) AND (${reservable_vendor:sqlstring} IN ('', '__all') OR r.vendor IN (${reservable_vendor:sqlstring})) AND (${reservable_search:sqlstring} = '' OR r.type || ':' || r.vendor || ':' || r.vendor_id ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.name, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.loop, '') ILIKE '%' || ${reservable_search:sqlstring} || '%' OR coalesce(r.site_type, '') ILIKE '%' || ${reservable_search:sqlstring} || '%') AND (${site_type_search:sqlstring} = '' OR coalesce(r.site_type, '') ILIKE '%' || ${site_type_search:sqlstring} || '%') AND (${rid_scope:sqlstring} = 'all' OR NOT (${poi_id:sqlstring} ~ '^[0-9]+$') OR EXISTS (SELECT 1 FROM reservable_pois rp WHERE rp.reservable_id = r.id AND rp.poi_id::text = ${poi_id:sqlstring})) ORDER BY display_name ASC, r.loop NULLS LAST, r.vendor_id ASC LIMIT 500) SELECT rid || ' - ' || display_name AS __text, rid AS __value FROM matches UNION ALL SELECT 'No matching reservable' AS __text, '__none' AS __value WHERE NOT EXISTS (SELECT 1 FROM matches)",
+        "definition": "SELECT cs.id::text || ' - ' || cg.name || ' / ' || cs.name AS __text, cs.id AS __value FROM campsites cs JOIN campgrounds cg ON cg.id = cs.campground_id WHERE cs.deleted_at IS NULL ORDER BY cg.name, cs.name LIMIT 1000",
+        "hide": 0,
+        "includeAll": false,
+        "label": "Campsite id",
+        "multi": false,
+        "name": "campsite_id",
+        "options": [],
+        "query": {
+          "query": "SELECT cs.id::text || ' - ' || cg.name || ' / ' || cs.name AS __text, cs.id AS __value FROM campsites cs JOIN campgrounds cg ON cg.id = cs.campground_id WHERE cs.deleted_at IS NULL ORDER BY cg.name, cs.name LIMIT 1000",
+          "rawQuery": true,
+          "rawSql": "SELECT cs.id::text || ' - ' || cg.name || ' / ' || cs.name AS __text, cs.id AS __value FROM campsites cs JOIN campgrounds cg ON cg.id = cs.campground_id WHERE cs.deleted_at IS NULL ORDER BY cg.name, cs.name LIMIT 1000",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
+        },
         "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
         "type": "query"
-      },
-      {
-        "current": {
-          "text": "30",
-          "value": "30"
-        },
-        "name": "observed_days_back",
-        "query": "7,14,30,90",
-        "type": "custom"
-      },
-      {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "name": "target_start_date",
-        "query": "",
-        "type": "textbox"
-      },
-      {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "name": "target_end_date",
-        "query": "",
-        "type": "textbox"
-      },
-      {
-        "current": {
-          "text": "false",
-          "value": "false"
-        },
-        "name": "show_deleted_reservables",
-        "query": "false,true",
-        "type": "custom"
       }
     ]
   },
@@ -857,8 +342,19 @@
     "from": "now-30d",
     "to": "now"
   },
+  "timepicker": {
+    "hidden": false,
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "1h",
+      "1d"
+    ]
+  },
   "timezone": "browser",
-  "title": "Catalog / POIs, Reservables, Availability",
+  "title": "Catalog / POIs, Campsites, Availability",
   "uid": "catalog-explorer",
   "version": 1
 }

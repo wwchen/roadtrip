@@ -5,11 +5,13 @@ import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampsite
+import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
@@ -36,14 +38,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability_run")
-        ctx.execute("DELETE FROM availability_watch_target")
-        ctx.execute("DELETE FROM availability_watch_poller")
-        ctx.execute("DELETE FROM availability_poller")
-        ctx.execute("DELETE FROM availability_watch")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     private fun now(): OffsetDateTime = OffsetDateTime.now(ZoneOffset.UTC)
@@ -53,21 +48,13 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     private fun insertPoi(name: String = "Upper Pines"): Long {
         val sourceId = "poi-${poiSeq++}"
         return ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
-                ) VALUES (
-                    'test', ?, 'campground', ?,
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
-                ) RETURNING id
-                """.trimIndent(),
-                sourceId,
-                name,
-            )!!
-            .get("id", Long::class.java)
+            .seedCatalogPoi(
+                sourceId = sourceId,
+                name = name,
+                lon = -119.56,
+                lat = 37.74,
+                source = "test",
+            ).poiId
     }
 
     private fun insertActiveWatch(
@@ -91,7 +78,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
                 )!!
                 .get("id", Long::class.java)
         ctx.execute(
-            "INSERT INTO availability_watch_target (watch_id, poi_id, reservable_id) VALUES (?, ?, ?)",
+            "INSERT INTO availability_watch_target (watch_id, poi_id, campsite_id) VALUES (?, ?, ?)",
             watchId,
             poiId,
             reservableId,
@@ -121,19 +108,19 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         poiId: Long,
         vendorId: String,
     ): Long {
-        val id =
-            reservableRepo.upsert(
-                ReservableRepo.Input(
-                    rid = ReservableId(type = ReservableType.SITE, vendor = "test", vendorId = vendorId),
-                    name = "Site $vendorId",
-                    loop = null,
-                    siteType = null,
-                    raw = null,
-                ),
-            )
-        reservableRepo.linkToPoi(id, poiId)
-        return id
+        val campgroundId = campgroundIdFor(poiId)
+        return ctx.seedCampsite(
+            campgroundId = campgroundId,
+            vendor = "test",
+            vendorId = vendorId,
+            name = "Site $vendorId",
+        )
     }
+
+    private fun campgroundIdFor(poiId: Long): Long =
+        ctx
+            .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
+            .get("campground_id", Long::class.java)
 
     private fun watch(id: Long): AvailabilityWatchRepo.Watch = AvailabilityWatchRepo(ctx).findById(id)!!
 
@@ -380,7 +367,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val pollerId = repo.pollerIdsForWatch(watchId).single()
 
         val pausedWatchId = insertPausedWatch(poi)
-        // Re-fetch: the paused watch has no reservable_id, but the sync should
+        // Re-fetch: the paused watch has no campsite_id, but the sync should
         // short-circuit on status before ever resolving scope/targets.
         membership.sync(watch(pausedWatchId), repo, null)
         assertTrue(repo.pollerIdsForWatch(pausedWatchId).isEmpty())

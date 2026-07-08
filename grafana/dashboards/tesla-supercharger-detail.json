@@ -23,70 +23,39 @@
   "liveNow": false,
   "panels": [
     {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 0
-      },
-      "id": 100,
-      "panels": [],
-      "title": "Supercharger",
-      "type": "row"
-    },
-    {
       "datasource": {
         "type": "postgres",
         "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Field"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 180
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 10,
-        "w": 15,
+        "w": 24,
         "x": 0,
-        "y": 1
+        "y": 0
       },
-      "id": 2,
+      "id": 1,
       "options": {
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  p.id,\n  p.name,\n  p.source_id,\n  p.source,\n  p.region,\n  p.country,\n  p.info_url,\n  p.fetched_at,\n  p.updated_at,\n  now() - p.updated_at AS catalog_age,\n  (p.properties->>'stall_count')::int AS stall_count,\n  (p.properties->>'max_power_kw')::int AS max_power_kw,\n  CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN jsonb_array_length(p.properties->'pricebooks') ELSE 0 END AS pricebook_count,\n  (p.properties->'upstream'->'detail' IS NOT NULL AND p.properties->'upstream'->'detail' <> 'null'::jsonb) AS detail_captured,\n  p.properties#>>'{upstream,index,supercharger_function,site_status}' AS site_status,\n  p.properties#>>'{upstream,index,supercharger_function,project_status}' AS project_status,\n  p.properties#>>'{upstream,index,supercharger_function,access_type}' AS access_type,\n  p.properties#>>'{upstream,index,supercharger_function,open_to_non_tesla}' AS open_to_non_tesla,\n  p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "rawSql": "SELECT\n  ts.id AS supercharger_id,\n  p.id AS poi_id,\n  ts.common_site_name AS name,\n  ts.location_slug,\n  ts.location_guid,\n  ts.country,\n  ts.region,\n  ts.site_status,\n  ts.access_type,\n  ts.open_to_public,\n  ts.open_to_non_teslas,\n  ts.trailer_friendly,\n  ts.twenty_four_seven,\n  ts.stall_count,\n  ts.max_power_kw,\n  ts.pricebooks,\n  ts.amenities,\n  ts.availability_profile,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat,\n  ts.updated_at\nFROM tesla_superchargers ts\nJOIN poi_tesla_superchargers pts ON pts.tesla_supercharger_id = ts.id\nJOIN pois p ON p.id = pts.poi_id\nWHERE ts.deleted_at IS NULL\n  AND p.deleted_at IS NULL\n  AND (${country:sqlstring} IN ('', '__all') OR ts.country::text IN (${country:sqlstring}))\n  AND (${region:sqlstring} IN ('', '__all') OR ts.region IN (${region:sqlstring}))\n  AND (${access_type:sqlstring} IN ('', '__all') OR ts.access_type IN (${access_type:sqlstring}))\nORDER BY ts.common_site_name ASC\nLIMIT 6000;",
           "refId": "A"
         }
       ],
-      "title": "Supercharger properties",
-      "transformations": [
-        {
-          "id": "transpose",
-          "options": {}
-        }
-      ],
+      "title": "Superchargers",
       "type": "table"
     },
     {
@@ -99,91 +68,31 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 10,
-        "w": 9,
-        "x": 15,
-        "y": 1
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 10
       },
-      "id": 1,
+      "id": 2,
       "options": {
-        "basemap": {
-          "config": {},
-          "name": "Layer 0",
-          "type": "default"
-        },
-        "controls": {
-          "mouseWheelZoom": true,
-          "showAttribution": true,
-          "showDebug": false,
-          "showMeasure": false,
-          "showScale": false,
-          "showZoom": true
-        },
-        "layers": [
-          {
-            "config": {
-              "showLegend": true,
-              "style": {
-                "color": {
-                  "fixed": "blue"
-                },
-                "opacity": 0.8,
-                "size": {
-                  "fixed": 9,
-                  "max": 20,
-                  "min": 2
-                }
-              }
-            },
-            "location": {
-              "latitude": "lat",
-              "longitude": "lng",
-              "mode": "coords"
-            },
-            "name": "Supercharger",
-            "tooltip": true,
-            "type": "markers"
-          }
-        ],
-        "tooltip": {
-          "mode": "details"
-        },
-        "view": {
-          "allLayers": true,
-          "id": "fit",
-          "lat": 49,
-          "lon": -123,
-          "zoom": 4
-        }
+        "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  p.id,\n  p.name,\n  p.source_id,\n  p.region,\n  p.country,\n  (p.properties->>'stall_count')::int AS stall_count,\n  (p.properties->>'max_power_kw')::int AS max_power_kw,\n  p.properties#>>'{upstream,index,supercharger_function,charging_accessibility}' AS charging_accessibility,\n  ST_X(ST_Centroid(p.geom)) AS lng,\n  ST_Y(ST_Centroid(p.geom)) AS lat\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "rawSql": "SELECT\n  ts.id AS supercharger_id,\n  ts.common_site_name AS name,\n  ts.country,\n  ts.region,\n  e.pricebook->>'currencyCode' AS currency,\n  round(avg(NULLIF(e.pricebook->>'rateBase', '')::numeric), 3) AS avg_price_per_kwh\nFROM tesla_superchargers ts\nCROSS JOIN LATERAL jsonb_array_elements(\n  CASE WHEN jsonb_typeof(ts.pricebooks) = 'array' THEN ts.pricebooks ELSE '[]'::jsonb END\n) AS e(pricebook)\nWHERE ts.deleted_at IS NULL\n  AND e.pricebook->>'feeType' = 'CHARGING'\n  AND e.pricebook->>'uom' = 'kwh'\n  AND e.pricebook->>'vehicleMakeType' = 'TSLA'\nGROUP BY ts.id, ts.common_site_name, ts.country, ts.region, currency\nORDER BY avg_price_per_kwh DESC;",
           "refId": "A"
         }
       ],
-      "title": "Selected Supercharger Map",
-      "type": "geomap"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 11
-      },
-      "id": 101,
-      "panels": [],
-      "title": "Operations / Location",
-      "type": "row"
+      "title": "Charging price by site",
+      "type": "table"
     },
     {
       "datasource": {
@@ -192,347 +101,137 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Field"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 180
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/[0-9]+/"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "json-view"
-                }
-              },
-              {
-                "id": "custom.inspect",
-                "value": true
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
-        "h": 10,
+        "h": 8,
         "w": 24,
         "x": 0,
-        "y": 12
+        "y": 19
       },
       "id": 3,
       "options": {
-        "cellHeight": "md",
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  p.properties#>>'{facility}' AS facility,\n  p.properties#>>'{upstream,detail,timeZone}' AS time_zone,\n  p.properties#>>'{upstream,detail,address,streetNumber}' AS street_number,\n  p.properties#>>'{upstream,detail,address,street}' AS street,\n  p.properties#>>'{upstream,detail,address,city}' AS city,\n  p.properties#>>'{upstream,detail,address,state}' AS state,\n  p.properties#>>'{upstream,detail,address,country}' AS country,\n  p.properties#>>'{upstream,detail,address,postalCode}' AS postal_code,\n  p.properties->'upstream'->'detail'->'amenities' AS amenities,\n  p.properties->'upstream'->'index'->'supercharger_function' AS index_status\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
+          "rawSql": "SELECT country, count(*) AS sites, sum(stall_count) AS stalls, max(max_power_kw) AS max_power_kw\nFROM tesla_superchargers\nWHERE deleted_at IS NULL\nGROUP BY country\nORDER BY sites DESC;",
           "refId": "A"
         }
       ],
-      "title": "Address & operational fields",
-      "transformations": [
-        {
-          "id": "transpose",
-          "options": {}
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 22
-      },
-      "id": 102,
-      "panels": [],
-      "title": "Pricing",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "raw_pricebook"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "json-view"
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 23
-      },
-      "id": 4,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  e.row_num,\n  e.pricebook->>'vehicleMakeType' AS vehicle_make_type,\n  e.pricebook->>'feeType' AS fee_type,\n  e.pricebook->>'currencyCode' AS currency,\n  e.pricebook->>'uom' AS unit,\n  NULLIF(e.pricebook->>'rateBase', '')::numeric AS rate_base,\n  NULLIF(e.pricebook->>'rateTier1', '')::numeric AS rate_tier_1,\n  NULLIF(e.pricebook->>'rateTier2', '')::numeric AS rate_tier_2,\n  NULLIF(e.pricebook->>'minSiteOccupancy', '')::numeric AS min_site_occupancy,\n  NULLIF(e.pricebook->>'maxSiteOccupancy', '')::numeric AS max_site_occupancy,\n  e.pricebook->>'isMemberPricebook' AS member_pricebook,\n  e.pricebook AS raw_pricebook\nFROM pois p\nCROSS JOIN LATERAL jsonb_array_elements(\n  CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n) WITH ORDINALITY AS e(pricebook, row_num)\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring}\nORDER BY e.row_num ASC;",
-          "refId": "A"
-        }
-      ],
-      "title": "Pricebooks",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "description": "TSLA TOU charging rates by hour of day. Empty if the site has no time-of-use pricebooks.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "axisPlacement": "auto",
-            "fillOpacity": 80,
-            "gradientMode": "none",
-            "lineWidth": 1
-          },
-          "decimals": 3,
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "currencyUSD"
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "hour"
-            },
-            "properties": [
-              {
-                "id": "unit",
-                "value": "none"
-              },
-              {
-                "id": "decimals",
-                "value": 0
-              },
-              {
-                "id": "displayName",
-                "value": "Hour"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "rate_base"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Rate / kWh"
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 33
-      },
-      "id": 6,
-      "options": {
-        "barWidth": 0.6,
-        "groupWidth": 0.7,
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "orientation": "auto",
-        "showValue": "auto",
-        "stacking": "none",
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        },
-        "xField": "hour",
-        "xTickLabelRotation": 0,
-        "xTickLabelSpacing": 0
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "WITH tou AS (\n  SELECT\n    NULLIF(e.pricebook->>'rateBase','')::numeric AS rate_base,\n    split_part(e.pricebook->>'startTime', ':', 1)::int AS start_hour,\n    split_part(e.pricebook->>'endTime',   ':', 1)::int AS end_hour\n  FROM pois p\n  CROSS JOIN LATERAL jsonb_array_elements(\n    CASE WHEN jsonb_typeof(p.properties->'pricebooks') = 'array' THEN p.properties->'pricebooks' ELSE '[]'::jsonb END\n  ) AS e(pricebook)\n  WHERE p.deleted_at IS NULL\n    AND p.category = 'supercharger'\n    AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n    AND p.id::text = ${supercharger_id:sqlstring}\n    AND (e.pricebook->>'isTou')::bool = true\n    AND e.pricebook->>'feeType' = 'CHARGING'\n    AND e.pricebook->>'uom' = 'kwh'\n    AND e.pricebook->>'vehicleMakeType' = 'TSLA'\n    AND NULLIF(e.pricebook->>'startTime','') IS NOT NULL\n    AND NULLIF(e.pricebook->>'endTime','')   IS NOT NULL\n)\nSELECT\n  hour,\n  avg(t.rate_base) AS rate_base\nFROM generate_series(0, 23) AS hour\nLEFT JOIN tou t\n  ON CASE\n       WHEN t.start_hour <= t.end_hour\n         THEN hour >= t.start_hour AND hour < t.end_hour\n       ELSE hour >= t.start_hour OR  hour < t.end_hour\n     END\nGROUP BY hour\nORDER BY hour;",
-          "refId": "A"
-        }
-      ],
-      "title": "Charging rates by hour of day",
-      "type": "barchart"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 43
-      },
-      "id": 103,
-      "panels": [],
-      "title": "Debug",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Field"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 220
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byRegexp",
-              "options": "/[0-9]+/"
-            },
-            "properties": [
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "json-view"
-                }
-              },
-              {
-                "id": "custom.inspect",
-                "value": true
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 12,
-        "w": 24,
-        "x": 0,
-        "y": 44
-      },
-      "id": 5,
-      "options": {
-        "cellHeight": "md",
-        "showHeader": true
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  p.provider_ref,\n  p.address,\n  p.properties->'upstream'->'index' AS upstream_index,\n  p.properties->'upstream'->'detail' AS upstream_detail,\n  p.properties AS raw_properties\nFROM pois p\nWHERE p.deleted_at IS NULL\n  AND p.category = 'supercharger'\n  AND ${supercharger_id:sqlstring} ~ '^[0-9]+$'\n  AND p.id::text = ${supercharger_id:sqlstring};",
-          "refId": "A"
-        }
-      ],
-      "title": "Raw Tesla upstream data",
-      "transformations": [
-        {
-          "id": "transpose",
-          "options": {}
-        }
-      ],
+      "title": "Hardware by country",
       "type": "table"
     }
   ],
-  "refresh": "",
-  "schemaVersion": 39,
+  "refresh": false,
+  "schemaVersion": 41,
   "tags": [
     "roadtrip",
-    "poi",
-    "tesla",
-    "supercharger"
+    "catalog",
+    "tesla"
   ],
   "templating": {
     "list": [
       {
-        "allowCustomValue": false,
+        "allowCustomValue": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
         "datasource": {
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
-        "label": "Supercharger",
-        "name": "supercharger_id",
-        "query": "SELECT\n  id::text || ' - ' || name || COALESCE(' [' || NULLIF(region, '') || ']', '') AS __text,\n  id::text AS __value\nFROM pois\nWHERE deleted_at IS NULL\n  AND category = 'supercharger'\nORDER BY name ASC, id ASC\nLIMIT 5000;",
+        "definition": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY country",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Country",
+        "multi": false,
+        "name": "country",
+        "options": [],
+        "query": {
+          "query": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY country",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT country::text AS __text, country::text AS __value FROM tesla_superchargers WHERE country IS NOT NULL ORDER BY country",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
+        },
         "refresh": 1,
-        "type": "query"
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query",
+        "allValue": "'__all'"
+      },
+      {
+        "allowCustomValue": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "definition": "SELECT DISTINCT region AS __text, region AS __value FROM tesla_superchargers WHERE region IS NOT NULL ORDER BY region",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Region",
+        "multi": false,
+        "name": "region",
+        "options": [],
+        "query": {
+          "query": "SELECT DISTINCT region AS __text, region AS __value FROM tesla_superchargers WHERE region IS NOT NULL ORDER BY region",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT region AS __text, region AS __value FROM tesla_superchargers WHERE region IS NOT NULL ORDER BY region",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query",
+        "allValue": "'__all'"
+      },
+      {
+        "allowCustomValue": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "definition": "SELECT DISTINCT access_type AS __text, access_type AS __value FROM tesla_superchargers WHERE access_type IS NOT NULL ORDER BY access_type",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Access",
+        "multi": false,
+        "name": "access_type",
+        "options": [],
+        "query": {
+          "query": "SELECT DISTINCT access_type AS __text, access_type AS __value FROM tesla_superchargers WHERE access_type IS NOT NULL ORDER BY access_type",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT access_type AS __text, access_type AS __value FROM tesla_superchargers WHERE access_type IS NOT NULL ORDER BY access_type",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query",
+        "allValue": "'__all'"
       }
     ]
   },
@@ -541,10 +240,18 @@
     "to": "now"
   },
   "timepicker": {
-    "hidden": true
+    "hidden": false,
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "1h",
+      "1d"
+    ]
   },
   "timezone": "browser",
-  "title": "POI / Tesla Supercharger / Detail",
+  "title": "Tesla Supercharger / Detail",
   "uid": "tesla-supercharger-detail",
   "version": 1
 }

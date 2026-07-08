@@ -15,10 +15,10 @@ import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.io.File
 
-private const val RETIRED_RESERVABLE_IMPORT_MESSAGE =
-    "reservable_data imports are retired; load campground and campsite catalogs through canonical catalog ETLs"
-private const val RETIRED_JOINER_IMPORT_MESSAGE =
-    "poi_reservable_joiner imports are retired; use canonical POI join tables instead"
+private const val DISABLED_CAMPING_IMPORT_MESSAGE =
+    "campground/campsite vendor imports are disabled until adapters write through the canonical catalog writer"
+private const val DISABLED_JOINER_IMPORT_MESSAGE =
+    "vendor campsite parent joiners are disabled until canonical campground/campsite reconciliation is wired"
 
 // Orchestrates one poi_data row's ETL chain end-to-end.
 //
@@ -127,9 +127,9 @@ class EtlOrchestrator(
         return terminalStats!!
     }
 
-    fun runReservableData(name: String): ReservableStats = throw UnsupportedOperationException("$RETIRED_RESERVABLE_IMPORT_MESSAGE: $name")
+    fun runReservableData(name: String): ReservableStats = throw UnsupportedOperationException("$DISABLED_CAMPING_IMPORT_MESSAGE: $name")
 
-    fun runJoiner(name: String): JoinerStats = throw UnsupportedOperationException("$RETIRED_JOINER_IMPORT_MESSAGE: $name")
+    fun runJoiner(name: String): JoinerStats = throw UnsupportedOperationException("$DISABLED_JOINER_IMPORT_MESSAGE: $name")
 
     @Suppress("UNCHECKED_CAST")
     private fun runTerminal(
@@ -273,9 +273,16 @@ class EtlOrchestrator(
     }
 
     companion object {
-        // Map of etl slug → adapter. Adding a new ETL = appending one line.
-        // Map keys MUST match the YAML poi_data.etls[*].slug exactly.
-        val registry: Map<String, SourceEtl<*, *>> =
+        // Runnable ETLs. Old wide-POI and reservable imports are intentionally
+        // not exposed here: admin import targets use this map to decide what
+        // can run. Keep vendor adapters in [disabledVendorRegistry] until
+        // their outputs are persisted through the canonical catalog writer.
+        val registry: Map<String, SourceEtl<*, *>> = emptyMap()
+
+        // Retained vendor adapters. This keeps the parsing/transform code in
+        // tree while making it explicit that the old registry rows are no-op
+        // until canonical campgrounds/campsites upsert support lands.
+        val disabledVendorRegistry: Map<String, SourceEtl<*, *>> =
             mapOf(
                 "planet-fitness" to
                     ca.floo.roadtrip.service.etl.vendors.osmpf
@@ -324,6 +331,42 @@ class EtlOrchestrator(
                 "aspira-pc-pins" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraJoinByNameEtl("aspira-pc-pins"),
+                "federal-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.recgov
+                        .RecGovCampsitesEtl("federal-campsites"),
+                "aspira-wa-resources" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraResourcesEtl(
+                            etlSlug = "aspira-wa-resources",
+                            mapsInputSlug = "aspira-maps-wa",
+                            inventoryInputSlug = "aspira-inventory-wa",
+                            dictionariesInputSlug = "aspira-dictionaries-wa",
+                            vendor = "aspira_wa",
+                        ),
+                "aspira-bc-resources" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraResourcesEtl(
+                            etlSlug = "aspira-bc-resources",
+                            mapsInputSlug = "aspira-maps-bc",
+                            inventoryInputSlug = "aspira-inventory-bc",
+                            dictionariesInputSlug = "aspira-dictionaries-bc",
+                            vendor = "aspira_bc",
+                        ),
+                "aspira-pc-resources" to
+                    ca.floo.roadtrip.service.etl.vendors.aspira
+                        .AspiraResourcesEtl(
+                            etlSlug = "aspira-pc-resources",
+                            mapsInputSlug = "aspira-maps-pc",
+                            inventoryInputSlug = "aspira-inventory-pc",
+                            dictionariesInputSlug = "aspira-dictionaries-pc",
+                            vendor = "aspira_pc",
+                        ),
+                "alberta-provincial-park-sites" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaSitesEtl("alberta-provincial-park-sites", "ABPP"),
+                "new-york-state-park-sites" to
+                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
+                        .ReserveAmericaSitesEtl("new-york-state-park-sites", "NY"),
             )
     }
 }

@@ -11,21 +11,21 @@ import kotlin.test.assertEquals
 class AvailabilityRepoTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     private fun seedReservable(vendorId: String): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO reservables (type, vendor, vendor_id, source, name)
-                VALUES ('site', 'recgov', ?, 'federal-campsites', 'site') RETURNING id
-                """.trimIndent(),
-                vendorId,
-            )!!
-            .get("id", Long::class.java)
+        ctx.seedCampsite(
+            campgroundId =
+                ctx.seedCampground(
+                    source = "recgov",
+                    sourceId = "cg-$vendorId",
+                    providerRefJson = """{"recgov_id":"cg-$vendorId"}""",
+                ),
+            vendor = "recgov",
+            vendorId = vendorId,
+            name = "site",
+        )
 
     private val date = LocalDate.parse("2026-07-04")
 

@@ -32,112 +32,30 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 12,
+        "h": 9,
         "w": 24,
         "x": 0,
         "y": 0
-      },
-      "id": 5,
-      "options": {
-        "basemap": {
-          "config": {},
-          "name": "Layer 0",
-          "type": "default"
-        },
-        "controls": {
-          "mouseWheelZoom": true,
-          "showAttribution": true,
-          "showDebug": false,
-          "showMeasure": false,
-          "showScale": false,
-          "showZoom": true
-        },
-        "layers": [
-          {
-            "config": {
-              "showLegend": true,
-              "style": {
-                "color": {
-                  "fixed": "dark-green"
-                },
-                "opacity": 0.8,
-                "size": {
-                  "fixed": 8,
-                  "max": 15,
-                  "min": 2
-                }
-              }
-            },
-            "location": {
-              "latitude": "lat",
-              "longitude": "lng",
-              "mode": "coords"
-            },
-            "name": "POIs",
-            "tooltip": true,
-            "type": "markers"
-          }
-        ],
-        "tooltip": {
-          "mode": "details"
-        },
-        "view": {
-          "allLayers": true,
-          "id": "fit",
-          "lat": 49,
-          "lon": -123,
-          "zoom": 5
-        }
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  id,\n  name,\n  category,\n  subcategory,\n  source,\n  source_id,\n  region,\n  ST_X(ST_Centroid(geom)) AS lng,\n  ST_Y(ST_Centroid(geom)) AS lat\nFROM pois\nWHERE deleted_at IS NULL\n  AND (${poi_name_search:sqlstring} = '' OR name ILIKE '%' || ${poi_name_search:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id_search:sqlstring} = '' THEN true\n    WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${poi_id_search:sqlstring}\n    ELSE false\n  END\n  AND (${poi_category:sqlstring} IN ('', '__all') OR category IN (${poi_category:sqlstring}))\nORDER BY name ASC, id ASC\nLIMIT 1000;",
-          "refId": "A"
-        }
-      ],
-      "title": "POI Map",
-      "type": "geomap"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 12
       },
       "id": 1,
       "options": {
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  id,\n  source,\n  source_id,\n  category,\n  subcategory,\n  name,\n  region,\n  unit_name,\n  reserve_url,\n  phone,\n  info_url,\n  fetched_at,\n  updated_at,\n  provider_ref,\n  properties AS raw_properties,\n  ST_AsGeoJSON(geom)::jsonb AS geometry\nFROM pois\nWHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n  AND id::text = ${poi_id:sqlstring};",
+          "rawSql": "WITH canonical_pois AS (\n  SELECT\n    p.id AS poi_id,\n    p.poi_type,\n    COALESCE(cg.name, ts.common_site_name, pf.name) AS name,\n    COALESCE(cg.location->>'region', ts.region, pf.region) AS region,\n    COALESCE(cg.location->>'country', ts.country::text, pf.country::text) AS country,\n    ST_X(ST_Centroid(p.geom)) AS lng,\n    ST_Y(ST_Centroid(p.geom)) AS lat,\n    pc.campground_id,\n    pts.tesla_supercharger_id,\n    ppf.planet_fitness_location_id,\n    cg.status AS campground_status,\n    ts.site_status AS tesla_site_status,\n    ts.stall_count,\n    ts.max_power_kw,\n    count(DISTINCT cs.id) AS campsite_count,\n    max(a.last_observed_at) AS latest_availability_observed_at\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\n  LEFT JOIN availability a ON a.campsite_id = cs.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  WHERE p.deleted_at IS NULL\n  GROUP BY p.id, p.poi_type, cg.id, ts.id, pf.id, pc.campground_id, pts.tesla_supercharger_id, ppf.planet_fitness_location_id\n)\nSELECT *\nFROM canonical_pois\nWHERE (${poi_name:sqlstring} = '' OR name ILIKE '%' || ${poi_name:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id:sqlstring} = '' THEN true\n    WHEN ${poi_id:sqlstring} ~ '^[0-9]+$' THEN poi_id::text = ${poi_id:sqlstring}\n    ELSE false\n  END\n  AND (${poi_type:sqlstring} IN ('', '__all') OR poi_type IN (${poi_type:sqlstring}))\nORDER BY name ASC NULLS LAST, poi_id ASC\nLIMIT 1000;",
           "refId": "A"
         }
       ],
-      "title": "POI Header",
+      "title": "POI detail",
       "type": "table"
     },
     {
@@ -147,51 +65,33 @@
       },
       "fieldConfig": {
         "defaults": {},
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "reservable_id"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": false,
-                    "title": "Open Reservable / Detail",
-                    "url": "/d/reservable-detail/roadtrip-reservable-detail?var-reservable_id=${__value.raw}"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
+        "overrides": []
       },
       "gridPos": {
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 20
+        "y": 9
       },
       "id": 2,
       "options": {
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  r.id AS reservable_id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,\n  r.type,\n  r.vendor,\n  r.vendor_id,\n  r.name,\n  r.loop,\n  r.site_type,\n  r.source,\n  r.updated_at,\n  r.deleted_at,\n  max(s.last_observed_at) AS latest_availability_observed_at,\n  count(s.id) FILTER (WHERE s.last_observed_at >= now() - interval '7 days') AS snapshots_last_7d,\n  bool_or(s.status = 'available') FILTER (WHERE s.last_observed_at >= now() - interval '7 days') AS any_available_last_7d\nFROM reservable_pois rp\nJOIN reservables r ON r.id = rp.reservable_id\nLEFT JOIN availability s ON s.reservable_id = r.id\nWHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n  AND rp.poi_id::text = ${poi_id:sqlstring}\n  AND (\n    ${include_deleted_reservables:sqlstring} = 'true'\n    OR r.deleted_at IS NULL\n  )\nGROUP BY r.id\nORDER BY r.type ASC, r.loop NULLS LAST, r.name NULLS LAST, rid ASC;",
+          "rawSql": "SELECT\n  cs.id AS campsite_id,\n  cs.campground_id,\n  cg.name AS campground_name,\n  cs.loop_name,\n  cs.name,\n  cs.kind,\n  cs.kind_listed,\n  cs.max_people,\n  cs.max_rv_length,\n  cs.max_trailer_length,\n  vr.vendor,\n  vr.external_id AS vendor_ref_id,\n  max(a.last_observed_at) AS latest_availability_observed_at,\n  bool_or(a.status = 'available') FILTER (WHERE a.last_observed_at >= now() - interval '7 days') AS any_available_last_7d\nFROM poi_campgrounds pc\nJOIN campgrounds cg ON cg.id = pc.campground_id\nJOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nLEFT JOIN availability a ON a.campsite_id = cs.id\nWHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n  AND pc.poi_id::text = ${poi_id:sqlstring}\nGROUP BY cs.id, cg.id, vr.id\nORDER BY cs.loop_name NULLS LAST, cs.name NULLS LAST, cs.id ASC;",
           "refId": "A"
         }
       ],
-      "title": "All Linked RIDs",
+      "title": "Campsites linked to POI",
       "type": "table"
     },
     {
@@ -204,72 +104,38 @@
         "overrides": []
       },
       "gridPos": {
-        "h": 7,
+        "h": 9,
         "w": 24,
         "x": 0,
-        "y": 30
+        "y": 19
       },
       "id": 3,
       "options": {
         "showHeader": true
       },
-      "pluginVersion": "12.4.4",
+      "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
             "type": "postgres",
             "uid": "roadtrip-postgres"
           },
+          "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH linked AS (\n  SELECT r.id\n  FROM reservable_pois rp\n  JOIN reservables r ON r.id = rp.reservable_id\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND rp.poi_id::text = ${poi_id:sqlstring}\n    AND r.deleted_at IS NULL\n),\nlatest AS (\n  SELECT\n    reservable_id,\n    max(last_observed_at) AS latest_observed_at\n  FROM availability\n  WHERE reservable_id IN (SELECT id FROM linked)\n  GROUP BY reservable_id\n)\nSELECT\n  count(*) AS linked_reservables,\n  count(latest.reservable_id) AS reservables_with_observations,\n  max(latest.latest_observed_at) AS newest_observation,\n  now() - max(latest.latest_observed_at) AS newest_observation_age\nFROM linked\nLEFT JOIN latest ON latest.reservable_id = linked.id;",
+          "rawSql": "SELECT\n  cs.id AS campsite_id,\n  cg.name AS campground_name,\n  cs.loop_name,\n  cs.name,\n  max(a.last_observed_at) AS latest_availability_observed_at,\n  count(a.id) AS snapshot_rows\nFROM poi_campgrounds pc\nJOIN campgrounds cg ON cg.id = pc.campground_id\nJOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\nLEFT JOIN availability a ON a.campsite_id = cs.id\nWHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n  AND pc.poi_id::text = ${poi_id:sqlstring}\nGROUP BY cs.id, cg.id\nORDER BY latest_availability_observed_at DESC NULLS LAST, cs.name ASC;",
           "refId": "A"
         }
       ],
-      "title": "POI Availability Coverage",
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "roadtrip-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {},
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 24,
-        "x": 0,
-        "y": 37
-      },
-      "id": 4,
-      "options": {
-        "showHeader": true
-      },
-      "pluginVersion": "12.4.4",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "format": "table",
-          "rawQuery": true,
-          "rawSql": "SELECT\n  provider_ref,\n  properties\nFROM pois\nWHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n  AND id::text = ${poi_id:sqlstring};",
-          "refId": "A"
-        }
-      ],
-      "title": "POI Raw Data",
+      "title": "Availability recency by campsite",
       "type": "table"
     }
   ],
-  "refresh": "",
-  "schemaVersion": 39,
+  "refresh": false,
+  "schemaVersion": 41,
   "tags": [
     "roadtrip",
-    "poi"
+    "catalog"
   ],
   "templating": {
     "list": [
@@ -278,21 +144,31 @@
           "text": "",
           "value": ""
         },
-        "name": "poi_name_search",
+        "hide": 0,
+        "label": "POI name",
+        "name": "poi_name",
+        "options": [],
         "query": "",
-        "type": "textbox"
+        "skipUrlSync": false,
+        "type": "textbox",
+        "allowCustomValue": true
       },
       {
         "current": {
           "text": "",
           "value": ""
         },
-        "name": "poi_id_search",
+        "hide": 0,
+        "label": "POI id",
+        "name": "poi_id",
+        "options": [],
         "query": "",
-        "type": "textbox"
+        "skipUrlSync": false,
+        "type": "textbox",
+        "allowCustomValue": true
       },
       {
-        "allValue": "'__all'",
+        "allowCustomValue": true,
         "current": {
           "text": "All",
           "value": "$__all"
@@ -301,30 +177,26 @@
           "type": "postgres",
           "uid": "roadtrip-postgres"
         },
+        "definition": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
+        "hide": 0,
         "includeAll": true,
-        "name": "poi_category",
-        "query": "SELECT DISTINCT category AS __text, category AS __value FROM pois WHERE deleted_at IS NULL ORDER BY category ASC",
-        "refresh": 1,
-        "type": "query"
-      },
-      {
-        "datasource": {
-          "type": "postgres",
-          "uid": "roadtrip-postgres"
+        "label": "POI type",
+        "multi": false,
+        "name": "poi_type",
+        "options": [],
+        "query": {
+          "query": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
         },
-        "name": "poi_id",
-        "query": "WITH matches AS (SELECT id::text || ' - ' || name || ' [' || category || ']' AS __text, id::text AS __value, name, id FROM pois WHERE deleted_at IS NULL AND (${poi_name_search:sqlstring} = '' OR name ILIKE '%' || ${poi_name_search:sqlstring} || '%') AND CASE WHEN ${poi_id_search:sqlstring} = '' THEN true WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN id::text = ${poi_id_search:sqlstring} ELSE false END AND (${poi_category:sqlstring} IN ('', '__all') OR category IN (${poi_category:sqlstring})) ORDER BY name ASC, id ASC LIMIT 500) SELECT __text, __value FROM matches UNION ALL SELECT 'No matching POI' AS __text, '__none' AS __value WHERE NOT EXISTS (SELECT 1 FROM matches)",
         "refresh": 1,
-        "type": "query"
-      },
-      {
-        "current": {
-          "text": "false",
-          "value": "false"
-        },
-        "name": "include_deleted_reservables",
-        "query": "false,true",
-        "type": "custom"
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query",
+        "allValue": "'__all'"
       }
     ]
   },
@@ -332,8 +204,19 @@
     "from": "now-30d",
     "to": "now"
   },
+  "timepicker": {
+    "hidden": false,
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "1h",
+      "1d"
+    ]
+  },
   "timezone": "browser",
-  "title": "POI Detail",
+  "title": "POI / Detail",
   "uid": "poi-detail",
   "version": 1
 }
