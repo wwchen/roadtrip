@@ -50,11 +50,7 @@ class CampflareCampgroundsEtl : SourceEtl<List<JsonObject>, CampgroundEtlOutput>
             latitude = latitude,
             longitude = longitude,
             status = raw.stringField("status"),
-            statusDescription = raw.stringField("status_description"),
             kind = raw.stringField("kind"),
-            shortDescription = raw.stringField("short_description"),
-            mediumDescription = raw.stringField("medium_description"),
-            longDescription = raw.stringField("long_description"),
             location = location,
             defaultCampsiteSchedule = raw.objectField("default_campsite_schedule"),
             amenities = raw.objectField("amenities"),
@@ -195,6 +191,7 @@ private fun JsonObject.stringField(name: String): String? =
     this[name]
         ?.jsonPrimitive
         ?.contentOrNull
+        ?.trim()
         ?.takeIf { it.isNotBlank() && it != "null" }
 
 private fun JsonObject.doubleField(name: String): Double? =

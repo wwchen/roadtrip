@@ -33,10 +33,8 @@ const campflareDetail = {
       directions: 'From Truckee, take Highway 89 north approximately 20 miles.',
     },
     raw: {
-      long_description: 'Cold Creek Campground is located on Highway 89.\n\nLake Tahoe is only 35 minutes away.',
       reservation_url: 'https://www.recreation.gov/camping/campgrounds/232869',
       status: 'open',
-      status_description: 'Open May through October',
       kind: 'campground',
       location: {
         elevation: 6200,
@@ -94,6 +92,10 @@ const campflareDetail = {
       metadata: {
         last_updated: '2026-05-16T06:40:02Z',
       },
+      source_payload: {
+        long_description: 'Cold Creek Campground is located on Highway 89.\n\nLake Tahoe is only 35 minutes away.',
+        status_description: 'Open May through October',
+      },
     },
   },
 };
@@ -101,7 +103,7 @@ const campflareDetail = {
 test('flattenHydratedPoi promotes canonical Campflare fields for the drawer', () => {
   const p = flattenHydratedPoi(campflareDetail).properties;
 
-  assert.equal(p.description, campflareDetail.properties.raw.long_description);
+  assert.equal(p.description, '');
   assert.equal(p.photo_url, 'https://cdn.campflare.com/photo/large.jpg');
   assert.equal(p.agency, 'USDA Forest Service');
   assert.equal(p.phone, '+1 (530) 994-3401');
@@ -110,7 +112,7 @@ test('flattenHydratedPoi promotes canonical Campflare fields for the drawer', ()
   assert.equal(p.state, 'CA');
   assert.equal(p.country, 'US');
   assert.equal(p.status, 'open');
-  assert.equal(p.status_description, 'Open May through October');
+  assert.equal(p.status_description, '');
   assert.deepEqual(p.price, campflareDetail.properties.raw.price);
   assert.deepEqual(p.schedule, campflareDetail.properties.raw.default_campsite_schedule);
   assert.equal(p.has_pull_through_sites, true);
@@ -138,7 +140,8 @@ test('structuredCampgroundDetailsHTML renders Campflare campground fields', () =
   const html = structuredCampgroundDetailsHTML(p);
 
   assert.match(html, /Stay details/);
-  assert.match(html, /Open May through October/);
+  assert.match(html, /Open/);
+  assert.doesNotMatch(html, /Open May through October/);
   assert.match(html, /\$24-\$32/);
   assert.match(html, /Check-in/);
   assert.match(html, /2:00 PM/);
