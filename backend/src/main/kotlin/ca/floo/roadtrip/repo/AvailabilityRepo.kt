@@ -13,7 +13,7 @@ import ca.floo.roadtrip.db.generated.enums.AvailabilityStatus as DbAvailabilityS
 
 /**
  * Sole owner of the `availability` interval table. Each row is a status-run for a
- * (reservable_id, target_date) cell. Writes bump `last_observed_at` in place while
+ * (campsite_id, target_date) cell. Writes bump `last_observed_at` in place while
  * status is unchanged and insert a new row (linked by `previous_id`) on a change;
  * reads take the row with the greatest `last_observed_at` per cell as current.
  */
@@ -63,7 +63,7 @@ class AvailabilityRepo(
                     txn
                         .select(AVAILABILITY.ID, AVAILABILITY.STATUS)
                         .from(AVAILABILITY)
-                        .where(AVAILABILITY.RESERVABLE_ID.eq(obs.reservableId))
+                        .where(AVAILABILITY.CAMPSITE_ID.eq(obs.reservableId))
                         .and(AVAILABILITY.TARGET_DATE.eq(obs.targetDate))
                         .orderBy(AVAILABILITY.LAST_OBSERVED_AT.desc(), AVAILABILITY.ID.desc())
                         .limit(1)
@@ -78,7 +78,7 @@ class AvailabilityRepo(
                 } else {
                     txn
                         .insertInto(AVAILABILITY)
-                        .set(AVAILABILITY.RESERVABLE_ID, obs.reservableId)
+                        .set(AVAILABILITY.CAMPSITE_ID, obs.reservableId)
                         .set(AVAILABILITY.TARGET_DATE, obs.targetDate)
                         .set(AVAILABILITY.STATUS, newStatus)
                         .set(AVAILABILITY.LAST_OBSERVED_AT, observedAt)
@@ -115,14 +115,14 @@ class AvailabilityRepo(
                 txn
                     .resultQuery(
                         """
-                        SELECT id, reservable_id, target_date
+                        SELECT id, campsite_id, target_date
                         FROM (
-                            SELECT DISTINCT ON (reservable_id, target_date)
-                                id, reservable_id, target_date, status
+                            SELECT DISTINCT ON (campsite_id, target_date)
+                                id, campsite_id, target_date, status
                             FROM availability
-                            WHERE reservable_id = ANY(?::bigint[])
+                            WHERE campsite_id = ANY(?::bigint[])
                               AND target_date < ?::date
-                            ORDER BY reservable_id, target_date, last_observed_at DESC, id DESC
+                            ORDER BY campsite_id, target_date, last_observed_at DESC, id DESC
                         ) cur
                         WHERE cur.status <> 'past'
                         """.trimIndent(),
@@ -132,7 +132,7 @@ class AvailabilityRepo(
             for (row in elapsed) {
                 txn
                     .insertInto(AVAILABILITY)
-                    .set(AVAILABILITY.RESERVABLE_ID, row.get("reservable_id", Long::class.java))
+                    .set(AVAILABILITY.CAMPSITE_ID, row.get("campsite_id", Long::class.java))
                     .set(AVAILABILITY.TARGET_DATE, row.get("target_date", LocalDate::class.java))
                     .set(AVAILABILITY.STATUS, DbAvailabilityStatus.past)
                     .set(AVAILABILITY.LAST_OBSERVED_AT, now)
@@ -152,19 +152,19 @@ class AvailabilityRepo(
         return ctx
             .resultQuery(
                 """
-                SELECT DISTINCT ON (reservable_id, target_date)
-                    reservable_id, target_date, status, last_observed_at
+                SELECT DISTINCT ON (campsite_id, target_date)
+                    campsite_id, target_date, status, last_observed_at
                 FROM availability
-                WHERE reservable_id = ANY(?::bigint[])
+                WHERE campsite_id = ANY(?::bigint[])
                   AND target_date = ANY(?::date[])
-                ORDER BY reservable_id, target_date, last_observed_at DESC, id DESC
+                ORDER BY campsite_id, target_date, last_observed_at DESC, id DESC
                 """.trimIndent(),
                 reservableIds.toTypedArray(),
                 dates.toTypedArray(),
             ).fetch { r ->
                 val status = AvailabilityStatus.parse(r.get("status", String::class.java))
                 CurrentCell(
-                    reservableId = r.get("reservable_id", Long::class.java),
+                    reservableId = r.get("campsite_id", Long::class.java),
                     targetDate = r.get("target_date", LocalDate::class.java),
                     status = status,
                     available = status.isOnlineBookable,
@@ -185,9 +185,9 @@ class AvailabilityRepo(
 
     private val statusRunSelect =
         """
-        SELECT reservable_id, run_id, target_date, status, last_observed_at,
+        SELECT campsite_id, run_id, target_date, status, last_observed_at,
                lag(last_observed_at) OVER (
-                 PARTITION BY reservable_id, target_date ORDER BY last_observed_at, id
+                 PARTITION BY campsite_id, target_date ORDER BY last_observed_at, id
                ) AS observed_from
         FROM availability
         """.trimIndent()
@@ -195,7 +195,7 @@ class AvailabilityRepo(
     private fun mapStatusRun(r: org.jooq.Record): StatusRun {
         val status = AvailabilityStatus.parse(r.get("status", String::class.java))
         return StatusRun(
-            reservableId = r.get("reservable_id", Long::class.java),
+            reservableId = r.get("campsite_id", Long::class.java),
             runId = r.get("run_id", Long::class.java),
             targetDate = r.get("target_date", LocalDate::class.java),
             status = status,
@@ -211,7 +211,7 @@ class AvailabilityRepo(
     ): List<StatusRun> =
         ctx
             .resultQuery(
-                "SELECT * FROM ($statusRunSelect) t WHERE reservable_id = ? " +
+                "SELECT * FROM ($statusRunSelect) t WHERE campsite_id = ? " +
                     "ORDER BY target_date DESC, last_observed_at DESC LIMIT ?",
                 reservableId,
                 limit.coerceIn(1, 1000),
@@ -256,17 +256,17 @@ class AvailabilityRepo(
             ctx
                 .resultQuery(
                     """
-                    SELECT reservable_id, run_id, target_date, status, last_observed_at, observed_from
+                    SELECT campsite_id, run_id, target_date, status, last_observed_at, observed_from
                     FROM (
-                        SELECT reservable_id, run_id, target_date, status, last_observed_at,
+                        SELECT campsite_id, run_id, target_date, status, last_observed_at,
                                lag(last_observed_at) OVER (
-                                 PARTITION BY reservable_id, target_date ORDER BY last_observed_at, id
+                                 PARTITION BY campsite_id, target_date ORDER BY last_observed_at, id
                                ) AS observed_from,
                                row_number() OVER (
-                                 PARTITION BY reservable_id, target_date ORDER BY last_observed_at DESC, id DESC
+                                 PARTITION BY campsite_id, target_date ORDER BY last_observed_at DESC, id DESC
                                ) AS rn
                         FROM availability
-                        WHERE reservable_id = ? AND target_date = ANY(?::date[])
+                        WHERE campsite_id = ? AND target_date = ANY(?::date[])
                     ) t
                     WHERE last_observed_at >= ?::timestamptz OR rn = 1
                     ORDER BY target_date, last_observed_at

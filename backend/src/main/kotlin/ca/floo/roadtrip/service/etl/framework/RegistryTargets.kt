@@ -64,7 +64,7 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
     val log = LoggerFactory.getLogger("RegistryTargets")
     val out = mutableMapOf<String, Target>()
     val implemented = EtlOrchestrator.registry.keys
-    val implementedJoiners = EtlOrchestrator.joinerRegistry.keys
+    val implementedJoiners = emptySet<String>()
 
     // poi_data — produces Poi rows.
     for (row in registry.poiData) {

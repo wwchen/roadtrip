@@ -85,7 +85,7 @@ class AvailabilityWatchRepo(
             ctx
                 .insertInto(AVAILABILITY_WATCH)
                 .set(
-                    AVAILABILITY_WATCH.RESERVABLE_FILTERS,
+                    AVAILABILITY_WATCH.CAMPSITE_FILTERS,
                     JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)),
                 ).set(AVAILABILITY_WATCH.START_DATE, input.startDate)
                 .set(AVAILABILITY_WATCH.END_DATE, input.endDate)
@@ -209,7 +209,7 @@ class AvailabilityWatchRepo(
                         .selectOne()
                         .from(AVAILABILITY_WATCH_TARGET)
                         .where(AVAILABILITY_WATCH_TARGET.WATCH_ID.eq(AVAILABILITY_WATCH.ID))
-                        .and(AVAILABILITY_WATCH_TARGET.RESERVABLE_ID.eq(reservableId)),
+                        .and(AVAILABILITY_WATCH_TARGET.CAMPSITE_ID.eq(reservableId)),
                 )
         }
         return if (conds.isEmpty()) DSL.noCondition() else DSL.and(conds)
@@ -223,7 +223,7 @@ class AvailabilityWatchRepo(
         if (input.reservableFilters != null) {
             query =
                 query.set(
-                    AVAILABILITY_WATCH.RESERVABLE_FILTERS,
+                    AVAILABILITY_WATCH.CAMPSITE_FILTERS,
                     JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)),
                 )
         }
@@ -262,7 +262,7 @@ class AvailabilityWatchRepo(
         Watch(
             id = r.get(AVAILABILITY_WATCH.ID)!!,
             targets = targetsRepo.listForWatch(r.get(AVAILABILITY_WATCH.ID)!!),
-            reservableFilters = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.RESERVABLE_FILTERS)!!.data()).jsonObject,
+            reservableFilters = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.CAMPSITE_FILTERS)!!.data()).jsonObject,
             startDate = r.get(AVAILABILITY_WATCH.START_DATE)!!,
             endDate = r.get(AVAILABILITY_WATCH.END_DATE)!!,
             cadenceSec = r.get(AVAILABILITY_WATCH.CADENCE_SEC),

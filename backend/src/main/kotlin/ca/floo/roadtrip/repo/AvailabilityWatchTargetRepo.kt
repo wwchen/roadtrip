@@ -61,7 +61,7 @@ class AvailabilityWatchTargetRepo(
                     .insertInto(AVAILABILITY_WATCH_TARGET)
                     .set(AVAILABILITY_WATCH_TARGET.WATCH_ID, watchId)
                     .set(AVAILABILITY_WATCH_TARGET.POI_ID, t.poiId)
-                    .set(AVAILABILITY_WATCH_TARGET.RESERVABLE_ID, t.reservableId)
+                    .set(AVAILABILITY_WATCH_TARGET.CAMPSITE_ID, t.reservableId)
                     .execute()
             }
         }
@@ -85,6 +85,6 @@ class AvailabilityWatchTargetRepo(
             id = r.get(AVAILABILITY_WATCH_TARGET.ID)!!,
             watchId = r.get(AVAILABILITY_WATCH_TARGET.WATCH_ID)!!,
             poiId = r.get(AVAILABILITY_WATCH_TARGET.POI_ID),
-            reservableId = r.get(AVAILABILITY_WATCH_TARGET.RESERVABLE_ID),
+            reservableId = r.get(AVAILABILITY_WATCH_TARGET.CAMPSITE_ID),
         )
 }

@@ -1,23 +1,10 @@
 package ca.floo.roadtrip
 
-import ca.floo.roadtrip.clients.aspira.AspiraAvailability
-import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
-import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.mapbox.MapboxDirections
-import ca.floo.roadtrip.clients.recgov.Campsite
-import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
-import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
-import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailability
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
-import ca.floo.roadtrip.routes.availabilityRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
-import ca.floo.roadtrip.service.reservation.ReservationProviderClients
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
 import ca.floo.roadtrip.service.routing.RouteCache
 import io.github.smiley4.ktorswaggerui.SwaggerUI
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
@@ -37,7 +24,6 @@ import kotlinx.serialization.json.jsonPrimitive
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import java.io.File
-import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -95,18 +81,6 @@ class OpenApiSmokeTest {
                     healthRoutes()
                     poiRoutes(ctx, registry)
                     poisOnRouteRoutes(ctx, RouteCache(MapboxDirections(token = null)), registry)
-                    val reservationProviders =
-                        ReservationProviderRegistryFactory.build(
-                            registry = registry,
-                            clients =
-                                ReservationProviderClients(
-                                    recgovClient = unusedRecgovClient(),
-                                    aspiraClient = unusedAspiraClient(),
-                                    reserveAmericaClient = unusedReserveAmericaClient(),
-                                    reserveCaliforniaClient = unusedReserveCaliforniaClient(),
-                                ),
-                        )
-                    availabilityRoutes(CampsiteProviderRepo(ctx), reservationProviders, ReservableRepo(ctx))
                 }
             }
 
@@ -149,46 +123,8 @@ class OpenApiSmokeTest {
             assertFalse(paths.keys.any { it.startsWith("/web") })
             assertFalse(paths.containsKey("/api/campsite/events"))
             assertFalse(paths.containsKey("/api/campsite/availability/{poi_id}"))
+            assertFalse(paths.containsKey("/api/poi/{poi_id}/reservables/availability"))
             assertFalse(paths.containsKey("/api/admin/campsite/debug/synth-match"))
-        }
-
-    private fun unusedRecgovClient(): RecGovAvailabilityClient =
-        object : RecGovAvailabilityClient {
-            override suspend fun fetchMonth(
-                campgroundId: String,
-                monthStart: String,
-            ): Map<String, Campsite> = error("not used by OpenApiSmokeTest")
-        }
-
-    private fun unusedAspiraClient(): AspiraAvailabilityClient =
-        object : AspiraAvailabilityClient {
-            override suspend fun fetch(
-                host: String,
-                mapId: Int,
-                startDate: LocalDate,
-                endDate: LocalDate,
-            ): AspiraAvailability = error("not used by OpenApiSmokeTest")
-
-            override suspend fun fetchOccupancy(
-                host: String,
-                resourceLocationId: Int,
-                startDate: LocalDate,
-                endDate: LocalDate,
-            ): AspiraOccupancy = error("not used by OpenApiSmokeTest")
-        }
-
-    private fun unusedReserveAmericaClient(): ReserveAmericaAvailabilityClient =
-        ReserveAmericaAvailabilityClient { _, _, _, _, _ -> error("not used by OpenApiSmokeTest") }
-
-    private fun unusedReserveCaliforniaClient(): ReserveCaliforniaAvailabilityClient =
-        object : ReserveCaliforniaAvailabilityClient {
-            override suspend fun fetchGrid(
-                facilityId: Long,
-                startDate: LocalDate,
-                endDate: LocalDate,
-                minDate: LocalDate,
-                maxDate: LocalDate,
-            ): ReserveCaliforniaGridAvailability = error("not used by OpenApiSmokeTest")
         }
 
     @Test

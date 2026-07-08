@@ -1,7 +1,5 @@
-// Reservable-by-date availability matrix for the campground drawer.
-// It uses the same POI-scoped availability response as the week strip:
-// each day carries available_reservable_ids, and the catalog rows come
-// from /api/poi/{id}/reservables.
+// Retired reservable-by-date availability matrix for the campground drawer.
+// Kept unmounted until the view is rebuilt on canonical campsite catalog data.
 
 import { escapeHtml } from '../core.js';
 import { renderSiteDetail } from './site-detail.js';

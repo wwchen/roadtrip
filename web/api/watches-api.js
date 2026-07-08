@@ -12,16 +12,16 @@ const BASE = '/api/availability/watches';
  * @param {object}        [params]
  * @param {string}        [params.status]        active | paused | done
  * @param {number|string} [params.poiId]
- * @param {number|string} [params.reservableId]
+ * @param {number|string} [params.campsiteId]
  * @param {number}        [params.limit]
  * @param {number}        [params.offset]
  * @param {AbortSignal}   [params.signal]
  */
-export function listWatches({ status, poiId, reservableId, limit, offset, signal } = {}) {
+export function listWatches({ status, poiId, campsiteId, limit, offset, signal } = {}) {
   const qs = new URLSearchParams();
   if (status) qs.set('status', status);
   if (poiId != null && poiId !== '') qs.set('poi_id', poiId);
-  if (reservableId != null && reservableId !== '') qs.set('reservable_id', reservableId);
+  if (campsiteId != null && campsiteId !== '') qs.set('campsite_id', campsiteId);
   if (limit != null) qs.set('limit', limit);
   if (offset != null) qs.set('offset', offset);
   const suffix = qs.toString() ? `?${qs}` : '';

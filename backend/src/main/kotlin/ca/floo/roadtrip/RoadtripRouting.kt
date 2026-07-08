@@ -3,13 +3,11 @@ package ca.floo.roadtrip
 import ca.floo.roadtrip.http.cacheOptionsFor
 import ca.floo.roadtrip.routes.adminIngestRoutes
 import ca.floo.roadtrip.routes.availabilityDashboardRoutes
-import ca.floo.roadtrip.routes.availabilityRoutes
 import ca.floo.roadtrip.routes.availabilityWatchRoutes
 import ca.floo.roadtrip.routes.geocodeRoutes
 import ca.floo.roadtrip.routes.healthRoutes
 import ca.floo.roadtrip.routes.poiRoutes
 import ca.floo.roadtrip.routes.poisOnRouteRoutes
-import ca.floo.roadtrip.routes.reservableRoutes
 import ca.floo.roadtrip.routes.routeRoutes
 import ca.floo.roadtrip.routes.slackInteractivityRoute
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
@@ -110,7 +108,6 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
                         ?.supportsAvailability == true
             },
         )
-        reservableRoutes(runtime.ctx)
         availabilityWatchRoutes(
             runtime.ctx,
             runtime.availabilityWatchService,
@@ -129,7 +126,6 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
         routeRoutes(runtime.routeCache, runtime.ctx)
         geocodeRoutes(runtime.mapboxGeocoder)
         healthRoutes()
-        availabilityRoutes(routeService = runtime.availabilityService)
         adminIngestRoutes(runtime.ingestController, runtime.ctx)
         staticSiteRoutes(runtime.staticDir)
     }
