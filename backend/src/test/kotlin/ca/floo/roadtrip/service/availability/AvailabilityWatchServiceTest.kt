@@ -9,7 +9,6 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
@@ -18,6 +17,7 @@ import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -197,8 +197,8 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = true,
                 maxPollWindowDays = 60,
-                bookingHorizon = CapabilityLimit(180, CapabilityTimeUnit.DAY),
-                fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
+                bookingHorizon = CapabilityLimit(180, ChronoUnit.DAYS),
+                fetchWindowCap = CapabilityLimit(60, ChronoUnit.DAYS),
             )
 
         override suspend fun availability(

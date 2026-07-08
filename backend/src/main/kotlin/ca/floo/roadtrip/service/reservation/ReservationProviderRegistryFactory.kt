@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.reservation
 
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.models.metadata.registry.RegistryCapabilityLimit
-import ca.floo.roadtrip.models.metadata.registry.RegistryCapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
 import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovReservationProvider
@@ -106,9 +105,5 @@ object ReservationProviderRegistryFactory {
 private fun RegistryCapabilityLimit.toCapabilityLimit(): CapabilityLimit =
     CapabilityLimit(
         value = value,
-        unit =
-            when (unit) {
-                RegistryCapabilityTimeUnit.DAY -> CapabilityTimeUnit.DAY
-                RegistryCapabilityTimeUnit.MONTH -> CapabilityTimeUnit.MONTH
-            },
+        unit = unit,
     )

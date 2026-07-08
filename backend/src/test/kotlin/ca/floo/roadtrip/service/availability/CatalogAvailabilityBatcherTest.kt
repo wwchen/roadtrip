@@ -9,7 +9,6 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
@@ -17,6 +16,7 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -137,8 +137,8 @@ class CatalogAvailabilityBatcherTest {
                     supportsAvailability = true,
                     supportsAlerts = true,
                     maxPollWindowDays = 60,
-                    bookingHorizon = CapabilityLimit(180, CapabilityTimeUnit.DAY),
-                    fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
+                    bookingHorizon = CapabilityLimit(180, ChronoUnit.DAYS),
+                    fetchWindowCap = CapabilityLimit(60, ChronoUnit.DAYS),
                 )
 
             override suspend fun availability(

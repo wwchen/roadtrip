@@ -11,7 +11,6 @@ import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
@@ -270,7 +269,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
         },
     ): FakeProvider = FakeProvider(maxPollWindowDays, bookingHorizon, onCatalog)
 
-    private fun dayLimit(days: Int): CapabilityLimit = CapabilityLimit(days, CapabilityTimeUnit.DAY)
+    private fun dayLimit(days: Int): CapabilityLimit = CapabilityLimit(days, ChronoUnit.DAYS)
 
     /** Build a batch that reports [status] for every requested reservable on every day in the window. */
     private fun batchFor(
@@ -316,7 +315,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
                 supportsAlerts = true,
                 maxPollWindowDays = maxPollWindowDays,
                 bookingHorizon = bookingHorizon,
-                fetchWindowCap = CapabilityLimit(maxPollWindowDays, CapabilityTimeUnit.DAY),
+                fetchWindowCap = CapabilityLimit(maxPollWindowDays, ChronoUnit.DAYS),
             )
 
         override suspend fun availability(

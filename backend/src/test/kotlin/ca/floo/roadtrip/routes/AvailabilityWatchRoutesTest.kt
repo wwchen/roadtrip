@@ -14,7 +14,6 @@ import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
@@ -37,6 +36,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.long
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -965,8 +965,8 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.reservation.Reserva
             supportsAvailability = true,
             supportsAlerts = true,
             maxPollWindowDays = 60,
-            bookingHorizon = CapabilityLimit(180, CapabilityTimeUnit.DAY),
-            fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
+            bookingHorizon = CapabilityLimit(180, ChronoUnit.DAYS),
+            fetchWindowCap = CapabilityLimit(60, ChronoUnit.DAYS),
         )
 
     override suspend fun availability(

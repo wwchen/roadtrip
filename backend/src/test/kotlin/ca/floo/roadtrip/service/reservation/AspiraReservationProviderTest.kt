@@ -14,6 +14,7 @@ import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenant
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -53,7 +54,7 @@ class AspiraReservationProviderTest {
                         AspiraTenant(
                             host = "reservation.pc.gc.ca",
                             vendorCode = "aspira_pc",
-                            bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                            bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
                         ),
                     client = client,
                 )
@@ -122,7 +123,7 @@ class AspiraReservationProviderTest {
                         AspiraTenant(
                             host = "reservation.pc.gc.ca",
                             vendorCode = "aspira_pc",
-                            bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                            bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
                         ),
                     client = client,
                     occupancyEnabled = true,
@@ -184,7 +185,7 @@ class AspiraReservationProviderTest {
                         AspiraTenant(
                             host = "reservation.pc.gc.ca",
                             vendorCode = "aspira_pc",
-                            bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                            bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
                         ),
                     client = client,
                     occupancyEnabled = false,
@@ -242,7 +243,7 @@ class AspiraReservationProviderTest {
                     AspiraTenant(
                         host = host,
                         vendorCode = vendor,
-                        bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                        bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
                     )
                 val adapter = AspiraReservationProvider(tenant = tenant, client = client)
                 val batch =
@@ -288,7 +289,7 @@ class AspiraReservationProviderTest {
                         AspiraTenant(
                             host = "reservation.pc.gc.ca",
                             vendorCode = "aspira_pc",
-                            bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                            bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
                         ),
                     client = client,
                 )
@@ -317,7 +318,7 @@ class AspiraReservationProviderTest {
                     AspiraTenant(
                         host = "washington.goingtocamp.com",
                         vendorCode = "aspira_wa",
-                        bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                        bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
                     ),
                 client = fakeAspiraClient(),
             )

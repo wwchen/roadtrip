@@ -11,7 +11,6 @@ import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
@@ -19,6 +18,7 @@ import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -131,8 +131,8 @@ class PollerBackfillTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = true,
                 maxPollWindowDays = 60,
-                bookingHorizon = CapabilityLimit(180, CapabilityTimeUnit.DAY),
-                fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
+                bookingHorizon = CapabilityLimit(180, ChronoUnit.DAYS),
+                fetchWindowCap = CapabilityLimit(60, ChronoUnit.DAYS),
             )
 
         override suspend fun availability(

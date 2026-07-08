@@ -9,6 +9,7 @@ import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmeri
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -22,7 +23,7 @@ class ReserveAmericaReservationProviderTest {
                         source = "new-york-state-parks",
                         host = "newyorkstateparks.reserveamerica.com",
                         contractCode = "NY",
-                        bookingHorizon = CapabilityLimit(270, CapabilityTimeUnit.DAY),
+                        bookingHorizon = CapabilityLimit(270, ChronoUnit.DAYS),
                     ),
                 client = ReserveAmericaAvailabilityClient { _, _, _, _, _ -> error("not used") },
             )
@@ -71,7 +72,7 @@ class ReserveAmericaReservationProviderTest {
                             source = "new-york-state-parks",
                             host = "newyorkstateparks.reserveamerica.com",
                             contractCode = "NY",
-                            bookingHorizon = CapabilityLimit(270, CapabilityTimeUnit.DAY),
+                            bookingHorizon = CapabilityLimit(270, ChronoUnit.DAYS),
                         ),
                     client = client,
                 )

@@ -16,6 +16,7 @@ import java.time.Clock
 import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicInteger
@@ -73,7 +74,7 @@ class ReserveCaliforniaReservationProviderTest {
             assertEquals(ReservationProviderId.RESERVECALIFORNIA, provider.id)
             assertEquals(true, provider.capabilities.supportsAvailability)
             assertEquals(false, provider.capabilities.supportsAlerts)
-            assertEquals(CapabilityLimit(183, CapabilityTimeUnit.DAY), provider.capabilities.bookingHorizon)
+            assertEquals(CapabilityLimit(183, ChronoUnit.DAYS), provider.capabilities.bookingHorizon)
             assertEquals("reservecalifornia", batch.provider)
             assertEquals("690", batch.campgroundId)
             assertEquals("611,612", batch.mapId)

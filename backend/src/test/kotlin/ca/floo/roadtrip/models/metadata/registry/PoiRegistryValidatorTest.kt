@@ -2,6 +2,7 @@ package ca.floo.roadtrip.models.metadata.registry
 
 import com.charleskorn.kaml.Yaml
 import com.charleskorn.kaml.YamlConfiguration
+import java.time.temporal.ChronoUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -392,7 +393,7 @@ class PoiRegistryValidatorTest {
                     source = "test-reserveamerica-parks",
                     host = "example.reserveamerica.test",
                     contractCode = "ZZ",
-                    bookingHorizon = RegistryCapabilityLimit(123, RegistryCapabilityTimeUnit.DAY),
+                    bookingHorizon = RegistryCapabilityLimit(123, ChronoUnit.DAYS),
                 ),
             ),
             r.reserveAmericaSources(),

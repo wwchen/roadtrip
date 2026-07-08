@@ -10,7 +10,6 @@ import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.reservation.AvailabilityClient
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
@@ -51,7 +50,7 @@ class ReserveAmericaReservationProvider(
             supportsAlerts = false,
             maxPollWindowDays = RESERVEAMERICA_MAX_POLL_WINDOW_DAYS,
             bookingHorizon = tenant.bookingHorizon,
-            fetchWindowCap = CapabilityLimit(RESERVEAMERICA_FETCH_WINDOW_DAYS, CapabilityTimeUnit.DAY),
+            fetchWindowCap = CapabilityLimit(RESERVEAMERICA_FETCH_WINDOW_DAYS, ChronoUnit.DAYS),
         )
 
     override suspend fun availability(

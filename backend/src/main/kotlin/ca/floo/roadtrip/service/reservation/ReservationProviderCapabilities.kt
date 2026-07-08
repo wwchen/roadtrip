@@ -1,6 +1,7 @@
 package ca.floo.roadtrip.service.reservation
 
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 private const val MONTHS_PER_YEAR: Int = 12
 private const val MONTH_INDEX_OFFSET: Int = 1
@@ -43,20 +44,27 @@ data class ReservationProviderCapabilities(
                 supportsAvailability = false,
                 supportsAlerts = false,
                 maxPollWindowDays = 0,
-                bookingHorizon = CapabilityLimit(0, CapabilityTimeUnit.DAY),
-                fetchWindowCap = CapabilityLimit(0, CapabilityTimeUnit.DAY),
+                bookingHorizon = CapabilityLimit(0, ChronoUnit.DAYS),
+                fetchWindowCap = CapabilityLimit(0, ChronoUnit.DAYS),
             )
     }
 }
 
 data class CapabilityLimit(
     val value: Int,
-    val unit: CapabilityTimeUnit,
+    val unit: ChronoUnit,
 ) {
+    init {
+        require(unit == ChronoUnit.DAYS || unit == ChronoUnit.MONTHS) {
+            "CapabilityLimit supports only DAYS and MONTHS, got $unit"
+        }
+    }
+
     fun endExclusiveFrom(startDate: LocalDate): LocalDate =
         when (unit) {
-            CapabilityTimeUnit.DAY -> startDate.plusDays(value.toLong())
-            CapabilityTimeUnit.MONTH -> startDate.plusMonths(value.toLong())
+            ChronoUnit.DAYS -> startDate.plusDays(value.toLong())
+            ChronoUnit.MONTHS -> startDate.plusMonths(value.toLong())
+            else -> unsupportedUnit()
         }
 
     fun windowCovering(
@@ -71,8 +79,9 @@ data class CapabilityLimit(
 
     private fun bucketStart(date: LocalDate): LocalDate =
         when (unit) {
-            CapabilityTimeUnit.DAY -> dayBucketStart(date)
-            CapabilityTimeUnit.MONTH -> monthBucketStart(date)
+            ChronoUnit.DAYS -> dayBucketStart(date)
+            ChronoUnit.MONTHS -> monthBucketStart(date)
+            else -> unsupportedUnit()
         }
 
     private fun dayBucketStart(date: LocalDate): LocalDate {
@@ -90,12 +99,10 @@ data class CapabilityLimit(
 
     private fun LocalDate.plusLimit(): LocalDate =
         when (unit) {
-            CapabilityTimeUnit.DAY -> plusDays(value.toLong())
-            CapabilityTimeUnit.MONTH -> plusMonths(value.toLong())
+            ChronoUnit.DAYS -> plusDays(value.toLong())
+            ChronoUnit.MONTHS -> plusMonths(value.toLong())
+            else -> unsupportedUnit()
         }
-}
 
-enum class CapabilityTimeUnit {
-    DAY,
-    MONTH,
+    private fun unsupportedUnit(): Nothing = error("CapabilityLimit supports only DAYS and MONTHS, got $unit")
 }

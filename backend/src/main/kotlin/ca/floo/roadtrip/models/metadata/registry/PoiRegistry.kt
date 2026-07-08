@@ -7,6 +7,7 @@ import com.charleskorn.kaml.YamlScalar
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
+import java.time.temporal.ChronoUnit
 
 private const val RESERVEAMERICA_PROVIDER = "reserveamerica"
 private const val RESERVEAMERICA_PROVIDER_ARG = "provider"
@@ -401,25 +402,8 @@ data class ReserveAmericaSourceConfig(
 
 data class RegistryCapabilityLimit(
     val value: Int,
-    val unit: RegistryCapabilityTimeUnit,
+    val unit: ChronoUnit,
 )
-
-enum class RegistryCapabilityTimeUnit {
-    DAY,
-    MONTH,
-    ;
-
-    companion object {
-        fun fromConfigValue(value: String): RegistryCapabilityTimeUnit? =
-            when (value.trim().uppercase()) {
-                "DAY", "DAYS" -> DAY
-
-                "MONTH", "MONTHS" -> MONTH
-
-                else -> null
-            }
-    }
-}
 
 private fun EtlEntry.requireCapabilityLimit(key: String): RegistryCapabilityLimit {
     val valueArg = "${key}_value"
@@ -431,10 +415,19 @@ private fun EtlEntry.requireCapabilityLimit(key: String): RegistryCapabilityLimi
         "ReserveAmerica source '$slug' args.$valueArg must be positive"
     }
     val unit =
-        args[unitArg]?.let { RegistryCapabilityTimeUnit.fromConfigValue(it) }
+        args[unitArg]?.let { parseCapabilityUnit(it) }
             ?: error("ReserveAmerica source '$slug' has invalid args.$unitArg")
     return RegistryCapabilityLimit(value = value, unit = unit)
 }
+
+private fun parseCapabilityUnit(value: String): ChronoUnit? =
+    when (value.trim().uppercase()) {
+        "DAY", "DAYS" -> ChronoUnit.DAYS
+
+        "MONTH", "MONTHS" -> ChronoUnit.MONTHS
+
+        else -> null
+    }
 
 private fun EtlEntry.isReserveAmericaProvider(): Boolean {
     val provider = args[RESERVEAMERICA_PROVIDER_ARG] ?: RESERVEAMERICA_PROVIDER

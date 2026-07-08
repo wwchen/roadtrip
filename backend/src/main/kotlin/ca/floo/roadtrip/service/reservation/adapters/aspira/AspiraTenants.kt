@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.reservation.adapters.aspira
 
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
+import java.time.temporal.ChronoUnit
 
 /**
  * Per-tenant Aspira NextGen configuration. One row per upstream host.
@@ -32,7 +32,7 @@ data class AspiraTenant(
 
 object AspiraTenants {
     /** Aspira NextGen typical horizon. */
-    private val DEFAULT_BOOKING_HORIZON: CapabilityLimit = CapabilityLimit(365, CapabilityTimeUnit.DAY)
+    private val DEFAULT_BOOKING_HORIZON: CapabilityLimit = CapabilityLimit(365, ChronoUnit.DAYS)
 
     /**
      * The tenant table. Order does not matter; lookup is by host.

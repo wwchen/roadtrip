@@ -14,7 +14,6 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.ReservableAvailabilityComposer
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
@@ -985,8 +984,8 @@ class ReservableRoutesTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = false,
                 maxPollWindowDays = 60,
-                bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
-                fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
+                bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
+                fetchWindowCap = CapabilityLimit(60, ChronoUnit.DAYS),
             )
 
         override suspend fun availability(
@@ -1081,8 +1080,8 @@ class ReservableRoutesTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = false,
                 maxPollWindowDays = 60,
-                bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
-                fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
+                bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
+                fetchWindowCap = CapabilityLimit(60, ChronoUnit.DAYS),
             )
 
         override suspend fun availability(

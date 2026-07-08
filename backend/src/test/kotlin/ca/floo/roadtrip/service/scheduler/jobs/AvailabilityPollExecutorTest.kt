@@ -33,7 +33,6 @@ import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.BookingUrlTemplate
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
@@ -49,6 +48,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
+import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -388,8 +388,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = true,
                 maxPollWindowDays = maxPollWindowDays,
-                bookingHorizon = CapabilityLimit(3650, CapabilityTimeUnit.DAY),
-                fetchWindowCap = CapabilityLimit(maxPollWindowDays, CapabilityTimeUnit.DAY),
+                bookingHorizon = CapabilityLimit(3650, ChronoUnit.DAYS),
+                fetchWindowCap = CapabilityLimit(maxPollWindowDays, ChronoUnit.DAYS),
             )
 
         override suspend fun availability(
@@ -446,8 +446,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 supportsAvailability = true,
                 supportsAlerts = true,
                 maxPollWindowDays = 60,
-                bookingHorizon = CapabilityLimit(3650, CapabilityTimeUnit.DAY),
-                fetchWindowCap = CapabilityLimit(60, CapabilityTimeUnit.DAY),
+                bookingHorizon = CapabilityLimit(3650, ChronoUnit.DAYS),
+                fetchWindowCap = CapabilityLimit(60, ChronoUnit.DAYS),
             )
 
         override suspend fun availability(
@@ -497,7 +497,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             assertTrue(start == today || start == today.plusDays(1), "window starts at today's earliest bookable date, not the watch start")
             val targetEnd = start.plusDays(provider.capabilities.maxPollWindowDays.toLong())
             val expectedFetchEnd =
-                CapabilityLimit(provider.capabilities.maxPollWindowDays, CapabilityTimeUnit.DAY)
+                CapabilityLimit(provider.capabilities.maxPollWindowDays, ChronoUnit.DAYS)
                     .windowCovering(start, targetEnd)!!
                     .second
             assertEquals(expectedFetchEnd, provider.lastEnd, "window snaps to the fetch bucket boundary, not the watch union")

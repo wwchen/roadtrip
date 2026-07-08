@@ -93,7 +93,8 @@ data class ReservationProviderCapabilities(
 
 The API can surface this struct for the campground behind a POI so the
 drawer can hide affordances the provider doesn't support. Availability
-windowing uses `bookingHorizon` directly, so month-based vendors keep
+windowing uses `bookingHorizon` directly; `CapabilityLimit.unit` is a
+`ChronoUnit` limited to `DAYS` or `MONTHS`, so month-based vendors keep
 calendar-month behavior instead of being rounded into fixed days. The requested
 day range is the target window; upstream reads use `fetchWindowCap` to snap
 that target to stable provider buckets (for example, 14-day epoch buckets for

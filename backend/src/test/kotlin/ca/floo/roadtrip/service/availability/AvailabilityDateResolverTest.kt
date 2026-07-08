@@ -2,7 +2,6 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import org.junit.jupiter.api.Test
 import java.time.Clock
 import java.time.Instant
@@ -21,7 +20,7 @@ class AvailabilityDateResolverTest {
     private fun resolverAt(instant: String): AvailabilityDateResolver =
         AvailabilityDateResolver(clock = Clock.fixed(Instant.parse(instant), ZoneOffset.UTC))
 
-    private fun dayLimit(days: Int): CapabilityLimit = CapabilityLimit(days, CapabilityTimeUnit.DAY)
+    private fun dayLimit(days: Int): CapabilityLimit = CapabilityLimit(days, ChronoUnit.DAYS)
 
     @Test
     fun `polling window starts at the earliest bookable date and spans the vendor cap`() {
@@ -119,7 +118,7 @@ class AvailabilityDateResolverTest {
                 anchor = anchor,
                 context = context,
                 maxPollWindowDays = 60,
-                bookingHorizon = CapabilityLimit(6, CapabilityTimeUnit.MONTH),
+                bookingHorizon = CapabilityLimit(6, ChronoUnit.MONTHS),
             )!!
 
         assertEquals(context.earliestDate.plusMonths(6), wide.endDate)
@@ -139,7 +138,7 @@ class AvailabilityDateResolverTest {
                     ),
                 context = context,
                 bookingHorizon = dayLimit(365),
-                fetchWindowCap = CapabilityLimit(14, CapabilityTimeUnit.DAY),
+                fetchWindowCap = CapabilityLimit(14, ChronoUnit.DAYS),
             )!!
 
         assertEquals(LocalDate.parse("2026-07-02"), fetch.startDate)
@@ -160,7 +159,7 @@ class AvailabilityDateResolverTest {
                     ),
                 context = context,
                 bookingHorizon = dayLimit(365),
-                fetchWindowCap = CapabilityLimit(14, CapabilityTimeUnit.DAY),
+                fetchWindowCap = CapabilityLimit(14, ChronoUnit.DAYS),
             )!!
 
         assertEquals(LocalDate.parse("2026-07-02"), fetch.startDate)

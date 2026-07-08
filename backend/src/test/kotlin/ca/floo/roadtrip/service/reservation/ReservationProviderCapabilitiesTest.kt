@@ -17,6 +17,7 @@ import ca.floo.roadtrip.service.reservation.adapters.reserveamerica.ReserveAmeri
 import ca.floo.roadtrip.service.reservation.adapters.reservecalifornia.ReserveCaliforniaReservationProvider
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
@@ -24,8 +25,8 @@ class ReservationProviderCapabilitiesTest {
     @Test
     fun `providers expose booking horizon and fetch window with explicit units`() {
         val recgov = RecGovReservationProvider(stubRecgovClient()).capabilities
-        assertEquals(CapabilityLimit(6, CapabilityTimeUnit.MONTH), recgov.bookingHorizon)
-        assertEquals(CapabilityLimit(1, CapabilityTimeUnit.MONTH), recgov.fetchWindowCap)
+        assertEquals(CapabilityLimit(6, ChronoUnit.MONTHS), recgov.bookingHorizon)
+        assertEquals(CapabilityLimit(1, ChronoUnit.MONTHS), recgov.fetchWindowCap)
 
         val aspira =
             AspiraReservationProvider(
@@ -33,12 +34,12 @@ class ReservationProviderCapabilitiesTest {
                     AspiraTenant(
                         host = "reservation.pc.gc.ca",
                         vendorCode = "aspira_pc",
-                        bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                        bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
                     ),
                 client = stubAspiraClient(),
             ).capabilities
-        assertEquals(CapabilityLimit(365, CapabilityTimeUnit.DAY), aspira.bookingHorizon)
-        assertEquals(CapabilityLimit(30, CapabilityTimeUnit.DAY), aspira.fetchWindowCap)
+        assertEquals(CapabilityLimit(365, ChronoUnit.DAYS), aspira.bookingHorizon)
+        assertEquals(CapabilityLimit(30, ChronoUnit.DAYS), aspira.fetchWindowCap)
 
         val reserveAmerica =
             ReserveAmericaReservationProvider(
@@ -47,16 +48,16 @@ class ReservationProviderCapabilitiesTest {
                         source = "new-york-state-parks",
                         host = "newyorkstateparks.reserveamerica.com",
                         contractCode = "NY",
-                        bookingHorizon = CapabilityLimit(270, CapabilityTimeUnit.DAY),
+                        bookingHorizon = CapabilityLimit(270, ChronoUnit.DAYS),
                     ),
                 client = stubReserveAmericaClient(),
             ).capabilities
-        assertEquals(CapabilityLimit(270, CapabilityTimeUnit.DAY), reserveAmerica.bookingHorizon)
-        assertEquals(CapabilityLimit(14, CapabilityTimeUnit.DAY), reserveAmerica.fetchWindowCap)
+        assertEquals(CapabilityLimit(270, ChronoUnit.DAYS), reserveAmerica.bookingHorizon)
+        assertEquals(CapabilityLimit(14, ChronoUnit.DAYS), reserveAmerica.fetchWindowCap)
 
         val reserveCalifornia = ReserveCaliforniaReservationProvider(stubReserveCaliforniaClient()).capabilities
-        assertEquals(CapabilityLimit(183, CapabilityTimeUnit.DAY), reserveCalifornia.bookingHorizon)
-        assertEquals(CapabilityLimit(30, CapabilityTimeUnit.DAY), reserveCalifornia.fetchWindowCap)
+        assertEquals(CapabilityLimit(183, ChronoUnit.DAYS), reserveCalifornia.bookingHorizon)
+        assertEquals(CapabilityLimit(30, ChronoUnit.DAYS), reserveCalifornia.fetchWindowCap)
     }
 
     private fun stubRecgovClient(): RecGovAvailabilityClient =

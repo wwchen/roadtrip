@@ -6,13 +6,13 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.reservation.AvailabilityClient
 import ca.floo.roadtrip.service.reservation.CapabilityLimit
-import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 
 /**
  * rec.gov adapter. Vendor-specific error translation lives here; routes only
@@ -32,8 +32,8 @@ class RecGovReservationProvider(
             supportsAvailability = true,
             supportsAlerts = true,
             maxPollWindowDays = RECGOV_MAX_POLL_WINDOW_DAYS,
-            bookingHorizon = CapabilityLimit(RECGOV_BOOKING_HORIZON_MONTHS, CapabilityTimeUnit.MONTH),
-            fetchWindowCap = CapabilityLimit(RECGOV_FETCH_WINDOW_MONTHS, CapabilityTimeUnit.MONTH),
+            bookingHorizon = CapabilityLimit(RECGOV_BOOKING_HORIZON_MONTHS, ChronoUnit.MONTHS),
+            fetchWindowCap = CapabilityLimit(RECGOV_FETCH_WINDOW_MONTHS, ChronoUnit.MONTHS),
         )
 
     override suspend fun availability(

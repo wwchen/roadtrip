@@ -19,6 +19,7 @@ import ca.floo.roadtrip.service.reservation.adapters.reservecalifornia.ReserveCa
 import kotlinx.coroutines.runBlocking
 import java.time.Instant
 import java.time.LocalDate
+import java.time.temporal.ChronoUnit
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -34,7 +35,7 @@ class AvailabilityClientContractTest {
                         AspiraTenant(
                             host = "reservation.pc.gc.ca",
                             vendorCode = "aspira_pc",
-                            bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                            bookingHorizon = CapabilityLimit(365, ChronoUnit.DAYS),
                         ),
                     client = stubAspiraClient(),
                 ),
@@ -44,7 +45,7 @@ class AvailabilityClientContractTest {
                             source = "new-york-state-parks",
                             host = "newyorkstateparks.reserveamerica.com",
                             contractCode = "NY",
-                            bookingHorizon = CapabilityLimit(270, CapabilityTimeUnit.DAY),
+                            bookingHorizon = CapabilityLimit(270, ChronoUnit.DAYS),
                         ),
                     client = stubReserveAmericaClient(),
                 ),
