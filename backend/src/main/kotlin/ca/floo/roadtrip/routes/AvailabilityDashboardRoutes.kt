@@ -294,26 +294,10 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                 .orEmpty()
         val dates =
             explicitDates.ifEmpty {
-                val avail = ca.floo.roadtrip.db.generated.tables.Availability.AVAILABILITY
-                val windowStart =
-                    java.time.OffsetDateTime
-                        .now()
-                        .minusHours(windowHours.toLong())
-                // Interval rows for this campsite that were either observed within
-                // the window, or track a current/future date. One table now, so no
-                // union: the OR keeps stable-but-recent dates and upcoming dates in
-                // the summary even when their last status-run predates the window.
-                ctx
-                    .selectDistinct(avail.TARGET_DATE)
-                    .from(avail)
-                    .where(avail.CAMPSITE_ID.eq(campsiteId))
-                    .and(
-                        avail.LAST_OBSERVED_AT
-                            .ge(windowStart)
-                            .or(avail.TARGET_DATE.ge(java.time.LocalDate.now())),
-                    ).fetch { it.value1() }
-                    .filterNotNull()
-                    .sorted()
+                availability.datesWithSnapshotsInWindow(
+                    campsiteId = campsiteId,
+                    windowStart = OffsetDateTime.now().minusHours(windowHours.toLong()),
+                )
             }
         val stats = availability.summarize(campsiteId, dates, windowHours = windowHours)
         call.respondJson(
