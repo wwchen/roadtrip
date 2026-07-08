@@ -178,10 +178,10 @@ export function flattenHydratedPoi(f) {
     flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
     flat.Mang_Name = raw.Mang_Name || raw.designation || '';
   }
-  if (p.category === 'planet-fitness') {
+  if (p.category === 'planet_fitness_location' || p.category === 'planet-fitness') {
     flat.opening_hours = raw.opening_hours || '';
   }
-  if (p.category === 'supercharger') {
+  if (p.category === 'tesla_supercharger' || p.category === 'supercharger') {
     flat.locationId = p.source_id;
     flat.stallCount = raw.stall_count ?? 0;
     flat.powerKilowatt = raw.max_power_kw ?? 0;

@@ -2,6 +2,8 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
+import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationEtlRecord
+import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlRecord
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -141,6 +143,68 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         assertEquals("A", row.get("loop_name", String::class.java))
         assertEquals("upper-pines-site-001", row.get("external_id", String::class.java))
         assertEquals("upper-pines-campground-447", row.get("parent_external_id", String::class.java))
+    }
+
+    @Test
+    fun `upserts Tesla superchargers and Planet Fitness locations through typed POI joins`() {
+        val repo = CanonicalCatalogRepo(ctx)
+
+        val tesla =
+            repo.upsertTeslaSuperchargers(
+                listOf(
+                    TeslaSuperchargerEtlRecord(
+                        locationSlug = "vancouver-bc-1",
+                        commonSiteName = "Vancouver, BC",
+                        latitude = 49.2827,
+                        longitude = -123.1207,
+                        siteStatus = "open",
+                        accessType = "public",
+                        openToNonTeslas = true,
+                        stallCount = 12,
+                        maxPowerKw = 250,
+                        address = json("""{"city":"Vancouver","country":"CA"}"""),
+                        region = "BC",
+                        country = "CA",
+                        pricebooks = json("""[{"feeType":"CHARGING"}]"""),
+                        infoUrl = "https://www.tesla.com/findus?location=vancouver-bc-1",
+                        indexPayload = json("""{"location_url_slug":"vancouver-bc-1"}"""),
+                        detailPayload = json("""{"name":"Vancouver, BC"}"""),
+                    ),
+                ),
+                source = "tesla-superchargers",
+            )
+        val planetFitness =
+            repo.upsertPlanetFitnessLocations(
+                listOf(
+                    PlanetFitnessLocationEtlRecord(
+                        locationId = "node-123",
+                        name = "Planet Fitness Vancouver",
+                        latitude = 49.25,
+                        longitude = -123.1,
+                        address = json("""{"city":"Vancouver","country":"US"}"""),
+                        region = "WA",
+                        country = "US",
+                        phone = "555-0100",
+                        infoUrl = "https://example.test/pf",
+                        payload = json("""{"id":123}"""),
+                    ),
+                ),
+                source = "planet-fitness",
+            )
+
+        assertEquals(1, tesla.upsertedCount)
+        assertEquals(1, planetFitness.upsertedCount)
+        assertEquals(1, tableCount("tesla_superchargers"))
+        assertEquals(1, tableCount("planet_fitness_locations"))
+        assertEquals(2, tableCount("pois"))
+        assertEquals(1, tableCount("poi_tesla_superchargers"))
+        assertEquals(1, tableCount("poi_planet_fitness_locations"))
+
+        val poiTypes =
+            ctx
+                .fetch("SELECT poi_type FROM pois ORDER BY poi_type")
+                .map { it.get("poi_type", String::class.java) }
+        assertEquals(listOf("planet_fitness_location", "tesla_supercharger"), poiTypes)
     }
 
     private fun tableCount(table: String): Int =

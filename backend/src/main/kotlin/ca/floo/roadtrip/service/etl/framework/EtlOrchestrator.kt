@@ -34,6 +34,8 @@ private const val DISABLED_JOINER_IMPORT_MESSAGE =
 //   4. If terminal, persist the supported catalog output:
 //        - CampgroundEtlOutput -> canonical campgrounds + lean POI wrappers
 //        - CampsiteEtlOutput   -> canonical campsites
+//        - TeslaSuperchargerEtlOutput -> canonical Tesla locations + lean POI wrappers
+//        - PlanetFitnessLocationEtlOutput -> canonical PF locations + lean POI wrappers
 //        - List<Poi.*>         -> retired wide-POI path, only for disabled
 //          legacy adapters/tests
 //
@@ -208,6 +210,10 @@ class EtlOrchestrator(
                     catalogRepo.upsertCampgrounds(output.campgrounds, source = concrete.etlSlug)
                 is CampsiteEtlOutput ->
                     catalogRepo.upsertCampsites(output.campsites, source = concrete.etlSlug)
+                is TeslaSuperchargerEtlOutput ->
+                    catalogRepo.upsertTeslaSuperchargers(output.superchargers, source = concrete.etlSlug)
+                is PlanetFitnessLocationEtlOutput ->
+                    catalogRepo.upsertPlanetFitnessLocations(output.locations, source = concrete.etlSlug)
                 is List<*> -> {
                     val pois = output.filterIsInstance<Poi>()
                     check(pois.size == output.size) {
@@ -247,6 +253,8 @@ class EtlOrchestrator(
         when (output) {
             is CampgroundEtlOutput -> output.campgrounds.size
             is CampsiteEtlOutput -> output.campsites.size
+            is TeslaSuperchargerEtlOutput -> output.superchargers.size
+            is PlanetFitnessLocationEtlOutput -> output.locations.size
             is List<*> -> output.size
             else -> 0
         }
@@ -362,6 +370,12 @@ class EtlOrchestrator(
                 "campflare-campsites" to
                     ca.floo.roadtrip.service.etl.vendors.campflare
                         .CampflareCampsitesEtl(),
+                "planet-fitness" to
+                    ca.floo.roadtrip.service.etl.vendors.osmpf
+                        .PlanetFitnessEtl(),
+                "tesla-superchargers" to
+                    ca.floo.roadtrip.service.etl.vendors.tesla
+                        .TeslaIndexEtl(),
             )
 
         // Retained vendor adapters. This keeps the parsing/transform code in
@@ -369,15 +383,9 @@ class EtlOrchestrator(
         // until canonical campgrounds/campsites upsert support lands.
         val disabledVendorRegistry: Map<String, SourceEtl<*, *>> =
             mapOf(
-                "planet-fitness" to
-                    ca.floo.roadtrip.service.etl.vendors.osmpf
-                        .PlanetFitnessEtl(),
                 "bcparks-strapi" to
                     ca.floo.roadtrip.service.etl.vendors.bcparks
                         .BcParksStrapiEtl(),
-                "tesla-superchargers" to
-                    ca.floo.roadtrip.service.etl.vendors.tesla
-                        .TeslaIndexEtl(),
                 "alberta-provincial" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
                         .ReserveAmericaEtl(),

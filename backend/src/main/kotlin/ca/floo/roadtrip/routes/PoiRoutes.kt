@@ -109,7 +109,7 @@ internal fun Route.poiRoutes(
                         PoisRequestSchema(
                             bbox = listOf(-122.6, 37.4, -121.6, 38.0),
                             zoom = 10,
-                            categories = listOf("planet-fitness", "supercharger"),
+                            categories = listOf("planet_fitness_location", "tesla_supercharger"),
                         )
                 }
             }
@@ -292,11 +292,12 @@ internal fun Route.poiRoutes(
 }
 
 private fun parseSearchCategories(values: List<String>): List<String> =
-    values
-        .flatMap { it.split(",") }
-        .map { it.trim() }
-        .filter { it.isNotEmpty() }
-        .distinct()
+    canonicalPoiCategories(
+        values
+            .flatMap { it.split(",") }
+            .map { it.trim() }
+            .filter { it.isNotEmpty() },
+    )
 
 private data class PoiRequest(
     val bbox: Bbox,
@@ -317,6 +318,7 @@ private fun parseRequest(bodyText: String): PoiRequest {
     val categories =
         dto.categories
             ?.mapNotNull { it.trim().takeIf { category -> category.isNotEmpty() } }
+            ?.let(::canonicalPoiCategories)
             ?.takeIf { it.isNotEmpty() }
 
     return PoiRequest(bbox, dto.zoom, categories)
