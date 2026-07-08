@@ -1,32 +1,34 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
-import ca.floo.roadtrip.models.domain.Address
 import ca.floo.roadtrip.models.domain.CellSignal
-import ca.floo.roadtrip.models.domain.Poi
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.RatingSummary
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.AgencyConfig
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.pointGeoJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.add
 import kotlinx.serialization.json.booleanOrNull
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.time.Instant
 import kotlin.math.round
 
-// RIDB facilities feed → Poi.Campground.
+// RIDB facilities feed → canonical campgrounds.
 //
 // Capture path: data/raw/<slug>/<ts>/page-NNN.json. Each page is the
 // envelope-wrapped RIDB /organizations/<orgId>/facilities response (a
@@ -34,12 +36,13 @@ import kotlin.math.round
 // every page into one logical capture.
 //
 // One ETL class covers every RIDB-publishing agency. Agency identity comes
-// from the configured facility raw field and lands on Poi.Campground.agency.
-// Reservable facilities get provider_ref=RecGov(FacilityID); non-reservable
-// facilities remain useful map POIs but are not live availability targets.
+// from the configured facility raw field and lands in `management`.
+// Reservable facilities get provider-ref payload `recgov_id`; non-reservable
+// facilities remain useful map campgrounds but are not live availability
+// targets.
 class RecGovCampgroundsEtl(
     override val etlSlug: String,
-) : SourceEtl<RecGovDto, List<Poi.Campground>> {
+) : SourceEtl<RecGovDto, CampgroundEtlOutput> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): RecGovDto {
@@ -47,7 +50,7 @@ class RecGovCampgroundsEtl(
         require(envelopes.isNotEmpty()) { "$etlSlug: no pages" }
         // Two passes per envelope: typed parse for the hot fields
         // (FacilityID, lat/lng, name) and raw JsonObject for the full
-        // payload — we hand the latter to Poi.Campground.extras so the
+        // payload. The raw payload is preserved as sourcePayload so the
         // drawer sees every field RIDB ships, even ones the ETL didn't
         // explicitly promote.
         val typed = mutableListOf<Facility>()
@@ -88,29 +91,30 @@ class RecGovCampgroundsEtl(
     override fun transform(
         dto: RecGovDto,
         ctx: TransformCtx,
-    ): List<Poi.Campground> {
+    ): CampgroundEtlOutput {
         val bucket = ctx.subcategoryFor(etlSlug)
         val agencyConfig = ctx.agencyFor(etlSlug)
-        return dto.rows.mapNotNull {
-            transformRow(
-                row = it,
-                raw = dto.rawById[it.FacilityID],
-                enrichment = dto.enrichmentById[it.FacilityID],
-                fetchedAt = dto.fetchedAt,
-                bucket = bucket,
-                agencyConfig = agencyConfig,
-            )
-        }
+        return CampgroundEtlOutput(
+            campgrounds =
+                dto.rows.mapNotNull {
+                    transformRow(
+                        row = it,
+                        raw = dto.rawById[it.FacilityID],
+                        enrichment = dto.enrichmentById[it.FacilityID],
+                        bucket = bucket,
+                        agencyConfig = agencyConfig,
+                    )
+                },
+        )
     }
 
     private fun transformRow(
         row: Facility,
         raw: JsonElement?,
         enrichment: JsonObject?,
-        fetchedAt: Instant,
         bucket: String?,
         agencyConfig: AgencyConfig?,
-    ): Poi.Campground? {
+    ): CampgroundEtlRecord? {
         // RIDB ships ORGANIZATION per row when full=true. The registry decides
         // which field becomes the user-facing agency label.
         val rawObj = raw as? JsonObject
@@ -124,49 +128,138 @@ class RecGovCampgroundsEtl(
         if (lat == null || lon == null || (lat == 0.0 && lon == 0.0)) return null
 
         val firstAddr = row.FACILITYADDRESS?.firstOrNull()
-        val address =
-            firstAddr?.let {
-                Address(
-                    street = it.FacilityStreetAddress1?.takeIf { s -> s.isNotBlank() },
-                    city = it.City?.takeIf { s -> s.isNotBlank() },
-                    state = it.AddressStateCode?.takeIf { s -> s.isNotBlank() },
-                    postcode = it.PostalCode?.takeIf { s -> s.isNotBlank() },
-                    country = normalizeCountry(it.AddressCountryCode),
-                )
-            }
+        val region = firstAddr?.AddressStateCode?.takeIf { it.isNotBlank() }
+        val country = normalizeCountry(firstAddr?.AddressCountryCode) ?: DEFAULT_COUNTRY
+        val infoUrl = facilityInfoUrl(row, rawObj, reservable)
+        val activities = activities(rawObj)
+        val photoUrl = photoUrl(rawObj)
+        val rating = ratingSummary(enrichment)
+        val cell = cellCoverage(enrichment)
 
-        return Poi.Campground(
-            source = etlSlug,
-            sourceId = "recgov-${row.FacilityID}",
+        return CampgroundEtlRecord(
+            vendor = etlSlug,
+            vendorRefId = "$CAMPGROUND_REF_PREFIX${row.FacilityID}",
             name = name,
-            geomGeoJson = pointGeoJson(lon, lat),
-            region = address?.state ?: firstAddr?.AddressStateCode,
-            country = address?.country ?: "US",
-            phone = row.FacilityPhone?.takeIf { it.isNotBlank() },
-            address = address,
-            infoUrl = facilityInfoUrl(row, rawObj, reservable),
-            fetchedAt = fetchedAt,
-            lastVerified = null,
-            providerRef =
+            latitude = lat,
+            longitude = lon,
+            kind = bucket,
+            mediumDescription = description(rawObj),
+            location = locationPayload(lat, lon, region, country, firstAddr),
+            reservationUrl = infoUrl,
+            links = infoUrl?.let(::linksPayload),
+            photos = photoUrl?.let(::photoPayload),
+            cellService = cell?.let(::cellCoveragePayload),
+            management = agency?.let(::managementPayload),
+            contact = row.FacilityPhone?.takeIf { it.isNotBlank() }?.let(::contactPayload),
+            metadata = metadataPayload(activities, rating),
+            sourceUrl = infoUrl,
+            sourcePayload = raw,
+            vendorRefPayload =
                 if (reservable) {
-                    ProviderRef.RecGov(recgovId = row.FacilityID.toString())
+                    buildJsonObject {
+                        put("recgov_id", row.FacilityID.toString())
+                    }
                 } else {
                     null
                 },
-            amenities = emptyList(),
-            activities = activities(rawObj),
-            sites = null,
-            season = null,
-            near = null,
-            description = description(rawObj),
-            photoUrl = photoUrl(rawObj),
-            cellCoverage = cellCoverage(enrichment),
-            ratingReviews = ratingSummary(enrichment),
-            subcategory = bucket,
-            agency = agency,
-            extras = raw,
         )
     }
+
+    private fun locationPayload(
+        latitude: Double,
+        longitude: Double,
+        region: String?,
+        country: String,
+        address: FacilityAddress?,
+    ): JsonObject =
+        buildJsonObject {
+            put("latitude", latitude)
+            put("longitude", longitude)
+            region?.let { put("region", it) }
+            put("country", country)
+            addressPayload(address)?.let { put("address", it) }
+        }
+
+    private fun addressPayload(address: FacilityAddress?): JsonObject? {
+        if (address == null) return null
+        val payload =
+            buildJsonObject {
+                address.FacilityStreetAddress1?.takeIf { it.isNotBlank() }?.let { put("street", it) }
+                address.City?.takeIf { it.isNotBlank() }?.let { put("city", it) }
+                address.AddressStateCode?.takeIf { it.isNotBlank() }?.let { put("state", it) }
+                address.PostalCode?.takeIf { it.isNotBlank() }?.let { put("postcode", it) }
+                normalizeCountry(address.AddressCountryCode)?.let { put("country", it) }
+            }
+        return payload.takeIf { it.isNotEmpty() }
+    }
+
+    private fun linksPayload(url: String): JsonArray =
+        buildJsonArray {
+            add(
+                buildJsonObject {
+                    put("url", url)
+                },
+            )
+        }
+
+    private fun photoPayload(url: String): JsonArray =
+        buildJsonArray {
+            add(
+                buildJsonObject {
+                    put("url", url)
+                },
+            )
+        }
+
+    private fun managementPayload(agency: String): JsonObject =
+        buildJsonObject {
+            put("agency", agency)
+        }
+
+    private fun contactPayload(phone: String): JsonObject =
+        buildJsonObject {
+            put("phone", phone)
+        }
+
+    private fun metadataPayload(
+        activities: List<String>,
+        rating: RatingSummary?,
+    ): JsonObject? {
+        val payload =
+            buildJsonObject {
+                if (activities.isNotEmpty()) {
+                    put(
+                        "activities",
+                        buildJsonArray {
+                            activities.forEach { add(it) }
+                        },
+                    )
+                }
+                rating?.let {
+                    put(
+                        "rating_reviews",
+                        buildJsonObject {
+                            put("avg", it.avg)
+                            put("count", it.count)
+                        },
+                    )
+                }
+            }
+        return payload.takeIf { it.isNotEmpty() }
+    }
+
+    private fun cellCoveragePayload(cellCoverage: Map<String, CellSignal>): JsonObject =
+        buildJsonObject {
+            for ((carrier, signal) in cellCoverage) {
+                put(
+                    carrier,
+                    buildJsonObject {
+                        put("avg", signal.avg)
+                        put("count", signal.count)
+                    },
+                )
+            }
+        }
 
     private fun agencyFrom(
         raw: JsonObject?,
@@ -348,6 +441,8 @@ class RecGovCampgroundsEtl(
         private val json = Json { ignoreUnknownKeys = true }
         private const val RIDB_INPUT = "recgov-campgrounds"
         private const val ENRICHMENT_INPUT = "recgov-campground-enrichment"
+        private const val DEFAULT_COUNTRY = "US"
+        private const val CAMPGROUND_REF_PREFIX = "recgov-"
         private val CARRIER_SLUG =
             mapOf(
                 "Verizon" to "verizon",

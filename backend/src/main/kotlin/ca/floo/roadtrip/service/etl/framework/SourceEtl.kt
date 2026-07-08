@@ -13,10 +13,9 @@ import kotlinx.serialization.json.JsonElement
 // row (whose typed payload gets loaded from data/etl-out/<slug>/). The
 // orchestrator hands the ETL an InputBundle keyed by slug.
 //
-// Outputs: an intermediate ETL returns any @Serializable payload; the
-// orchestrator writes it as JSON to data/etl-out/<etl-slug>/<UTC-ts>.json.
-// A terminal ETL (the last entry in a poi_data row's etls: list) returns
-// List<Poi.*>; the orchestrator hands it to Upsert.run.
+// Outputs: an intermediate ETL returns any @Serializable payload. A terminal
+// ETL returns one of the canonical catalog output DTOs; the orchestrator
+// persists it through CanonicalCatalogRepo.
 //
 // Per RFC decision #26: one file per ETL under etl/<vendor>/, all stages
 // co-located. The interface gives a uniform shape to grep across; the
@@ -24,7 +23,7 @@ import kotlinx.serialization.json.JsonElement
 interface SourceEtl<DTO, OUT> {
     /**
      * The etl's YAML slug. Must match exactly. Terminal ETLs use this as
-     * `pois.source` so the upsert sweep stays scoped per-terminal.
+     * the catalog import source so the upsert sweep stays scoped per-terminal.
      */
     val etlSlug: String
 
@@ -54,8 +53,9 @@ interface SourceEtl<DTO, OUT> {
 
     /**
      * DTO → OUT. Pure except for the read-only lookups TransformCtx
-     * provides (subcategory). Terminal ETLs return List<Poi.*>;
-     * intermediate ETLs return any @Serializable payload type.
+     * provides (subcategory, agency, adapter args). Terminal ETLs return a
+     * canonical catalog output type; intermediate ETLs return any
+     * @Serializable payload type.
      */
     fun transform(
         dto: DTO,

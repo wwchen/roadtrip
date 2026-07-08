@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
-import ca.floo.roadtrip.models.domain.propertiesJson
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.RequestMeta
 import ca.floo.roadtrip.models.metadata.ResponseMeta
@@ -8,6 +7,8 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
 import kotlin.test.Test
@@ -17,14 +18,25 @@ class BcParksStrapiEtlTest {
     @Test
     fun `transform promotes BC Parks description and featured photo`() {
         val etl = BcParksStrapiEtl()
-        val poi = etl.transform(etl.parse(bundle()), transformCtx()).single()
+        val campground = etl.transform(etl.parse(bundle()), transformCtx()).campgrounds.single()
 
-        assertEquals("<p>Camp beside Adams Lake.</p>", poi.description)
-        assertEquals("https://example.test/featured.jpg", poi.photoUrl)
-
-        val properties = poi.propertiesJson()
-        assertEquals("<p>Camp beside Adams Lake.</p>", properties["description"]!!.jsonPrimitive.content)
-        assertEquals("https://example.test/featured.jpg", properties["photo_url"]!!.jsonPrimitive.content)
+        assertEquals("bcparks-strapi", campground.vendor)
+        assertEquals("orcs-6648", campground.vendorRefId)
+        assertEquals("<p>Camp beside Adams Lake.</p>", campground.mediumDescription)
+        assertEquals(
+            "https://example.test/featured.jpg",
+            campground.photos!!
+                .jsonArray
+                .first()
+                .jsonObject["url"]!!
+                .jsonPrimitive
+                .content,
+        )
+        val location = campground.location!!.jsonObject
+        assertEquals("BC", location["region"]!!.jsonPrimitive.content)
+        assertEquals("CA", location["country"]!!.jsonPrimitive.content)
+        val management = campground.management!!.jsonObject
+        assertEquals("BC Parks", management["agency"]!!.jsonPrimitive.content)
     }
 
     private fun bundle(): InputBundle =

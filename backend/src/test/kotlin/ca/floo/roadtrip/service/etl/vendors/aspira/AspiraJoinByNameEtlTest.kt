@@ -202,7 +202,7 @@ class AspiraJoinByNameEtlTest {
     }
 
     @Test
-    fun `resourceLocationId is carried into provider_ref for the joiner`() {
+    fun `resourceLocationId is carried into provider ref payload`() {
         val campground = campgrounds(dtoOf(campground)).single()
 
         val providerRef = campground.vendorRefPayload!!.jsonObject

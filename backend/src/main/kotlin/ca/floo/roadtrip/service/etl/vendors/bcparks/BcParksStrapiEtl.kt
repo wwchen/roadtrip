@@ -1,22 +1,27 @@
 package ca.floo.roadtrip.service.etl.vendors.bcparks
 
-import ca.floo.roadtrip.models.domain.Poi
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.pointGeoJson
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
 import java.time.Instant
 
-// BC Parks Strapi feed → Poi.Campground (provincial bucket).
+// BC Parks Strapi feed → canonical campgrounds.
 //
 // Capture path: data/raw/bcparks-strapi/<ts>/page-NNN.json (paginated,
 // 100 rows/page). Each row is a "protectedArea" record from BC Parks'
@@ -27,7 +32,7 @@ import java.time.Instant
 // Bucketed under campground/provincial (vs the older state-park
 // categorization) so BC Parks dots show up alongside Alberta Parks +
 // US federal/state campgrounds on the same FE legend layer.
-class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
+class BcParksStrapiEtl : SourceEtl<BcParksDto, CampgroundEtlOutput> {
     override val etlSlug = "bcparks-strapi"
     override val multiPart: Boolean = true
 
@@ -64,19 +69,21 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
     override fun transform(
         dto: BcParksDto,
         ctx: TransformCtx,
-    ): List<Poi.Campground> {
+    ): CampgroundEtlOutput {
         val bucket = ctx.subcategoryFor(etlSlug)
-        return dto.rows.mapNotNull { row ->
-            transformRow(row, dto.rawById[row.orcs], dto.fetchedAt, bucket)
-        }
+        return CampgroundEtlOutput(
+            campgrounds =
+                dto.rows.mapNotNull { row ->
+                    transformRow(row, dto.rawById[row.orcs], bucket)
+                },
+        )
     }
 
     private fun transformRow(
         row: BcParksRow,
         raw: JsonElement?,
-        fetchedAt: Instant,
         bucket: String?,
-    ): Poi.Campground? {
+    ): CampgroundEtlRecord? {
         // ORCS (Official Records and Conservation System) is the stable
         // BC Parks identifier — survives renames and reorganizations.
         val orcs = row.orcs ?: return null
@@ -87,36 +94,69 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
         // Active rows, but be defensive — Strapi could change its filter.
         if (row.legalStatus != null && !row.legalStatus.equals("Active", ignoreCase = true)) return null
 
-        return Poi.Campground(
-            source = etlSlug,
-            sourceId = "orcs-$orcs",
+        val infoUrl = row.url?.takeIf { it.isNotBlank() }
+        val photoUrl = parkPhotoUrl(row.parkPhotos)
+        return CampgroundEtlRecord(
+            vendor = etlSlug,
+            vendorRefId = "$ORCS_REF_PREFIX$orcs",
             name = name,
-            geomGeoJson = pointGeoJson(lon, lat),
-            region = "BC",
-            country = "CA",
-            phone = row.parkContact?.takeIf { it.isNotBlank() },
-            address = null,
-            infoUrl = row.url?.takeIf { it.isNotBlank() },
-            fetchedAt = fetchedAt,
-            lastVerified = null,
-            // BC Parks routes through Aspira NextGen (camping.bcparks.ca)
-            // for bookings; the per-park transactionLocationId/mapId are
-            // a separate fetch and aren't on this Strapi row.
-            providerRef = null,
-            amenities = emptyList(),
-            activities = emptyList(),
-            sites = null,
-            season = null,
-            near = null,
-            description = row.description?.trim()?.takeIf { it.isNotBlank() },
-            photoUrl = parkPhotoUrl(row.parkPhotos),
-            cellCoverage = null,
-            ratingReviews = null,
-            subcategory = bucket,
-            agency = "BC Parks",
-            extras = raw,
+            latitude = lat,
+            longitude = lon,
+            kind = bucket,
+            mediumDescription = row.description?.trim()?.takeIf { it.isNotBlank() },
+            location = locationPayload(lat, lon),
+            reservationUrl = infoUrl,
+            links = infoUrl?.let(::linksPayload),
+            photos = photoUrl?.let(::photoPayload),
+            management = managementPayload(),
+            contact = row.parkContact?.takeIf { it.isNotBlank() }?.let(::contactPayload),
+            sourceUrl = infoUrl,
+            sourcePayload = raw,
+            vendorRefPayload =
+                buildJsonObject {
+                    put("orcs", orcs)
+                },
         )
     }
+
+    private fun locationPayload(
+        latitude: Double,
+        longitude: Double,
+    ): JsonObject =
+        buildJsonObject {
+            put("latitude", latitude)
+            put("longitude", longitude)
+            put("region", REGION)
+            put("country", COUNTRY)
+        }
+
+    private fun linksPayload(url: String): JsonArray =
+        buildJsonArray {
+            add(
+                buildJsonObject {
+                    put("url", url)
+                },
+            )
+        }
+
+    private fun photoPayload(url: String): JsonArray =
+        buildJsonArray {
+            add(
+                buildJsonObject {
+                    put("url", url)
+                },
+            )
+        }
+
+    private fun managementPayload(): JsonObject =
+        buildJsonObject {
+            put("agency", AGENCY)
+        }
+
+    private fun contactPayload(phone: String): JsonObject =
+        buildJsonObject {
+            put("phone", phone)
+        }
 
     private fun parseFetchedAt(envelope: Envelope): Instant =
         try {
@@ -139,6 +179,10 @@ class BcParksStrapiEtl : SourceEtl<BcParksDto, List<Poi.Campground>> {
 
     companion object {
         private val json = Json { ignoreUnknownKeys = true }
+        private const val AGENCY = "BC Parks"
+        private const val REGION = "BC"
+        private const val COUNTRY = "CA"
+        private const val ORCS_REF_PREFIX = "orcs-"
     }
 }
 
