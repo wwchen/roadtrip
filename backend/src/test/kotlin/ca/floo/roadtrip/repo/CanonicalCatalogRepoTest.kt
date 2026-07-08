@@ -1,0 +1,153 @@
+package ca.floo.roadtrip.repo
+
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
+import kotlinx.serialization.json.Json
+import org.junit.jupiter.api.BeforeEach
+import org.junit.jupiter.api.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
+
+class CanonicalCatalogRepoTest : SharedDbTest() {
+    @BeforeEach
+    fun resetCatalog() {
+        ctx.cleanCanonicalCatalogFixtures()
+    }
+
+    @Test
+    fun `upserts campgrounds through vendor refs and creates lean POI wrapper`() {
+        val repo = CanonicalCatalogRepo(ctx)
+        val record =
+            CampgroundEtlRecord(
+                vendor = "campflare",
+                vendorRefId = "upper-pines-campground-447",
+                name = "Upper Pines",
+                status = "open",
+                kind = "established",
+                latitude = 37.739,
+                longitude = -119.565,
+                location = json("""{"latitude":37.739,"longitude":-119.565,"address":{"state_code":"CA","country_code":"US"}}"""),
+                amenities = json("""{"toilets":true,"water":true}"""),
+                management = json("""{"agency_name":"National Park Service"}"""),
+                connections = json("""{"ridb_facility_id":"232447"}"""),
+                metadata = json("""{"last_updated":"2026-07-01T00:00:00Z"}"""),
+                sourceUrl = "https://api.campflare.com/v2/campground/upper-pines-campground-447",
+                sourcePayload = json("""{"id":"upper-pines-campground-447","name":"Upper Pines"}"""),
+                vendorRefPayload = json("""{"connections":{"ridb_facility_id":"232447"}}"""),
+            )
+
+        val first = repo.upsertCampgrounds(listOf(record), source = "campflare-campgrounds")
+        val second = repo.upsertCampgrounds(listOf(record.copy(name = "Upper Pines Campground")), source = "campflare-campgrounds")
+
+        assertEquals(1, first.seenCount)
+        assertEquals(1, first.upsertedCount)
+        assertEquals(1, second.upsertedCount)
+        assertEquals(1, tableCount("campgrounds"))
+        assertEquals(1, tableCount("vendor_refs"))
+        assertEquals(1, tableCount("campground_vendor_refs"))
+        assertEquals(1, tableCount("pois"))
+        assertEquals(1, tableCount("poi_campgrounds"))
+
+        val row =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT cg.id, cg.name, cg.amenities::text AS amenities,
+                           vr.external_id, vr.source_url, vr.payload::text AS ref_payload,
+                           ST_X(p.geom::geometry) AS lon, ST_Y(p.geom::geometry) AS lat
+                    FROM campgrounds cg
+                    JOIN campground_vendor_refs cvr ON cvr.campground_id = cg.id
+                    JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+                    JOIN poi_campgrounds pc ON pc.campground_id = cg.id
+                    JOIN pois p ON p.id = pc.poi_id
+                    """.trimIndent(),
+                )
+
+        assertNotNull(row)
+        assertEquals("Upper Pines Campground", row.get("name", String::class.java))
+        assertEquals("upper-pines-campground-447", row.get("external_id", String::class.java))
+        assertEquals("https://api.campflare.com/v2/campground/upper-pines-campground-447", row.get("source_url", String::class.java))
+        assertEquals(-119.565, row.get("lon", Double::class.java))
+        assertEquals(37.739, row.get("lat", Double::class.java))
+    }
+
+    @Test
+    fun `upserts campsites by resolving parent campground vendor ref`() {
+        val repo = CanonicalCatalogRepo(ctx)
+        repo.upsertCampgrounds(
+            listOf(
+                CampgroundEtlRecord(
+                    vendor = "campflare",
+                    vendorRefId = "upper-pines-campground-447",
+                    name = "Upper Pines",
+                    latitude = 37.739,
+                    longitude = -119.565,
+                    location = json("""{"latitude":37.739,"longitude":-119.565}"""),
+                    sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
+                    vendorRefPayload = json("""{"id":"upper-pines-campground-447"}"""),
+                ),
+            ),
+            source = "campflare-campgrounds",
+        )
+
+        val result =
+            repo.upsertCampsites(
+                listOf(
+                    CampsiteEtlRecord(
+                        vendor = "campflare",
+                        vendorRefId = "upper-pines-site-001",
+                        parentVendor = "campflare",
+                        parentVendorRefId = "upper-pines-campground-447",
+                        name = "Site 001",
+                        kind = "tent-only",
+                        loopName = "A",
+                        latitude = 37.738,
+                        longitude = -119.566,
+                        reservationUrl = "https://example.test/site/001",
+                        equipment = json("""[{"name":"Tent"}]"""),
+                        maxPeople = 6,
+                        sourcePayload = json("""{"id":"upper-pines-site-001","campground_id":"upper-pines-campground-447"}"""),
+                        vendorRefPayload = json("""{"campground_id":"upper-pines-campground-447"}"""),
+                    ),
+                ),
+                source = "campflare-campsites",
+            )
+
+        assertEquals(1, result.seenCount)
+        assertEquals(1, result.upsertedCount)
+        assertEquals(0, result.skippedCount)
+        assertEquals(1, tableCount("campsites"))
+        assertEquals(2, tableCount("vendor_refs"))
+        assertEquals(1, tableCount("campsite_vendor_refs"))
+
+        val row =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT c.name, c.kind, c.loop_name, c.equipment::text AS equipment,
+                           vr.external_id, parent_ref.external_id AS parent_external_id
+                    FROM campsites c
+                    JOIN campsite_vendor_refs cvr ON cvr.campsite_id = c.id
+                    JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+                    JOIN campgrounds cg ON cg.id = c.campground_id
+                    JOIN campground_vendor_refs cgvr ON cgvr.campground_id = cg.id
+                    JOIN vendor_refs parent_ref ON parent_ref.id = cgvr.vendor_ref_id
+                    """.trimIndent(),
+                )
+
+        assertNotNull(row)
+        assertEquals("Site 001", row.get("name", String::class.java))
+        assertEquals("tent-only", row.get("kind", String::class.java))
+        assertEquals("A", row.get("loop_name", String::class.java))
+        assertEquals("upper-pines-site-001", row.get("external_id", String::class.java))
+        assertEquals("upper-pines-campground-447", row.get("parent_external_id", String::class.java))
+    }
+
+    private fun tableCount(table: String): Int =
+        ctx
+            .fetchOne("SELECT COUNT(*) AS n FROM $table")!!
+            .get("n", Number::class.java)
+            .toInt()
+
+    private fun json(value: String) = Json.parseToJsonElement(value)
+}
