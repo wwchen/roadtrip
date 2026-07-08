@@ -6,6 +6,7 @@ import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
+import ca.floo.roadtrip.service.etl.framework.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.service.etl.framework.CatalogVendorRefEtlRecord
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
@@ -100,7 +101,7 @@ class CampflareCampsitesEtl : SourceEtl<List<JsonObject>, CampsiteEtlOutput> {
         val id = raw.stringField("id") ?: return null
         val campgroundId = raw.stringField("campground_id") ?: return null
         val name = raw.stringField("name") ?: return null
-        val kind = raw.stringField("kind") ?: return null
+        val kind = raw.stringField("kind") ?: DEFAULT_CAMPSITE_KIND
         val reservationUrl = raw.stringField("reservation_url")
         return CampsiteEtlRecord(
             vendor = CAMPFLARE_VENDOR,
