@@ -227,8 +227,9 @@ class IngestController(
     // -- Import phases (data/raw/ + data/etl-out/ → Postgres) -----------------
     //
     // The phase carries a row's display name + which YAML section it
-    // came from. The orchestrator walks the section's ETL chain
-    // (poi_data / reservable_data); retired joiner rows remain unsupported.
+    // came from. poi_data / reservable_data walk an ETL chain and write
+    // canonical rows; poi_reservable_joiner runs a vendor-scoped
+    // reconciliation pass that reparents campsites via runJoiner.
     //
     // Each branch writes a section-specific counts DTO so dashboards can
     // render whichever fields are populated; the legacy `seen`/`swept`/
@@ -305,7 +306,7 @@ private data class FetchPhaseCountsDto(
  * Section-specific fields are nullable; readers ignore the ones they
  * don't care about. Existing dashboards keyed off `seen`/`swept`/
  * `import_run_id` keep working. Reservable phases carry their campsite
- * import run id; retired joiner fields remain nullable compatibility slots.
+ * import run id; joiner phases carry created_links / stale_links_deleted.
  */
 @Serializable
 private data class ImportPhaseCountsDto(
