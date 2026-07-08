@@ -109,10 +109,20 @@ export function upstreamDecorations(upstream) {
 }
 
 export function descriptionSectionHTML(description) {
-  const html = sanitizeUpstreamHtml(description);
+  const html = sanitizeUpstreamHtml(normalizeDescriptionHtml(description));
   return html
     ? `<section class="cg-about"><h3>About</h3><div class="cg-html">${html}</div></section>`
     : '';
+}
+
+function normalizeDescriptionHtml(description) {
+  if (typeof description !== 'string' || !description.trim()) return '';
+  const text = description.trim();
+  if (/<\/?[a-z][\s\S]*>/i.test(text)) return text;
+  return text
+    .split(/\n{2,}/)
+    .map(part => `<p>${escapeHtml(part.trim()).replace(/\n/g, '<br>')}</p>`)
+    .join('');
 }
 
 function pickParentName(recArea) {
