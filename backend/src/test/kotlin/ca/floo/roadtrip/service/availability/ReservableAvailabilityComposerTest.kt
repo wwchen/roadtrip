@@ -135,11 +135,11 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
         }
 
     @Test
-    fun `fetches the wide vendor window while requesting a single week`() =
+    fun `fetches the snapped provider bucket while requesting a narrower range`() =
         runBlocking {
-            // The vendor's maxPollWindowDays (30) is wider than the requested
-            // week (7 days): the upstream call must span the full 30-day vendor
-            // window, anchored at the request's start, not the narrow request.
+            // The vendor's day fetch cap defines stable epoch-day buckets.
+            // The upstream call should fetch the containing bucket, while the
+            // response returned to the caller stays sliced to the requested days.
             var fetchedStart: LocalDate? = null
             var fetchedEnd: LocalDate? = null
             val provider =
@@ -162,8 +162,8 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
                 )
             }
 
-            assertEquals(LocalDate.parse("2026-08-12"), fetchedStart)
-            assertEquals(30L, ChronoUnit.DAYS.between(fetchedStart, fetchedEnd))
+            assertEquals(LocalDate.parse("2026-08-05"), fetchedStart)
+            assertEquals(LocalDate.parse("2026-09-04"), fetchedEnd)
         }
 
     @Test

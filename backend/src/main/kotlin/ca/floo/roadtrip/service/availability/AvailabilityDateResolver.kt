@@ -2,6 +2,8 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import java.time.Clock
 import java.time.LocalDate
 import java.time.LocalTime
@@ -35,6 +37,23 @@ internal class AvailabilityDateResolver(
         bookingHorizonDays: Int,
         maxDays: Int,
         defaultDays: Int,
+    ): ResolvedDateWindow =
+        resolveWindow(
+            startDate = startDate,
+            endDate = endDate,
+            context = context,
+            bookingHorizon = CapabilityLimit(bookingHorizonDays, CapabilityTimeUnit.DAY),
+            maxDays = maxDays,
+            defaultDays = defaultDays,
+        )
+
+    fun resolveWindow(
+        startDate: LocalDate?,
+        endDate: LocalDate?,
+        context: PoiDateContext,
+        bookingHorizon: CapabilityLimit,
+        maxDays: Int,
+        defaultDays: Int,
     ): ResolvedDateWindow {
         val earliestDate = context.earliestDate
         if (startDate != null && startDate.isBefore(earliestDate)) {
@@ -46,7 +65,7 @@ internal class AvailabilityDateResolver(
         val start = startDate ?: earliestDate
         val end = endDate ?: start.plusDays(defaultDays.toLong())
         if (!end.isAfter(start)) throw AvailabilityServiceError.BadDateWindow.EndBeforeStart
-        val latestDate = earliestDate.plusDays(bookingHorizonDays.toLong())
+        val latestDate = bookingHorizon.endExclusiveFrom(earliestDate)
         if (end.isAfter(latestDate)) {
             throw AvailabilityServiceError.BadDateWindow.BeyondBookingHorizon(latestDate = latestDate)
         }
@@ -58,26 +77,60 @@ internal class AvailabilityDateResolver(
     /**
      * The widest window the vendor exposes for a single call, anchored at
      * [anchor] (clamped forward to the earliest bookable date) and capped by
-     * `min(maxPollWindowDays, bookingHorizonDays)`, never running past the
-     * booking horizon. Shared by the poller (anchor = earliestDate) and the
-     * live read path (anchor = the requested week's start) so the two never
-     * drift on how wide a single fetch is. Returns null when the effective
-     * span is non-positive or the anchor is already at/after the horizon, so
-     * the batcher skips the group and makes no upstream call.
+     * [maxPollWindowDays], never running past the booking horizon. Shared by
+     * the poller (anchor = earliestDate) and the live read path (anchor = the
+     * requested week's start) so the two never drift on how wide a single
+     * fetch is. Returns null when the effective span is non-positive or the
+     * anchor is already at/after the horizon, so the batcher skips the group
+     * and makes no upstream call.
      */
     fun wideWindow(
         anchor: LocalDate,
         context: PoiDateContext,
         maxPollWindowDays: Int,
         bookingHorizonDays: Int,
+    ): ResolvedDateWindow? =
+        wideWindow(
+            anchor = anchor,
+            context = context,
+            maxPollWindowDays = maxPollWindowDays,
+            bookingHorizon = CapabilityLimit(bookingHorizonDays, CapabilityTimeUnit.DAY),
+        )
+
+    fun wideWindow(
+        anchor: LocalDate,
+        context: PoiDateContext,
+        maxPollWindowDays: Int,
+        bookingHorizon: CapabilityLimit,
     ): ResolvedDateWindow? {
-        val span = minOf(maxPollWindowDays, bookingHorizonDays)
-        if (span <= 0) return null
+        if (maxPollWindowDays <= 0) return null
         val start = maxOf(context.earliestDate, anchor)
-        val horizonEnd = context.earliestDate.plusDays(bookingHorizonDays.toLong())
-        val end = minOf(horizonEnd, start.plusDays(span.toLong()))
+        val horizonEnd = bookingHorizon.endExclusiveFrom(context.earliestDate)
+        val end = minOf(horizonEnd, start.plusDays(maxPollWindowDays.toLong()))
         if (!end.isAfter(start)) return null
         return ResolvedDateWindow(startDate = start, endDate = end)
+    }
+
+    /**
+     * Provider-shaped fetch window for a logical target range. Day-based caps
+     * snap to stable epoch-day buckets; month-based caps snap to calendar
+     * month buckets. The caller still slices returned observations to [target].
+     */
+    fun fetchWindow(
+        target: ResolvedDateWindow,
+        context: PoiDateContext,
+        bookingHorizon: CapabilityLimit,
+        fetchWindowCap: CapabilityLimit,
+    ): ResolvedDateWindow? {
+        val horizonEnd = bookingHorizon.endExclusiveFrom(context.earliestDate)
+        val targetStart = maxOf(context.earliestDate, target.startDate)
+        val targetEnd = minOf(horizonEnd, target.endDate)
+        if (!targetEnd.isAfter(targetStart)) return null
+        val (bucketStart, bucketEnd) = fetchWindowCap.windowCovering(targetStart, targetEnd) ?: return null
+        val fetchStart = maxOf(context.earliestDate, bucketStart)
+        val fetchEnd = minOf(horizonEnd, bucketEnd)
+        if (!fetchEnd.isAfter(fetchStart)) return null
+        return ResolvedDateWindow(startDate = fetchStart, endDate = fetchEnd)
     }
 
     /**
@@ -88,16 +141,27 @@ internal class AvailabilityDateResolver(
      * whole window's per-day grid at no extra cost, polling maximally widens
      * snapshot history for free.
      *
-     * The window is `[earliestDate, earliestDate + min(maxPollWindowDays,
-     * bookingHorizonDays))`. Because [PoiDateContext.earliestDate] is
+     * The window is `[earliestDate, min(booking horizon, earliestDate +
+     * maxPollWindowDays))`. Because [PoiDateContext.earliestDate] is
      * clock-derived, the window slides forward every day with no state to
-     * maintain. Returns null when the effective span is non-positive (an
-     * unsupported vendor with a zero poll window / horizon) so the batcher
+     * maintain. Returns null when the effective span is non-positive, such as
+     * an unsupported vendor with a zero poll window or horizon, so the batcher
      * skips the group and makes no upstream call.
      */
     fun resolvePollingWindow(
         context: PoiDateContext,
         maxPollWindowDays: Int,
         bookingHorizonDays: Int,
-    ): ResolvedDateWindow? = wideWindow(context.earliestDate, context, maxPollWindowDays, bookingHorizonDays)
+    ): ResolvedDateWindow? =
+        resolvePollingWindow(
+            context = context,
+            maxPollWindowDays = maxPollWindowDays,
+            bookingHorizon = CapabilityLimit(bookingHorizonDays, CapabilityTimeUnit.DAY),
+        )
+
+    fun resolvePollingWindow(
+        context: PoiDateContext,
+        maxPollWindowDays: Int,
+        bookingHorizon: CapabilityLimit,
+    ): ResolvedDateWindow? = wideWindow(context.earliestDate, context, maxPollWindowDays, bookingHorizon)
 }

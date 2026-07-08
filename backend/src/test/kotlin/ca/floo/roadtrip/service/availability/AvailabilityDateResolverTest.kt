@@ -1,8 +1,12 @@
 package ca.floo.roadtrip.service.availability
 
+import ca.floo.roadtrip.models.availability.ResolvedDateWindow
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import org.junit.jupiter.api.Test
 import java.time.Clock
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneOffset
 import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
@@ -100,6 +104,65 @@ class AvailabilityDateResolverTest {
         val wide = resolver.wideWindow(anchor, context, maxPollWindowDays = 60, bookingHorizonDays = 30)!!
 
         assertEquals(horizonEnd, wide.endDate)
+    }
+
+    @Test
+    fun `month booking horizon uses calendar months instead of fixed thirty day months`() {
+        val resolver = resolverAt("2026-01-31T00:00:00Z")
+        val context = resolver.context(lat = null, lng = null)
+        val anchor = context.earliestDate.plusMonths(6).minusDays(10)
+
+        val wide =
+            resolver.wideWindow(
+                anchor = anchor,
+                context = context,
+                maxPollWindowDays = 60,
+                bookingHorizon = CapabilityLimit(6, CapabilityTimeUnit.MONTH),
+            )!!
+
+        assertEquals(context.earliestDate.plusMonths(6), wide.endDate)
+    }
+
+    @Test
+    fun `day fetch window cap snaps to epoch-day bucket covering the target range`() {
+        val resolver = resolverAt("2026-06-01T00:00:00Z")
+        val context = resolver.context(lat = null, lng = null)
+
+        val fetch =
+            resolver.fetchWindow(
+                target =
+                    ResolvedDateWindow(
+                        startDate = LocalDate.parse("2026-07-11"),
+                        endDate = LocalDate.parse("2026-07-12"),
+                    ),
+                context = context,
+                bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                fetchWindowCap = CapabilityLimit(14, CapabilityTimeUnit.DAY),
+            )!!
+
+        assertEquals(LocalDate.parse("2026-07-02"), fetch.startDate)
+        assertEquals(LocalDate.parse("2026-07-16"), fetch.endDate)
+    }
+
+    @Test
+    fun `day fetch window cap spans every epoch bucket intersecting the target range`() {
+        val resolver = resolverAt("2026-06-01T00:00:00Z")
+        val context = resolver.context(lat = null, lng = null)
+
+        val fetch =
+            resolver.fetchWindow(
+                target =
+                    ResolvedDateWindow(
+                        startDate = LocalDate.parse("2026-07-11"),
+                        endDate = LocalDate.parse("2026-07-18"),
+                    ),
+                context = context,
+                bookingHorizon = CapabilityLimit(365, CapabilityTimeUnit.DAY),
+                fetchWindowCap = CapabilityLimit(14, CapabilityTimeUnit.DAY),
+            )!!
+
+        assertEquals(LocalDate.parse("2026-07-02"), fetch.startDate)
+        assertEquals(LocalDate.parse("2026-07-30"), fetch.endDate)
     }
 
     @Test

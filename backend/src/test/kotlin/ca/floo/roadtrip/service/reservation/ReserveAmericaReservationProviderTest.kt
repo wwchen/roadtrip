@@ -14,6 +14,29 @@ import kotlin.test.assertEquals
 
 class ReserveAmericaReservationProviderTest {
     @Test
+    fun `availability fetch cost counts fourteen day pages`() {
+        val adapter =
+            ReserveAmericaReservationProvider(
+                tenant =
+                    ReserveAmericaTenant(
+                        source = "new-york-state-parks",
+                        host = "newyorkstateparks.reserveamerica.com",
+                        contractCode = "NY",
+                        bookingHorizonDays = 270,
+                    ),
+                client = ReserveAmericaAvailabilityClient { _, _, _, _, _ -> error("not used") },
+            )
+
+        assertEquals(
+            2L,
+            adapter.availabilityFetchCost(
+                startDate = LocalDate.parse("2026-07-02"),
+                endDate = LocalDate.parse("2026-07-30"),
+            ),
+        )
+    }
+
+    @Test
     fun `catalog availability parses reserveamerica matrix and narrows to requested reservables`() =
         runBlocking {
             val client =

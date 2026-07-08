@@ -5,6 +5,8 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.reservation.AvailabilityClient
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
@@ -29,8 +31,10 @@ class RecGovReservationProvider(
         ReservationProviderCapabilities(
             supportsAvailability = true,
             supportsAlerts = true,
-            bookingHorizonDays = RECGOV_BOOKING_HORIZON_DAYS,
+            bookingHorizonDays = recgovBookingHorizonDays(),
             maxPollWindowDays = RECGOV_MAX_POLL_WINDOW_DAYS,
+            bookingHorizon = CapabilityLimit(RECGOV_BOOKING_HORIZON_MONTHS, CapabilityTimeUnit.MONTH),
+            fetchWindowCap = CapabilityLimit(RECGOV_FETCH_WINDOW_MONTHS, CapabilityTimeUnit.MONTH),
         )
 
     override suspend fun availability(
@@ -88,6 +92,14 @@ class RecGovReservationProvider(
         }
     }
 
+    override fun availabilityFetchCost(
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): Long {
+        if (!endDate.isAfter(startDate)) return 0L
+        return monthsCovering(startDate, endDate.minusDays(1)).size.toLong()
+    }
+
     /** rec.gov single-site booking page; the concrete-date [bookingUrl] fills
      *  the window placeholders. [parentRef] is unused — the site id alone
      *  addresses the page. */
@@ -122,7 +134,13 @@ class RecGovReservationProvider(
 
     companion object {
         /** rec.gov exposes 6 months of inventory at any time. */
-        private const val RECGOV_BOOKING_HORIZON_DAYS: Int = 180
+        private const val RECGOV_BOOKING_HORIZON_MONTHS: Int = 6
+
+        /**
+         * Legacy compatibility for day-only callers. Real availability paths
+         * use [RECGOV_BOOKING_HORIZON_MONTHS] through the native capability.
+         */
+        private const val LEGACY_DAYS_PER_RECGOV_HORIZON_MONTH: Int = 30
 
         /**
          * Widest single-tick poll window. rec.gov shapes availability calls by
@@ -131,5 +149,8 @@ class RecGovReservationProvider(
          * independent of watch dates.
          */
         private const val RECGOV_MAX_POLL_WINDOW_DAYS: Int = 60
+        private const val RECGOV_FETCH_WINDOW_MONTHS: Int = 1
+
+        private fun recgovBookingHorizonDays(): Int = RECGOV_BOOKING_HORIZON_MONTHS * LEGACY_DAYS_PER_RECGOV_HORIZON_MONTH
     }
 }

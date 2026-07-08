@@ -32,6 +32,8 @@ import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.BookingUrlTemplate
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
@@ -47,7 +49,6 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneOffset
-import java.time.temporal.ChronoUnit
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
@@ -373,6 +374,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         // (the only way a supported provider yields a null window now that the
         // window is vendor-derived, not watch-derived).
         maxPollWindowDays: Int = 60,
+        private val fetchCost: Long = 1L,
     ) : ReservationProvider {
         var calls: Int = 0
         var lastStart: LocalDate? = null
@@ -424,6 +426,11 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                 cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
             )
         }
+
+        override fun availabilityFetchCost(
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): Long = fetchCost
 
         override fun bookingUrlTemplate(
             reservable: Reservable,
@@ -481,12 +488,17 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
 
             // ONE upstream call over the vendor window and all 3 sites once each.
             assertEquals(1, provider.calls)
-            // Window is today-anchored and 60 days wide, independent of the
-            // watches' year-out dates.
+            // Window is today-anchored and snapped to provider fetch buckets,
+            // independent of the watches' year-out dates.
             val start = provider.lastStart!!
             val today = LocalDate.now(ZoneOffset.UTC)
             assertTrue(start == today || start == today.plusDays(1), "window starts at today's earliest bookable date, not the watch start")
-            assertEquals(60L, ChronoUnit.DAYS.between(start, provider.lastEnd), "window spans the vendor cap, not the watch union")
+            val targetEnd = start.plusDays(provider.capabilities.maxPollWindowDays.toLong())
+            val expectedFetchEnd =
+                CapabilityLimit(provider.capabilities.maxPollWindowDays, CapabilityTimeUnit.DAY)
+                    .windowCovering(start, targetEnd)!!
+                    .second
+            assertEquals(expectedFetchEnd, provider.lastEnd, "window snaps to the fetch bucket boundary, not the watch union")
 
             val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
             assertEquals(1, runs.size)
@@ -1060,6 +1072,22 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
             assertEquals(1, runs.size)
             assertEquals("completed", runs[0].status)
+        }
+
+    @Test
+    fun `governor consumes provider reported cost for multi-request fetch groups`() =
+        runBlocking {
+            val provider = CountingRecgovProvider(fetchCost = 3L)
+            val poiId = seedPoi("232447")
+            seedReservable(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+            val grantingLimiter = RecordingLimiter(grant = true)
+
+            executorFor(provider, limiter = grantingLimiter).handle(poller)
+
+            assertEquals(1, provider.calls)
+            assertEquals(listOf("recgov" to 3L), grantingLimiter.requests)
         }
 
     @Test

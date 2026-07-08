@@ -57,18 +57,18 @@ internal class ReservableAvailabilityComposer(
                             startDate = startDate,
                             endDate = endDate,
                             context = context,
-                            bookingHorizonDays = caps.bookingHorizonDays,
+                            bookingHorizon = caps.bookingHorizon,
                             maxDays = caps.maxPollWindowDays,
                             defaultDays = DEFAULT_AVAILABILITY_DAYS,
                         )
                     // `?: target` is an unreachable safety net: once `target` resolved,
-                    // span > 0 and anchor >= earliestDate, so wideWindow never returns null.
+                    // the fetch bucket covers at least that target range.
                     val fetch =
-                        dateResolver.wideWindow(
-                            anchor = target.startDate,
+                        dateResolver.fetchWindow(
+                            target = target,
                             context = context,
-                            maxPollWindowDays = caps.maxPollWindowDays,
-                            bookingHorizonDays = caps.bookingHorizonDays,
+                            bookingHorizon = caps.bookingHorizon,
+                            fetchWindowCap = caps.fetchWindowCap,
                         ) ?: target
                     AvailabilityWindows(target = target, fetch = fetch)
                 },

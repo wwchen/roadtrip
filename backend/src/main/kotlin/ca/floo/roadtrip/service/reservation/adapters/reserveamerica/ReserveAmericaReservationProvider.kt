@@ -9,6 +9,8 @@ import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.reservation.AvailabilityClient
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
@@ -32,6 +34,7 @@ data class ReserveAmericaTenant(
  * pending cadence/load validation; declared for capability completeness.
  */
 private const val RESERVEAMERICA_MAX_POLL_WINDOW_DAYS = 30
+private const val RESERVEAMERICA_FETCH_WINDOW_DAYS = 14
 
 class ReserveAmericaReservationProvider(
     private val tenant: ReserveAmericaTenant,
@@ -48,6 +51,8 @@ class ReserveAmericaReservationProvider(
             supportsAlerts = false,
             bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = RESERVEAMERICA_MAX_POLL_WINDOW_DAYS,
+            bookingHorizon = CapabilityLimit(tenant.bookingHorizonDays, CapabilityTimeUnit.DAY),
+            fetchWindowCap = CapabilityLimit(RESERVEAMERICA_FETCH_WINDOW_DAYS, CapabilityTimeUnit.DAY),
         )
 
     override suspend fun availability(
@@ -132,6 +137,15 @@ class ReserveAmericaReservationProvider(
             observations = observations,
             reservableId = target.rid,
         )
+    }
+
+    override fun availabilityFetchCost(
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): Long {
+        if (!endDate.isAfter(startDate)) return 0L
+        val days = ChronoUnit.DAYS.between(startDate, endDate)
+        return (days + RESERVEAMERICA_FETCH_WINDOW_DAYS - 1) / RESERVEAMERICA_FETCH_WINDOW_DAYS
     }
 
     private suspend fun fetch(

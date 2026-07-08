@@ -6,6 +6,8 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.reservation.AvailabilityClient
+import ca.floo.roadtrip.service.reservation.CapabilityLimit
+import ca.floo.roadtrip.service.reservation.CapabilityTimeUnit
 import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
@@ -58,6 +60,8 @@ class AspiraReservationProvider(
             supportsAlerts = false,
             bookingHorizonDays = tenant.bookingHorizonDays,
             maxPollWindowDays = ASPIRA_MAX_POLL_WINDOW_DAYS,
+            bookingHorizon = CapabilityLimit(tenant.bookingHorizonDays, CapabilityTimeUnit.DAY),
+            fetchWindowCap = CapabilityLimit(ASPIRA_MAX_POLL_WINDOW_DAYS, CapabilityTimeUnit.DAY),
         )
 
     override suspend fun availability(

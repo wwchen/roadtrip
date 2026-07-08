@@ -1,12 +1,11 @@
 package ca.floo.roadtrip.models.availability
 
 /**
- * The two windows a single availability fetch works with. [fetch] is the
- * widest window the vendor allows for one call (what we ask upstream and
- * record); [target] is the caller's requested window (what drives the cache
- * coverage check and the returned slice). The poller sets them equal; the
- * live read path sets [fetch] wider than [target] so paging is served from
- * the DB.
+ * The two windows a single availability fetch works with. [target] is the
+ * caller's logical day range (what drives cache coverage and returned slices).
+ * [fetch] is the provider-shaped bucket range we ask upstream for and record.
+ * It may be wider than [target] so adjacent day-grid reads reuse the same
+ * cached observations.
  */
 internal data class AvailabilityWindows(
     val target: ResolvedDateWindow,

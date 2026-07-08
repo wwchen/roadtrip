@@ -1,5 +1,11 @@
 package ca.floo.roadtrip.service.reservation
 
+import java.time.LocalDate
+
+private const val MONTHS_PER_YEAR: Int = 12
+private const val MONTH_INDEX_OFFSET: Int = 1
+private const val FIRST_DAY_OF_MONTH: Int = 1
+
 /**
  * What an adapter supports. Surfaced to the FE through
  * availability capability surfaces so the drawer can hide UI
@@ -14,7 +20,11 @@ data class ReservationProviderCapabilities(
     val supportsAvailability: Boolean,
     /** Can be polled in the background to drive watches. */
     val supportsAlerts: Boolean,
-    /** Max days into the future the upstream exposes (e.g. rec.gov = 180). */
+    /**
+     * Compatibility day fallback for older date-window call sites. New
+     * availability flows should use [bookingHorizon], which preserves the
+     * upstream's native unit and exact calendar behavior.
+     */
     val bookingHorizonDays: Int,
     /**
      * Widest window, in days, the poller asks this vendor for in a single
@@ -27,6 +37,10 @@ data class ReservationProviderCapabilities(
      * into ungoverned sub-calls. Zero means "don't poll" (unsupported stub).
      */
     val maxPollWindowDays: Int,
+    /** User/operator-facing booking horizon in the vendor's native unit. */
+    val bookingHorizon: CapabilityLimit = CapabilityLimit(bookingHorizonDays, CapabilityTimeUnit.DAY),
+    /** User/operator-facing single upstream fetch window cap. */
+    val fetchWindowCap: CapabilityLimit = CapabilityLimit(maxPollWindowDays, CapabilityTimeUnit.DAY),
 ) {
     companion object {
         /** Reasonable starting point for a stub — can be flipped on as features land. */
@@ -38,4 +52,55 @@ data class ReservationProviderCapabilities(
                 maxPollWindowDays = 0,
             )
     }
+}
+
+data class CapabilityLimit(
+    val value: Int,
+    val unit: CapabilityTimeUnit,
+) {
+    fun endExclusiveFrom(startDate: LocalDate): LocalDate =
+        when (unit) {
+            CapabilityTimeUnit.DAY -> startDate.plusDays(value.toLong())
+            CapabilityTimeUnit.MONTH -> startDate.plusMonths(value.toLong())
+        }
+
+    fun windowCovering(
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): Pair<LocalDate, LocalDate>? {
+        if (value <= 0 || !endDate.isAfter(startDate)) return null
+        val start = bucketStart(startDate)
+        val end = bucketStart(endDate.minusDays(1)).plusLimit()
+        return start to end
+    }
+
+    private fun bucketStart(date: LocalDate): LocalDate =
+        when (unit) {
+            CapabilityTimeUnit.DAY -> dayBucketStart(date)
+            CapabilityTimeUnit.MONTH -> monthBucketStart(date)
+        }
+
+    private fun dayBucketStart(date: LocalDate): LocalDate {
+        val bucketDays = value.toLong()
+        return LocalDate.ofEpochDay(Math.floorDiv(date.toEpochDay(), bucketDays) * bucketDays)
+    }
+
+    private fun monthBucketStart(date: LocalDate): LocalDate {
+        val monthIndex = date.year * MONTHS_PER_YEAR + date.monthValue - MONTH_INDEX_OFFSET
+        val bucketIndex = Math.floorDiv(monthIndex, value) * value
+        val year = Math.floorDiv(bucketIndex, MONTHS_PER_YEAR)
+        val month = Math.floorMod(bucketIndex, MONTHS_PER_YEAR) + MONTH_INDEX_OFFSET
+        return LocalDate.of(year, month, FIRST_DAY_OF_MONTH)
+    }
+
+    private fun LocalDate.plusLimit(): LocalDate =
+        when (unit) {
+            CapabilityTimeUnit.DAY -> plusDays(value.toLong())
+            CapabilityTimeUnit.MONTH -> plusMonths(value.toLong())
+        }
+}
+
+enum class CapabilityTimeUnit {
+    DAY,
+    MONTH,
 }

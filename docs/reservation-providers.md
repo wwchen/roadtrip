@@ -82,13 +82,79 @@ data class ReservationProviderCapabilities(
     val supportsAvailability: Boolean,
     /** Can we poll for openings and notify on match? */
     val supportsAlerts: Boolean,
-    /** Max days into the future the upstream exposes. */
+    /** Compatibility fallback for older day-only callers. */
     val bookingHorizonDays: Int,
+    /** Operational max days the poller requests per tick. */
+    val maxPollWindowDays: Int,
+    /** Exact booking horizon in the upstream's native unit. */
+    val bookingHorizon: CapabilityLimit,
+    /** User/operator-facing single upstream fetch window cap. */
+    val fetchWindowCap: CapabilityLimit,
 )
 ```
 
 The API can surface this struct for the campground behind a POI so the
-drawer can hide affordances the provider doesn't support.
+drawer can hide affordances the provider doesn't support. Availability
+windowing uses `bookingHorizon`, not `bookingHorizonDays`, so month-based
+vendors keep calendar-month behavior instead of being rounded into fixed days.
+The requested day range is the target window; upstream reads use
+`fetchWindowCap` to snap that target to stable provider buckets (for example,
+14-day epoch buckets for ReserveAmerica), then slice returned observations back
+to the target range.
+
+Current native limits:
+
+| Provider | Booking horizon | Single fetch window cap | Poll window policy |
+|---|---:|---:|---:|
+| RecGov | 6 months | 1 month | 60 days |
+| Aspira NextGen | 365 days | 30 days | 30 days |
+| ReserveAmerica / Active Network | 270 days | 14 days | 30 days |
+| ReserveCalifornia / Tyler | 183 days | 30 days | 30 days |
+
+### Fetch window examples
+
+Assumptions for every example below:
+
+- `today = 2026-07-07 23:00` in the POI's local time zone.
+- `earliestDate = 2026-07-08` because the local time is after the
+  18:00 cutoff.
+- Date windows are half-open: `[start, end)`.
+- The requested target window is validated before any upstream fetch window is
+  computed.
+- Fetch windows snap to provider cap buckets, then clamp to `earliestDate` and
+  the provider booking horizon.
+
+For target `[2026-07-11, 2026-07-12)`:
+
+| Provider | Fetch window | Why |
+|---|---|---|
+| RecGov | `[2026-07-08, 2026-08-01)` | One calendar-month bucket, clipped forward from `[2026-07-01, 2026-08-01)` to `earliestDate`. |
+| Aspira NextGen | `[2026-07-08, 2026-08-05)` | One 30-day epoch bucket, clipped forward from `[2026-07-06, 2026-08-05)` to `earliestDate`. |
+| ReserveAmerica / Active Network | `[2026-07-08, 2026-07-16)` | One 14-day epoch bucket, clipped forward from `[2026-07-02, 2026-07-16)` to `earliestDate`. |
+| ReserveCalifornia / Tyler | `[2026-07-08, 2026-08-05)` | One 30-day epoch bucket, clipped forward from `[2026-07-06, 2026-08-05)` to `earliestDate`. |
+
+For target `[2026-08-01, 2026-08-07)`:
+
+| Provider | Fetch window | Why |
+|---|---|---|
+| RecGov | `[2026-08-01, 2026-09-01)` | One calendar-month bucket. |
+| Aspira NextGen | `[2026-07-08, 2026-09-04)` | The target crosses the 30-day epoch bucket boundary at `2026-08-05`, so the fetch covers both buckets and clips the start to `earliestDate`. |
+| ReserveAmerica / Active Network | `[2026-07-30, 2026-08-13)` | The whole target fits inside one 14-day epoch bucket. |
+| ReserveCalifornia / Tyler | `[2026-07-08, 2026-09-04)` | The target crosses the 30-day epoch bucket boundary at `2026-08-05`, so the fetch covers both buckets and clips the start to `earliestDate`. |
+
+For target `[2026-08-01, 2026-10-31)`, no provider fetches. The target spans
+91 days, so date-window validation rejects it before fetch-window snapping:
+RecGov exceeds its 60-day poll/window policy, and Aspira NextGen,
+ReserveAmerica, and ReserveCalifornia each exceed their 30-day policy.
+
+For target `[2026-07-08, 2026-07-09)`:
+
+| Provider | Fetch window | Why |
+|---|---|---|
+| RecGov | `[2026-07-08, 2026-08-01)` | One calendar-month bucket, clipped forward from `[2026-07-01, 2026-08-01)` to `earliestDate`. |
+| Aspira NextGen | `[2026-07-08, 2026-08-05)` | One 30-day epoch bucket, clipped forward from `[2026-07-06, 2026-08-05)` to `earliestDate`. |
+| ReserveAmerica / Active Network | `[2026-07-08, 2026-07-16)` | One 14-day epoch bucket, clipped forward from `[2026-07-02, 2026-07-16)` to `earliestDate`. |
+| ReserveCalifornia / Tyler | `[2026-07-08, 2026-08-05)` | One 30-day epoch bucket, clipped forward from `[2026-07-06, 2026-08-05)` to `earliestDate`. |
 
 ## Supported monitoring actions
 
@@ -185,12 +251,14 @@ watch → job → run → fetch-call(s) → snapshots
 A run can cover many reservables (a POI-scope watch fans out to every child
 reservable), but the poller does not issue one upstream call per reservable.
 `CatalogAvailabilityBatcher` groups a run's resolved targets by
-`(provider, parentRef, dateContext)` and issues exactly one
+`(provider, parentRef, dateContext)` and issues exactly one logical
 `catalogAvailability` call per group — so N reservables under one campground
-become one upstream call. This is what fixed the old per-site rate-limit
-fan-out. Call-shaping stays inside each adapter (months for rec.gov, the park
-matrix for ReserveAmerica, per-day map calls for Aspira); the batcher and poller
-never branch on vendor, they only group and dispatch.
+become one provider call. This is what fixed the old per-site rate-limit
+fan-out. Physical HTTP call-shaping stays inside each adapter (months for
+rec.gov, 14-day matrix pages for ReserveAmerica, per-map calls for Aspira);
+the batcher and poller never branch on vendor, they only group and dispatch.
+The vendor governor uses each adapter's capability/cost hints to charge for
+that physical fan-out.
 
 `availability_fetch_call` is the trace table for this grouping: one row per
 group call, keyed by `run_id`, with columns `provider`, `parent_ref`,

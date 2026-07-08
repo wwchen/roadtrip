@@ -17,6 +17,8 @@ import java.time.LocalDate
  *   - their own caching (per-month, per-host, however the upstream wants)
  *   - vendor-specific error translation into [ReservationProviderError]
  *   - the host / API root they talk to (set at construction time)
+ *   - the cost hint for how many upstream availability requests a logical
+ *     provider call fans out to
  *
  * Adapters do NOT own:
  *   - poll cadence (the platform poller does — see RFC 0007)
@@ -74,6 +76,18 @@ interface ReservationProvider : AvailabilityClient {
     ): AvailabilityObservationBatch = throw ReservationProviderError.Unsupported("reservableAvailability", id)
 
     /**
+     * Number of upstream availability requests consumed by one logical
+     * availability call for `[startDate, endDate)`. The poller performs the
+     * accounting above this port, but the adapter owns the upstream request
+     * shape. Most providers make one request; Rec.gov overrides this because
+     * its campground endpoint is calendar-month shaped.
+     */
+    fun availabilityFetchCost(
+        startDate: LocalDate,
+        endDate: LocalDate,
+    ): Long = DEFAULT_AVAILABILITY_FETCH_COST
+
+    /**
      * User-facing booking URL *template* for [reservable] under a campground
      * whose parent scope is [parentRef], or null when this provider exposes no
      * stable deep link. The template may embed the
@@ -111,3 +125,5 @@ data class CatalogReservableRef(
     val mapId: Long? = null,
     val resourceLocationId: Long? = null,
 )
+
+private const val DEFAULT_AVAILABILITY_FETCH_COST: Long = 1L
