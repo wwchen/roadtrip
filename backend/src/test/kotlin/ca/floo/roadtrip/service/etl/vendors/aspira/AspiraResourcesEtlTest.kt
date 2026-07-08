@@ -25,7 +25,7 @@ import kotlin.test.assertTrue
 
 /**
  * End-to-end AspiraResourcesEtl test. Captures the two inputs the ETL needs:
- *   - aspira-inventory-pc/<ts>/park-<rid>.json   (multi-part named-site catalog)
+ *   - aspira-inventory-pc/<ts>/park-<resourceLocationId>.json   (multi-part named-site catalog)
  *   - aspira-maps-pc/<ts>.json                   (single-envelope /api/maps tree)
  * …points the orchestrator at the production YAML, runs the import via the
  * reservable_data section, asserts the catalog landed with parent leaf
@@ -104,9 +104,9 @@ class AspiraResourcesEtlTest : SharedDbTest() {
 
         // ReservableId disallows ':' in vendor, so per-tenant vendors use
         // underscore separators.
-        val r = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
-        assertEquals("aspira_pc", r.rid.vendor)
-        assertEquals("501", r.rid.vendorId)
+        val r = reservablesRepo.findByIdentity(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
+        assertEquals("aspira_pc", r.identity.vendor)
+        assertEquals("501", r.identity.vendorId)
     }
 
     @Test
@@ -117,11 +117,11 @@ class AspiraResourcesEtlTest : SharedDbTest() {
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runReservableData("Parks Canada Aspira Resources")
 
-        val tunnel = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
+        val tunnel = reservablesRepo.findByIdentity(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
         assertEquals("TMV1-A1", tunnel.name)
         assertEquals("Tunnel Mountain Village I", tunnel.loop)
 
-        val twoJack = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "601"))!!
+        val twoJack = reservablesRepo.findByIdentity(ReservableId(ReservableType.SITE, "aspira_pc", "601"))!!
         assertEquals("TJL-1", twoJack.name)
         assertEquals("Two Jack Lakeside", twoJack.loop)
     }
@@ -133,7 +133,7 @@ class AspiraResourcesEtlTest : SharedDbTest() {
 
         val raw =
             reservablesRepo
-                .findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
+                .findByIdentity(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
                 .raw as JsonObject
         assertEquals(
             "Tunnel Mountain V1 — Site A1",
@@ -152,7 +152,7 @@ class AspiraResourcesEtlTest : SharedDbTest() {
         val orch = EtlOrchestrator(ctx, rawDir, poiRegistry)
         orch.runReservableData("Parks Canada Aspira Resources")
 
-        val reservable = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
+        val reservable = reservablesRepo.findByIdentity(ReservableId(ReservableType.SITE, "aspira_pc", "501"))!!
         assertEquals("Campsite", reservable.siteType)
 
         val raw = reservable.raw as JsonObject
@@ -209,7 +209,7 @@ class AspiraResourcesEtlTest : SharedDbTest() {
 
         fun reservable(vendorId: String) =
             reservablesRepo
-                .findByRid(ReservableId(ReservableType.SITE, "aspira_pc", vendorId))!!
+                .findByIdentity(ReservableId(ReservableType.SITE, "aspira_pc", vendorId))!!
 
         fun rawOf(vendorId: String): JsonObject =
             reservable(vendorId)
@@ -284,7 +284,7 @@ class AspiraResourcesEtlTest : SharedDbTest() {
         // 503 is the third resource at park 9001; if the maps walk
         // hadn't run, we'd have no leaf metadata and the loop would
         // be null.
-        val r = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "aspira_pc", "503"))!!
+        val r = reservablesRepo.findByIdentity(ReservableId(ReservableType.SITE, "aspira_pc", "503"))!!
         assertEquals("Tunnel Mountain Village I", r.loop)
     }
 
@@ -301,7 +301,7 @@ class AspiraResourcesEtlTest : SharedDbTest() {
         src.copyTo(dest, overwrite = true)
     }
 
-    private fun tagsFor(rid: ReservableId): JsonObject {
+    private fun tagsFor(identity: ReservableId): JsonObject {
         val raw =
             ctx
                 .fetchOne(
@@ -310,9 +310,9 @@ class AspiraResourcesEtlTest : SharedDbTest() {
                     FROM reservables
                     WHERE type = ? AND vendor = ? AND vendor_id = ?
                     """.trimIndent(),
-                    rid.type.encode(),
-                    rid.vendor,
-                    rid.vendorId,
+                    identity.type.encode(),
+                    identity.vendor,
+                    identity.vendorId,
                 )!!
                 .get(0, String::class.java)!!
         return Json.parseToJsonElement(raw).jsonObject

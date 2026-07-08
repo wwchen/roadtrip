@@ -361,11 +361,11 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p-bad-target", name = "Bad Target")
-            val rid = seedReservable("bad-target-1")
-            linkReservableToPoi(rid, poiId)
+            val reservableId = seedReservable("bad-target-1")
+            linkReservableToPoi(reservableId, poiId)
             val body =
                 """
-                {"targets": [{"poi_id": $poiId, "reservable_id": $rid}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"targets": [{"poi_id": $poiId, "reservable_id": $reservableId}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
                 client.post("/api/availability/watches") {
@@ -601,8 +601,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p-patch-bad-target", name = "Patch Bad Target")
-            val rid = seedReservable("patch-bad-target-1")
-            linkReservableToPoi(rid, poiId)
+            val reservableId = seedReservable("patch-bad-target-1")
+            linkReservableToPoi(reservableId, poiId)
             val body =
                 """
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
@@ -622,7 +622,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val resp =
                 client.patch("/api/availability/watches/$id") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"targets": [{"poi_id": $poiId, "reservable_id": $rid}]}""")
+                    setBody("""{"targets": [{"poi_id": $poiId, "reservable_id": $reservableId}]}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -862,12 +862,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
-            val rid = seedReservable("100", name = "A12", loop = "Loop A")
-            linkReservableToPoi(rid, poiId)
+            val reservableId = seedReservable("100", name = "A12", loop = "Loop A")
+            linkReservableToPoi(reservableId, poiId)
 
             val createBody =
                 """
-                {"reservable_rid": "site:recgov:100", "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"reservable_id": $reservableId, "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {
@@ -882,7 +882,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                     .jsonPrimitive.long
 
             val now = java.time.OffsetDateTime.now(java.time.ZoneOffset.UTC)
-            insertCell(rid, "2026-07-04", now.minusMinutes(1), available = true)
+            insertCell(reservableId, "2026-07-04", now.minusMinutes(1), available = true)
 
             val resp = client.get("/api/availability/watches/$watchId/heatmap")
             assertEquals(HttpStatusCode.OK, resp.status)
@@ -896,6 +896,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals("Loop A", groups[0].jsonObject["loop"]!!.jsonPrimitive.content)
             val rows = groups[0].jsonObject["rows"]!!.jsonArray
             assertEquals(1, rows.size)
+            assertEquals(reservableId.toString(), rows[0].jsonObject["reservable_id"]!!.jsonPrimitive.content)
+            assertEquals(false, rows[0].jsonObject.containsKey("reservable_rid"))
             val cells = rows[0].jsonObject["cells"]!!.jsonArray
             assertEquals(2, cells.size)
             assertEquals("available", cells[0].jsonObject["status"]!!.jsonPrimitive.content)
@@ -946,10 +948,10 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals("Loop A", groups[0].jsonObject["loop"]!!.jsonPrimitive.content)
             val rows = groups[0].jsonObject["rows"]!!.jsonArray
             assertEquals(2, rows.size)
-            val ridsInResponse = rows.map { it.jsonObject["reservable_rid"]!!.jsonPrimitive.content }
-            assertEquals(true, ridsInResponse.contains("site:recgov:201"))
-            assertEquals(true, ridsInResponse.contains("site:recgov:202"))
-            assertEquals(false, ridsInResponse.contains("site:recgov:203"))
+            val idsInResponse = rows.map { it.jsonObject["reservable_id"]!!.jsonPrimitive.long }
+            assertEquals(true, idsInResponse.contains(rA1))
+            assertEquals(true, idsInResponse.contains(rA2))
+            assertEquals(false, idsInResponse.contains(rB1))
         }
 }
 

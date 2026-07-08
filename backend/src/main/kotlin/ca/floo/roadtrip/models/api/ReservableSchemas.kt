@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonElement
 
 @Serializable
 data class ReservableSchema(
-    val rid: String,
+    val id: Long,
     val type: String,
     val vendor: String,
     @SerialName("vendor_id") val vendorId: String,

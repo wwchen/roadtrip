@@ -108,7 +108,7 @@ class ReserveCaliforniaSitesEtl(
             for (unit in grid.units) {
                 reservables +=
                     ReservableRepo.Input(
-                        rid = ReservableId(ReservableType.SITE, VENDOR, unit.unitId.toString()),
+                        identity = ReservableId(ReservableType.SITE, VENDOR, unit.unitId.toString()),
                         name = unit.name,
                         loop = facilityName,
                         siteType = siteType,

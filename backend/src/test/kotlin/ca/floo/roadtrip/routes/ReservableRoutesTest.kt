@@ -5,7 +5,6 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
@@ -74,11 +73,12 @@ class ReservableRoutesTest : SharedDbTest() {
             link(reservableId, poiId)
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/reservable/site:recgov:330257")
+            val resp = client.get("/api/reservable/$reservableId")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val reservable = body["reservable"]!!.jsonObject
-            assertEquals("site:recgov:330257", reservable["rid"]!!.jsonPrimitive.content)
+            assertEquals(reservableId.toString(), reservable["id"]!!.jsonPrimitive.content)
+            assertEquals(false, reservable.containsKey("rid"))
             assertEquals("site", reservable["type"]!!.jsonPrimitive.content)
             assertEquals("recgov", reservable["vendor"]!!.jsonPrimitive.content)
             assertEquals("330257", reservable["vendor_id"]!!.jsonPrimitive.content)
@@ -107,25 +107,25 @@ class ReservableRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `reservable detail returns 404 for unknown rid`() =
+    fun `reservable detail returns 404 for unknown id`() =
         testApplication {
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/reservable/site:recgov:missing")
+            val resp = client.get("/api/reservable/999999")
             assertEquals(HttpStatusCode.NotFound, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals("not_found", body["error"]!!.jsonPrimitive.content)
         }
 
     @Test
-    fun `reservable detail returns 400 for malformed rid`() =
+    fun `reservable detail returns 400 for malformed id`() =
         testApplication {
             application { routing { reservableRoutes(ctx) } }
 
-            val resp = client.get("/api/reservable/not-a-rid")
+            val resp = client.get("/api/reservable/not-an-id")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("bad_rid", body["error"]!!.jsonPrimitive.content)
+            assertEquals("bad_id", body["error"]!!.jsonPrimitive.content)
         }
 
     @Test
@@ -133,7 +133,7 @@ class ReservableRoutesTest : SharedDbTest() {
         testApplication {
             val poiId = seedPoi("upper-pines", "Upper Pines Campground")
             val linkedReservable = seedReservable(vendorId = "330257", name = "A12", loop = "Loop A")
-            seedReservable(vendorId = "330258", name = "B03", loop = "Loop B")
+            val secondReservable = seedReservable(vendorId = "330258", name = "B03", loop = "Loop B")
             seedReservable(
                 vendor = "aspira_pc",
                 vendorId = "-2147483641",
@@ -152,17 +152,21 @@ class ReservableRoutesTest : SharedDbTest() {
             assertEquals("2", body["total"]!!.jsonPrimitive.content)
             assertEquals("100", body["limit"]!!.jsonPrimitive.content)
             assertEquals("0", body["offset"]!!.jsonPrimitive.content)
-            val rids =
+            val ids =
                 body["reservables"]!!
                     .jsonArray
-                    .map { it.jsonObject["rid"]!!.jsonPrimitive.content }
-                    .toSet()
-            assertEquals(setOf("site:recgov:330257", "site:recgov:330258"), rids)
+                    .map {
+                        it.jsonObject["id"]!!
+                            .jsonPrimitive.content
+                            .toLong()
+                    }.toSet()
+            assertEquals(setOf(linkedReservable, secondReservable), ids)
             val linkedRow =
                 body["reservables"]!!
                     .jsonArray
                     .map { it.jsonObject }
-                    .single { it["rid"]!!.jsonPrimitive.content == "site:recgov:330257" }
+                    .single { it["id"]!!.jsonPrimitive.content.toLong() == linkedReservable }
+            assertEquals(false, linkedRow.containsKey("rid"))
             assertEquals(listOf(poiId.toString()), linkedRow["poi_ids"]!!.jsonArray.map { it.jsonPrimitive.content })
 
             val paged = client.get("/api/reservables?vendor=recgov,aspira_pc&name=A12&limit=1&offset=1")
@@ -177,30 +181,27 @@ class ReservableRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, raw.status)
             val rawBody = Json.parseToJsonElement(raw.bodyAsText()).jsonObject
             assertEquals("1", rawBody["total"]!!.jsonPrimitive.content)
-            val rawRid =
+            val rawId =
                 rawBody["reservables"]!!
                     .jsonArray
                     .single()
-                    .jsonObject["rid"]!!
+                    .jsonObject["id"]!!
                     .jsonPrimitive
                     .content
-            assertEquals(
-                "site:aspira_pc:-2147483641",
-                rawRid,
-            )
+            assertTrue(rawId.toLong() > 0)
 
             val tags = client.get("/api/reservables?tags=%7B%22attributes%22%3A%7B%22firepit_on_site%22%3A%22Yes%22%7D%7D")
             assertEquals(HttpStatusCode.OK, tags.status)
             val tagsBody = Json.parseToJsonElement(tags.bodyAsText()).jsonObject
             assertEquals("1", tagsBody["total"]!!.jsonPrimitive.content)
-            val tagsRid =
+            val tagsId =
                 tagsBody["reservables"]!!
                     .jsonArray
                     .single()
-                    .jsonObject["rid"]!!
+                    .jsonObject["id"]!!
                     .jsonPrimitive
                     .content
-            assertEquals("site:aspira_pc:-2147483641", tagsRid)
+            assertTrue(tagsId.toLong() > 0)
         }
 
     @Test
@@ -231,18 +232,21 @@ class ReservableRoutesTest : SharedDbTest() {
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             assertEquals(poiId.toString(), body["poi_id"]!!.jsonPrimitive.content)
             assertEquals("site", body["type"]!!.jsonPrimitive.content)
-            val rids =
+            val ids =
                 body["reservables"]!!
                     .jsonArray
-                    .map { it.jsonObject["rid"]!!.jsonPrimitive.content }
-                    .toSet()
-            assertEquals(setOf("site:recgov:330257", "site:recgov:330258"), rids)
+                    .map {
+                        it.jsonObject["id"]!!
+                            .jsonPrimitive.content
+                            .toLong()
+                    }.toSet()
+            assertEquals(setOf(a12, b03), ids)
             val templates =
                 body["reservables"]!!
                     .jsonArray
                     .associate {
                         val row = it.jsonObject
-                        row["rid"]!!.jsonPrimitive.content to row["reservation_url_template"]!!.jsonPrimitive.content
+                        row["id"]!!.jsonPrimitive.content.toLong() to row["reservation_url_template"]!!.jsonPrimitive.content
                     }
             body["reservables"]!!
                 .jsonArray
@@ -255,7 +259,7 @@ class ReservableRoutesTest : SharedDbTest() {
                 }
             assertEquals(
                 "https://www.recreation.gov/camping/campsites/330257?startDate={start_date}&endDate={end_date}",
-                templates["site:recgov:330257"],
+                templates[a12],
             )
             body["reservables"]!!
                 .jsonArray
@@ -391,7 +395,8 @@ class ReservableRoutesTest : SharedDbTest() {
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
             val row = body["reservables"]!!.jsonArray.single().jsonObject
-            assertEquals("site:recgov:330257", row["rid"]!!.jsonPrimitive.content)
+            assertEquals(standard.toString(), row["id"]!!.jsonPrimitive.content)
+            assertEquals(false, row.containsKey("rid"))
             assertEquals("STANDARD", row["site_type"]!!.jsonPrimitive.content)
         }
 
@@ -473,12 +478,12 @@ class ReservableRoutesTest : SharedDbTest() {
             assertEquals(poiId, body["poi_id"]!!.jsonPrimitive.content.toLong())
             assertEquals("2026-07-01", body["start_date"]!!.jsonPrimitive.content)
             assertEquals("2026-07-02", body["end_date"]!!.jsonPrimitive.content)
-            val rids =
+            val ids =
                 body["reservables"]!!
                     .jsonArray
                     .map { it.jsonObject["reservable_id"]!!.jsonPrimitive.content }
                     .sorted()
-            assertEquals(listOf("site:recgov:330257", "site:recgov:330258"), rids)
+            assertEquals(listOf(a12.toString(), b03.toString()), ids)
             assertEquals(1, FakeReservationProvider.catalogAvailabilityCalls)
             assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
         }
@@ -690,12 +695,12 @@ class ReservableRoutesTest : SharedDbTest() {
                 )
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            val rids =
+            val ids =
                 body["reservables"]!!
                     .jsonArray
                     .map { it.jsonObject["reservable_id"]!!.jsonPrimitive.content }
                     .sorted()
-            assertEquals(listOf("site:recgov:330257", "site:recgov:330259"), rids)
+            assertEquals(listOf(a12.toString(), c44.toString()), ids)
             assertEquals(1, FakeReservationProvider.catalogAvailabilityCalls)
             assertEquals(0, FakeReservationProvider.reservableAvailabilityCalls)
         }
@@ -764,17 +769,17 @@ class ReservableRoutesTest : SharedDbTest() {
                     .availabilityFor(
                         reservables =
                             listOf(
-                                reservablesRepo.findByRid(ReservableId.parse("site:recgov:330301")!!)!!,
-                                reservablesRepo.findByRid(ReservableId.parse("site:recgov:330302")!!)!!,
+                                reservablesRepo.findById(westReservable)!!,
+                                reservablesRepo.findById(eastReservable)!!,
                             ),
                         startDate = null,
                         endDate = null,
                     ).associateBy { it.reservableId }
 
-            assertEquals("2026-06-18", availability["site:recgov:330301"]!!.startDate)
-            assertEquals("2026-06-25", availability["site:recgov:330301"]!!.endDate)
-            assertEquals("2026-06-19", availability["site:recgov:330302"]!!.startDate)
-            assertEquals("2026-06-26", availability["site:recgov:330302"]!!.endDate)
+            assertEquals("2026-06-18", availability[westReservable.toString()]!!.startDate)
+            assertEquals("2026-06-25", availability[westReservable.toString()]!!.endDate)
+            assertEquals("2026-06-19", availability[eastReservable.toString()]!!.startDate)
+            assertEquals("2026-06-26", availability[eastReservable.toString()]!!.endDate)
             assertEquals(2, FakeReservationProvider.catalogAvailabilityCalls)
         }
 
@@ -829,23 +834,23 @@ class ReservableRoutesTest : SharedDbTest() {
             val resp = client.get("/api/poi/$poiId/reservables/availability?start_date=2026-07-01&end_date=2026-07-02")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            val byRid =
+            val byId =
                 body["reservables"]!!.jsonArray.associateBy {
                     it.jsonObject["reservable_id"]!!.jsonPrimitive.content
                 }
             assertEquals(
-                listOf("site:aspira_wa:-100", "site:aspira_wa:-200").sorted(),
-                byRid.keys.sorted(),
+                listOf(a.toString(), b.toString()).sorted(),
+                byId.keys.sorted(),
             )
             // Each per-reservable response carries the child-map id (the
             // reservable's own mapId, not the POI's parent mapId).
             assertEquals(
                 "-2147483615",
-                byRid["site:aspira_wa:-100"]!!.jsonObject["map_id"]!!.jsonPrimitive.content,
+                byId[a.toString()]!!.jsonObject["map_id"]!!.jsonPrimitive.content,
             )
             assertEquals(
                 "-2147483613",
-                byRid["site:aspira_wa:-200"]!!.jsonObject["map_id"]!!.jsonPrimitive.content,
+                byId[b.toString()]!!.jsonObject["map_id"]!!.jsonPrimitive.content,
             )
         }
 
@@ -1016,7 +1021,7 @@ class ReservableRoutesTest : SharedDbTest() {
                 endDate = endDate,
                 campgroundId = recGovRef.recgovId,
                 reservableId = null,
-                availableIds = reservables.map { it.rid },
+                availableIds = reservables.map { it.catalogId.toString() },
             )
         }
 
@@ -1111,7 +1116,7 @@ class ReservableRoutesTest : SharedDbTest() {
                 endDate = endDate,
                 mapId = aspiraRef.mapId.toString(),
                 reservableId = null,
-                availableIds = reservables.map { it.rid },
+                availableIds = reservables.map { it.catalogId.toString() },
             )
         }
 

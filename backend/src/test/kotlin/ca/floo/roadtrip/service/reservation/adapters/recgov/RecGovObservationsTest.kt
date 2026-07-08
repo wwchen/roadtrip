@@ -173,7 +173,7 @@ class RecGovObservationsTest {
                         fetchRecgovCatalogObservations(
                             client = clientReturning(emptyMap()),
                             recgovId = "232447",
-                            campsiteIds = setOf("100", "200"),
+                            catalogIdsByCampsiteId = mapOf("100" to 100L, "200" to 200L),
                             startDate = today,
                             endDate = today.plusDays(1),
                         )
@@ -188,13 +188,13 @@ class RecGovObservationsTest {
         assertEquals(
             "unknown",
             day["reservable_statuses"]!!
-                .jsonObject["site:recgov:100"]!!
+                .jsonObject["100"]!!
                 .jsonPrimitive.content,
         )
         assertEquals(
             "unknown",
             day["reservable_statuses"]!!
-                .jsonObject["site:recgov:200"]!!
+                .jsonObject["200"]!!
                 .jsonPrimitive.content,
         )
     }

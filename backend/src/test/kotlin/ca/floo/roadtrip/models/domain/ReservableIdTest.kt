@@ -86,8 +86,8 @@ class ReservableIdTest {
 
     @Test
     fun `toString matches encode`() {
-        val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
-        assertEquals("site:recgov:330257", rid.toString())
+        val identity = ReservableId(ReservableType.SITE, "recgov", "330257")
+        assertEquals("site:recgov:330257", identity.toString())
     }
 
     @Test

@@ -65,7 +65,7 @@ class ReserveCaliforniaReservationProviderTest {
                     ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = listOf(611, 612)),
                     reservables =
                         listOf(
-                            CatalogReservableRef(rid = "site:reservecalifornia:43793", vendorId = "43793"),
+                            CatalogReservableRef(catalogId = 4379301, vendorId = "43793"),
                         ),
                     startDate = LocalDate.parse("2026-12-15"),
                     endDate = LocalDate.parse("2026-12-18"),
@@ -79,7 +79,7 @@ class ReserveCaliforniaReservationProviderTest {
             assertEquals("690", batch.campgroundId)
             assertEquals("611,612", batch.mapId)
             assertEquals(3, batch.observations.size)
-            assertEquals(setOf("site:reservecalifornia:43793"), batch.observations.map { it.reservableId }.toSet())
+            assertEquals(setOf("4379301"), batch.observations.map { it.reservableId }.toSet())
             assertEquals(
                 listOf(
                     AvailabilityStatus.UNKNOWN,
@@ -143,7 +143,7 @@ class ReserveCaliforniaReservationProviderTest {
                     ref = ProviderRef.ReserveCalifornia(placeId = 690, facilityIds = emptyList()),
                     reservables =
                         listOf(
-                            CatalogReservableRef(rid = "site:reservecalifornia:43793", vendorId = "43793"),
+                            CatalogReservableRef(catalogId = 4379301, vendorId = "43793"),
                         ),
                     startDate = LocalDate.parse("2026-12-15"),
                     endDate = LocalDate.parse("2026-12-17"),

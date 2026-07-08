@@ -70,13 +70,13 @@ class AspiraReservationProviderTest {
                     reservables =
                         listOf(
                             CatalogReservableRef(
-                                rid = "site:aspira_pc:100",
+                                catalogId = 1001,
                                 vendorId = "100",
                                 mapId = -2147483615,
                                 resourceLocationId = -2147483624,
                             ),
                             CatalogReservableRef(
-                                rid = "site:aspira_pc:200",
+                                catalogId = 1002,
                                 vendorId = "200",
                                 mapId = -2147483615,
                                 resourceLocationId = -2147483624,
@@ -86,11 +86,11 @@ class AspiraReservationProviderTest {
                     endDate = LocalDate.parse("2026-06-19"),
                 )
 
-            val byRid = batch.observations.filter { it.date == LocalDate.parse("2026-06-17") }.associateBy { it.reservableId }
+            val byId = batch.observations.filter { it.date == LocalDate.parse("2026-06-17") }.associateBy { it.reservableId }
             assertEquals(1, mapFetches)
             assertEquals(0, occupancyFetches)
-            assertEquals(AvailabilityStatus.AVAILABLE, byRid["site:aspira_pc:100"]!!.status)
-            assertEquals(AvailabilityStatus.RESERVED, byRid["site:aspira_pc:200"]!!.status)
+            assertEquals(AvailabilityStatus.AVAILABLE, byId["1001"]!!.status)
+            assertEquals(AvailabilityStatus.RESERVED, byId["1002"]!!.status)
         }
 
     @Test
@@ -140,13 +140,13 @@ class AspiraReservationProviderTest {
                     reservables =
                         listOf(
                             CatalogReservableRef(
-                                rid = "site:aspira_pc:100",
+                                catalogId = 1001,
                                 vendorId = "100",
                                 mapId = -2147483615,
                                 resourceLocationId = -2147483624,
                             ),
                             CatalogReservableRef(
-                                rid = "site:aspira_pc:200",
+                                catalogId = 1002,
                                 vendorId = "200",
                                 mapId = -2147483615,
                                 resourceLocationId = -2147483624,
@@ -156,10 +156,10 @@ class AspiraReservationProviderTest {
                     endDate = LocalDate.parse("2026-06-18"),
                 )
 
-            val byRid = batch.observations.associateBy { it.reservableId }
+            val byId = batch.observations.associateBy { it.reservableId }
             assertEquals(0, mapFetches)
-            assertEquals(AvailabilityStatus.AVAILABLE, byRid["site:aspira_pc:100"]!!.status)
-            assertEquals(AvailabilityStatus.RESERVED, byRid["site:aspira_pc:200"]!!.status)
+            assertEquals(AvailabilityStatus.AVAILABLE, byId["1001"]!!.status)
+            assertEquals(AvailabilityStatus.RESERVED, byId["1002"]!!.status)
         }
 
     @Test
@@ -202,7 +202,7 @@ class AspiraReservationProviderTest {
                     reservables =
                         listOf(
                             CatalogReservableRef(
-                                rid = "site:aspira_pc:100",
+                                catalogId = 1001,
                                 vendorId = "100",
                                 mapId = -2147483615,
                                 resourceLocationId = -2147483624,
@@ -213,7 +213,7 @@ class AspiraReservationProviderTest {
                 )
 
             val observation = batch.observations.single()
-            assertEquals("site:aspira_pc:100", observation.reservableId)
+            assertEquals("1001", observation.reservableId)
             assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
         }
 
@@ -325,7 +325,7 @@ class AspiraReservationProviderTest {
         val reservable =
             Reservable(
                 id = 1,
-                rid = ReservableId.parse("site:aspira_wa:-100")!!,
+                identity = ReservableId.parse("site:aspira_wa:-100")!!,
                 name = "A",
                 loop = null,
                 siteType = null,

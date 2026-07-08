@@ -46,7 +46,7 @@ internal class ReservableAvailabilityComposer(
     ): List<AvailabilityResponseDto> {
         if (reservables.isEmpty()) return emptyList()
         val resolved = reservables.map { targets.resolve(it) ?: throw AvailabilityServiceError.UnknownCampground }
-        val byRid = linkedMapOf<String, AvailabilityResponseDto>()
+        val byId = linkedMapOf<String, AvailabilityResponseDto>()
         val batcher = CatalogAvailabilityBatcher()
         val results =
             batcher.fetchByGroup(
@@ -100,23 +100,23 @@ internal class ReservableAvailabilityComposer(
         results.forEach { result ->
             val batch = result.batch ?: return@forEach
             result.reservables.forEach { reservable ->
-                val rid = reservable.rid.encode()
+                val catalogId = reservable.id.toString()
                 val ref = reservable.providerRefForReservable(result.parentRef)
-                val metadata = availabilityMetadata(result.provider.id, ref, reservableId = rid)
-                byRid[rid] =
+                val metadata = availabilityMetadata(result.provider.id, ref, reservableId = catalogId)
+                byId[catalogId] =
                     availabilityResponseFromObservations(
                         batch.copy(
-                            observations = batch.observations.filter { it.reservableId == rid },
+                            observations = batch.observations.filter { it.reservableId == catalogId },
                             campgroundId = metadata.campgroundId ?: batch.campgroundId,
                             host = batch.host,
                             mapId = metadata.mapId ?: batch.mapId,
-                            reservableId = rid,
+                            reservableId = catalogId,
                         ),
                     )
             }
         }
         return reservables.map { reservable ->
-            byRid[reservable.rid.encode()] ?: throw AvailabilityServiceError.NotFound
+            byId[reservable.id.toString()] ?: throw AvailabilityServiceError.NotFound
         }
     }
 }
@@ -132,7 +132,6 @@ internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Dur
 private fun Reservable.toAvailabilityTarget(): AvailabilityLoader.TargetReservable =
     AvailabilityLoader.TargetReservable(
         dbId = id,
-        rid = rid.encode(),
     )
 
 private fun availabilityMetadata(

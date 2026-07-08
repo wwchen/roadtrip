@@ -81,7 +81,7 @@ class RecGovCampsitesEtlTest : SharedDbTest() {
 
         // Spot-check the rich row's field mapping.
         val rid330257 = ReservableId(ReservableType.SITE, "recgov", "330257")
-        val r = reservablesRepo.findByRid(rid330257)!!
+        val r = reservablesRepo.findByIdentity(rid330257)!!
         assertEquals("FS1-20", r.name)
         assertEquals("AREA WHITE RIVER", r.loop)
         assertEquals("STANDARD NONELECTRIC", r.siteType)
@@ -112,7 +112,7 @@ class RecGovCampsitesEtlTest : SharedDbTest() {
         orch.runReservableData("Federal Campsites")
 
         val r =
-            reservablesRepo.findByRid(
+            reservablesRepo.findByIdentity(
                 ReservableId(ReservableType.SITE, "recgov", "330259"),
             )!!
         assertEquals(null, r.name)
@@ -176,7 +176,7 @@ class RecGovCampsitesEtlTest : SharedDbTest() {
         orch.runReservableData("Federal Campsites")
 
         fun parentOf(vendorId: String): String {
-            val r = reservablesRepo.findByRid(ReservableId(ReservableType.SITE, "recgov", vendorId))!!
+            val r = reservablesRepo.findByIdentity(ReservableId(ReservableType.SITE, "recgov", vendorId))!!
             return ((r.raw as JsonObject)["_parent_facility_id"] as JsonPrimitive).content
         }
         assertEquals("232447", parentOf("330257"))
@@ -198,7 +198,7 @@ class RecGovCampsitesEtlTest : SharedDbTest() {
         src.copyTo(dest, overwrite = true)
     }
 
-    private fun tagsFor(rid: ReservableId): JsonObject {
+    private fun tagsFor(identity: ReservableId): JsonObject {
         val raw =
             ctx
                 .fetchOne(
@@ -207,9 +207,9 @@ class RecGovCampsitesEtlTest : SharedDbTest() {
                     FROM reservables
                     WHERE type = ? AND vendor = ? AND vendor_id = ?
                     """.trimIndent(),
-                    rid.type.encode(),
-                    rid.vendor,
-                    rid.vendorId,
+                    identity.type.encode(),
+                    identity.vendor,
+                    identity.vendorId,
                 )!!
                 .get(0, String::class.java)!!
         return Json.parseToJsonElement(raw).jsonObject

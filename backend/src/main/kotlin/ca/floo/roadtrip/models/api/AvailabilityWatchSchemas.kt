@@ -20,7 +20,6 @@ data class AvailabilityWatchCreateRequest(
     val targets: List<AvailabilityWatchTargetSchema>? = null,
     @SerialName("poi_id") val poiId: Long? = null,
     @SerialName("reservable_id") val reservableId: Long? = null,
-    @SerialName("reservable_rid") val reservableRid: String? = null,
     @SerialName("reservable_filters") val reservableFilters: JsonObject = JsonObject(emptyMap()),
     @SerialName("start_date") val startDate: String,
     @SerialName("end_date") val endDate: String,
@@ -35,7 +34,7 @@ data class AvailabilityWatchCreateRequest(
 @Serializable
 data class AvailabilityWatchUpdateRequest(
     // Same targets-or-legacy-fields shape as create. Absent `targets` AND
-    // absent poi_id/reservable_id/reservable_rid means "leave the target set
+    // absent poi_id/reservable_id means "leave the target set
     // untouched" (maps to UpdateInput.targets = null).
     val targets: List<AvailabilityWatchTargetSchema>? = null,
     @SerialName("reservable_filters") val reservableFilters: JsonObject? = null,
@@ -103,7 +102,6 @@ data class AvailabilityWatchHeatmapCell(
 @Serializable
 data class AvailabilityWatchHeatmapRow(
     @SerialName("reservable_id") val reservableId: Long,
-    @SerialName("reservable_rid") val reservableRid: String,
     val name: String? = null,
     val cells: List<AvailabilityWatchHeatmapCell>,
 )

@@ -51,7 +51,7 @@ class RecGovReservationProviderTest {
                     reservables =
                         listOf(
                             CatalogReservableRef(
-                                rid = "site:recgov:330257",
+                                catalogId = 123,
                                 vendorId = "330257",
                             ),
                         ),
@@ -60,7 +60,7 @@ class RecGovReservationProviderTest {
                 )
 
             val observation = batch.observations.single()
-            assertEquals("site:recgov:330257", observation.reservableId)
+            assertEquals("123", observation.reservableId)
             assertEquals(LocalDate.parse("2026-07-01"), observation.date)
             assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
         }
@@ -169,7 +169,7 @@ class RecGovReservationProviderTest {
         val reservable =
             Reservable(
                 id = 1,
-                rid = ReservableId.parse("site:recgov:330257")!!,
+                identity = ReservableId.parse("site:recgov:330257")!!,
                 name = null,
                 loop = null,
                 siteType = null,

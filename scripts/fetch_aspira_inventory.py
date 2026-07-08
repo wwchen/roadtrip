@@ -107,15 +107,15 @@ def _walk_resource_location_ids(maps_slug: str) -> list[int]:
     seen: set[int] = set()
 
     def consider(rec: dict) -> None:
-        rid = rec.get("resourceLocationId")
-        if rid is None or rid == "" or rid in seen:
+        resource_location_id = rec.get("resourceLocationId")
+        if resource_location_id is None or resource_location_id == "" or resource_location_id in seen:
             return
         # Bookable nodes carry both ids. Defensive: skip rows missing
         # transactionLocationId, which are non-bookable parents.
         if rec.get("transactionLocationId") in (None, ""):
             return
-        seen.add(rid)
-        ids.append(rid)
+        seen.add(resource_location_id)
+        ids.append(resource_location_id)
 
     for node in nodes:
         if not isinstance(node, dict):
@@ -209,7 +209,7 @@ def main() -> int:
         ts = existing_ts
         already = {p.stem for p in (capture_root / ts).glob("park-*.json")}
         before = len(park_ids)
-        park_ids = [rid for rid in park_ids if f"park-{rid}" not in already]
+        park_ids = [park_id for park_id in park_ids if f"park-{park_id}" not in already]
         err(f"  resuming ts={ts}: {len(already)} already captured, {len(park_ids)}/{before} remaining")
         if not park_ids:
             err("  nothing left to fetch; everything already captured")
@@ -225,13 +225,13 @@ def main() -> int:
     last_call_at = 0.0
     written = 0
     skipped = 0
-    for i, rid in enumerate(park_ids, start=1):
+    for i, park_id in enumerate(park_ids, start=1):
         gap = time.monotonic() - last_call_at
         if gap < MIN_GAP_S:
             time.sleep(MIN_GAP_S - gap)
 
-        url = _build_url(args.host, rid)
-        err(f"  [{i}/{len(park_ids)}] resourceLocationId={rid}")
+        url = _build_url(args.host, park_id)
+        err(f"  [{i}/{len(park_ids)}] resourceLocationId={park_id}")
         result = _fetch_with_backoff(url, headers)
         last_call_at = time.monotonic()
         if result is None:
@@ -254,7 +254,7 @@ def main() -> int:
             response_headers=resp_headers,
             payload=payload,
             ts=ts,
-            part=f"park-{rid}",
+            part=f"park-{park_id}",
         )
         written += 1
 

@@ -10,7 +10,7 @@ export function availableReservableIds(day) {
   if (Array.isArray(ids)) return ids.map(String);
   return Object.entries(reservableStatuses(day))
     .filter(([, status]) => normalizeAvailabilityStatus(status) === 'available')
-    .map(([rid]) => String(rid));
+    .map(([reservableId]) => String(reservableId));
 }
 
 export function availableCount(day) {

@@ -95,6 +95,6 @@ data class AvailabilitySnapshotStatsSchema(
 
 @Serializable
 data class AvailabilitySnapshotsSummaryResponse(
-    @SerialName("reservable_rid") val reservableRid: String,
+    @SerialName("reservable_id") val reservableId: Long,
     val stats: List<AvailabilitySnapshotStatsSchema>,
 )

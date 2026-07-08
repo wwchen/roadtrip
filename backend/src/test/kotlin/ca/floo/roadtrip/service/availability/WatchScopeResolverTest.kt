@@ -57,7 +57,7 @@ class WatchScopeResolverTest : SharedDbTest() {
         val id =
             reservableRepo.upsert(
                 ReservableRepo.Input(
-                    rid = ReservableId(type = ReservableType.SITE, vendor = "test", vendorId = vendorId),
+                    identity = ReservableId(type = ReservableType.SITE, vendor = "test", vendorId = vendorId),
                     name = "Site $vendorId",
                     loop = null,
                     siteType = null,

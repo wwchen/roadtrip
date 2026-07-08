@@ -36,7 +36,7 @@ export function renderSiteMatrix({
   selectedDate,
   siteColumnWidth,
   filters = DEFAULT_FILTERS,
-  selectedSiteRid = null,
+  selectedSiteId = null,
   weekStart = null,
   showToday = true,
   armedBook = null,
@@ -102,7 +102,7 @@ export function renderSiteMatrix({
       rowHtml(row, {
         availabilityByDate,
         selectedDate,
-        selectedSiteRid,
+        selectedSiteId,
         visibleDays,
         armedBook,
         watchedDates,
@@ -346,7 +346,7 @@ function dateHeaderHtml(day) {
 function rowHtml(row, context) {
   const siteLabel = siteName(row);
   const siteTitle = siteTitleText(row, siteLabel);
-  const isSelected = String(row.rid) === String(context.selectedSiteRid);
+  const isSelected = rowId(row) === String(context.selectedSiteId);
   const rowClass = isSelected ? ' class="cg-site-matrix-row-selected"' : '';
   const cells = context.visibleDays
     .map((day) =>
@@ -389,7 +389,7 @@ function siteLabelHtml(row, siteLabel, siteTitle, isSelected) {
     <button
       type="button"
       class="cg-site-matrix-site-button"
-      data-site-header-rid="${escapeHtml(row.rid)}"
+      data-site-header-reservable-id="${escapeHtml(rowId(row))}"
       title="${escapeHtml(siteTitle)}"
       aria-label="View details for ${escapeHtml(siteTitle)}"
       aria-expanded="${isSelected ? 'true' : 'false'}"
@@ -441,7 +441,7 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, 
   }
 
   const armed = !!armedBook
-    && String(armedBook.rid) === rowRid(row)
+    && String(armedBook.reservableId) === rowId(row)
     && armedBook.date === day.date;
   const label = armed ? 'Book' : state.label;
   const armedClass = armed ? ' is-armed' : '';
@@ -454,7 +454,7 @@ function cellHtml({ row, day, availableIds, selectedDate, siteLabel, armedBook, 
       <button
         type="button"
         class="cg-site-matrix-cell-button${armedClass}"
-        data-book-rid="${escapeHtml(rowRid(row))}"
+        data-book-reservable-id="${escapeHtml(rowId(row))}"
         data-book-date="${escapeHtml(day.date)}"
         aria-label="${escapeHtml(ariaLabel)}"
       >
@@ -470,21 +470,21 @@ function siteTitleText(row, siteLabel) {
 }
 
 function cellState(row, day, availableIds) {
-  const rid = rowRid(row);
-  const directStatus = reservableStatus(day, rid);
+  const reservableId = rowId(row);
+  const directStatus = reservableStatus(day, reservableId);
   if (directStatus) return availabilityStatusMeta(directStatus);
-  if (availableIds?.has(rid)) return availabilityStatusMeta('available');
+  if (availableIds?.has(reservableId)) return availabilityStatusMeta('available');
 
   const status = normalizeAvailabilityStatus(day.status);
   if (status === 'available' && availableIds) return availabilityStatusMeta('reserved');
   return availabilityStatusMeta(status);
 }
 
-function reservableStatus(day, rid) {
+function reservableStatus(day, reservableId) {
   const statuses = day?.reservable_statuses ?? day?.reservableStatuses;
   if (!statuses || typeof statuses !== 'object') return null;
-  if (!Object.prototype.hasOwnProperty.call(statuses, rid)) return null;
-  return normalizeAvailabilityStatus(statuses[rid]);
+  if (!Object.prototype.hasOwnProperty.call(statuses, reservableId)) return null;
+  return normalizeAvailabilityStatus(statuses[reservableId]);
 }
 
 function availableReservableIds(day) {
@@ -503,19 +503,18 @@ function fallbackReservablesFromDays(days) {
   for (const day of Array.isArray(days) ? days : []) {
     const statuses = day?.reservable_statuses ?? day?.reservableStatuses;
     if (statuses && typeof statuses === 'object') {
-      Object.keys(statuses).forEach((rid) => ids.add(String(rid)));
+      Object.keys(statuses).forEach((reservableId) => ids.add(String(reservableId)));
     }
-    availableReservableIds(day).forEach((rid) => ids.add(String(rid)));
+    availableReservableIds(day).forEach((reservableId) => ids.add(String(reservableId)));
   }
   return [...ids].sort().map(fallbackReservable);
 }
 
-function fallbackReservable(rid) {
-  const parts = String(rid).split(':');
+function fallbackReservable(reservableId) {
   return {
-    rid: String(rid),
-    vendor: parts[1] || '',
-    vendor_id: parts.slice(2).join(':') || String(rid),
+    id: String(reservableId),
+    vendor: '',
+    vendor_id: String(reservableId),
   };
 }
 
@@ -542,7 +541,7 @@ function filterReservables(rows, filters) {
       row.site_type,
       row.vendor_id,
       row.vendorId,
-      row.rid,
+      row.id,
     ]
       .filter(Boolean)
       .join(' ')
@@ -567,12 +566,12 @@ function sortReservables(rows, sortKey, context) {
 }
 
 function availableDateCount(row, availabilityByDate, days = []) {
-  const rid = rowRid(row);
+  const reservableId = rowId(row);
   let count = 0;
   for (const day of days) {
-    const status = reservableStatus(day, rid);
+    const status = reservableStatus(day, reservableId);
     if (status === 'available') count += 1;
-    else if (!status && availabilityByDate.get(day.date)?.has(rid)) count += 1;
+    else if (!status && availabilityByDate.get(day.date)?.has(reservableId)) count += 1;
   }
   return count;
 }
@@ -585,11 +584,11 @@ function filterOptions(rows, key) {
 function siteName(row) {
   if (row.name) return row.name;
   if (row.vendor_id) return `Site #${row.vendor_id}`;
-  return row.rid || '(unknown)';
+  return row.id != null ? `Site #${row.id}` : '(unknown)';
 }
 
-function rowRid(row) {
-  return String(row.rid);
+function rowId(row) {
+  return String(row.id);
 }
 
 function compareReservable(a, b) {

@@ -267,7 +267,7 @@ class AspiraPoiReservableJoinerTest : SharedDbTest() {
             )
         return reservablesRepo.upsert(
             ReservableRepo.Input(
-                rid = ReservableId(ReservableType.SITE, vendor, vendorId),
+                identity = ReservableId(ReservableType.SITE, vendor, vendorId),
                 name = null,
                 loop = null,
                 siteType = null,
@@ -346,7 +346,7 @@ class AspiraPoiReservableJoinerTest : SharedDbTest() {
             )
         return reservablesRepo.upsert(
             ReservableRepo.Input(
-                rid = ReservableId(ReservableType.SITE, vendor, vendorId),
+                identity = ReservableId(ReservableType.SITE, vendor, vendorId),
                 name = null,
                 loop = null,
                 siteType = null,

@@ -71,10 +71,10 @@ class RecGovCampsitesEtl(
             val campsites = payload["campsites"] as? JsonObject ?: continue
             for ((campsiteId, element) in campsites) {
                 val raw = element as? JsonObject ?: continue
-                val rid = ReservableId(ReservableType.SITE, "recgov", campsiteId)
+                val identity = ReservableId(ReservableType.SITE, "recgov", campsiteId)
                 reservables +=
                     ReservableRepo.Input(
-                        rid = rid,
+                        identity = identity,
                         name = (raw["site"] as? JsonPrimitive)?.contentOrNull,
                         loop = (raw["loop"] as? JsonPrimitive)?.contentOrNull,
                         siteType = (raw["campsite_type"] as? JsonPrimitive)?.contentOrNull,

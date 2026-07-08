@@ -148,10 +148,10 @@ class CatalogAvailabilityBatcherTest {
             ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by fetchByGroup tests")
         }
 
-    private fun reservable(rid: String): Reservable =
+    private fun reservable(identityText: String): Reservable =
         Reservable(
             id = 1L,
-            rid = ReservableId.parse(rid)!!,
+            identity = ReservableId.parse(identityText)!!,
             name = null,
             loop = null,
             siteType = null,

@@ -74,17 +74,16 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
         }
 
     @Test
-    fun `multi-rid request spanning distinct groups splits results per rid`() =
+    fun `multi-site request spanning distinct groups splits results per reservable id`() =
         runBlocking {
-            // Two rids under different parent refs → two fetch groups. Each rid's
-            // response must carry only its own observations, keyed to its rid.
+            // Two reservables under different parent refs → two fetch groups.
+            // Each response must carry only its own observations, keyed to its
+            // catalog id.
             val provider =
                 fakeProvider { _, reservables, startDate, endDate ->
                     // Group A (site 100) is AVAILABLE; group B (site 200) is RESERVED.
                     val status =
-                        if (reservables.single().rid ==
-                            "site:recgov:100"
-                        ) {
+                        if (reservables.single().vendorId == "100") {
                             AvailabilityStatus.AVAILABLE
                         } else {
                             AvailabilityStatus.RESERVED
@@ -100,8 +99,8 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
 
             assertEquals(2, provider.catalogCalls, "distinct groups fetch independently")
             assertEquals(2, results.size)
-            assertEquals("site:recgov:200", results[0].reservableId)
-            assertEquals("site:recgov:100", results[1].reservableId)
+            assertEquals(targetB.reservable.id.toString(), results[0].reservableId)
+            assertEquals(targetA.reservable.id.toString(), results[1].reservableId)
             // A's window is fully AVAILABLE; B's is fully RESERVED.
             assertTrue(results[1].availability.all { it.status == AvailabilityStatus.AVAILABLE })
             assertTrue(results[0].availability.all { it.status == AvailabilityStatus.RESERVED })
@@ -152,7 +151,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
             val target = resolvedTarget("site:recgov:100", provider = provider, parentRef = ProviderRef.RecGov("100"))
             val composer = composer(listOf(target), availability = null)
 
-            // An empty/short-lived batch would leave byRid empty and the mapping
+            // An empty/short-lived batch would leave the id map empty and the mapping
             // step would throw NotFound after the window is already captured, so
             // the window assertions below still hold regardless.
             runCatching {
@@ -209,15 +208,15 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
         availability: AvailabilityRepo?,
     ): ReservableAvailabilityComposer =
         ReservableAvailabilityComposer(
-            targets = FakeTargetResolver(targets.associateBy { it.reservable.rid }),
+            targets = FakeTargetResolver(targets.associateBy { it.reservable.identity }),
             availability = availability,
             snapshotFreshnessTtl = { longTtl },
         )
 
-    private fun reservable(rid: String): Reservable =
+    private fun reservable(identityText: String): Reservable =
         Reservable(
             id = 0L,
-            rid = ReservableId.parse(rid)!!,
+            identity = ReservableId.parse(identityText)!!,
             name = null,
             loop = null,
             siteType = null,
@@ -225,8 +224,8 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
         )
 
     /** Seeds a reservable row so the interval-table FK holds, returning its db id. */
-    private fun seedReservable(rid: String): Long {
-        val vendorId = ReservableId.parse(rid)!!.vendorId
+    private fun seedReservable(identityText: String): Long {
+        val vendorId = ReservableId.parse(identityText)!!.vendorId
         return ctx
             .fetchOne(
                 """
@@ -240,7 +239,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
     }
 
     private fun resolvedTarget(
-        rid: String,
+        identityText: String,
         provider: ReservationProvider,
         parentRef: ProviderRef,
         parentPoiId: Long = 1L,
@@ -248,8 +247,8 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
         ResolvedAvailabilityTarget(
             reservable =
                 Reservable(
-                    id = seedReservable(rid),
-                    rid = ReservableId.parse(rid)!!,
+                    id = seedReservable(identityText),
+                    identity = ReservableId.parse(identityText)!!,
                     name = null,
                     loop = null,
                     siteType = null,
@@ -282,7 +281,7 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
         val dates = (0 until ChronoUnit.DAYS.between(startDate, endDate)).map { startDate.plusDays(it) }
         val observations =
             reservables.flatMap { ref ->
-                dates.map { date -> ReservableDayObservation(ref.rid, date, observedAt, status) }
+                dates.map { date -> ReservableDayObservation(ref.catalogId.toString(), date, observedAt, status) }
             }
         return AvailabilityObservationBatch(
             provider = "recgov",
@@ -294,11 +293,12 @@ class ReservableAvailabilityComposerTest : SharedDbTest() {
     }
 
     private class FakeTargetResolver(
-        private val byRid: Map<ReservableId, ResolvedAvailabilityTarget>,
+        private val byIdentity: Map<ReservableId, ResolvedAvailabilityTarget>,
     ) : AvailabilityTargetResolver {
-        override fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget = byRid[rid] ?: throw AvailabilityServiceError.NotFound
+        override fun requireByIdentity(identity: ReservableId): ResolvedAvailabilityTarget =
+            byIdentity[identity] ?: throw AvailabilityServiceError.NotFound
 
-        override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byRid[reservable.rid]
+        override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byIdentity[reservable.identity]
     }
 
     private class FakeProvider(

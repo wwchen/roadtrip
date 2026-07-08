@@ -68,7 +68,7 @@ internal suspend fun fetchAspiraCatalogObservations(
     val days = daysBetween(startDate, endDate)
     val targets =
         reservables
-            .distinctBy { it.rid }
+            .distinctBy { it.catalogId }
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
         return fetchAspiraAvailabilityObservations(
@@ -89,7 +89,7 @@ internal suspend fun fetchAspiraCatalogObservations(
     val resourceRows =
         targets.map { target ->
             CatalogResourceDays(
-                rid = target.rid,
+                catalogId = target.catalogId,
                 days = dataByMap[target.mapId]?.byResource?.get(target.resourceId),
                 observedAt = observedAt,
             )
@@ -116,7 +116,7 @@ internal suspend fun fetchAspiraCatalogOccupancyObservations(
 ): AvailabilityObservationBatch {
     val targets =
         reservables
-            .distinctBy { it.rid }
+            .distinctBy { it.catalogId }
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
         return AvailabilityObservationBatch(
@@ -255,7 +255,7 @@ private fun observationsFromLinkedResourceCatalog(
     resources.flatMap { resource ->
         (0 until days).map { d ->
             ReservableDayObservation(
-                reservableId = resource.rid,
+                reservableId = resource.catalogId,
                 date = start.plusDays(d.toLong()),
                 observedAt = resource.observedAt,
                 status = resource.days?.let { resourceStatusAt(it, d) } ?: AvailabilityStatus.UNKNOWN,
@@ -279,7 +279,7 @@ private fun observationsFromOccupancyCatalogArrivalDay(
                 else -> AspiraResourceAvailability.classify(occupancy.availability)
             }
         ReservableDayObservation(
-            reservableId = resource.rid,
+            reservableId = resource.catalogId,
             date = arrival,
             observedAt = observedAt,
             status = status,
@@ -288,14 +288,14 @@ private fun observationsFromOccupancyCatalogArrivalDay(
 }
 
 internal data class AspiraCatalogReservable(
-    val rid: String,
+    val catalogId: String,
     val resourceId: String,
     val mapId: Int?,
     val resourceLocationId: Int? = null,
 )
 
 private data class CatalogResourceDays(
-    val rid: String,
+    val catalogId: String,
     val days: List<Int>?,
     val observedAt: Instant,
 )

@@ -52,7 +52,7 @@ class ReserveCaliforniaReservationProvider(
             grids.flatMap { grid ->
                 grid.statuses.flatMap { (unitId, byDate) ->
                     observationsForReservable(
-                        rid = rid(unitId),
+                        reservableId = providerScopedReservableId(unitId),
                         byDate = byDate,
                         dates = dates,
                         observedAt = grid.observedAt,
@@ -79,7 +79,7 @@ class ReserveCaliforniaReservationProvider(
             reservables.flatMap { reservable ->
                 val found = byUnit[reservable.vendorId]
                 observationsForReservable(
-                    rid = reservable.rid,
+                    reservableId = reservable.catalogId.toString(),
                     byDate = found?.second.orEmpty(),
                     dates = dates,
                     observedAt = found?.first ?: observedAt(grids),
@@ -95,14 +95,18 @@ class ReserveCaliforniaReservationProvider(
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
         val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(ref)
-        val result =
-            catalogAvailability(
-                ref = reserveCaliforniaRef,
-                reservables = listOf(CatalogReservableRef(rid = rid(vendorId), vendorId = vendorId)),
-                startDate = startDate,
-                endDate = endDate,
+        val grids = fetchFacilities(reserveCaliforniaRef, startDate, endDate)
+        val found =
+            grids
+                .firstNotNullOfOrNull { grid -> grid.statuses[vendorId]?.let { grid.observedAt to it } }
+        val observations =
+            observationsForReservable(
+                reservableId = providerScopedReservableId(vendorId),
+                byDate = found?.second.orEmpty(),
+                dates = dates(startDate, endDate),
+                observedAt = found?.first ?: observedAt(grids),
             )
-        return result.copy(reservableId = rid(vendorId))
+        return batch(reserveCaliforniaRef, startDate, endDate, observations).copy(reservableId = providerScopedReservableId(vendorId))
     }
 
     private suspend fun fetchFacilities(
@@ -128,14 +132,14 @@ class ReserveCaliforniaReservationProvider(
         }
 
     private fun observationsForReservable(
-        rid: String,
+        reservableId: String,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         observedAt: Instant,
     ): List<ReservableDayObservation> =
         dates.map { date ->
             ReservableDayObservation(
-                reservableId = rid,
+                reservableId = reservableId,
                 date = date,
                 observedAt = observedAt,
                 status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
@@ -199,4 +203,4 @@ private fun dates(
     (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt())
         .map { startDate.plusDays(it.toLong()) }
 
-private fun rid(unitId: String): String = "site:reservecalifornia:$unitId"
+private fun providerScopedReservableId(unitId: String): String = "site:reservecalifornia:$unitId"

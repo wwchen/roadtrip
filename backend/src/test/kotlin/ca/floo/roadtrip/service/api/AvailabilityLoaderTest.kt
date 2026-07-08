@@ -45,17 +45,17 @@ class AvailabilityLoaderTest : SharedDbTest() {
                 service.loadOrFetch(
                     request(seen, omitted, startDate, endDate),
                 ) {
-                    fetchedBatch(startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
+                    fetchedBatch(seen, startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
                 }
 
             val byPair = batch.observations.associateBy { it.reservableId to it.date }
             assertEquals(4, byPair.size)
-            assertEquals(AvailabilityStatus.AVAILABLE, byPair["site:recgov:100" to startDate]!!.status)
-            assertEquals(AvailabilityStatus.RESERVED, byPair["site:recgov:100" to startDate.plusDays(1)]!!.status)
-            assertEquals(AvailabilityStatus.UNKNOWN, byPair["site:recgov:200" to startDate]!!.status)
-            assertEquals(AvailabilityStatus.UNKNOWN, byPair["site:recgov:200" to startDate.plusDays(1)]!!.status)
-            assertEquals(dayOneObservedAt, byPair["site:recgov:200" to startDate]!!.observedAt)
-            assertEquals(dayTwoObservedAt, byPair["site:recgov:200" to startDate.plusDays(1)]!!.observedAt)
+            assertEquals(AvailabilityStatus.AVAILABLE, byPair[seen.toString() to startDate]!!.status)
+            assertEquals(AvailabilityStatus.RESERVED, byPair[seen.toString() to startDate.plusDays(1)]!!.status)
+            assertEquals(AvailabilityStatus.UNKNOWN, byPair[omitted.toString() to startDate]!!.status)
+            assertEquals(AvailabilityStatus.UNKNOWN, byPair[omitted.toString() to startDate.plusDays(1)]!!.status)
+            assertEquals(dayOneObservedAt, byPair[omitted.toString() to startDate]!!.observedAt)
+            assertEquals(dayTwoObservedAt, byPair[omitted.toString() to startDate.plusDays(1)]!!.observedAt)
 
             // Latest state is served from the interval table (current row per cell).
             val persisted =
@@ -85,7 +85,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
 
             // First fetch: 4 cells transition from absent → status, so 4 interval rows.
             service.loadOrFetch(request(seen, omitted, startDate, endDate)) {
-                fetchedBatch(startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
+                fetchedBatch(seen, startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
             }
             assertEquals(4, availabilityRowCount())
 
@@ -93,7 +93,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             // NO new interval rows. (The pre-cube path appended a full cell-set on
             // every call, which is why the old snapshot table grew unbounded.)
             service.loadOrFetch(request(seen, omitted, startDate, endDate)) {
-                fetchedBatch(startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
+                fetchedBatch(seen, startDate, endDate, dayOneObservedAt, dayTwoObservedAt)
             }
             assertEquals(4, availabilityRowCount())
         }
@@ -126,8 +126,8 @@ class AvailabilityLoaderTest : SharedDbTest() {
                     metadata = AvailabilityLoader.Metadata(provider = "recgov", campgroundId = "232447"),
                     targets =
                         listOf(
-                            AvailabilityLoader.TargetReservable(seen, "site:recgov:100"),
-                            AvailabilityLoader.TargetReservable(omitted, "site:recgov:200"),
+                            AvailabilityLoader.TargetReservable(seen),
+                            AvailabilityLoader.TargetReservable(omitted),
                         ),
                     startDate = requestStart,
                     endDate = requestEnd,
@@ -141,7 +141,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
                     observations =
                         fetchDates.map {
                             ReservableDayObservation(
-                                "site:recgov:100",
+                                seen.toString(),
                                 it,
                                 observedAt,
                                 AvailabilityStatus.AVAILABLE,
@@ -184,8 +184,8 @@ class AvailabilityLoaderTest : SharedDbTest() {
                 metadata = AvailabilityLoader.Metadata(provider = "recgov", campgroundId = "232447"),
                 targets =
                     listOf(
-                        AvailabilityLoader.TargetReservable(seen, "site:recgov:100"),
-                        AvailabilityLoader.TargetReservable(omitted, "site:recgov:200"),
+                        AvailabilityLoader.TargetReservable(seen),
+                        AvailabilityLoader.TargetReservable(omitted),
                     ),
                 startDate = start,
                 endDate = end,
@@ -193,7 +193,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             )
 
             // Week-1 request, but the fetch returns the wide [07-01, 07-15) window with
-            // observations ONLY for site:recgov:100 — site:recgov:200 is omitted, so its
+            // observations ONLY for `seen`; `omitted` is omitted, so its
             // coverage across the wide window depends entirely on UNKNOWN-fill.
             service.loadOrFetch(req(week1Start, week1End)) {
                 AvailabilityObservationBatch(
@@ -202,7 +202,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
                     endDate = wideEnd,
                     observations =
                         (0L until 14L).map {
-                            ReservableDayObservation("site:recgov:100", week1Start.plusDays(it), observedAt, AvailabilityStatus.AVAILABLE)
+                            ReservableDayObservation(seen.toString(), week1Start.plusDays(it), observedAt, AvailabilityStatus.AVAILABLE)
                         },
                     cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 7200),
                     campgroundId = "232447",
@@ -212,7 +212,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
             // Week-2 request is fully inside the recorded window → must NOT fetch.
             // This only holds if UNKNOWN-fill reached the wide window for the omitted
             // target; recording on the request window instead would leave week-2 of
-            // site:recgov:200 uncovered and force a refetch.
+            // the omitted reservable uncovered and force a refetch.
             var week2Fetched = false
             val batch =
                 service.loadOrFetch(req(week2Start, week2End)) {
@@ -242,7 +242,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
                 service.loadOrFetch(
                     AvailabilityLoader.Request(
                         metadata = AvailabilityLoader.Metadata(provider = "recgov", campgroundId = "232447"),
-                        targets = listOf(AvailabilityLoader.TargetReservable(1L, "site:recgov:100")),
+                        targets = listOf(AvailabilityLoader.TargetReservable(1L)),
                         startDate = requestStart,
                         endDate = requestEnd,
                         ttl = Duration.ofMinutes(10),
@@ -255,7 +255,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
                         observations =
                             (0L until 60L).map {
                                 ReservableDayObservation(
-                                    "site:recgov:100",
+                                    "1",
                                     requestStart.plusDays(it),
                                     observedAt,
                                     AvailabilityStatus.AVAILABLE,
@@ -282,8 +282,8 @@ class AvailabilityLoaderTest : SharedDbTest() {
         metadata = AvailabilityLoader.Metadata(provider = "recgov", campgroundId = "232447"),
         targets =
             listOf(
-                AvailabilityLoader.TargetReservable(seen, "site:recgov:100"),
-                AvailabilityLoader.TargetReservable(omitted, "site:recgov:200"),
+                AvailabilityLoader.TargetReservable(seen),
+                AvailabilityLoader.TargetReservable(omitted),
             ),
         startDate = startDate,
         endDate = endDate,
@@ -291,6 +291,7 @@ class AvailabilityLoaderTest : SharedDbTest() {
     )
 
     private fun fetchedBatch(
+        seen: Long,
         startDate: LocalDate,
         endDate: LocalDate,
         dayOneObservedAt: Instant,
@@ -301,8 +302,8 @@ class AvailabilityLoaderTest : SharedDbTest() {
         endDate = endDate,
         observations =
             listOf(
-                ReservableDayObservation("site:recgov:100", startDate, dayOneObservedAt, AvailabilityStatus.AVAILABLE),
-                ReservableDayObservation("site:recgov:100", startDate.plusDays(1), dayTwoObservedAt, AvailabilityStatus.RESERVED),
+                ReservableDayObservation(seen.toString(), startDate, dayOneObservedAt, AvailabilityStatus.AVAILABLE),
+                ReservableDayObservation(seen.toString(), startDate.plusDays(1), dayTwoObservedAt, AvailabilityStatus.RESERVED),
             ),
         cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 600),
         campgroundId = "232447",

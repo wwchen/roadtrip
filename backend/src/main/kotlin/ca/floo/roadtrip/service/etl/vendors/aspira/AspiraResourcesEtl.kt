@@ -160,7 +160,7 @@ class AspiraResourcesEtl(
                 if (leafMapId != null && leaf == null) unmatchedLeaf++
                 out +=
                     ReservableRepo.Input(
-                        rid = ReservableId(ReservableType.SITE, vendor, resourceId),
+                        identity = ReservableId(ReservableType.SITE, vendor, resourceId),
                         // Short label from /api/resourcelocation/resources
                         // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
                         name = inv.name,

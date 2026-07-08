@@ -323,7 +323,7 @@ internal fun Route.availabilityWatchRoutes(
         for (r in children.sortedWith(
             compareBy<Reservable, String?>(nullsLast()) {
                 it.loop
-            }.thenBy { it.name ?: "" }.thenBy { it.rid.vendorId },
+            }.thenBy { it.name ?: "" }.thenBy { it.identity.vendorId },
         )) {
             val rowCells =
                 dates.map { d ->
@@ -339,7 +339,6 @@ internal fun Route.availabilityWatchRoutes(
             rowsByLoop.getOrPut(key) { mutableListOf() } +=
                 AvailabilityWatchHeatmapRow(
                     reservableId = r.id,
-                    reservableRid = r.rid.encode(),
                     name = r.name,
                     cells = rowCells,
                 )
@@ -391,7 +390,7 @@ private fun validateTargets(targets: List<AvailabilityWatchTargetSchema>): Resol
 /**
  * Builds the target list for create/update from either the preferred
  * `targets` array or the legacy single-scope fields (`poi_id`,
- * `reservable_id`, `reservable_rid`) — exactly one of the two shapes must be
+ * `reservable_id`) — exactly one of the two shapes must be
  * present. Legacy fields are sugar for a one-element `targets` list so the
  * existing calendar UI keeps working unmodified.
  */
@@ -399,26 +398,16 @@ private fun resolveCreateScope(
     req: AvailabilityWatchCreateRequest,
     reservablesRepo: ReservableRepo,
 ): ResolveResult {
-    val legacyKeysSet = listOf(req.poiId, req.reservableId, req.reservableRid).count { it != null }
+    val legacyKeysSet = listOf(req.poiId, req.reservableId).count { it != null }
     val hasTargets = req.targets != null
     if (hasTargets && legacyKeysSet > 0) {
-        return ResolveResult.Err("invalid_scope", "specify either targets or poi_id/reservable_id/reservable_rid, not both")
+        return ResolveResult.Err("invalid_scope", "specify either targets or poi_id/reservable_id, not both")
     }
     if (hasTargets) {
         return validateTargets(req.targets!!)
     }
     if (legacyKeysSet != 1) {
-        return ResolveResult.Err("invalid_scope", "exactly one of targets, poi_id, reservable_id, or reservable_rid must be set")
-    }
-    if (req.reservableRid != null) {
-        val parsed =
-            ca.floo.roadtrip.models.domain.ReservableId
-                .parse(req.reservableRid)
-                ?: return ResolveResult.Err("invalid_reservable_rid", "could not parse reservable_rid '${req.reservableRid}'")
-        val resolvedReservable =
-            reservablesRepo.findByRid(parsed)
-                ?: return ResolveResult.Err("reservable_not_found", "no reservable with rid ${req.reservableRid}")
-        return ResolveResult.Ok(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = null, reservableId = resolvedReservable.id)))
+        return ResolveResult.Err("invalid_scope", "exactly one of targets, poi_id, or reservable_id must be set")
     }
     return ResolveResult.Ok(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = req.poiId, reservableId = req.reservableId)))
 }
@@ -476,10 +465,10 @@ private fun Watch.toSchema(reservablesRepo: ReservableRepo): AvailabilityWatchSc
             ?.let { reservablesRepo.findById(it) }
             ?.let { r ->
                 ReservableSchema(
-                    rid = r.rid.encode(),
-                    type = r.rid.type.encode(),
-                    vendor = r.rid.vendor,
-                    vendorId = r.rid.vendorId,
+                    id = r.id,
+                    type = r.identity.type.encode(),
+                    vendor = r.identity.vendor,
+                    vendorId = r.identity.vendorId,
                     name = r.name,
                     loop = r.loop,
                     siteType = r.siteType,

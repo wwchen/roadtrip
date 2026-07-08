@@ -30,7 +30,6 @@ class AvailabilityLoader(
 ) {
     data class TargetReservable(
         val dbId: Long,
-        val rid: String,
     )
 
     data class Metadata(
@@ -115,7 +114,7 @@ class AvailabilityLoader(
         request: Request,
         batch: AvailabilityObservationBatch,
     ) {
-        val targetByRid = request.targets.associateBy { it.rid }
+        val targetByWireId = request.targets.associateBy { it.dbId.toString() }
         val dates = datesInWindow(batch.startDate, batch.endDate)
         val observedAtByDate =
             batch.observations.groupBy { it.date }.mapValues { (_, o) -> o.maxOf { it.observedAt } }
@@ -123,7 +122,7 @@ class AvailabilityLoader(
         val covered = mutableSetOf<Pair<Long, LocalDate>>()
         val observations = mutableListOf<AvailabilityRepo.Observation>()
         for (o in batch.observations) {
-            val target = targetByRid[o.reservableId] ?: continue
+            val target = targetByWireId[o.reservableId] ?: continue
             covered += target.dbId to o.date
             observations += AvailabilityRepo.Observation(target.dbId, o.date, o.status, o.observedAt)
         }
@@ -148,7 +147,6 @@ class AvailabilityLoader(
         hit: Boolean,
         seasonBlock: AvailabilitySeasonBlock? = null,
     ): AvailabilityObservationBatch {
-        val ridByDbId = request.targets.associate { it.dbId to it.rid }
         val now = Instant.now(clock)
         return AvailabilityObservationBatch(
             provider = request.metadata.provider,
@@ -157,7 +155,7 @@ class AvailabilityLoader(
             observations =
                 rows.map { row ->
                     ReservableDayObservation(
-                        reservableId = ridByDbId[row.reservableId] ?: row.reservableId.toString(),
+                        reservableId = row.reservableId.toString(),
                         date = row.targetDate,
                         observedAt = row.observedAt.toInstant(),
                         status = row.status,

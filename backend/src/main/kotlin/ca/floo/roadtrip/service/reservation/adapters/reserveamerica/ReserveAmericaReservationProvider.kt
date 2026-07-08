@@ -67,7 +67,7 @@ class ReserveAmericaReservationProvider(
                 // catalog-less callers still need every visible site/date cell.
                 dates(startDate, endDate).map { date ->
                     ReservableDayObservation(
-                        reservableId = rid(contractCode, siteId),
+                        reservableId = providerScopedReservableId(contractCode, siteId),
                         date = date,
                         observedAt = data.observedAt,
                         status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
@@ -95,7 +95,7 @@ class ReserveAmericaReservationProvider(
         val observations =
             reservables.flatMap { reservable ->
                 observationsForReservable(
-                    reservable = reservable,
+                    reservableId = reservable.catalogId.toString(),
                     byDate = data.statuses[reservable.vendorId].orEmpty(),
                     dates = dates(startDate, endDate),
                     observedAt = data.observedAt,
@@ -119,10 +119,9 @@ class ReserveAmericaReservationProvider(
         val reserveAmericaRef = reserveAmericaRefOrThrow(ref)
         val contractCode = contractCode(reserveAmericaRef)
         val data = fetch(contractCode, reserveAmericaRef.parkId, startDate, endDate)
-        val target = CatalogReservableRef(rid = rid(contractCode, vendorId), vendorId = vendorId)
         val observations =
             observationsForReservable(
-                reservable = target,
+                reservableId = providerScopedReservableId(contractCode, vendorId),
                 byDate = data.statuses[vendorId].orEmpty(),
                 dates = dates(startDate, endDate),
                 observedAt = data.observedAt,
@@ -133,7 +132,7 @@ class ReserveAmericaReservationProvider(
             startDate = startDate,
             endDate = endDate,
             observations = observations,
-            reservableId = target.rid,
+            reservableId = providerScopedReservableId(contractCode, vendorId),
         )
     }
 
@@ -163,14 +162,14 @@ class ReserveAmericaReservationProvider(
         }
 
     private fun observationsForReservable(
-        reservable: CatalogReservableRef,
+        reservableId: String,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         observedAt: Instant,
     ): List<ReservableDayObservation> =
         dates.map { date ->
             ReservableDayObservation(
-                reservableId = reservable.rid,
+                reservableId = reservableId,
                 date = date,
                 observedAt = observedAt,
                 status = byDate[date] ?: AvailabilityStatus.UNKNOWN,
@@ -236,7 +235,7 @@ private fun dates(
     (0 until ChronoUnit.DAYS.between(startDate, endDate).toInt())
         .map { startDate.plusDays(it.toLong()) }
 
-private fun rid(
+private fun providerScopedReservableId(
     contractCode: String,
     siteId: String,
 ): String = "site:reserveamerica_${contractCode.lowercase()}:$siteId"

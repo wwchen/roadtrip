@@ -98,7 +98,7 @@ function makeContext(host, feature, signal) {
       type: '',
       sort: 'available',
     },
-    selectedSiteRid: null,
+    selectedSiteId: null,
     selectedSiteDate: null,
     armedBook: null,
     cacheBlock: null,
@@ -187,7 +187,7 @@ function renderAvailabilitySurface(ctx) {
     selectedDate: null,
     siteColumnWidth: ctx.siteColumnWidth,
     filters: ctx.matrixFilters,
-    selectedSiteRid: ctx.selectedSiteRid,
+    selectedSiteId: ctx.selectedSiteId,
     weekStart: localYmd(ctx.weekStart),
     showToday: shouldShowEarliestButton(ctx),
     armedBook: ctx.armedBook,
@@ -249,7 +249,7 @@ function wireRoot(ctx) {
 function onRootPointerDown(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
-  const bookBtn = tgt.closest('[data-book-rid]');
+  const bookBtn = tgt.closest('[data-book-reservable-id]');
   if (bookBtn) {
     captureBookTapScroll(ctx, e.pointerType === 'touch');
   }
@@ -262,7 +262,7 @@ function onRootPointerDown(ctx, e) {
 function onRootTouchStart(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
-  if (tgt.closest('[data-book-rid]')) {
+  if (tgt.closest('[data-book-reservable-id]')) {
     captureBookTapScroll(ctx, true);
   }
 }
@@ -278,18 +278,21 @@ function onRootClick(ctx, e) {
   const tgt = e.target;
   if (!(tgt instanceof Element)) return;
 
-  const bookBtn = tgt.closest('[data-book-rid]');
+  const bookBtn = tgt.closest('[data-book-reservable-id]');
   if (bookBtn) {
     e.preventDefault();
     const tapScroll = ctx.pendingBookTapScroll || captureMatrixScroll(ctx);
     const tapWasTouch = !!ctx.pendingBookTapWasTouch;
     ctx.pendingBookTapScroll = null;
     ctx.pendingBookTapWasTouch = false;
-    const rid = bookBtn.getAttribute('data-book-rid');
+    const reservableId = bookBtn.getAttribute('data-book-reservable-id');
     const date = bookBtn.getAttribute('data-book-date');
-    if (!rid || !date) return;
-    const armed = ctx.armedBook && String(ctx.armedBook.rid) === String(rid) && ctx.armedBook.date === date;
-    const site = ctx.sites.find((s) => String(s.rid) === String(rid));
+    if (!reservableId || !date) return;
+    const armed =
+      ctx.armedBook &&
+      String(ctx.armedBook.reservableId) === String(reservableId) &&
+      ctx.armedBook.date === date;
+    const site = ctx.sites.find((s) => String(s.id) === String(reservableId));
     if (armed) {
       const url = site
         ? reservationUrlFromTemplate(site, { startDate: date, endDate: stayEndDate(ctx, date) })
@@ -299,7 +302,7 @@ function onRootClick(ctx, e) {
       updateBookButtonState(bookBtn, site, date, false);
     } else {
       disarmBookButtonsInPlace(ctx);
-      ctx.armedBook = { rid: String(rid), date };
+      ctx.armedBook = { reservableId: String(reservableId), date };
       updateBookButtonState(bookBtn, site, date, true);
     }
     if (tapWasTouch) {
@@ -330,11 +333,11 @@ function onRootClick(ctx, e) {
     rerender(ctx);
     return;
   }
-  const siteHeaderBtn = tgt.closest('[data-site-header-rid]');
+  const siteHeaderBtn = tgt.closest('[data-site-header-reservable-id]');
   if (siteHeaderBtn) {
-    const rid = siteHeaderBtn.getAttribute('data-site-header-rid');
-    if (!rid) return;
-    ctx.selectedSiteRid = String(ctx.selectedSiteRid) === String(rid) ? null : rid;
+    const reservableId = siteHeaderBtn.getAttribute('data-site-header-reservable-id');
+    if (!reservableId) return;
+    ctx.selectedSiteId = String(ctx.selectedSiteId) === String(reservableId) ? null : reservableId;
     ctx.selectedSiteDate = null;
     rerender(ctx);
     return;
@@ -456,9 +459,9 @@ function onRootScroll(ctx, e) {
 function disarmBookButtonsInPlace(ctx) {
   for (const button of ctx.host.querySelectorAll('.cg-site-matrix-cell-button.is-armed')) {
     if (!(button instanceof HTMLElement)) continue;
-    const rid = button.getAttribute('data-book-rid');
+    const reservableId = button.getAttribute('data-book-reservable-id');
     const date = button.getAttribute('data-book-date');
-    const site = ctx.sites.find((s) => String(s.rid) === String(rid));
+    const site = ctx.sites.find((s) => String(s.id) === String(reservableId));
     updateBookButtonState(button, site, date, false);
   }
 }
@@ -481,7 +484,7 @@ function siteLabel(site) {
   if (!site) return 'Site';
   if (site.name) return site.name;
   if (site.vendor_id) return `Site #${site.vendor_id}`;
-  return site.rid || 'Site';
+  return site.id != null ? `Site #${site.id}` : 'Site';
 }
 
 const AVAIL_ERROR_LABELS = {
@@ -662,7 +665,7 @@ function jumpMatrixToToday(ctx) {
 
 function resetWeekViewState(ctx) {
   ctx.selectedDate = null;
-  ctx.selectedSiteRid = null;
+  ctx.selectedSiteId = null;
   ctx.selectedSiteDate = null;
   ctx.sitesExpanded = false;
   ctx.armedBook = null;
@@ -728,8 +731,8 @@ async function fetchWeek(ctx) {
 // rollup over all reservables; the new endpoint hands us the streams and lets
 // the FE decide how to combine them. Same rollup rules:
 //   - status: available > first_come > unknown > reserved > closed > unknown
-//   - reservable_statuses: { rid → status } for the matrix tooltip
-//   - available_reservable_ids: rids that are bookable that day
+//   - reservable_statuses: { reservable_id → status } for the matrix tooltip
+//   - available_reservable_ids: reservable ids that are bookable that day
 //
 // state shortcut:
 //   - reservables: []          → 'empty' (POI has no online-bookable sites)
@@ -768,20 +771,20 @@ function fusePoiReservablesAvailability(json, startDate, endDate) {
 }
 
 function fuseDay(date, reservables) {
-  // reservable_statuses: { rid → status } across all reservables for that date.
+  // reservable_statuses: { reservable_id → status } across all reservables for that date.
   const statuses = {};
   for (const r of reservables) {
-    const rid = r?.reservable_id;
-    if (!rid) continue;
+    const reservableId = r?.reservable_id;
+    if (!reservableId) continue;
     const day = (Array.isArray(r.availability) ? r.availability : []).find((d) => d?.date === date);
-    statuses[rid] = day?.status || 'unknown';
+    statuses[reservableId] = day?.status || 'unknown';
   }
-  const ridsSorted = Object.keys(statuses).sort();
+  const idsSorted = Object.keys(statuses).sort();
   const orderedStatuses = {};
-  for (const rid of ridsSorted) orderedStatuses[rid] = statuses[rid];
+  for (const reservableId of idsSorted) orderedStatuses[reservableId] = statuses[reservableId];
 
-  const availableIds = ridsSorted.filter((rid) => statuses[rid] === 'available');
-  const status = rollupStatus(ridsSorted.map((rid) => statuses[rid]));
+  const availableIds = idsSorted.filter((reservableId) => statuses[reservableId] === 'available');
+  const status = rollupStatus(idsSorted.map((reservableId) => statuses[reservableId]));
   return {
     date,
     status,

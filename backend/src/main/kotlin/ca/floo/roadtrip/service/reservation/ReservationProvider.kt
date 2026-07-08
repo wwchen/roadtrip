@@ -120,7 +120,7 @@ interface ReservationProvider : AvailabilityClient {
 }
 
 data class CatalogReservableRef(
-    val rid: String,
+    val catalogId: Long,
     val vendorId: String,
     val mapId: Long? = null,
     val resourceLocationId: Long? = null,

@@ -23,7 +23,7 @@ tree, rec.gov's facility → campsite, Camis's facility → site) into a flat
 
 The current `/api/campsite/availability/{poi_id}` route is replaced by
 `/api/poi/{poi_id}/availability` (per-day rollup over child reservables) and
-a new family of `/api/reservable/{rid}/...` routes for per-reservable
+a new family of `/api/reservable/{id}/...` routes for per-reservable
 detail. No version prefix; we sunset the old paths.
 
 ## Motivation
@@ -142,11 +142,11 @@ GET /api/poi/{poi_id}/reservables
 → list of reservables qualifying the arrival day, with names + status.
 
 # Per-reservable detail
-GET /api/reservable/{rid}
+GET /api/reservable/{id}
 → reservable info: name, vendor, type, parent POI(s), capabilities, raw
   upstream blob.
 
-GET /api/reservable/{rid}/availability
+GET /api/reservable/{id}/availability
    ?start=YYYY-MM-DD&days=N
 → one reservable's per-day status across the window.
 ```
@@ -341,8 +341,8 @@ class BookingProviderRegistry(
         val type: ReservableType,
     )
 
-    fun forReservable(rid: ReservableId): BookingProvider? =
-        adapters[AdapterKey(rid.vendor, rid.type)]
+    fun forReservable(identity: ReservableId): BookingProvider? =
+        adapters[AdapterKey(identity.vendor, identity.type)]
 
     fun forPoi(row: CampsiteProviderRefRow, type: ReservableType): BookingProvider? {
         val vendor = sourceToVendor[row.source] ?: return null
@@ -389,7 +389,7 @@ GET /api/poi/{poi_id}/reservables?date=2026-09-12&min_nights=2&type=site
   "filter": { "type": "site" },
   "reservables": [
     {
-      "rid": "site:recgov:330257",
+      "id": 123,
       "type": "site",
       "vendor": "recgov",
       "name": "FS1-20",
@@ -469,10 +469,10 @@ today's existing error responses.
 ### Per-reservable detail
 
 ```jsonc
-GET /api/reservable/site:recgov:330257
+GET /api/reservable/123
 
 {
-  "rid": "site:recgov:330257",
+  "id": 123,
   "type": "site",
   "vendor": "recgov",
   "name": "FS1-20",
@@ -486,9 +486,9 @@ GET /api/reservable/site:recgov:330257
   "raw": { ...full upstream blob... }
 }
 
-GET /api/reservable/site:recgov:330257/availability?start=2026-09-12&days=14
+GET /api/reservable/123/availability?start=2026-09-12&days=14
 {
-  "rid": "site:recgov:330257",
+  "id": 123,
   "window": { "start": "2026-09-12", "days": 14 },
   "availability": [
     { "date": "2026-09-12", "status": "available" },
@@ -518,7 +518,7 @@ What this means in practice:
 - **Per-POI rollup endpoint** (`/api/poi/{poi_id}/availability`) hits the
   same per-vendor cache the old route hit. Same TTL, same hit/miss
   semantics, same `cache.age_seconds` block in the response.
-- **Per-reservable detail endpoint** (`/api/reservable/{rid}/availability`)
+- **Per-reservable detail endpoint** (`/api/reservable/{id}/availability`)
   shares the cache with the per-POI rollup. Loading one site's status
   after loading the campground rollup is free.
 - **`min_nights` does not fragment the cache.** It's a classifier
@@ -583,7 +583,7 @@ the user said "watch this campground" and that's what's watched.
 | 3a | recgov-campsites fetcher + ETL emitting reservables (no POI knowledge); recgov joiner adapter | Medium — new upstream fetch at scale |
 | 3b | aspira-{wa,bc,pc}-resources fetchers + ETL emitting reservables; aspira joiner adapter | Medium — three tenants, WAF-prone upstream |
 | 4 | BookingProvider port becomes 2D registry; adapters move to `<vendor>/site/` subdirs; no behavior change | Low — refactor, tests gate |
-| 5 | New routes (`/api/poi/{id}/...`, `/api/reservable/{rid}/...`); old routes deleted; FE migrates in same PR | Medium — atomic API rename, FE+BE in lockstep |
+| 5 | New routes (`/api/poi/{id}/...`, `/api/reservable/{id}/...`); old routes deleted; FE migrates in same PR | Medium — atomic API rename, FE+BE in lockstep |
 | 6 | Alerts migration: add `reservable_id` column; backfill at deploy; poller switches to per-reservable evaluation | Medium — touches the alert/poll code path |
 
 PRs 1-4 are forward-compatible no-ops to the running system. PR 5 is

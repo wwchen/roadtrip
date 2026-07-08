@@ -16,7 +16,7 @@ import { hasReservationUrlTemplate, reservationUrlFromTemplate } from './booking
  *
  * @param {object} args
  * @param {'loading'|'success'|'error'} args.state
- * @param {Array<object>}        args.reservables  Rows from BE (rid/name/loop/site_type/reservation_url_template).
+ * @param {Array<object>}        args.reservables  Rows from BE (id/name/loop/site_type/reservation_url_template).
  * @param {string|null}          args.error
  * @param {boolean}               args.expanded
  * @param {object|null}           args.selectedDay  Per-day availability row.
@@ -98,15 +98,12 @@ function renderRows(reservables, dateWindow) {
 }
 
 function reservablesForIds(reservables, ids) {
-  const byRid = new Map((Array.isArray(reservables) ? reservables : []).map((r) => [r.rid, r]));
-  return ids.map((rid) => byRid.get(rid) || fallbackReservable(rid));
+  const byId = new Map((Array.isArray(reservables) ? reservables : []).map((r) => [String(r.id), r]));
+  return ids.map((reservableId) => byId.get(String(reservableId)) || fallbackReservable(reservableId));
 }
 
-function fallbackReservable(rid) {
-  const parts = String(rid).split(':');
-  const vendor = parts[1] || '';
-  const vendorId = parts.slice(2).join(':') || String(rid);
-  return { rid, vendor, vendor_id: vendorId };
+function fallbackReservable(reservableId) {
+  return { id: String(reservableId), vendor: '', vendor_id: String(reservableId) };
 }
 
 function renderRow(r, dateWindow) {
@@ -135,7 +132,7 @@ function renderRow(r, dateWindow) {
     ? `<a class="cg-sites-row-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer" aria-label="Book site ${safeName}">${inner}</a>`
     : inner;
   return `
-    <li class="cg-sites-row" data-rid="${escapeHtml(r.rid)}">
+    <li class="cg-sites-row" data-reservable-id="${escapeHtml(r.id)}">
       ${body}
     </li>
   `;
@@ -147,7 +144,7 @@ function renderRow(r, dateWindow) {
  */
 function formatFallbackName(r) {
   if (r.vendor_id) return `Site #${r.vendor_id}`;
-  return r.rid || '(unknown)';
+  return r.id != null ? `Site #${r.id}` : '(unknown)';
 }
 
 function renderSiteDetails(r) {

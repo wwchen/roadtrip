@@ -97,7 +97,7 @@ class ReserveAmericaPoiReservableJoinerTest : SharedDbTest() {
         val raw = Json.parseToJsonElement("""{"_parent_contract_code":"$contract","_parent_park_id":"$parkId"}""")
         return reservablesRepo.upsert(
             ReservableRepo.Input(
-                rid = ReservableId(ReservableType.SITE, vendor, vendorId),
+                identity = ReservableId(ReservableType.SITE, vendor, vendorId),
                 name = null,
                 loop = null,
                 siteType = null,

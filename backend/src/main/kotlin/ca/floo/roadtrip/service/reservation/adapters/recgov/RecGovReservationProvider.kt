@@ -66,7 +66,7 @@ class RecGovReservationProvider(
             fetchRecgovCatalogObservations(
                 client = client,
                 recgovId = recgovId,
-                campsiteIds = reservables.map { it.vendorId }.toSet(),
+                catalogIdsByCampsiteId = reservables.associate { it.vendorId to it.catalogId },
                 startDate = startDate,
                 endDate = endDate,
             )
@@ -105,7 +105,7 @@ class RecGovReservationProvider(
     override fun bookingUrlTemplate(
         reservable: Reservable,
         parentRef: ProviderRef,
-    ): String = RecGovBookingUrl.template(reservable.rid.vendorId)
+    ): String = RecGovBookingUrl.template(reservable.identity.vendorId)
 
     private fun recgovIdOrThrow(ref: ProviderRef): String =
         when (ref) {

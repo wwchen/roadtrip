@@ -124,7 +124,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val id =
             reservableRepo.upsert(
                 ReservableRepo.Input(
-                    rid = ReservableId(type = ReservableType.SITE, vendor = "test", vendorId = vendorId),
+                    identity = ReservableId(type = ReservableType.SITE, vendor = "test", vendorId = vendorId),
                     name = "Site $vendorId",
                     loop = null,
                     siteType = null,
@@ -177,7 +177,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
                 )
         }
 
-        override fun requireByRid(rid: ca.floo.roadtrip.models.domain.ReservableId): ResolvedAvailabilityTarget =
+        override fun requireByIdentity(identity: ca.floo.roadtrip.models.domain.ReservableId): ResolvedAvailabilityTarget =
             throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
 
         override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byReservableId[reservable.id]

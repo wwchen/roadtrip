@@ -80,19 +80,19 @@ function restoreScrollAfterTap(scroll, snapshot) {
 let pendingTapScroll = null;
 
 root.addEventListener('pointerdown', (event) => {
-  if (event.target.closest('[data-book-rid]')) {
+  if (event.target.closest('[data-book-reservable-id]')) {
     pendingTapScroll = captureScroll(scroller);
   }
 });
 
 root.addEventListener('touchstart', (event) => {
-  if (event.target.closest('[data-book-rid]')) {
+  if (event.target.closest('[data-book-reservable-id]')) {
     pendingTapScroll = captureScroll(scroller);
   }
 }, { passive: true });
 
 root.addEventListener('click', (event) => {
-  const button = event.target.closest('[data-book-rid]');
+  const button = event.target.closest('[data-book-reservable-id]');
   if (!button) return;
 
   event.preventDefault();

@@ -209,11 +209,11 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
 
     get("/api/availability/snapshots", {
         tags = listOf("availability")
-        summary = "Snapshot rows filtered by reservable rid or run id"
+        summary = "Snapshot rows filtered by reservable id or run id"
         request {
-            queryParameter<String>("reservable_rid") {
+            queryParameter<Long>("reservable_id") {
                 description =
-                    "Snapshots for this reservable (e.g. site:recgov:330257), newest first."
+                    "Snapshots for this reservable, newest first."
             }
             queryParameter<Long>("run_id") { description = "Snapshots produced by this run." }
             queryParameter<Int>("limit") { description = "Page size, default 200, max 1000." }
@@ -226,34 +226,26 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
-        val rid = call.request.queryParameters["reservable_rid"]?.takeIf { it.isNotBlank() }
+        val reservableId = call.request.queryParameters["reservable_id"]?.toLongOrNull()
         val runId = call.request.queryParameters["run_id"]?.toLongOrNull()
-        if ((rid == null) == (runId == null)) {
+        if ((reservableId == null) == (runId == null)) {
             return@get call.respondError(
                 "invalid_filter",
                 HttpStatusCode.BadRequest,
-                "exactly one of reservable_rid or run_id must be set",
+                "exactly one of reservable_id or run_id must be set",
             )
         }
         val limit =
             (call.request.queryParameters["limit"]?.toIntOrNull() ?: SNAPSHOT_DEFAULT_LIMIT)
                 .coerceIn(1, SNAPSHOT_MAX_LIMIT)
         val rows =
-            if (rid != null) {
-                val parsed =
-                    ca.floo.roadtrip.models.domain.ReservableId
-                        .parse(rid)
-                        ?: return@get call.respondError(
-                            "invalid_reservable_rid",
-                            HttpStatusCode.BadRequest,
-                            "could not parse reservable_rid '$rid'",
-                        )
+            if (reservableId != null) {
                 val reservable =
-                    reservablesRepo.findByRid(parsed)
+                    reservablesRepo.findById(reservableId)
                         ?: return@get call.respondError(
                             "reservable_not_found",
                             HttpStatusCode.NotFound,
-                            "no reservable with rid $rid",
+                            "no reservable with id $reservableId",
                         )
                 availability.listForReservable(reservable.id, limit = limit)
             } else {
@@ -266,7 +258,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         tags = listOf("availability")
         summary = "Per-date stats for one reservable's snapshot history"
         request {
-            queryParameter<String>("reservable_rid") { description = "Reservable composite id (e.g. site:recgov:330257)." }
+            queryParameter<Long>("reservable_id") { description = "reservables.id primary key." }
             queryParameter<String>("dates") {
                 description = "Comma-separated YYYY-MM-DD list. If omitted, every date with snapshots in the window is returned."
             }
@@ -280,27 +272,19 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
-        val rid =
-            call.request.queryParameters["reservable_rid"]?.takeIf { it.isNotBlank() }
+        val reservableId =
+            call.request.queryParameters["reservable_id"]?.toLongOrNull()
                 ?: return@get call.respondError(
-                    "missing_reservable_rid",
+                    "missing_reservable_id",
                     HttpStatusCode.BadRequest,
-                    "reservable_rid is required",
-                )
-        val parsed =
-            ca.floo.roadtrip.models.domain.ReservableId
-                .parse(rid)
-                ?: return@get call.respondError(
-                    "invalid_reservable_rid",
-                    HttpStatusCode.BadRequest,
-                    "could not parse reservable_rid '$rid'",
+                    "reservable_id is required",
                 )
         val reservable =
-            reservablesRepo.findByRid(parsed)
+            reservablesRepo.findById(reservableId)
                 ?: return@get call.respondError(
                     "reservable_not_found",
                     HttpStatusCode.NotFound,
-                    "no reservable with rid $rid",
+                    "no reservable with id $reservableId",
                 )
         val windowHours =
             call.request.queryParameters["window_hours"]
@@ -339,7 +323,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
         val stats = availability.summarize(reservable.id, dates, windowHours = windowHours)
         call.respondJson(
             AvailabilitySnapshotsSummaryResponse(
-                reservableRid = rid,
+                reservableId = reservable.id,
                 stats = stats.map { it.toSchema() },
             ),
         )

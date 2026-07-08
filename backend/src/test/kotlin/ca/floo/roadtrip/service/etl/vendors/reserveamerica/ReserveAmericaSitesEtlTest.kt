@@ -58,7 +58,7 @@ class ReserveAmericaSitesEtlTest {
 
         assertEquals(2, out.reservables.size)
         val first = out.reservables.first()
-        assertEquals("site:reserveamerica_ny:253478", first.rid.encode())
+        assertEquals("site:reserveamerica_ny:253478", first.identity.encode())
         assertEquals("039", first.name)
         assertEquals(null, first.loop)
         assertEquals(null, first.siteType)
@@ -74,7 +74,7 @@ class ReserveAmericaSitesEtlTest {
             etl
                 .transform(etl.parse(bundle()), transformCtx)
                 .reservables
-                .map { it.rid.vendorId }
+                .map { it.identity.vendorId }
                 .toSet()
         val availabilityIds =
             ReserveAmericaAvailabilityParser

@@ -158,7 +158,7 @@ class RecgovPoiReservableJoinerTest : SharedDbTest() {
         // Upsert with raw=null — no synthetic parent key to match on.
         reservablesRepo.upsert(
             ReservableRepo.Input(
-                rid = ReservableId(ReservableType.SITE, "recgov", "330257"),
+                identity = ReservableId(ReservableType.SITE, "recgov", "330257"),
                 name = "FS1-20",
                 loop = null,
                 siteType = null,
@@ -179,7 +179,7 @@ class RecgovPoiReservableJoinerTest : SharedDbTest() {
         val raw = Json.parseToJsonElement("""{"_parent_facility_id":"$parentFacilityId"}""")
         return reservablesRepo.upsert(
             ReservableRepo.Input(
-                rid = ReservableId(ReservableType.SITE, vendor, vendorId),
+                identity = ReservableId(ReservableType.SITE, vendor, vendorId),
                 name = null,
                 loop = null,
                 siteType = null,

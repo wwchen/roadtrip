@@ -24,7 +24,7 @@ import kotlinx.serialization.json.JsonElement
  */
 data class Reservable(
     val id: Long,
-    val rid: ReservableId,
+    val identity: ReservableId,
     val name: String?,
     val loop: String?,
     val siteType: String?,

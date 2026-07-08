@@ -7,7 +7,6 @@ import ca.floo.roadtrip.models.api.ReservableSchema
 import ca.floo.roadtrip.models.api.ReservablesResponseSchema
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableRepo
@@ -49,7 +48,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
             "can be repeated or comma-separated, e.g. `?type=site&vendor=recgov" +
             "&vendor_id=330257,330258`."
         request {
-            queryParameter<String>("rid") { description = "Composite id `{type}:{vendor}:{vendor_id}`." }
+            queryParameter<Long>("id") { description = "reservables.id primary key." }
             queryParameter<String>("type") { description = "Reservable type, e.g. `site`." }
             queryParameter<String>("vendor") { description = "Vendor id, e.g. `recgov` or `aspira_pc`." }
             queryParameter<String>("vendor_id") { description = "Vendor-native reservable id." }
@@ -67,7 +66,7 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 body<ReservablesResponseSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.BadRequest) {
-                description = "Malformed filter, limit, offset, rid, type, or raw JSON."
+                description = "Malformed filter, limit, offset, id, type, or raw JSON."
                 body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
         }
@@ -104,14 +103,14 @@ fun Route.reservableRoutes(ctx: DSLContext) {
         )
     }
 
-    get("/api/reservable/{rid}", {
+    get("/api/reservable/{id}", {
         tags = listOf("reservable")
         summary = "Single reservable catalog detail"
         description =
-            "Returns one reservable by composite id, e.g. site:recgov:330257. " +
+            "Returns one reservable by reservables.id. " +
             "The response includes active POI ids linked through reservable_pois."
         request {
-            pathParameter<String>("rid") { description = "{type}:{vendor}:{vendor_id}" }
+            pathParameter<Long>("id") { description = "reservables.id primary key" }
         }
         response {
             code(HttpStatusCode.OK) {
@@ -119,21 +118,20 @@ fun Route.reservableRoutes(ctx: DSLContext) {
                 body<ReservableDetailResponseSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.BadRequest) {
-                description = "Malformed composite reservable id."
+                description = "Malformed reservable id."
                 body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
             code(HttpStatusCode.NotFound) {
-                description = "No reservable with that composite id."
+                description = "No reservable with that id."
                 body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) }
             }
         }
     }) {
-        val rid =
-            call.parameters["rid"]
-                ?.let(ReservableId::parse)
-                ?: return@get call.respondReservableError("bad_rid", HttpStatusCode.BadRequest)
+        val id =
+            call.parameters["id"]?.toLongOrNull()
+                ?: return@get call.respondReservableError("bad_id", HttpStatusCode.BadRequest)
         val reservable =
-            reservablesRepo.findByRid(rid)
+            reservablesRepo.findById(id)
                 ?: return@get call.respondReservableError("not_found", HttpStatusCode.NotFound)
 
         val poiIds = reservablesRepo.poiIdsForReservable(reservable.id)
@@ -226,9 +224,9 @@ internal fun parseReservableType(raw: String?): ReservableType? =
 
 private fun ApplicationCall.reservableSearchFilters(): ReservableRepo.SearchFilters =
     ReservableRepo.SearchFilters(
-        rids =
-            queryValues("rid")
-                .map { raw -> ReservableId.parse(raw) ?: throw BadReservableQuery("bad_rid", raw) },
+        ids =
+            queryValues("id")
+                .map { raw -> raw.toLongOrNull() ?: throw BadReservableQuery("bad_id", raw) },
         types =
             queryValues("type")
                 .map { raw -> ReservableType.parse(raw) ?: throw BadReservableQuery("bad_type", raw) },
@@ -284,10 +282,10 @@ internal fun Reservable.toSchema(
     reservationUrlTemplate: String? = null,
 ): ReservableSchema =
     ReservableSchema(
-        rid = rid.encode(),
-        type = rid.type.encode(),
-        vendor = rid.vendor,
-        vendorId = rid.vendorId,
+        id = id,
+        type = identity.type.encode(),
+        vendor = identity.vendor,
+        vendorId = identity.vendorId,
         name = name,
         loop = loop,
         siteType = siteType,
@@ -307,9 +305,9 @@ internal fun Reservable.toSchema(
  */
 internal fun Reservable.reservationUrlTemplate(parentRef: ProviderRef?): String? =
     when {
-        rid.vendor == "recgov" -> RecGovBookingUrl.template(rid.vendorId)
-        rid.vendor.startsWith("aspira_") ->
-            AspiraTenants.byVendorCode(rid.vendor)?.host?.let { host ->
+        identity.vendor == "recgov" -> RecGovBookingUrl.template(identity.vendorId)
+        identity.vendor.startsWith("aspira_") ->
+            AspiraTenants.byVendorCode(identity.vendor)?.host?.let { host ->
                 AspiraBookingUrl.templateFor(host, providerRef, parentRef)
             }
         else -> null

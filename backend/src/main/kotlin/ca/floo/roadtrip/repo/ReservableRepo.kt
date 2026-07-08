@@ -18,7 +18,7 @@ import org.slf4j.LoggerFactory
  * Persistence for the reservables catalog and its N:M link to POIs.
  *
  * Reservables are upserted in batches by ETL adapters; the request path
- * reads them via `findByPoi` (listing endpoint) or `findByRid`
+ * reads them via `findByPoi` (listing endpoint) or `findByIdentity`
  * (per-reservable detail). Per-day availability is NOT stored here — that
  * lives in the per-vendor availability cache, recomputed live by the
  * ReservationProvider.
@@ -46,7 +46,7 @@ class ReservableRepo(
      */
     fun upsert(
         input: Input,
-        source: String = input.rid.vendor,
+        source: String = input.identity.vendor,
         runId: Long? = null,
     ): Long {
         val rawJson = input.raw?.let { jsonEncoder.encodeToString(JsonElement.serializer(), it) }
@@ -74,9 +74,9 @@ class ReservableRepo(
                   updated_at = now()
                 RETURNING id
                 """.trimIndent(),
-                input.rid.type.encode(),
-                input.rid.vendor,
-                input.rid.vendorId,
+                input.identity.type.encode(),
+                input.identity.vendor,
+                input.identity.vendorId,
                 source,
                 input.name,
                 input.loop,
@@ -134,12 +134,12 @@ class ReservableRepo(
             ?.let(::fromRecord)
 
     /** Find one reservable by its composite identity. */
-    fun findByRid(rid: ReservableId): Reservable? =
+    fun findByIdentity(identity: ReservableId): Reservable? =
         ctx
             .selectFrom(RESERVABLES)
-            .where(RESERVABLES.TYPE.eq(rid.type.encode()))
-            .and(RESERVABLES.VENDOR.eq(rid.vendor))
-            .and(RESERVABLES.VENDOR_ID.eq(rid.vendorId))
+            .where(RESERVABLES.TYPE.eq(identity.type.encode()))
+            .and(RESERVABLES.VENDOR.eq(identity.vendor))
+            .and(RESERVABLES.VENDOR_ID.eq(identity.vendorId))
             .and(RESERVABLE_ACTIVE_CONDITION)
             .fetchOne()
             ?.let(::fromRecord)
@@ -277,9 +277,9 @@ class ReservableRepo(
             .execute()
     }
 
-    /** Input shape for `upsert`. Type/vendor/vendor_id come from the rid. */
+    /** Input shape for `upsert`. Type/vendor/vendor_id come from the identity. */
     data class Input(
-        val rid: ReservableId,
+        val identity: ReservableId,
         val name: String?,
         val loop: String?,
         val siteType: String?,
@@ -294,7 +294,7 @@ class ReservableRepo(
     )
 
     data class SearchFilters(
-        val rids: List<ReservableId> = emptyList(),
+        val ids: List<Long> = emptyList(),
         val types: List<ReservableType> = emptyList(),
         val vendors: List<String> = emptyList(),
         val vendorIds: List<String> = emptyList(),
@@ -319,13 +319,13 @@ class ReservableRepo(
         val type =
             ReservableType.parse(typeStr)
                 ?: error("reservables.type=$typeStr is not a known ReservableType (row id=${r.get(RESERVABLES.ID)})")
-        val rid = ReservableId(type = type, vendor = vendor, vendorId = vendorId)
+        val identity = ReservableId(type = type, vendor = vendor, vendorId = vendorId)
         val rawJson = r.get(RESERVABLES.RAW)?.data()?.let { Json.parseToJsonElement(it) }
         val tagsJson = r.get(RESERVABLES.TAGS)?.data()?.let { Json.parseToJsonElement(it) }
         val providerRefJson = r.get(RESERVABLES.PROVIDER_REF)?.data()?.let { Json.parseToJsonElement(it) }
         return Reservable(
             id = r.get(RESERVABLES.ID)!!,
-            rid = rid,
+            identity = identity,
             name = r.get(RESERVABLES.NAME),
             loop = r.get(RESERVABLES.LOOP),
             siteType = r.get(RESERVABLES.SITE_TYPE),
@@ -337,15 +337,7 @@ class ReservableRepo(
 
     private fun searchCondition(filters: SearchFilters): Condition =
         listOfNotNull(
-            orCondition(
-                filters.rids.map { rid ->
-                    DSL.and(
-                        RESERVABLES.TYPE.eq(rid.type.encode()),
-                        RESERVABLES.VENDOR.eq(rid.vendor),
-                        RESERVABLES.VENDOR_ID.eq(rid.vendorId),
-                    )
-                },
-            ),
+            filters.ids.takeIf { it.isNotEmpty() }?.let { RESERVABLES.ID.`in`(it) },
             filters.types
                 .map { it.encode() }
                 .takeIf { it.isNotEmpty() }
@@ -385,9 +377,9 @@ class ReservableRepo(
             val values = chunk.joinToString(", ") { "(?, ?, ?, ?, ?, ?, ?, ?::jsonb, ?::jsonb, ?::jsonb, ?)" }
             val args = mutableListOf<Any?>()
             for (input in chunk) {
-                args += input.rid.type.encode()
-                args += input.rid.vendor
-                args += input.rid.vendorId
+                args += input.identity.type.encode()
+                args += input.identity.vendor
+                args += input.identity.vendorId
                 args += source
                 args += input.name
                 args += input.loop

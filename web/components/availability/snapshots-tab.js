@@ -1,4 +1,4 @@
-// Snapshots tab: tabular view scoped to either one reservable (by RID) or
+// Snapshots tab: tabular view scoped to either one reservable or
 // one run id. Backend rejects calls with neither/both.
 
 import {
@@ -13,7 +13,7 @@ export async function mount(rootEl, { urlParams }) {
     <section class="panel">
       <h2>Filter</h2>
       <form id="snap-filter" class="filters">
-        <label>Reservable RID <input name="reservable_rid" placeholder="site:recgov:330257"></label>
+        <label>Reservable ID <input name="reservable_id" inputmode="numeric"></label>
         <label>Run ID <input name="run_id" inputmode="numeric"></label>
         <div class="actions">
           <button class="primary" type="submit">Apply</button>
@@ -26,7 +26,7 @@ export async function mount(rootEl, { urlParams }) {
       <div id="snap-stats"></div>
     </section>
     <section class="panel" aria-live="polite">
-      <div id="snap-status" class="status">Set a Reservable RID or Run ID to load snapshots.</div>
+      <div id="snap-status" class="status">Set a Reservable ID or Run ID to load snapshots.</div>
       <div id="snap-results"></div>
     </section>
   `;
@@ -37,7 +37,7 @@ export async function mount(rootEl, { urlParams }) {
   const statsPanel = rootEl.querySelector('#snap-stats-panel');
   const statsEl = rootEl.querySelector('#snap-stats');
 
-  if (urlParams.reservable_rid) filterForm.querySelector('[name=reservable_rid]').value = urlParams.reservable_rid;
+  if (urlParams.reservable_id) filterForm.querySelector('[name=reservable_id]').value = urlParams.reservable_id;
   if (urlParams.run_id) filterForm.querySelector('[name=run_id]').value = urlParams.run_id;
 
   filterForm.addEventListener('submit', (e) => {
@@ -46,29 +46,29 @@ export async function mount(rootEl, { urlParams }) {
   });
   filterForm.addEventListener('reset', () => setTimeout(refresh, 0));
 
-  if (urlParams.reservable_rid || urlParams.run_id) {
+  if (urlParams.reservable_id || urlParams.run_id) {
     await refresh();
   }
 
   async function refresh() {
     const fd = new FormData(filterForm);
-    const rid = (fd.get('reservable_rid') || '').trim();
+    const reservableId = (fd.get('reservable_id') || '').trim();
     const runId = (fd.get('run_id') || '').trim();
-    if (!rid === !runId) {
-      statusEl.textContent = 'Set exactly one of Reservable RID or Run ID.';
+    if (!reservableId === !runId) {
+      statusEl.textContent = 'Set exactly one of Reservable ID or Run ID.';
       resultsEl.innerHTML = '';
       hideStats();
       return;
     }
     statusEl.textContent = 'Loading…';
     try {
-      const data = rid
-        ? await listSnapshotsForReservable(rid)
+      const data = reservableId
+        ? await listSnapshotsForReservable(reservableId)
         : await listSnapshotsForRun(runId);
       statusEl.textContent = `${data.snapshots.length} snapshot${data.snapshots.length === 1 ? '' : 's'}.`;
       render(data.snapshots);
-      if (rid) {
-        await refreshStats(rid);
+      if (reservableId) {
+        await refreshStats(reservableId);
       } else {
         hideStats();
       }
@@ -110,9 +110,9 @@ export async function mount(rootEl, { urlParams }) {
     `;
   }
 
-  async function refreshStats(rid) {
+  async function refreshStats(reservableId) {
     try {
-      const data = await getSnapshotsSummary(rid);
+      const data = await getSnapshotsSummary(reservableId);
       if (data.stats.length === 0) {
         hideStats();
         return;

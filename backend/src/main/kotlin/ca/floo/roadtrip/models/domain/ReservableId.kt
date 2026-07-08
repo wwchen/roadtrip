@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.models.domain
 
 /**
- * Composite identity for a reservable on the wire. Format:
+ * Composite provider identity for a reservable. Format:
  *
  *   {type}:{vendor}:{vendor_id}
  *
@@ -35,14 +35,14 @@ data class ReservableId(
         // "arches-2026-08-01-09:00" round-trip cleanly.
     }
 
-    /** Wire form. Always lowercase type + vendor; vendor_id verbatim. */
+    /** Encoded provider identity. Always lowercase type + vendor; vendor_id verbatim. */
     fun encode(): String = "${type.encode()}:${vendor.lowercase()}:$vendorId"
 
     override fun toString(): String = encode()
 
     companion object {
         /**
-         * Parse a wire-form composite. Returns null on:
+         * Parse an encoded provider identity. Returns null on:
          *   - missing colon delimiters,
          *   - unknown type,
          *   - empty vendor or vendor_id,

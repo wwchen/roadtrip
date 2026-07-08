@@ -50,7 +50,7 @@ class SectionDispatchTest : SharedDbTest() {
 
     @Test
     fun `runReservableData upserts via ReservableRepo and skips Pois Upsert`() {
-        val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
+        val identity = ReservableId(ReservableType.SITE, "recgov", "330257")
         val fakeEtl =
             FakeReservableEtl(
                 slug = "fake-reservable-terminal",
@@ -59,7 +59,7 @@ class SectionDispatchTest : SharedDbTest() {
                         reservables =
                             listOf(
                                 ReservableRepo.Input(
-                                    rid = rid,
+                                    identity = identity,
                                     name = "FS1-20",
                                     loop = "Loop A",
                                     siteType = "STANDARD",
@@ -81,7 +81,7 @@ class SectionDispatchTest : SharedDbTest() {
         assertEquals(1, stats.parsed)
         assertEquals(1, stats.upserted)
         assertEquals(0, stats.swept)
-        assertNotNull(reservablesRepo.findByRid(rid))
+        assertNotNull(reservablesRepo.findByIdentity(identity))
     }
 
     @Test
@@ -127,17 +127,17 @@ class SectionDispatchTest : SharedDbTest() {
 
         assertEquals(1, stats.upserted)
         assertEquals(1, stats.swept)
-        assertNotNull(reservablesRepo.findByRid(ridA))
-        assertNull(reservablesRepo.findByRid(ridB))
+        assertNotNull(reservablesRepo.findByIdentity(ridA))
+        assertNull(reservablesRepo.findByIdentity(ridB))
     }
 
     @Test
     fun `runJoiner links reservables to POIs via the adapter`() {
         // Pre-populate one reservable + one POI; the fake joiner reports
         // the pair. Orchestrator turns that into a reservable_pois row.
-        val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
+        val identity = ReservableId(ReservableType.SITE, "recgov", "330257")
         val reservableId =
-            reservablesRepo.upsert(ReservableRepo.Input(rid = rid, name = "FS1-20", loop = null, siteType = null, raw = null))
+            reservablesRepo.upsert(ReservableRepo.Input(identity = identity, name = "FS1-20", loop = null, siteType = null, raw = null))
         val poiId = insertCampgroundPoi(source = "fake-cg", sourceId = "232447", name = "Upper Pines")
 
         val fakeJoiner =
@@ -162,9 +162,9 @@ class SectionDispatchTest : SharedDbTest() {
 
     @Test
     fun `runJoiner is idempotent — re-running creates no duplicate links`() {
-        val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
+        val identity = ReservableId(ReservableType.SITE, "recgov", "330257")
         val reservableId =
-            reservablesRepo.upsert(ReservableRepo.Input(rid = rid, name = "FS1-20", loop = null, siteType = null, raw = null))
+            reservablesRepo.upsert(ReservableRepo.Input(identity = identity, name = "FS1-20", loop = null, siteType = null, raw = null))
         val poiId = insertCampgroundPoi(source = "fake-cg", sourceId = "232447", name = "Upper Pines")
 
         val fakeJoiner =

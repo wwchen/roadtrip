@@ -251,10 +251,10 @@ internal class AvailabilityPollExecutor(
         runId: Long,
     ): List<CellTransition> {
         val batch = result.batch ?: return emptyList()
-        val idByRid = result.reservables.associateBy({ it.rid.encode() }, { it.id })
+        val idByWireId = result.reservables.associateBy({ it.id.toString() }, { it.id })
         val observations =
             batch.observations.mapNotNull { obs ->
-                val dbId = idByRid[obs.reservableId] ?: return@mapNotNull null
+                val dbId = idByWireId[obs.reservableId] ?: return@mapNotNull null
                 AvailabilityRepo.Observation(
                     reservableId = dbId,
                     targetDate = obs.date,

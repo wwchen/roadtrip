@@ -20,7 +20,7 @@ import kotlinx.serialization.json.put
  * site. The [ReserveAmericaPoiReservableJoiner] links them to POIs.
  *
  * `vendor` is per-tenant (`reserveamerica_ny`) — mandated by the availability
- * adapter's `rid()`; `vendor_id` is the scraped `siteId`, so catalog rows bind
+ * adapter's `identity()`; `vendor_id` is the scraped `siteId`, so catalog rows bind
  * to availability by construction. `loop`/`site_type` are null: the calendar's
  * loopName is a pagination bucket, not a real loop.
  */
@@ -58,7 +58,7 @@ class ReserveAmericaSitesEtl(
                 .distinctBy { it.siteId }
                 .map { site ->
                     ReservableRepo.Input(
-                        rid = ReservableId(ReservableType.SITE, vendor, site.siteId),
+                        identity = ReservableId(ReservableType.SITE, vendor, site.siteId),
                         name = site.name,
                         loop = null,
                         siteType = null,

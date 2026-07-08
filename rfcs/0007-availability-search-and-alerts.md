@@ -675,8 +675,8 @@ upstream deeplink format, alert payload shape, and auto-book flow.
 URL pattern after this pivot:
 
 ```
-GET /api/reservable/{rid}                       info: name, vendor, type, parent POI, capabilities
-GET /api/reservable/{rid}/availability          per-time-unit status (day, hour, slot)
+GET /api/reservable/{id}                        info: name, vendor, type, parent POI, capabilities
+GET /api/reservable/{id}/availability           per-time-unit status (day, hour, slot)
 
 GET /api/poi/{poi_id}/reservables               list child reservables
 GET /api/poi/{poi_id}/reservables/availability  per-day rollup across children

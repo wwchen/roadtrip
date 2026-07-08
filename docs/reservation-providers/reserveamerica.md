@@ -41,7 +41,7 @@ instance (see `config/poi-registry.yaml`).
   `siteId` is the numeric id in the calendar's `campsiteDetails.do` href.
   `vendor` is **per-tenant** (`reserveamerica_abpp`, `reserveamerica_ny`), not a
   flat `reserveamerica` — this is mandated by the availability adapter's
-  `rid()`, and it makes `vendor_id == siteId` so catalog rows bind to
+  provider identity, and it makes `vendor_id == siteId` so catalog rows bind to
   availability observations directly.
 - The joiner (`ReserveAmericaPoiReservableJoiner`) links reservable → POI on the
   `(contract_code, park_id)` pair carried in `reservables.raw`

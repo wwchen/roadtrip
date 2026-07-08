@@ -250,10 +250,11 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
             recordObservation(reservableId, "2026-07-04", now.minusMinutes(3), available = false)
             recordObservation(reservableId, "2026-07-04", now.minusMinutes(2), available = true)
             recordObservation(reservableId, "2026-07-04", now.minusMinutes(1), available = true)
-            val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:330257")
+            val resp = client.get("/api/availability/snapshots/summary?reservable_id=$reservableId")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("site:recgov:330257", body["reservable_rid"]!!.jsonPrimitive.content)
+            assertEquals(reservableId.toString(), body["reservable_id"]!!.jsonPrimitive.content)
+            assertEquals(false, body.containsKey("reservable_rid"))
             val stats = body["stats"]!!.jsonArray
             assertEquals(1, stats.size)
             val row = stats[0].jsonObject
@@ -264,20 +265,20 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `GET snapshots summary requires rid`() =
+    fun `GET snapshots summary requires reservable id`() =
         testApplication {
             application { routing { availabilityDashboardRoutes(ctx) } }
             val resp = client.get("/api/availability/snapshots/summary")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("missing_reservable_rid", body["error"]!!.jsonPrimitive.content)
+            assertEquals("missing_reservable_id", body["error"]!!.jsonPrimitive.content)
         }
 
     @Test
-    fun `GET snapshots summary returns 404 on unknown rid`() =
+    fun `GET snapshots summary returns 404 on unknown reservable id`() =
         testApplication {
             application { routing { availabilityDashboardRoutes(ctx) } }
-            val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:999999")
+            val resp = client.get("/api/availability/snapshots/summary?reservable_id=999999")
             assertEquals(HttpStatusCode.NotFound, resp.status)
         }
 }

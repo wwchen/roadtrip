@@ -92,7 +92,7 @@ internal suspend fun fetchRecgovAvailabilityObservations(
 internal suspend fun fetchRecgovCatalogObservations(
     client: RecGovAvailabilityClient,
     recgovId: String,
-    campsiteIds: Set<String>,
+    catalogIdsByCampsiteId: Map<String, Long>,
     startDate: LocalDate,
     endDate: LocalDate,
 ): AvailabilityObservationBatch =
@@ -106,14 +106,17 @@ internal suspend fun fetchRecgovCatalogObservations(
                 .awaitAll()
 
         val merged = mergeCampsites(payloads)
-        val catalogSites = campsiteIds.associateWith { siteId -> merged[siteId].orEmpty() }
+        val catalogSites =
+            catalogIdsByCampsiteId.entries.associate { (siteId, catalogId) ->
+                catalogId.toString() to merged[siteId].orEmpty()
+            }
         val observedAtByDate = dates.associateWith { observedAt }
 
         AvailabilityObservationBatch(
             provider = "recgov",
             startDate = startDate,
             endDate = endDate,
-            observations = observationsFromCampsites(catalogSites, dates, observedAtByDate),
+            observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, reservableIdForSite = { it }),
             seasonBlock = inferReopenDate(catalogSites, startDate),
             cacheBlock = directFetchCacheBlock(),
             campgroundId = recgovId,
@@ -184,11 +187,12 @@ private fun observationsFromCampsites(
     merged: Map<String, Map<String, String>>,
     dates: List<LocalDate>,
     observedAtByDate: Map<LocalDate, Instant>,
+    reservableIdForSite: (String) -> String = ::recgovReservableId,
 ): List<ReservableDayObservation> =
     merged.flatMap { (siteId, byDate) ->
         dates.map { date ->
             ReservableDayObservation(
-                reservableId = recgovReservableId(siteId),
+                reservableId = reservableIdForSite(siteId),
                 date = date,
                 observedAt = observedAtByDate[date] ?: Instant.EPOCH,
                 status = classifyRecgovStatus(byDate[date.toString()]),

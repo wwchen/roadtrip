@@ -2,13 +2,13 @@
 //
 //   GET /api/poi/{id}/reservables[?type=site]
 //     → { poi_id, type, reservables:
-//         [{rid, reservation_url_template, poi_ids, name, …}, …] }
+//         [{id, reservation_url_template, poi_ids, name, …}, …] }
 //
-//   GET /api/reservable/{rid}
-//     → { reservable: {rid, poi_ids, name, loop, raw, …}, poi_ids: [123, 456] }
+//   GET /api/reservable/{id}
+//     → { reservable: {id, poi_ids, name, loop, raw, …}, poi_ids: [123, 456] }
 //
 //   GET /api/reservables
-//     → { total, limit, offset, reservables: [{rid, poi_ids, name, loop, …}, …] }
+//     → { total, limit, offset, reservables: [{id, poi_ids, name, loop, …}, …] }
 //
 // Catalog routes are cheap (no upstream roundtrip).
 
@@ -59,12 +59,12 @@ export function poiReservablesUrl(poiId, { type, siteType } = {}) {
 }
 
 /**
- * Fetch a single reservable by its composite id (e.g. site:recgov:330257).
+ * Fetch a single reservable by its catalog id.
  *
- * @param {string}      rid    Composite reservable id.
+ * @param {number|string} id   reservables.id
  * @param {object}      [opts]
  * @param {AbortSignal} [opts.signal]
  */
-export function fetchReservable(rid, { signal } = {}) {
-  return jsonGetOk(`/api/reservable/${encodeURIComponent(rid)}`, { signal });
+export function fetchReservable(id, { signal } = {}) {
+  return jsonGetOk(`/api/reservable/${encodeURIComponent(id)}`, { signal });
 }

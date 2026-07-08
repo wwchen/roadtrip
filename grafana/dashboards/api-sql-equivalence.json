@@ -188,7 +188,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  s.run_id,\n  s.target_date,\n  lag(s.last_observed_at) OVER (PARTITION BY s.reservable_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from,\n  s.last_observed_at AS observed_at,\n  s.status,\n  (s.status = 'available') AS available\nFROM availability s\nJOIN reservables r ON r.id = s.reservable_id\nWHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\nORDER BY s.target_date DESC, s.last_observed_at DESC, s.id DESC\nLIMIT 200;",
+          "rawSql": "SELECT\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_id,\n  s.run_id,\n  s.target_date,\n  lag(s.last_observed_at) OVER (PARTITION BY s.reservable_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from,\n  s.last_observed_at AS observed_at,\n  s.status,\n  (s.status = 'available') AS available\nFROM availability s\nJOIN reservables r ON r.id = s.reservable_id\nWHERE ${reservable_id:sqlstring} ~ '^[0-9]+$' AND r.id::text = ${reservable_id:sqlstring}\nORDER BY s.target_date DESC, s.last_observed_at DESC, s.id DESC\nLIMIT 200;",
           "refId": "A"
         }
       ],
@@ -223,7 +223,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_rid,\n  s.run_id,\n  s.target_date,\n  lag(s.last_observed_at) OVER (PARTITION BY s.reservable_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from,\n  s.last_observed_at AS observed_at,\n  s.status,\n  (s.status = 'available') AS available\nFROM availability s\nLEFT JOIN reservables r ON r.id = s.reservable_id\nWHERE ${run_id:sqlstring} <> ''\n  AND s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.target_date ASC\nLIMIT 500;",
+          "rawSql": "SELECT\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS reservable_id,\n  s.run_id,\n  s.target_date,\n  lag(s.last_observed_at) OVER (PARTITION BY s.reservable_id, s.target_date ORDER BY s.last_observed_at, s.id) AS observed_from,\n  s.last_observed_at AS observed_at,\n  s.status,\n  (s.status = 'available') AS available\nFROM availability s\nLEFT JOIN reservables r ON r.id = s.reservable_id\nWHERE ${run_id:sqlstring} <> ''\n  AND s.run_id = NULLIF(${run_id:sqlstring}, '')::bigint\nORDER BY s.target_date ASC\nLIMIT 500;",
           "refId": "A"
         }
       ],
@@ -258,7 +258,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH scoped AS (\n  SELECT\n    s.id,\n    s.target_date,\n    s.last_observed_at,\n    s.status,\n    lag(s.last_observed_at) OVER (\n      PARTITION BY s.target_date\n      ORDER BY s.last_observed_at, s.id\n    ) AS observed_from\n  FROM availability s\n  JOIN reservables r ON r.id = s.reservable_id\n  WHERE r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\n    AND s.last_observed_at >= now() - (${window_hours:sqlstring} || ' hours')::interval\n)\nSELECT\n  target_date,\n  count(*) AS total_runs,\n  max(last_observed_at) FILTER (WHERE status = 'available') AS last_open_at,\n  (array_agg((status = 'available') ORDER BY last_observed_at DESC, id DESC))[1] AS is_currently_open,\n  (array_agg(extract(epoch from (last_observed_at - coalesce(observed_from, last_observed_at))) ORDER BY last_observed_at DESC, id DESC) FILTER (WHERE status = 'available'))[1] AS current_or_last_open_window_sec,\n  percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch from (last_observed_at - coalesce(observed_from, last_observed_at)))) FILTER (WHERE status = 'available') AS median_open_window_sec,\n  count(*) FILTER (\n    WHERE status = 'available'\n      AND coalesce(observed_from, last_observed_at) >= now() - interval '24 hours'\n  ) AS opens_last_24h\nFROM scoped\nGROUP BY target_date\nORDER BY target_date ASC;",
+          "rawSql": "WITH scoped AS (\n  SELECT\n    s.id,\n    s.target_date,\n    s.last_observed_at,\n    s.status,\n    lag(s.last_observed_at) OVER (\n      PARTITION BY s.target_date\n      ORDER BY s.last_observed_at, s.id\n    ) AS observed_from\n  FROM availability s\n  JOIN reservables r ON r.id = s.reservable_id\n  WHERE ${reservable_id:sqlstring} ~ '^[0-9]+$' AND r.id::text = ${reservable_id:sqlstring}\n    AND s.last_observed_at >= now() - (${window_hours:sqlstring} || ' hours')::interval\n)\nSELECT\n  target_date,\n  count(*) AS total_runs,\n  max(last_observed_at) FILTER (WHERE status = 'available') AS last_open_at,\n  (array_agg((status = 'available') ORDER BY last_observed_at DESC, id DESC))[1] AS is_currently_open,\n  (array_agg(extract(epoch from (last_observed_at - coalesce(observed_from, last_observed_at))) ORDER BY last_observed_at DESC, id DESC) FILTER (WHERE status = 'available'))[1] AS current_or_last_open_window_sec,\n  percentile_cont(0.5) WITHIN GROUP (ORDER BY extract(epoch from (last_observed_at - coalesce(observed_from, last_observed_at)))) FILTER (WHERE status = 'available') AS median_open_window_sec,\n  count(*) FILTER (\n    WHERE status = 'available'\n      AND coalesce(observed_from, last_observed_at) >= now() - interval '24 hours'\n  ) AS opens_last_24h\nFROM scoped\nGROUP BY target_date\nORDER BY target_date ASC;",
           "refId": "A"
         }
       ],
@@ -293,7 +293,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  r.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,\n  r.type,\n  r.vendor,\n  r.vendor_id,\n  r.name,\n  r.loop,\n  r.site_type,\n  array_remove(array_agg(p.id ORDER BY p.id), NULL) AS poi_ids,\n  r.tags,\n  r.raw\nFROM reservables r\nLEFT JOIN reservable_pois rp ON rp.reservable_id = r.id\nLEFT JOIN pois p ON p.id = rp.poi_id AND p.deleted_at IS NULL\nWHERE r.deleted_at IS NULL\n  AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor = ${vendor:sqlstring})\n  AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type = ${site_type:sqlstring})\n  AND (${name:sqlstring} = '' OR r.name = ${name:sqlstring})\nGROUP BY r.id\nORDER BY r.type ASC, r.vendor ASC, r.vendor_id ASC\nLIMIT 100;",
+          "rawSql": "SELECT\n  r.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS provider_key,\n  r.type,\n  r.vendor,\n  r.vendor_id,\n  r.name,\n  r.loop,\n  r.site_type,\n  array_remove(array_agg(p.id ORDER BY p.id), NULL) AS poi_ids,\n  r.tags,\n  r.raw\nFROM reservables r\nLEFT JOIN reservable_pois rp ON rp.reservable_id = r.id\nLEFT JOIN pois p ON p.id = rp.poi_id AND p.deleted_at IS NULL\nWHERE r.deleted_at IS NULL\n  AND (${vendor:sqlstring} IN ('', '__all') OR r.vendor = ${vendor:sqlstring})\n  AND (${site_type:sqlstring} IN ('', '__all') OR r.site_type = ${site_type:sqlstring})\n  AND (${name:sqlstring} = '' OR r.name = ${name:sqlstring})\nGROUP BY r.id\nORDER BY r.type ASC, r.vendor ASC, r.vendor_id ASC\nLIMIT 100;",
           "refId": "A"
         }
       ],
@@ -328,11 +328,11 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  r.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS rid,\n  r.type,\n  r.vendor,\n  r.vendor_id,\n  r.name,\n  r.loop,\n  r.site_type,\n  array_remove(array_agg(p.id ORDER BY p.id), NULL) AS poi_ids,\n  r.provider_ref,\n  r.tags,\n  r.raw\nFROM reservables r\nLEFT JOIN reservable_pois rp ON rp.reservable_id = r.id\nLEFT JOIN pois p ON p.id = rp.poi_id AND p.deleted_at IS NULL\nWHERE r.deleted_at IS NULL\n  AND r.type || ':' || r.vendor || ':' || r.vendor_id = ${reservable_rid:sqlstring}\nGROUP BY r.id;",
+          "rawSql": "SELECT\n  r.id,\n  r.type || ':' || r.vendor || ':' || r.vendor_id AS provider_key,\n  r.type,\n  r.vendor,\n  r.vendor_id,\n  r.name,\n  r.loop,\n  r.site_type,\n  array_remove(array_agg(p.id ORDER BY p.id), NULL) AS poi_ids,\n  r.provider_ref,\n  r.tags,\n  r.raw\nFROM reservables r\nLEFT JOIN reservable_pois rp ON rp.reservable_id = r.id\nLEFT JOIN pois p ON p.id = rp.poi_id AND p.deleted_at IS NULL\nWHERE r.deleted_at IS NULL\n  AND r.id::text = ${reservable_id:sqlstring}\nGROUP BY r.id;",
           "refId": "A"
         }
       ],
-      "title": "/api/reservable/{rid}",
+      "title": "/api/reservable/{id}",
       "type": "table"
     },
     {
@@ -445,8 +445,8 @@
           "uid": "roadtrip-postgres"
         },
         "includeAll": true,
-        "name": "reservable_rid",
-        "query": "SELECT type || ':' || vendor || ':' || vendor_id AS __text, type || ':' || vendor || ':' || vendor_id AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
+        "name": "reservable_id",
+        "query": "SELECT id::text || ' - ' || coalesce(name, 'unnamed') || ' [' || type || ':' || vendor || ':' || vendor_id || ']' AS __text, id::text AS __value FROM reservables WHERE deleted_at IS NULL ORDER BY type ASC, vendor ASC, vendor_id ASC LIMIT 1000",
         "refresh": 1,
         "type": "query"
       },

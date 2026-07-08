@@ -106,7 +106,7 @@ class ReserveCaliforniaEtlTest : SharedDbTest() {
         reservablesRepo.linkToPois(links.map { ReservableRepo.LinkInput(it.reservableId, it.poiId) })
 
         val site =
-            reservablesRepo.findByRid(
+            reservablesRepo.findByIdentity(
                 ReservableId(ReservableType.SITE, "reservecalifornia", "43793"),
             )!!
         assertEquals("Campsite #W079", site.name)
@@ -117,7 +117,7 @@ class ReserveCaliforniaEtlTest : SharedDbTest() {
         assertEquals("612", raw["_parent_facility_id"]!!.jsonPrimitive.content)
 
         val linked = reservablesRepo.findByPoi(1, ReservableType.SITE)
-        assertEquals(listOf("site:reservecalifornia:43793"), linked.map { it.rid.encode() })
+        assertEquals(listOf("site:reservecalifornia:43793"), linked.map { it.identity.encode() })
     }
 
     private fun copyFixtureTo(

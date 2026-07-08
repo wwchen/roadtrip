@@ -91,7 +91,7 @@ class AspiraReservationProvider(
         val targets =
             reservables.map {
                 AspiraCatalogReservable(
-                    rid = it.rid,
+                    catalogId = it.catalogId.toString(),
                     resourceId = it.vendorId,
                     mapId = it.mapId?.let(::mapIdOrThrow),
                     resourceLocationId = it.resourceLocationId?.let { value -> intOrThrow("resourceLocationId", value) },

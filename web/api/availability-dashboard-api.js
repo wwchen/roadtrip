@@ -43,8 +43,8 @@ export function listRuns({ status, pollerId, since, limit, signal } = {}) {
   return jsonGetOk(`/api/availability/runs${suffix}`, { signal });
 }
 
-export function listSnapshotsForReservable(reservableRid, { limit, signal } = {}) {
-  const qs = new URLSearchParams({ reservable_rid: String(reservableRid) });
+export function listSnapshotsForReservable(reservableId, { limit, signal } = {}) {
+  const qs = new URLSearchParams({ reservable_id: String(reservableId) });
   if (limit != null) qs.set('limit', limit);
   return jsonGetOk(`/api/availability/snapshots?${qs}`, { signal });
 }
@@ -55,8 +55,8 @@ export function listSnapshotsForRun(runId, { limit, signal } = {}) {
   return jsonGetOk(`/api/availability/snapshots?${qs}`, { signal });
 }
 
-export function getSnapshotsSummary(reservableRid, { dates, signal } = {}) {
-  const qs = new URLSearchParams({ reservable_rid: String(reservableRid) });
+export function getSnapshotsSummary(reservableId, { dates, signal } = {}) {
+  const qs = new URLSearchParams({ reservable_id: String(reservableId) });
   if (Array.isArray(dates) && dates.length > 0) qs.set('dates', dates.join(','));
   return jsonGetOk(`/api/availability/snapshots/summary?${qs}`, { signal });
 }

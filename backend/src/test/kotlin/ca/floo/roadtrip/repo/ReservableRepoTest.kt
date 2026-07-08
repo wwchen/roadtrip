@@ -13,7 +13,7 @@ import kotlin.test.assertNull
 /**
  * DB-backed tests for the reservables catalog. Asserts:
  *   - upsert is idempotent (same composite identity → same row, fields refreshed)
- *   - findByRid round-trips a row inserted via upsert
+ *   - findByIdentity round-trips a row inserted via upsert
  *   - findByPoi joins through the N:M link table and filters by type
  *   - countByPoi mirrors findByPoi but returns just the count
  *   - runImport sweeps missing reservables and resurrects rows that reappear
@@ -37,14 +37,14 @@ class ReservableRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `upsert + findByRid round-trips`() {
-        val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
+    fun `upsert + findByIdentity round-trips`() {
+        val identity = ReservableId(ReservableType.SITE, "recgov", "330257")
         val rawJson = Json.parseToJsonElement("""{"campsite_id":"330257","loop":"AREA WHITE RIVER"}""")
         val providerRefJson = Json.parseToJsonElement("""{"mapId":-2147483615,"resourceLocationId":-2147483624}""")
         val id =
             repo.upsert(
                 ReservableRepo.Input(
-                    rid = rid,
+                    identity = identity,
                     name = "FS1-20",
                     loop = "AREA WHITE RIVER",
                     siteType = "STANDARD NONELECTRIC",
@@ -53,10 +53,10 @@ class ReservableRepoTest : SharedDbTest() {
                 ),
             )
 
-        val found = repo.findByRid(rid)
+        val found = repo.findByIdentity(identity)
         assertNotNull(found)
         assertEquals(id, found.id)
-        assertEquals(rid, found.rid)
+        assertEquals(identity, found.identity)
         assertEquals("FS1-20", found.name)
         assertEquals("AREA WHITE RIVER", found.loop)
         assertEquals("STANDARD NONELECTRIC", found.siteType)
@@ -66,12 +66,12 @@ class ReservableRepoTest : SharedDbTest() {
 
     @Test
     fun `upsert is idempotent and refreshes mutable fields`() {
-        val rid = ReservableId(ReservableType.SITE, "recgov", "330257")
-        val firstId = repo.upsert(ReservableRepo.Input(rid, "FS1-20", "loop A", "STANDARD", null))
-        val secondId = repo.upsert(ReservableRepo.Input(rid, "FS1-20-renamed", "loop A", "TENT ONLY", null))
+        val identity = ReservableId(ReservableType.SITE, "recgov", "330257")
+        val firstId = repo.upsert(ReservableRepo.Input(identity, "FS1-20", "loop A", "STANDARD", null))
+        val secondId = repo.upsert(ReservableRepo.Input(identity, "FS1-20-renamed", "loop A", "TENT ONLY", null))
 
         assertEquals(firstId, secondId, "upsert on same composite must reuse the row")
-        val found = repo.findByRid(rid)!!
+        val found = repo.findByIdentity(identity)!!
         assertEquals("FS1-20-renamed", found.name)
         assertEquals("TENT ONLY", found.siteType)
     }
@@ -86,13 +86,13 @@ class ReservableRepoTest : SharedDbTest() {
         val first = repo.runImport("federal-campsites", listOf(inputA, inputB))
         assertEquals(2, first.seenCount)
         assertEquals(0, first.sweptCount)
-        assertNotNull(repo.findByRid(ridB))
+        assertNotNull(repo.findByIdentity(ridB))
 
         val second = repo.runImport("federal-campsites", listOf(inputA.copy(name = "A1-renamed")))
         assertEquals(1, second.seenCount)
         assertEquals(1, second.sweptCount)
-        assertEquals("A1-renamed", repo.findByRid(ridA)!!.name)
-        assertNull(repo.findByRid(ridB))
+        assertEquals("A1-renamed", repo.findByIdentity(ridA)!!.name)
+        assertNull(repo.findByIdentity(ridB))
 
         val deletedCount =
             ctx
@@ -106,13 +106,13 @@ class ReservableRepoTest : SharedDbTest() {
         val third = repo.runImport("federal-campsites", listOf(inputA, inputB.copy(name = "B1-back")))
         assertEquals(2, third.seenCount)
         assertEquals(0, third.sweptCount)
-        assertEquals("B1-back", repo.findByRid(ridB)!!.name)
+        assertEquals("B1-back", repo.findByIdentity(ridB)!!.name)
     }
 
     @Test
-    fun `findByRid returns null for unknown composite`() {
-        val rid = ReservableId(ReservableType.SITE, "recgov", "999999")
-        assertNull(repo.findByRid(rid))
+    fun `findByIdentity returns null for unknown composite`() {
+        val identity = ReservableId(ReservableType.SITE, "recgov", "999999")
+        assertNull(repo.findByIdentity(identity))
     }
 
     @Test
@@ -120,8 +120,8 @@ class ReservableRepoTest : SharedDbTest() {
         val poiId = insertCampgroundPoi("Upper Pines")
         val ridA = ReservableId(ReservableType.SITE, "recgov", "1001")
         val ridB = ReservableId(ReservableType.SITE, "recgov", "1002")
-        val a = repo.upsert(ReservableRepo.Input(rid = ridA, name = "A1", loop = null, siteType = null, raw = null))
-        val b = repo.upsert(ReservableRepo.Input(rid = ridB, name = "B1", loop = null, siteType = null, raw = null))
+        val a = repo.upsert(ReservableRepo.Input(identity = ridA, name = "A1", loop = null, siteType = null, raw = null))
+        val b = repo.upsert(ReservableRepo.Input(identity = ridB, name = "B1", loop = null, siteType = null, raw = null))
         repo.linkToPoi(a, poiId)
         repo.linkToPoi(b, poiId)
 
@@ -134,8 +134,8 @@ class ReservableRepoTest : SharedDbTest() {
         val poiId = insertCampgroundPoi("Upper Pines")
         val ridA = ReservableId(ReservableType.SITE, "recgov", "3001")
         val ridB = ReservableId(ReservableType.SITE, "recgov", "3002")
-        val a = repo.upsert(ReservableRepo.Input(rid = ridA, name = "A1", loop = null, siteType = null, raw = null))
-        val b = repo.upsert(ReservableRepo.Input(rid = ridB, name = "B1", loop = null, siteType = null, raw = null))
+        val a = repo.upsert(ReservableRepo.Input(identity = ridA, name = "A1", loop = null, siteType = null, raw = null))
+        val b = repo.upsert(ReservableRepo.Input(identity = ridB, name = "B1", loop = null, siteType = null, raw = null))
         repo.linkToPoi(a, poiId)
         repo.linkToPoi(b, poiId)
 
@@ -155,8 +155,8 @@ class ReservableRepoTest : SharedDbTest() {
     fun `countByPoi matches findByPoi size`() {
         val poiId = insertCampgroundPoi("Lower Pines")
         repeat(3) { i ->
-            val rid = ReservableId(ReservableType.SITE, "recgov", "200$i")
-            val id = repo.upsert(ReservableRepo.Input(rid, "site$i", null, null, null))
+            val identity = ReservableId(ReservableType.SITE, "recgov", "200$i")
+            val id = repo.upsert(ReservableRepo.Input(identity, "site$i", null, null, null))
             repo.linkToPoi(id, poiId)
         }
         assertEquals(3, repo.countByPoi(poiId, ReservableType.SITE))
@@ -165,8 +165,8 @@ class ReservableRepoTest : SharedDbTest() {
     @Test
     fun `linkToPoi is idempotent`() {
         val poiId = insertCampgroundPoi("Test CG")
-        val rid = ReservableId(ReservableType.SITE, "recgov", "5000")
-        val id = repo.upsert(ReservableRepo.Input(rid, "S1", null, null, null))
+        val identity = ReservableId(ReservableType.SITE, "recgov", "5000")
+        val id = repo.upsert(ReservableRepo.Input(identity, "S1", null, null, null))
         assertEquals(1, repo.linkToPoi(id, poiId))
         assertEquals(0, repo.linkToPoi(id, poiId)) // second link is a no-op via ON CONFLICT DO NOTHING
 
@@ -177,8 +177,8 @@ class ReservableRepoTest : SharedDbTest() {
     fun `linkToPois batches inserts and returns only new links`() {
         val campground = insertCampgroundPoi("Test CG")
         val park = insertCampgroundPoi("Test Park")
-        val rid = ReservableId(ReservableType.SITE, "recgov", "5002")
-        val id = repo.upsert(ReservableRepo.Input(rid, "S1", null, null, null))
+        val identity = ReservableId(ReservableType.SITE, "recgov", "5002")
+        val id = repo.upsert(ReservableRepo.Input(identity, "S1", null, null, null))
 
         val inserted =
             repo.linkToPois(
@@ -197,15 +197,15 @@ class ReservableRepoTest : SharedDbTest() {
     @Test
     fun `unlinkFromPoi removes the link only`() {
         val poiId = insertCampgroundPoi("Test CG")
-        val rid = ReservableId(ReservableType.SITE, "recgov", "5001")
-        val id = repo.upsert(ReservableRepo.Input(rid, "S1", null, null, null))
+        val identity = ReservableId(ReservableType.SITE, "recgov", "5001")
+        val id = repo.upsert(ReservableRepo.Input(identity, "S1", null, null, null))
         repo.linkToPoi(id, poiId)
         assertEquals(1, repo.countByPoi(poiId, ReservableType.SITE))
 
         repo.unlinkFromPoi(id, poiId)
         assertEquals(0, repo.countByPoi(poiId, ReservableType.SITE))
         // The reservable row itself stays — the link is what we removed.
-        assertNotNull(repo.findByRid(rid))
+        assertNotNull(repo.findByIdentity(identity))
     }
 
     @Test
@@ -215,8 +215,8 @@ class ReservableRepoTest : SharedDbTest() {
         // already supports the relationship; this test pins the behavior.
         val campgroundPoi = insertCampgroundPoi("Upper Pines")
         val parkPoi = insertCampgroundPoi("Yosemite NP")
-        val rid = ReservableId(ReservableType.SITE, "recgov", "7000")
-        val id = repo.upsert(ReservableRepo.Input(rid, "A1", null, null, null))
+        val identity = ReservableId(ReservableType.SITE, "recgov", "7000")
+        val id = repo.upsert(ReservableRepo.Input(identity, "A1", null, null, null))
 
         repo.linkToPoi(id, campgroundPoi)
         repo.linkToPoi(id, parkPoi)

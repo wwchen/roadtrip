@@ -8,16 +8,16 @@ import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 
 /**
- * Resolves a reservable (by rid, or from an already-loaded [Reservable]) to the
+ * Resolves a reservable (by identity, or from an already-loaded [Reservable]) to the
  * provider adapter, parent provider ref, and date context needed to fetch its
  * availability. A port so the request path can be unit-tested with an in-memory
  * fake; [DbAvailabilityTargetResolver] is the production, DB-backed implementation.
  */
 internal interface AvailabilityTargetResolver {
-    /** Resolve by rid, throwing [AvailabilityServiceError.NotFound] when the
+    /** Resolve by identity, throwing [AvailabilityServiceError.NotFound] when the
      *  reservable is unknown and [AvailabilityServiceError.UnknownCampground]
      *  when it has no resolvable reservation provider. */
-    fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget
+    fun requireByIdentity(identity: ReservableId): ResolvedAvailabilityTarget
 
     /** Resolve an already-loaded reservable, or null when it has no resolvable
      *  reservation provider. */
@@ -30,9 +30,9 @@ internal class DbAvailabilityTargetResolver(
     private val reservationProviders: ReservationProviderRegistry,
     private val dateResolver: AvailabilityDateResolver,
 ) : AvailabilityTargetResolver {
-    override fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget {
+    override fun requireByIdentity(identity: ReservableId): ResolvedAvailabilityTarget {
         val reservable =
-            reservablesRepo.findByRid(rid)
+            reservablesRepo.findByIdentity(identity)
                 ?: throw AvailabilityServiceError.NotFound
         return resolve(reservable)
             ?: throw AvailabilityServiceError.UnknownCampground

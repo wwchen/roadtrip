@@ -413,7 +413,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val observations =
                 reservables.map { reservable ->
                     ReservableDayObservation(
-                        reservableId = reservable.rid,
+                        reservableId = reservable.catalogId.toString(),
                         date = observationDate ?: startDate,
                         observedAt = observedAt,
                         status = status,
@@ -436,7 +436,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         override fun bookingUrlTemplate(
             reservable: Reservable,
             parentRef: ProviderRef,
-        ): String = "https://example.test/book/${reservable.rid.vendorId}?d=${BookingUrlTemplate.START_DATE}"
+        ): String = "https://example.test/book/${reservable.identity.vendorId}?d=${BookingUrlTemplate.START_DATE}"
     }
 
     private class RateLimitedProvider : ReservationProvider {
