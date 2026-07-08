@@ -209,10 +209,6 @@ function promoteCanonicalCampgroundFields(flat, p, raw) {
   flat.description = firstText(
     p.description,
     raw.description,
-    raw.long_description,
-    raw.medium_description,
-    raw.short_description,
-    raw.status_description,
   );
   flat.photo_url = firstText(p.photo_url, campgroundPhotoUrl(raw.photos));
   flat.agency = firstText(p.agency, management.agency_name, management.agency, management.name);
@@ -220,7 +216,7 @@ function promoteCanonicalCampgroundFields(flat, p, raw) {
   flat.email = firstText(p.email, contact.email, contact.primary_email);
   flat.reserve_url = firstText(p.reserve_url, raw.reservation_url);
   flat.status = firstText(p.status, raw.status, flat.status);
-  flat.status_description = firstText(p.status_description, raw.status_description, flat.status_description);
+  flat.status_description = firstText(p.status_description, flat.status_description);
   flat.kind = firstText(p.kind, raw.kind, flat.kind);
   flat.price = p.price ?? raw.price ?? flat.price;
   flat.schedule = p.schedule ?? raw.default_campsite_schedule ?? flat.schedule;

@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { flattenHydratedPoi } from './core.js';
 import {
+  campgroundParentParkName,
   cellCoveragePillsHTML,
   parseAmenities,
   parseCellCoverage,
@@ -33,8 +34,10 @@ const campflareDetail = {
       directions: 'From Truckee, take Highway 89 north approximately 20 miles.',
     },
     raw: {
+      long_description: 'Cold Creek Campground is located on Highway 89.\n\nLake Tahoe is only 35 minutes away.',
       reservation_url: 'https://www.recreation.gov/camping/campgrounds/232869',
       status: 'open',
+      status_description: 'Open May through October',
       kind: 'campground',
       location: {
         elevation: 6200,
@@ -133,6 +136,31 @@ test('campground drawer helpers accept canonical amenities and cell service', ()
   assert.deepEqual(parseCellCoverage(p), { verizon: 0, tmobile: 2.5 });
   assert.match(cellCoveragePillsHTML(parseCellCoverage(p)), /T-Mobile/);
   assert.match(reserveButtonHTML(p, 'cg-btn'), /View on recreation\.gov/);
+});
+
+test('campgroundParentParkName derives specific parent park labels from links', () => {
+  assert.equal(campgroundParentParkName({
+    name: 'Cranberry Lake Campground',
+    links: [
+      { title: 'Deception Pass State Park', url: 'https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park' },
+      { title: 'Washington State Parks Reservations', url: 'https://parks.wa.gov/passes-permits/reservations' },
+    ],
+  }), 'Deception Pass State Park');
+
+  assert.equal(campgroundParentParkName({
+    name: 'Cold Creek',
+    links: [
+      { title: 'Official page', url: 'https://example.test/cold-creek' },
+      { title: 'Map', url: 'https://example.test/cold-creek-map' },
+    ],
+  }), '');
+
+  assert.equal(campgroundParentParkName({
+    name: 'Deception Pass State Park',
+    links: [
+      { title: 'Deception Pass State Park', url: 'https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park' },
+    ],
+  }), '');
 });
 
 test('structuredCampgroundDetailsHTML renders Campflare campground fields', () => {
