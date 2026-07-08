@@ -28,7 +28,7 @@ DEFAULT_CHUNK_SIZE = 5_000
 AUTH_HEADER = "Authorization"
 REDACTED = "<redacted>"
 TOKEN_ENV_NAMES = ("CAMPFLARE_API_KEY", "CAMPFLARE_TOKEN")
-DEFAULT_ENV_FILES = (Path(".env"), Path("/tmp/campflare"))
+DEFAULT_ENV_FILES = (Path(".env"),)
 
 
 def resolve_api_key(environ: dict[str, str] | None = None, env_files=DEFAULT_ENV_FILES) -> str:
@@ -51,7 +51,7 @@ def resolve_api_key(environ: dict[str, str] | None = None, env_files=DEFAULT_ENV
             if key.strip() in TOKEN_ENV_NAMES and value.strip():
                 return value.strip().strip("\"'")
 
-    raise RuntimeError("missing CAMPFLARE_API_KEY; set it in the environment, .env, or /tmp/campflare")
+    raise RuntimeError("missing CAMPFLARE_API_KEY; set it in the environment or .env")
 
 
 def http_get_bytes(url: str, headers: dict[str, str], timeout: int = 300) -> tuple[int, dict[str, str], bytes]:

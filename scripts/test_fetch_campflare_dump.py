@@ -61,6 +61,10 @@ class FetchCampflareDumpTest(unittest.TestCase):
             token = fetcher.resolve_api_key({"CAMPFLARE_API_KEY": "from-env"}, [env_file])
             self.assertEqual("from-env", token)
 
+    def test_default_token_files_are_limited_to_dotenv(self):
+        fetcher = load_fetcher()
+        self.assertEqual((Path(".env"),), fetcher.DEFAULT_ENV_FILES)
+
 
 if __name__ == "__main__":
     unittest.main()
