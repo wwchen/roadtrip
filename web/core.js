@@ -158,11 +158,12 @@ export function flattenHydratedPoi(f) {
   // category that surfaces an address — popups read them directly.
   const addr = p.address || {};
   const nestedAddr = addr.address && typeof addr.address === 'object' ? addr.address : {};
-  flat.street = firstText(addr.street, addr.address_line, nestedAddr.street, nestedAddr.address_line);
+  flat.full_address = firstText(addr.full, nestedAddr.full, flat.full_address);
+  flat.street = firstText(addr.street, addr.street1, addr.address_line, nestedAddr.street, nestedAddr.street1, nestedAddr.address_line);
   flat.city = firstText(addr.city, nestedAddr.city);
   flat.state = firstText(addr.state, addr.state_code, nestedAddr.state, nestedAddr.state_code, p.region);
   flat.country = firstText(p.country, addr.country, addr.country_code, nestedAddr.country, nestedAddr.country_code, flat.country);
-  flat.postcode = firstText(addr.postcode, addr.postal_code, nestedAddr.postcode, nestedAddr.postal_code);
+  flat.postcode = firstText(addr.postcode, addr.postal_code, addr.zipcode, nestedAddr.postcode, nestedAddr.postal_code, nestedAddr.zipcode);
 
   // info_url is the BE's canonical "open this in upstream" link
   // (Tesla findus, planetfitness.com gym page, BC Parks page, …).
@@ -202,6 +203,7 @@ export function flattenHydratedPoi(f) {
 function promoteCanonicalCampgroundFields(flat, p, raw) {
   const management = raw.management && typeof raw.management === 'object' ? raw.management : {};
   const contact = raw.contact && typeof raw.contact === 'object' ? raw.contact : {};
+  const location = raw.location && typeof raw.location === 'object' ? raw.location : {};
   const metadata = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : {};
 
   flat.description = firstText(
@@ -215,12 +217,28 @@ function promoteCanonicalCampgroundFields(flat, p, raw) {
   flat.photo_url = firstText(p.photo_url, campgroundPhotoUrl(raw.photos));
   flat.agency = firstText(p.agency, management.agency_name, management.agency, management.name);
   flat.phone = firstText(p.phone, contact.primary_phone, contact.phone);
+  flat.email = firstText(p.email, contact.email, contact.primary_email);
   flat.reserve_url = firstText(p.reserve_url, raw.reservation_url);
+  flat.status = firstText(p.status, raw.status, flat.status);
+  flat.status_description = firstText(p.status_description, raw.status_description, flat.status_description);
+  flat.kind = firstText(p.kind, raw.kind, flat.kind);
+  flat.price = p.price ?? raw.price ?? flat.price;
+  flat.schedule = p.schedule ?? raw.default_campsite_schedule ?? flat.schedule;
+  flat.default_campsite_schedule = flat.schedule;
   flat.amenities = p.amenities ?? raw.amenities ?? flat.amenities;
   flat.cell_coverage = p.cell_coverage ?? raw.cell_service ?? flat.cell_coverage;
   flat.last_verified = firstText(p.last_verified, metadata.last_updated, raw.updated_at);
   flat.max_rv_length = p.max_rv_length ?? raw.max_rv_length ?? flat.max_rv_length;
   flat.max_trailer_length = p.max_trailer_length ?? raw.max_trailer_length ?? flat.max_trailer_length;
+  flat.has_pull_through_sites = p.has_pull_through_sites ?? raw.has_pull_through_sites ?? flat.has_pull_through_sites;
+  flat.big_rig_friendly = p.big_rig_friendly ?? raw.big_rig_friendly ?? flat.big_rig_friendly;
+  flat.elevation = p.elevation ?? location.elevation ?? flat.elevation;
+  flat.management = p.management ?? raw.management ?? flat.management;
+  flat.contact = p.contact ?? raw.contact ?? flat.contact;
+  flat.links = p.links ?? raw.links ?? flat.links;
+  flat.alerts = p.alerts ?? raw.alerts ?? flat.alerts;
+  flat.connections = p.connections ?? raw.connections ?? flat.connections;
+  flat.metadata = p.metadata ?? raw.metadata ?? flat.metadata;
 }
 
 function campgroundPhotoUrl(photos) {
