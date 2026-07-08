@@ -19,7 +19,6 @@
 - Do not solve cross-vendor campsite identity resolution in v1.
 - Use deterministic vendor refs only. If a source owns a row, that source writes the canonical row and its vendor refs.
 - V1 owning campground/site sources are Campflare for US coverage and Canada ETLs for Canadian coverage.
-- RID retirement is handled by [#391](https://github.com/wwchen/roadtrip/pull/391). Merge that first; this plan starts from #391's numeric reservable-id contract and only moves the backing catalog from generic `reservables` to canonical `campsites`.
 
 ## File Structure
 
@@ -67,10 +66,12 @@
   - Return new wrapper response shape.
 - `backend/src/main/kotlin/ca/floo/roadtrip/repo/OnRoutePoiRepo.kt`
   - Read on-route POIs through typed joins.
+- `backend/src/main/kotlin/ca/floo/roadtrip/routes/ReservableRoutes.kt`
+  - Deprecate old reservable routes or leave them disabled behind no-op responses after the frontend stops calling them.
 - `backend/src/main/kotlin/ca/floo/roadtrip/service/reservation/*`
-  - Resolve availability targets through `vendor_refs` and canonical campground/campsite rows.
+  - Resolve availability targets through `vendor_refs` instead of `ReservableId`.
 - `web/availability/*`
-  - After #391, rename numeric reservable-id UI fields to canonical campsite-id fields where endpoint and table semantics change.
+  - Replace `rid` usage with canonical numeric `campsite_id`.
 - `grafana/dashboards/catalog-explorer.json`
   - Replace old `pois` + `reservables` explorer SQL with canonical POI wrapper, campground, campsite, and vendor-ref joins.
 - `grafana/dashboards/poi-detail.json`
@@ -94,7 +95,7 @@
 - `grafana/dashboards/poller-detail.json` and `grafana/dashboards/poller-run-detail.json`
   - Rename linked target language from reservable to campsite and update detail links.
 - `scripts/test_grafana_canonical_catalog_dashboards.py`
-  - Regression test that dashboard SQL no longer depends on old catalog tables or old reservable dashboard links.
+  - Regression test that dashboard SQL no longer depends on old catalog tables or old RID dashboard links.
 
 ---
 
@@ -1826,11 +1827,13 @@ git commit -m "feat: serve pois from canonical wrapper joins"
 
 ---
 
-### Task 9: Add Canonical Campsite API on Top of #391 Numeric Identity
+### Task 9: Replace RID/Reservable Site API with Campsite IDs
 
 **Files:**
+- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/routes/ReservableRoutes.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/routes/CampsiteRoutes.kt`
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/models/api/CampsiteSchemas.kt`
+- Modify: `backend/src/test/kotlin/ca/floo/roadtrip/routes/ReservableRoutesTest.kt`
 - Create: `backend/src/test/kotlin/ca/floo/roadtrip/routes/CampsiteRoutesTest.kt`
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/RoadtripRuntime.kt`
 
@@ -1843,7 +1846,7 @@ Create `CampsiteRoutesTest.kt`:
 fun `GET campground campsites returns numeric campsite ids`() = testApplication {
     // Seed campground id=100 and two campsites id=201, id=202.
     // Call /api/campgrounds/100/campsites.
-    // Assert response uses campsite_id and reads from canonical campsites.
+    // Assert response uses campsite_id and does not include rid.
 }
 ```
 
@@ -1932,20 +1935,32 @@ campsiteRoutes(ctx)
 
 next to current API route registration.
 
-- [ ] **Step 6: Run route tests**
+- [ ] **Step 6: Keep old reservable route compatibility explicit**
+
+In `ReservableRoutes.kt`, return `410 Gone` for endpoints that the frontend no longer calls:
+
+```kotlin
+call.respondReservableError(
+    error = "reservables_deprecated",
+    status = HttpStatusCode.Gone,
+    detail = "Use /api/campgrounds/{campground_id}/campsites.",
+)
+```
+
+- [ ] **Step 7: Run route tests**
 
 Run:
 
 ```bash
-./gradlew --no-daemon test --tests ca.floo.roadtrip.routes.CampsiteRoutesTest
+./gradlew --no-daemon test --tests ca.floo.roadtrip.routes.CampsiteRoutesTest --tests ca.floo.roadtrip.routes.ReservableRoutesTest
 ```
 
-Expected: PASS.
+Expected: PASS after updating legacy expectations.
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 8: Commit**
 
 ```bash
-git add backend/src/main/kotlin/ca/floo/roadtrip/routes/CampsiteRoutes.kt backend/src/main/kotlin/ca/floo/roadtrip/models/api/CampsiteSchemas.kt backend/src/test/kotlin/ca/floo/roadtrip/routes/CampsiteRoutesTest.kt backend/src/main/kotlin/ca/floo/roadtrip/RoadtripRuntime.kt
+git add backend/src/main/kotlin/ca/floo/roadtrip/routes/CampsiteRoutes.kt backend/src/main/kotlin/ca/floo/roadtrip/models/api/CampsiteSchemas.kt backend/src/main/kotlin/ca/floo/roadtrip/routes/ReservableRoutes.kt backend/src/test/kotlin/ca/floo/roadtrip/routes/CampsiteRoutesTest.kt backend/src/test/kotlin/ca/floo/roadtrip/routes/ReservableRoutesTest.kt backend/src/main/kotlin/ca/floo/roadtrip/RoadtripRuntime.kt
 git commit -m "feat: expose campsites by canonical ids"
 ```
 
@@ -2040,7 +2055,7 @@ Run:
 ./gradlew --no-daemon test --tests ca.floo.roadtrip.service.availability.AvailabilityTargetResolverTest --tests ca.floo.roadtrip.routes.AvailabilityRoutesTest
 ```
 
-Expected: PASS after updating expected response fields from #391's numeric reservable IDs to canonical campsite IDs where the endpoint now speaks about `campsites`.
+Expected: PASS after updating expected response IDs from RID strings to numeric campsite IDs.
 
 - [ ] **Step 7: Commit**
 
@@ -2051,7 +2066,7 @@ git commit -m "feat: resolve availability through vendor refs"
 
 ---
 
-### Task 11: Rename Frontend Availability Contract From Reservable IDs to Campsite IDs
+### Task 11: Update Frontend Away From RID
 
 **Files:**
 - Modify: `web/availability/site-list.js`
@@ -2061,12 +2076,12 @@ git commit -m "feat: resolve availability through vendor refs"
 - Modify: `web/api/reservable-api.js`
 - Modify: frontend smoke tests under `backend/src/smokeTest/kotlin/ca/floo/roadtrip/SmokeTest.kt`
 
-- [ ] **Step 1: Update frontend test fixtures from #391 numeric reservable IDs**
+- [ ] **Step 1: Update frontend test fixtures**
 
 Replace fixture keys:
 
 ```json
-"available_reservable_ids": [201]
+"available_reservable_ids": ["site:campflare:5f65dc5c-30e2-4531-8fba-82bdcaa17e1a"]
 ```
 
 with:
@@ -2078,7 +2093,7 @@ with:
 Replace row shape:
 
 ```json
-{ "reservable_id": 201, "name": "6" }
+{ "rid": "site:campflare:5f65dc5c-30e2-4531-8fba-82bdcaa17e1a", "name": "6" }
 ```
 
 with:
@@ -2111,7 +2126,7 @@ export function availableCampsiteIds(day) {
 
 - [ ] **Step 4: Update site list and matrix row identity**
 
-Replace #391-era `row.reservable_id` and `data-reservable-id` with `row.campsite_id` and `data-campsite-id`. The identity function becomes:
+Replace `row.rid` and `data-rid` with `row.campsite_id` and `data-campsite-id`. The identity function becomes:
 
 ```javascript
 function campsiteId(row) {
@@ -2119,9 +2134,9 @@ function campsiteId(row) {
 }
 ```
 
-- [ ] **Step 5: Remove generic reservable fallback display**
+- [ ] **Step 5: Remove RID fallback display**
 
-Replace labels that fall back to `reservable_id` with `Site #${campsite_id}` or `site.name`.
+Replace labels that fall back to `rid` with `Site #${campsite_id}` or `site.name`.
 
 - [ ] **Step 6: Run frontend smoke tests**
 
@@ -2204,6 +2219,7 @@ BANNED_SQL_PATTERNS = [
 
 BANNED_LINKS = [
     "/d/reservable-detail/",
+    "var-reservable_rid",
 ]
 
 REQUIRED_DB_STATS_TOKENS = [
@@ -2336,7 +2352,7 @@ to:
 /d/campsite-detail/campsite-detail?var-campsite_id=${...}
 ```
 
-Do not reintroduce `var-reservable_rid`; #391 owns RID removal, and these dashboards should link by `var-campsite_id`.
+Remove all `var-reservable_rid` links.
 
 - [ ] **Step 4: Update catalog explorer and POI detail SQL to canonical joins**
 
@@ -2774,8 +2790,7 @@ git commit -m "docs: document canonical catalog architecture"
 - No legacy data migration: Scope Decisions and Task 13 verification.
 - No cross-vendor association or enrichment merge: Scope Decisions.
 - `/api/pois` wrapper joined with data: Task 8.
-- RID retirement dependency: handled by #391 before this plan starts.
-- Canonical campsite API and UI naming after #391 numeric IDs: Task 9, Task 10, Task 11.
+- Drop RID as primary API identity: Task 9, Task 10, Task 11.
 - Grafana dashboards updated for canonical catalog tables and campsite terminology: Task 12.
 
 **Placeholder scan:**
