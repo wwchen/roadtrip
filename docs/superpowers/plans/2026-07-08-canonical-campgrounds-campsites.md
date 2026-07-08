@@ -50,7 +50,7 @@
 - `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/framework/EtlOrchestrator.kt`
   - Dispatch terminal `CatalogEtlOutput` rows to catalog repos.
 - `backend/src/main/kotlin/ca/floo/roadtrip/models/metadata/registry/PoiRegistry.kt`
-  - Add `data_type` to ETL rows so the registry declares whether a terminal emits campgrounds, campsites, Tesla, Planet Fitness, or legacy rows.
+  - Add required `data_type` to every terminal ETL row so the registry declares whether it emits campgrounds, campsites, Tesla, or Planet Fitness rows.
 - `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/vendors/campflare/CampflareCampgroundsEtl.kt`
   - Parse Campflare campground dump records into canonical campground rows.
 - `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/vendors/campflare/CampflareCampsitesEtl.kt`
@@ -58,7 +58,7 @@
 - `backend/src/test/kotlin/ca/floo/roadtrip/service/etl/vendors/campflare/*Test.kt`
   - Fixture tests for Campflare mapping.
 - `config/poi-registry.yaml`
-  - Add Campflare dump sources and mark US legacy ETL rows disabled.
+  - Add Campflare dump sources and mark old US raw vendor ETL rows disabled.
 - `backend/src/main/kotlin/ca/floo/roadtrip/models/api/PoiSchemas.kt`
   - Add typed POI wrapper response DTOs with joined `data`.
 - `backend/src/main/kotlin/ca/floo/roadtrip/repo/PoiServingRepo.kt`
@@ -72,7 +72,7 @@
 - `backend/src/main/kotlin/ca/floo/roadtrip/service/reservation/*`
   - Resolve availability targets through `vendor_refs` and canonical `campsite_id` instead of `ReservableId`.
 - `web/availability/*`
-  - Replace `rid` and legacy reservable identity usage with canonical numeric `campsite_id`.
+  - Replace `rid` and old reservable identity usage with canonical numeric `campsite_id`.
 - `grafana/dashboards/catalog-explorer.json`
   - Replace old `pois` + `reservables` explorer SQL with canonical POI wrapper, campground, campsite, and vendor-ref joins.
 - `grafana/dashboards/poi-detail.json`
@@ -1373,12 +1373,6 @@ Modify `backend/src/main/kotlin/ca/floo/roadtrip/models/metadata/registry/PoiReg
 enum class EtlDataType(
     val wireValue: String,
 ) {
-    @SerialName("legacy_poi")
-    LEGACY_POI("legacy_poi"),
-
-    @SerialName("legacy_reservable")
-    LEGACY_RESERVABLE("legacy_reservable"),
-
     @SerialName("campground")
     CAMPGROUND("campground"),
 
@@ -1399,7 +1393,7 @@ data class EtlEntry(
     val inputs: List<String> = emptyList(),
     val args: Map<String, String> = emptyMap(),
     @SerialName("data_type")
-    val dataType: EtlDataType = EtlDataType.LEGACY_POI,
+    val dataType: EtlDataType,
 )
 ```
 
@@ -1707,7 +1701,7 @@ Run:
 ./gradlew --no-daemon test --tests ca.floo.roadtrip.service.etl.vendors.bcparks.BcParksStrapiEtlTest --tests ca.floo.roadtrip.service.etl.vendors.aspira.AspiraJoinByNameEtlTest --tests ca.floo.roadtrip.service.etl.vendors.aspira.AspiraResourcesEtlTest --tests ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaEtlTest --tests ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaSitesEtlTest
 ```
 
-Expected: FAIL while outputs still use legacy `Poi` or `ReservableEtlOutput`.
+Expected: FAIL while outputs still use old `Poi` or `ReservableEtlOutput`.
 
 - [ ] **Step 3: Convert Canada campground ETLs to canonical outputs**
 
@@ -1735,7 +1729,7 @@ For Canada sources with fields that do not fit canonical columns, preserve the f
 
 - [ ] **Step 5: Update registry rows**
 
-Set US legacy rows disabled. Keep Canada rows enabled and label their terminal data types:
+Set old US raw vendor rows disabled. Keep Canada rows enabled and label their terminal data types:
 
 ```yaml
   - name: BC Provincial Parks
@@ -1850,7 +1844,7 @@ data class PoiWrapperPropertiesSchema(
 )
 ```
 
-Remove old reservable/RID DTO usage as each route moves to canonical campsite identity.
+Remove old reservable/RID DTO usage; routes should expose canonical campsite identity only.
 
 - [ ] **Step 4: Rewrite serving repo queries**
 
@@ -2012,7 +2006,7 @@ next to current API route registration, and remove any `reservableRoutes(...)` r
 
 - [ ] **Step 6: Delete old reservable route code**
 
-Delete `ReservableRoutes.kt` and `ReservableRoutesTest.kt`. Do not leave compatibility handlers for `/api/reservables` or RID-based site endpoints.
+Delete `ReservableRoutes.kt` and `ReservableRoutesTest.kt`. Do not leave handlers for `/api/reservables` or RID-based site endpoints.
 
 - [ ] **Step 7: Run route tests**
 
@@ -2201,9 +2195,9 @@ function campsiteId(row) {
 }
 ```
 
-- [ ] **Step 5: Remove RID fallback display**
+- [ ] **Step 5: Remove RID display**
 
-Replace labels that fall back to `rid` with `Site #${campsite_id}` or `site.name`.
+Replace labels that use `rid` with `Site #${campsite_id}` or `site.name`.
 
 - [ ] **Step 6: Run frontend smoke tests**
 
@@ -2268,12 +2262,6 @@ CATALOG_DASHBOARDS = [
     "api-sql-equivalence.json",
 ]
 
-RENAMED_DASHBOARD_FALLBACKS = {
-    "poi-campsites.json": "poi-reservables.json",
-    "campsite-detail.json": "reservable-detail.json",
-    "campsite-stats.json": "reservable-stats.json",
-}
-
 BANNED_SQL_PATTERNS = [
     re.compile(r"\bFROM\s+reservables\b", re.IGNORECASE),
     re.compile(r"\bJOIN\s+reservables\b", re.IGNORECASE),
@@ -2304,8 +2292,6 @@ REQUIRED_DB_STATS_TOKENS = [
 
 def load_dashboard(name: str) -> dict:
     path = DASHBOARD_DIR / name
-    if not path.exists() and name in RENAMED_DASHBOARD_FALLBACKS:
-        path = DASHBOARD_DIR / RENAMED_DASHBOARD_FALLBACKS[name]
     return json.loads(path.read_text())
 
 
@@ -2353,12 +2339,8 @@ class GrafanaCanonicalCatalogDashboardTest(unittest.TestCase):
         missing = [token for token in REQUIRED_DB_STATS_TOKENS if token not in text]
         self.assertEqual([], missing)
 
-    def test_renamed_campsite_dashboards_exist(self):
-        missing = [
-            name
-            for name in RENAMED_DASHBOARD_FALLBACKS
-            if not (DASHBOARD_DIR / name).exists()
-        ]
+    def test_canonical_campsite_dashboards_exist(self):
+        missing = [name for name in CATALOG_DASHBOARDS if not (DASHBOARD_DIR / name).exists()]
         self.assertEqual([], missing)
 
 
@@ -2856,7 +2838,7 @@ git commit -m "docs: document canonical catalog architecture"
 - POI wrapper table with typed joins: Task 1, Task 3, Task 8.
 - `vendor_refs` and entity-ref join tables: Task 1, Task 3, Task 10.
 - Campflare for US and Canada sources for Canada: Task 6 and Task 7.
-- No legacy data migration: Scope Decisions and Task 13 verification.
+- No old catalog data migration: Scope Decisions and Task 13 verification.
 - No cross-vendor association or enrichment merge: Scope Decisions.
 - `/api/pois` wrapper joined with data: Task 8.
 - Drop RID as primary API identity: Task 9, Task 10, Task 11.
