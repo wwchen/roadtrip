@@ -66,7 +66,7 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
     val log = LoggerFactory.getLogger("RegistryTargets")
     val out = mutableMapOf<String, Target>()
     val implemented = EtlOrchestrator.registry.keys
-    val implementedJoiners = emptySet<String>()
+    val implementedJoiners = EtlOrchestrator.joinerRegistry.keys
 
     // poi_data — produces canonical POI-backed catalog rows.
     for (row in registry.poiData) {
@@ -129,8 +129,9 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
             )
     }
 
-    // poi_reservable_joiner — retired parent resolvers. Keep omitted from
-    // fan-out; canonical campsite rows carry parent refs themselves.
+    // poi_reservable_joiner — reconciliation pass. Reparents any campsite
+    // whose current campground_id disagrees with the joiner's cross-vendor
+    // lookup; idempotent on already-correct rows. See runJoiner.
     for (row in registry.poiReservableJoiners) {
         if (!row.enabled) {
             log.info("poi_reservable_joiner '{}' is disabled - omitting import target", row.name)

@@ -19,9 +19,12 @@ sealed interface Phase {
     /**
      * Run one row from the registry. The [section] field tells the
      * orchestrator which dispatch path to take:
-     *   - POI_DATA          → runPoiData(name)
-     *   - RESERVABLE_DATA   → runReservableData(name)
-     *   - POI_RESERVABLE_JOINER → retired; runJoiner(name) rejects it
+     *   - POI_DATA              → runPoiData(name)
+     *   - RESERVABLE_DATA       → runReservableData(name)
+     *   - POI_RESERVABLE_JOINER → runJoiner(name), a reconciler that
+     *                             reparents campsites whose canonical
+     *                             campground_id disagrees with the joiner's
+     *                             vendor-ref lookup.
      *
      * [name] is the row's display name from the YAML (unique per
      * section, but slugs share a namespace across sections so the
