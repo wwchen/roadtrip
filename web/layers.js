@@ -33,7 +33,7 @@ const CG_COLOR = {
   provincial: '#2e7d32',    // same green — BC provincial parks (parallel to US federal)
   state: '#558b2f',         // medium green — US state
   local: '#9ccc65',         // light green — US county/municipal
-  other: '#cddc39',         // unclassified
+  other: '#2e7d32',         // unclassified; shares the federal toggle/color
 };
 const CG_SUBCATEGORIES = ['federal', 'state', 'provincial', 'local'];
 const CG_EMPTY_FC = { type: 'FeatureCollection', features: [] };
