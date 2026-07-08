@@ -102,6 +102,16 @@ class GrafanaCanonicalCatalogDashboardTest(unittest.TestCase):
         missing = [name for name in CATALOG_DASHBOARDS if not (DASHBOARD_DIR / name).exists()]
         self.assertEqual([], missing)
 
+    def test_tesla_detail_dashboard_keeps_hourly_charging_rate_graph(self) -> None:
+        dashboard = load_dashboard("tesla-supercharger-detail.json")
+        matching = [
+            panel
+            for panel in dashboard["panels"]
+            if panel.get("title") == "Charging rates by hour of day"
+        ]
+        self.assertEqual(1, len(matching))
+        self.assertEqual("barchart", matching[0].get("type"))
+
 
 if __name__ == "__main__":
     unittest.main()

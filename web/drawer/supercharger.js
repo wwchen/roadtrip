@@ -28,7 +28,12 @@ function renderSuperchargerDrawer(f) {
   // The Tesla detail capture is verbatim under properties.upstream.detail
   // (set in TeslaIndexEtl.transformRow). Read promoted fields from there
   // so we don't need a backend schema change for each new pill.
-  const detail = (p.upstream && p.upstream.detail) || {};
+  const detail = {
+    ...(p.detailPayload || {}),
+    ...((p.upstream && p.upstream.detail) || {}),
+  };
+  if (p.availabilityProfile && !detail.availabilityProfile) detail.availabilityProfile = p.availabilityProfile;
+  if (p.timeZone && !detail.timeZone) detail.timeZone = p.timeZone;
 
   // Build the address line from the new tesla-locations enrichment.
   // street + city + state + postcode is the natural reading order; drop
@@ -207,7 +212,7 @@ function scPill(label, title = '') {
 // day-of-week (in the site's local timezone when known, otherwise the
 // browser's). Each bar is a fraction of the day's peak so the visual is
 // useful even at quiet sites; callout shows the peak hour.
-function renderBusyHours(ap, siteTz) {
+export function renderBusyHours(ap, siteTz) {
   if (!ap || typeof ap !== 'object') return '';
   // Tesla nests once: availabilityProfile.availabilityProfile.{day}.
   const days = ap.availabilityProfile || {};

@@ -121,16 +121,23 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
             commonSiteName = name,
             latitude = lat,
             longitude = lon,
+            locationGuid = detail?.locationGuid?.takeIf { it.isNotBlank() },
             siteStatus = sf.siteStatus?.takeIf { it.isNotBlank() } ?: DEFAULT_TESLA_SITE_STATUS,
             accessType = detail?.accessType?.takeIf { it.isNotBlank() },
+            openToPublic = detail?.openToPublic ?: true,
             openToNonTeslas = detail?.openToNonTeslas,
+            trailerFriendly = detail?.isTrailerFriendly,
+            twentyFourSeven = detail?.accessHours?.twentyFourSeven,
             stallCount = detail?.publicStallCount,
             maxPowerKw = detail?.maxPowerKw,
             address = addressJson(addressOf(detail)),
             region = region,
             country = country,
+            timeZone = detail?.timeZone?.takeIf { it.isNotBlank() },
+            amenities = rawDetail?.get(AMENITIES_KEY),
             infoUrl = "https://www.tesla.com/findus?location=$slug",
             pricebooks = JsonArray(detail?.effectivePricebooks ?: emptyList()),
+            availabilityProfile = rawDetail?.get(AVAILABILITY_PROFILE_KEY),
             indexPayload = rawIndex,
             detailPayload = rawDetail,
         )
@@ -215,6 +222,8 @@ class TeslaIndexEtl : SourceEtl<TeslaIndexDto, TeslaSuperchargerEtlOutput> {
         }
 
     companion object {
+        private const val AMENITIES_KEY = "amenities"
+        private const val AVAILABILITY_PROFILE_KEY = "availabilityProfile"
         private val log = LoggerFactory.getLogger(TeslaIndexEtl::class.java)
         private val json = Json { ignoreUnknownKeys = true }
     }
@@ -266,15 +275,25 @@ data class TeslaDetailInner(
 @Serializable
 data class TeslaLocationDetail(
     val name: String? = null,
+    @kotlinx.serialization.SerialName("locationGUID") val locationGuid: String? = null,
     val address: TeslaAddress? = null,
+    val timeZone: String? = null,
+    val openToPublic: Boolean? = null,
     val publicStallCount: Int? = null,
     val maxPowerKw: Int? = null,
     val accessType: String? = null,
     val openToNonTeslas: Boolean? = null,
+    val isTrailerFriendly: Boolean? = null,
+    val accessHours: TeslaAccessHours? = null,
     // Pricebook entries Tesla returns alongside the location detail. Held
     // as raw JsonElements; the FE knows the shape and renders only the
     // entries it cares about (Tesla CHARGING, first CONGESTION row).
     val effectivePricebooks: List<JsonElement> = emptyList(),
+)
+
+@Serializable
+data class TeslaAccessHours(
+    val twentyFourSeven: Boolean? = null,
 )
 
 @Serializable
