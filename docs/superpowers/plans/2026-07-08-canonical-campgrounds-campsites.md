@@ -648,6 +648,14 @@ enum class CatalogEntityType(
     PLANET_FITNESS_LOCATION("planet_fitness_location"),
 }
 
+enum class CatalogPoiType(
+    val wireValue: String,
+) {
+    CAMPGROUND("campground"),
+    TESLA_SUPERCHARGER("tesla_supercharger"),
+    PLANET_FITNESS_LOCATION("planet_fitness_location"),
+}
+
 data class VendorRefInput(
     val vendor: CatalogVendor,
     val entityType: CatalogEntityType,
@@ -736,7 +744,7 @@ data class TeslaSuperchargerInput(
 )
 
 data class PoiWrapperInput(
-    val poiType: CatalogEntityType,
+    val poiType: CatalogPoiType,
     val latitude: Double,
     val longitude: Double,
     val metadata: JsonElement,
@@ -782,6 +790,7 @@ package ca.floo.roadtrip.repo.catalog
 import ca.floo.roadtrip.models.catalog.CampgroundInput
 import ca.floo.roadtrip.models.catalog.CampsiteInput
 import ca.floo.roadtrip.models.catalog.CatalogEntityType
+import ca.floo.roadtrip.models.catalog.CatalogPoiType
 import ca.floo.roadtrip.models.catalog.CatalogVendor
 import ca.floo.roadtrip.models.catalog.PoiWrapperInput
 import ca.floo.roadtrip.models.catalog.TeslaSuperchargerInput
@@ -880,7 +889,7 @@ class CatalogRepoTest {
                     campgroundId = campgroundId,
                     input =
                         PoiWrapperInput(
-                            poiType = CatalogEntityType.CAMPGROUND,
+                            poiType = CatalogPoiType.CAMPGROUND,
                             latitude = 38.40831195138031,
                             longitude = -76.41588657431205,
                             metadata = buildJsonObject {},
@@ -949,7 +958,7 @@ class CatalogRepoTest {
                     superchargerId = superchargerId,
                     input =
                         PoiWrapperInput(
-                            poiType = CatalogEntityType.TESLA_SUPERCHARGER,
+                            poiType = CatalogPoiType.TESLA_SUPERCHARGER,
                             latitude = 41.72603,
                             longitude = -72.76248,
                             metadata = buildJsonObject {},
@@ -2849,6 +2858,7 @@ git commit -m "docs: document canonical catalog architecture"
 - Steps that modify code include target paths, expected signatures, and concrete mapping rules.
 
 **Type consistency:**
-- `CatalogVendor`, `CatalogEntityType`, `VendorRefInput`, `CampgroundInput`, and `CampsiteInput` are introduced in Task 2 and reused consistently in later tasks.
+- `CatalogVendor`, `CatalogEntityType`, `CatalogPoiType`, `VendorRefInput`, `CampgroundInput`, and `CampsiteInput` are introduced in Task 2 and reused consistently in later tasks.
+- `CatalogEntityType.CAMPSITE` exists for `vendor_refs` and campsite lookup only; `CatalogPoiType` intentionally excludes campsites because POI wrappers are campground/Tesla/Planet Fitness rows.
 - Canonical site identity is `campsites.id` exposed as `campsite_id`.
 - Upstream identity is always `vendor_refs(vendor, entity_type, external_id)`.
