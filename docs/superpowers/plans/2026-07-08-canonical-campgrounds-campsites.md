@@ -72,6 +72,30 @@
   - Resolve availability targets through `vendor_refs` instead of `ReservableId`.
 - `web/availability/*`
   - Replace `rid` usage with canonical numeric `campsite_id`.
+- `grafana/dashboards/catalog-explorer.json`
+  - Replace old `pois` + `reservables` explorer SQL with canonical POI wrapper, campground, campsite, and vendor-ref joins.
+- `grafana/dashboards/poi-detail.json`
+  - Replace old POI detail and linked-reservable panels with typed POI data and linked campsite panels.
+- `grafana/dashboards/poi-reservables.json` -> `grafana/dashboards/poi-campsites.json`
+  - Convert to POI campsites view backed by `poi_campgrounds`, `campgrounds`, and `campsites`.
+- `grafana/dashboards/reservable-detail.json` -> `grafana/dashboards/campsite-detail.json`
+  - Convert display and SQL to campsite detail backed by `campsites` and `campsite_vendor_refs`.
+- `grafana/dashboards/reservable-stats.json` -> `grafana/dashboards/campsite-stats.json`
+  - Convert aggregate panels to campsite stats and vendor-ref coverage.
+- `grafana/dashboards/tesla-supercharger-detail.json`
+  - Replace old `pois.properties` Tesla JSON reads with typed `tesla_superchargers` columns and payload JSON.
+- `grafana/dashboards/tesla-supercharger-stats.json`
+  - Replace old supercharger queries with typed `tesla_superchargers` plus `poi_tesla_superchargers`.
+- `grafana/dashboards/db-stats.json`
+  - Add canonical catalog table counts and staleness rows.
+- `grafana/dashboards/status-overview.json`
+  - Rename catalog availability labels from reservable to campsite and join through `campsites`.
+- `grafana/dashboards/api-sql-equivalence.json`
+  - Update API/SQL comparison queries for `/api/pois` canonical wrapper responses.
+- `grafana/dashboards/poller-detail.json` and `grafana/dashboards/poller-run-detail.json`
+  - Rename linked target language from reservable to campsite and update detail links.
+- `scripts/test_grafana_canonical_catalog_dashboards.py`
+  - Regression test that dashboard SQL no longer depends on old catalog tables or old RID dashboard links.
 
 ---
 
@@ -2133,7 +2157,490 @@ git commit -m "feat: use canonical campsite ids in frontend"
 
 ---
 
-### Task 12: End-to-End Campflare Load Verification
+### Task 12: Update Grafana Dashboards for Canonical Catalog
+
+**Files:**
+- Create: `scripts/test_grafana_canonical_catalog_dashboards.py`
+- Modify: `grafana/dashboards/catalog-explorer.json`
+- Modify: `grafana/dashboards/poi-detail.json`
+- Rename: `grafana/dashboards/poi-reservables.json` -> `grafana/dashboards/poi-campsites.json`
+- Rename: `grafana/dashboards/reservable-detail.json` -> `grafana/dashboards/campsite-detail.json`
+- Rename: `grafana/dashboards/reservable-stats.json` -> `grafana/dashboards/campsite-stats.json`
+- Modify: `grafana/dashboards/tesla-supercharger-detail.json`
+- Modify: `grafana/dashboards/tesla-supercharger-stats.json`
+- Modify: `grafana/dashboards/db-stats.json`
+- Modify: `grafana/dashboards/status-overview.json`
+- Modify: `grafana/dashboards/api-sql-equivalence.json`
+- Modify: `grafana/dashboards/poller-detail.json`
+- Modify: `grafana/dashboards/poller-run-detail.json`
+
+- [ ] **Step 1: Add dashboard regression test**
+
+Create `scripts/test_grafana_canonical_catalog_dashboards.py`:
+
+```python
+#!/usr/bin/env python3
+from __future__ import annotations
+
+import json
+import re
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+DASHBOARD_DIR = ROOT / "grafana" / "dashboards"
+
+CATALOG_DASHBOARDS = [
+    "catalog-explorer.json",
+    "poi-detail.json",
+    "poi-campsites.json",
+    "campsite-detail.json",
+    "campsite-stats.json",
+    "tesla-supercharger-detail.json",
+    "tesla-supercharger-stats.json",
+    "api-sql-equivalence.json",
+]
+
+RENAMED_DASHBOARD_FALLBACKS = {
+    "poi-campsites.json": "poi-reservables.json",
+    "campsite-detail.json": "reservable-detail.json",
+    "campsite-stats.json": "reservable-stats.json",
+}
+
+BANNED_SQL_PATTERNS = [
+    re.compile(r"\bFROM\s+reservables\b", re.IGNORECASE),
+    re.compile(r"\bJOIN\s+reservables\b", re.IGNORECASE),
+    re.compile(r"\breservable_pois\b", re.IGNORECASE),
+    re.compile(r"\bp\.category\b", re.IGNORECASE),
+    re.compile(r"\bp\.source_id\b", re.IGNORECASE),
+    re.compile(r"\bp\.properties\b", re.IGNORECASE),
+    re.compile(r"\bprovider_ref\b", re.IGNORECASE),
+]
+
+BANNED_LINKS = [
+    "/d/reservable-detail/",
+    "var-reservable_rid",
+]
+
+REQUIRED_DB_STATS_TOKENS = [
+    "campgrounds",
+    "campsites",
+    "vendor_refs",
+    "campground_vendor_refs",
+    "campsite_vendor_refs",
+    "tesla_superchargers",
+    "planet_fitness_locations",
+]
+
+
+def load_dashboard(name: str) -> dict:
+    path = DASHBOARD_DIR / name
+    if not path.exists() and name in RENAMED_DASHBOARD_FALLBACKS:
+        path = DASHBOARD_DIR / RENAMED_DASHBOARD_FALLBACKS[name]
+    return json.loads(path.read_text())
+
+
+def walk(value):
+    if isinstance(value, dict):
+        for child in value.values():
+            yield from walk(child)
+    elif isinstance(value, list):
+        for child in value:
+            yield from walk(child)
+    else:
+        yield value
+
+
+def raw_sql_strings(dashboard: dict) -> list[str]:
+    strings = []
+    for value in walk(dashboard):
+        if isinstance(value, str) and ("SELECT" in value.upper() or "WITH " in value.upper()):
+            strings.append(value)
+    return strings
+
+
+class GrafanaCanonicalCatalogDashboardTest(unittest.TestCase):
+    def test_catalog_dashboards_do_not_query_old_catalog_tables(self):
+        offenders = []
+        for name in CATALOG_DASHBOARDS:
+            dashboard = load_dashboard(name)
+            for sql in raw_sql_strings(dashboard):
+                for pattern in BANNED_SQL_PATTERNS:
+                    if pattern.search(sql):
+                        offenders.append(f"{name}: {pattern.pattern}")
+        self.assertEqual([], offenders)
+
+    def test_dashboard_links_no_longer_target_old_reservable_views(self):
+        offenders = []
+        for path in DASHBOARD_DIR.glob("*.json"):
+            text = path.read_text()
+            for token in BANNED_LINKS:
+                if token in text:
+                    offenders.append(f"{path.name}: {token}")
+        self.assertEqual([], offenders)
+
+    def test_db_stats_tracks_canonical_catalog_tables(self):
+        text = (DASHBOARD_DIR / "db-stats.json").read_text()
+        missing = [token for token in REQUIRED_DB_STATS_TOKENS if token not in text]
+        self.assertEqual([], missing)
+
+    def test_renamed_campsite_dashboards_exist(self):
+        missing = [
+            name
+            for name in RENAMED_DASHBOARD_FALLBACKS
+            if not (DASHBOARD_DIR / name).exists()
+        ]
+        self.assertEqual([], missing)
+
+
+if __name__ == "__main__":
+    unittest.main()
+```
+
+- [ ] **Step 2: Run dashboard regression test and verify it fails**
+
+Run:
+
+```bash
+python3 -m unittest scripts/test_grafana_canonical_catalog_dashboards.py
+```
+
+Expected: FAIL because dashboards still query `reservables`, `reservable_pois`, old `pois.category/source_id/properties`, and old reservable detail links.
+
+- [ ] **Step 3: Rename reservable dashboard concepts to campsite concepts**
+
+Run:
+
+```bash
+git mv grafana/dashboards/reservable-detail.json grafana/dashboards/campsite-detail.json
+git mv grafana/dashboards/reservable-stats.json grafana/dashboards/campsite-stats.json
+git mv grafana/dashboards/poi-reservables.json grafana/dashboards/poi-campsites.json
+```
+
+In the renamed JSON files:
+
+```json
+{
+  "uid": "campsite-detail",
+  "title": "Campsite / Detail"
+}
+```
+
+```json
+{
+  "uid": "campsite-stats",
+  "title": "Campsite / Stats"
+}
+```
+
+```json
+{
+  "uid": "poi-campsites",
+  "title": "POI with Campsites / Details"
+}
+```
+
+Update all dashboard links:
+
+```text
+/d/reservable-detail/roadtrip-reservable-detail?var-reservable_id=${...}
+```
+
+to:
+
+```text
+/d/campsite-detail/campsite-detail?var-campsite_id=${...}
+```
+
+Remove all `var-reservable_rid` links.
+
+- [ ] **Step 4: Update catalog explorer and POI detail SQL to canonical joins**
+
+Replace POI list/detail queries in `grafana/dashboards/catalog-explorer.json` and `grafana/dashboards/poi-detail.json` with this canonical shape:
+
+```sql
+WITH canonical_pois AS (
+  SELECT
+    p.id AS poi_id,
+    p.poi_type,
+    COALESCE(c.name, ts.name, pf.name) AS name,
+    COALESCE(c.region, ts.region) AS region,
+    COALESCE(c.country::text, ts.country::text) AS country,
+    ST_X(ST_Centroid(p.geom)) AS lng,
+    ST_Y(ST_Centroid(p.geom)) AS lat,
+    pc.campground_id,
+    pts.supercharger_id,
+    ppf.location_id AS planet_fitness_location_id,
+    c.status AS campground_status,
+    ts.site_status AS tesla_site_status,
+    ts.stall_count,
+    ts.max_power_kw,
+    count(DISTINCT cs.id) AS campsite_count,
+    max(a.last_observed_at) AS latest_availability_observed_at
+  FROM pois p
+  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+  LEFT JOIN campgrounds c ON c.id = pc.campground_id AND c.deleted_at IS NULL
+  LEFT JOIN campsites cs ON cs.campground_id = c.id AND cs.deleted_at IS NULL
+  LEFT JOIN availability a ON a.reservable_id = cs.id
+  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
+  LEFT JOIN tesla_superchargers ts ON ts.id = pts.supercharger_id AND ts.deleted_at IS NULL
+  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
+  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.location_id AND pf.deleted_at IS NULL
+  WHERE p.deleted_at IS NULL
+  GROUP BY
+    p.id,
+    p.poi_type,
+    c.id,
+    ts.id,
+    pf.id,
+    pc.campground_id,
+    pts.supercharger_id,
+    ppf.location_id
+)
+SELECT *
+FROM canonical_pois
+WHERE (${poi_name_search:sqlstring} = '' OR name ILIKE '%' || ${poi_name_search:sqlstring} || '%')
+  AND CASE
+    WHEN ${poi_id_search:sqlstring} = '' THEN true
+    WHEN ${poi_id_search:sqlstring} ~ '^[0-9]+$' THEN poi_id::text = ${poi_id_search:sqlstring}
+    ELSE false
+  END
+  AND (${poi_type:sqlstring} IN ('', '__all') OR poi_type IN (${poi_type:sqlstring}))
+ORDER BY name ASC, poi_id ASC
+LIMIT 1000;
+```
+
+Replace linked campsite panels with:
+
+```sql
+SELECT
+  cs.id AS campsite_id,
+  cs.campground_id,
+  cg.name AS campground_name,
+  cs.loop_name,
+  cs.name,
+  cs.kind,
+  cs.kind_listed,
+  cs.max_people,
+  cs.max_rv_length,
+  cs.max_trailer_length,
+  vr.vendor,
+  vr.external_id AS vendor_ref_id,
+  max(a.last_observed_at) AS latest_availability_observed_at,
+  bool_or(a.status = 'available') FILTER (WHERE a.last_observed_at >= now() - interval '7 days') AS any_available_last_7d
+FROM poi_campgrounds pc
+JOIN campgrounds cg ON cg.id = pc.campground_id
+JOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL
+LEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary
+LEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+LEFT JOIN availability a ON a.reservable_id = cs.id
+WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'
+  AND pc.poi_id::text = ${poi_id:sqlstring}
+GROUP BY cs.id, cg.id, vr.id
+ORDER BY cs.loop_name NULLS LAST, cs.name NULLS LAST, cs.id ASC;
+```
+
+- [ ] **Step 5: Update campsite detail and campsite stats dashboards**
+
+In `grafana/dashboards/campsite-detail.json`, use `var-campsite_id` and this detail SQL:
+
+```sql
+SELECT
+  cs.id AS campsite_id,
+  cg.id AS campground_id,
+  cg.name AS campground_name,
+  cs.name,
+  cs.loop_name,
+  cs.kind,
+  cs.kind_listed,
+  cs.max_people,
+  cs.max_cars,
+  cs.max_rv_length,
+  cs.max_trailer_length,
+  cs.electric_hookups,
+  cs.water_hookups,
+  cs.sewer_hookups,
+  cs.ada_accessible,
+  cs.pull_through,
+  cs.equipment,
+  cs.price,
+  cs.schedule,
+  vr.vendor,
+  vr.external_id AS vendor_ref_id,
+  cs.source_payload,
+  cs.updated_at,
+  cs.deleted_at
+FROM campsites cs
+JOIN campgrounds cg ON cg.id = cs.campground_id
+LEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary
+LEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+WHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'
+  AND cs.id::text = ${campsite_id:sqlstring};
+```
+
+In `grafana/dashboards/campsite-stats.json`, replace aggregate queries with:
+
+```sql
+SELECT
+  coalesce(vr.vendor, '(missing primary ref)') AS vendor,
+  count(*) AS campsites,
+  count(*) FILTER (WHERE cs.deleted_at IS NULL) AS active_campsites,
+  count(*) FILTER (WHERE cs.latitude IS NOT NULL AND cs.longitude IS NOT NULL) AS with_coordinates,
+  count(*) FILTER (WHERE cs.max_people IS NOT NULL) AS with_capacity,
+  count(*) FILTER (WHERE cs.equipment <> '[]'::jsonb) AS with_equipment,
+  count(*) FILTER (WHERE cs.price <> '{}'::jsonb) AS with_price,
+  max(cs.updated_at) AS latest_catalog_update
+FROM campsites cs
+LEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary
+LEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+GROUP BY 1
+ORDER BY campsites DESC;
+```
+
+- [ ] **Step 6: Update Tesla dashboards to typed table**
+
+In `grafana/dashboards/tesla-supercharger-stats.json` and `grafana/dashboards/tesla-supercharger-detail.json`, replace old `pois.properties` queries with:
+
+```sql
+SELECT
+  ts.id AS supercharger_id,
+  p.id AS poi_id,
+  ts.name,
+  ts.location_slug,
+  ts.location_guid,
+  ts.country,
+  ts.region,
+  ts.site_status,
+  ts.access_type,
+  ts.open_to_public,
+  ts.open_to_non_teslas,
+  ts.trailer_friendly,
+  ts.twenty_four_seven,
+  ts.stall_count,
+  ts.max_power_kw,
+  ts.pricebooks,
+  ts.amenities,
+  ts.availability_profile,
+  ST_X(ST_Centroid(p.geom)) AS lng,
+  ST_Y(ST_Centroid(p.geom)) AS lat,
+  ts.updated_at
+FROM tesla_superchargers ts
+JOIN poi_tesla_superchargers pts ON pts.supercharger_id = ts.id
+JOIN pois p ON p.id = pts.poi_id
+WHERE ts.deleted_at IS NULL
+  AND p.deleted_at IS NULL
+  AND (${country:sqlstring} IN ('', '__all') OR ts.country::text IN (${country:sqlstring}))
+  AND (${region:sqlstring} IN ('', '__all') OR ts.region IN (${region:sqlstring}))
+  AND (${access_type:sqlstring} IN ('', '__all') OR ts.access_type IN (${access_type:sqlstring}))
+ORDER BY ts.name ASC
+LIMIT 6000;
+```
+
+For pricing panels, explode `ts.pricebooks` instead of `p.properties->'pricebooks'`:
+
+```sql
+SELECT
+  ts.id AS supercharger_id,
+  ts.name,
+  ts.country,
+  ts.region,
+  e.pricebook->>'currencyCode' AS currency,
+  round(avg(NULLIF(e.pricebook->>'rateBase', '')::numeric), 3) AS avg_price_per_kwh
+FROM tesla_superchargers ts
+CROSS JOIN LATERAL jsonb_array_elements(
+  CASE WHEN jsonb_typeof(ts.pricebooks) = 'array' THEN ts.pricebooks ELSE '[]'::jsonb END
+) AS e(pricebook)
+WHERE ts.deleted_at IS NULL
+  AND e.pricebook->>'feeType' = 'CHARGING'
+  AND e.pricebook->>'uom' = 'kwh'
+  AND e.pricebook->>'vehicleMakeType' = 'TSLA'
+GROUP BY ts.id, ts.name, ts.country, ts.region, currency
+ORDER BY avg_price_per_kwh DESC;
+```
+
+- [ ] **Step 7: Update status, poller, DB stats, and API equivalence dashboards**
+
+In `grafana/dashboards/db-stats.json`, replace catalog count rows with:
+
+```sql
+SELECT *
+FROM (
+  VALUES
+    ('pois',                         (SELECT count(*)::bigint FROM pois)),
+    ('active_pois',                  (SELECT count(*)::bigint FROM pois WHERE deleted_at IS NULL)),
+    ('campgrounds',                  (SELECT count(*)::bigint FROM campgrounds)),
+    ('active_campgrounds',           (SELECT count(*)::bigint FROM campgrounds WHERE deleted_at IS NULL)),
+    ('campsites',                    (SELECT count(*)::bigint FROM campsites)),
+    ('active_campsites',             (SELECT count(*)::bigint FROM campsites WHERE deleted_at IS NULL)),
+    ('vendor_refs',                  (SELECT count(*)::bigint FROM vendor_refs)),
+    ('campground_vendor_refs',       (SELECT count(*)::bigint FROM campground_vendor_refs)),
+    ('campsite_vendor_refs',         (SELECT count(*)::bigint FROM campsite_vendor_refs)),
+    ('tesla_superchargers',          (SELECT count(*)::bigint FROM tesla_superchargers)),
+    ('planet_fitness_locations',     (SELECT count(*)::bigint FROM planet_fitness_locations)),
+    ('availability',                 (SELECT count(*)::bigint FROM availability)),
+    ('availability_watch',           (SELECT count(*)::bigint FROM availability_watch)),
+    ('availability_poller',          (SELECT count(*)::bigint FROM availability_poller)),
+    ('availability_run',             (SELECT count(*)::bigint FROM availability_run)),
+    ('ingest_runs',                  (SELECT count(*)::bigint FROM ingest_runs)),
+    ('import_runs',                  (SELECT count(*)::bigint FROM import_runs)),
+    ('api_cache_metadata',           (SELECT count(*)::bigint FROM grafana_api_cache_metadata))
+) AS counts(table_name, exact_rows)
+ORDER BY exact_rows DESC;
+```
+
+In `grafana/dashboards/status-overview.json`, `poller-detail.json`, and `poller-run-detail.json`, keep `availability.reservable_id` only as the physical availability column name, but alias it as campsite identity in dashboard output:
+
+```sql
+SELECT
+  a.last_observed_at AS transitioned_at,
+  a.reservable_id AS campsite_id,
+  cs.loop_name || ' / ' || cs.name AS campsite_name,
+  a.target_date::text AS date,
+  prev.status AS from_status,
+  a.status AS to_status,
+  a.run_id
+FROM availability a
+LEFT JOIN availability prev ON prev.id = a.previous_id
+JOIN campsites cs ON cs.id = a.reservable_id
+WHERE $__timeFilter(a.last_observed_at)
+  AND a.previous_id IS NOT NULL
+ORDER BY a.last_observed_at DESC, a.id DESC
+LIMIT 100;
+```
+
+In `grafana/dashboards/api-sql-equivalence.json`, compare `/api/pois` against the same canonical POI join from Step 4. The SQL response must expose `poi_id`, `poi_type`, and joined `data` fields instead of old `category`, `source_id`, and `properties`.
+
+- [ ] **Step 8: Run dashboard regression test**
+
+Run:
+
+```bash
+python3 -m unittest scripts/test_grafana_canonical_catalog_dashboards.py
+```
+
+Expected: PASS.
+
+- [ ] **Step 9: Optionally sync from Grafana UI**
+
+If dashboards were edited in the Grafana UI, export the normalized JSON back to disk:
+
+```bash
+python3 scripts/export_grafana_dashboards.py
+python3 -m unittest scripts/test_grafana_canonical_catalog_dashboards.py
+```
+
+Expected: exporter succeeds or reports dashboards already in sync; dashboard regression test remains PASS.
+
+- [ ] **Step 10: Commit**
+
+```bash
+git add scripts/test_grafana_canonical_catalog_dashboards.py grafana/dashboards
+git commit -m "feat: update grafana dashboards for canonical catalog"
+```
+
+---
+
+### Task 13: End-to-End Campflare Load Verification
 
 **Files:**
 - Modify: `docs/reservation-providers.md`
@@ -2280,10 +2787,11 @@ git commit -m "docs: document canonical catalog architecture"
 - POI wrapper table with typed joins: Task 1, Task 3, Task 8.
 - `vendor_refs` and entity-ref join tables: Task 1, Task 3, Task 10.
 - Campflare for US and Canada sources for Canada: Task 6 and Task 7.
-- No legacy data migration: Scope Decisions and Task 12 verification.
+- No legacy data migration: Scope Decisions and Task 13 verification.
 - No cross-vendor association or enrichment merge: Scope Decisions.
 - `/api/pois` wrapper joined with data: Task 8.
 - Drop RID as primary API identity: Task 9, Task 10, Task 11.
+- Grafana dashboards updated for canonical catalog tables and campsite terminology: Task 12.
 
 **Placeholder scan:**
 - The plan does not use `TBD`, `TODO`, or "implement later".
