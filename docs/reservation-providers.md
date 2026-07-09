@@ -75,9 +75,112 @@ The availability orchestration that consumes this port lives one layer above:
 service/availability/
 ├── AvailabilityService.kt               # POI availability contract used by routes
 ├── CampsiteAvailabilityComposer.kt      # grouping, window policy, per-collection availability load
-├── AvailabilityTargetResolver.kt        # campsite → parent provider + date context
-└── AvailabilityDateResolver.kt          # target-local earliest date/window policy
+├── AvailabilityTargetResolver.kt        # campsite → ordered provider candidates + date context
+├── AvailabilityDateResolver.kt          # target-local earliest date/window policy
+├── ProviderCandidate.kt                 # (provider, parentRef, catalogRef) one candidate in a match group
+├── FailoverAvailabilityFetcher.kt       # walks candidates on retryable failure; records per-attempt outcomes
+├── ProviderCooldownTracker.kt           # in-process demote-on-failure for AvailabilityProviderId
+├── TriggerActionHandler.kt              # fire-side registry (`slack_notify` today; unknown kinds inert)
+├── SlackNotifyHandler.kt                # first TriggerActionHandler
+└── alert/
+    ├── AlertProvider.kt                 # who detects openings for a watch
+    ├── AlertProviderRegistry.kt         # per-watch dispatch (v1: always InternalPollerAlertProvider)
+    └── InternalPollerAlertProvider.kt   # today's poller-membership sync + orphan deactivation
 ```
+
+## Multi-source resolution
+
+Since Part 2, each ETL writes its own per-vendor campground row; match tables
++ `campground_canonical` group the vendor rows that describe the same
+real-world campground. Availability lookups now enumerate every vendor row
+in a match group instead of choosing one at write time.
+
+**Candidate ordering** (`CampsiteProviderRepo.findProviderRefCandidates`
+SQL, single source of truth reused by the resolver and the API):
+
+1. Rows whose vendor matches `campgrounds.preferred_availability_source` (an
+   optional per-campground column).
+2. Rows whose provider ref payload is provider-shaped (existing
+   `providerRefShapeSql` — filters out placeholder refs).
+3. Winner-first: the `campground_canonical` view's chosen row, then
+   siblings in member-id order.
+4. Deterministic tie-break on `vendor_ref_id`.
+
+`ResolvedAvailabilityTarget.candidates: List<ProviderCandidate>` carries the
+full ordered list. The batcher `GroupKey` still keys on the first (preferred)
+candidate, so grouping semantics are unchanged; failover happens **inside**
+the group fetch.
+
+**Failover walk** (`FailoverAvailabilityFetcher`):
+
+- Candidates are cooldown-sorted (cooling providers demoted, sole cooling
+  candidate still tried).
+- Retryable outcomes — `RATE_LIMITED`, `UPSTREAM_5XX`, `BLOCKED` — record a
+  cooldown against the failing `AvailabilityProviderId` and continue to the
+  next candidate.
+- `OTHER` stops immediately (likely a bug in this env, not an outage).
+- On any candidate returning OK, the fetcher clears that provider's
+  cooldown and returns.
+
+**Sibling identity translation:** when a sibling vendor serves the fetch,
+its campsite refs come from that row's own `campsite_vendor_refs`, joined
+through `campsite_matches` / `campsite_canonical`. Observations are still
+recorded against **representative campsite ids** (the canonical winner),
+not the sibling's row, so downstream reads through `campsite_canonical`
+stay coherent.
+
+**Per-attempt fetch-call rows:** `AvailabilityPollExecutor` writes one row
+per attempt to `availability_fetch_call` (each row carries its own
+`provider`, `parent_ref`, `outcome`, `duration_ms`, `error`), so failover
+walks show up in the Grafana call-trace panels without extra plumbing.
+
+**Cooldown duration:** `AVAILABILITY_PROVIDER_COOLDOWN_SECONDS` (default
+300s). In-process only; expires lazily on the next `isCooling` check.
+
+**Preference wiring:** `GET /api/pois/{id}` reads its `availability_provider`
+field from `PoiAvailabilitySupport.preferredAvailabilityProvider(poiId)`,
+which returns the first candidate. So setting
+`campgrounds.preferred_availability_source = 'recgov'` on a dual-vendor
+campground flips both the API field and the failover walk order in one
+SQL update.
+
+## Alert seam
+
+Who detects openings for a watch is a separate concern from who serves
+availability. `AlertProvider` is the port; today's only implementation
+`InternalPollerAlertProvider` wraps the existing poller-membership sync
+(watch → poller links) and orphan-poller deactivation. A hosted-alert
+implementation (e.g. Campflare's alert API) would:
+
+- `onWatchActivated`: subscribe upstream to per-site opening notifications.
+- Own a webhook route that receives vendor pushes, normalizes payloads to
+  the same `CellTransition` the internal poller produces, and hands them
+  to `WatchAlertDispatcher`.
+- `onWatchDeactivated`: unsubscribe upstream.
+
+**Adding a new alert provider is one file** under
+`service/availability/alert/providers/<vendor>/` plus one registry entry.
+`AlertProviderRegistry.forWatch` v1 always returns the internal poller;
+when the alert provider becomes per-watch (based on the watch's target
+vendors, `preferred_availability_source`, and adapter capability), that
+dispatch rule lives on the registry — no other code changes.
+
+`AvailabilityProviderCapabilities.pollableForAlerts` (renamed from
+`supportsAlerts` in Part 3) is the poller-side capability — "can the
+internal poller poll this vendor for openings?". Hosted-alert capability
+lives on the alert provider itself (`hostsAlerts: Boolean`).
+
+## Trigger registry
+
+`TriggerActionHandler` fires one side effect kind (Slack message today,
+push/email tomorrow, ATC route someday) for a watch that just detected an
+opening. `TriggerActionRegistry.forKind(kind)` returns null for unknown
+slugs — inert by design, matching today's `atc` behavior.
+
+Registering a new kind is one file under `service/availability/` plus one
+entry in the registry list. The `stopWhenTriggered` DONE transition still
+gates on `fire()` returning true, so a handler that fails to deliver
+leaves the watch active for the next poll.
 
 ## Capabilities
 
@@ -88,8 +191,8 @@ on each provider drive what the FE shows.
 data class AvailabilityProviderCapabilities(
     /** Can we serve per-day availability for a window? */
     val supportsAvailability: Boolean,
-    /** Can we poll for openings and notify on match? */
-    val supportsAlerts: Boolean,
+    /** Can the internal poller poll this vendor for openings? */
+    val pollableForAlerts: Boolean,
     /** Max days into the future the upstream exposes. */
     val bookingHorizonDays: Int,
 )
@@ -118,7 +221,7 @@ availability history only.
 | Provider | Availability | Watches | Notes |
 |---|---|---|---|
 | RecGov (rec.gov) | ✓ | ✓ | Availability and generic watch polling. |
-| Campflare | ✓ | ✗ | Availability uses v2 bulk campground availability for Campflare-owned US catalog rows. Alerts stay off until cadence/load limits are validated. |
+| Campflare | ✓ | ✗ | Availability uses v2 bulk campground availability for Campflare-owned US catalog rows. Hosted alerts planned via the `AlertProvider` seam (see "Alert seam" above); until that lands, alerts stay off. |
 | Aspira NextGen (BC Parks, Washington, Pennsylvania) | ✓ | planned | Availability ships now; watch dispatch still needs work. |
 | ReserveAmerica / Active Network (Alberta Parks, New York State Parks) | ✓ | ✗ | Availability reads the live campsite-calendar matrix; sites are cataloged from that same calendar roster (see `reserveamerica.md`). Alerts stay off until upstream cadence/load limits are validated. |
 | ReserveCalifornia / Tyler | ✓ | ✗ | Availability reads standard facility grids. Catalog import uses the public Search All Parks `search/place` flow. |
@@ -228,7 +331,7 @@ walk `previous_id` back from the current row. Each row is an interval
 - **History only exists for slots we polled.** No background backfill,
   no synthetic data. If a slot was never alerted on, there's no history
   for it. Capability-gate any history endpoint behind
-  `supportsAlerts`.
+  `pollableForAlerts`.
 - **Widen data per upstream call.** Upstreams return a window of
   per-day availability in one response. Record the whole window, not
   just the alerted slot. Same upstream cost; vastly more history.
@@ -281,7 +384,7 @@ poller has produced.
    covered.
 3. Create `service/availability/provider/adapters/<vendor>/<Vendor>AvailabilityProvider.kt`
    implementing `AvailabilityProvider`. Capabilities default conservatively
-   (`supportsAlerts = false`); flip them on as features land.
+   (`pollableForAlerts = false`); flip them on as features land.
 4. Ensure the terminal ETL emits the right `provider_ref` JSON and that its
    `pois.source` maps to the adapter in `AvailabilityProviderRegistryFactory`.
 5. Update the matrix table above.

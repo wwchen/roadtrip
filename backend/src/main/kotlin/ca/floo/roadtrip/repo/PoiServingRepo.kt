@@ -27,7 +27,6 @@ internal data class PoiRow(
 internal data class PoiDetailRow(
     val id: Long,
     val source: String,
-    val providerSource: String? = null,
     val sourceId: String,
     val category: String,
     val subcategory: String?,
@@ -106,7 +105,6 @@ internal class PoiServingRepo(
                 """
                 SELECT p.id,
                        COALESCE(primary_gvr.vendor, p.poi_type) AS source,
-                       provider_gvr.vendor AS provider_source,
                        COALESCE(primary_gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
                        p.poi_type AS category,
                        cg.kind AS subcategory,
@@ -141,7 +139,7 @@ internal class PoiServingRepo(
                   LIMIT 1
                 ) primary_gvr ON true
                 LEFT JOIN LATERAL (
-                  SELECT vr.vendor, vr.payload
+                  SELECT vr.payload
                   FROM campground_vendor_refs cvr
                   JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
                   WHERE cvr.campground_id = cg.id
@@ -164,7 +162,6 @@ internal class PoiServingRepo(
         return PoiDetailRow(
             id = (r.get("id") as Number).toLong(),
             source = r.get("source") as String,
-            providerSource = r.get("provider_source") as String?,
             sourceId = r.get("source_id") as String,
             category = r.get("category") as String,
             subcategory = r.get("subcategory") as String?,

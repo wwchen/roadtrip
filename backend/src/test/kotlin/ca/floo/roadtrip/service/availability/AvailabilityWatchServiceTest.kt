@@ -11,11 +11,15 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.availability.alert.AlertProvider
+import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
+import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import kotlinx.serialization.json.JsonObject
+import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -55,7 +59,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
             .get("campground_id", Long::class.java)
 
-    private fun service(): AvailabilityWatchService {
+    private fun service(alertProviders: AlertProviderRegistry? = null): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
         val targets =
@@ -65,7 +69,15 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
-        return AvailabilityWatchService(ctx, campsitesRepo, targets)
+        val providers =
+            alertProviders ?: AlertProviderRegistry(
+                listOf(
+                    InternalPollerAlertProvider(
+                        AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets),
+                    ),
+                ),
+            )
+        return AvailabilityWatchService(ctx, providers)
     }
 
     private fun poiInput(poiId: Long): AvailabilityWatchRepo.CreateInput =
@@ -174,12 +186,61 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         assertEquals(false, pollers.findById(pollerId)!!.active)
     }
 
+    @Test
+    fun `watch lifecycle drives alert-provider hooks through the registry`() {
+        val poiId = seedPoi("232447")
+        seedCampsite(poiId, "100")
+        val recorder = RecordingAlertProvider()
+        val svc = service(AlertProviderRegistry(listOf(recorder)))
+
+        val watch = svc.create(poiInput(poiId))
+        svc.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))
+        svc.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.ACTIVE))
+        svc.delete(watch.id)
+
+        assertEquals(
+            listOf(
+                watch.id to AlertEvent.ACTIVATED, // create
+                watch.id to AlertEvent.DEACTIVATED, // pause
+                watch.id to AlertEvent.ACTIVATED, // resume
+                watch.id to AlertEvent.DEACTIVATED, // delete
+            ),
+            recorder.events,
+        )
+    }
+
+    private enum class AlertEvent { ACTIVATED, DEACTIVATED }
+
+    /** Fake alert provider that records `(watch.id, event)` tuples so the test
+     *  can assert the service dispatches watch-lifecycle events through the
+     *  registry rather than reaching into poller state directly. Impersonates
+     *  the internal poller id because the v1 registry always dispatches to it. */
+    private class RecordingAlertProvider : AlertProvider {
+        override val id: String = AlertProviderRegistry.INTERNAL_POLLER_ID
+        override val hostsAlerts: Boolean = false
+        val events: MutableList<Pair<Long, AlertEvent>> = mutableListOf()
+
+        override fun onWatchActivated(
+            txn: DSLContext,
+            watch: AvailabilityWatchRepo.Watch,
+        ) {
+            events += watch.id to AlertEvent.ACTIVATED
+        }
+
+        override fun onWatchDeactivated(
+            txn: DSLContext,
+            watch: AvailabilityWatchRepo.Watch,
+        ) {
+            events += watch.id to AlertEvent.DEACTIVATED
+        }
+    }
+
     private object FakeProvider : AvailabilityProvider {
         override val id = AvailabilityProviderId.RECGOV
         override val capabilities =
             AvailabilityProviderCapabilities(
                 supportsAvailability = true,
-                supportsAlerts = true,
+                pollableForAlerts = true,
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )

@@ -82,6 +82,13 @@ internal fun Route.poiRoutes(
     registry: PoiRegistry,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availabilitySupport: (PoiDetailRow) -> Boolean = ::providerRefShapeSupportsAvailability,
+    // Resolver-preferred vendor for the POI's availability. Default `null` keeps
+    // the field empty when the route is wired without the availability support
+    // service (e.g. unit tests / dev scaffolding); production wiring in
+    // [ca.floo.roadtrip.registerRoadtripRoutes] passes the support service's
+    // preferredAvailabilityProvider so the API mirrors what the poller/live
+    // fetcher will actually choose.
+    availabilityProvider: (PoiDetailRow) -> String? = { null },
 ) {
     // Canonical POI wrappers expose their typed domain through poi_type.
     val defaultCategories: List<String> = DEFAULT_POI_TYPES
@@ -205,6 +212,7 @@ internal fun Route.poiRoutes(
                 r = row,
                 dateResolver = dateResolver,
                 availabilitySupported = availabilitySupport(row),
+                availabilityProvider = availabilityProvider(row),
             ),
         )
     }
@@ -350,6 +358,7 @@ internal fun poiDetailFeature(
     r: PoiDetailRow,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availabilitySupported: Boolean = providerRefShapeSupportsAvailability(r),
+    availabilityProvider: String? = null,
 ): PoiDetailFeatureSchema {
     val raw = Json.parseToJsonElement(r.propertiesJson)
     val rawObject = raw as? JsonObject ?: JsonObject(emptyMap())
@@ -367,7 +376,7 @@ internal fun poiDetailFeature(
                 source = r.source,
                 sourceId = r.sourceId,
                 sources = r.memberSources,
-                availabilityProvider = r.providerSource,
+                availabilityProvider = availabilityProvider,
                 category = r.category,
                 subcategory = r.subcategory,
                 agency = r.agency,

@@ -32,8 +32,14 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
+import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
+import ca.floo.roadtrip.service.availability.SlackNotifyHandler
+import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
+import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistryFactory
@@ -93,6 +99,7 @@ internal class RoadtripRuntime(
     val watchAlertDispatcher: WatchAlertDispatcher,
     val schedulerScope: CoroutineScope,
     val slackInteractivity: SlackInteractivityWiring?,
+    val failoverFetcher: FailoverAvailabilityFetcher,
     private val slackNotifications: SlackNotificationServiceImpl,
 ) {
     val appConfig: AppConfig get() = boot.appConfig
@@ -196,13 +203,24 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             availabilityProviders = availabilityProviderRegistry,
             dateResolver = availabilityDateResolver,
         )
-    val availabilityWatchService = AvailabilityWatchService(boot.ctx, campsitesRepo, availabilityTargets)
+    val pollerMembership = AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), availabilityTargets)
+    val alertProviders = AlertProviderRegistry(listOf(InternalPollerAlertProvider(pollerMembership)))
+    val availabilityWatchService = AvailabilityWatchService(boot.ctx, alertProviders)
 
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     val availabilityPollers = AvailabilityPollerRepo(boot.ctx)
-    PollerBackfill(boot.ctx, AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), availabilityTargets)).run()
+    PollerBackfill(boot.ctx, pollerMembership).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
+    val triggerActions =
+        TriggerActionRegistry(
+            listOf(
+                SlackNotifyHandler(
+                    slack = slackNotifications,
+                    appRootUrl = boot.appConfig.webApp?.rootUrl,
+                ),
+            ),
+        )
     val watchAlertDispatcher =
         WatchAlertDispatcher(
             slack = slackNotifications,
@@ -211,6 +229,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             targets = availabilityTargets,
             pois = PoiServingRepo(boot.ctx),
             availability = availability,
+            triggerActions = triggerActions,
             grafanaRootUrl = boot.appConfig.grafana?.rootUrl,
             appRootUrl = boot.appConfig.webApp?.rootUrl,
         )
@@ -257,6 +276,12 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             log.info("Slack interactivity DISABLED: {}", reason)
             null
         }
+    // One in-process cooldown tracker shared by both the poller and the live
+    // path — a cooldown observed in either surface should demote the same
+    // provider in the other. Env-configurable via
+    // AVAILABILITY_PROVIDER_COOLDOWN_SECONDS.
+    val providerCooldowns = ProviderCooldownTracker.fromEnv()
+    val sharedFailoverFetcher = FailoverAvailabilityFetcher(cooldowns = providerCooldowns)
     Scheduler(
         repo = availabilityPollers,
         handler =
@@ -271,6 +296,8 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
                 fetchCalls = AvailabilityFetchCallRepo(boot.ctx),
                 limiter = VendorRateLimiter(VendorRateLimitConfig.fromEnv(), boot.dataSource),
                 alertDispatcher = watchAlertDispatcher,
+                failoverFetcher = sharedFailoverFetcher,
+                campsiteProviderRepo = campsiteProviders,
             )::handle,
         name = "availability",
     ).start(schedulerScope)
@@ -285,6 +312,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         watchAlertDispatcher = watchAlertDispatcher,
         schedulerScope = schedulerScope,
         slackInteractivity = slackInteractivity,
+        failoverFetcher = sharedFailoverFetcher,
         slackNotifications = slackNotifications,
     )
 }

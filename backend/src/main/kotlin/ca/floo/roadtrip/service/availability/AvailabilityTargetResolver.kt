@@ -5,7 +5,6 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
@@ -30,11 +29,10 @@ internal class DbAvailabilityTargetResolver(
     private val availabilityProviders: AvailabilityProviderRegistry,
     private val dateResolver: AvailabilityDateResolver,
 ) : AvailabilityTargetResolver {
-    private data class ParentCandidate(
+    private data class ResolvedRow(
         val poiId: Long,
         val row: CampsiteProviderRefRow,
-        val provider: AvailabilityProvider,
-        val ref: ProviderRef,
+        val candidate: ProviderCandidate,
     )
 
     override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? {
@@ -42,34 +40,39 @@ internal class DbAvailabilityTargetResolver(
         if (poiIds.isEmpty()) return null
 
         val providerRefsByPoiId = providerRefs.findProviderRefCandidates(poiIds)
-        val parent =
+        val resolvedRows: List<ResolvedRow> =
             poiIds
                 .asSequence()
                 .flatMap { poiId -> providerRefsByPoiId[poiId].orEmpty().asSequence().map { row -> poiId to row } }
-                .mapNotNull { (poiId, row) -> parentCandidate(poiId, row) }
-                .firstOrNull() ?: return null
+                .mapNotNull { (poiId, row) ->
+                    val candidate = buildCandidate(row, campsite) ?: return@mapNotNull null
+                    ResolvedRow(poiId = poiId, row = row, candidate = candidate)
+                }.toList()
+
+        val head = resolvedRows.firstOrNull() ?: return null
 
         return ResolvedAvailabilityTarget(
             campsite = campsite,
-            provider = parent.provider,
-            parentRef = parent.ref,
-            catalogRef = catalogRefFor(campsite, parent.provider.id),
-            parentPoiId = parent.poiId,
-            dateContext = dateResolver.context(lat = parent.row.lat, lng = parent.row.lng),
+            provider = head.candidate.provider,
+            parentRef = head.candidate.parentRef,
+            catalogRef = head.candidate.catalogRef,
+            parentPoiId = head.poiId,
+            dateContext = dateResolver.context(lat = head.row.lat, lng = head.row.lng),
+            candidates = resolvedRows.map { it.candidate },
         )
     }
 
-    private fun parentCandidate(
-        poiId: Long,
+    private fun buildCandidate(
         row: CampsiteProviderRefRow,
-    ): ParentCandidate? {
+        campsite: Campsite,
+    ): ProviderCandidate? {
         val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
         val provider = availabilityProviders.forPoi(row, ref) ?: return null
-        return ParentCandidate(
-            poiId = poiId,
-            row = row,
+        if (!provider.capabilities.supportsAvailability) return null
+        return ProviderCandidate(
             provider = provider,
-            ref = ref,
+            parentRef = ref,
+            catalogRef = catalogRefFor(campsite, provider.id),
         )
     }
 

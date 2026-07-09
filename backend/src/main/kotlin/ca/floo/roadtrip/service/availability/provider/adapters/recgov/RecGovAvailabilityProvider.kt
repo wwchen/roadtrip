@@ -28,7 +28,7 @@ class RecGovAvailabilityProvider(
     override val capabilities: AvailabilityProviderCapabilities =
         AvailabilityProviderCapabilities(
             supportsAvailability = true,
-            supportsAlerts = true,
+            pollableForAlerts = true,
             bookingHorizonDays = RECGOV_BOOKING_HORIZON_DAYS,
             maxPollWindowDays = RECGOV_MAX_POLL_WINDOW_DAYS,
         )

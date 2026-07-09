@@ -48,6 +48,7 @@ ca.floo.roadtrip
 ├── service/
 │   ├── api/
 │   ├── availability/
+│   │   ├── alert/
 │   │   └── provider/
 │   │       └── adapters/<vendor>/
 │   ├── etl/

@@ -72,7 +72,7 @@ class ReserveCaliforniaAvailabilityProviderTest {
 
             assertEquals(AvailabilityProviderId.RESERVECALIFORNIA, provider.id)
             assertEquals(true, provider.capabilities.supportsAvailability)
-            assertEquals(false, provider.capabilities.supportsAlerts)
+            assertEquals(false, provider.capabilities.pollableForAlerts)
             assertEquals(183, provider.capabilities.bookingHorizonDays)
             assertEquals("reservecalifornia", batch.provider)
             assertEquals("690", batch.campgroundId)

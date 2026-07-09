@@ -1,18 +1,27 @@
 package ca.floo.roadtrip.service.scheduler.jobs
 
 import ca.floo.roadtrip.models.availability.CellTransition
+import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
+import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
+import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.FetchOutcome
 import ca.floo.roadtrip.service.availability.GroupFetchResult
+import ca.floo.roadtrip.service.availability.ProviderCandidate
+import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
+import ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.parentRefKey
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.scheduler.framework.HandlerResult
 import kotlinx.coroutines.slf4j.MDCContext
@@ -74,6 +83,9 @@ internal class AvailabilityPollExecutor(
     private val fetchCalls: AvailabilityFetchCallRepo,
     private val limiter: VendorRateLimiter,
     private val alertDispatcher: WatchAlertDispatcher,
+    private val failoverFetcher: FailoverAvailabilityFetcher =
+        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
+    private val campsiteProviderRepo: CampsiteProviderRepo? = null,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
 
@@ -167,6 +179,11 @@ internal class AvailabilityPollExecutor(
         val startedAt = OffsetDateTime.now()
         val runId = runs.start(poller.id, startedAt)
         var runFailed = false
+        // Per-group attempt trace captured inside the batcher's fetch lambda so
+        // recordFetchCalls can write ONE availability_fetch_call row per attempt
+        // (preferred + each sibling failover), not one per group.
+        val attemptsByGroup =
+            mutableMapOf<Pair<AvailabilityProviderId, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>()
         try {
             withContext(MDCContext(mapOf("run_id" to runId.toString()))) {
                 val results =
@@ -174,12 +191,9 @@ internal class AvailabilityPollExecutor(
                         targets = resolved,
                         windowFor = windowFor,
                         fetch = { parentRef, provider, rows, windows ->
-                            provider.catalogAvailability(
-                                ref = parentRef,
-                                campsites = rows.map { it.catalogRef },
-                                startDate = windows.fetch.startDate,
-                                endDate = windows.fetch.endDate,
-                            )
+                            val result = fetchWithFailover(rows, windows.fetch)
+                            attemptsByGroup[provider.id to parentRefKey(parentRef)] = result.attempts
+                            result.batch ?: throw synthesizedError(result.attempts.lastOrNull())
                         },
                     )
                 val failure = results.firstOrNull { it.outcome != FetchOutcome.OK }
@@ -191,7 +205,7 @@ internal class AvailabilityPollExecutor(
                 val observedCampsiteIds =
                     results.flatMap { r -> r.campsites.map { it.id } }.distinct()
                 availability.markElapsedAsPast(observedCampsiteIds, LocalDate.now(ZoneOffset.UTC))
-                recordFetchCalls(results, runId)
+                recordFetchCalls(results, attemptsByGroup, runId)
                 val completedAt = OffsetDateTime.now()
                 val durationMs = durationMs(startedAt, completedAt)
                 if (failure != null) {
@@ -257,29 +271,110 @@ internal class AvailabilityPollExecutor(
         return availability.recordObservations(runId, observations)
     }
 
-    /** Write one trace row per group that made a real upstream call (window
-     *  != null). Null-window groups were skipped by the batcher and made no
-     *  call, so they leave no trace. Written for every outcome — a rate
-     *  limited or failed group still produced a call worth tracing. */
+    /** Write ONE availability_fetch_call row per failover attempt for each
+     *  group that made a real upstream call (window != null). Null-window
+     *  groups were skipped by the batcher and made no call, so they leave no
+     *  trace. Every attempt — including retryable failovers to sibling
+     *  vendors — is worth tracing. If a group produced no attempts (e.g. the
+     *  batcher wrapped an unexpected error before the failover ran), the
+     *  batcher's aggregated outcome is the fallback single row. */
     private fun recordFetchCalls(
         results: List<GroupFetchResult>,
+        attemptsByGroup: Map<Pair<AvailabilityProviderId, String>, List<FailoverAvailabilityFetcher.AttemptRecord>>,
         runId: Long,
     ) {
         results.filter { it.window != null }.forEach { r ->
-            val providerId = r.provider.id.name
-            fetchCalls.record(
-                AvailabilityFetchCallRepo.NewCall(
-                    runId = runId,
-                    provider = providerId.lowercase(),
-                    parentRef = parentRefKey(r.parentRef),
-                    campsiteCount = r.campsites.size,
-                    windowStart = r.window!!.startDate,
-                    windowEnd = r.window.endDate,
-                    outcome = r.outcome.name.lowercase(),
-                    durationMs = r.durationMs,
-                    error = r.error,
-                ),
-            )
+            val key = r.provider.id to parentRefKey(r.parentRef)
+            val attempts = attemptsByGroup[key].orEmpty()
+            if (attempts.isEmpty()) {
+                fetchCalls.record(
+                    AvailabilityFetchCallRepo.NewCall(
+                        runId = runId,
+                        provider =
+                            r.provider.id.name
+                                .lowercase(),
+                        parentRef = parentRefKey(r.parentRef),
+                        campsiteCount = r.campsites.size,
+                        windowStart = r.window!!.startDate,
+                        windowEnd = r.window.endDate,
+                        outcome = r.outcome.name.lowercase(),
+                        durationMs = r.durationMs,
+                        error = r.error,
+                    ),
+                )
+                return@forEach
+            }
+            attempts.forEach { attempt ->
+                fetchCalls.record(
+                    AvailabilityFetchCallRepo.NewCall(
+                        runId = runId,
+                        provider = attempt.provider.name.lowercase(),
+                        parentRef = parentRefKey(attempt.parentRef),
+                        campsiteCount = r.campsites.size,
+                        windowStart = r.window!!.startDate,
+                        windowEnd = r.window.endDate,
+                        outcome = attempt.outcome.name.lowercase(),
+                        durationMs = attempt.durationMs,
+                        error = attempt.error,
+                    ),
+                )
+            }
+        }
+    }
+
+    /** Delegates to [FailoverAvailabilityFetcher] for one batcher group,
+     *  translating sibling candidates via [CampsiteProviderRepo]. Group all
+     *  rows share the preferred `(provider, parentRef)` (that's the batcher
+     *  key), so the group's candidate list is any row's. */
+    private suspend fun fetchWithFailover(
+        rows: List<ResolvedAvailabilityTarget>,
+        fetchWindow: ResolvedDateWindow,
+    ): FailoverAvailabilityFetcher.FailoverResult {
+        val groupCandidates = rows.first().candidates
+        val preferredRefs = rows.map { it.catalogRef }
+        val representativeIds = rows.map { it.campsite.id }
+        return failoverFetcher.fetch(
+            candidates = groupCandidates,
+            campsites = rows.map { it.campsite },
+            window = fetchWindow,
+            translateRefs = { candidate ->
+                if (candidate === groupCandidates.first()) {
+                    preferredRefs
+                } else {
+                    siblingRefsFor(candidate, representativeIds)
+                }
+            },
+        )
+    }
+
+    private fun siblingRefsFor(
+        candidate: ProviderCandidate,
+        representativeIds: List<Long>,
+    ): List<CatalogCampsiteRef> {
+        val repo = campsiteProviderRepo ?: return emptyList()
+        val vendorSlug =
+            candidate.provider.id.name
+                .lowercase()
+        return repo
+            .findCampsiteRefsForCandidate(representativeIds, vendorSlug)
+            .map { row ->
+                CatalogCampsiteRef(
+                    campsiteId = row.representativeCampsiteId,
+                    vendorId = row.externalId,
+                )
+            }
+    }
+
+    private fun synthesizedError(last: FailoverAvailabilityFetcher.AttemptRecord?): AvailabilityProviderError {
+        val message = last?.error ?: NO_CANDIDATES_ERROR
+        return when (last?.outcome) {
+            FetchOutcome.RATE_LIMITED -> AvailabilityProviderError.RateLimited(RuntimeException(message))
+            FetchOutcome.BLOCKED -> AvailabilityProviderError.UpstreamBlocked(RuntimeException(message))
+            FetchOutcome.UPSTREAM_5XX,
+            FetchOutcome.OK,
+            FetchOutcome.OTHER,
+            null,
+            -> AvailabilityProviderError.UpstreamUnavailable(RuntimeException(message))
         }
     }
 
@@ -332,3 +427,7 @@ private const val GLOBAL_DEFAULT_SEC = 300 // 5 min fall-through; PR4 layers poi
 // re-check once the vendor bucket has likely refilled a token. Distinct from the
 // success cadence and the failure backoff.
 private const val GOVERNOR_STARVED_RETRY_SEC = 15L
+
+// Fallback error message when the failover fetcher returns null-batch with no
+// attempts (empty-candidates case). Not user-facing — surfaces in the run row.
+private const val NO_CANDIDATES_ERROR: String = "no availability candidates available"

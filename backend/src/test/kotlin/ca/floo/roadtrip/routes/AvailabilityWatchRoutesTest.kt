@@ -12,10 +12,15 @@ import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
+import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.SlackNotifyHandler
+import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
+import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
 import io.ktor.client.request.delete
@@ -64,7 +69,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                 dateResolver = AvailabilityDateResolver(),
             )
-        return AvailabilityWatchService(ctx, campsitesRepo, targets)
+        return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
     }
 
     /**
@@ -83,8 +88,22 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
-        return AvailabilityWatchService(ctx, campsitesRepo, targets)
+        return AvailabilityWatchService(ctx, alertProviders(campsitesRepo, targets))
     }
+
+    /** Wraps the default internal-poller alert provider for tests, mirroring
+     *  the production wiring in [ca.floo.roadtrip.startRoadtripRuntime]. */
+    private fun alertProviders(
+        campsitesRepo: CampsiteRepo,
+        targets: DbAvailabilityTargetResolver,
+    ): AlertProviderRegistry =
+        AlertProviderRegistry(
+            listOf(
+                InternalPollerAlertProvider(
+                    AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets),
+                ),
+            ),
+        )
 
     // These CRUD tests don't exercise Slack, so the dispatcher runs with the
     // notifier disabled — dispatchInitial no-ops and the fire-and-forget launch
@@ -93,8 +112,9 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
     private fun disabledDispatcher(): WatchAlertDispatcher {
         val campsitesRepo = CampsiteRepo(ctx)
+        val slack = SlackNotificationServiceImpl(config = null)
         return WatchAlertDispatcher(
-            slack = SlackNotificationServiceImpl(config = null),
+            slack = slack,
             scopeResolver = WatchScopeResolver(campsitesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets =
@@ -106,6 +126,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 ),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
+            triggerActions = TriggerActionRegistry(listOf(SlackNotifyHandler(slack, appRootUrl = null))),
             grafanaRootUrl = null,
             appRootUrl = null,
         )
@@ -950,7 +971,7 @@ private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provid
     override val capabilities =
         ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities(
             supportsAvailability = true,
-            supportsAlerts = true,
+            pollableForAlerts = true,
             bookingHorizonDays = 180,
             maxPollWindowDays = 60,
         )
