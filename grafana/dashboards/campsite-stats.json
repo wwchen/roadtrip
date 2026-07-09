@@ -63,7 +63,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  coalesce(vr.vendor, '(missing primary ref)') AS vendor,\n  count(*) AS campsites,\n  count(*) FILTER (WHERE cs.deleted_at IS NULL) AS active_campsites,\n  count(*) FILTER (WHERE cs.latitude IS NOT NULL AND cs.longitude IS NOT NULL) AS with_coordinates,\n  count(*) FILTER (WHERE cs.max_people IS NOT NULL) AS with_capacity,\n  count(*) FILTER (WHERE cs.equipment <> '[]'::jsonb) AS with_equipment,\n  count(*) FILTER (WHERE cs.price <> '{}'::jsonb) AS with_price,\n  max(cs.updated_at) AS latest_catalog_update\nFROM campsites cs\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nGROUP BY 1\nORDER BY campsites DESC;",
+          "rawSql": "SELECT\n  coalesce(vr.vendor, '(missing primary ref)') AS vendor,\n  count(*) AS campsites,\n  count(*) FILTER (WHERE cs.deleted_at IS NULL) AS active_campsites,\n  count(*) FILTER (WHERE cs.latitude IS NOT NULL AND cs.longitude IS NOT NULL) AS with_coordinates,\n  count(*) FILTER (WHERE cs.max_people IS NOT NULL) AS with_capacity,\n  count(*) FILTER (WHERE cs.equipment <> '[]'::jsonb) AS with_equipment,\n  count(*) FILTER (WHERE cs.price <> '{}'::jsonb) AS with_price,\n  max(cs.updated_at) AS latest_catalog_update\nFROM campsites cs\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nGROUP BY 1\nORDER BY campsites DESC;",
           "refId": "A"
         }
       ],
