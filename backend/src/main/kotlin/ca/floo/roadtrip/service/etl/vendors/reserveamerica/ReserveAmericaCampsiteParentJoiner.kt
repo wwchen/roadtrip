@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
+import ca.floo.roadtrip.service.etl.framework.CampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
-import ca.floo.roadtrip.service.etl.framework.PoiReservableJoiner
 
 /**
  * Canonicalized ReserveAmerica campsite parent resolver.
@@ -10,10 +10,10 @@ import ca.floo.roadtrip.service.etl.framework.PoiReservableJoiner
  * `(contract_code, park_id)`, using the same tenant keys as the availability
  * adapter.
  */
-class ReserveAmericaPoiReservableJoiner : PoiReservableJoiner {
+class ReserveAmericaCampsiteParentJoiner : CampsiteParentJoiner {
     override val adapter: String = ADAPTER_NAME
 
-    override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> =
+    override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentJoiner.Link> =
         ctx.ctx
             .fetch(
                 """
@@ -69,14 +69,14 @@ class ReserveAmericaPoiReservableJoiner : PoiReservableJoiner {
                 PARENT_PARK_KEY,
                 PROVIDER_PARK_KEY,
             ).map { record ->
-                PoiReservableJoiner.Link(
+                CampsiteParentJoiner.Link(
                     campsiteId = record.get("campsite_id", Long::class.java),
                     campgroundId = record.get("campground_id", Long::class.java),
                 )
             }
 
     private companion object {
-        const val ADAPTER_NAME = "ReserveAmericaPoiReservableJoiner"
+        const val ADAPTER_NAME = "ReserveAmericaCampsiteParentJoiner"
         const val VENDOR_PREFIX = "reserveamerica_%"
         const val ALBERTA_CAMPGROUND_VENDOR = "alberta-provincial"
         const val NEW_YORK_CAMPGROUND_VENDOR = "new-york-state-parks"

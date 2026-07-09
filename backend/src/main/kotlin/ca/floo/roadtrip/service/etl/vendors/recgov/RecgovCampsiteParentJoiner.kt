@@ -1,19 +1,22 @@
-package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
+package ca.floo.roadtrip.service.etl.vendors.recgov
 
+import ca.floo.roadtrip.service.etl.framework.CampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
-import ca.floo.roadtrip.service.etl.framework.PoiReservableJoiner
 
 /**
- * Canonicalized ReserveCalifornia campsite parent resolver.
+ * Canonicalized rec.gov campsite parent resolver.
+ *
+ * The old adapter linked `reservables` to `pois`; with the canonical catalog it
+ * resolves rec.gov campsite rows to campground rows through vendor refs.
  */
-class ReserveCaliforniaPoiReservableJoiner : PoiReservableJoiner {
+class RecgovCampsiteParentJoiner : CampsiteParentJoiner {
     override val adapter: String = ADAPTER_NAME
 
-    override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> =
+    override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentJoiner.Link> =
         ctx.ctx
             .fetch(
                 """
-                SELECT DISTINCT c.id AS campsite_id, cg.id AS campground_id
+                SELECT c.id AS campsite_id, cg.id AS campground_id
                 FROM campsites c
                 JOIN campsite_vendor_refs cvr
                   ON cvr.campsite_id = c.id
@@ -33,29 +36,31 @@ class ReserveCaliforniaPoiReservableJoiner : PoiReservableJoiner {
                   AND site_ref.vendor = ?
                   AND campground_ref.entity_type = 'campground'
                   AND campground_ref.vendor = ?
-                  AND jsonb_extract_path_text(campground_ref.payload, ?) =
+                  AND campground_ref.external_id = concat(
+                    ?,
                     COALESCE(
-                      jsonb_extract_path_text(site_ref.payload, ?),
-                      jsonb_extract_path_text(c.source_payload, ?)
+                      jsonb_extract_path_text(c.source_payload, ?),
+                      jsonb_extract_path_text(site_ref.payload, ?)
                     )
+                  )
                 """.trimIndent(),
                 VENDOR,
                 PARENT_CAMPGROUND_VENDOR,
-                POI_PLACE_KEY,
-                PARENT_PLACE_KEY,
-                PARENT_PLACE_KEY,
+                PARENT_CAMPGROUND_REF_PREFIX,
+                PARENT_FACILITY_KEY,
+                PARENT_FACILITY_KEY,
             ).map { record ->
-                PoiReservableJoiner.Link(
+                CampsiteParentJoiner.Link(
                     campsiteId = record.get("campsite_id", Long::class.java),
                     campgroundId = record.get("campground_id", Long::class.java),
                 )
             }
 
     private companion object {
-        const val ADAPTER_NAME = "ReserveCaliforniaPoiReservableJoiner"
-        const val VENDOR = "reservecalifornia"
-        const val PARENT_CAMPGROUND_VENDOR = "california-state-parks"
-        const val PARENT_PLACE_KEY = "_parent_place_id"
-        const val POI_PLACE_KEY = "place_id"
+        const val ADAPTER_NAME = "RecgovCampsiteParentJoiner"
+        const val VENDOR = "recgov"
+        const val PARENT_CAMPGROUND_VENDOR = "federal-campgrounds"
+        const val PARENT_CAMPGROUND_REF_PREFIX = "recgov-"
+        const val PARENT_FACILITY_KEY = "_parent_facility_id"
     }
 }

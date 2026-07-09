@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
+import ca.floo.roadtrip.service.etl.framework.CampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
-import ca.floo.roadtrip.service.etl.framework.PoiReservableJoiner
 
 /**
  * Canonicalized Aspira campsite parent resolver.
@@ -10,10 +10,10 @@ import ca.floo.roadtrip.service.etl.framework.PoiReservableJoiner
  * `campsites`/`campgrounds` vendor refs instead of the removed
  * `reservables`/`reservable_pois` tables.
  */
-class AspiraPoiReservableJoiner : PoiReservableJoiner {
+class AspiraCampsiteParentJoiner : CampsiteParentJoiner {
     override val adapter: String = ADAPTER_NAME
 
-    override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> =
+    override fun discoverLinks(ctx: JoinerCtx): List<CampsiteParentJoiner.Link> =
         ctx.ctx
             .fetch(
                 """
@@ -77,14 +77,14 @@ class AspiraPoiReservableJoiner : PoiReservableJoiner {
                 RESOURCE_LOCATION_ID_KEY,
                 PARENT_RESOURCE_LOCATION_ID_KEY,
             ).map { record ->
-                PoiReservableJoiner.Link(
+                CampsiteParentJoiner.Link(
                     campsiteId = record.get("campsite_id", Long::class.java),
                     campgroundId = record.get("campground_id", Long::class.java),
                 )
             }
 
     private companion object {
-        const val ADAPTER_NAME = "AspiraPoiReservableJoiner"
+        const val ADAPTER_NAME = "AspiraCampsiteParentJoiner"
         const val POI_SOURCE_ID_PREFIX = "aspira-"
         const val TXN_LOC_KEY = "transactionLocationId"
         const val MAP_ID_KEY = "mapId"

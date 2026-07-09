@@ -21,7 +21,7 @@ sealed interface Phase {
      * orchestrator which dispatch path to take:
      *   - POI_DATA              → runPoiData(name)
      *   - CAMPSITE_DATA         → runCampsiteData(name)
-     *   - POI_RESERVABLE_JOINER → runJoiner(name), a reconciler that
+     *   - CAMPSITE_PARENT_JOINER → runJoiner(name), a reconciler that
      *                             reparents campsites whose canonical
      *                             campground_id disagrees with the joiner's
      *                             vendor-ref lookup.
@@ -41,7 +41,7 @@ sealed interface Phase {
         ) {
             POI_DATA("poi_data"),
             CAMPSITE_DATA("campsite_data"),
-            POI_RESERVABLE_JOINER("poi_reservable_joiner"),
+            CAMPSITE_PARENT_JOINER("campsite_parent_joiner"),
         }
     }
 }

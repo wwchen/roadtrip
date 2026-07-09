@@ -7,10 +7,10 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CanonicalCatalogRepo
 import ca.floo.roadtrip.repo.NoCaptureException
 import ca.floo.roadtrip.repo.RawCapture
-import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraPoiReservableJoiner
-import ca.floo.roadtrip.service.etl.vendors.recgov.RecgovPoiReservableJoiner
-import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaPoiReservableJoiner
-import ca.floo.roadtrip.service.etl.vendors.reservecalifornia.ReserveCaliforniaPoiReservableJoiner
+import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
+import ca.floo.roadtrip.service.etl.vendors.recgov.RecgovCampsiteParentJoiner
+import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaCampsiteParentJoiner
+import ca.floo.roadtrip.service.etl.vendors.reservecalifornia.ReserveCaliforniaCampsiteParentJoiner
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
@@ -52,7 +52,7 @@ class EtlOrchestrator(
      * production registry under [Companion.joinerRegistry]; overridable
      * for tests.
      */
-    private val joinerRegistry: Map<String, PoiReservableJoiner> = Companion.joinerRegistry,
+    private val joinerRegistry: Map<String, CampsiteParentJoiner> = Companion.joinerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val catalogRepo = CanonicalCatalogRepo(ctx)
@@ -172,7 +172,7 @@ class EtlOrchestrator(
     }
 
     /**
-     * Run a poi_reservable_joiner row by name. The joiner walks the canonical
+     * Run a campsite_parent_joiner row by name. The joiner walks the canonical
      * schema through its vendor-specific predicates (typically campsite
      * vendor refs → campground vendor refs) and returns a list of
      * (campsite_id, campground_id) pairs it believes are correct.
@@ -193,8 +193,8 @@ class EtlOrchestrator(
      */
     fun runJoiner(name: String): JoinerStats {
         val row =
-            poiRegistry.poiReservableJoinerByName(name)
-                ?: error("no poi_reservable_joiner row with name='$name'")
+            poiRegistry.campsiteParentJoinerByName(name)
+                ?: error("no campsite_parent_joiner row with name='$name'")
         val joiner =
             joinerRegistry[row.adapter]
                 ?: error("no joiner adapter registered for '${row.adapter}'")
@@ -472,12 +472,12 @@ class EtlOrchestrator(
         // separate from `registry` because joiners don't emit typed ETL
         // output; they mutate campsite parent links directly through
         // discoverLinks + a reparent UPDATE in runJoiner.
-        val joinerRegistry: Map<String, PoiReservableJoiner> =
+        val joinerRegistry: Map<String, CampsiteParentJoiner> =
             listOf(
-                RecgovPoiReservableJoiner(),
-                AspiraPoiReservableJoiner(),
-                ReserveAmericaPoiReservableJoiner(),
-                ReserveCaliforniaPoiReservableJoiner(),
+                RecgovCampsiteParentJoiner(),
+                AspiraCampsiteParentJoiner(),
+                ReserveAmericaCampsiteParentJoiner(),
+                ReserveCaliforniaCampsiteParentJoiner(),
             ).associateBy { it.adapter }
     }
 }

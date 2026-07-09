@@ -129,17 +129,17 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
             )
     }
 
-    // poi_reservable_joiner — reconciliation pass. Reparents any campsite
+    // campsite_parent_joiner — reconciliation pass. Reparents any campsite
     // whose current campground_id disagrees with the joiner's cross-vendor
     // lookup; idempotent on already-correct rows. See runJoiner.
-    for (row in registry.poiReservableJoiners) {
+    for (row in registry.campsiteParentJoiners) {
         if (!row.enabled) {
-            log.info("poi_reservable_joiner '{}' is disabled - omitting import target", row.name)
+            log.info("campsite_parent_joiner '{}' is disabled - omitting import target", row.name)
             continue
         }
         if (row.adapter !in implementedJoiners) {
             log.warn(
-                "poi_reservable_joiner '{}' adapter '{}' is disabled or not registered - omitting import target",
+                "campsite_parent_joiner '{}' adapter '{}' is disabled or not registered - omitting import target",
                 row.name,
                 row.adapter,
             )
@@ -154,7 +154,7 @@ fun importTargetsFromRegistry(registry: PoiRegistry): Map<String, Target> {
                         Phase.Import(
                             label = "import:${row.name}",
                             name = row.name,
-                            section = Phase.Import.Section.POI_RESERVABLE_JOINER,
+                            section = Phase.Import.Section.CAMPSITE_PARENT_JOINER,
                         ),
                     ),
             )
