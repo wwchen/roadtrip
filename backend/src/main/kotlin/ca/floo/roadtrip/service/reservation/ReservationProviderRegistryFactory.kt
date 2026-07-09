@@ -32,7 +32,10 @@ object ReservationProviderRegistryFactory {
             adaptersBySource[source] = recgov
         }
 
+        // Canonical catalog reads expose `vendor_refs.vendor` ("campflare"),
+        // while registry YAML exposes the terminal ETL slug ("campflare-campgrounds").
         val campflare = CampflareReservationProvider(client = clients.campflareClient)
+        adaptersBySource[CAMPFLARE_VENDOR] = campflare
         for (source in registry.campflareSources()) {
             adaptersBySource[source] = campflare
         }
@@ -105,4 +108,6 @@ object ReservationProviderRegistryFactory {
         // Reverse direction is informational, not fatal: a tenant row with no
         // YAML source is harmless (the adapter just won't be exercised).
     }
+
+    private const val CAMPFLARE_VENDOR = "campflare"
 }

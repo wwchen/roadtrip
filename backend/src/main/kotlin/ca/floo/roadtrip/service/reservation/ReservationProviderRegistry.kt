@@ -3,13 +3,13 @@ package ca.floo.roadtrip.service.reservation
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 
 /**
- * Holds the live reservation-provider adapters and dispatches a
- * `(pois.source, provider_ref)` pair to the right one.
+ * Holds the live reservation-provider adapters and dispatches a selected
+ * `(vendor_ref.vendor, provider_ref)` pair to the right one.
  *
- * Construction is the only place that knows the mapping from `pois.source`
- * (an ETL slug) to a [ReservationProvider] instance. Once built, the registry
- * exposes a single lookup — routes and the watch poller never see the
- * source string, and adapters never see the source either.
+ * Construction is the only place that knows the mapping from source/vendor
+ * keys to a [ReservationProvider] instance. Once built, the registry exposes a
+ * single lookup — routes and the watch poller never see the source string, and
+ * adapters never see the source either.
  *
  * Key shape note: a single [ReservationProviderId] value can map to multiple
  * adapter *instances* (Aspira NextGen runs three tenants — PC/BC/WA — that
@@ -22,9 +22,9 @@ import ca.floo.roadtrip.repo.CampsiteProviderRefRow
  */
 class ReservationProviderRegistry(
     /**
-     * `pois.source` → adapter instance. One row per terminal-ETL slug
-     * that produces bookable POIs. Source strings come from the YAML
-     * registry; adapters are built by [ReservationProviderRegistryFactory].
+     * Source/vendor key → adapter instance. Most keys are terminal ETL slugs
+     * from YAML; canonical catalog reads can also surface `vendor_refs.vendor`
+     * values such as `campflare`.
      */
     private val adaptersBySource: Map<String, ReservationProvider>,
 ) {

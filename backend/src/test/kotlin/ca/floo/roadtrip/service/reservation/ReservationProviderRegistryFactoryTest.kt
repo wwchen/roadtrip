@@ -101,7 +101,7 @@ class ReservationProviderRegistryFactoryTest {
         }
 
     @Test
-    fun `campflare source maps to campflare provider`() =
+    fun `campflare source and canonical vendor key map to campflare provider`() =
         runBlocking {
             var observedCall: CampflareCall? = null
 
@@ -149,9 +149,12 @@ class ReservationProviderRegistryFactoryTest {
                 )
 
             val provider = registry.forPoi(row("campflare-campgrounds"))
+            val providerByCanonicalVendor = registry.forPoi(row("campflare"))
 
             assertNotNull(provider)
+            assertNotNull(providerByCanonicalVendor)
             assertEquals(ReservationProviderId.CAMPFLARE, provider.id)
+            assertEquals(ReservationProviderId.CAMPFLARE, providerByCanonicalVendor.id)
             provider.availability(
                 ref = ProviderRef.Campflare("upper-pines-campground-447"),
                 startDate = LocalDate.parse("2026-06-01"),
