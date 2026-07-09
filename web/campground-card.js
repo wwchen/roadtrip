@@ -120,21 +120,6 @@ export function bookingSystemFooterHTML(p) {
   return `<div class="footer cg-booking-sys">Booking via ${escapeHtml(sys)}</div>`;
 }
 
-export function sourceMetaHTML(p) {
-  const bookingSite = firstText(p.booking_site, urlHost(firstText(p.reserve_url, p.reservation_url)));
-  const rows = [
-    ['Data source', firstText(p.data_source, p.source)],
-    ['Availability provider', firstText(p.availability_provider, p.provider_source)],
-    ['Agency', p.agency],
-    ['Booking site', bookingSite],
-  ].filter(([, value]) => firstText(value));
-  if (!rows.length) return '';
-  const body = rows.map(([label, value]) => (
-    `<div><dt>${escapeHtml(label)}</dt><dd>${escapeHtml(value)}</dd></div>`
-  )).join('');
-  return `<dl class="cg-source-meta">${body}</dl>`;
-}
-
 export function campgroundParentParkName(p) {
   const campgroundName = normalizeLinkTitle(firstText(p?.name));
   if (!Array.isArray(p?.links)) return '';
