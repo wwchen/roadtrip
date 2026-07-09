@@ -3,8 +3,8 @@ package ca.floo.roadtrip.service.availability.provider.adapters.aspira
 import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraException
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.availability.provider.AvailabilityClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
@@ -124,12 +124,12 @@ class AspiraAvailabilityProvider(
 
     /** goingtocamp `create-booking/results` deep link for this tenant's host;
      *  the concrete-date [bookingUrl] fills the window placeholders. Null when
-     *  neither the reservable's own ref nor [parentRef] carries the ids the
+     *  neither the campsite's own ref nor [parentRef] carries the ids the
      *  link needs. */
     override fun bookingUrlTemplate(
-        reservable: Reservable,
+        campsite: Campsite,
         parentRef: ProviderRef,
-    ): String? = AspiraBookingUrl.templateFor(tenant.host, reservable.providerRef, parentRef)
+    ): String? = AspiraBookingUrl.templateFor(tenant.host, campsite.providerRef, parentRef)
 
     override suspend fun reservableAvailability(
         ref: ProviderRef,

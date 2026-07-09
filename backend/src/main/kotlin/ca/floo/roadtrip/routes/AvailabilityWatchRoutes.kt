@@ -12,7 +12,7 @@ import ca.floo.roadtrip.models.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchTargetSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.models.api.CampsiteSummarySchema
-import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
@@ -321,7 +321,7 @@ internal fun Route.availabilityWatchRoutes(
         val dateStrings = dates.map { it.toString() }
         val rowsByLoop = LinkedHashMap<String?, MutableList<AvailabilityWatchHeatmapRow>>()
         for (r in children.sortedWith(
-            compareBy<Reservable, String?>(nullsLast()) {
+            compareBy<Campsite, String?>(nullsLast()) {
                 it.loop
             }.thenBy { it.name ?: "" }.thenBy { it.vendorId },
         )) {

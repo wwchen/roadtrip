@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.availability.provider.adapters.recgov
 
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.availability.provider.AvailabilityClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
@@ -92,9 +92,9 @@ class RecGovAvailabilityProvider(
      *  the window placeholders. [parentRef] is unused — the site id alone
      *  addresses the page. */
     override fun bookingUrlTemplate(
-        reservable: Reservable,
+        campsite: Campsite,
         parentRef: ProviderRef,
-    ): String = RecGovBookingUrl.template(reservable.vendorId)
+    ): String = RecGovBookingUrl.template(campsite.vendorId)
 
     private fun recgovIdOrThrow(ref: ProviderRef): String =
         when (ref) {

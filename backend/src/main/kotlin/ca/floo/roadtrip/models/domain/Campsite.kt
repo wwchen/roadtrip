@@ -3,7 +3,7 @@ package ca.floo.roadtrip.models.domain
 import kotlinx.serialization.json.JsonElement
 
 /**
- * A reservable as we store it. Catalog data — names, loop, type, the raw
+ * A campsite as we store it. Catalog data — names, loop, type, the raw
  * upstream blob — refreshed by ETL, not request-time. Per-day availability
  * is computed live by the AvailabilityProvider; not stored here.
  *
@@ -23,7 +23,7 @@ import kotlinx.serialization.json.JsonElement
  *
  * RFC 0008 §"Data model".
  */
-data class Reservable(
+data class Campsite(
     val id: Long,
     val vendor: String,
     val vendorId: String,

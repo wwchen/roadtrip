@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import java.time.LocalDate
 
 /**
@@ -96,21 +96,21 @@ interface AvailabilityProvider : AvailabilityClient {
      * adapter — a provider without one is not a gap to fill.
      */
     fun bookingUrlTemplate(
-        reservable: Reservable,
+        campsite: Campsite,
         parentRef: ProviderRef,
     ): String? = null
 
     /**
-     * Concrete booking deep link for [reservable] on the single night beginning
+     * Concrete booking deep link for [campsite] on the single night beginning
      * [date] (check-out the next day), or null when the provider exposes none.
      * Derived from [bookingUrlTemplate] by filling its window placeholders, so
      * an adapter only implements the template once.
      */
     fun bookingUrl(
-        reservable: Reservable,
+        campsite: Campsite,
         parentRef: ProviderRef,
         date: LocalDate,
-    ): String? = bookingUrlTemplate(reservable, parentRef)?.let { BookingUrlTemplate.fill(it, date, date.plusDays(1)) }
+    ): String? = bookingUrlTemplate(campsite, parentRef)?.let { BookingUrlTemplate.fill(it, date, date.plusDays(1)) }
 }
 
 data class CatalogReservableRef(

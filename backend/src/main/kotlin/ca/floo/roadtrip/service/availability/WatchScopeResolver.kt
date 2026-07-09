@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
 import kotlinx.serialization.json.JsonArray
@@ -12,14 +12,14 @@ class WatchScopeResolver(
 ) {
     /**
      * Resolves a watch's full target SET to the flat, de-duplicated list of
-     * reservables it covers. A reservable target resolves to itself; a POI
+     * campsites it covers. A campsite target resolves to itself; a POI
      * target expands to that POI's site-type children, filtered by the
      * watch's shared `reservableFilters`. Union across all targets,
      * first-seen order preserved — this is the entire seam
      * [AvailabilityPollerMembership.sync] depends on, unchanged since PR1.
      */
-    fun resolve(watch: AvailabilityWatchRepo.Watch): List<Reservable> {
-        val seen = LinkedHashMap<Long, Reservable>()
+    fun resolve(watch: AvailabilityWatchRepo.Watch): List<Campsite> {
+        val seen = LinkedHashMap<Long, Campsite>()
         for (target in watch.targets) {
             val resolved =
                 target.reservableId?.let { id -> campsitesRepo.findById(id)?.let(::listOf) ?: emptyList() }
@@ -33,7 +33,7 @@ class WatchScopeResolver(
     private fun resolvePoi(
         poiId: Long,
         filters: JsonObject,
-    ): List<Reservable> {
+    ): List<Campsite> {
         val all = campsitesRepo.findByPoi(poiId)
         val loops = collectStringFilter(filters, "loop")
         val siteTypes = collectStringFilter(filters, "site_type")

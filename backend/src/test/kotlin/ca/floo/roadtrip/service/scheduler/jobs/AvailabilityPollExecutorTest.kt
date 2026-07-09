@@ -6,8 +6,8 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityFetchCallRepo
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
@@ -405,9 +405,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         }
 
         override fun bookingUrlTemplate(
-            reservable: Reservable,
+            campsite: Campsite,
             parentRef: ProviderRef,
-        ): String = "https://example.test/book/${reservable.vendorId}?d=${BookingUrlTemplate.START_DATE}"
+        ): String = "https://example.test/book/${campsite.vendorId}?d=${BookingUrlTemplate.START_DATE}"
     }
 
     private class RateLimitedProvider : AvailabilityProvider {

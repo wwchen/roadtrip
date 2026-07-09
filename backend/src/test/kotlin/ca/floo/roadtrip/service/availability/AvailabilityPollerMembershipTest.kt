@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.PoiDateContext
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
@@ -148,28 +148,28 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val byCampsiteId = mutableMapOf<Long, ResolvedAvailabilityTarget>()
 
         fun stub(
-            reservable: Reservable,
+            campsite: Campsite,
             provider: AvailabilityProviderId,
             parentRef: ProviderRef,
             parentPoiId: Long,
             dateContext: PoiDateContext,
         ) {
-            byCampsiteId[reservable.id] =
+            byCampsiteId[campsite.id] =
                 ResolvedAvailabilityTarget(
-                    reservable = reservable,
+                    campsite = campsite,
                     provider = FakeProvider(provider),
                     parentRef = parentRef,
                     catalogRef =
                         CatalogReservableRef(
-                            campsiteId = reservable.id,
-                            vendorId = reservable.vendorId,
+                            campsiteId = campsite.id,
+                            vendorId = campsite.vendorId,
                         ),
                     parentPoiId = parentPoiId,
                     dateContext = dateContext,
                 )
         }
 
-        override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byCampsiteId[reservable.id]
+        override fun resolve(campsite: Campsite): ResolvedAvailabilityTarget? = byCampsiteId[campsite.id]
     }
 
     @Test

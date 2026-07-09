@@ -1,16 +1,16 @@
 package ca.floo.roadtrip.service.availability.provider
 
-import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovAvailabilityProvider
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import ca.floo.roadtrip.clients.recgov.Campsite as RecGovCampsite
 
 class RecGovAvailabilityProviderTest {
     @Test
@@ -21,7 +21,7 @@ class RecGovAvailabilityProviderTest {
                     assertEquals("232447", campgroundId)
                     mapOf(
                         "330257" to
-                            Campsite(
+                            RecGovCampsite(
                                 id = "330257",
                                 site = "A12",
                                 loop = "A",
@@ -31,7 +31,7 @@ class RecGovAvailabilityProviderTest {
                                 availabilities = mapOf("2026-07-01" to "Available"),
                             ),
                         "330258" to
-                            Campsite(
+                            RecGovCampsite(
                                 id = "330258",
                                 site = "B01",
                                 loop = "B",
@@ -72,7 +72,7 @@ class RecGovAvailabilityProviderTest {
                     assertEquals("232447", campgroundId)
                     mapOf(
                         "100" to
-                            Campsite(
+                            RecGovCampsite(
                                 id = "100",
                                 site = "A12",
                                 loop = "A",
@@ -112,7 +112,7 @@ class RecGovAvailabilityProviderTest {
                     assertEquals("232447", campgroundId)
                     mapOf(
                         "330257" to
-                            Campsite(
+                            RecGovCampsite(
                                 id = "330257",
                                 site = "A12",
                                 loop = "A",
@@ -126,7 +126,7 @@ class RecGovAvailabilityProviderTest {
                                     ),
                             ),
                         "999999" to
-                            Campsite(
+                            RecGovCampsite(
                                 id = "999999",
                                 site = "B01",
                                 loop = "B",
@@ -160,7 +160,7 @@ class RecGovAvailabilityProviderTest {
                     assertEquals("232447", campgroundId)
                     mapOf(
                         "330257" to
-                            Campsite(
+                            RecGovCampsite(
                                 id = "330257",
                                 site = "A12",
                                 loop = "A",
@@ -174,7 +174,7 @@ class RecGovAvailabilityProviderTest {
                                     ),
                             ),
                         "330258" to
-                            Campsite(
+                            RecGovCampsite(
                                 id = "330258",
                                 site = "B01",
                                 loop = "B",
@@ -210,8 +210,8 @@ class RecGovAvailabilityProviderTest {
     @Test
     fun `booking url points at the rec_gov campsite page for the single night`() {
         val adapter = RecGovAvailabilityProvider(fakeRecgovClient { _, _ -> emptyMap() })
-        val reservable =
-            Reservable(
+        val campsite =
+            Campsite(
                 id = 1,
                 vendor = "recgov",
                 vendorId = "330257",
@@ -221,7 +221,7 @@ class RecGovAvailabilityProviderTest {
                 raw = null,
             )
 
-        val url = adapter.bookingUrl(reservable, ProviderRef.RecGov("232447"), LocalDate.parse("2026-07-01"))
+        val url = adapter.bookingUrl(campsite, ProviderRef.RecGov("232447"), LocalDate.parse("2026-07-01"))
 
         assertEquals(
             "https://www.recreation.gov/camping/campsites/330257?startDate=2026-07-01&endDate=2026-07-02",
@@ -234,11 +234,11 @@ private fun fakeRecgovClient(
     fetcher: suspend (
         campgroundId: String,
         monthStart: String,
-    ) -> Map<String, Campsite>,
+    ) -> Map<String, RecGovCampsite>,
 ): RecGovAvailabilityClient =
     object : RecGovAvailabilityClient {
         override suspend fun fetchMonth(
             campgroundId: String,
             monthStart: String,
-        ): Map<String, Campsite> = fetcher(campgroundId, monthStart)
+        ): Map<String, RecGovCampsite> = fetcher(campgroundId, monthStart)
     }

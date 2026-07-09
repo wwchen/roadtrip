@@ -5,8 +5,8 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityWindows
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
@@ -178,12 +178,12 @@ class CatalogAvailabilityBatcherTest {
             ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used by fetchByGroup tests")
         }
 
-    private fun reservable(
+    private fun campsite(
         campsiteId: Long,
         vendor: String,
         vendorId: String,
-    ): Reservable =
-        Reservable(
+    ): Campsite =
+        Campsite(
             id = campsiteId,
             vendor = vendor,
             vendorId = vendorId,
@@ -207,7 +207,7 @@ class CatalogAvailabilityBatcherTest {
             ),
     ): ResolvedAvailabilityTarget =
         ResolvedAvailabilityTarget(
-            reservable = reservable(campsiteId, vendor, vendorId),
+            campsite = campsite(campsiteId, vendor, vendorId),
             provider = provider,
             parentRef = parentRef,
             catalogRef = catalogRef,

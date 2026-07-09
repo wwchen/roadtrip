@@ -116,9 +116,9 @@ internal class AvailabilityPollExecutor(
                         it.provider.id.name
                             .lowercase() == poller.provider
                 }
-                // findByPoi returns distinct reservables, but guard against
+                // findByPoi returns distinct campsites, but guard against
                 // duplicate poi links so a site is fetched once.
-                .distinctBy { it.reservable.id }
+                .distinctBy { it.campsite.id }
 
         // The polling window per date-context: the widest window the vendor
         // exposes for a single tick, anchored at today and independent of the

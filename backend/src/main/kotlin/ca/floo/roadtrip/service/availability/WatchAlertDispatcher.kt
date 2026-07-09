@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.CellTransition
-import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -150,7 +150,7 @@ internal class WatchAlertDispatcher(
     private suspend fun postOpenings(
         watch: AvailabilityWatchRepo.Watch,
         covered: List<CellTransition>,
-        reservablesById: Map<Long, Reservable>,
+        reservablesById: Map<Long, Campsite>,
     ) {
         val openings = hydrateOpenings(covered, reservablesById)
         val fired =
@@ -172,7 +172,7 @@ internal class WatchAlertDispatcher(
      *  and the provider booking URL — so the notification layer only formats. */
     private fun hydrateOpenings(
         covered: List<CellTransition>,
-        reservablesById: Map<Long, Reservable>,
+        reservablesById: Map<Long, Campsite>,
     ): List<WatchOpening> {
         val poiNames = HashMap<Long, String?>()
         return covered.map { t ->
@@ -204,7 +204,7 @@ internal class WatchAlertDispatcher(
      *  no POI). */
     private fun statusNotice(
         watch: AvailabilityWatchRepo.Watch,
-        reservables: List<Reservable>,
+        reservables: List<Campsite>,
         state: WatchStatusNotice.State,
     ): WatchStatusNotice {
         val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
