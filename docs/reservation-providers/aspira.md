@@ -762,8 +762,8 @@ a tenant.
   contract: ports, capabilities, registry shape.
 - `service/availability/provider/adapters/aspira/AspiraAvailabilityProvider.kt` — the
   current adapter (availability only).
-- `service/etl/aspira/AspiraResourcesEtl.kt` — emits reservable rows
-  emits one reservable per inventory record; reads the `/api/maps`
+- `service/etl/aspira/AspiraResourcesEtl.kt` — emits campsite rows,
+  emits one campsite per inventory record; reads the `/api/maps`
   tree only to label each row's `loop` via a `mapIds[0]` lookup.
 - `client/AspiraAvailabilityClient.kt` — the request-time HTTP
   client; pattern to copy for an inventory client.

@@ -6,7 +6,7 @@ import org.jooq.Record
 import org.jooq.impl.DSL
 
 /**
- * Owns all SQL for `availability_watch_target` — the set of POIs/reservables
+ * Owns all SQL for `availability_watch_target` — the set of POIs/campsites
  * a watch covers. A watch's scope is exactly this set; [AvailabilityWatchRepo]
  * delegates all target reads/writes here rather than embedding the join
  * table's SQL inline, so the two repos can't drift on shape.

@@ -74,8 +74,8 @@ The availability orchestration that consumes this port lives one layer above:
 ```
 service/availability/
 ├── AvailabilityService.kt               # POI availability contract used by routes
-├── ReservableAvailabilityComposer.kt    # grouping, window policy, per-collection availability load
-├── AvailabilityTargetResolver.kt        # reservable → parent provider + date context
+├── CampsiteAvailabilityComposer.kt      # grouping, window policy, per-collection availability load
+├── AvailabilityTargetResolver.kt        # campsite → parent provider + date context
 └── AvailabilityDateResolver.kt          # target-local earliest date/window policy
 ```
 
@@ -190,11 +190,11 @@ watch → job → run → fetch-call(s) → snapshots
                      └ one availability_fetch_call row per upstream group call
 ```
 
-A run can cover many reservables (a POI-scope watch fans out to every child
-reservable), but the poller does not issue one upstream call per reservable.
+A run can cover many campsites (a POI-scope watch fans out to every child
+campsite), but the poller does not issue one upstream call per campsite.
 `CatalogAvailabilityBatcher` groups a run's resolved targets by
 `(provider, parentRef, dateContext)` and issues exactly one
-`catalogAvailability` call per group — so N reservables under one campground
+`catalogAvailability` call per group — so N campsites under one campground
 become one upstream call. This is what fixed the old per-site rate-limit
 fan-out. Call-shaping stays inside each adapter (months for rec.gov, the park
 matrix for ReserveAmerica, per-day map calls for Aspira); the batcher and poller
@@ -202,11 +202,11 @@ never branch on vendor, they only group and dispatch.
 
 `availability_fetch_call` is the trace table for this grouping: one row per
 group call, keyed by `run_id`, with columns `provider`, `parent_ref`,
-`reservable_count`, `window_start` / `window_end`, `outcome`
+`campsite_count`, `window_start` / `window_end`, `outcome`
 (`ok | rate_limited | upstream_5xx | blocked | other`), `duration_ms`, and
 `error`. Rows are written only when a real upstream call was made — a group
 with no future dates is skipped by the batcher and produces no row. This
-table is surfaced in the "Reservable Availability Watch drill down" Grafana
+table is surfaced in the "Availability Watch drill down" Grafana
 dashboard's "Fetch calls for this run" panel, with a "Rate-limited fetches"
 monitor watching the outcome column across runs.
 
@@ -235,7 +235,7 @@ walk `previous_id` back from the current row. Each row is an interval
 
 History is read through provider-agnostic SQL on the `availability` table.
 Adapters do not own history queries. The lingua franca is one
-reservable/date/status observation with the shared status enum:
+campsite/date/status observation with the shared status enum:
 `first_come | reserved | available | closed | unknown`. `first_come` is
 visible to users but does not count as online availability; missing provider
 data is `unknown`, not `closed`. Provider-specific richness (equipment-type

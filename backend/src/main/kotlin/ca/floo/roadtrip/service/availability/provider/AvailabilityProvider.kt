@@ -64,14 +64,14 @@ interface AvailabilityProvider : AvailabilityClient {
     ): AvailabilityObservationBatch = availability(ref, startDate, endDate)
 
     /**
-     * User-facing booking URL *template* for [reservable] under a campground
+     * User-facing booking URL *template* for [campsite] under a campground
      * whose parent scope is [parentRef], or null when this provider exposes no
      * stable deep link. The template may embed the
      * [BookingUrlTemplate] placeholders (filled by the caller for a chosen
      * window) or be a static URL. Pure and cheap — no upstream call, no throw.
      *
      * The URL scheme is vendor-specific, so it lives in the adapter — the one
-     * place that knows the vendor's booking-site shape. Both the reservables
+     * place that knows the vendor's booking-site shape. Both the campsites
      * API (which ships the template to the web app) and provider-neutral
      * callers (alert notifications, via [bookingUrl]) read it from here rather
      * than hardcoding vendor URLs. Default null keeps deep links opt-in per

@@ -26,13 +26,13 @@ import org.slf4j.LoggerFactory
 /**
  * Terminal ETL for the `campsite_data` section. Reads the per-park
  * `/api/resourcelocation/resources` envelopes captured by
- * `scripts/fetch_aspira_inventory.py` and emits one reservable per
+ * `scripts/fetch_aspira_inventory.py` and emits one campsite per
  * Aspira resource (per-individual-site).
  *
  * Two inputs per row:
  *   1. `aspira-inventory-{tenant}` — per-park named-site catalog
  *      (`/api/resourcelocation/resources`). Source of truth for both
- *      "what reservables exist" and "what we know about them": names,
+ *      "what campsites exist" and "what we know about them": names,
  *      descriptions, allowed equipment, capacity, attribute IDs.
  *   2. `aspira-maps-{tenant}` — same /api/maps capture
  *      [AspiraLeavesEtl] reads. Walked here for leaf metadata
@@ -50,7 +50,7 @@ import org.slf4j.LoggerFactory
  * `resourceAvailabilities` block:** the per-leaf availability call
  * returns an empty `resourceAvailabilities` for parent leaves whose
  * children carry the actual sites. Inventory enumerates every
- * reservable site under a park regardless, so the catalog is complete.
+ * campsite under a park regardless, so the catalog is complete.
  *
  * Parent linking is explicit on every emitted row: the tenant vendor maps to
  * the matching Aspira campground ETL slug and `parentVendorRefId` is derived
@@ -67,13 +67,13 @@ class AspiraResourcesEtl(
      * YAML data_source slug for the /api/maps capture
      * (`aspira-maps-{tenant}`). One single-envelope input. Used to
      * resolve each resource's `mapIds[]` to a parent leaf and label
-     * the reservable's `loop`.
+     * the campsite's `loop`.
      */
     val mapsInputSlug: String,
     /**
      * YAML data_source slug for the per-park inventory capture
      * (`aspira-inventory-{tenant}`). Multi-part: one envelope per park.
-     * The catalog drives the output set: one reservable per inventory
+     * The catalog drives the output set: one campsite per inventory
      * record.
      */
     val inventoryInputSlug: String,
@@ -81,7 +81,7 @@ class AspiraResourcesEtl(
      * Optional YAML data_source slug for tenant dictionaries captured from
      * `/api/equipment`, `/api/resourcecategory`, and
      * `/api/attribute/filterable`. These are ETL side inputs only: loaded
-     * into memory for this transform and copied into reservable.raw labels.
+     * into memory for this transform and copied into campsite.raw labels.
      */
     val dictionariesInputSlug: String? = null,
     /**
@@ -137,7 +137,7 @@ class AspiraResourcesEtl(
     ): CampsiteEtlOutput {
         // Maps tree → mapId-keyed leaf metadata. Each inventory record
         // carries `mapIds[]`; we look up the first one to label the
-        // reservable's `loop`.
+        // campsite's `loop`.
         val leavesByMapId =
             AspiraLeavesWalk
                 .walk(dto.maps)
@@ -179,13 +179,13 @@ class AspiraResourcesEtl(
             }
         }
         log.info(
-            "$etlSlug: emitted {} reservables from {} inventory envelopes ({} resources with no matching leaf in /api/maps)",
+            "$etlSlug: emitted {} campsites from {} inventory envelopes ({} resources with no matching leaf in /api/maps)",
             out.size,
             dto.inventory.size,
             unmatchedLeaf,
         )
         if (totalRecords != out.size) {
-            log.warn("$etlSlug: parsed {} inventory records but emitted {} reservables", totalRecords, out.size)
+            log.warn("$etlSlug: parsed {} inventory records but emitted {} campsites", totalRecords, out.size)
         }
         return CampsiteEtlOutput(campsites = out)
     }
@@ -235,7 +235,7 @@ class AspiraResourcesEtl(
     }
 
     /**
-     * Build the `raw` JSON we persist on the reservable. The per-resource
+     * Build the `raw` JSON we persist on the campsite. The per-resource
      * upstream availability array is intentionally *not* stored — that's
      * availability data and lives elsewhere. We keep the catalog signal:
      * who this resource is, how to find its parent campground, and the
@@ -654,7 +654,7 @@ class AspiraResourcesEtl(
             )
     }
 
-    /** A single reservable's catalog row, normalized out of Aspira's wrapping. */
+    /** A single campsite's catalog row, normalized out of Aspira's wrapping. */
     private data class ResourceInventory(
         val resourceId: String,
         val name: String?,

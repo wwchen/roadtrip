@@ -48,7 +48,7 @@ internal fun monthsCovering(
 
 /**
  * Fetch every relevant month and translate upstream statuses into atomic
- * reservable-day observations. Throws on upstream failure — caller maps to a
+ * campsite-day observations. Throws on upstream failure — caller maps to a
  * 503.
  *
  * The half-open window `[startDate, endDate)` is classified as independent
@@ -87,7 +87,7 @@ internal suspend fun fetchRecgovAvailabilityObservations(
 
 /**
  * Same upstream fetch as [fetchRecgovAvailabilityObservations], narrowed to a
- * linked reservable catalog. This lets `/api/poi/{id}/availability?site_type=...`
+ * linked campsite catalog. This lets `/api/poi/{id}/availability?site_type=...`
  * classify only the matching POI sites without a per-site upstream loop.
  */
 internal suspend fun fetchRecgovCatalogObservations(

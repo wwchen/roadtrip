@@ -52,10 +52,10 @@ internal suspend fun fetchAspiraAvailabilityObservations(
 }
 
 /**
- * POI-scoped Aspira availability using the linked reservable catalog instead
+ * POI-scoped Aspira availability using the linked campsite catalog instead
  * of only the POI's parent map. Some Aspira parks can have one visible POI
  * map whose linked sites live under several child maps; this groups by the
- * per-reservable child map and classifies the actual resource ids.
+ * per-campsite child map and classifies the actual resource ids.
  */
 internal suspend fun fetchAspiraCatalogObservations(
     client: AspiraAvailabilityClient,

@@ -21,7 +21,7 @@ import kotlinx.serialization.json.put
 /**
  * Terminal ETL for the `campsite_data` section. Reads per-facility
  * envelopes captured by `scripts/fetch_recgov_campsites.py` and emits one
- * reservable per campsite.
+ * campsite per campsite.
  *
  * Parent linking is explicit on every emitted row: `parentVendor` is the
  * federal campground ETL slug and `parentVendorRefId` is `recgov-{FacilityID}`.
@@ -32,7 +32,7 @@ import kotlinx.serialization.json.put
  *
  * Multi-part input: the fetcher writes one file per facility under
  * `data/raw/recgov-campsites/<ts>/facility-<id>.json`. We get all of
- * them via `inputs.soleEnvelopes()` and emit one reservable per
+ * them via `inputs.soleEnvelopes()` and emit one campsite per
  * `campsites` map entry.
  */
 class RecGovCampsitesEtl(

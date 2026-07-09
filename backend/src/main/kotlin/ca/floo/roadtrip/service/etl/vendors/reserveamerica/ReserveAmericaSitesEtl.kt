@@ -12,9 +12,9 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
- * Reservable catalog terminal (RFC 0008) for one ReserveAmerica tenant.
+ * Campsite catalog terminal (RFC 0008) for one ReserveAmerica tenant.
  * Reads the `campsite-<parkId>-<startIdx>` HTML envelopes captured by
- * `scripts/fetch_reserveamerica_campsites.py` and emits one reservable per
+ * `scripts/fetch_reserveamerica_campsites.py` and emits one campsite per
  * site. The [ReserveAmericaCampsiteParentJoiner] links them to POIs.
  *
  * `vendor` is per-tenant (`reserveamerica_ny`) — matching the availability

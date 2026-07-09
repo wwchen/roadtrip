@@ -15,7 +15,7 @@ import java.time.temporal.ChronoUnit
 /**
  * The Aspira NextGen (goingtocamp) `create-booking/results` URL scheme — the
  * one place that knows it. Consumed by
- * [AspiraAvailabilityProvider.bookingUrlTemplate] (alerts) and the reservables
+ * [AspiraAvailabilityProvider.bookingUrlTemplate] (alerts) and the campsites
  * API (the web app's per-site "Book" link), so the query shape and its inert
  * defaults are never re-spelled at a call site.
  *
@@ -30,8 +30,8 @@ internal object AspiraBookingUrl {
     private val TEMPLATE_END_DATE: LocalDate = LocalDate.parse("2001-01-03")
 
     /**
-     * Booking-page template for a reservable, or null when neither the
-     * reservable's own [reservableProviderRef] nor its [parentRef] carries the
+     * Booking-page template for a campsite, or null when neither the
+     * campsite's own [reservableProviderRef] nor its [parentRef] carries the
      * transaction-location and map ids the link needs. The site-level ref wins;
      * the campground ref fills what the site omits (e.g. `resourceLocationId`
      * is per-site, `transactionLocationId` is campground-wide).

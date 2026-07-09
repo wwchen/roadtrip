@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Capture small Aspira tenant dictionaries used by reservable ETL.
+"""Capture small Aspira tenant dictionaries used by campsite ETL.
 
 The per-park `/api/resourcelocation/resources` catalog stores IDs for
 resource categories, allowed equipment, and defined attributes. These
@@ -10,7 +10,7 @@ tenant-level endpoints resolve those IDs to labels:
   - /api/attribute/filterable
 
 The ETL loads this single envelope into memory and writes resolved names
-into each reservable's existing raw JSON. No dictionary table is created.
+into each campsite's existing raw JSON. No dictionary table is created.
 """
 from __future__ import annotations
 

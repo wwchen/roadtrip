@@ -143,7 +143,7 @@ class AvailabilityRepo(
         }
     }
 
-    /** Current cell per (reservable, date): the row with the greatest last_observed_at. */
+    /** Current cell per (campsite, date): the row with the greatest last_observed_at. */
     fun readCurrent(
         campsiteIds: List<Long>,
         dates: List<LocalDate>,
