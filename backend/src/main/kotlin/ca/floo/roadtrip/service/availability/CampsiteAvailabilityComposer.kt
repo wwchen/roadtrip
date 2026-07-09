@@ -135,7 +135,9 @@ internal class CampsiteAvailabilityComposer(
         representativeIds: List<Long>,
     ): List<CatalogCampsiteRef> {
         val repo = campsiteProviderRepo ?: return emptyList()
-        val vendorSlug = candidate.provider.id.name.lowercase()
+        val vendorSlug =
+            candidate.provider.id.name
+                .lowercase()
         return repo
             .findCampsiteRefsForCandidate(representativeIds, vendorSlug)
             .map { row ->

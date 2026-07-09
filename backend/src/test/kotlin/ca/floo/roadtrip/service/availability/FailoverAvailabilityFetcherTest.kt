@@ -25,7 +25,9 @@ class FailoverAvailabilityFetcherTest {
     private val window = ResolvedDateWindow(LocalDate.parse("2026-07-17"), LocalDate.parse("2026-07-31"))
 
     /** Mutable virtual clock (mirrors ProviderCooldownTrackerTest's FakeClock). */
-    private class FakeClock(start: String = "2026-07-09T12:00:00Z") {
+    private class FakeClock(
+        start: String = "2026-07-09T12:00:00Z",
+    ) {
         var now: Instant = Instant.parse(start)
             private set
 
@@ -46,8 +48,13 @@ class FailoverAvailabilityFetcherTest {
             private set
 
         sealed class Behaviour {
-            data class ReturnBatch(val batch: AvailabilityObservationBatch) : Behaviour()
-            data class Throw(val error: Throwable) : Behaviour()
+            data class ReturnBatch(
+                val batch: AvailabilityObservationBatch,
+            ) : Behaviour()
+
+            data class Throw(
+                val error: Throwable,
+            ) : Behaviour()
         }
 
         override val capabilities: AvailabilityProviderCapabilities =
@@ -97,8 +104,11 @@ class FailoverAvailabilityFetcherTest {
             cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
         )
 
-    private fun campsite(id: Long, vendor: String = "recgov", vendorId: String = id.toString()): Campsite =
-        Campsite(id = id, vendor = vendor, vendorId = vendorId, name = null, loop = null, siteType = null, raw = null)
+    private fun campsite(
+        id: Long,
+        vendor: String = "recgov",
+        vendorId: String = id.toString(),
+    ): Campsite = Campsite(id = id, vendor = vendor, vendorId = vendorId, name = null, loop = null, siteType = null, raw = null)
 
     private fun candidate(
         provider: AvailabilityProvider,
@@ -111,11 +121,15 @@ class FailoverAvailabilityFetcherTest {
             catalogRef = CatalogCampsiteRef(campsiteId = catalogRefId, vendorId = catalogRefId.toString()),
         )
 
-    private fun trackerWith(clock: FakeClock, cooldownSeconds: Long = 60L): ProviderCooldownTracker =
-        ProviderCooldownTracker(cooldown = Duration.ofSeconds(cooldownSeconds), clock = { clock.now })
+    private fun trackerWith(
+        clock: FakeClock,
+        cooldownSeconds: Long = 60L,
+    ): ProviderCooldownTracker = ProviderCooldownTracker(cooldown = Duration.ofSeconds(cooldownSeconds), clock = { clock.now })
 
-    private fun fetcherWith(tracker: ProviderCooldownTracker, clock: FakeClock): FailoverAvailabilityFetcher =
-        FailoverAvailabilityFetcher(cooldowns = tracker, clock = { clock.now })
+    private fun fetcherWith(
+        tracker: ProviderCooldownTracker,
+        clock: FakeClock,
+    ): FailoverAvailabilityFetcher = FailoverAvailabilityFetcher(cooldowns = tracker, clock = { clock.now })
 
     @Test
     fun `first candidate succeeds — single attempt, servedBy first`() =
@@ -349,6 +363,7 @@ class FailoverAvailabilityFetcherTest {
                     init {
                         scriptReturns(emptyBatch())
                     }
+
                     override suspend fun catalogAvailability(
                         ref: ProviderRef,
                         campsites: List<CatalogCampsiteRef>,

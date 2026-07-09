@@ -62,6 +62,8 @@ internal class ProviderCooldownTracker(
      * never excluded — a sole candidate that happens to be cooling is still
      * worth trying rather than returning nothing.
      */
-    fun <T> sortHealthyFirst(items: List<T>, idOf: (T) -> AvailabilityProviderId): List<T> =
-        items.sortedWith(compareBy { if (isCooling(idOf(it))) 1 else 0 })
+    fun <T> sortHealthyFirst(
+        items: List<T>,
+        idOf: (T) -> AvailabilityProviderId,
+    ): List<T> = items.sortedWith(compareBy { if (isCooling(idOf(it))) 1 else 0 })
 }

@@ -110,7 +110,9 @@ class TriggerActionHandlerTest {
     /** [SlackNotificationService] double that records the last call to
      *  [sendWatchOpenings]; other methods no-op because the handler under test
      *  only exercises that one seam. */
-    private class CapturingSlack(private val result: Boolean) : SlackNotificationService {
+    private class CapturingSlack(
+        private val result: Boolean,
+    ) : SlackNotificationService {
         var lastWatchId: Long? = null
         var lastChannel: String? = null
         var lastAppRootUrl: String? = null

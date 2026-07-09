@@ -31,7 +31,9 @@ class AlertProviderRegistryTest {
         assertEquals("AlertProviderRegistry needs at least one AlertProvider", error.message)
     }
 
-    private class FakeAlertProvider(override val id: String) : AlertProvider {
+    private class FakeAlertProvider(
+        override val id: String,
+    ) : AlertProvider {
         override val hostsAlerts: Boolean = false
 
         override fun onWatchActivated(

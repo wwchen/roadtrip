@@ -205,7 +205,11 @@ class CampsiteProviderRepo(
                      members.member_id ASC,
                      cvr.vendor_ref_id ASC
             """.trimIndent()
-        val bindings = mutableListOf<Any?>().also { it.addAll(campsiteIds); it += vendor }
+        val bindings =
+            mutableListOf<Any?>().also {
+                it.addAll(campsiteIds)
+                it += vendor
+            }
         return ctx.fetch(sql, *bindings.toTypedArray()).mapNotNull { r ->
             SiblingCampsiteRefRow(
                 representativeCampsiteId = (r.get("representative_id") as Number).toLong(),

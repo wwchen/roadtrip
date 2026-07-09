@@ -17,7 +17,9 @@ class ProviderCooldownTrackerTest {
      * `() -> Instant` lambda that reads it. Real `Instant.now()` would make
      * boundary assertions racy.
      */
-    private class FakeClock(start: String = "2026-07-09T12:00:00Z") {
+    private class FakeClock(
+        start: String = "2026-07-09T12:00:00Z",
+    ) {
         var now: Instant = Instant.parse(start)
             private set
 
@@ -26,10 +28,14 @@ class ProviderCooldownTrackerTest {
         }
     }
 
-    private data class Candidate(val id: AvailabilityProviderId)
+    private data class Candidate(
+        val id: AvailabilityProviderId,
+    )
 
-    private fun trackerWith(clock: FakeClock, cooldownSeconds: Long = 60L): ProviderCooldownTracker =
-        ProviderCooldownTracker(cooldown = Duration.ofSeconds(cooldownSeconds), clock = { clock.now })
+    private fun trackerWith(
+        clock: FakeClock,
+        cooldownSeconds: Long = 60L,
+    ): ProviderCooldownTracker = ProviderCooldownTracker(cooldown = Duration.ofSeconds(cooldownSeconds), clock = { clock.now })
 
     @Test
     fun `recordFailure marks provider as cooling until expiry`() {
@@ -118,9 +124,10 @@ class ProviderCooldownTrackerTest {
         // the parse landed by constructing an equivalent tracker directly and
         // exercising its boundary. This documents the contract: the env value
         // becomes `Duration.ofSeconds(<value>)`.
-        val fromEnv = ProviderCooldownTracker.fromEnv(
-            env = mapOf(ProviderCooldownTracker.ENV_COOLDOWN_SECONDS to "42"),
-        )
+        val fromEnv =
+            ProviderCooldownTracker.fromEnv(
+                env = mapOf(ProviderCooldownTracker.ENV_COOLDOWN_SECONDS to "42"),
+            )
         // With no injected clock, fromEnv uses Instant.now(). Recording a
         // failure and immediately checking isCooling proves the cooldown is
         // positive; further boundary checks would race against wall time.

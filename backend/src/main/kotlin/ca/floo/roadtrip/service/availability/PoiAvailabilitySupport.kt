@@ -27,8 +27,7 @@ internal class PoiAvailabilitySupport(
      * `preferred_availability_source` set on the canonical campground floats
      * that vendor to the top; otherwise the match-group winner leads.
      */
-    fun preferredAvailabilityProvider(poiId: Long): String? =
-        providerRefs.findProviderRefCandidates(poiId).firstOrNull()?.source
+    fun preferredAvailabilityProvider(poiId: Long): String? = providerRefs.findProviderRefCandidates(poiId).firstOrNull()?.source
 
     private companion object {
         private const val CAMPGROUND_CATEGORY = "campground"

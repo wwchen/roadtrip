@@ -134,8 +134,10 @@ internal open class FailoverAvailabilityFetcher(
             Attempt(outcome = FetchOutcome.OTHER, batch = null, error = e.message ?: e.javaClass.simpleName)
         }
 
-    private fun elapsedMs(begin: Instant, end: Instant): Int =
-        (end.toEpochMilli() - begin.toEpochMilli()).toInt().coerceAtLeast(0)
+    private fun elapsedMs(
+        begin: Instant,
+        end: Instant,
+    ): Int = (end.toEpochMilli() - begin.toEpochMilli()).toInt().coerceAtLeast(0)
 
     companion object {
         internal const val NO_REFS_ERROR = "no campsite refs for candidate"

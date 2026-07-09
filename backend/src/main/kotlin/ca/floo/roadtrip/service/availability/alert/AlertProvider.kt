@@ -33,7 +33,10 @@ internal interface AlertProvider {
      * earlier when this watch's cadence is tighter. Vendor-hosted: registers
      * an upstream alert subscription for the watch's targets.
      */
-    fun onWatchActivated(txn: DSLContext, watch: AvailabilityWatchRepo.Watch)
+    fun onWatchActivated(
+        txn: DSLContext,
+        watch: AvailabilityWatchRepo.Watch,
+    )
 
     /**
      * Called after a watch is paused, marked done, or deleted. Internal
@@ -42,5 +45,8 @@ internal interface AlertProvider {
      * any now-orphaned poller. Vendor-hosted: cancels the upstream
      * subscription.
      */
-    fun onWatchDeactivated(txn: DSLContext, watch: AvailabilityWatchRepo.Watch)
+    fun onWatchDeactivated(
+        txn: DSLContext,
+        watch: AvailabilityWatchRepo.Watch,
+    )
 }

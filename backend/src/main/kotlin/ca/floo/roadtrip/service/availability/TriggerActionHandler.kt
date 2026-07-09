@@ -34,7 +34,9 @@ internal interface TriggerActionHandler {
  * A kind with no registered handler resolves to `null` (inert — the current
  * `atc` behavior). Composed once at runtime startup.
  */
-internal class TriggerActionRegistry(handlers: List<TriggerActionHandler>) {
+internal class TriggerActionRegistry(
+    handlers: List<TriggerActionHandler>,
+) {
     private val byKind: Map<String, TriggerActionHandler> = handlers.associateBy { it.kind }
 
     init {
