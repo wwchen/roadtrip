@@ -1,41 +1,38 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
-import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
-import java.time.OffsetDateTime
 
 /**
- * Mutates watches and keeps their poller membership in sync. Single seam
- * for routes; routes never touch [AvailabilityWatchRepo] or
- * [AvailabilityPollerRepo] for writes.
+ * Mutates watches and hands the "who detects openings" work to the
+ * [AlertProviderRegistry]. Single seam for routes; routes never touch
+ * [AvailabilityWatchRepo] or [ca.floo.roadtrip.repo.AvailabilityPollerRepo]
+ * for writes.
  *
- * A watch is user intent; a poller is the physical, coalesced
- * per-(provider, parent_ref) unit of scheduled work. Every watch mutation
- * transacts across `availability_watch` and its `availability_watch_poller`
- * links so a watch is never visible without its poller membership resolved.
+ * A watch is user intent; the alert provider is what actually detects
+ * openings for it — today always the internal poller (watches are linked to
+ * coalesced per-(provider, parent_ref) poller rows), tomorrow potentially a
+ * vendor-hosted alert API. Every watch mutation transacts across
+ * `availability_watch` and whatever state the chosen alert provider owns, so
+ * a watch is never visible without its alert-provider bookkeeping resolved.
  *
- * Internal because it composes [AvailabilityPollerMembership] and
- * [AvailabilityTargetResolver], both module-internal; everything is one
- * Gradle module (routes included), so `internal` costs nothing and keeps
- * upstream-vendor shape from leaking through a public API.
+ * Internal because it composes [AlertProviderRegistry], which is module-
+ * internal; everything is one Gradle module (routes included), so `internal`
+ * costs nothing and keeps upstream-vendor shape from leaking through a public
+ * API.
  */
 internal class AvailabilityWatchService(
     private val ctx: DSLContext,
-    private val campsitesRepo: CampsiteRepo,
-    private val targets: AvailabilityTargetResolver,
+    private val alertProviders: AlertProviderRegistry,
 ) {
-    private fun membershipFor(txn: DSLContext): AvailabilityPollerMembership =
-        AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
-
     fun create(input: AvailabilityWatchRepo.CreateInput): Watch =
         ctx.transactionResult { config ->
             val txn = DSL.using(config)
             val watch = AvailabilityWatchRepo(txn).create(input)
-            membershipFor(txn).sync(watch, AvailabilityPollerRepo(txn), tighterCadencePull = OffsetDateTime.now())
+            alertProviders.forWatch(watch).onWatchActivated(txn, watch)
             watch
         }
 
@@ -46,21 +43,30 @@ internal class AvailabilityWatchService(
         ctx.transactionResult { config ->
             val txn = DSL.using(config)
             val updated = AvailabilityWatchRepo(txn).update(id, input) ?: return@transactionResult null
-            // A cadence tighten (or a resume) should pull next_run_at earlier; simplest
-            // correct behavior is to allow a pull to now whenever the watch is active.
-            // Membership.sync forwards this only as an earlier-pull; it never pushes
-            // next_run_at later. A non-active watch drops its links and pulls nothing.
-            val pull = if (updated.status == WatchStatus.ACTIVE) OffsetDateTime.now() else null
-            membershipFor(txn).sync(updated, AvailabilityPollerRepo(txn), tighterCadencePull = pull)
+            // ACTIVE → the alert provider (re)subscribes / re-syncs poller links;
+            // any non-ACTIVE status is a deactivate as far as opening-detection
+            // is concerned — the watch holds no live subscription.
+            val provider = alertProviders.forWatch(updated)
+            if (updated.status == WatchStatus.ACTIVE) {
+                provider.onWatchActivated(txn, updated)
+            } else {
+                provider.onWatchDeactivated(txn, updated)
+            }
             updated
         }
 
     fun delete(id: Long): Boolean =
         ctx.transactionResult { config ->
             val txn = DSL.using(config)
-            // FK cascade drops the watch's availability_watch_poller links.
-            val deleted = AvailabilityWatchRepo(txn).delete(id)
-            AvailabilityPollerRepo(txn).deactivatePollersWithNoLinks()
+            val repo = AvailabilityWatchRepo(txn)
+            // Snapshot pre-delete so the alert provider's deactivate hook has a
+            // Watch to work with — the row itself is about to disappear (FK
+            // cascade will drop its availability_watch_poller links).
+            val snapshot = repo.findById(id) ?: return@transactionResult false
+            val deleted = repo.delete(id)
+            if (deleted) {
+                alertProviders.forWatch(snapshot).onWatchDeactivated(txn, snapshot)
+            }
             deleted
         }
 }

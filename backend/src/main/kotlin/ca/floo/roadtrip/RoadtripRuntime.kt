@@ -37,6 +37,8 @@ import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
+import ca.floo.roadtrip.service.availability.alert.InternalPollerAlertProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistryFactory
@@ -199,11 +201,13 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             availabilityProviders = availabilityProviderRegistry,
             dateResolver = availabilityDateResolver,
         )
-    val availabilityWatchService = AvailabilityWatchService(boot.ctx, campsitesRepo, availabilityTargets)
+    val pollerMembership = AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), availabilityTargets)
+    val alertProviders = AlertProviderRegistry(listOf(InternalPollerAlertProvider(pollerMembership)))
+    val availabilityWatchService = AvailabilityWatchService(boot.ctx, alertProviders)
 
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     val availabilityPollers = AvailabilityPollerRepo(boot.ctx)
-    PollerBackfill(boot.ctx, AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), availabilityTargets)).run()
+    PollerBackfill(boot.ctx, pollerMembership).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
     val watchAlertDispatcher =
