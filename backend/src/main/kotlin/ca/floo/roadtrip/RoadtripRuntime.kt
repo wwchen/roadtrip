@@ -170,7 +170,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         ReservationProviderRegistryFactory.build(
             registry = boot.poiRegistry,
             clients = boot.reservationProviderClients,
-            campflareAvailabilityMode = boot.appConfig.campflare.availabilityMode,
             campflareApiKeyConfigured = boot.appConfig.campflare.apiKey != null,
         )
 

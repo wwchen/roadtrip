@@ -48,8 +48,9 @@ Operational config:
 - `CAMPFLARE_API_KEY` or `CAMPFLARE_TOKEN`: API key.
 - `CAMPFLARE_API_BASE`: optional API base URL override; defaults to
   `https://api.campflare.com/v2`.
-- `CAMPFLARE_AVAILABILITY_MODE`: `auto` (default), `campflare`, or `recgov`.
-  `auto` uses Campflare when an API key is configured and otherwise lets
-  linked rec.gov refs serve as the availability fallback. `recgov` forces that
-  fallback for Campflare catalog rows that carry a rec.gov alias.
 - `ROADTRIP_CACHE_CAMPFLARE_AVAILABILITY_TTL`: optional cache TTL override.
+
+Campflare stays registered in the reservation-provider registry even when no
+API key is configured. In that state the adapter declines Campflare refs, so
+availability resolution can continue through linked fallback refs such as
+rec.gov aliases without a Campflare-specific branch in the service layer.

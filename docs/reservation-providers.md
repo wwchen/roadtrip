@@ -32,7 +32,7 @@ service/reservation/
 ├── ReservationProviderClients.kt   # boot-time vendor client set + lifecycle
 ├── ReservationProvider.kt          # availability + provider metadata port
 ├── ReservationProviderId.kt        # enum/provider identity
-├── ReservationProviderRegistry.kt  # forPoi(row) → adapter
+├── ReservationProviderRegistry.kt  # forPoi(row, ref) → adapter that can handle it
 ├── ReservationProviderCapabilities.kt
 ├── ProviderRefParser.kt            # JSONB → models.ProviderRef (single source)
 └── adapters/
@@ -50,10 +50,17 @@ matching variant and the registry guarantees the dispatch is correct.
 Every vendor adapter class implements both `AvailabilityClient` and
 `ReservationProvider`: `AvailabilityClient` is the shared normalized
 availability contract, while `ReservationProvider` adds identity,
-capabilities, and booking-link metadata. Raw HTTP clients under `clients/`
-stay vendor-specific because their upstream request and response shapes are
-genuinely different. The adapter boundary is where those shapes become
-provider-neutral `AvailabilityObservationBatch` values.
+capabilities, ref handling, and booking-link metadata. Raw HTTP clients under
+`clients/` stay vendor-specific because their upstream request and response
+shapes are genuinely different. The adapter boundary is where those shapes
+become provider-neutral `AvailabilityObservationBatch` values.
+
+The registry does not hardcode fallback modes. Availability services enumerate
+candidate provider refs from the catalog/registry, and the registry asks the
+mapped provider whether it `canHandle(ref)`. If one provider declines a ref
+because it is unconfigured in this process, the resolver continues to the next
+linked candidate ref. This is how a Campflare catalog row can naturally fall
+through to a linked rec.gov alias without a Campflare-specific service branch.
 
 Boot wiring passes those vendor-specific HTTP clients as one
 `ReservationProviderClients` set. Every vendor client interface is

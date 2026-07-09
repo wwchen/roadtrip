@@ -76,7 +76,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private class NoopCampflareProvider : ReservationProvider {
+    private open class NoopCampflareProvider : ReservationProvider {
         override val id: ReservationProviderId = ReservationProviderId.CAMPFLARE
         override val capabilities: ReservationProviderCapabilities =
             ReservationProviderCapabilities(
@@ -91,6 +91,10 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             startDate: LocalDate,
             endDate: LocalDate,
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+    }
+
+    private class DecliningCampflareProvider : NoopCampflareProvider() {
+        override fun canHandle(ref: ProviderRef): Boolean = false
     }
 
     private fun resolverFor(
@@ -171,7 +175,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         }
 
     @Test
-    fun `resolve falls back to recgov aliases when campflare availability is disabled`() =
+    fun `resolve falls back to recgov aliases when campflare provider declines the ref`() =
         runBlocking {
             val poi =
                 ctx
@@ -210,7 +214,11 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val target =
                 resolverFor(
                     campsitesRepo = campsitesRepo,
-                    providers = mapOf("federal-campgrounds" to NoopRecgovProvider()),
+                    providers =
+                        mapOf(
+                            "campflare" to DecliningCampflareProvider(),
+                            "federal-campgrounds" to NoopRecgovProvider(),
+                        ),
                 ).resolve(reservable)!!
 
             assertEquals("site:campflare:upper-pines-site-100", reservable.rid.encode())

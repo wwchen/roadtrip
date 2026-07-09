@@ -52,6 +52,27 @@ class ReservationProviderRegistryTest {
     }
 
     @Test
+    fun `forPoi with ref returns null when mapped provider declines the ref`() {
+        val declining =
+            object : ReservationProvider {
+                override val id: ReservationProviderId = ReservationProviderId.CAMPFLARE
+                override val capabilities: ReservationProviderCapabilities = ReservationProviderCapabilities.UNSUPPORTED
+
+                override fun canHandle(ref: ProviderRef): Boolean = false
+
+                override suspend fun availability(
+                    ref: ProviderRef,
+                    startDate: LocalDate,
+                    endDate: LocalDate,
+                ): AvailabilityObservationBatch = error("not used in this test")
+            }
+        val registry = ReservationProviderRegistry(adaptersBySource = mapOf("campflare" to declining))
+
+        assertSame(declining, registry.forPoi(row("campflare")))
+        assertNull(registry.forPoi(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
+    }
+
+    @Test
     fun `forSource resolves source without requiring a campground row`() {
         val recgov = FakeProvider(ReservationProviderId.RECGOV)
         val registry =

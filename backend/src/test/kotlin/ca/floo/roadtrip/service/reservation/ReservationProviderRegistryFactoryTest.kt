@@ -12,7 +12,6 @@ import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailability
-import ca.floo.roadtrip.config.CampflareAvailabilityMode
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
@@ -173,7 +172,7 @@ class ReservationProviderRegistryFactoryTest {
         }
 
     @Test
-    fun `disabled campflare availability omits campflare dispatch keys so recgov aliases can be fallback`() {
+    fun `unconfigured campflare provider declines campflare refs so recgov aliases can be fallback`() {
         val registry =
             ReservationProviderRegistryFactory.build(
                 registry =
@@ -213,12 +212,17 @@ class ReservationProviderRegistryFactoryTest {
                         reserveCaliforniaClient = stubReserveCaliforniaClient(),
                         campflareClient = stubCampflareClient(),
                     ),
-                campflareAvailabilityMode = CampflareAvailabilityMode.RECGOV,
+                campflareApiKeyConfigured = false,
             )
 
-        assertNull(registry.forPoi(row("campflare")))
-        assertNull(registry.forPoi(row("campflare-campgrounds")))
-        assertEquals(ReservationProviderId.RECGOV, registry.forPoi(row("federal-campgrounds"))?.id)
+        assertEquals(ReservationProviderId.CAMPFLARE, registry.forPoi(row("campflare"))?.id)
+        assertEquals(ReservationProviderId.CAMPFLARE, registry.forPoi(row("campflare-campgrounds"))?.id)
+        assertNull(registry.forPoi(row("campflare"), ProviderRef.Campflare("upper-pines-campground-447")))
+        assertNull(registry.forPoi(row("campflare-campgrounds"), ProviderRef.Campflare("upper-pines-campground-447")))
+        assertEquals(
+            ReservationProviderId.RECGOV,
+            registry.forPoi(row("federal-campgrounds"), ProviderRef.RecGov("232447"))?.id,
+        )
     }
 
     @Test

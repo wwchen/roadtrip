@@ -31,6 +31,14 @@ interface ReservationProvider : AvailabilityClient {
     val capabilities: ReservationProviderCapabilities
 
     /**
+     * Whether this adapter can serve the typed provider reference for this
+     * process. The registry calls this before dispatching so unconfigured
+     * providers can decline and the availability resolver can try linked
+     * fallback refs without hardcoded provider branching.
+     */
+    fun canHandle(ref: ProviderRef): Boolean = id == ref.reservationProviderId()
+
+    /**
      * Per-day availability for the half-open window `[startDate, endDate)`.
      *
      * @throws ReservationProviderError on upstream failure (rate limit, WAF block,

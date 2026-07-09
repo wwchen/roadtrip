@@ -23,7 +23,7 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
     }
 
     @Test
-    fun `supports availability through recgov alias when campflare provider is disabled`() {
+    fun `supports availability through recgov alias when campflare provider declines the ref`() {
         val fixture =
             ctx.seedCatalogPoi(
                 sourceId = "upper-pines-campflare-support",
@@ -45,7 +45,10 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
                 providerRefs = CampsiteProviderRepo(ctx),
                 reservationProviders =
                     ReservationProviderRegistry(
-                        mapOf("federal-campgrounds" to NoopRecgovProvider()),
+                        mapOf(
+                            "campflare" to DecliningCampflareProvider(),
+                            "federal-campgrounds" to NoopRecgovProvider(),
+                        ),
                     ),
             )
 
@@ -90,6 +93,25 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
                 bookingHorizonDays = 180,
                 maxPollWindowDays = 60,
             )
+
+        override suspend fun availability(
+            ref: ProviderRef,
+            startDate: LocalDate,
+            endDate: LocalDate,
+        ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
+    }
+
+    private class DecliningCampflareProvider : ReservationProvider {
+        override val id: ReservationProviderId = ReservationProviderId.CAMPFLARE
+        override val capabilities: ReservationProviderCapabilities =
+            ReservationProviderCapabilities(
+                supportsAvailability = true,
+                supportsAlerts = false,
+                bookingHorizonDays = 365,
+                maxPollWindowDays = 60,
+            )
+
+        override fun canHandle(ref: ProviderRef): Boolean = false
 
         override suspend fun availability(
             ref: ProviderRef,

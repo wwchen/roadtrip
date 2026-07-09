@@ -20,6 +20,7 @@ import java.time.temporal.ChronoUnit
 
 class CampflareReservationProvider(
     private val client: CampflareAvailabilityClient,
+    private val apiKeyConfigured: Boolean = true,
 ) : ReservationProvider,
     AvailabilityClient {
     override val id: ReservationProviderId = ReservationProviderId.CAMPFLARE
@@ -31,6 +32,8 @@ class CampflareReservationProvider(
             bookingHorizonDays = CAMPFLARE_BOOKING_HORIZON_DAYS,
             maxPollWindowDays = CAMPFLARE_MAX_POLL_WINDOW_DAYS,
         )
+
+    override fun canHandle(ref: ProviderRef): Boolean = apiKeyConfigured && ref is ProviderRef.Campflare
 
     override suspend fun availability(
         ref: ProviderRef,

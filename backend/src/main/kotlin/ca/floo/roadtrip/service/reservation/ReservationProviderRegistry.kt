@@ -41,7 +41,7 @@ class ReservationProviderRegistry(
         ref: ProviderRef,
     ): ReservationProvider? =
         adaptersBySource[row.source]
-            ?.takeIf { it.id == ref.reservationProviderId() }
+            ?.takeIf { it.canHandle(ref) }
 
     /**
      * Source-only lookup for call sites that only need static adapter

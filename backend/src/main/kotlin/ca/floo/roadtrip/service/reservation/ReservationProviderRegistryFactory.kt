@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.reservation
 
-import ca.floo.roadtrip.config.CampflareAvailabilityMode
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraReservationProvider
 import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
@@ -24,7 +23,6 @@ object ReservationProviderRegistryFactory {
     fun build(
         registry: PoiRegistry,
         clients: ReservationProviderClients,
-        campflareAvailabilityMode: CampflareAvailabilityMode = CampflareAvailabilityMode.CAMPFLARE,
         campflareApiKeyConfigured: Boolean = true,
     ): ReservationProviderRegistry {
         val adaptersBySource = mutableMapOf<String, ReservationProvider>()
@@ -37,12 +35,14 @@ object ReservationProviderRegistryFactory {
 
         // Canonical catalog reads expose `vendor_refs.vendor` ("campflare"),
         // while registry YAML exposes the terminal ETL slug ("campflare-campgrounds").
-        val campflare = CampflareReservationProvider(client = clients.campflareClient)
-        if (campflareAvailabilityMode.usesCampflareAvailability(apiKeyConfigured = campflareApiKeyConfigured)) {
-            adaptersBySource[CAMPFLARE_VENDOR] = campflare
-            for (source in registry.campflareSources()) {
-                adaptersBySource[source] = campflare
-            }
+        val campflare =
+            CampflareReservationProvider(
+                client = clients.campflareClient,
+                apiKeyConfigured = campflareApiKeyConfigured,
+            )
+        adaptersBySource[CAMPFLARE_VENDOR] = campflare
+        for (source in registry.campflareSources()) {
+            adaptersBySource[source] = campflare
         }
 
         // Aspira — one adapter instance per upstream host. Sources that share

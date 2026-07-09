@@ -2,8 +2,6 @@ package ca.floo.roadtrip.config
 
 import java.time.Duration
 
-private const val CAMPFLARE_AVAILABILITY_MODE_ENV = "CAMPFLARE_AVAILABILITY_MODE"
-
 data class AppConfig(
     val cache: ApiCacheConfig,
     val campflare: CampflareConfig,
@@ -90,11 +88,7 @@ data class ApiCacheConfig(
 data class CampflareConfig(
     val apiKey: String?,
     val apiBaseUrl: String,
-    val availabilityMode: CampflareAvailabilityMode,
 ) {
-    val usesCampflareAvailability: Boolean
-        get() = availabilityMode.usesCampflareAvailability(apiKeyConfigured = apiKey != null)
-
     companion object {
         private const val DEFAULT_API_BASE_URL = "https://api.campflare.com/v2"
 
@@ -112,35 +106,7 @@ data class CampflareConfig(
                         ?.trim()
                         ?.takeIf { it.isNotEmpty() }
                         ?: DEFAULT_API_BASE_URL,
-                availabilityMode = CampflareAvailabilityMode.parse(env[CAMPFLARE_AVAILABILITY_MODE_ENV]),
             )
-    }
-}
-
-enum class CampflareAvailabilityMode {
-    AUTO,
-    CAMPFLARE,
-    RECGOV,
-    ;
-
-    fun usesCampflareAvailability(apiKeyConfigured: Boolean): Boolean =
-        when (this) {
-            AUTO -> apiKeyConfigured
-            CAMPFLARE -> true
-            RECGOV -> false
-        }
-
-    companion object {
-        fun parse(raw: String?): CampflareAvailabilityMode {
-            val value = raw?.trim()?.lowercase().orEmpty()
-            if (value.isBlank()) return AUTO
-            return when (value) {
-                "auto" -> AUTO
-                "campflare" -> CAMPFLARE
-                "recgov" -> RECGOV
-                else -> throw IllegalArgumentException("$CAMPFLARE_AVAILABILITY_MODE_ENV must be one of auto, campflare, recgov")
-            }
-        }
     }
 }
 
