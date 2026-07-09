@@ -187,7 +187,7 @@ fun DSLContext.seedCampground(
             payloadJson = providerRefJson ?: "{}",
         )
     execute(
-        "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, is_primary) VALUES (?, ?, true)",
+        "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
         campgroundId,
         vendorRefId,
     )
@@ -230,7 +230,7 @@ fun DSLContext.seedCampsite(
             payloadJson = providerRefJson ?: "{}",
         )
     execute(
-        "INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id, is_primary) VALUES (?, ?, true)",
+        "INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id) VALUES (?, ?)",
         campsiteId,
         vendorRefId,
     )

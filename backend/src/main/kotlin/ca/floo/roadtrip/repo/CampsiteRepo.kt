@@ -179,7 +179,6 @@ class CampsiteRepo(
                 AND vr.deleted_at IS NULL
               ORDER BY
                 CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                cvr.is_primary DESC,
                 cvr.vendor_ref_id ASC
               LIMIT 1
             ) primary_ref ON true

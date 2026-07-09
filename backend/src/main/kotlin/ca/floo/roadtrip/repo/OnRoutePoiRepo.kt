@@ -66,8 +66,16 @@ internal class OnRoutePoiRepo(
                         FROM pois p
                         LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
                         LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
-                        LEFT JOIN campground_vendor_refs cgvr ON cgvr.campground_id = cg.id AND cgvr.is_primary
-                        LEFT JOIN vendor_refs gvr ON gvr.id = cgvr.vendor_ref_id AND gvr.deleted_at IS NULL
+                        LEFT JOIN LATERAL (
+                          SELECT vr.vendor, vr.external_id, vr.payload
+                          FROM campground_vendor_refs cvr
+                          JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
+                          WHERE cvr.campground_id = cg.id
+                            AND vr.entity_type = 'campground'
+                            AND vr.deleted_at IS NULL
+                          ORDER BY cvr.vendor_ref_id ASC
+                          LIMIT 1
+                        ) gvr ON TRUE
                         LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
                         LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL
                         LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
