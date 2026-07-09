@@ -15,6 +15,8 @@ import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.SlackNotifyHandler
+import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
@@ -110,8 +112,9 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
     private fun disabledDispatcher(): WatchAlertDispatcher {
         val campsitesRepo = CampsiteRepo(ctx)
+        val slack = SlackNotificationServiceImpl(config = null)
         return WatchAlertDispatcher(
-            slack = SlackNotificationServiceImpl(config = null),
+            slack = slack,
             scopeResolver = WatchScopeResolver(campsitesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets =
@@ -123,6 +126,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 ),
             pois = PoiServingRepo(ctx),
             availability = AvailabilityRepo(ctx),
+            triggerActions = TriggerActionRegistry(listOf(SlackNotifyHandler(slack, appRootUrl = null))),
             grafanaRootUrl = null,
             appRootUrl = null,
         )

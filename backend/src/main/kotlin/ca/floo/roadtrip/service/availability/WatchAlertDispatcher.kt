@@ -11,10 +11,6 @@ import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import kotlinx.serialization.json.JsonPrimitive
 import java.time.LocalDate
 
-/** The only trigger kind that dispatches today. Others (e.g. `atc`) are stored
- *  but inert — they match no branch here. */
-const val SLACK_NOTIFY_KIND = "slack_notify"
-
 /** Grafana dashboards the alert deep-links to. The watch drill-down takes the
  *  firing watch's id (`var-watch_id`); the cube matrix takes a POI
  *  (`var-poi_id`) for the current availability grid. */
@@ -27,17 +23,18 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * watches (both already in the executor's hand).
  *
  * For each live watch it keeps the transitions that fall inside the watch's
- * campsite set and date window, and — if the watch opted into
- * [SLACK_NOTIFY_KIND] — posts one message. A watch with `stopWhenTriggered`
- * goes `DONE` **only after a post actually succeeds**, so a delivery failure
- * never silences a watch we could not notify on.
+ * campsite set and date window and — for every kind on the watch that has a
+ * registered [TriggerActionHandler] — fires that handler with the hydrated
+ * openings. Kinds with no registered handler (e.g. `atc` today) stay inert.
+ * A watch with `stopWhenTriggered` goes `DONE` **only after a handler
+ * actually reports success**, so a delivery failure never silences a watch
+ * we could not notify on.
  *
- * This class only decides *which* watches fire and hydrates their openings; the
- * [SlackNotificationService] owns the message rendering and delivery (and no-ops
- * when Slack is unconfigured). Nothing here throws into the caller: the service
- * swallows its own failures and the executor wraps this call best-effort. A
- * watch's channel override (if any) is passed through; the service falls back to
- * its default channel.
+ * This class decides *which* watches fire and hydrates their openings; the
+ * handlers own transport and formatting (the [SlackNotifyHandler] delegates to
+ * [SlackNotificationService], which no-ops when Slack is unconfigured).
+ * Nothing here throws into the caller: handlers swallow their own failures
+ * and the executor wraps this call best-effort.
  *
  * The notice-building helper [statusNoticeForWatch] is public so the Slack
  * interactivity handler can re-render a watch's card after a user pauses /
@@ -51,6 +48,7 @@ internal class WatchAlertDispatcher(
     private val targets: AvailabilityTargetResolver,
     private val pois: PoiServingRepo,
     private val availability: AvailabilityRepo,
+    private val triggerActions: TriggerActionRegistry,
     private val grafanaRootUrl: String?,
     private val appRootUrl: String?,
 ) {
@@ -62,14 +60,15 @@ internal class WatchAlertDispatcher(
         if (bookable.isEmpty()) return
 
         for (watch in liveWatches) {
-            if (SLACK_NOTIFY_KIND !in watch.triggerKinds) continue
+            val handlers = watch.triggerKinds.mapNotNull { triggerActions.forKind(it) }
+            if (handlers.isEmpty()) continue
             val campsitesById = scopeResolver.resolve(watch).associateBy { it.id }
             val covered =
                 bookable.filter { t ->
                     t.campsiteId in campsitesById && t.targetDate.withinWindow(watch)
                 }
             if (covered.isEmpty()) continue
-            postOpenings(watch, covered, campsitesById)
+            postOpenings(watch, covered, campsitesById, handlers)
         }
     }
 
@@ -93,7 +92,7 @@ internal class WatchAlertDispatcher(
      * Only the bookable state ever marks a watch `DONE`.
      */
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
-        if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
+        if (SlackNotifyHandler.KIND !in watch.triggerKinds) return
 
         val campsites = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
@@ -110,8 +109,9 @@ internal class WatchAlertDispatcher(
         val cells = availability.readCurrent(campsites.map { it.id }, datesInWindow(watch))
         val bookable = cells.filter { it.available }
         if (bookable.isNotEmpty()) {
+            val handlers = watch.triggerKinds.mapNotNull { triggerActions.forKind(it) }
             val covered = bookable.map { CellTransition(it.campsiteId, it.targetDate, it.status) }
-            postOpenings(watch, covered, campsitesById)
+            postOpenings(watch, covered, campsitesById, handlers)
         } else {
             val state = if (cells.isNotEmpty()) WatchStatusNotice.State.WATCHING else WatchStatusNotice.State.UNCHECKED
             slack.sendWatchStatus(statusNotice(watch, campsites, state), watch.channelOverride())
@@ -125,7 +125,7 @@ internal class WatchAlertDispatcher(
      * throws into its caller and no-ops for a watch that never opted into Slack.
      */
     suspend fun dispatchStopped(watch: AvailabilityWatchRepo.Watch) {
-        if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
+        if (SlackNotifyHandler.KIND !in watch.triggerKinds) return
         val campsites = scopeResolver.resolve(watch)
         slack.sendWatchStatus(statusNotice(watch, campsites, WatchStatusNotice.State.STOPPED), watch.channelOverride())
     }
@@ -142,26 +142,25 @@ internal class WatchAlertDispatcher(
         state: WatchStatusNotice.State,
     ): WatchStatusNotice = statusNotice(watch, scopeResolver.resolve(watch), state)
 
-    /** Hydrates the covered cells into [WatchOpening]s, hands them to the
-     *  notification service (which owns the message rendering), and — on a
-     *  successful post — marks a `stopWhenTriggered` watch `DONE`, so a delivery
-     *  failure never silences a watch we could not notify on. Shared by the edge
-     *  and initial paths. */
+    /** Hydrates the covered cells into [WatchOpening]s, fires each of the
+     *  watch's registered [TriggerActionHandler]s with them, and — if any
+     *  handler reports success — marks a `stopWhenTriggered` watch `DONE`, so
+     *  a delivery failure never silences a watch we could not notify on.
+     *  Shared by the edge and initial paths. Handlers own transport and
+     *  formatting; this method only hydrates and gates the DONE transition. */
     private suspend fun postOpenings(
         watch: AvailabilityWatchRepo.Watch,
         covered: List<CellTransition>,
         campsitesById: Map<Long, Campsite>,
+        handlers: List<TriggerActionHandler>,
     ) {
+        if (handlers.isEmpty()) return
         val openings = hydrateOpenings(covered, campsitesById)
-        val fired =
-            slack.sendWatchOpenings(
-                watchId = watch.id,
-                startDate = watch.startDate,
-                endDate = watch.endDate,
-                openings = openings,
-                channel = watch.channelOverride(),
-                appRootUrl = appRootUrl,
-            )
+        // Fire every registered handler; fold-any so one succeeding handler is
+        // enough to satisfy `stopWhenTriggered`. `.any { it }` on a mapped
+        // list evaluates every handler (no short-circuit), matching the
+        // "each handler is invoked exactly once per trigger" contract.
+        val fired = handlers.map { it.fire(watch, openings) }.any { it }
         if (fired && watch.stopWhenTriggered) {
             watches.update(watch.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.DONE))
         }
@@ -254,7 +253,7 @@ internal class WatchAlertDispatcher(
 // inclusive bound would misfire the shorter watch (and wrongly mark it done).
 private fun LocalDate.withinWindow(watch: AvailabilityWatchRepo.Watch): Boolean = !isBefore(watch.startDate) && isBefore(watch.endDate)
 
-private fun AvailabilityWatchRepo.Watch.channelOverride(): String? =
+internal fun AvailabilityWatchRepo.Watch.channelOverride(): String? =
     (triggerConfig["channel"] as? JsonPrimitive)
         ?.takeIf { it.isString }
         ?.content

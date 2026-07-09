@@ -35,6 +35,8 @@ import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
 import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
+import ca.floo.roadtrip.service.availability.SlackNotifyHandler
+import ca.floo.roadtrip.service.availability.TriggerActionRegistry
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.alert.AlertProviderRegistry
@@ -210,6 +212,15 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     PollerBackfill(boot.ctx, pollerMembership).run()
 
     val slackNotifications = SlackNotificationServiceImpl(boot.appConfig.slack)
+    val triggerActions =
+        TriggerActionRegistry(
+            listOf(
+                SlackNotifyHandler(
+                    slack = slackNotifications,
+                    appRootUrl = boot.appConfig.webApp?.rootUrl,
+                ),
+            ),
+        )
     val watchAlertDispatcher =
         WatchAlertDispatcher(
             slack = slackNotifications,
@@ -218,6 +229,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             targets = availabilityTargets,
             pois = PoiServingRepo(boot.ctx),
             availability = availability,
+            triggerActions = triggerActions,
             grafanaRootUrl = boot.appConfig.grafana?.rootUrl,
             appRootUrl = boot.appConfig.webApp?.rootUrl,
         )
