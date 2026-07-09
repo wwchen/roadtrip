@@ -16,6 +16,7 @@ import ca.floo.roadtrip.repo.PoiDetailRow
 import ca.floo.roadtrip.repo.PoiRow
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.service.api.PoiCta
+import ca.floo.roadtrip.service.api.UrlHosts
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
@@ -365,6 +366,8 @@ internal fun poiDetailFeature(
             PoiDetailPropertiesSchema(
                 source = r.source,
                 sourceId = r.sourceId,
+                dataSource = r.source,
+                availabilityProvider = r.providerSource,
                 category = r.category,
                 subcategory = r.subcategory,
                 agency = r.agency,
@@ -375,6 +378,7 @@ internal fun poiDetailFeature(
                 earliestDate = dateContext?.earliestDate?.toString(),
                 unitName = r.unitName,
                 reserveUrl = r.reserveUrl,
+                bookingSite = r.reserveUrl?.let(UrlHosts::extract),
                 phone = r.phone,
                 infoUrl = r.infoUrl,
                 address = r.addressJson?.let { Json.parseToJsonElement(it) },

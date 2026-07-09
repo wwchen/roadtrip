@@ -158,7 +158,10 @@ export function structuredCampgroundDetailsHTML(p) {
   const linkRows = linksHTML(p.links);
   const alerts = alertsHTML(p.alerts);
   const sourceRows = [
+    detailRow('Data source', firstText(p.data_source, p.source)),
     detailRow('Source ID', p.source_id),
+    detailRow('Availability provider', firstText(p.availability_provider, p.provider_source)),
+    detailRow('Booking site', firstText(p.booking_site, urlHost(firstText(p.reserve_url, p.reservation_url)))),
     detailRow('Last updated', firstText(p.metadata?.last_updated, p.last_verified)),
     connectionsRow(p.connections),
   ].filter(Boolean).join('');

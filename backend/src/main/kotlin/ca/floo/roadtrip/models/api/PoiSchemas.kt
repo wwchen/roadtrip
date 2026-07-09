@@ -50,6 +50,8 @@ data class PoiDetailFeatureSchema(
 data class PoiDetailPropertiesSchema(
     val source: String,
     @SerialName("source_id") val sourceId: String,
+    @SerialName("data_source") val dataSource: String? = null,
+    @SerialName("availability_provider") val availabilityProvider: String? = null,
     val category: String,
     val subcategory: String? = null,
     val agency: String? = null,
@@ -60,6 +62,7 @@ data class PoiDetailPropertiesSchema(
     @SerialName("earliest_date") val earliestDate: String? = null,
     @SerialName("unit_name") val unitName: String? = null,
     @SerialName("reserve_url") val reserveUrl: String? = null,
+    @SerialName("booking_site") val bookingSite: String? = null,
     val phone: String? = null,
     @SerialName("info_url") val infoUrl: String? = null,
     val address: JsonElement? = null,

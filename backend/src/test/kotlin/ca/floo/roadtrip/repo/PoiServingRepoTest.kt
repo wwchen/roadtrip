@@ -82,6 +82,56 @@ class PoiServingRepoTest : SharedDbTest() {
         assertEquals(link, row.infoUrl)
     }
 
+    @Test
+    fun `detail row keeps data source while selecting availability provider ref and booking site`() {
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "recgov-232869",
+                name = "Cold Creek",
+                lon = -120.3147222,
+                lat = 39.5427778,
+                source = "federal-campgrounds",
+                subcategory = "established",
+                agency = "USDA Forest Service",
+                region = "CA",
+                country = "US",
+                providerRefJson = """{"catalog_id":"recgov-232869"}""",
+            )
+        ctx.execute(
+            "UPDATE campgrounds SET reservation_url = ? WHERE id = ?",
+            "https://www.recreation.gov/camping/campgrounds/232869",
+            fixture.catalogId,
+        )
+        val recgovVendorRefId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO vendor_refs (
+                      vendor, entity_type, external_id, external_name, payload
+                    ) VALUES (
+                      'recgov', 'campground', '232869', 'Cold Creek', '{"recgov_id":"232869"}'::jsonb
+                    )
+                    RETURNING id
+                    """.trimIndent(),
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute(
+            "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, is_primary) VALUES (?, ?, false)",
+            fixture.catalogId,
+            recgovVendorRefId,
+        )
+
+        val row = PoiServingRepo(ctx).fetchPoiById(fixture.poiId)
+
+        assertNotNull(row)
+        assertEquals("federal-campgrounds", row.source)
+        assertEquals("recgov-232869", row.sourceId)
+        assertEquals("recgov", row.providerSource)
+        assertEquals("https://www.recreation.gov/camping/campgrounds/232869", row.reserveUrl)
+        val publicRef = Json.parseToJsonElement(row.providerRefJson!!).jsonObject
+        assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
+    }
+
     private fun seedPoi(
         providerRefJson: String,
         propertiesJson: String = "{}",
