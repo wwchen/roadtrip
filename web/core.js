@@ -145,24 +145,31 @@ export function flattenHydratedPoi(f) {
   const p = f.properties || {};
   const raw = p.raw || {};
   const flat = p.category === 'campground'
-    ? { id: f.id, ...p, upstream: p.upstream || raw.upstream || null }
+    ? { id: f.id, ...p, upstream: p.upstream || raw.upstream || canonicalCampgroundUpstream(raw, p.address) }
     : { id: f.id, ...raw, ...p };
   delete flat.raw;
+
+  if (p.category === 'campground') {
+    promoteCanonicalCampgroundFields(flat, p, raw);
+  }
 
   // Address arrives as a nested object from /api/pois/{id} (the JSONB
   // column). Flatten its parts onto the top of properties for every
   // category that surfaces an address — popups read them directly.
   const addr = p.address || {};
-  flat.street = addr.street || '';
-  flat.city = addr.city || '';
-  flat.state = addr.state || p.region || '';
-  flat.postcode = addr.postcode || '';
+  const nestedAddr = addr.address && typeof addr.address === 'object' ? addr.address : {};
+  flat.full_address = firstText(addr.full, nestedAddr.full, flat.full_address);
+  flat.street = firstText(addr.street, addr.street1, addr.address_line, nestedAddr.street, nestedAddr.street1, nestedAddr.address_line);
+  flat.city = firstText(addr.city, nestedAddr.city);
+  flat.state = firstText(addr.state, addr.state_code, nestedAddr.state, nestedAddr.state_code, p.region);
+  flat.country = firstText(p.country, addr.country, addr.country_code, nestedAddr.country, nestedAddr.country_code, flat.country);
+  flat.postcode = firstText(addr.postcode, addr.postal_code, addr.zipcode, nestedAddr.postcode, nestedAddr.postal_code, nestedAddr.zipcode);
 
   // info_url is the BE's canonical "open this in upstream" link
   // (Tesla findus, planetfitness.com gym page, BC Parks page, …).
   // Popups read p.website / p.infoUrl — keep both names alive.
-  flat.website = p.info_url || p.website || '';
-  flat.infoUrl = p.info_url || '';
+  flat.website = firstText(p.info_url, p.website, flat.website);
+  flat.infoUrl = firstText(p.info_url);
 
   if (p.category === 'campground' && p.subcategory) {
     flat.category = p.subcategory;
@@ -178,10 +185,10 @@ export function flattenHydratedPoi(f) {
     flat.GIS_Acres = raw.GIS_Acres ?? raw.acres ?? null;
     flat.Mang_Name = raw.Mang_Name || raw.designation || '';
   }
-  if (p.category === 'planet-fitness') {
+  if (p.category === 'planet_fitness_location' || p.category === 'planet-fitness') {
     flat.opening_hours = raw.opening_hours || '';
   }
-  if (p.category === 'supercharger') {
+  if (p.category === 'tesla_supercharger' || p.category === 'supercharger') {
     flat.locationId = p.source_id;
     flat.stallCount = raw.stall_count ?? 0;
     flat.powerKilowatt = raw.max_power_kw ?? 0;
@@ -191,4 +198,87 @@ export function flattenHydratedPoi(f) {
   }
   flat.name = p.name || raw.name || flat.name;
   return { ...f, properties: flat };
+}
+
+function promoteCanonicalCampgroundFields(flat, p, raw) {
+  const management = raw.management && typeof raw.management === 'object' ? raw.management : {};
+  const contact = raw.contact && typeof raw.contact === 'object' ? raw.contact : {};
+  const location = raw.location && typeof raw.location === 'object' ? raw.location : {};
+  const metadata = raw.metadata && typeof raw.metadata === 'object' ? raw.metadata : {};
+
+  flat.description = firstText(
+    p.description,
+    raw.description,
+    raw.long_description,
+    raw.medium_description,
+    raw.short_description,
+    raw.status_description,
+  );
+  flat.photo_url = firstText(p.photo_url, campgroundPhotoUrl(raw.photos));
+  flat.agency = firstText(p.agency, management.agency_name, management.agency, management.name);
+  flat.phone = firstText(p.phone, contact.primary_phone, contact.phone);
+  flat.email = firstText(p.email, contact.email, contact.primary_email);
+  flat.reserve_url = firstText(p.reserve_url, raw.reservation_url);
+  flat.status = firstText(p.status, raw.status, flat.status);
+  flat.status_description = firstText(p.status_description, raw.status_description, flat.status_description);
+  flat.kind = firstText(p.kind, raw.kind, flat.kind);
+  flat.price = p.price ?? raw.price ?? flat.price;
+  flat.schedule = p.schedule ?? raw.default_campsite_schedule ?? flat.schedule;
+  flat.default_campsite_schedule = flat.schedule;
+  flat.amenities = p.amenities ?? raw.amenities ?? flat.amenities;
+  flat.cell_coverage = p.cell_coverage ?? raw.cell_service ?? flat.cell_coverage;
+  flat.last_verified = firstText(p.last_verified, metadata.last_updated, raw.updated_at);
+  flat.max_rv_length = p.max_rv_length ?? raw.max_rv_length ?? flat.max_rv_length;
+  flat.max_trailer_length = p.max_trailer_length ?? raw.max_trailer_length ?? flat.max_trailer_length;
+  flat.has_pull_through_sites = p.has_pull_through_sites ?? raw.has_pull_through_sites ?? flat.has_pull_through_sites;
+  flat.big_rig_friendly = p.big_rig_friendly ?? raw.big_rig_friendly ?? flat.big_rig_friendly;
+  flat.elevation = p.elevation ?? location.elevation ?? flat.elevation;
+  flat.management = p.management ?? raw.management ?? flat.management;
+  flat.contact = p.contact ?? raw.contact ?? flat.contact;
+  flat.links = p.links ?? raw.links ?? flat.links;
+  flat.alerts = p.alerts ?? raw.alerts ?? flat.alerts;
+  flat.connections = p.connections ?? raw.connections ?? flat.connections;
+  flat.metadata = p.metadata ?? raw.metadata ?? flat.metadata;
+}
+
+function campgroundPhotoUrl(photos) {
+  if (!Array.isArray(photos)) return '';
+  for (const photo of photos) {
+    if (!photo || typeof photo !== 'object') continue;
+    const url = firstText(photo.large_url, photo.medium_url, photo.small_url, photo.original_url);
+    if (url) return url;
+  }
+  return '';
+}
+
+function canonicalCampgroundUpstream(raw, address) {
+  const location = raw.location && typeof raw.location === 'object' ? raw.location : {};
+  const upstream = {};
+  const directions = firstText(address?.directions, location.directions);
+  const status = firstText(raw.status_description, raw.status);
+  const price = priceLabel(raw.price);
+  if (directions) upstream.FacilityDirections = directions;
+  if (status) upstream.Status = status;
+  if (price) upstream.Price = price;
+  return Object.keys(upstream).length ? upstream : null;
+}
+
+function priceLabel(price) {
+  if (!price || typeof price !== 'object') return '';
+  const min = Number(price.minimum);
+  const max = Number(price.maximum);
+  const currency = firstText(price.currency_code, price.currency) || 'USD';
+  if (!Number.isFinite(min) && !Number.isFinite(max)) return '';
+  const format = (n) => `${currency} ${n.toFixed(Number.isInteger(n) ? 0 : 2)}`;
+  if (Number.isFinite(min) && Number.isFinite(max) && min !== max) return `${format(min)}-${format(max)}`;
+  return format(Number.isFinite(min) ? min : max);
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
 }

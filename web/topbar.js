@@ -17,7 +17,7 @@
 
 import { state, distanceKm, formatDistance, flattenHydratedPoi, geomCenter, zoomForBbox } from './core.js';
 import { fitAndSelect } from './search.js';
-import { campgroundFeaturePassesFilter, onCampgroundFilterChange, synthesizeClick } from './layers.js';
+import { campgroundFeaturePassesFilter, campgroundLayerCategory, onCampgroundFilterChange, synthesizeClick } from './layers.js';
 import { openCampgroundDrawer } from './drawer/campground.js';
 import { openParkDrawer } from './drawer/park.js';
 import { openPlanetFitnessDrawer } from './drawer/planet-fitness.js';
@@ -820,7 +820,9 @@ function kindForCategory(category) {
     case 'campground': return 'CG';
     case 'national-park': return 'NP';
     case 'state-park': return 'SP';
+    case 'planet_fitness_location': return 'PF';
     case 'planet-fitness': return 'PF';
+    case 'tesla_supercharger': return 'SC';
     case 'supercharger': return 'SC';
     default: return 'PLACE';
   }
@@ -1009,12 +1011,12 @@ function openBackendPoiDrawer(result) {
 function enablePoiToggle(category, feature) {
   let id = null;
   if (category === 'campground') {
-    const cat = feature?.properties?.subcategory || feature?.properties?.category || 'federal';
+    const cat = campgroundLayerCategory(feature?.properties?.subcategory || feature?.properties?.category);
     id = `f-cg-${cat === 'other' ? 'federal' : cat}`;
   } else if (category === 'national-park') id = 'f-np';
   else if (category === 'state-park') id = 'f-sp';
-  else if (category === 'planet-fitness') id = 'f-pf';
-  else if (category === 'supercharger') id = 'f-open';
+  else if (category === 'planet_fitness_location' || category === 'planet-fitness') id = 'f-pf';
+  else if (category === 'tesla_supercharger' || category === 'supercharger') id = 'f-open';
   const el = id ? document.getElementById(id) : null;
   if (el && !el.checked) {
     el.checked = true;
@@ -1042,9 +1044,11 @@ function openSharedPoiFeature(detail) {
     case 'state-park':
       openParkDrawer('sp', feature, lngLat);
       break;
+    case 'planet_fitness_location':
     case 'planet-fitness':
       openPlanetFitnessDrawer(feature);
       break;
+    case 'tesla_supercharger':
     case 'supercharger':
       openSuperchargerDrawer(feature);
       break;
@@ -1785,13 +1789,13 @@ function setTripPois(cgFeatures) {
     const [lng, lat] = f.geometry?.coordinates || [];
     if (!Number.isFinite(lng) || !Number.isFinite(lat)) continue;
     const p = f.properties || {};
-    const subcat = p.subcategory || p.category || 'other';
+    const subcat = campgroundLayerCategory(p.subcategory || p.category);
     const card = {
       id,
       name: 'Campground',
       sub: '',
       location: '',
-      category: subcat === 'campground' ? 'other' : subcat,
+      category: subcat,
       sites: null,
       season: null,
       reservable: undefined,

@@ -7,6 +7,18 @@
   "graphTooltip": 0,
   "links": [
     {
+      "asDropdown": false,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [],
+      "targetBlank": false,
+      "title": "🚦 Status Overview",
+      "tooltip": "",
+      "type": "link",
+      "url": "/d/status-overview/roadtrip-status-overview"
+    },
+    {
       "asDropdown": true,
       "icon": "dashboard",
       "includeVars": false,
@@ -141,6 +153,7 @@
   "templating": {
     "list": [
       {
+        "allValue": "'__all'",
         "allowCustomValue": true,
         "current": {
           "text": "All",
@@ -168,10 +181,10 @@
         "regexApplyTo": "value",
         "skipUrlSync": false,
         "sort": 0,
-        "type": "query",
-        "allValue": "'__all'"
+        "type": "query"
       },
       {
+        "allValue": "'__all'",
         "allowCustomValue": true,
         "current": {
           "text": "All",
@@ -199,10 +212,10 @@
         "regexApplyTo": "value",
         "skipUrlSync": false,
         "sort": 0,
-        "type": "query",
-        "allValue": "'__all'"
+        "type": "query"
       },
       {
+        "allValue": "'__all'",
         "allowCustomValue": true,
         "current": {
           "text": "All",
@@ -230,8 +243,7 @@
         "regexApplyTo": "value",
         "skipUrlSync": false,
         "sort": 0,
-        "type": "query",
-        "allValue": "'__all'"
+        "type": "query"
       }
     ]
   },

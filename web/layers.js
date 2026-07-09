@@ -33,7 +33,7 @@ const CG_COLOR = {
   provincial: '#2e7d32',    // same green — BC provincial parks (parallel to US federal)
   state: '#558b2f',         // medium green — US state
   local: '#9ccc65',         // light green — US county/municipal
-  other: '#cddc39',         // unclassified
+  other: '#2e7d32',         // unclassified; shares the federal toggle/color
 };
 const CG_SUBCATEGORIES = ['federal', 'state', 'provincial', 'local'];
 const CG_EMPTY_FC = { type: 'FeatureCollection', features: [] };
@@ -52,13 +52,20 @@ function normalizeAgency(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+export function campgroundLayerCategory(value) {
+  const category = typeof value === 'string' ? value.trim() : '';
+  if (!category || category === 'campground' || category === 'null') return 'other';
+  return CG_SUBCATEGORIES.includes(category) ? category : 'other';
+}
+
 function effectiveCampgroundCategory(category) {
-  return category === 'other' ? 'federal' : category;
+  const layerCategory = campgroundLayerCategory(category);
+  return layerCategory === 'other' ? 'federal' : layerCategory;
 }
 
 function featureCampgroundCategory(props) {
   const category = props?.category === 'campground' ? props?.subcategory : props?.category;
-  return effectiveCampgroundCategory(category || 'other');
+  return effectiveCampgroundCategory(category);
 }
 
 function agencySelection(category) {

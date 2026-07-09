@@ -13,6 +13,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.doubleOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonArray
@@ -148,8 +149,8 @@ private fun jsonObjects(envelopes: List<Envelope>): List<JsonObject> =
 private fun JsonObject.stringField(name: String): String? =
     this[name]
         ?.jsonPrimitive
-        ?.content
-        ?.takeIf { it.isNotBlank() }
+        ?.contentOrNull
+        ?.takeIf { it.isNotBlank() && it != "null" }
 
 private fun JsonObject.doubleField(name: String): Double? =
     this[name]

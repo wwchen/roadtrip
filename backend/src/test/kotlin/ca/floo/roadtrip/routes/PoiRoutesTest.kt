@@ -123,6 +123,36 @@ class PoiRoutesTest : SharedDbTest() {
         }
 
     @Test
+    fun `legacy map category filters resolve to canonical poi types`() =
+        testApplication {
+            seed(
+                listOf(
+                    row("tesla-1", "Tesla Vancouver", -123.05, 49.05, "tesla_supercharger"),
+                    row("pf-1", "PF Vancouver", -123.1, 49.1, "planet_fitness_location"),
+                ),
+            )
+            application { routing { poiRoutes(ctx, testRegistry) } }
+
+            val resp =
+                client.post("/api/pois") {
+                    contentType(ContentType.Application.Json)
+                    setBody(body("-125,47,-120,51", categories = listOf("planet-fitness", "supercharger"), zoom = 3))
+                }
+            val cats =
+                Json
+                    .parseToJsonElement(resp.bodyAsText())
+                    .jsonObject["features"]!!
+                    .jsonArray
+                    .map {
+                        it.jsonObject["properties"]!!
+                            .jsonObject["category"]!!
+                            .jsonPrimitive.content
+                    }.toSet()
+
+            assertEquals(setOf("planet_fitness_location", "tesla_supercharger"), cats)
+        }
+
+    @Test
     fun `bbox slim properties include agency when present`() =
         testApplication {
             seed(

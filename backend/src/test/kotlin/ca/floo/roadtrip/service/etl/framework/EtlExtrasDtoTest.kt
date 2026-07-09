@@ -69,9 +69,9 @@ class EtlExtrasDtoTest {
     }
 
     @Test
-    fun `tesla extras preserve index and explicit null detail payloads`() {
+    fun `tesla canonical output preserves index and nullable detail payloads`() {
         val rawIndex = Json.parseToJsonElement("""{"location_url_slug":"test-slug","title":"locations"}""").jsonObject
-        val poi =
+        val record =
             TeslaIndexEtl()
                 .transform(
                     TeslaIndexDto(
@@ -89,17 +89,24 @@ class EtlExtrasDtoTest {
                         fetchedAt = FETCHED_AT,
                     ),
                     transformCtx(),
-                ).single()
+                ).superchargers
+                .single()
 
-        val extras = poi.extras!!.jsonObject
-        assertEquals("Tesla", poi.agency)
-        assertEquals("test-slug", extras["index"]!!.jsonObject["location_url_slug"]!!.jsonPrimitive.content)
-        assertEquals(JsonNull, extras["detail"])
+        assertEquals("test-slug", record.locationSlug)
+        assertEquals(
+            "test-slug",
+            record
+                .indexPayload!!
+                .jsonObject["location_url_slug"]!!
+                .jsonPrimitive
+                .content,
+        )
+        assertNull(record.detailPayload)
     }
 
     @Test
     fun `planet fitness extras serialize center and tags through sparse dto`() {
-        val poi =
+        val record =
             PlanetFitnessEtl()
                 .transform(
                     PlanetFitnessRawDto(
@@ -119,10 +126,10 @@ class EtlExtrasDtoTest {
                         _fetchedAt = FETCHED_AT,
                     ),
                     transformCtx(),
-                ).single()
+                ).locations
+                .single()
 
-        val extras = poi.extras!!.jsonObject
-        assertEquals("Planet Fitness", poi.agency)
+        val extras = record.payload!!.jsonObject
         assertEquals("way", extras["type"]!!.jsonPrimitive.content)
         assertEquals(456, extras["id"]!!.jsonPrimitive.int)
         assertEquals(47.61, extras["center"]!!.jsonObject["lat"]!!.jsonPrimitive.double)

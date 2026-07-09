@@ -1,21 +1,23 @@
 package ca.floo.roadtrip.service.etl.vendors.osmpf
 
 import ca.floo.roadtrip.models.domain.Address
-import ca.floo.roadtrip.models.domain.Poi
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.InputBundle
+import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationEtlOutput
+import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationEtlRecord
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.pointGeoJson
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
+import kotlinx.serialization.json.put
 import java.time.Instant
 
-// OSM Overpass → Poi.PlanetFitness.
+// OSM Overpass → canonical planet_fitness_locations.
 //
 // Capture path: data/raw/osm-pf/<ts>.json (single envelope per run).
 // Upstream payload shape:
@@ -29,7 +31,7 @@ import java.time.Instant
 // node: lat/lon at the element. way: lat/lon under `center` (Overpass `out
 // center` directive). Some entries have neither — those get dropped at
 // validate.
-class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>> {
+class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, PlanetFitnessLocationEtlOutput> {
     override val etlSlug = "planet-fitness"
 
     override fun parse(inputs: InputBundle): PlanetFitnessRawDto {
@@ -58,16 +60,12 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>>
     override fun transform(
         dto: PlanetFitnessRawDto,
         ctx: TransformCtx,
-    ): List<Poi.PlanetFitness> {
-        val agency = ctx.requiredConstantAgency(etlSlug)
-        return dto.elements.mapNotNull { el -> transformElement(el, dto._fetchedAt, agency) }
-    }
+    ): PlanetFitnessLocationEtlOutput =
+        PlanetFitnessLocationEtlOutput(
+            locations = dto.elements.mapNotNull { el -> transformElement(el) },
+        )
 
-    private fun transformElement(
-        el: OverpassElement,
-        fetchedAt: Instant,
-        agency: String,
-    ): Poi.PlanetFitness? {
+    private fun transformElement(el: OverpassElement): PlanetFitnessLocationEtlRecord? {
         // Resolve lat/lon: nodes have it directly, ways/relations have it
         // under `center` (Overpass `out center` semantics).
         val lat = el.lat ?: el.center?.lat ?: return null
@@ -81,24 +79,20 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>>
         // when nothing's known instead of {"street":"","city":""}.
         val address = buildAddress(tags)
 
-        return Poi.PlanetFitness(
-            source = etlSlug,
-            sourceId = sourceId,
+        return PlanetFitnessLocationEtlRecord(
+            locationId = sourceId,
             name = tags["name"] ?: "Planet Fitness",
-            geomGeoJson = pointGeoJson(lon, lat),
+            latitude = lat,
+            longitude = lon,
             region = tags["addr:state"]?.takeIf { it.isNotBlank() },
             country = "US", // OSM-PF poller's bbox is continental US; safe default
             phone = tags["phone"]?.takeIf { it.isNotBlank() },
-            address = address,
+            address = addressJson(address),
             infoUrl = tags["website"]?.takeIf { it.isNotBlank() },
-            fetchedAt = fetchedAt,
-            lastVerified = null, // OSM — no editorial-touch field
-            agency = agency,
-            openingHours = tags["opening_hours"]?.takeIf { it.isNotBlank() },
             // OSM stores the interesting per-element data as tags (key/value
             // strings). Surface the full tag map via extras so the drawer's
             // "Upstream data" accordion has all of it.
-            extras = elementExtras(el),
+            payload = elementExtras(el),
         )
     }
 
@@ -125,6 +119,17 @@ class PlanetFitnessEtl : SourceEtl<PlanetFitnessRawDto, List<Poi.PlanetFitness>>
         val postcode = tags["addr:postcode"]?.takeIf { it.isNotBlank() }
         if (street == null && city == null && state == null && postcode == null) return null
         return Address(street = street, city = city, state = state, postcode = postcode, country = "US")
+    }
+
+    private fun addressJson(address: Address?): JsonElement? {
+        address ?: return null
+        return buildJsonObject {
+            address.street?.let { put("street", it) }
+            address.city?.let { put("city", it) }
+            address.state?.let { put("state", it) }
+            address.postcode?.let { put("postcode", it) }
+            address.country?.let { put("country", it) }
+        }
     }
 
     private fun parseFetchedAt(envelope: Envelope): Instant =

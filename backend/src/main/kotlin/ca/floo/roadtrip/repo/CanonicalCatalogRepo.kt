@@ -2,6 +2,8 @@ package ca.floo.roadtrip.repo
 
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
+import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationEtlRecord
+import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlRecord
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
@@ -71,6 +73,44 @@ class CanonicalCatalogRepo(
         }
     }
 
+    fun upsertTeslaSuperchargers(
+        records: List<TeslaSuperchargerEtlRecord>,
+        source: String,
+    ): Result {
+        val runId = importRuns.start(source)
+        try {
+            val upserted =
+                ctx.transactionResult { cfg ->
+                    val tx = CanonicalCatalogRepo(DSL.using(cfg))
+                    records.sumOf { record -> if (tx.upsertTeslaSupercharger(record)) 1 else 0 }
+                }
+            importRuns.complete(runId, records.size)
+            return Result(runId = runId, seenCount = records.size, upsertedCount = upserted)
+        } catch (e: Throwable) {
+            importRuns.fail(runId, e.message ?: e.javaClass.simpleName)
+            throw e
+        }
+    }
+
+    fun upsertPlanetFitnessLocations(
+        records: List<PlanetFitnessLocationEtlRecord>,
+        source: String,
+    ): Result {
+        val runId = importRuns.start(source)
+        try {
+            val upserted =
+                ctx.transactionResult { cfg ->
+                    val tx = CanonicalCatalogRepo(DSL.using(cfg))
+                    records.sumOf { record -> if (tx.upsertPlanetFitnessLocation(record)) 1 else 0 }
+                }
+            importRuns.complete(runId, records.size)
+            return Result(runId = runId, seenCount = records.size, upsertedCount = upserted)
+        } catch (e: Throwable) {
+            importRuns.fail(runId, e.message ?: e.javaClass.simpleName)
+            throw e
+        }
+    }
+
     private fun upsertCampground(record: CampgroundEtlRecord): Boolean {
         val vendorRefId =
             upsertVendorRef(
@@ -118,6 +158,24 @@ class CanonicalCatalogRepo(
                 campsiteId
             }
         linkCampsiteVendorRef(persistedCampsiteId, vendorRefId)
+        return true
+    }
+
+    private fun upsertTeslaSupercharger(record: TeslaSuperchargerEtlRecord): Boolean {
+        val superchargerId =
+            teslaSuperchargerIdForLocationSlug(record.locationSlug)
+                ?.also { updateTeslaSupercharger(it, record) }
+                ?: insertTeslaSupercharger(record)
+        upsertTeslaSuperchargerPoi(superchargerId, record.longitude, record.latitude)
+        return true
+    }
+
+    private fun upsertPlanetFitnessLocation(record: PlanetFitnessLocationEtlRecord): Boolean {
+        val locationId =
+            planetFitnessLocationIdForLocationId(record.locationId)
+                ?.also { updatePlanetFitnessLocation(it, record) }
+                ?: insertPlanetFitnessLocation(record)
+        upsertPlanetFitnessLocationPoi(locationId, record.longitude, record.latitude)
         return true
     }
 
@@ -188,6 +246,20 @@ class CanonicalCatalogRepo(
                 "SELECT campsite_id FROM campsite_vendor_refs WHERE vendor_ref_id = ?",
                 vendorRefId,
             )?.get("campsite_id", Long::class.java)
+
+    private fun teslaSuperchargerIdForLocationSlug(locationSlug: String): Long? =
+        ctx
+            .fetchOne(
+                "SELECT id FROM tesla_superchargers WHERE location_slug = ?",
+                locationSlug,
+            )?.get("id", Long::class.java)
+
+    private fun planetFitnessLocationIdForLocationId(locationId: String): Long? =
+        ctx
+            .fetchOne(
+                "SELECT id FROM planet_fitness_locations WHERE location_id = ?",
+                locationId,
+            )?.get("id", Long::class.java)
 
     private fun insertCampground(record: CampgroundEtlRecord): Long =
         ctx
@@ -370,6 +442,244 @@ class CanonicalCatalogRepo(
         }
     }
 
+    private fun insertPoi(
+        poiType: String,
+        longitude: Double,
+        latitude: Double,
+    ): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO pois (poi_type, geom)
+                VALUES (?, ST_SetSRID(ST_MakePoint(?, ?), 4326))
+                RETURNING id
+                """.trimIndent(),
+                poiType,
+                longitude,
+                latitude,
+            )!!
+            .get("id", Long::class.java)
+
+    private fun updatePoiGeometry(
+        poiId: Long,
+        longitude: Double,
+        latitude: Double,
+    ) {
+        ctx.execute(
+            """
+            UPDATE pois
+            SET geom = ST_SetSRID(ST_MakePoint(?, ?), 4326),
+                updated_at = now(),
+                deleted_at = NULL
+            WHERE id = ?
+            """.trimIndent(),
+            longitude,
+            latitude,
+            poiId,
+        )
+    }
+
+    private fun insertTeslaSupercharger(record: TeslaSuperchargerEtlRecord): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO tesla_superchargers (
+                  location_slug, location_guid, common_site_name, site_status, access_type,
+                  open_to_public, open_to_non_teslas, trailer_friendly, twenty_four_seven,
+                  stall_count, max_power_kw, address, region, country, time_zone,
+                  amenities, hardware_counts, pricebooks, availability_profile, info_url,
+                  index_payload, detail_payload
+                ) VALUES (
+                  ?, ?, ?, ?, ?,
+                  ?, ?, ?, ?,
+                  ?, ?, ?::jsonb, ?, ?, ?,
+                  ?::jsonb, ?::jsonb, ?::jsonb, ?::jsonb, ?,
+                  ?::jsonb, ?::jsonb
+                )
+                RETURNING id
+                """.trimIndent(),
+                record.locationSlug,
+                record.locationGuid,
+                record.commonSiteName,
+                record.siteStatus,
+                record.accessType,
+                record.openToPublic,
+                record.openToNonTeslas,
+                record.trailerFriendly,
+                record.twentyFourSeven,
+                record.stallCount,
+                record.maxPowerKw,
+                jsonObject(record.address),
+                record.region,
+                record.country,
+                record.timeZone,
+                jsonArray(record.amenities),
+                jsonObject(record.hardwareCounts),
+                jsonArray(record.pricebooks),
+                jsonObject(record.availabilityProfile),
+                record.infoUrl,
+                jsonObject(record.indexPayload),
+                jsonObject(record.detailPayload),
+            )!!
+            .get("id", Long::class.java)
+
+    private fun updateTeslaSupercharger(
+        superchargerId: Long,
+        record: TeslaSuperchargerEtlRecord,
+    ) {
+        ctx.execute(
+            """
+            UPDATE tesla_superchargers
+            SET location_guid = ?,
+                common_site_name = ?,
+                site_status = ?,
+                access_type = ?,
+                open_to_public = ?,
+                open_to_non_teslas = ?,
+                trailer_friendly = ?,
+                twenty_four_seven = ?,
+                stall_count = ?,
+                max_power_kw = ?,
+                address = ?::jsonb,
+                region = ?,
+                country = ?,
+                time_zone = ?,
+                amenities = ?::jsonb,
+                hardware_counts = ?::jsonb,
+                pricebooks = ?::jsonb,
+                availability_profile = ?::jsonb,
+                info_url = ?,
+                index_payload = ?::jsonb,
+                detail_payload = ?::jsonb,
+                updated_at = now(),
+                deleted_at = NULL
+            WHERE id = ?
+            """.trimIndent(),
+            record.locationGuid,
+            record.commonSiteName,
+            record.siteStatus,
+            record.accessType,
+            record.openToPublic,
+            record.openToNonTeslas,
+            record.trailerFriendly,
+            record.twentyFourSeven,
+            record.stallCount,
+            record.maxPowerKw,
+            jsonObject(record.address),
+            record.region,
+            record.country,
+            record.timeZone,
+            jsonArray(record.amenities),
+            jsonObject(record.hardwareCounts),
+            jsonArray(record.pricebooks),
+            jsonObject(record.availabilityProfile),
+            record.infoUrl,
+            jsonObject(record.indexPayload),
+            jsonObject(record.detailPayload),
+            superchargerId,
+        )
+    }
+
+    private fun upsertTeslaSuperchargerPoi(
+        superchargerId: Long,
+        longitude: Double,
+        latitude: Double,
+    ) {
+        val existingPoiId =
+            ctx
+                .fetchOne(
+                    "SELECT poi_id FROM poi_tesla_superchargers WHERE tesla_supercharger_id = ?",
+                    superchargerId,
+                )?.get("poi_id", Long::class.java)
+        if (existingPoiId == null) {
+            val poiId = insertPoi(TESLA_SUPERCHARGER_POI_TYPE, longitude, latitude)
+            ctx.execute(
+                "INSERT INTO poi_tesla_superchargers (poi_id, tesla_supercharger_id) VALUES (?, ?)",
+                poiId,
+                superchargerId,
+            )
+        } else {
+            updatePoiGeometry(existingPoiId, longitude, latitude)
+        }
+    }
+
+    private fun insertPlanetFitnessLocation(record: PlanetFitnessLocationEtlRecord): Long =
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO planet_fitness_locations (
+                  location_id, name, address, region, country, phone, info_url, amenities, payload
+                ) VALUES (
+                  ?, ?, ?::jsonb, ?, ?, ?, ?, ?::jsonb, ?::jsonb
+                )
+                RETURNING id
+                """.trimIndent(),
+                record.locationId,
+                record.name,
+                jsonObject(record.address),
+                record.region,
+                record.country,
+                record.phone,
+                record.infoUrl,
+                jsonArray(record.amenities),
+                jsonObject(record.payload),
+            )!!
+            .get("id", Long::class.java)
+
+    private fun updatePlanetFitnessLocation(
+        locationId: Long,
+        record: PlanetFitnessLocationEtlRecord,
+    ) {
+        ctx.execute(
+            """
+            UPDATE planet_fitness_locations
+            SET name = ?,
+                address = ?::jsonb,
+                region = ?,
+                country = ?,
+                phone = ?,
+                info_url = ?,
+                amenities = ?::jsonb,
+                payload = ?::jsonb,
+                updated_at = now(),
+                deleted_at = NULL
+            WHERE id = ?
+            """.trimIndent(),
+            record.name,
+            jsonObject(record.address),
+            record.region,
+            record.country,
+            record.phone,
+            record.infoUrl,
+            jsonArray(record.amenities),
+            jsonObject(record.payload),
+            locationId,
+        )
+    }
+
+    private fun upsertPlanetFitnessLocationPoi(
+        locationId: Long,
+        longitude: Double,
+        latitude: Double,
+    ) {
+        val existingPoiId =
+            ctx
+                .fetchOne(
+                    "SELECT poi_id FROM poi_planet_fitness_locations WHERE planet_fitness_location_id = ?",
+                    locationId,
+                )?.get("poi_id", Long::class.java)
+        if (existingPoiId == null) {
+            val poiId = insertPoi(PLANET_FITNESS_LOCATION_POI_TYPE, longitude, latitude)
+            ctx.execute(
+                "INSERT INTO poi_planet_fitness_locations (poi_id, planet_fitness_location_id) VALUES (?, ?)",
+                poiId,
+                locationId,
+            )
+        } else {
+            updatePoiGeometry(existingPoiId, longitude, latitude)
+        }
+    }
+
     private fun insertCampsite(
         campgroundId: Long,
         record: CampsiteEtlRecord,
@@ -518,6 +828,8 @@ class CanonicalCatalogRepo(
     companion object {
         private const val CAMPGROUND_ENTITY = "campground"
         private const val CAMPSITE_ENTITY = "campsite"
+        private const val TESLA_SUPERCHARGER_POI_TYPE = "tesla_supercharger"
+        private const val PLANET_FITNESS_LOCATION_POI_TYPE = "planet_fitness_location"
         private const val EMPTY_JSON_OBJECT = "{}"
         private const val EMPTY_JSON_ARRAY = "[]"
     }

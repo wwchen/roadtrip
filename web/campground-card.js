@@ -13,9 +13,18 @@
 
 import { escapeHtml } from './core.js';
 
-/** Parse properties.amenities (array) → string[]; safe on bad input. */
+/** Parse properties.amenities (legacy array or canonical object) → string[]. */
 export function parseAmenities(p) {
-  return parseStringList(p.amenities);
+  const value = p.amenities;
+  if (Array.isArray(value)) return parseStringList(value);
+  if (!value || typeof value !== 'object') return [];
+  const out = [];
+  for (const [key, raw] of Object.entries(value)) {
+    if (key === 'toilets' && value.toilet_kind) continue;
+    const label = amenityLabel(key, raw);
+    if (label) out.push(label);
+  }
+  return out;
 }
 
 /** Parse properties.activities (array) → string[]; safe on bad input. */
@@ -30,7 +39,7 @@ function parseStringList(value) {
 
 /** Parse properties.cell_coverage → object or null. */
 export function parseCellCoverage(p) {
-  const value = p.cell_coverage;
+  const value = p.cell_coverage || p.cell_service;
   return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
 }
 
@@ -46,21 +55,24 @@ export function amenitiesPillsHTML(amenities) {
   return `<div class="pills">${amenities.map(a => `<span class="pill">${escapeHtml(a)}</span>`).join('')}</div>`;
 }
 
-const CARRIER_LABEL = { verizon: 'Verizon', att: 'AT&T', tmobile: 'T-Mobile', sprint: 'Sprint' };
+const CARRIER_LABEL = { verizon: 'Verizon', att: 'AT&T', tmobile: 'T-Mobile', sprint: 'Sprint', uscell: 'US Cellular' };
 /**
  * Render per-carrier cell-signal chips. cc is `{verizon: [avg, count], ...}`
  * where avg is rec.gov's 0–4 scale. Sorts by signal strength desc.
  */
 export function cellCoveragePillsHTML(cc) {
   if (!cc) return '';
-  const entries = Object.entries(cc);
+  const entries = Object.entries(cc)
+    .map(([k, v]) => [k, normalizeCellValue(v)])
+    .filter(([, v]) => v && Number.isFinite(v.avg));
   if (!entries.length) return '';
-  entries.sort((a, b) => b[1][0] - a[1][0]);
+  entries.sort((a, b) => b[1].avg - a[1].avg);
   return '<div class="cell">' + entries.map(([k, v]) => {
-    const [avg, cnt] = v;
+    const { avg, count } = v;
     const bucket = Math.max(0, Math.min(4, Math.round(avg)));
     const label = CARRIER_LABEL[k] || k;
-    return `<span class="cell-pill" data-bucket="${bucket}" title="${cnt} reports"><span class="carrier">${label}</span><span class="val">${avg.toFixed(1)}</span></span>`;
+    const title = Number.isFinite(count) ? ` title="${count} reports"` : '';
+    return `<span class="cell-pill" data-bucket="${bucket}"${title}><span class="carrier">${label}</span><span class="val">${avg.toFixed(1)}</span></span>`;
   }).join('') + '</div>';
 }
 
@@ -106,6 +118,45 @@ export function bookingSystemFooterHTML(p) {
   const sys = p.booking_system;
   if (!sys) return '';
   return `<div class="footer cg-booking-sys">Booking via ${escapeHtml(sys)}</div>`;
+}
+
+export function structuredCampgroundDetailsHTML(p) {
+  const stayRows = [
+    detailRow('Status', firstText(p.status_description, titleCase(p.status))),
+    detailRow('Price', priceDisplay(p.price)),
+    detailRow('Check-in', scheduleTime(p.schedule, 'check_in_time')),
+    detailRow('Check-out', scheduleTime(p.schedule, 'check_out_time')),
+    detailRow('Max RV', lengthDisplay(p.max_rv_length)),
+    detailRow('Max trailer', lengthDisplay(p.max_trailer_length)),
+    detailRow('Pull-through', booleanDisplay(p.has_pull_through_sites)),
+    detailRow('Big-rig friendly', booleanDisplay(p.big_rig_friendly)),
+    detailRow('Elevation', elevationDisplay(p.elevation)),
+  ].filter(Boolean).join('');
+
+  const contactRows = [
+    detailRow('Address', addressDisplay(p)),
+    detailRow('Phone', p.phone),
+    detailRow('Email', emailLink(p.email)),
+    detailRow('Managed by', managementDisplay(p)),
+  ].filter(Boolean).join('');
+
+  const linkRows = linksHTML(p.links);
+  const alerts = alertsHTML(p.alerts);
+  const sourceRows = [
+    detailRow('Source ID', p.source_id),
+    detailRow('Last updated', firstText(p.metadata?.last_updated, p.last_verified)),
+    connectionsRow(p.connections),
+  ].filter(Boolean).join('');
+
+  const sections = [
+    detailSection('Stay details', stayRows),
+    detailSection('Contact', contactRows),
+    linkRows ? `<section class="cg-detail-group"><h4>Links</h4><div class="cg-link-list">${linkRows}</div></section>` : '',
+    alerts,
+    detailSection('Source metadata', sourceRows),
+  ].filter(Boolean).join('');
+
+  return sections ? `<div class="cg-structured-details">${sections}</div>` : '';
 }
 
 const MONTHS = { jan:0, feb:1, mar:2, apr:3, may:4, jun:5, jul:6, aug:7, sep:8, sept:8, oct:9, nov:10, dec:11 };
@@ -187,6 +238,12 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
   if (p.cta?.url) {
     url = p.cta.url;
     label = p.cta.label;
+  } else if (p.reserve_url || p.reservation_url) {
+    url = p.reserve_url || p.reservation_url;
+    label = reserveUrlLabel(url);
+  } else if (p.info_url || p.website) {
+    url = p.info_url || p.website;
+    label = 'Visit website';
   } else if (p.reservable === false) {
     // No CTA, marked FCFS — there's nothing to link to.
     return `<span class="${btnClass} ${btnClass}-disabled">First-come, first-served</span>`;
@@ -204,6 +261,240 @@ export function reserveButtonHTML(p, btnClass = 'btn') {
     }
   }
   return `<a class="${btnClass} ${btnClass}-primary" href="${url}" target="_blank" rel="noreferrer">${label}</a>`;
+}
+
+const AMENITY_LABELS = {
+  camp_store: 'Camp store',
+  dump_station: 'Dump station',
+  electric_hookups: 'Electric hookups',
+  fires_allowed: 'Fires allowed',
+  pets_allowed: 'Pets allowed',
+  sewer_hookups: 'Sewer hookups',
+  showers: 'Showers',
+  toilets: 'Toilets',
+  trash: 'Trash',
+  water: 'Water',
+  water_hookups: 'Water hookups',
+  wifi: 'Wi-Fi',
+};
+const NEGATIVE_AMENITY_LABELS = {
+  electric_hookups: 'No electric hookups',
+  sewer_hookups: 'No sewer hookups',
+  showers: 'No showers',
+  water: 'No water',
+  water_hookups: 'No water hookups',
+};
+
+function amenityLabel(key, value) {
+  if (value === null || value === undefined) return '';
+  if (key === 'toilet_kind' && typeof value === 'string' && value.trim()) {
+    return `${titleCase(value)} toilets`;
+  }
+  if (value === true) return AMENITY_LABELS[key] || titleCase(key);
+  if (value === false) return NEGATIVE_AMENITY_LABELS[key] || '';
+  if (typeof value === 'string' && value.trim()) return `${AMENITY_LABELS[key] || titleCase(key)}: ${value.trim()}`;
+  return '';
+}
+
+function normalizeCellValue(value) {
+  if (Array.isArray(value)) {
+    const avg = Number(value[0]);
+    const count = Number(value[1]);
+    return { avg, count };
+  }
+  const avg = Number(value);
+  return { avg, count: NaN };
+}
+
+function reserveUrlLabel(url) {
+  const host = urlHost(url);
+  if (host.endsWith('recreation.gov')) return 'View on recreation.gov';
+  if (host.endsWith('reserveamerica.com')) return 'View on ReserveAmerica';
+  if (host.endsWith('reservecalifornia.com')) return 'View on ReserveCalifornia';
+  if (host.endsWith('parks.canada.ca') || host.endsWith('pc.gc.ca')) return 'View on Parks Canada';
+  return 'Reserve';
+}
+
+function detailSection(title, body) {
+  if (!body) return '';
+  return `<section class="cg-detail-group"><h4>${escapeHtml(title)}</h4><div class="cg-detail-grid">${body}</div></section>`;
+}
+
+function detailRow(label, value) {
+  if (value === null || value === undefined) return '';
+  const html = typeof value === 'object' && value.__html != null
+    ? String(value.__html).trim()
+    : escapeHtml(String(value).trim());
+  if (!html) return '';
+  return `<div class="cg-detail-row"><span class="cg-detail-label">${escapeHtml(label)}</span><span class="cg-detail-value">${html}</span></div>`;
+}
+
+function emailLink(email) {
+  const value = firstText(email);
+  if (!value) return '';
+  return { __html: `<a href="mailto:${escapeHtml(value)}">${escapeHtml(value)}</a>` };
+}
+
+function managementDisplay(p) {
+  const management = p.management && typeof p.management === 'object' ? p.management : {};
+  const name = firstText(p.agency, management.agency_name, management.agency, management.name);
+  const url = safeUrl(firstText(management.agency_website, management.website_url, management.website, management.url));
+  if (!name && !url) return '';
+  if (!url) return name;
+  const label = name || url;
+  return { __html: `<a href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>` };
+}
+
+function addressDisplay(p) {
+  const addr = p.address && typeof p.address === 'object' ? p.address : {};
+  const nested = addr.address && typeof addr.address === 'object' ? addr.address : {};
+  const full = firstText(p.full_address, addr.full, nested.full);
+  if (full) return full;
+  const street = firstText(p.street, addr.street, addr.street1, addr.address_line, nested.street, nested.street1, nested.address_line);
+  const city = firstText(p.city, addr.city, nested.city);
+  const region = firstText(p.state, addr.state, addr.state_code, nested.state, nested.state_code);
+  const postcode = firstText(p.postcode, addr.postcode, addr.postal_code, addr.zipcode, nested.postcode, nested.postal_code, nested.zipcode);
+  const country = firstText(p.country, addr.country, addr.country_code, nested.country, nested.country_code);
+  const locality = [city, region, postcode].filter(Boolean).join(', ');
+  return [street, locality, country].filter(Boolean).join(' · ');
+}
+
+function connectionsRow(connections) {
+  if (!connections || typeof connections !== 'object' || Array.isArray(connections)) return '';
+  const parts = Object.entries(connections)
+    .filter(([, value]) => value !== null && value !== undefined && String(value).trim())
+    .map(([key, value]) => `<span class="cg-connection"><span>${escapeHtml(key)}</span><code>${escapeHtml(String(value))}</code></span>`);
+  if (!parts.length) return '';
+  return detailRow('Connections', { __html: parts.join('') });
+}
+
+function linksHTML(links) {
+  if (!Array.isArray(links)) return '';
+  return links.map(linkHTML).filter(Boolean).join('');
+}
+
+function linkHTML(link) {
+  if (!link || typeof link !== 'object') return '';
+  const url = safeUrl(firstText(link.url, link.href));
+  if (!url) return '';
+  const label = firstText(link.title, link.label, link.name, url);
+  return `<a class="cg-detail-link" href="${escapeHtml(url)}" target="_blank" rel="noreferrer">${escapeHtml(label)}</a>`;
+}
+
+function alertsHTML(alerts) {
+  if (!Array.isArray(alerts) || !alerts.length) return '';
+  const rows = alerts.map(alertHTML).filter(Boolean).join('');
+  if (!rows) return '';
+  return `<section class="cg-detail-group cg-alert-group"><h4>Alerts</h4><div class="cg-alert-list">${rows}</div></section>`;
+}
+
+function alertHTML(alert) {
+  if (typeof alert === 'string') {
+    const text = alert.trim();
+    return text ? `<div class="cg-alert-item">${escapeHtml(text)}</div>` : '';
+  }
+  if (!alert || typeof alert !== 'object') return '';
+  const title = firstText(alert.title, alert.name, alert.headline, alert.type);
+  const body = firstText(alert.description, alert.message, alert.body, alert.text);
+  if (!title && !body) return '';
+  return `<div class="cg-alert-item">${title ? `<strong>${escapeHtml(title)}</strong>` : ''}${body ? `<span>${escapeHtml(body)}</span>` : ''}</div>`;
+}
+
+function priceDisplay(price) {
+  if (!price || typeof price !== 'object') return '';
+  const min = finiteNumber(price.minimum ?? price.min);
+  const max = finiteNumber(price.maximum ?? price.max);
+  if (min == null && max == null) return '';
+  const currency = firstText(price.currency_code, price.currency) || 'USD';
+  const format = (n) => `${currencySymbol(currency)}${formatNumber(n)}`;
+  if (min != null && max != null && min !== max) return `${format(min)}-${format(max)}`;
+  return format(min ?? max);
+}
+
+function scheduleTime(schedule, key) {
+  if (!schedule || typeof schedule !== 'object') return '';
+  return timeDisplay(schedule[key]);
+}
+
+function timeDisplay(value) {
+  const text = firstText(value);
+  const match = text.match(/^(\d{1,2}):(\d{2})(?::\d{2})?$/);
+  if (!match) return text;
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) return text;
+  const suffix = hour >= 12 ? 'PM' : 'AM';
+  const h12 = hour % 12 || 12;
+  return `${h12}:${String(minute).padStart(2, '0')} ${suffix}`;
+}
+
+function lengthDisplay(value) {
+  const n = finiteNumber(value);
+  if (n == null) return '';
+  return `${formatNumber(n)} ft`;
+}
+
+function elevationDisplay(value) {
+  const n = finiteNumber(value);
+  if (n == null) return '';
+  return `${formatNumber(n)} ft`;
+}
+
+function booleanDisplay(value) {
+  if (value === true) return 'Yes';
+  if (value === false) return 'No';
+  return '';
+}
+
+function currencySymbol(currency) {
+  switch (currency.toUpperCase()) {
+    case 'USD':
+    case 'CAD':
+      return '$';
+    default:
+      return `${currency.toUpperCase()} `;
+  }
+}
+
+function formatNumber(n) {
+  return n.toLocaleString('en-US', {
+    maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
+  });
+}
+
+function finiteNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function safeUrl(url) {
+  const value = firstText(url);
+  if (!value || !/^(https?:|mailto:|tel:|\/|#)/i.test(value)) return '';
+  return value;
+}
+
+function firstText(...values) {
+  for (const value of values) {
+    if (typeof value !== 'string' && typeof value !== 'number') continue;
+    const trimmed = String(value).trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+}
+
+function urlHost(url) {
+  try {
+    return new URL(url).hostname.toLowerCase().replace(/^www\./, '');
+  } catch {
+    return '';
+  }
+}
+
+function titleCase(value) {
+  return String(value)
+    .replace(/_/g, ' ')
+    .replace(/\w\S*/g, word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase());
 }
 
 /**

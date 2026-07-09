@@ -25,6 +25,7 @@ import {
   bookingSystemFooterHTML,
   seasonVerdictHTML,
   reserveButtonHTML,
+  structuredCampgroundDetailsHTML,
 } from '../campground-card.js';
 import { descriptionSectionHTML, upstreamDecorations } from '../upstream-html.js';
 import {
@@ -185,6 +186,7 @@ function renderShell(f, signal) {
   const sitesTag = sitesTagHTML(p);
   const footer = lastVerifiedFooterHTML(p);
   const bookingSysFooter = bookingSystemFooterHTML(p);
+  const structuredDetails = structuredCampgroundDetailsHTML(p);
 
   const verdict = seasonVerdictHTML(p.season, p.reservable);
 
@@ -213,7 +215,7 @@ function renderShell(f, signal) {
         ${reserveButtonHTML(p, 'cg-btn')}
       </div>`;
 
-  const detailsBody = [pills, cellPills, rating,
+  const detailsBody = [structuredDetails, pills, cellPills, rating,
     sitesTag ? `<div class="cg-sites">${sitesTag}</div>` : '',
     bookingSysFooter,
     footer].filter(Boolean).join('');

@@ -112,7 +112,7 @@ internal class PoiServingRepo(
                        NULL::text AS unit_name,
                        cg.reservation_url AS reserve_url,
                        COALESCE(cg.contact->>'phone', pf.phone) AS phone,
-                       COALESCE(ts.info_url, pf.info_url) AS info_url,
+                       COALESCE(ts.info_url, pf.info_url, cg.links->0->>'url') AS info_url,
                        COALESCE(cg.location, ts.address, pf.address, '{}'::jsonb)::text AS address_text,
                        gvr.payload::text AS provider_ref_text,
                        NULL::text AS cta_provider_ref_text,
