@@ -100,7 +100,7 @@ internal class PoiServingRepo(
             ctx.fetchOne(
                 """
                 SELECT p.id,
-                       COALESCE(primary_gvr.vendor, p.poi_type) AS source,
+                       COALESCE(cg.etl_source, primary_gvr.vendor, p.poi_type) AS source,
                        provider_gvr.vendor AS provider_source,
                        COALESCE(primary_gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
                        p.poi_type AS category,

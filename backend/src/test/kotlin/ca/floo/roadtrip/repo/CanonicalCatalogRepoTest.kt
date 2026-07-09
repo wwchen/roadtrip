@@ -6,6 +6,8 @@ import ca.floo.roadtrip.service.etl.framework.CatalogVendorRefEtlRecord
 import ca.floo.roadtrip.service.etl.framework.PlanetFitnessLocationEtlRecord
 import ca.floo.roadtrip.service.etl.framework.TeslaSuperchargerEtlRecord
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import kotlin.test.assertEquals
@@ -55,7 +57,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             ctx
                 .fetchOne(
                     """
-                    SELECT cg.id, cg.name, cg.amenities::text AS amenities,
+                    SELECT cg.id, cg.etl_source, cg.name, cg.amenities::text AS amenities,
                            vr.external_id, vr.source_url, vr.payload::text AS ref_payload,
                            ST_X(p.geom::geometry) AS lon, ST_Y(p.geom::geometry) AS lat
                     FROM campgrounds cg
@@ -67,6 +69,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
                 )
 
         assertNotNull(row)
+        assertEquals("campflare-campgrounds", row.get("etl_source", String::class.java))
         assertEquals("Upper Pines Campground", row.get("name", String::class.java))
         assertEquals("upper-pines-campground-447", row.get("external_id", String::class.java))
         assertEquals("https://api.campflare.com/v2/campground/upper-pines-campground-447", row.get("source_url", String::class.java))
@@ -75,7 +78,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `additional campground vendor refs attach to an existing canonical row`() {
+    fun `shared campground vendor refs create matches without merging etl source rows`() {
         val repo = CanonicalCatalogRepo(ctx)
         repo.upsertCampgrounds(
             listOf(
@@ -115,25 +118,42 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             source = "campflare-campgrounds",
         )
 
-        assertEquals(1, tableCount("campgrounds"))
+        assertEquals(2, tableCount("campgrounds"))
         assertEquals(2, tableCount("vendor_refs"))
-        assertEquals(2, tableCount("campground_vendor_refs"))
+        assertEquals(3, tableCount("campground_vendor_refs"))
+        assertEquals(1, tableCount("campground_matches"))
+        assertEquals(2, tableCount("pois"))
+        assertEquals(2, tableCount("poi_campgrounds"))
 
         val refs =
             ctx
                 .fetch(
                     """
-                    SELECT vr.vendor, vr.external_id, cvr.is_primary
+                    SELECT cg.etl_source, vr.vendor, vr.external_id, cvr.is_primary
                     FROM campground_vendor_refs cvr
+                    JOIN campgrounds cg ON cg.id = cvr.campground_id
                     JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                    ORDER BY cvr.is_primary DESC, vr.vendor
+                    ORDER BY cg.etl_source, cvr.is_primary DESC, vr.vendor
                     """.trimIndent(),
-                ).map { "${it.get("vendor")}:${it.get("external_id")}:${it.get("is_primary")}" }
+                ).map {
+                    "${it.get("etl_source")}:${it.get("vendor")}:${it.get("external_id")}:${it.get("is_primary")}"
+                }
 
         assertEquals(
-            listOf("campflare:upper-pines-campground-447:true", "federal-campgrounds:recgov-232447:false"),
+            listOf(
+                "campflare-campgrounds:campflare:upper-pines-campground-447:true",
+                "campflare-campgrounds:federal-campgrounds:recgov-232447:false",
+                "federal-campgrounds:federal-campgrounds:recgov-232447:true",
+            ),
             refs,
         )
+        val heuristic =
+            ctx
+                .fetchOne("SELECT match_heuristic::text AS h FROM campground_matches")!!
+                .get("h", String::class.java)
+        val heuristicJson = Json.parseToJsonElement(heuristic).jsonObject
+        assertEquals("shared_vendor_ref", heuristicJson["kind"]?.jsonPrimitive?.content)
+        assertEquals("recgov-232447", heuristicJson["external_id"]?.jsonPrimitive?.content)
     }
 
     @Test
@@ -209,22 +229,24 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
     }
 
     @Test
-    fun `additional campsite vendor refs attach to an existing canonical row`() {
+    fun `shared campsite vendor refs create matches without merging etl source rows`() {
         val repo = CanonicalCatalogRepo(ctx)
-        repo.upsertCampgrounds(
-            listOf(
-                CampgroundEtlRecord(
-                    vendor = "campflare",
-                    vendorRefId = "upper-pines-campground-447",
-                    name = "Upper Pines",
-                    latitude = 37.739,
-                    longitude = -119.565,
-                    sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
-                    vendorRefPayload = json("""{"campflare_id":"upper-pines-campground-447"}"""),
+        val campgroundResult =
+            repo.upsertCampgrounds(
+                listOf(
+                    CampgroundEtlRecord(
+                        vendor = "campflare",
+                        vendorRefId = "upper-pines-campground-447",
+                        name = "Upper Pines",
+                        latitude = 37.739,
+                        longitude = -119.565,
+                        sourcePayload = json("""{"id":"upper-pines-campground-447"}"""),
+                        vendorRefPayload = json("""{"campflare_id":"upper-pines-campground-447"}"""),
+                    ),
                 ),
-            ),
-            source = "campflare-campgrounds",
-        )
+                source = "campflare-campgrounds",
+            )
+        assertEquals(1, campgroundResult.upsertedCount)
         repo.upsertCampsites(
             listOf(
                 CampsiteEtlRecord(
@@ -265,22 +287,40 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             source = "campflare-campsites",
         )
 
-        assertEquals(1, tableCount("campsites"))
+        assertEquals(2, tableCount("campsites"))
         assertEquals(3, tableCount("vendor_refs"))
-        assertEquals(2, tableCount("campsite_vendor_refs"))
+        assertEquals(3, tableCount("campsite_vendor_refs"))
+        assertEquals(1, tableCount("campsite_matches"))
 
         val refs =
             ctx
                 .fetch(
                     """
-                    SELECT vr.vendor, vr.external_id, cvr.is_primary
+                    SELECT c.etl_source, vr.vendor, vr.external_id, cvr.is_primary
                     FROM campsite_vendor_refs cvr
+                    JOIN campsites c ON c.id = cvr.campsite_id
                     JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                    ORDER BY cvr.is_primary DESC, vr.vendor
+                    ORDER BY c.etl_source, cvr.is_primary DESC, vr.vendor
                     """.trimIndent(),
-                ).map { "${it.get("vendor")}:${it.get("external_id")}:${it.get("is_primary")}" }
+                ).map {
+                    "${it.get("etl_source")}:${it.get("vendor")}:${it.get("external_id")}:${it.get("is_primary")}"
+                }
 
-        assertEquals(listOf("campflare:upper-pines-site-100:true", "recgov:100:false"), refs)
+        assertEquals(
+            listOf(
+                "campflare-campsites:campflare:upper-pines-site-100:true",
+                "campflare-campsites:recgov:100:false",
+                "federal-campsites:recgov:100:true",
+            ),
+            refs,
+        )
+        val heuristic =
+            ctx
+                .fetchOne("SELECT match_heuristic::text AS h FROM campsite_matches")!!
+                .get("h", String::class.java)
+        val heuristicJson = Json.parseToJsonElement(heuristic).jsonObject
+        assertEquals("shared_vendor_ref", heuristicJson["kind"]?.jsonPrimitive?.content)
+        assertEquals("100", heuristicJson["external_id"]?.jsonPrimitive?.content)
     }
 
     @Test

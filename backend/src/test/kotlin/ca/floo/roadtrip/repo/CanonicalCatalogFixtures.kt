@@ -21,6 +21,8 @@ fun DSLContext.cleanCanonicalCatalogFixtures() {
           availability_watch,
           availability_poller,
           availability,
+          campsite_matches,
+          campground_matches,
           poi_campgrounds,
           poi_tesla_superchargers,
           poi_planet_fitness_locations,
@@ -161,14 +163,15 @@ fun DSLContext.seedCampground(
         fetchOne(
             """
             INSERT INTO campgrounds (
-              name, kind, location, management, source_payload
+              etl_source, name, kind, location, management, source_payload
             ) VALUES (
-              ?, ?, jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
+              ?, ?, ?, jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
               jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
               ?::jsonb
             )
             RETURNING id
             """.trimIndent(),
+            source,
             name,
             kind,
             region,
@@ -197,6 +200,7 @@ fun DSLContext.seedCampground(
 fun DSLContext.seedCampsite(
     campgroundId: Long,
     vendor: String = "recgov",
+    source: String = vendor,
     vendorId: String,
     name: String = "Site $vendorId",
     kind: String = "site",
@@ -208,12 +212,13 @@ fun DSLContext.seedCampsite(
         fetchOne(
             """
             INSERT INTO campsites (
-              campground_id, name, kind, loop_name, source_payload
+              etl_source, campground_id, name, kind, loop_name, source_payload
             ) VALUES (
-              ?, ?, ?, ?, ?::jsonb
+              ?, ?, ?, ?, ?, ?::jsonb
             )
             RETURNING id
             """.trimIndent(),
+            source,
             campgroundId,
             name,
             kind,
