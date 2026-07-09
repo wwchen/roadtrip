@@ -40,7 +40,7 @@ import java.io.File
 // Loaded once at boot. Used by:
 //   1. EtlOrchestrator — runs etl chains in declared order, dispatching
 //      poi_data terminals to Pois Upsert and reservable_data terminals
-//      to ReservableRepo. Also runs joiner adapters.
+//      to CampsiteRepo. Also runs joiner adapters.
 //   2. IngestController / RegistryTargets — fetch is per data_source;
 //      import targets cover all three of {poi_data, reservable_data,
 //      poi_reservable_joiner}.
@@ -514,7 +514,7 @@ data class EtlEntry(
  * Row in the `reservable_data` section. Same shape as [PoiDataEntry] minus
  * `category` / `subcategory` — reservables aren't map pins, so the FE
  * legend metadata doesn't apply. The terminal etl emits reservable rows
- * via [ca.floo.roadtrip.repo.ReservableRepo]; the orchestrator dispatches
+ * via [ca.floo.roadtrip.repo.CampsiteRepo]; the orchestrator dispatches
  * by section, not by etl marker interface.
  */
 @Serializable

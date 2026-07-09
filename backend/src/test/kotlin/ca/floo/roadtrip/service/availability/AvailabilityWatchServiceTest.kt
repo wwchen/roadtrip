@@ -6,7 +6,7 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
@@ -56,16 +56,16 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
             .get("campground_id", Long::class.java)
 
     private fun service(): AvailabilityWatchService {
-        val reservablesRepo = ReservableRepo(ctx)
+        val campsitesRepo = CampsiteRepo(ctx)
         val registry = ReservationProviderRegistry(mapOf("test" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
-                reservablesRepo = reservablesRepo,
+                campsitesRepo = campsitesRepo,
                 reservationProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
-        return AvailabilityWatchService(ctx, reservablesRepo, targets)
+        return AvailabilityWatchService(ctx, campsitesRepo, targets)
     }
 
     private fun poiInput(poiId: Long): AvailabilityWatchRepo.CreateInput =

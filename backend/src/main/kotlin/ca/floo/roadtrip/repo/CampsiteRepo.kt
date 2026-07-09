@@ -9,15 +9,13 @@ import org.jooq.DSLContext
 import org.jooq.Record
 
 /**
- * Temporary read adapter over the canonical `campsites` catalog.
+ * Persistence boundary for canonical campsite catalog reads.
  *
- * The old `reservables` and `reservable_pois` tables are gone. Existing
- * availability services still consume the `Reservable` domain model until the
- * next slice renames that service surface to `Campsite`; this adapter keeps
- * those internal reads pointed at `campsites`, `campsite_vendor_refs`, and
- * `poi_campgrounds` without recreating the retired tables or public RID API.
+ * Availability services still consume the `Reservable` domain model at the
+ * provider boundary, so this repo maps canonical `campsites` rows into that
+ * internal shape while all persistence stays pointed at the campsite catalog.
  */
-class ReservableRepo(
+class CampsiteRepo(
     private val ctx: DSLContext,
 ) {
     data class SearchFilters(
@@ -108,7 +106,7 @@ class ReservableRepo(
             ).map(::fromRecord)
     }
 
-    fun poiIdsForReservable(campsiteId: Long): List<Long> =
+    fun poiIdsForCampsite(campsiteId: Long): List<Long> =
         ctx
             .fetch(
                 """
@@ -126,7 +124,7 @@ class ReservableRepo(
                 campsiteId,
             ).map { it.get("poi_id", Long::class.java) }
 
-    fun poiIdsForReservables(campsiteIds: Collection<Long>): Map<Long, List<Long>> {
+    fun poiIdsForCampsites(campsiteIds: Collection<Long>): Map<Long, List<Long>> {
         if (campsiteIds.isEmpty()) return emptyMap()
         return ctx
             .fetch(

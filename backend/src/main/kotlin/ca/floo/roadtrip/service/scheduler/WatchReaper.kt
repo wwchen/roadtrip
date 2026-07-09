@@ -56,10 +56,10 @@ internal class WatchReaper(
             val outcome = pollers.reapElapsedWatches()
             if (outcome.reapedWatchIds.isNotEmpty()) {
                 // Audit event: the exact lifecycle transitions this sweep made,
-                // by id — a watch retiring (-> done) and a poller going dormant
+                // by id — an elapsed watch completing (-> done) and a poller going dormant
                 // are the state changes worth an audit trail, not just a count.
                 log.info(
-                    "watch-reaper audit: retired watches {} (-> done); deactivated pollers {}",
+                    "watch-reaper audit: completed elapsed watches {} (-> done); deactivated pollers {}",
                     outcome.reapedWatchIds,
                     outcome.deactivatedPollerIds,
                 )

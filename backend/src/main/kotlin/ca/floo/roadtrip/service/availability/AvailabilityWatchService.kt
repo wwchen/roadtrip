@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import org.jooq.DSLContext
 import org.jooq.impl.DSL
 import java.time.OffsetDateTime
@@ -25,11 +25,11 @@ import java.time.OffsetDateTime
  */
 internal class AvailabilityWatchService(
     private val ctx: DSLContext,
-    private val reservablesRepo: ReservableRepo,
+    private val campsitesRepo: CampsiteRepo,
     private val targets: AvailabilityTargetResolver,
 ) {
     private fun membershipFor(txn: DSLContext): AvailabilityPollerMembership =
-        AvailabilityPollerMembership(WatchScopeResolver(reservablesRepo), targets)
+        AvailabilityPollerMembership(WatchScopeResolver(campsitesRepo), targets)
 
     fun create(input: AvailabilityWatchRepo.CreateInput): Watch =
         ctx.transactionResult { config ->

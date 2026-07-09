@@ -3,13 +3,13 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
 class WatchScopeResolver(
-    private val reservablesRepo: ReservableRepo,
+    private val campsitesRepo: CampsiteRepo,
 ) {
     /**
      * Resolves a watch's full target SET to the flat, de-duplicated list of
@@ -23,7 +23,7 @@ class WatchScopeResolver(
         val seen = LinkedHashMap<Long, Reservable>()
         for (target in watch.targets) {
             val resolved =
-                target.reservableId?.let { id -> reservablesRepo.findById(id)?.let(::listOf) ?: emptyList() }
+                target.reservableId?.let { id -> campsitesRepo.findById(id)?.let(::listOf) ?: emptyList() }
                     ?: target.poiId?.let { poiId -> resolvePoi(poiId, watch.reservableFilters) }
                     ?: emptyList()
             for (r in resolved) seen.putIfAbsent(r.id, r)
@@ -35,7 +35,7 @@ class WatchScopeResolver(
         poiId: Long,
         filters: JsonObject,
     ): List<Reservable> {
-        val all = reservablesRepo.findByPoi(poiId, type = ReservableType.SITE)
+        val all = campsitesRepo.findByPoi(poiId, type = ReservableType.SITE)
         val loops = collectStringFilter(filters, "loop")
         val siteTypes = collectStringFilter(filters, "site_type")
         return all.filter { r ->

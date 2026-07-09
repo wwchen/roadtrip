@@ -13,7 +13,6 @@ import org.jooq.impl.DSL
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertFalse
 
 class RegistryTargetsTest {
     @Test
@@ -155,13 +154,13 @@ class RegistryTargetsTest {
                 "California State Park Sites",
                 "Alberta Provincial Park Sites",
                 "New York State Park Sites",
+                "Federal Campsites → Federal Campgrounds",
+                "Aspira Resources → Aspira Pins",
+                "ReserveCalifornia Sites → California State Parks",
+                "ReserveAmerica Sites → Alberta + NY Parks",
             ),
             importTargetsFromRegistry(registry).keys.toList(),
         )
-        assertFalse("Federal Campsites → Federal Campgrounds" in importTargetsFromRegistry(registry).keys)
-        assertFalse("Aspira Resources → Aspira Pins" in importTargetsFromRegistry(registry).keys)
-        assertFalse("ReserveCalifornia Sites → California State Parks" in importTargetsFromRegistry(registry).keys)
-        assertFalse("ReserveAmerica Sites → Alberta + NY Parks" in importTargetsFromRegistry(registry).keys)
     }
 
     private fun source(

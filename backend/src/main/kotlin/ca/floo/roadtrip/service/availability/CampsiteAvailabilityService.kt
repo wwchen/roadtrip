@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.api.PoiCampsitesAvailabilityResponseDto
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import java.time.LocalDate
 
 private const val EMPTY_WINDOW_DEFAULT_DAYS = 7
@@ -12,7 +12,7 @@ private const val EMPTY_WINDOW_HORIZON_DAYS = 365
 
 internal class CampsiteAvailabilityService(
     private val providerRefs: CampsiteProviderRepo,
-    private val campsitesRepo: ReservableRepo,
+    private val campsitesRepo: CampsiteRepo,
     private val composer: CampsiteAvailabilityComposer,
     private val dateResolver: AvailabilityDateResolver,
 ) {

@@ -3,7 +3,7 @@ package ca.floo.roadtrip.service.availability
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.service.reservation.ProviderRefParser
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 
@@ -26,20 +26,20 @@ internal interface AvailabilityTargetResolver {
 
 internal class DbAvailabilityTargetResolver(
     private val providerRefs: CampsiteProviderRepo,
-    private val reservablesRepo: ReservableRepo,
+    private val campsitesRepo: CampsiteRepo,
     private val reservationProviders: ReservationProviderRegistry,
     private val dateResolver: AvailabilityDateResolver,
 ) : AvailabilityTargetResolver {
     override fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget {
         val reservable =
-            reservablesRepo.findByRid(rid)
+            campsitesRepo.findByRid(rid)
                 ?: throw AvailabilityServiceError.NotFound
         return resolve(reservable)
             ?: throw AvailabilityServiceError.UnknownCampground
     }
 
     override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? {
-        val poiIds = reservablesRepo.poiIdsForReservable(reservable.id)
+        val poiIds = campsitesRepo.poiIdsForCampsite(reservable.id)
         if (poiIds.isEmpty()) return null
 
         val providerRefsByPoiId = providerRefs.findProviderRefs(poiIds)

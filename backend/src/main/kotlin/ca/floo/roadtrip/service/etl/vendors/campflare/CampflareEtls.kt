@@ -6,8 +6,8 @@ import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
 import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
-import ca.floo.roadtrip.service.etl.framework.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.service.etl.framework.CatalogVendorRefEtlRecord
+import ca.floo.roadtrip.service.etl.framework.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx

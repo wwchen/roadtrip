@@ -4,8 +4,8 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
+import ca.floo.roadtrip.repo.CampsiteRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
-import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampground
@@ -56,15 +56,15 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
      * and executor tests).
      */
     private fun watchService(): AvailabilityWatchService {
-        val reservablesRepo = ReservableRepo(ctx)
+        val campsitesRepo = CampsiteRepo(ctx)
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
-                reservablesRepo = reservablesRepo,
+                campsitesRepo = campsitesRepo,
                 reservationProviders = ReservationProviderRegistry(emptyMap()),
                 dateResolver = AvailabilityDateResolver(),
             )
-        return AvailabilityWatchService(ctx, reservablesRepo, targets)
+        return AvailabilityWatchService(ctx, campsitesRepo, targets)
     }
 
     /**
@@ -74,16 +74,16 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
      * membership on watch mutation.
      */
     private fun watchServiceWithRecgov(): AvailabilityWatchService {
-        val reservablesRepo = ReservableRepo(ctx)
+        val campsitesRepo = CampsiteRepo(ctx)
         val registry = ReservationProviderRegistry(mapOf("test" to FakeRecgovProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
-                reservablesRepo = reservablesRepo,
+                campsitesRepo = campsitesRepo,
                 reservationProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
-        return AvailabilityWatchService(ctx, reservablesRepo, targets)
+        return AvailabilityWatchService(ctx, campsitesRepo, targets)
     }
 
     // These CRUD tests don't exercise Slack, so the dispatcher runs with the
@@ -92,15 +92,15 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     private val testNotifyScope = CoroutineScope(Dispatchers.Unconfined)
 
     private fun disabledDispatcher(): WatchAlertDispatcher {
-        val reservablesRepo = ReservableRepo(ctx)
+        val campsitesRepo = CampsiteRepo(ctx)
         return WatchAlertDispatcher(
             slack = SlackNotificationServiceImpl(config = null),
-            scopeResolver = WatchScopeResolver(reservablesRepo),
+            scopeResolver = WatchScopeResolver(campsitesRepo),
             watches = AvailabilityWatchRepo(ctx),
             targets =
                 DbAvailabilityTargetResolver(
                     providerRefs = CampsiteProviderRepo(ctx),
-                    reservablesRepo = reservablesRepo,
+                    campsitesRepo = campsitesRepo,
                     reservationProviders = ReservationProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
                 ),

@@ -370,4 +370,3 @@ private fun splitPoiSearchTerms(q: String): List<String> =
         .filter { it.isNotEmpty() }
 
 private fun escapeLikePattern(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
