@@ -16,6 +16,8 @@ import ca.floo.roadtrip.service.availability.CampsiteAvailabilityComposer
 import ca.floo.roadtrip.service.availability.CampsiteAvailabilityService
 import ca.floo.roadtrip.service.availability.CampsiteCatalogService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
+import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import io.github.smiley4.ktorswaggerui.dsl.routing.get
@@ -38,6 +40,8 @@ internal fun Route.campsiteRoutes(
     ctx: DSLContext,
     availabilityProviders: AvailabilityProviderRegistry,
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
+    failoverFetcher: FailoverAvailabilityFetcher =
+        FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
 ) {
     val campsitesRepo = CampsiteRepo(ctx)
     val providerRefs = CampsiteProviderRepo(ctx)
@@ -58,6 +62,8 @@ internal fun Route.campsiteRoutes(
                     targets = targets,
                     dateResolver = dateResolver,
                     availability = AvailabilityRepo(ctx),
+                    failoverFetcher = failoverFetcher,
+                    campsiteProviderRepo = providerRefs,
                 ),
             dateResolver = dateResolver,
         )

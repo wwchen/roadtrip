@@ -26,7 +26,7 @@ import java.time.Instant
  * the match group while keeping `campsiteId` = representative id (so
  * observations always land on the representative campsite row).
  */
-internal class FailoverAvailabilityFetcher(
+internal open class FailoverAvailabilityFetcher(
     private val cooldowns: ProviderCooldownTracker,
     private val clock: () -> Instant = Instant::now,
 ) {
@@ -47,7 +47,7 @@ internal class FailoverAvailabilityFetcher(
         val attempts: List<AttemptRecord>,
     )
 
-    suspend fun fetch(
+    open suspend fun fetch(
         candidates: List<ProviderCandidate>,
         @Suppress("UNUSED_PARAMETER") campsites: List<Campsite>,
         window: ResolvedDateWindow,

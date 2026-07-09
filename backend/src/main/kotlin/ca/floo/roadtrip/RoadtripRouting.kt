@@ -116,6 +116,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             ctx = runtime.ctx,
             availabilityProviders = runtime.availabilityProviderRegistry,
             dateResolver = runtime.availabilityDateResolver,
+            failoverFetcher = runtime.failoverFetcher,
         )
         // Inbound Slack interactivity is only registered when the app is
         // configured with a signing secret; an unset secret means we can't

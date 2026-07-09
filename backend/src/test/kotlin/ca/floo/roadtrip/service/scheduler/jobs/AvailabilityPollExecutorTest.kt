@@ -20,10 +20,15 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
+import ca.floo.roadtrip.service.availability.FailoverAvailabilityFetcher
+import ca.floo.roadtrip.service.availability.FetchOutcome
+import ca.floo.roadtrip.service.availability.ProviderCandidate
+import ca.floo.roadtrip.service.availability.ProviderCooldownTracker
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -316,6 +321,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         provider: AvailabilityProvider,
         limiter: VendorRateLimiter = RecordingLimiter(grant = true),
         alertDispatcher: WatchAlertDispatcher = disabledDispatcher(),
+        failoverFetcher: FailoverAvailabilityFetcher =
+            FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()),
     ): AvailabilityPollExecutor {
         val campsitesRepo = CampsiteRepo(ctx)
         val registry = AvailabilityProviderRegistry(mapOf("test" to provider))
@@ -338,6 +345,8 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             fetchCalls = AvailabilityFetchCallRepo(ctx),
             limiter = limiter,
             alertDispatcher = alertDispatcher,
+            failoverFetcher = failoverFetcher,
+            campsiteProviderRepo = CampsiteProviderRepo(ctx),
         )
     }
 
@@ -1203,6 +1212,105 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val after = repo.listForCampsite(campsiteId).size
 
             assertEquals(before + 1, after)
+        }
+
+    @Test
+    fun `poll writes one availability_fetch_call row per failover attempt`() =
+        runBlocking {
+            val provider = CountingRecgovProvider()
+            val poiId = seedPoi("232447")
+            seedCampsite(poiId, "100")
+            val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
+            val poller = linkWatch(provider, watchId)
+
+            // The DB fixture builds a single-candidate resolve (one vendor ref).
+            // To exercise per-attempt fetch-call writes end-to-end, drive the
+            // executor's failover with a scripted fake that returns two attempts:
+            // a rate-limited preferred vendor, then an OK sibling. The batch
+            // observations are keyed on the real campsite id so the run rides
+            // through the normal cube-write path.
+            val realCampsiteId =
+                ctx
+                    .fetchOne("SELECT id FROM campsites WHERE campground_id = ? ORDER BY id LIMIT 1", campgroundIdFor(poiId))!!
+                    .get("id", Long::class.java)
+            val fake =
+                fakeFailoverFetcher(
+                    attempts =
+                        listOf(
+                            AttemptSpec(AvailabilityProviderId.CAMPFLARE, "cf-1", FetchOutcome.RATE_LIMITED, 42, "429"),
+                            AttemptSpec(AvailabilityProviderId.RECGOV, "232447", FetchOutcome.OK, 84, null),
+                        ),
+                    successBatch =
+                        AvailabilityObservationBatch(
+                            provider = "recgov",
+                            startDate = farStart,
+                            endDate = farStart.plusDays(2),
+                            observations =
+                                listOf(
+                                    CampsiteDayObservation(
+                                        campsiteId = realCampsiteId,
+                                        date = farStart,
+                                        observedAt = Instant.now(),
+                                        status = AvailabilityStatus.AVAILABLE,
+                                    ),
+                                ),
+                            cacheBlock = AvailabilityCacheBlock(hit = false, ageSeconds = 0, ttlSeconds = 0),
+                        ),
+                    servedBy = AvailabilityProviderId.RECGOV,
+                )
+
+            executorFor(provider, failoverFetcher = fake).handle(poller)
+
+            val runs = AvailabilityRunRepo(ctx).listForPoller(poller.id, limit = 10)
+            assertEquals(1, runs.size)
+            // Run status reflects the SERVED outcome — since the failover returned
+            // a batch, the run completes even though the first attempt was RL.
+            assertEquals("completed", runs[0].status)
+
+            val fetchCalls = AvailabilityFetchCallRepo(ctx).listForRun(runs[0].id)
+            assertEquals(2, fetchCalls.size, "one row per failover attempt")
+            assertEquals("campflare", fetchCalls[0].provider)
+            assertEquals("rate_limited", fetchCalls[0].outcome)
+            assertEquals("cf-1", fetchCalls[0].parentRef)
+            assertEquals("recgov", fetchCalls[1].provider)
+            assertEquals("ok", fetchCalls[1].outcome)
+            assertEquals("232447", fetchCalls[1].parentRef)
+        }
+
+    private data class AttemptSpec(
+        val provider: AvailabilityProviderId,
+        val parentId: String,
+        val outcome: FetchOutcome,
+        val durationMs: Int,
+        val error: String?,
+    )
+
+    private fun fakeFailoverFetcher(
+        attempts: List<AttemptSpec>,
+        successBatch: AvailabilityObservationBatch?,
+        servedBy: AvailabilityProviderId?,
+    ): FailoverAvailabilityFetcher =
+        object : FailoverAvailabilityFetcher(cooldowns = ProviderCooldownTracker.fromEnv()) {
+            override suspend fun fetch(
+                candidates: List<ProviderCandidate>,
+                campsites: List<Campsite>,
+                window: ResolvedDateWindow,
+                translateRefs: (ProviderCandidate) -> List<CatalogCampsiteRef>,
+            ): FailoverAvailabilityFetcher.FailoverResult =
+                FailoverAvailabilityFetcher.FailoverResult(
+                    batch = successBatch,
+                    servedBy = servedBy,
+                    attempts =
+                        attempts.map { spec ->
+                            FailoverAvailabilityFetcher.AttemptRecord(
+                                provider = spec.provider,
+                                parentRef = ProviderRef.RecGov(recgovId = spec.parentId),
+                                outcome = spec.outcome,
+                                durationMs = spec.durationMs,
+                                error = spec.error,
+                            )
+                        },
+                )
         }
 
     @Test
