@@ -4,6 +4,7 @@ import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
 import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
+import ca.floo.roadtrip.service.etl.framework.DEFAULT_CAMPSITE_KIND
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
@@ -65,16 +66,18 @@ class RecGovCampsitesEtl(
             for ((campsiteId, element) in rawCampsites) {
                 val raw = element as? JsonObject ?: continue
                 val tags = buildCampsiteTags(raw)
+                val siteName = raw.stringField("site") ?: campsiteId
+                val campsiteType = raw.stringField("campsite_type")
                 campsites +=
                     CampsiteEtlRecord(
                         vendor = VENDOR,
                         vendorRefId = campsiteId,
                         parentVendor = PARENT_CAMPGROUND_VENDOR,
                         parentVendorRefId = "$PARENT_CAMPGROUND_REF_PREFIX$facilityId",
-                        name = (raw["site"] as? JsonPrimitive)?.contentOrNull ?: campsiteId,
-                        loopName = (raw["loop"] as? JsonPrimitive)?.contentOrNull,
-                        kind = (raw["campsite_type"] as? JsonPrimitive)?.contentOrNull ?: "site",
-                        kindListed = (raw["campsite_type"] as? JsonPrimitive)?.contentOrNull,
+                        name = siteName,
+                        loopName = raw.stringField("loop"),
+                        kind = campsiteType ?: DEFAULT_CAMPSITE_KIND,
+                        kindListed = campsiteType,
                         equipment = raw["equipment_types"] as? JsonArray,
                         maxPeople = raw["max_num_people"]?.jsonPrimitive?.intOrNull,
                         sourcePayload =
@@ -95,6 +98,12 @@ class RecGovCampsitesEtl(
         }
         return CampsiteEtlOutput(campsites = campsites)
     }
+
+    private fun JsonObject.stringField(key: String): String? =
+        (this[key] as? JsonPrimitive)
+            ?.contentOrNull
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
 
     private fun buildCampsiteTags(raw: JsonObject): JsonObject =
         buildJsonObject {
