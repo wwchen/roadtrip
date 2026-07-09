@@ -4,8 +4,10 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.CanonicalViewRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampground
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
@@ -174,6 +176,73 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(AvailabilityProviderId.CAMPFLARE, target.provider.id)
             assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef))
         }
+
+    @Test
+    fun `findProviderRefCandidates enumerates every vendor ref in the campground match group`() {
+        // Winner (lower id, seeded first via the POI) is campflare; sibling is
+        // recgov. Both rows carry a provider-shaped payload, so shape ranking
+        // ties and match-group-winner-first is the decisive ordering.
+        val fixture =
+            ctx.seedCatalogPoi(
+                sourceId = "upper-pines-campflare",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "campflare",
+                providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
+            )
+        val winnerCampgroundId = fixture.catalogId
+        val siblingCampgroundId =
+            ctx.seedCampground(
+                name = "Upper Pines",
+                source = "recgov",
+                sourceId = "recgov-232447",
+                providerRefJson = """{"recgov_id":"232447"}""",
+            )
+        matchAndGroupCampgrounds(winnerCampgroundId, siblingCampgroundId)
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
+
+        val repo = CampsiteProviderRepo(ctx)
+
+        // No preferred_availability_source: winner-source first.
+        val withoutPreference = repo.findProviderRefCandidates(fixture.poiId)
+        assertEquals(
+            listOf("campflare", "recgov"),
+            withoutPreference.map { it.source },
+        )
+
+        // Flip preference to recgov: sibling-source floats to the top even
+        // though its member id is higher and it isn't the canonical winner.
+        ctx.execute(
+            "UPDATE campgrounds SET preferred_availability_source = ? WHERE id = ?",
+            "recgov",
+            winnerCampgroundId,
+        )
+        CanonicalViewRepo(ctx).refreshCanonicalViews()
+
+        val withPreference = repo.findProviderRefCandidates(fixture.poiId)
+        assertEquals(
+            listOf("recgov", "campflare"),
+            withPreference.map { it.source },
+        )
+    }
+
+    private fun matchAndGroupCampgrounds(
+        aId: Long,
+        bId: Long,
+    ) {
+        val lo = minOf(aId, bId)
+        val hi = maxOf(aId, bId)
+        ctx.execute(
+            """
+            INSERT INTO campground_matches (campground_a_id, campground_b_id, heuristic)
+            VALUES (?, ?, '{"method":"manual","score":1.0}'::jsonb)
+            """.trimIndent(),
+            lo,
+            hi,
+        )
+        ctx.execute("UPDATE campgrounds SET match_group_id = ? WHERE id IN (?, ?)", lo, lo, hi)
+    }
 
     @Test
     fun `resolve falls back to recgov aliases when campflare provider declines the ref`() =

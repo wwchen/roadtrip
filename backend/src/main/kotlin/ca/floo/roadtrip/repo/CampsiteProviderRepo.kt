@@ -27,7 +27,16 @@ class CampsiteProviderRepo(
     /** Provider ref for a single campground POI, or null when not found / unsupported. */
     fun findProviderRef(poiId: Long): CampsiteProviderRefRow? = findProviderRefCandidates(poiId).firstOrNull()
 
-    /** Provider refs for a single campground POI, ordered with usable provider shapes first, then primary refs. */
+    /**
+     * Provider refs for a single campground POI's entire match group.
+     *
+     * Enumerates every campground vendor ref across every row that shares the
+     * POI's canonical match group (via `campground_canonical.member_ids`), not
+     * just the campground currently linked through `poi_campgrounds`. Ordering:
+     * preferred availability source first, provider-shaped payload next, then
+     * the canonical winner ahead of its siblings, member id, and vendor ref id
+     * as final tiebreakers.
+     */
     fun findProviderRefCandidates(poiId: Long): List<CampsiteProviderRefRow> =
         ctx
             .fetch(
@@ -40,27 +49,23 @@ class CampsiteProviderRepo(
                 FROM pois p
                 JOIN poi_campgrounds pc
                   ON pc.poi_id = p.id
-                JOIN campgrounds cg
-                  ON cg.id = pc.campground_id
-                JOIN LATERAL (
-                  SELECT ref.vendor, ref.payload, cvr.vendor_ref_id
-                  FROM campground_vendor_refs cvr
-                  JOIN vendor_refs ref
-                    ON ref.id = cvr.vendor_ref_id
-                  WHERE cvr.campground_id = cg.id
-                    AND ref.entity_type = 'campground'
-                    AND ref.deleted_at IS NULL
-                  ORDER BY
-                    CASE WHEN ${providerRefShapeSql("ref.payload")} THEN 1 ELSE 0 END DESC,
-                    cvr.vendor_ref_id ASC
-                ) vr ON true
+                JOIN campground_canonical cc
+                  ON cc.id = pc.campground_id
+                JOIN LATERAL unnest(cc.member_ids) AS members(member_id) ON TRUE
+                JOIN campground_vendor_refs cvr
+                  ON cvr.campground_id = members.member_id
+                JOIN vendor_refs vr
+                  ON vr.id = cvr.vendor_ref_id
                 WHERE p.id = ?
                   AND p.deleted_at IS NULL
-                  AND p.poi_type = 'campground'
-                  AND cg.deleted_at IS NULL
+                  AND vr.entity_type = 'campground'
+                  AND vr.deleted_at IS NULL
                 ORDER BY
+                  CASE WHEN vr.vendor = cc.preferred_availability_source THEN 1 ELSE 0 END DESC,
                   CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                  vr.vendor_ref_id ASC
+                  CASE WHEN members.member_id = cc.id THEN 0 ELSE 1 END ASC,
+                  members.member_id ASC,
+                  cvr.vendor_ref_id ASC
                 """.trimIndent(),
                 poiId,
             ).mapNotNull(::campgroundProviderRow)
@@ -170,28 +175,24 @@ class CampsiteProviderRepo(
             FROM pois p
             JOIN poi_campgrounds pc
               ON pc.poi_id = p.id
-            JOIN campgrounds cg
-              ON cg.id = pc.campground_id
-            JOIN LATERAL (
-              SELECT ref.vendor, ref.payload, cvr.vendor_ref_id
-              FROM campground_vendor_refs cvr
-              JOIN vendor_refs ref
-                ON ref.id = cvr.vendor_ref_id
-              WHERE cvr.campground_id = cg.id
-                AND ref.entity_type = 'campground'
-                AND ref.deleted_at IS NULL
-              ORDER BY
-                CASE WHEN ${providerRefShapeSql("ref.payload")} THEN 1 ELSE 0 END DESC,
-                cvr.vendor_ref_id ASC
-            ) vr ON true
+            JOIN campground_canonical cc
+              ON cc.id = pc.campground_id
+            JOIN LATERAL unnest(cc.member_ids) AS members(member_id) ON TRUE
+            JOIN campground_vendor_refs cvr
+              ON cvr.campground_id = members.member_id
+            JOIN vendor_refs vr
+              ON vr.id = cvr.vendor_ref_id
             WHERE p.id IN ($placeholders)
               AND p.deleted_at IS NULL
-              AND p.poi_type = 'campground'
-              AND cg.deleted_at IS NULL
+              AND vr.entity_type = 'campground'
+              AND vr.deleted_at IS NULL
             ORDER BY
               p.id,
+              CASE WHEN vr.vendor = cc.preferred_availability_source THEN 1 ELSE 0 END DESC,
               CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-              vr.vendor_ref_id ASC
+              CASE WHEN members.member_id = cc.id THEN 0 ELSE 1 END ASC,
+              members.member_id ASC,
+              cvr.vendor_ref_id ASC
             """.trimIndent()
 
         val out = linkedMapOf<Long, MutableList<CampsiteProviderRefRow>>()
