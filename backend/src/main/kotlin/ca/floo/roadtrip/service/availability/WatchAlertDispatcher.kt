@@ -27,7 +27,7 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * watches (both already in the executor's hand).
  *
  * For each live watch it keeps the transitions that fall inside the watch's
- * reservable set and date window, and — if the watch opted into
+ * campsite set and date window, and — if the watch opted into
  * [SLACK_NOTIFY_KIND] — posts one message. A watch with `stopWhenTriggered`
  * goes `DONE` **only after a post actually succeeds**, so a delivery failure
  * never silences a watch we could not notify on.
@@ -167,7 +167,7 @@ internal class WatchAlertDispatcher(
         }
     }
 
-    /** Resolves each covered cell to a [WatchOpening] — the reservable's display
+    /** Resolves each covered cell to a [WatchOpening] — the campsite's display
      *  label/loop/type, its parent campground (id + name, each POI fetched once),
      *  and the provider booking URL — so the notification layer only formats. */
     private fun hydrateOpenings(
@@ -176,7 +176,7 @@ internal class WatchAlertDispatcher(
     ): List<WatchOpening> {
         val poiNames = HashMap<Long, String?>()
         return covered.map { t ->
-            // covered was filtered to reservables in this map, so the key exists.
+            // covered was filtered to campsites in this map, so the key exists.
             val r = campsitesById.getValue(t.campsiteId)
             val target = targets.resolve(r)
             WatchOpening(
@@ -186,7 +186,7 @@ internal class WatchAlertDispatcher(
                 date = t.targetDate,
                 campgroundId = target?.parentPoiId,
                 campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiById(it)?.name } },
-                // Booking link, if the reservable's provider exposes one — the URL
+                // Booking link, if the campsite's provider exposes one — the URL
                 // scheme is the adapter's, never this dispatcher's. The parent
                 // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
                 bookingUrl = target?.let { it.provider.bookingUrl(r, it.parentRef, t.targetDate) },
@@ -198,9 +198,9 @@ internal class WatchAlertDispatcher(
      *  message. Carries the watch id (echoed as every interactive button's
      *  value), scope, window, and deep-link URLs (the Grafana watch dashboard,
      *  and per POI the web-app map page + Grafana grid); the notification
-     *  layer owns the Block Kit rendering. A single-reservable watch reports
+     *  layer owns the Block Kit rendering. A single-campsite watch reports
      *  its site name (+ loop); a broader one reports the count. POI links come
-     *  from the watch's POI-scoped targets (reservable-scoped targets carry
+     *  from the watch's POI-scoped targets (campsite-scoped targets carry
      *  no POI). */
     private fun statusNotice(
         watch: AvailabilityWatchRepo.Watch,
@@ -209,8 +209,8 @@ internal class WatchAlertDispatcher(
     ): WatchStatusNotice {
         val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
         // A POI-scoped watch is "the campground" even when it expands to one
-        // site; a reservable-scoped watch names the site. So the scope label
-        // keys off the target kind, not the resolved reservable count.
+        // site; a campsite-scoped watch names the site. So the scope label
+        // keys off the target kind, not the resolved campsite count.
         val siteScoped = poiIds.isEmpty()
         val single = campsites.singleOrNull().takeIf { siteScoped }
         return WatchStatusNotice(

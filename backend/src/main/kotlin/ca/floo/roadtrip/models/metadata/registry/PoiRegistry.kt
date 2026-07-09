@@ -21,11 +21,11 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 //   - campsite_data: campsite catalogs. Terminal etl emits canonical campsite
 //     rows. Same chain shape as poi_data, minus category/subcategory
 //     (campsites aren't map pins).
-//   - campsite_parent_joiner: N:M-link discovery (RFC 0008). Each entry
-//     names an adapter that reads the current state of `pois` +
-//     canonical campsite catalog rows and writes the POI/campsite link rows
-//     into `reservable_pois`. No etl chain — joiners don't transform raw
-//     data, they query DB tables.
+//   - campsite_parent_joiner: post-import parent reconciliation. Each entry
+//     names an adapter that reads canonical campsite/campground vendor refs
+//     and reparents campsites whose campground_id disagrees with the
+//     vendor-ref lookup. No etl chain — joiners don't transform raw data,
+//     they query DB tables.
 //
 // Etl chain semantics (poi_data + campsite_data):
 //   - Terminal stage = last etls entry. Earlier entries are intermediates.
@@ -300,7 +300,7 @@ data class PoiRegistry(
     fun campsiteParentJoinerByName(name: String): CampsiteParentJoinerEntry? = campsiteParentJoiners.firstOrNull { it.name == name }
 
     /**
-     * Static subcategory lookup keyed by terminal etl slug (== pois.source).
+     * Static subcategory lookup keyed by terminal etl slug.
      * Returns null when the row has no subcategory (e.g. planet-fitness).
      */
     fun subcategoryByTerminalEtlSlug(): Map<String, String?> {
@@ -322,7 +322,7 @@ data class PoiRegistry(
     }
 
     /**
-     * Aspira upstream host keyed by terminal etl slug (== pois.source).
+     * Aspira upstream host keyed by terminal etl slug.
      * Returns the `host` arg from the terminal AspiraJoinByNameEtl row.
      *
      * Used by [ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry]
@@ -343,7 +343,7 @@ data class PoiRegistry(
 
     /**
      * Sources whose terminal ETL produces rec.gov-keyed campgrounds. Used
-     * by the availability-provider registry to map `pois.source` → `RECGOV`.
+     * by the availability-provider registry to map the terminal etl slug → `RECGOV`.
      */
     fun recgovSources(): Set<String> =
         poiData
@@ -534,11 +534,10 @@ data class CampsiteDataEntry(
 )
 
 /**
- * Row in the `poi_reservable_joiner` section. Names a single adapter
- * (registered in EtlOrchestrator's joiner registry) that reads the
- * current state of `pois` + canonical campsite catalog rows and writes
- * POI/campsite link rows into `reservable_pois`. No etl chain; joiners
- * don't transform raw data, they query DB tables.
+ * Row in the `campsite_parent_joiner` section. Names a single adapter that
+ * recomputes each campsite's campground parent from vendor refs and
+ * reparents rows whose current `campsites.campground_id` disagrees. No etl
+ * chain; joiners don't transform raw data, they query DB tables.
  *
  * `args` follows the same shape as [EtlEntry.args]: free-form
  * adapter-specific config (e.g. which provider source to scope to).

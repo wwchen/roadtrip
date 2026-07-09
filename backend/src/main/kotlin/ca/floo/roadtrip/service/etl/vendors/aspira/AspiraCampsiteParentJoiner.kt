@@ -8,7 +8,7 @@ import ca.floo.roadtrip.service.etl.framework.JoinerCtx
  *
  * Preserves the old tenant-specific matching rules, but targets
  * `campsites`/`campgrounds` vendor refs instead of the removed
- * `reservables`/`reservable_pois` tables.
+ * `reservables` table and retired POI-campsite link table.
  */
 class AspiraCampsiteParentJoiner : CampsiteParentJoiner {
     override val adapter: String = ADAPTER_NAME

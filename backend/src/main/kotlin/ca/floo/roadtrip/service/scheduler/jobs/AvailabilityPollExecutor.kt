@@ -35,7 +35,7 @@ import java.time.ZoneOffset
  * derived from watch state: the polling window is vendor-derived and anchored
  * at today (the widest window the upstream exposes per tick), and the target
  * set is the poller's parent campground's **full catalog** — every child
- * reservable under its representative POI, not just the sites a watch happens
+ * campsite under its representative POI, not just the sites a watch happens
  * to reference. It resolves that catalog to
  * [ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget]s
  * (filtered to this poller's own (provider, parentRef)), and hands them to
@@ -98,10 +98,10 @@ internal class AvailabilityPollExecutor(
         val poiCadenceOverrideSec = pollers.cadenceOverrideForPoller(poller.id)
         val cadenceSec = resolveCadenceSec(liveWatches, poiCadenceOverrideSec)
 
-        // Fetch the parent campground's FULL catalog — every child reservable
+        // Fetch the parent campground's FULL catalog — every child campsite
         // under the poller's representative POI — not just the sites some live
         // watch happens to reference. One catalogAvailability call returns the
-        // whole parent grid regardless of the reservable list (the list is a
+        // whole parent grid regardless of the campsite list (the list is a
         // projection, not a call multiplier), so widening to the full catalog
         // costs no extra upstream calls and maximally widens snapshot history.
         // This is what severs the fetch path from watch state: the poller reads

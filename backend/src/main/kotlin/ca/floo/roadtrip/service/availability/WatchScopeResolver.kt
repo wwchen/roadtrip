@@ -14,9 +14,9 @@ class WatchScopeResolver(
      * Resolves a watch's full target SET to the flat, de-duplicated list of
      * campsites it covers. A campsite target resolves to itself; a POI
      * target expands to that POI's site-type children, filtered by the
-     * watch's shared `reservableFilters`. Union across all targets,
+     * watch's shared `campsiteFilters`. Union across all targets,
      * first-seen order preserved — this is the entire seam
-     * [AvailabilityPollerMembership.sync] depends on, unchanged since PR1.
+     * [AvailabilityPollerMembership.sync] depends on.
      */
     fun resolve(watch: AvailabilityWatchRepo.Watch): List<Campsite> {
         val seen = LinkedHashMap<Long, Campsite>()
