@@ -103,6 +103,7 @@ internal class CampsiteAvailabilityComposer(
 internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =
     when (providerId) {
         ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
+        ReservationProviderId.CAMPFLARE -> ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl
         ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
         ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
         ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
@@ -121,7 +122,12 @@ private fun availabilityMetadata(
 ): AvailabilityLoader.Metadata =
     AvailabilityLoader.Metadata(
         provider = providerId.name.lowercase(),
-        campgroundId = (ref as? ProviderRef.RecGov)?.recgovId,
+        campgroundId =
+            when (ref) {
+                is ProviderRef.RecGov -> ref.recgovId
+                is ProviderRef.Campflare -> ref.campgroundId
+                else -> null
+            },
         mapId =
             when (ref) {
                 is ProviderRef.Aspira -> ref.mapId.toString()

@@ -8,6 +8,7 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 internal fun parentRefKey(ref: ProviderRef): String =
     when (ref) {
         is ProviderRef.RecGov -> ref.recgovId
+        is ProviderRef.Campflare -> ref.campgroundId
         is ProviderRef.Aspira -> ref.mapId.toString()
         is ProviderRef.ReserveAmerica -> ref.parkId
         is ProviderRef.ReserveCalifornia -> ref.facilityIds.joinToString(",")

@@ -15,6 +15,13 @@ class ProviderRefParserTest {
     }
 
     @Test
+    fun `parses campflare`() {
+        val ref = ProviderRefParser.parse("""{"campflare_id": "upper-pines-campground-447"}""")
+        assertTrue(ref is ProviderRef.Campflare)
+        assertEquals("upper-pines-campground-447", ref.campgroundId)
+    }
+
+    @Test
     fun `parses aspira with all three ids as Long`() {
         val ref =
             ProviderRefParser.parse(
