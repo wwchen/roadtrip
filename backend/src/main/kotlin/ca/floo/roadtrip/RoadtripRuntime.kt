@@ -19,11 +19,14 @@ import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
+import ca.floo.roadtrip.repo.CanonicalViewRepo
+import ca.floo.roadtrip.repo.CatalogMatchRepo
 import ca.floo.roadtrip.repo.DbConfig
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.dataSourceFor
 import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
+import ca.floo.roadtrip.service.catalog.CatalogMatcherService
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
@@ -138,14 +141,22 @@ internal fun createRoadtripBootContext(): RoadtripBootContext {
     val poiRegistry = PoiRegistry.load(File(staticDir, "config/poi-registry.yaml"))
 
     sweepStaleIngestRuns(ctx)
+    val catalogMatcher =
+        CatalogMatcherService(
+            matches = CatalogMatchRepo(ctx),
+            config = CatalogMatcherService.MatcherConfig.fromEnv(),
+        )
+    val canonicalViews = CanonicalViewRepo(ctx)
     val ingestController =
         IngestController(
             ctx = ctx,
             etl =
                 EtlOrchestrator(
-                    ctx,
-                    File(staticDir, "data/raw"),
-                    poiRegistry,
+                    ctx = ctx,
+                    rawDir = File(staticDir, "data/raw"),
+                    poiRegistry = poiRegistry,
+                    matcher = catalogMatcher,
+                    canonicalViews = canonicalViews,
                 ),
             fetchTargets = fetchTargetsFromRegistry(poiRegistry, staticDir),
             importTargets = importTargetsFromRegistry(poiRegistry),

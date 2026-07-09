@@ -1,12 +1,16 @@
 package ca.floo.roadtrip.service.etl.framework
 
+import ca.floo.roadtrip.models.api.CatalogMatchRunStats
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.CanonicalCatalogRepo
+import ca.floo.roadtrip.repo.CanonicalViewRepo
+import ca.floo.roadtrip.repo.CatalogMatchRepo
 import ca.floo.roadtrip.repo.NoCaptureException
 import ca.floo.roadtrip.repo.RawCapture
+import ca.floo.roadtrip.service.catalog.CatalogMatcherService
 import ca.floo.roadtrip.service.etl.vendors.aspira.AspiraCampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.vendors.recgov.RecgovCampsiteParentJoiner
 import ca.floo.roadtrip.service.etl.vendors.reserveamerica.ReserveAmericaCampsiteParentJoiner
@@ -38,7 +42,7 @@ import java.io.File
 // The DAG-level ordering across multiple poi_data rows is the caller's
 // problem (today: per-row imports, no cross-row composition). Within a row,
 // list order = dependency order, validated at boot.
-class EtlOrchestrator(
+open class EtlOrchestrator(
     private val ctx: DSLContext,
     private val rawDir: File,
     private val poiRegistry: PoiRegistry,
@@ -53,6 +57,18 @@ class EtlOrchestrator(
      * for tests.
      */
     private val joinerRegistry: Map<String, CampsiteParentJoiner> = Companion.joinerRegistry,
+    /**
+     * Catalog matcher service used by [runCatalogMatch]. Defaults to a fresh
+     * service built from `ctx` and env-driven tuning so tests that don't
+     * exercise the match stage don't have to construct one.
+     */
+    private val matcher: CatalogMatcherService =
+        CatalogMatcherService(CatalogMatchRepo(ctx), CatalogMatcherService.MatcherConfig.fromEnv()),
+    /**
+     * Canonical view refresh + representative re-point repo used by
+     * [runCatalogMatch]. Defaults to a fresh instance built from `ctx`.
+     */
+    private val canonicalViews: CanonicalViewRepo = CanonicalViewRepo(ctx),
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val catalogRepo = CanonicalCatalogRepo(ctx)
@@ -239,6 +255,45 @@ class EtlOrchestrator(
             linksInserted = reparented,
             staleLinksDeleted = staleDeleted,
         )
+    }
+
+    /**
+     * Runs the full catalog-match stage: matcher pass → canonical view
+     * refresh → representative re-point. This is a single logical operation:
+     * each step depends on the previous one leaving the DB in a consistent
+     * state, so callers get one combined stats DTO rather than three
+     * separate return values.
+     *
+     * Invoked automatically at the end of an import run that touched
+     * campsite-data or joiner phases (see [IngestController.runPhases]), and
+     * manually via `POST /api/admin/etl/catalog-match`. Idempotent — a second
+     * call re-materializes the same view state and finds no non-winner rows
+     * to re-point.
+     */
+    open fun runCatalogMatch(): CatalogMatchRunStats {
+        val matchStats = matcher.run()
+        canonicalViews.refreshCanonicalViews()
+        val repointStats = canonicalViews.repointRepresentatives()
+        val combined =
+            CatalogMatchRunStats(
+                campgroundPairs = matchStats.campgroundPairs,
+                campsitePairs = matchStats.campsitePairs,
+                groupsRecomputed = matchStats.groupsRecomputed,
+                poisRepointed = repointStats.poisRepointed,
+                watchTargetsRepointed = repointStats.watchTargetsRepointed,
+                availabilityRowsRepointed = repointStats.availabilityRowsRepointed,
+            )
+        log.info(
+            "catalog match: campground_pairs={} campsite_pairs={} groups_recomputed={} " +
+                "pois_repointed={} watch_targets_repointed={} availability_rows_repointed={}",
+            combined.campgroundPairs,
+            combined.campsitePairs,
+            combined.groupsRecomputed,
+            combined.poisRepointed,
+            combined.watchTargetsRepointed,
+            combined.availabilityRowsRepointed,
+        )
+        return combined
     }
 
     @Suppress("UNCHECKED_CAST")
