@@ -105,7 +105,6 @@ class FeatureCollectionContractTest {
             PoiDetailRow(
                 id = 42,
                 source = "uscampgrounds",
-                providerSource = "parks-canada",
                 sourceId = "abc-123",
                 category = "campground",
                 subcategory = "federal",
@@ -150,7 +149,12 @@ class FeatureCollectionContractTest {
                 """"season":"May-Oct","near":"Banff"}}}"""
         )
         val dateResolver = AvailabilityDateResolver(Clock.fixed(Instant.parse("2026-06-21T12:00:00Z"), ZoneOffset.UTC))
-        assertEquals(expected, encodePoiFeatureJson(poiDetailFeature(row, dateResolver)))
+        assertEquals(
+            expected,
+            encodePoiFeatureJson(
+                poiDetailFeature(row, dateResolver, availabilityProvider = "parks-canada"),
+            ),
+        )
     }
 
     @Test
