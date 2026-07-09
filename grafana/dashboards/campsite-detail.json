@@ -63,7 +63,7 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  cs.id AS campsite_id,\n  cg.id AS campground_id,\n  cg.name AS campground_name,\n  cs.name,\n  cs.loop_name,\n  cs.kind,\n  cs.kind_listed,\n  cs.max_people,\n  cs.max_cars,\n  cs.max_rv_length,\n  cs.max_trailer_length,\n  cs.electric_hookups,\n  cs.water_hookups,\n  cs.sewer_hookups,\n  cs.ada_accessible,\n  cs.pull_through,\n  cs.equipment,\n  cs.price,\n  cs.schedule,\n  vr.vendor,\n  vr.external_id AS vendor_ref_id,\n  cs.source_payload,\n  cs.updated_at,\n  cs.deleted_at\nFROM campsites cs\nJOIN campgrounds cg ON cg.id = cs.campground_id\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND cs.id::text = ${campsite_id:sqlstring};",
+          "rawSql": "SELECT\n  cs.id AS campsite_id,\n  cg.id AS campground_id,\n  cg.name AS campground_name,\n  cs.name,\n  cs.loop_name,\n  cs.kind,\n  cs.kind_listed,\n  cs.max_people,\n  cs.max_cars,\n  cs.max_rv_length,\n  cs.max_trailer_length,\n  cs.electric_hookups,\n  cs.water_hookups,\n  cs.sewer_hookups,\n  cs.ada_accessible,\n  cs.pull_through,\n  cs.equipment,\n  cs.price,\n  cs.schedule,\n  vr.vendor,\n  vr.external_id AS vendor_ref_id,\n  cs.source_payload,\n  cs.updated_at,\n  cs.deleted_at\nFROM campsites cs\nJOIN campgrounds cg ON cg.id = cs.campground_id\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nWHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n  AND cs.id::text = ${campsite_id:sqlstring};",
           "refId": "A"
         }
       ],
