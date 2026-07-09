@@ -2,8 +2,12 @@ package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.models.metadata.ingest.RunKind
 import ca.floo.roadtrip.models.metadata.registry.DataSourceEntry
+import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.Fetcher
+import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.models.metadata.registry.PoiReservableJoinerEntry
+import ca.floo.roadtrip.models.metadata.registry.ReservableDataEntry
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import java.io.File
@@ -69,6 +73,56 @@ class RegistryTargetsTest {
             phase.cmd.takeLast(4),
         )
         assertEquals(7200, phase.timeoutSec)
+    }
+
+    @Test
+    fun `import fan-out omits disabled or unwired registry rows`() {
+        val registry =
+            PoiRegistry(
+                dataSources = emptyList(),
+                poiData =
+                    listOf(
+                        PoiDataEntry(
+                            name = "Runnable Campgrounds",
+                            category = "campground",
+                            etls = listOf(EtlEntry(slug = "campflare-campgrounds", adapter = "CampflareCampgroundsEtl")),
+                        ),
+                        PoiDataEntry(
+                            name = "Legacy Federal Campgrounds",
+                            category = "campground",
+                            etls = listOf(EtlEntry(slug = "legacy-federal-campgrounds", adapter = "LegacyFederalEtl")),
+                        ),
+                        PoiDataEntry(
+                            name = "Explicitly Disabled Campgrounds",
+                            enabled = false,
+                            category = "campground",
+                            etls = listOf(EtlEntry(slug = "campflare-campgrounds", adapter = "CampflareCampgroundsEtl")),
+                        ),
+                    ),
+                reservableData =
+                    listOf(
+                        ReservableDataEntry(
+                            name = "Runnable Campsites",
+                            etls = listOf(EtlEntry(slug = "campflare-campsites", adapter = "CampflareCampsitesEtl")),
+                        ),
+                        ReservableDataEntry(
+                            name = "Legacy Federal Campsites",
+                            etls = listOf(EtlEntry(slug = "legacy-federal-campsites", adapter = "LegacyFederalSitesEtl")),
+                        ),
+                    ),
+                poiReservableJoiners =
+                    listOf(
+                        PoiReservableJoinerEntry(
+                            name = "Federal Campsites to Federal Campgrounds",
+                            adapter = "LegacyFederalJoiner",
+                        ),
+                    ),
+            )
+
+        assertEquals(
+            listOf("Runnable Campgrounds", "Runnable Campsites"),
+            importTargetsFromRegistry(registry).keys.toList(),
+        )
     }
 
     private fun source(

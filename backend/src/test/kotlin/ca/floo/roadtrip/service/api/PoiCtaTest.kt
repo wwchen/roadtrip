@@ -54,6 +54,23 @@ class PoiCtaTest {
     }
 
     @Test
+    fun `aspira parks canada can derive CTA host from canonical reserve_url`() {
+        val out =
+            cta.computeCta(
+                row(
+                    providerRefJson = """{"transactionLocationId":4189,"mapId":-2147483361,"resourceLocationId":-2147483408}""",
+                    reserveUrl = "https://reservation.pc.gc.ca/",
+                ),
+            )
+        val url = out?.url
+        assertNotNull(url)
+        assertTrue(url.startsWith("https://reservation.pc.gc.ca/create-booking/results?"), "host + path: $url")
+        assertTrue(url.contains("transactionLocationId=4189"), url)
+        assertEquals("Reserve on parks.canada.ca", out.label)
+        assertEquals("reserve", out.kind)
+    }
+
+    @Test
     fun `aspira CTA uses linked reservable map when POI map is only a container`() {
         val out =
             cta.computeCta(
@@ -152,6 +169,25 @@ class PoiCtaTest {
     }
 
     @Test
+    fun `blank reserve_url falls back to info_url`() {
+        val out = cta.computeCta(row(reserveUrl = "  ", infoUrl = "https://www.nps.gov/yose/index.htm"))
+        assertEquals("Park info on nps.gov", out?.label)
+    }
+
+    @Test
+    fun `non-provider reserve_url does not override info_url fallback`() {
+        val out =
+            cta.computeCta(
+                row(
+                    reserveUrl = "https://reservation.pc.gc.ca/",
+                    infoUrl = "https://parks.canada.ca/banff",
+                ),
+            )
+        assertEquals("https://parks.canada.ca/banff", out?.url)
+        assertEquals("Park info on parks.canada.ca", out?.label)
+    }
+
+    @Test
     fun `provider_ref recgov wins over info_url`() {
         // A reservable rec.gov campground also has its rec.gov page as info_url.
         // We want the canonical "Reserve on recreation.gov" CTA, not the page link.
@@ -196,6 +232,15 @@ class PoiCtaTest {
                 ),
             ),
         )
+        assertEquals(
+            "Aspira NextGen (Parks Canada)",
+            cta.bookingSystem(
+                row(
+                    providerRefJson = """{"transactionLocationId":1,"mapId":2,"resourceLocationId":null}""",
+                    reserveUrl = "https://reservation.pc.gc.ca/",
+                ),
+            ),
+        )
         assertNull(cta.bookingSystem(row(infoUrl = "https://www.fs.usda.gov/recarea/")))
         assertNull(cta.bookingSystem(row()))
     }
@@ -203,6 +248,7 @@ class PoiCtaTest {
     private fun row(
         providerRefJson: String? = null,
         ctaProviderRefJson: String? = null,
+        reserveUrl: String? = null,
         infoUrl: String? = null,
     ): PoiDetailRow =
         PoiDetailRow(
@@ -214,7 +260,7 @@ class PoiCtaTest {
             name = "Butte Meadows Campground",
             region = "CA",
             unitName = null,
-            reserveUrl = null,
+            reserveUrl = reserveUrl,
             phone = null,
             infoUrl = infoUrl,
             addressJson = null,

@@ -4,8 +4,10 @@ import ca.floo.roadtrip.models.domain.Poi
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.AgencyConfig
+import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.repo.CanonicalCatalogRepo
 import ca.floo.roadtrip.repo.NoCaptureException
 import ca.floo.roadtrip.repo.RawCapture
 import ca.floo.roadtrip.repo.Upsert
@@ -15,12 +17,10 @@ import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.io.File
 
-private const val DISABLED_CAMPING_IMPORT_MESSAGE =
-    "campground/campsite vendor imports are disabled until adapters write through the canonical catalog writer"
 private const val DISABLED_JOINER_IMPORT_MESSAGE =
     "vendor campsite parent joiners are disabled until canonical campground/campsite reconciliation is wired"
 
-// Orchestrates one poi_data row's ETL chain end-to-end.
+// Orchestrates one poi_data/reservable_data row's ETL chain end-to-end.
 //
 // Per-row sequence (declared etls: list, in order):
 //   1. Resolve each etls entry's `inputs:` slug into either:
@@ -31,8 +31,11 @@ private const val DISABLED_JOINER_IMPORT_MESSAGE =
 //   3. If the etl is intermediate (not the last in the row), keep OUT in
 //      the per-run map for later siblings to consume. No disk persistence —
 //      every ETL is f(inputs) → output, so re-running an import recomputes.
-//   4. If terminal, expect OUT = List<Poi.*> and run Upsert (sweep scoped
-//      to source = etl-slug).
+//   4. If terminal, persist the supported catalog output:
+//        - CampgroundEtlOutput -> canonical campgrounds + lean POI wrappers
+//        - CampsiteEtlOutput   -> canonical campsites
+//        - List<Poi.*>         -> retired wide-POI path, only for disabled
+//          legacy adapters/tests
 //
 // The DAG-level ordering across multiple poi_data rows is the caller's
 // problem (today: per-row imports, no cross-row composition). Within a row,
@@ -49,18 +52,19 @@ class EtlOrchestrator(
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val upsert = Upsert(ctx)
+    private val catalogRepo = CanonicalCatalogRepo(ctx)
 
     /**
-     * Per-row run summary for `poi_data` rows. Mirrors the shape that
-     * existed before RFC 0008's section split — the Pois Upsert path is
-     * unchanged.
+     * Per-row run summary for import rows. `poi_data` and `reservable_data`
+     * both flow through the same chain runner; only terminal persistence
+     * differs by output type.
      */
     data class Stats(
         val poiDataName: String,
         val terminalEtlSlug: String,
         val parsed: Int,
         val transformed: Int,
-        val upsertResult: Upsert.Result,
+        val upsertResult: CanonicalCatalogRepo.Result,
     )
 
     data class ReservableStats(
@@ -82,8 +86,8 @@ class EtlOrchestrator(
 
     /**
      * Run a poi_data row by display name. Walks the row's `etls:` chain in
-     * declared order, materializing intermediates and upserting the
-     * terminal's Poi.* output. Throws if the row isn't registered or any
+     * declared order, materializing intermediates and persisting the
+     * terminal catalog output. Throws if the row isn't registered or any
      * stage fails.
      */
     fun runPoiData(name: String): Stats {
@@ -93,6 +97,44 @@ class EtlOrchestrator(
         require(row.etls.isNotEmpty()) { "poi_data '$name' has empty etls list" }
 
         log.info("etl poi_data='{}' starting ({} stages)", name, row.etls.size)
+        return runEtlChain(
+            rowName = row.name,
+            sectionLabel = "poi_data",
+            etls = row.etls,
+            poiDataEntry = row,
+        )
+    }
+
+    fun runReservableData(name: String): ReservableStats {
+        val row =
+            poiRegistry.reservableDataByName(name)
+                ?: error("no reservable_data row with name='$name'")
+        require(row.etls.isNotEmpty()) { "reservable_data '$name' has empty etls list" }
+
+        log.info("etl reservable_data='{}' starting ({} stages)", name, row.etls.size)
+        val stats =
+            runEtlChain(
+                rowName = row.name,
+                sectionLabel = "reservable_data",
+                etls = row.etls,
+                poiDataEntry = null,
+            )
+        return ReservableStats(
+            reservableDataName = row.name,
+            terminalEtlSlug = stats.terminalEtlSlug,
+            runId = stats.upsertResult.runId,
+            parsed = stats.parsed,
+            upserted = stats.upsertResult.upsertedCount,
+            swept = stats.upsertResult.sweptCount,
+        )
+    }
+
+    private fun runEtlChain(
+        rowName: String,
+        sectionLabel: String,
+        etls: List<EtlEntry>,
+        poiDataEntry: PoiDataEntry?,
+    ): Stats {
         val transformCtx = TransformCtx.load(rawDir, poiRegistry)
 
         // Per-run cache of intermediate outputs keyed by etl slug. Lets a
@@ -102,15 +144,15 @@ class EtlOrchestrator(
 
         var terminalStats: Stats? = null
 
-        for ((index, entry) in row.etls.withIndex()) {
-            val isTerminal = index == row.etls.lastIndex
+        for ((index, entry) in etls.withIndex()) {
+            val isTerminal = index == etls.lastIndex
             val etl =
                 etlRegistry[entry.slug]
                     ?: error("no adapter registered for etl slug='${entry.slug}'")
             log.info(
                 "  stage {}/{} slug={} adapter={} terminal={}",
                 index + 1,
-                row.etls.size,
+                etls.size,
                 entry.slug,
                 etl::class.simpleName,
                 isTerminal,
@@ -118,7 +160,7 @@ class EtlOrchestrator(
 
             val bundle = buildBundle(entry.inputs, intermediateOutputs)
             if (isTerminal) {
-                terminalStats = runTerminal(row, etl, bundle, transformCtx)
+                terminalStats = runTerminal(rowName, sectionLabel, poiDataEntry, etl, bundle, transformCtx)
             } else {
                 intermediateOutputs[entry.slug] = runIntermediate(etl, bundle, transformCtx)
             }
@@ -127,52 +169,87 @@ class EtlOrchestrator(
         return terminalStats!!
     }
 
-    fun runReservableData(name: String): ReservableStats = throw UnsupportedOperationException("$DISABLED_CAMPING_IMPORT_MESSAGE: $name")
-
     fun runJoiner(name: String): JoinerStats = throw UnsupportedOperationException("$DISABLED_JOINER_IMPORT_MESSAGE: $name")
 
     @Suppress("UNCHECKED_CAST")
     private fun runTerminal(
-        row: PoiDataEntry,
+        rowName: String,
+        sectionLabel: String,
+        poiDataEntry: PoiDataEntry?,
         etl: SourceEtl<*, *>,
         bundle: InputBundle,
         transformCtx: TransformCtx,
     ): Stats {
-        val concrete = etl as SourceEtl<Any, List<Poi>>
+        val concrete = etl as SourceEtl<Any, Any>
         val dto = concrete.parse(bundle)
         val validated =
             when (val v = concrete.validate(dto)) {
                 is ValidationResult.Ok -> v.dto
                 is ValidationResult.Bad -> {
-                    log.warn("poi_data '{}' terminal validation failed: {}", row.name, v.errors)
+                    log.warn("{} '{}' terminal validation failed: {}", sectionLabel, rowName, v.errors)
                     return Stats(
-                        poiDataName = row.name,
+                        poiDataName = rowName,
                         terminalEtlSlug = concrete.etlSlug,
                         parsed = 0,
                         transformed = 0,
-                        upsertResult = Upsert.Result(runId = -1L, seenCount = 0, sweptCount = 0),
+                        upsertResult =
+                            CanonicalCatalogRepo.Result(
+                                runId = -1L,
+                                seenCount = 0,
+                                upsertedCount = 0,
+                            ),
                     )
                 }
             }
-        val pois = concrete.transform(validated, transformCtx)
-        validateAgencyConfig(row, pois)
-        val ups = upsert.run(setOf(concrete.etlSlug), pois)
+        val output = concrete.transform(validated, transformCtx)
+        val ups =
+            when (output) {
+                is CampgroundEtlOutput ->
+                    catalogRepo.upsertCampgrounds(output.campgrounds, source = concrete.etlSlug)
+                is CampsiteEtlOutput ->
+                    catalogRepo.upsertCampsites(output.campsites, source = concrete.etlSlug)
+                is List<*> -> {
+                    val pois = output.filterIsInstance<Poi>()
+                    check(pois.size == output.size) {
+                        "terminal '${concrete.etlSlug}' returned unsupported List element type"
+                    }
+                    poiDataEntry?.let { validateAgencyConfig(it, pois) }
+                    val legacy = upsert.run(setOf(concrete.etlSlug), pois)
+                    CanonicalCatalogRepo.Result(
+                        runId = legacy.runId,
+                        seenCount = legacy.seenCount,
+                        upsertedCount = legacy.seenCount,
+                        sweptCount = legacy.sweptCount,
+                    )
+                }
+                else -> error("terminal '${concrete.etlSlug}' returned unsupported output ${output::class.qualifiedName}")
+            }
+        val transformedCount = outputCount(output)
         log.info(
-            "poi_data '{}' terminal slug={} transformed={} upserted={} swept={}",
-            row.name,
+            "{} '{}' terminal slug={} transformed={} upserted={} swept={}",
+            sectionLabel,
+            rowName,
             concrete.etlSlug,
-            pois.size,
-            ups.seenCount,
+            transformedCount,
+            ups.upsertedCount,
             ups.sweptCount,
         )
         return Stats(
-            poiDataName = row.name,
+            poiDataName = rowName,
             terminalEtlSlug = concrete.etlSlug,
-            parsed = pois.size,
-            transformed = pois.size,
+            parsed = transformedCount,
+            transformed = transformedCount,
             upsertResult = ups,
         )
     }
+
+    private fun outputCount(output: Any): Int =
+        when (output) {
+            is CampgroundEtlOutput -> output.campgrounds.size
+            is CampsiteEtlOutput -> output.campsites.size
+            is List<*> -> output.size
+            else -> 0
+        }
 
     private fun validateAgencyConfig(
         row: PoiDataEntry,
@@ -273,11 +350,19 @@ class EtlOrchestrator(
     }
 
     companion object {
-        // Runnable ETLs. Old wide-POI and reservable imports are intentionally
-        // not exposed here: admin import targets use this map to decide what
-        // can run. Keep vendor adapters in [disabledVendorRegistry] until
-        // their outputs are persisted through the canonical catalog writer.
-        val registry: Map<String, SourceEtl<*, *>> = emptyMap()
+        // Runnable ETLs. Old wide-POI and retired-reservable imports are
+        // intentionally not exposed here; admin import targets use this map
+        // to decide what can run. Campflare is enabled because it writes
+        // through the canonical catalog repo.
+        val registry: Map<String, SourceEtl<*, *>> =
+            mapOf(
+                "campflare-campgrounds" to
+                    ca.floo.roadtrip.service.etl.vendors.campflare
+                        .CampflareCampgroundsEtl(),
+                "campflare-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.campflare
+                        .CampflareCampsitesEtl(),
+            )
 
         // Retained vendor adapters. This keeps the parsing/transform code in
         // tree while making it explicit that the old registry rows are no-op

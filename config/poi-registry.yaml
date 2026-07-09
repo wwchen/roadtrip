@@ -14,8 +14,8 @@
 #    is dependency order — entry N may only reference data_source slugs OR
 #    earlier `etls:` siblings in the SAME row via `inputs:`. Cycles, forward
 #    references, and cross-row etl refs are rejected at boot.
-#    `enabled: false` skips the row in fan-out import; per-name imports still
-#    run it on request.
+#    `enabled: false` omits the row from admin import targets until the row
+#    is explicitly re-enabled.
 #
 # Reservation provider info is NOT in this file. ETLs that need it construct
 # their ProviderRef variant directly from upstream rows and per-tenant args
@@ -25,6 +25,26 @@
 # data_sources — fetchers
 # ============================================================================
 data_sources:
+  # --- Campflare canonical exports ------------------------------------------
+  - slug: campflare-campgrounds-export
+    name: Campflare campgrounds export
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_campflare_dump.py
+      args: { slug: campflare-campgrounds-export, kind: campgrounds }
+      timeout_sec: 7200
+      output_dir_prefix: data/raw/campflare-campgrounds-export
+
+  - slug: campflare-campsites-export
+    name: Campflare campsites export
+    depends_on: [campflare-campgrounds-export]
+    fetcher:
+      executor: python3
+      filename: scripts/fetch_campflare_dump.py
+      args: { slug: campflare-campsites-export, kind: campsites }
+      timeout_sec: 7200
+      output_dir_prefix: data/raw/campflare-campsites-export
+
   # --- Aspira /api/maps (one fetcher, three tenants via args.host) -----------
   - slug: aspira-maps-wa
     name: Aspira maps (Washington State Parks)
@@ -285,6 +305,13 @@ data_sources:
 # last `etls:` entry's slug. Upsert sweep scope follows.
 # ============================================================================
 poi_data:
+  - name: Campflare Campgrounds
+    category: campground
+    etls:
+      - slug: campflare-campgrounds
+        adapter: CampflareCampgroundsEtl
+        inputs: [campflare-campgrounds-export]
+
   - name: Federal Campgrounds
     category: campground
     subcategory: federal
@@ -418,6 +445,12 @@ poi_data:
 # No new data should be written to the removed reservables table.
 # ============================================================================
 reservable_data:
+  - name: Campflare Campsites
+    etls:
+      - slug: campflare-campsites
+        adapter: CampflareCampsitesEtl
+        inputs: [campflare-campsites-export]
+
   - name: Federal Campsites
     etls:
       - slug: federal-campsites

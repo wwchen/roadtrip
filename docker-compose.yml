@@ -79,6 +79,9 @@ services:
     image: roadtrip/backend
     restart: unless-stopped
     hostname: backend
+    env_file:
+      - path: .env
+        required: false
     environment:
       - PORT=8765
       - ROADTRIP_STATIC_DIR=/app/static
