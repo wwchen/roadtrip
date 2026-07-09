@@ -21,6 +21,10 @@ services:
       # (which serves the site) instead of the prod default.
       - APP_ROOT_URL=http://localhost:8765/
 
+  grafana-db-setup:
+    environment:
+      GRAFANA_DB_REPAIR_DROP: "true"
+
   grafana:
     restart: "no"
     environment:
