@@ -167,8 +167,8 @@ function renderTable() {
 
 function watchName(w) {
   if (w.poi_id != null) return poiNameCache.get(w.poi_id) || `POI ${w.poi_id}`;
-  // Reservable-targeted watches (no POI scope) carry a reservable object.
-  const r = w.reservable;
+  // Campsite-targeted watches (no POI scope) carry a campsite object.
+  const r = w.campsite;
   if (r?.name) return r.loop ? `${r.loop} / ${r.name}` : r.name;
   return `Watch #${w.id}`;
 }

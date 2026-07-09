@@ -16,7 +16,7 @@ import { hasReservationUrlTemplate, reservationUrlFromTemplate } from './booking
  *
  * @param {object} args
  * @param {'loading'|'success'|'error'} args.state
- * @param {Array<object>}        args.reservables  Rows from BE (id/name/loop/site_type/reservation_url_template).
+ * @param {Array<object>}        args.campsites  Rows from BE (id/name/loop/site_type/reservation_url_template).
  * @param {string|null}          args.error
  * @param {boolean}               args.expanded
  * @param {object|null}           args.selectedDay  Per-day availability row.
@@ -24,7 +24,7 @@ import { hasReservationUrlTemplate, reservationUrlFromTemplate } from './booking
  */
 export function renderSiteList({
   state,
-  reservables,
+  campsites,
   error,
   expanded,
   selectedDay = null,
@@ -33,7 +33,7 @@ export function renderSiteList({
   const availableIds = availableCampsiteIds(selectedDay);
   if (availableIds.length === 0) return '';
   const count = availableCount(selectedDay);
-  const catalogRows = Array.isArray(reservables) ? reservables : [];
+  const catalogRows = Array.isArray(campsites) ? campsites : [];
   const total = catalogRows.length > 0 ? catalogRows.length : null;
 
   if (state === 'loading') {
@@ -49,7 +49,7 @@ export function renderSiteList({
     });
   }
   // success
-  const rows = reservablesForIds(reservables, availableIds);
+  const rows = campsitesForIds(campsites, availableIds);
   const body = expanded
     ? renderRows(rows, { selectedDate: selectedDay?.date || null, selectedEndDate })
     : '';
@@ -86,23 +86,23 @@ function renderHeaderLabel(count, total) {
   return `Available sites (${count})`;
 }
 
-function renderRows(reservables, dateWindow) {
-  if (!Array.isArray(reservables) || reservables.length === 0) {
+function renderRows(campsites, dateWindow) {
+  if (!Array.isArray(campsites) || campsites.length === 0) {
     return '<div class="cg-sites-empty">No available sites for this date.</div>';
   }
   // Stable sort: loop alphabetical, then site name. Loop-less rows fall
   // to the bottom — that's what Aspira's resource-id-only rows look like.
-  const sorted = [...reservables].sort(compareReservable);
+  const sorted = [...campsites].sort(compareCampsite);
   const rows = sorted.map((r) => renderRow(r, dateWindow)).join('');
   return `<ol class="cg-sites-rows">${rows}</ol>`;
 }
 
-function reservablesForIds(reservables, ids) {
-  const byId = new Map((Array.isArray(reservables) ? reservables : []).map((r) => [String(r.id), r]));
-  return ids.map((id) => byId.get(String(id)) || fallbackReservable(id));
+function campsitesForIds(campsites, ids) {
+  const byId = new Map((Array.isArray(campsites) ? campsites : []).map((r) => [String(r.id), r]));
+  return ids.map((id) => byId.get(String(id)) || fallbackCampsite(id));
 }
 
-function fallbackReservable(id) {
+function fallbackCampsite(id) {
   return { id, vendor_id: String(id) };
 }
 
@@ -182,7 +182,7 @@ function descriptionSummary(value) {
   return text.length > 120 ? `${text.slice(0, 117).trim()}...` : text;
 }
 
-function compareReservable(a, b) {
+function compareCampsite(a, b) {
   const al = a.loop || '￿';
   const bl = b.loop || '￿';
   if (al !== bl) return al.localeCompare(bl);
