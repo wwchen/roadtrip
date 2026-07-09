@@ -3,14 +3,22 @@ package ca.floo.roadtrip.service.etl.framework
 import org.jooq.DSLContext
 
 /**
- * Retired legacy import hook for vendor-specific campsite parent resolution.
+ * Post-import parent reconciler for vendor-specific campsite → campground
+ * relationships.
  *
- * The registry section is still named `poi_reservable_joiner` for YAML
- * compatibility, but the removed `reservables` / `reservable_pois` tables are
- * not part of this contract anymore. Canonical campsite ETLs emit
- * `parentVendor` and `parentVendorRefId`; CanonicalCatalogRepo resolves those
- * against `vendor_refs` during upsert, so the orchestrator keeps this phase
- * out of import fan-out.
+ * Canonical campsite ETLs emit `parentVendor` + `parentVendorRefId` and
+ * CanonicalCatalogRepo.upsertCampsite resolves them through `vendor_refs`
+ * to set `campsites.campground_id`. That's the source of truth for the
+ * parent link at write time.
+ *
+ * A joiner is a second, cross-vendor pass over the same schema — with each
+ * adapter carrying vendor-specific SQL predicates that recover the "correct"
+ * parent from vendor payloads. When a joiner's discovered pair disagrees
+ * with the current `campsites.campground_id`, `EtlOrchestrator.runJoiner`
+ * reparents the campsite. Idempotent on already-correct rows; useful when
+ * vendor payloads shift over time (Aspira leaf reassignments, rec.gov
+ * facility moves) or when a future cross-vendor merge exposes a better
+ * parent than the source-of-truth ETL saw at write time.
  */
 interface PoiReservableJoiner {
     /** Adapter identifier; matches the YAML `adapter:` field. */
@@ -19,7 +27,11 @@ interface PoiReservableJoiner {
     /** Find canonical campsite → campground parent pairs for this vendor. */
     fun discoverLinks(ctx: JoinerCtx): List<Link>
 
-    /** Delete stale links in this adapter's provider scope when re-enabled. */
+    /**
+     * Optional adapter hook to prune vendor-scoped rows the discoverLinks
+     * pass no longer emits. Defaults to zero; adapters override when they
+     * own a scope (e.g. one-provider-vs-all-links) that supports pruning.
+     */
     fun sweepStaleLinks(ctx: JoinerCtx): Int = 0
 
     data class Link(

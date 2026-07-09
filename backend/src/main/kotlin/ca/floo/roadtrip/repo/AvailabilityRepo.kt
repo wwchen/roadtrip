@@ -217,6 +217,27 @@ class AvailabilityRepo(
                 limit.coerceIn(1, 1000),
             ).fetch { mapStatusRun(it) }
 
+    // Dates observed in the availability window for a campsite, plus any date
+    // >= today (so the summary still surfaces upcoming cells whose last
+    // observation predates windowStart). One table now, so the "OR" replaces
+    // the old union.
+    fun datesWithSnapshotsInWindow(
+        campsiteId: Long,
+        windowStart: OffsetDateTime,
+        today: LocalDate = LocalDate.now(),
+    ): List<LocalDate> =
+        ctx
+            .selectDistinct(AVAILABILITY.TARGET_DATE)
+            .from(AVAILABILITY)
+            .where(AVAILABILITY.CAMPSITE_ID.eq(campsiteId))
+            .and(
+                AVAILABILITY.LAST_OBSERVED_AT
+                    .ge(windowStart)
+                    .or(AVAILABILITY.TARGET_DATE.ge(today)),
+            ).fetch { it.value1() }
+            .filterNotNull()
+            .sorted()
+
     fun listForRun(
         runId: Long,
         limit: Int = 500,

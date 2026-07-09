@@ -117,7 +117,8 @@ internal class PoiServingRepo(
                        COALESCE(ts.info_url, pf.info_url, cg.links->0->>'url') AS info_url,
                        COALESCE(cg.location, ts.address, pf.address, '{}'::jsonb)::text AS address_text,
                        provider_gvr.payload::text AS provider_ref_text,
-                       NULL::text AS cta_provider_ref_text,
+                       NULLIF(cg.source_payload->'booking_cta_provider_ref', 'null'::jsonb)::text
+                           AS cta_provider_ref_text,
                        ST_AsGeoJSON(p.geom) AS geom_json,
                        COALESCE(to_jsonb(cg), to_jsonb(ts), to_jsonb(pf), '{}'::jsonb)::text AS properties_text
                 FROM pois p
@@ -370,13 +371,3 @@ private fun splitPoiSearchTerms(q: String): List<String> =
 
 private fun escapeLikePattern(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
 
-private fun providerRefShapeSql(payloadExpression: String): String =
-    """
-    (
-      jsonb_exists($payloadExpression, 'recgov_id')
-      OR (jsonb_exists($payloadExpression, 'mapId') AND jsonb_exists($payloadExpression, 'transactionLocationId'))
-      OR jsonb_exists($payloadExpression, 'park_id')
-      OR jsonb_exists($payloadExpression, 'facility_id')
-      OR jsonb_exists($payloadExpression, 'place_id')
-    )
-    """.trimIndent()
