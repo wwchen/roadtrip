@@ -35,6 +35,20 @@ fun DSLContext.cleanCanonicalCatalogFixtures() {
         RESTART IDENTITY CASCADE
         """.trimIndent(),
     )
+    refreshCanonicalCatalogViews()
+}
+
+/**
+ * Publishes the current campground/campsite state through the canonical
+ * materialized views so that read paths going through them (POI detail,
+ * campsite serving, availability lookups) see the freshly-seeded data.
+ *
+ * Seed helpers call this automatically at the end; tests that mutate rows
+ * outside the seed helpers can invoke it directly. Cheap in test-sized data.
+ */
+fun DSLContext.refreshCanonicalCatalogViews() {
+    execute("REFRESH MATERIALIZED VIEW campground_canonical")
+    execute("REFRESH MATERIALIZED VIEW campsite_canonical")
 }
 
 fun DSLContext.seedCatalogPoi(
@@ -52,6 +66,10 @@ fun DSLContext.seedCatalogPoi(
     propertiesJson: String = """{"test":true}""",
     cadenceOverrideSec: Int? = null,
     geomGeoJson: String = """{"type":"Point","coordinates":[$lon,$lat]}""",
+    // Bulk-seed callers can pass `refresh = false` and refresh once at the end
+    // to skip N × REFRESH MATERIALIZED VIEW calls (a hot path for tests that
+    // insert hundreds of POIs to exercise pagination / truncation).
+    refresh: Boolean = true,
 ): CatalogPoiFixture {
     val canonicalType = canonicalPoiType(poiType)
     val poiId =
@@ -70,6 +88,9 @@ fun DSLContext.seedCatalogPoi(
     val catalogId =
         when (canonicalType) {
             "campground" -> {
+                // Inner refresh suppressed: this function refreshes once at
+                // the end, and we don't want the inner seedCampground call to
+                // do a redundant one on top.
                 val campgroundId =
                     seedCampground(
                         name = name,
@@ -81,6 +102,7 @@ fun DSLContext.seedCatalogPoi(
                         country = country,
                         providerRefJson = providerRefJson,
                         sourcePayloadJson = propertiesJson,
+                        refresh = false,
                     )
                 execute("INSERT INTO poi_campgrounds (poi_id, campground_id) VALUES (?, ?)", poiId, campgroundId)
                 campgroundId
@@ -143,6 +165,7 @@ fun DSLContext.seedCatalogPoi(
             else -> error("unsupported canonical poi type: $canonicalType")
         }
 
+    if (refresh) refreshCanonicalCatalogViews()
     return CatalogPoiFixture(poiId = poiId, catalogId = catalogId, poiType = canonicalType)
 }
 
@@ -156,14 +179,15 @@ fun DSLContext.seedCampground(
     country: String? = "US",
     providerRefJson: String? = null,
     sourcePayloadJson: String = "{}",
+    refresh: Boolean = true,
 ): Long {
     val campgroundId =
         fetchOne(
             """
             INSERT INTO campgrounds (
-              name, kind, location, management, source_payload
+              name, kind, data_source, location, management, source_payload
             ) VALUES (
-              ?, ?, jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
+              ?, ?, ?, jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
               jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
               ?::jsonb
             )
@@ -171,6 +195,7 @@ fun DSLContext.seedCampground(
             """.trimIndent(),
             name,
             kind,
+            source,
             region,
             country,
             agency,
@@ -187,10 +212,11 @@ fun DSLContext.seedCampground(
             payloadJson = providerRefJson ?: "{}",
         )
     execute(
-        "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, is_primary) VALUES (?, ?, true)",
+        "INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id) VALUES (?, ?)",
         campgroundId,
         vendorRefId,
     )
+    if (refresh) refreshCanonicalCatalogViews()
     return campgroundId
 }
 
@@ -203,20 +229,22 @@ fun DSLContext.seedCampsite(
     loopName: String? = null,
     providerRefJson: String? = null,
     sourcePayloadJson: String = "{}",
+    refresh: Boolean = true,
 ): Long {
     val campsiteId =
         fetchOne(
             """
             INSERT INTO campsites (
-              campground_id, name, kind, loop_name, source_payload
+              campground_id, name, kind, data_source, loop_name, source_payload
             ) VALUES (
-              ?, ?, ?, ?, ?::jsonb
+              ?, ?, ?, ?, ?, ?::jsonb
             )
             RETURNING id
             """.trimIndent(),
             campgroundId,
             name,
             kind,
+            vendor,
             loopName,
             sourcePayloadJson,
         )!!
@@ -230,10 +258,11 @@ fun DSLContext.seedCampsite(
             payloadJson = providerRefJson ?: "{}",
         )
     execute(
-        "INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id, is_primary) VALUES (?, ?, true)",
+        "INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id) VALUES (?, ?)",
         campsiteId,
         vendorRefId,
     )
+    if (refresh) refreshCanonicalCatalogViews()
     return campsiteId
 }
 

@@ -46,6 +46,11 @@ internal data class PoiDetailRow(
     val geomJson: String,
     val propertiesJson: String,
     val ctaProviderRefJson: String? = null,
+    // Vendors that contributed to this canonical row (from the campground_canonical
+    // materialized view's `member_sources` TEXT[]). Empty for non-campground POIs
+    // and for campgrounds not yet grouped (single-vendor case: match_group_id NULL,
+    // the row is its own group).
+    val memberSources: List<String> = emptyList(),
 )
 
 internal data class PoiSearchHit(
@@ -120,10 +125,11 @@ internal class PoiServingRepo(
                        NULLIF(cg.source_payload->'booking_cta_provider_ref', 'null'::jsonb)::text
                            AS cta_provider_ref_text,
                        ST_AsGeoJSON(p.geom) AS geom_json,
-                       COALESCE(to_jsonb(cg), to_jsonb(ts), to_jsonb(pf), '{}'::jsonb)::text AS properties_text
+                       COALESCE(to_jsonb(cg), to_jsonb(ts), to_jsonb(pf), '{}'::jsonb)::text AS properties_text,
+                       cg.member_sources AS member_sources
                 FROM pois p
                 LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                LEFT JOIN campgrounds cg ON cg.id = pc.campground_id
+                LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
                 LEFT JOIN LATERAL (
                   SELECT vr.vendor, vr.external_id, vr.payload
                   FROM campground_vendor_refs cvr
@@ -131,7 +137,7 @@ internal class PoiServingRepo(
                   WHERE cvr.campground_id = cg.id
                     AND vr.entity_type = 'campground'
                     AND vr.deleted_at IS NULL
-                  ORDER BY cvr.is_primary DESC, cvr.vendor_ref_id ASC
+                  ORDER BY cvr.vendor_ref_id ASC
                   LIMIT 1
                 ) primary_gvr ON true
                 LEFT JOIN LATERAL (
@@ -143,7 +149,6 @@ internal class PoiServingRepo(
                     AND vr.deleted_at IS NULL
                   ORDER BY
                     CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                    cvr.is_primary DESC,
                     cvr.vendor_ref_id ASC
                   LIMIT 1
                 ) provider_gvr ON true
@@ -178,6 +183,7 @@ internal class PoiServingRepo(
             geomJson = r.get("geom_json") as String,
             propertiesJson = r.get("properties_text") as String,
             ctaProviderRefJson = r.get("cta_provider_ref_text") as String?,
+            memberSources = memberSourcesOf(r.get("member_sources")),
         )
     }
 
@@ -219,7 +225,7 @@ internal class PoiServingRepo(
                            COALESCE(cg.location->>'region', ts.region, pf.region) AS region
                     FROM pois p
                     LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                    LEFT JOIN campgrounds cg ON cg.id = pc.campground_id
+                    LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
                     LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
                     LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
                     LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
@@ -326,7 +332,7 @@ internal class PoiServingRepo(
                                ) AS rn
                         FROM pois p
                         LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
-                        LEFT JOIN campgrounds cg ON cg.id = pc.campground_id
+                        LEFT JOIN campground_canonical cg ON cg.id = pc.campground_id
                         WHERE p.deleted_at IS NULL
                           AND p.poi_type = ?
                           AND p.geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
@@ -370,3 +376,15 @@ private fun splitPoiSearchTerms(q: String): List<String> =
         .filter { it.isNotEmpty() }
 
 private fun escapeLikePattern(s: String): String = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+// jOOQ decodes Postgres TEXT[] into java.sql.Array (via Object[] payload) for
+// dynamic queries. Non-campground detail rows hit the LEFT JOIN's null side and
+// arrive here as null. Normalize both to List<String>.
+private fun memberSourcesOf(value: Any?): List<String> =
+    when (value) {
+        null -> emptyList()
+        is Array<*> -> value.mapNotNull { it?.toString() }
+        is java.sql.Array -> memberSourcesOf(value.array)
+        is Collection<*> -> value.mapNotNull { it?.toString() }
+        else -> emptyList()
+    }

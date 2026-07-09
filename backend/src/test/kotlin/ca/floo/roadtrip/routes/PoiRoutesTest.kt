@@ -3,6 +3,7 @@ package ca.floo.roadtrip.routes
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.refreshCanonicalCatalogViews
 import ca.floo.roadtrip.repo.seedCatalogPoi
 import io.ktor.client.request.get
 import io.ktor.client.request.post
@@ -602,6 +603,10 @@ class PoiRoutesTest : SharedDbTest() {
         // the test focused on the serving path. Geometry goes through
         // ST_SetSRID(ST_GeomFromGeoJSON(...), 4326) so the SRID matches the
         // pois.geom column declaration.
+        //
+        // Bulk-seed: skip the per-POI matview refresh (2005-row tests choke
+        // on it) and do one refresh at the end so PoiServingRepo can read
+        // the freshly-seeded rows through campground_canonical.
         for (r in rows) {
             ctx.seedCatalogPoi(
                 sourceId = r.sourceId,
@@ -614,7 +619,9 @@ class PoiRoutesTest : SharedDbTest() {
                 propertiesJson = r.properties,
                 geomGeoJson = r.geomGeoJson,
                 subcategory = r.unitName,
+                refresh = false,
             )
         }
+        ctx.refreshCanonicalCatalogViews()
     }
 }

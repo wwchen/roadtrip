@@ -24,7 +24,7 @@ class AspiraCampsiteParentJoiner : CampsiteParentJoiner {
                 JOIN vendor_refs site_ref
                   ON site_ref.id = cvr.vendor_ref_id
                 JOIN campground_vendor_refs cgvr
-                  ON cgvr.is_primary
+                  ON TRUE
                 JOIN vendor_refs campground_ref
                   ON campground_ref.id = cgvr.vendor_ref_id
                 JOIN campgrounds cg

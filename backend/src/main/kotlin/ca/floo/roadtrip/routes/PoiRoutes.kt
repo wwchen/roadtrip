@@ -366,7 +366,7 @@ internal fun poiDetailFeature(
             PoiDetailPropertiesSchema(
                 source = r.source,
                 sourceId = r.sourceId,
-                dataSource = r.source,
+                sources = r.memberSources,
                 availabilityProvider = r.providerSource,
                 category = r.category,
                 subcategory = r.subcategory,

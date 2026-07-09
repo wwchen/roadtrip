@@ -156,15 +156,21 @@ jobs:
       # auth + WAF-shaped fetches that don't fit here); this row gives the
       # FE a Banff/Parks-Canada-shaped Aspira pin which matches what the
       # smoke clicks on. Fetch + import remain exercisable locally via Tilt.
+      #
+      # Post-V39 shape: `campgrounds.data_source` is NOT NULL, `is_primary` is
+      # gone from `campground_vendor_refs`, and read paths (PoiServingRepo)
+      # serve through `campground_canonical` — so the matview needs a refresh
+      # after the insert or the FE gets an empty bbox.
       - name: Seed canonical catalog with smoke fixture
         run: |
           PGPASSWORD=roadtrip psql -h localhost -U roadtrip -d roadtrip <<'SQL'
           WITH campground AS (
               INSERT INTO campgrounds (
-                  name, kind, location, management, reservation_url, source_payload
+                  name, kind, data_source, location, management, reservation_url, source_payload
               ) VALUES (
                   'Tunnel Mountain - Village 1',
                   'federal',
+                  'aspira-pc-pins',
                   '{"region":"AB","country":"CA"}'::jsonb,
                   '{"agency":"Parks Canada"}'::jsonb,
                   'https://reservation.pc.gc.ca/',
@@ -186,8 +192,8 @@ jobs:
               RETURNING id
           ),
           linked_vendor_ref AS (
-              INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, is_primary)
-              SELECT campground.id, vendor_ref.id, true
+              INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id)
+              SELECT campground.id, vendor_ref.id
               FROM campground, vendor_ref
           ),
           poi AS (
@@ -203,6 +209,8 @@ jobs:
           INSERT INTO poi_campgrounds (poi_id, campground_id)
           SELECT poi.id, campground.id
           FROM poi, campground;
+          REFRESH MATERIALIZED VIEW campground_canonical;
+          REFRESH MATERIALIZED VIEW campsite_canonical;
           SQL
 
       # Chromium is a fixed-version (~150MB) download the install task otherwise

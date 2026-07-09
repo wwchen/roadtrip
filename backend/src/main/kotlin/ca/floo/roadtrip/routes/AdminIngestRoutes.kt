@@ -1,5 +1,7 @@
 package ca.floo.roadtrip.routes
 
+import ca.floo.roadtrip.models.api.CatalogMatchRunStats
+import ca.floo.roadtrip.models.api.EXAMPLE_CATALOG_MATCH_RUN
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_NOT_FOUND_BAD_ID
 import ca.floo.roadtrip.models.api.EXAMPLE_ERR_TARGET_BUSY
@@ -279,7 +281,31 @@ fun Route.adminIngestRoutes(
             call.respondAdminJson(statusByTarget(readRepo, controller.knownTargets()))
         }
     }
+
+    // Catalog-match stage lives under a distinct /api/admin/etl prefix
+    // because it isn't a per-target run — it's the cross-vendor identity
+    // stage that follows any campsite-data run. Kept in the same file so
+    // one auth boundary (the /api/admin/* Cloudflare rule) covers both.
+    post(CATALOG_MATCH_ADMIN_PATH, {
+        tags = listOf("admin")
+        summary = "Run the catalog-match stage (matcher + canonical refresh + representative re-point)"
+        response {
+            code(HttpStatusCode.OK) {
+                description = "Match + refresh + re-point completed; body carries combined stats"
+                body<CatalogMatchRunStats> {
+                    mediaTypes(ContentType.Application.Json)
+                    example("stats") { value = EXAMPLE_CATALOG_MATCH_RUN }
+                }
+            }
+        }
+    }) {
+        val stats = controller.etl.runCatalogMatch()
+        call.respondAdminJson(stats)
+    }
 }
+
+/** Admin path for the manual catalog-match trigger. */
+const val CATALOG_MATCH_ADMIN_PATH = "/api/admin/etl/catalog-match"
 
 private suspend fun io.ktor.server.routing.RoutingContext.runOne(
     controller: IngestController,

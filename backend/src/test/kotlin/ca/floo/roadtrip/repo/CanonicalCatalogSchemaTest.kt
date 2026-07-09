@@ -61,6 +61,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "connections",
                 "contact",
                 "created_at",
+                "data_source",
                 "default_campsite_schedule",
                 "deleted_at",
                 "has_pull_through_sites",
@@ -70,12 +71,14 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "location",
                 "long_description",
                 "management",
+                "match_group_id",
                 "max_rv_length",
                 "max_trailer_length",
                 "medium_description",
                 "metadata",
                 "name",
                 "photos",
+                "preferred_availability_source",
                 "price",
                 "reservation_url",
                 "short_description",
@@ -97,6 +100,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "ada_accessible",
                 "campground_id",
                 "created_at",
+                "data_source",
                 "deleted_at",
                 "driveway_length",
                 "electric_hookups",
@@ -108,6 +112,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "latitude",
                 "longitude",
                 "loop_name",
+                "match_group_id",
                 "max_cars",
                 "max_people",
                 "max_rv_length",
@@ -350,6 +355,168 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
             newColumns,
         )
     }
+
+    @Test
+    fun `campground and campsite match tables exist with required columns`() {
+        assertEquals(
+            listOf(
+                "campground_a_id",
+                "campground_b_id",
+                "created_at",
+                "heuristic",
+                "id",
+                "updated_at",
+            ),
+            columnNames("campground_matches"),
+        )
+        assertEquals(
+            listOf(
+                "campsite_a_id",
+                "campsite_b_id",
+                "created_at",
+                "heuristic",
+                "id",
+                "updated_at",
+            ),
+            columnNames("campsite_matches"),
+        )
+
+        // Required constraints on both match tables: ordered pairs, jsonb-object
+        // heuristic, and a unique index on the ordered pair.
+        val matchConstraints =
+            ctx
+                .fetch(
+                    """
+                    SELECT table_name || '.' || constraint_name AS ref
+                    FROM information_schema.table_constraints
+                    WHERE table_schema = 'public'
+                      AND table_name IN ('campground_matches', 'campsite_matches')
+                      AND constraint_name IN (
+                        'campground_matches_order_check',
+                        'campground_matches_heuristic_check',
+                        'campground_matches_pair_uidx',
+                        'campsite_matches_order_check',
+                        'campsite_matches_heuristic_check',
+                        'campsite_matches_pair_uidx'
+                      )
+                    ORDER BY ref
+                    """.trimIndent(),
+                ).map { it.get("ref", String::class.java) }
+
+        assertEquals(
+            listOf(
+                "campground_matches.campground_matches_heuristic_check",
+                "campground_matches.campground_matches_order_check",
+                "campground_matches.campground_matches_pair_uidx",
+                "campsite_matches.campsite_matches_heuristic_check",
+                "campsite_matches.campsite_matches_order_check",
+                "campsite_matches.campsite_matches_pair_uidx",
+            ),
+            matchConstraints,
+        )
+    }
+
+    @Test
+    fun `data_source columns are non-null with non-blank check`() {
+        val dataSourceRows =
+            ctx
+                .fetch(
+                    """
+                    SELECT table_name || ':' || is_nullable AS ref
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND column_name = 'data_source'
+                      AND table_name IN ('campgrounds', 'campsites')
+                    ORDER BY table_name
+                    """.trimIndent(),
+                ).map { it.get("ref", String::class.java) }
+
+        assertEquals(
+            listOf("campgrounds:NO", "campsites:NO"),
+            dataSourceRows,
+        )
+
+        val dataSourceChecks =
+            ctx
+                .fetch(
+                    """
+                    SELECT table_name || '.' || constraint_name AS ref
+                    FROM information_schema.table_constraints
+                    WHERE table_schema = 'public'
+                      AND constraint_type = 'CHECK'
+                      AND constraint_name IN (
+                        'campgrounds_data_source_check',
+                        'campsites_data_source_check'
+                      )
+                    ORDER BY ref
+                    """.trimIndent(),
+                ).map { it.get("ref", String::class.java) }
+
+        assertEquals(
+            listOf(
+                "campgrounds.campgrounds_data_source_check",
+                "campsites.campsites_data_source_check",
+            ),
+            dataSourceChecks,
+        )
+    }
+
+    @Test
+    fun `is_primary columns on vendor ref link tables are gone`() {
+        val remaining =
+            ctx
+                .fetch(
+                    """
+                    SELECT table_name || '.' || column_name AS ref
+                    FROM information_schema.columns
+                    WHERE table_schema = 'public'
+                      AND column_name = 'is_primary'
+                      AND table_name IN ('campground_vendor_refs', 'campsite_vendor_refs')
+                    ORDER BY ref
+                    """.trimIndent(),
+                ).map { it.get("ref", String::class.java) }
+
+        assertEquals(emptyList<String>(), remaining)
+    }
+
+    @Test
+    fun `canonical materialized views exist with unique index on id`() {
+        val matviews =
+            ctx
+                .fetch(
+                    """
+                    SELECT matviewname
+                    FROM pg_matviews
+                    WHERE schemaname = 'public'
+                      AND matviewname IN ('campground_canonical', 'campsite_canonical')
+                    ORDER BY matviewname
+                    """.trimIndent(),
+                ).map { it.get("matviewname", String::class.java) }
+
+        assertEquals(
+            listOf("campground_canonical", "campsite_canonical"),
+            matviews,
+        )
+
+        assertEquals(1, uniqueIdIndexCount("campground_canonical"))
+        assertEquals(1, uniqueIdIndexCount("campsite_canonical"))
+    }
+
+    private fun uniqueIdIndexCount(matview: String): Int =
+        ctx
+            .fetchOne(
+                """
+                SELECT COUNT(*) AS n
+                FROM pg_indexes
+                WHERE schemaname = 'public'
+                  AND tablename = ?
+                  AND indexdef ILIKE 'CREATE UNIQUE INDEX%'
+                  AND indexdef ILIKE '%(id)'
+                """.trimIndent(),
+                matview,
+            )!!
+            .get("n", Number::class.java)
+            .toInt()
 
     private fun columnNames(tableName: String): List<String> =
         ctx
