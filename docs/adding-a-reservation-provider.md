@@ -1,8 +1,8 @@
-# Adding a reservation provider
+# Adding an availability provider
 
 Use this when a new upstream can answer campsite/reservable booking or
-availability questions. If the upstream only adds map pins and has no
-reservation surface, use [adding-a-data-source.md](adding-a-data-source.md)
+availability questions. If the upstream only adds map pins and has no booking
+surface, use [adding-a-data-source.md](adding-a-data-source.md)
 instead.
 
 This is a how-to. The stable architecture contract lives in
@@ -15,7 +15,7 @@ Adding a provider should produce this shape:
 
 ```
 clients/<vendor>/*Client.kt
-service/reservation/adapters/<vendor>/*
+service/availability/provider/adapters/<vendor>/*
 service/api/<Vendor>PoiCtaProvider.kt          # only if POI drawer CTAs apply
 service/etl/vendors/<vendor>/*                 # only if importing catalog data
 models/<area>/*                                # shared DTOs/domain values only
@@ -65,11 +65,11 @@ Add focused client tests with local/fake HTTP responses. Cover success, parser
 edge cases, non-2xx responses, and rate-limit/block responses if the upstream
 has them.
 
-## Step 3 - Add The Reservation Adapter
+## Step 3 - Add The Availability Adapter
 
-Create `service/reservation/adapters/<vendor>/`.
+Create `service/availability/provider/adapters/<vendor>/`.
 
-The adapter implements the reservation-provider port and converts raw upstream
+The adapter implements the availability-provider port and converts raw upstream
 responses into provider-neutral availability observations. Provider-specific
 richness stays inside the adapter unless there is an explicit extension point.
 
@@ -91,7 +91,7 @@ unfinished.
 
 ## Step 4 - Wire The Registry
 
-Wire the adapter through the reservation-provider registry/factory.
+Wire the adapter through the availability-provider registry/factory.
 
 Checklist:
 
@@ -113,7 +113,7 @@ beside the adapter and expose drawer CTA behavior through a vendor-specific
 
 Checklist:
 
-- Add a booking URL helper under `service/reservation/adapters/<vendor>/`.
+- Add a booking URL helper under `service/availability/provider/adapters/<vendor>/`.
 - Add a booking display helper under the same vendor package if labels vary by
   provider or tenant.
 - Add a vendor-specific POI CTA provider if campground-level drawer buttons

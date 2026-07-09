@@ -8,10 +8,10 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.service.reservation.ReservationProvider
-import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import kotlinx.coroutines.runBlocking
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -59,10 +59,10 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
             .get("campground_id", Long::class.java)
 
-    private class NoopRecgovProvider : ReservationProvider {
-        override val id: ReservationProviderId = ReservationProviderId.RECGOV
-        override val capabilities: ReservationProviderCapabilities =
-            ReservationProviderCapabilities(
+    private class NoopRecgovProvider : AvailabilityProvider {
+        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
                 bookingHorizonDays = 180,
@@ -76,10 +76,10 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private open class NoopCampflareProvider : ReservationProvider {
-        override val id: ReservationProviderId = ReservationProviderId.CAMPFLARE
-        override val capabilities: ReservationProviderCapabilities =
-            ReservationProviderCapabilities(
+    private open class NoopCampflareProvider : AvailabilityProvider {
+        override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = false,
                 bookingHorizonDays = 365,
@@ -99,7 +99,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
 
     private fun resolverFor(
         campsitesRepo: CampsiteRepo,
-        providers: Map<String, ReservationProvider> =
+        providers: Map<String, AvailabilityProvider> =
             mapOf(
                 "test" to NoopRecgovProvider(),
                 "federal-campgrounds" to NoopRecgovProvider(),
@@ -109,7 +109,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         DbAvailabilityTargetResolver(
             providerRefs = CampsiteProviderRepo(ctx),
             campsitesRepo = campsitesRepo,
-            reservationProviders = ReservationProviderRegistry(providers),
+            availabilityProviders = AvailabilityProviderRegistry(providers),
             dateResolver = AvailabilityDateResolver(),
         )
 
@@ -170,7 +170,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
 
             assertEquals("site:campflare:upper-pines-site-100", reservable.rid.encode())
             assertEquals(poi, target.parentPoiId)
-            assertEquals(ReservationProviderId.CAMPFLARE, target.provider.id)
+            assertEquals(AvailabilityProviderId.CAMPFLARE, target.provider.id)
             assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef))
         }
 
@@ -222,7 +222,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
                 ).resolve(reservable)!!
 
             assertEquals("site:campflare:upper-pines-site-100", reservable.rid.encode())
-            assertEquals(ReservationProviderId.RECGOV, target.provider.id)
+            assertEquals(AvailabilityProviderId.RECGOV, target.provider.id)
             assertEquals("232447", parentRefKey(target.parentRef))
             assertEquals("site:campflare:upper-pines-site-100", target.catalogRef.rid)
             assertEquals("100", target.catalogRef.vendorId)

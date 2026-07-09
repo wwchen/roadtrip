@@ -6,23 +6,23 @@ import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
-import ca.floo.roadtrip.service.reservation.CatalogReservableRef
-import ca.floo.roadtrip.service.reservation.ReservationProvider
-import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
-import ca.floo.roadtrip.service.reservation.ReservationProviderError
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
+import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
 /** Platform-level outcome of one group's upstream fetch. Derived from the
- *  typed [ReservationProviderError] the adapter throws; provider-agnostic. */
+ *  typed [AvailabilityProviderError] the adapter throws; provider-agnostic. */
 enum class FetchOutcome { OK, RATE_LIMITED, UPSTREAM_5XX, BLOCKED, OTHER }
 
 /** Result of one (provider, parentRef, dateContext) group's fetch.
  *  [window] is null when the group had no future dates and was skipped
  *  (no upstream call, no error). [batch] is non-null iff outcome == OK. */
 internal data class GroupFetchResult(
-    val provider: ReservationProvider,
+    val provider: AvailabilityProvider,
     val parentRef: ProviderRef,
     val dateContext: PoiDateContext,
     val reservables: List<Reservable>,
@@ -31,7 +31,7 @@ internal data class GroupFetchResult(
     val outcome: FetchOutcome,
     val durationMs: Int,
     val error: String?,
-    val providerError: ReservationProviderError? = null,
+    val providerError: AvailabilityProviderError? = null,
 )
 
 internal fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
@@ -44,17 +44,17 @@ internal fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
 
 private fun Reservable.aspiraProviderRefLong(key: String): Long? = (providerRef as? JsonObject)?.get(key)?.jsonPrimitive?.longOrNull
 
-internal fun ReservationProviderError.toFetchOutcome(): FetchOutcome =
+internal fun AvailabilityProviderError.toFetchOutcome(): FetchOutcome =
     when (this) {
-        is ReservationProviderError.RateLimited -> FetchOutcome.RATE_LIMITED
-        is ReservationProviderError.UpstreamBlocked -> FetchOutcome.BLOCKED
-        is ReservationProviderError.UpstreamUnavailable -> FetchOutcome.UPSTREAM_5XX
+        is AvailabilityProviderError.RateLimited -> FetchOutcome.RATE_LIMITED
+        is AvailabilityProviderError.UpstreamBlocked -> FetchOutcome.BLOCKED
+        is AvailabilityProviderError.UpstreamUnavailable -> FetchOutcome.UPSTREAM_5XX
         else -> FetchOutcome.OTHER
     }
 
 internal class CatalogAvailabilityBatcher {
     private data class GroupKey(
-        val provider: ReservationProvider,
+        val provider: AvailabilityProvider,
         val parentRef: ProviderRef,
         val dateContext: PoiDateContext,
     )
@@ -75,7 +75,7 @@ internal class CatalogAvailabilityBatcher {
      */
     fun countFetchGroups(
         targets: List<ResolvedAvailabilityTarget>,
-        windowFor: (PoiDateContext, ReservationProviderCapabilities) -> AvailabilityWindows?,
+        windowFor: (PoiDateContext, AvailabilityProviderCapabilities) -> AvailabilityWindows?,
     ): Int =
         targets
             .map { GroupKey(it.provider, it.parentRef, it.dateContext) }
@@ -84,10 +84,10 @@ internal class CatalogAvailabilityBatcher {
 
     suspend fun fetchByGroup(
         targets: List<ResolvedAvailabilityTarget>,
-        windowFor: (PoiDateContext, ReservationProviderCapabilities) -> AvailabilityWindows?,
+        windowFor: (PoiDateContext, AvailabilityProviderCapabilities) -> AvailabilityWindows?,
         fetch: suspend (
             parentRef: ProviderRef,
-            provider: ReservationProvider,
+            provider: AvailabilityProvider,
             targets: List<ResolvedAvailabilityTarget>,
             windows: AvailabilityWindows,
         ) -> AvailabilityObservationBatch,
@@ -124,7 +124,7 @@ internal class CatalogAvailabilityBatcher {
                         durationMs = elapsedMs(startedNanos),
                         error = null,
                     )
-                } catch (e: ReservationProviderError) {
+                } catch (e: AvailabilityProviderError) {
                     GroupFetchResult(
                         provider = key.provider,
                         parentRef = key.parentRef,

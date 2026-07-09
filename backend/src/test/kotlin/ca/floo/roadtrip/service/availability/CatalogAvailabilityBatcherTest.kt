@@ -8,11 +8,11 @@ import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.service.reservation.CatalogReservableRef
-import ca.floo.roadtrip.service.reservation.ReservationProvider
-import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
-import ca.floo.roadtrip.service.reservation.ReservationProviderError
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
 import kotlinx.coroutines.runBlocking
 import java.time.LocalDate
 import java.time.ZoneOffset
@@ -76,7 +76,7 @@ class CatalogAvailabilityBatcherTest {
         runBlocking {
             val provider = fakeProvider()
             val targets = listOf(resolvedTarget("site:recgov:1", provider, ProviderRef.RecGov("100")))
-            val thrown = ReservationProviderError.RateLimited(RuntimeException("429"))
+            val thrown = AvailabilityProviderError.RateLimited(RuntimeException("429"))
             val results =
                 CatalogAvailabilityBatcher().fetchByGroup(
                     targets,
@@ -86,7 +86,7 @@ class CatalogAvailabilityBatcherTest {
             assertEquals(FetchOutcome.RATE_LIMITED, results[0].outcome)
             assertNull(results[0].batch)
             assertNotNull(results[0].providerError)
-            assertTrue(results[0].providerError is ReservationProviderError.RateLimited)
+            assertTrue(results[0].providerError is AvailabilityProviderError.RateLimited)
             assertEquals(thrown, results[0].providerError)
         }
 
@@ -159,11 +159,11 @@ class CatalogAvailabilityBatcherTest {
 
     // --- fixtures ---
 
-    private fun fakeProvider(): ReservationProvider =
-        object : ReservationProvider {
-            override val id: ReservationProviderId = ReservationProviderId.RECGOV
-            override val capabilities: ReservationProviderCapabilities =
-                ReservationProviderCapabilities(
+    private fun fakeProvider(): AvailabilityProvider =
+        object : AvailabilityProvider {
+            override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+            override val capabilities: AvailabilityProviderCapabilities =
+                AvailabilityProviderCapabilities(
                     supportsAvailability = true,
                     supportsAlerts = true,
                     bookingHorizonDays = 180,
@@ -189,7 +189,7 @@ class CatalogAvailabilityBatcherTest {
 
     private fun resolvedTarget(
         reservableRid: String,
-        provider: ReservationProvider,
+        provider: AvailabilityProvider,
         parentRef: ProviderRef,
         parentPoiId: Long = 1L,
         catalogRef: CatalogReservableRef =

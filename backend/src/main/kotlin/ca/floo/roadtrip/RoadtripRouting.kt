@@ -90,7 +90,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
     val poiAvailabilitySupport =
         PoiAvailabilitySupport(
             providerRefs = runtime.campsiteProviders,
-            reservationProviders = runtime.reservationProviderRegistry,
+            availabilityProviders = runtime.availabilityProviderRegistry,
         )
     routing {
         route("/api/docs") {
@@ -114,7 +114,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
         )
         campsiteRoutes(
             ctx = runtime.ctx,
-            reservationProviders = runtime.reservationProviderRegistry,
+            availabilityProviders = runtime.availabilityProviderRegistry,
             dateResolver = runtime.availabilityDateResolver,
         )
         // Inbound Slack interactivity is only registered when the app is

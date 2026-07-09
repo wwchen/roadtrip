@@ -16,8 +16,8 @@ import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.notification.SlackNotificationServiceImpl
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import io.ktor.client.request.delete
 import io.ktor.client.request.get
 import io.ktor.client.request.patch
@@ -51,7 +51,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
     /**
      * Builds the watch service the routes take. The target resolver is real
      * but backed by an empty provider registry, so POIs without a resolvable
-     * reservation provider produce no poller links — which is fine for the
+     * availability provider produce no poller links — which is fine for the
      * CRUD assertions here (poller membership is exercised in the membership
      * and executor tests).
      */
@@ -61,7 +61,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                reservationProviders = ReservationProviderRegistry(emptyMap()),
+                availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityWatchService(ctx, campsitesRepo, targets)
@@ -75,12 +75,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
      */
     private fun watchServiceWithRecgov(): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = ReservationProviderRegistry(mapOf("test" to FakeRecgovProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeRecgovProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                reservationProviders = registry,
+                availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityWatchService(ctx, campsitesRepo, targets)
@@ -101,7 +101,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 DbAvailabilityTargetResolver(
                     providerRefs = CampsiteProviderRepo(ctx),
                     campsitesRepo = campsitesRepo,
-                    reservationProviders = ReservationProviderRegistry(emptyMap()),
+                    availabilityProviders = AvailabilityProviderRegistry(emptyMap()),
                     dateResolver = AvailabilityDateResolver(),
                 ),
             pois = PoiServingRepo(ctx),
@@ -945,10 +945,10 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
  * never fetches (the watch service only resolves targets, it does not poll),
  * so the availability methods are unsupported.
  */
-private object FakeRecgovProvider : ca.floo.roadtrip.service.reservation.ReservationProvider {
-    override val id = ca.floo.roadtrip.service.reservation.ReservationProviderId.RECGOV
+private object FakeRecgovProvider : ca.floo.roadtrip.service.availability.provider.AvailabilityProvider {
+    override val id = ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId.RECGOV
     override val capabilities =
-        ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities(
+        ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities(
             supportsAvailability = true,
             supportsAlerts = true,
             bookingHorizonDays = 180,

@@ -422,7 +422,7 @@ Minimal v1 path:
    `ProviderRef.ReserveCalifornia(placeId, facilityIds)`.
 3. `ReserveCaliforniaSitesEtl` imports site reservables from captured standard
    facility grids.
-4. `ReserveCaliforniaReservationProvider` fetches `search/grid` per facility
+4. `ReserveCaliforniaAvailabilityProvider` fetches `search/grid` per facility
    and merges unit slices into `AvailabilityObservationBatch`.
 5. `supportsAlerts = false` until rate limits and snapshot behavior are
    validated.

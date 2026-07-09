@@ -7,10 +7,10 @@ import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
-import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraBookingUrl
-import ca.floo.roadtrip.service.reservation.adapters.aspira.AspiraTenants
-import ca.floo.roadtrip.service.reservation.adapters.recgov.RecGovBookingUrl
+import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
+import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraBookingUrl
+import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenants
+import ca.floo.roadtrip.service.availability.provider.adapters.recgov.RecGovBookingUrl
 
 internal class CampsiteCatalogService(
     private val providerRefs: CampsiteProviderRepo,

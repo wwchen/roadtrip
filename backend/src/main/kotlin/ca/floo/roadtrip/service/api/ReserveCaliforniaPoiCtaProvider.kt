@@ -2,8 +2,8 @@ package ca.floo.roadtrip.service.api
 
 import ca.floo.roadtrip.models.api.PoiCtaSchema
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.service.reservation.adapters.reservecalifornia.ReserveCaliforniaBookingDisplay
-import ca.floo.roadtrip.service.reservation.adapters.reservecalifornia.ReserveCaliforniaBookingUrl
+import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaBookingDisplay
+import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia.ReserveCaliforniaBookingUrl
 
 internal object ReserveCaliforniaPoiCtaProvider : PoiCtaProvider {
     override fun bookingSystem(

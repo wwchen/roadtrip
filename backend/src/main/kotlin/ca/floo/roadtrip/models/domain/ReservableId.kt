@@ -12,8 +12,8 @@ package ca.floo.roadtrip.models.domain
  *
  * Type is a [ReservableType] (closed enum). Vendor is a string here at the
  * model layer — at the service boundary, callers map it to a
- * `ReservationProviderId` for adapter dispatch. Keeping vendor as a string at
- * the model layer avoids a circular dependency on `service/reservation/` and
+ * `AvailabilityProviderId` for adapter dispatch. Keeping vendor as a string at
+ * the model layer avoids a circular dependency on `service/availability/provider/` and
  * lets unknown-vendor strings round-trip without rejection.
  *
  * Vendor IDs are opaque to this parser. They may contain colons (split on

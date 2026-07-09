@@ -6,12 +6,12 @@ import ca.floo.roadtrip.models.domain.ReservableId
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.CampsiteRepo
-import ca.floo.roadtrip.service.reservation.CatalogReservableRef
-import ca.floo.roadtrip.service.reservation.ProviderRefParser
-import ca.floo.roadtrip.service.reservation.ReservationProvider
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
-import ca.floo.roadtrip.service.reservation.reservationProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.ProviderRefParser
+import ca.floo.roadtrip.service.availability.provider.availabilityProviderId
 
 /**
  * Resolves a reservable (by rid, or from an already-loaded [Reservable]) to the
@@ -22,24 +22,24 @@ import ca.floo.roadtrip.service.reservation.reservationProviderId
 internal interface AvailabilityTargetResolver {
     /** Resolve by rid, throwing [AvailabilityServiceError.NotFound] when the
      *  reservable is unknown and [AvailabilityServiceError.UnknownCampground]
-     *  when it has no resolvable reservation provider. */
+     *  when it has no resolvable availability provider. */
     fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget
 
     /** Resolve an already-loaded reservable, or null when it has no resolvable
-     *  reservation provider. */
+     *  availability provider. */
     fun resolve(reservable: Reservable): ResolvedAvailabilityTarget?
 }
 
 internal class DbAvailabilityTargetResolver(
     private val providerRefs: CampsiteProviderRepo,
     private val campsitesRepo: CampsiteRepo,
-    private val reservationProviders: ReservationProviderRegistry,
+    private val availabilityProviders: AvailabilityProviderRegistry,
     private val dateResolver: AvailabilityDateResolver,
 ) : AvailabilityTargetResolver {
     private data class ParentCandidate(
         val poiId: Long,
         val row: CampsiteProviderRefRow,
-        val provider: ReservationProvider,
+        val provider: AvailabilityProvider,
         val ref: ProviderRef,
     )
 
@@ -78,7 +78,7 @@ internal class DbAvailabilityTargetResolver(
         row: CampsiteProviderRefRow,
     ): ParentCandidate? {
         val ref = ProviderRefParser.parse(row.providerRefJson) ?: return null
-        val provider = reservationProviders.forPoi(row, ref) ?: return null
+        val provider = availabilityProviders.forPoi(row, ref) ?: return null
         return ParentCandidate(
             poiId = poiId,
             row = row,
@@ -89,7 +89,7 @@ internal class DbAvailabilityTargetResolver(
 
     private fun catalogRefFor(
         reservable: Reservable,
-        providerId: ReservationProviderId,
+        providerId: AvailabilityProviderId,
     ): CatalogReservableRef {
         val fallback = reservable.toCatalogReservableRef()
         val ref =
@@ -97,7 +97,7 @@ internal class DbAvailabilityTargetResolver(
                 .findCampsiteProviderRefs(reservable.id)
                 .asSequence()
                 .mapNotNull { ProviderRefParser.parse(it.providerRefJson) }
-                .firstOrNull { it.reservationProviderId() == providerId }
+                .firstOrNull { it.availabilityProviderId() == providerId }
                 ?: return fallback
         return ref.toCatalogReservableRef(canonicalRid = reservable.rid.encode(), fallback = fallback)
     }

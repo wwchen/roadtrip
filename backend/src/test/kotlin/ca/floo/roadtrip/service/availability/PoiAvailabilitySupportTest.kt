@@ -7,10 +7,10 @@ import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.service.reservation.ReservationProvider
-import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import java.time.LocalDate
@@ -43,8 +43,8 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
         val support =
             PoiAvailabilitySupport(
                 providerRefs = CampsiteProviderRepo(ctx),
-                reservationProviders =
-                    ReservationProviderRegistry(
+                availabilityProviders =
+                    AvailabilityProviderRegistry(
                         mapOf(
                             "campflare" to DecliningCampflareProvider(),
                             "federal-campgrounds" to NoopRecgovProvider(),
@@ -84,10 +84,10 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
         )
     }
 
-    private class NoopRecgovProvider : ReservationProvider {
-        override val id: ReservationProviderId = ReservationProviderId.RECGOV
-        override val capabilities: ReservationProviderCapabilities =
-            ReservationProviderCapabilities(
+    private class NoopRecgovProvider : AvailabilityProvider {
+        override val id: AvailabilityProviderId = AvailabilityProviderId.RECGOV
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
                 bookingHorizonDays = 180,
@@ -101,10 +101,10 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private class DecliningCampflareProvider : ReservationProvider {
-        override val id: ReservationProviderId = ReservationProviderId.CAMPFLARE
-        override val capabilities: ReservationProviderCapabilities =
-            ReservationProviderCapabilities(
+    private class DecliningCampflareProvider : AvailabilityProvider {
+        override val id: AvailabilityProviderId = AvailabilityProviderId.CAMPFLARE
+        override val capabilities: AvailabilityProviderCapabilities =
+            AvailabilityProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = false,
                 bookingHorizonDays = 365,

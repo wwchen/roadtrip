@@ -8,7 +8,7 @@ import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.api.AvailabilityLoader
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -21,7 +21,7 @@ internal class CampsiteAvailabilityComposer(
     private val targets: AvailabilityTargetResolver,
     private val dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availability: AvailabilityRepo? = null,
-    private val snapshotFreshnessTtl: (ReservationProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
+    private val snapshotFreshnessTtl: (AvailabilityProviderId) -> Duration = ::defaultSnapshotFreshnessTtl,
 ) {
     private val availabilityLoader = AvailabilityLoader(availability)
 
@@ -100,13 +100,13 @@ internal class CampsiteAvailabilityComposer(
     }
 }
 
-internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Duration =
+internal fun defaultSnapshotFreshnessTtl(providerId: AvailabilityProviderId): Duration =
     when (providerId) {
-        ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
-        ReservationProviderId.CAMPFLARE -> ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl
-        ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
-        ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
-        ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.CAMPFLARE -> ApiCacheEntity.CAMPFLARE_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY.defaultTtl
+        AvailabilityProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
     }
 
 private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoader.TargetReservable =
@@ -116,7 +116,7 @@ private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoade
     )
 
 private fun availabilityMetadata(
-    providerId: ReservationProviderId,
+    providerId: AvailabilityProviderId,
     ref: ProviderRef,
     reservableId: String? = null,
 ): AvailabilityLoader.Metadata =

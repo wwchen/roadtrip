@@ -128,7 +128,7 @@ internal class AvailabilityPollExecutor(
         // and never drifts between the two.
         val windowFor: (
             ca.floo.roadtrip.models.availability.PoiDateContext,
-            ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities,
+            ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities,
         ) -> ca.floo.roadtrip.models.availability.AvailabilityWindows? = { context, caps ->
             val resolvedWindow =
                 dateResolver.resolvePollingWindow(

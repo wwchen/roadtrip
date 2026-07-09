@@ -11,10 +11,10 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
-import ca.floo.roadtrip.service.reservation.ReservationProvider
-import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
-import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
+import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -57,12 +57,12 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
     private fun service(): AvailabilityWatchService {
         val campsitesRepo = CampsiteRepo(ctx)
-        val registry = ReservationProviderRegistry(mapOf("test" to FakeProvider))
+        val registry = AvailabilityProviderRegistry(mapOf("test" to FakeProvider))
         val targets =
             DbAvailabilityTargetResolver(
                 providerRefs = CampsiteProviderRepo(ctx),
                 campsitesRepo = campsitesRepo,
-                reservationProviders = registry,
+                availabilityProviders = registry,
                 dateResolver = AvailabilityDateResolver(),
             )
         return AvailabilityWatchService(ctx, campsitesRepo, targets)
@@ -174,10 +174,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
         assertEquals(false, pollers.findById(pollerId)!!.active)
     }
 
-    private object FakeProvider : ReservationProvider {
-        override val id = ReservationProviderId.RECGOV
+    private object FakeProvider : AvailabilityProvider {
+        override val id = AvailabilityProviderId.RECGOV
         override val capabilities =
-            ReservationProviderCapabilities(
+            AvailabilityProviderCapabilities(
                 supportsAvailability = true,
                 supportsAlerts = true,
                 bookingHorizonDays = 180,
