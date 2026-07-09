@@ -16,7 +16,9 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                       AND table_name IN (
                         'pois',
                         'campgrounds',
+                        'campground_matches',
                         'campsites',
+                        'campsite_matches',
                         'vendor_refs',
                         'campground_vendor_refs',
                         'campsite_vendor_refs',
@@ -32,8 +34,10 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
 
         assertEquals(
             listOf(
+                "campground_matches",
                 "campground_vendor_refs",
                 "campgrounds",
+                "campsite_matches",
                 "campsite_vendor_refs",
                 "campsites",
                 "planet_fitness_locations",
@@ -63,6 +67,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "created_at",
                 "default_campsite_schedule",
                 "deleted_at",
+                "etl_source",
                 "has_pull_through_sites",
                 "id",
                 "kind",
@@ -101,6 +106,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "driveway_length",
                 "electric_hookups",
                 "equipment",
+                "etl_source",
                 "firepit",
                 "id",
                 "kind",
@@ -259,6 +265,58 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 .toInt()
 
         assertEquals(1, constraintCount)
+    }
+
+    @Test
+    fun `catalog rows carry etl source and matches carry heuristic evidence`() {
+        val campgroundColumns = columnNames("campground_matches")
+        val campsiteColumns = columnNames("campsite_matches")
+
+        assertEquals(
+            listOf(
+                "campground_id",
+                "created_at",
+                "id",
+                "match_heuristic",
+                "matched_campground_id",
+                "updated_at",
+            ),
+            campgroundColumns,
+        )
+        assertEquals(
+            listOf(
+                "campsite_id",
+                "created_at",
+                "id",
+                "match_heuristic",
+                "matched_campsite_id",
+                "updated_at",
+            ),
+            campsiteColumns,
+        )
+
+        val primaryVendorRefIndexes =
+            ctx
+                .fetch(
+                    """
+                    SELECT indexname
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND indexname IN (
+                        'campground_vendor_refs_primary_vendor_ref_uidx',
+                        'campsite_vendor_refs_primary_vendor_ref_uidx'
+                      )
+                    ORDER BY indexname
+                    """.trimIndent(),
+                ).map { it.get("indexname", String::class.java) }
+
+        assertEquals(
+            listOf(
+                "campground_vendor_refs_primary_vendor_ref_uidx",
+                "campsite_vendor_refs_primary_vendor_ref_uidx",
+            ),
+            primaryVendorRefIndexes,
+        )
     }
 
     @Test

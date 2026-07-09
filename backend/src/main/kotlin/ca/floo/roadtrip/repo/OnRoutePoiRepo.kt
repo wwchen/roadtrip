@@ -60,7 +60,7 @@ internal class OnRoutePoiRepo(
                           p.poi_type AS category,
                           cg.kind AS subcategory,
                           cg.management->>'agency' AS agency,
-                          COALESCE(gvr.vendor, p.poi_type) AS source,
+                          COALESCE(cg.etl_source, gvr.vendor, p.poi_type) AS source,
                           COALESCE(gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
                           COALESCE(gvr.payload, '{}'::jsonb) AS provider_ref
                         FROM pois p
