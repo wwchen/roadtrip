@@ -271,6 +271,7 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
     fun `catalog rows carry etl source and matches carry heuristic evidence`() {
         val campgroundColumns = columnNames("campground_matches")
         val campsiteColumns = columnNames("campsite_matches")
+        val materializedViewColumns = materializedViewColumnNames("catalog_match_rows")
 
         assertEquals(
             listOf(
@@ -294,6 +295,26 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
             ),
             campsiteColumns,
         )
+        assertEquals(
+            listOf(
+                "entity_type",
+                "match_id",
+                "left_record_id",
+                "left_etl_source",
+                "left_name",
+                "left_primary_vendor",
+                "left_primary_external_id",
+                "right_record_id",
+                "right_etl_source",
+                "right_name",
+                "right_primary_vendor",
+                "right_primary_external_id",
+                "match_heuristic",
+                "match_created_at",
+                "match_updated_at",
+            ),
+            materializedViewColumns,
+        )
 
         val primaryVendorRefIndexes =
             ctx
@@ -316,6 +337,57 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "campsite_vendor_refs_primary_vendor_ref_uidx",
             ),
             primaryVendorRefIndexes,
+        )
+
+        val materializedViewCount =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT COUNT(*) AS n
+                    FROM pg_matviews
+                    WHERE schemaname = 'public'
+                      AND matviewname = 'catalog_match_rows'
+                    """.trimIndent(),
+                )!!
+                .get("n", Number::class.java)
+                .toInt()
+
+        assertEquals(1, materializedViewCount)
+    }
+
+    @Test
+    fun `catalog match materialized view is refreshable`() {
+        ctx.execute("REFRESH MATERIALIZED VIEW catalog_match_rows")
+
+        val rows =
+            ctx
+                .fetchOne("SELECT COUNT(*) AS n FROM catalog_match_rows")!!
+                .get("n", Number::class.java)
+                .toInt()
+
+        assertEquals(0, rows)
+    }
+
+    @Test
+    fun `catalog match materialized view has indexes`() {
+        val indexes =
+            ctx
+                .fetch(
+                    """
+                    SELECT indexname
+                    FROM pg_indexes
+                    WHERE schemaname = 'public'
+                      AND tablename = 'catalog_match_rows'
+                    ORDER BY indexname
+                    """.trimIndent(),
+                ).map { it.get("indexname", String::class.java) }
+
+        assertEquals(
+            listOf(
+                "catalog_match_rows_etl_source_idx",
+                "catalog_match_rows_uidx",
+            ),
+            indexes,
         )
     }
 
@@ -420,5 +492,23 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 ORDER BY column_name
                 """.trimIndent(),
                 tableName,
+            ).map { it.get("column_name", String::class.java) }
+
+    private fun materializedViewColumnNames(viewName: String): List<String> =
+        ctx
+            .fetch(
+                """
+                SELECT a.attname AS column_name
+                FROM pg_attribute a
+                JOIN pg_class c ON c.oid = a.attrelid
+                JOIN pg_namespace n ON n.oid = c.relnamespace
+                WHERE n.nspname = 'public'
+                  AND c.relkind = 'm'
+                  AND c.relname = ?
+                  AND a.attnum > 0
+                  AND NOT a.attisdropped
+                ORDER BY a.attnum
+                """.trimIndent(),
+                viewName,
             ).map { it.get("column_name", String::class.java) }
 }

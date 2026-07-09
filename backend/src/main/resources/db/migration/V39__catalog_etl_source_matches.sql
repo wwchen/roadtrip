@@ -101,3 +101,78 @@ CREATE UNIQUE INDEX campsite_matches_pair_uidx
 
 CREATE INDEX campsite_matches_matched_idx
   ON campsite_matches (matched_campsite_id);
+
+CREATE MATERIALIZED VIEW catalog_match_rows AS
+SELECT
+  'campground'::text                 AS entity_type,
+  cm.id                              AS match_id,
+  cm.campground_id                   AS left_record_id,
+  left_cg.etl_source                 AS left_etl_source,
+  left_cg.name                       AS left_name,
+  left_primary_ref.vendor            AS left_primary_vendor,
+  left_primary_ref.external_id       AS left_primary_external_id,
+  cm.matched_campground_id           AS right_record_id,
+  right_cg.etl_source                AS right_etl_source,
+  right_cg.name                      AS right_name,
+  right_primary_ref.vendor           AS right_primary_vendor,
+  right_primary_ref.external_id      AS right_primary_external_id,
+  cm.match_heuristic                 AS match_heuristic,
+  cm.created_at                      AS match_created_at,
+  cm.updated_at                      AS match_updated_at
+FROM campground_matches cm
+JOIN campgrounds left_cg ON left_cg.id = cm.campground_id
+JOIN campgrounds right_cg ON right_cg.id = cm.matched_campground_id
+LEFT JOIN campground_vendor_refs left_primary_cvr
+  ON left_primary_cvr.campground_id = left_cg.id
+ AND left_primary_cvr.is_primary
+LEFT JOIN vendor_refs left_primary_ref
+  ON left_primary_ref.id = left_primary_cvr.vendor_ref_id
+ AND left_primary_ref.deleted_at IS NULL
+LEFT JOIN campground_vendor_refs right_primary_cvr
+  ON right_primary_cvr.campground_id = right_cg.id
+ AND right_primary_cvr.is_primary
+LEFT JOIN vendor_refs right_primary_ref
+  ON right_primary_ref.id = right_primary_cvr.vendor_ref_id
+ AND right_primary_ref.deleted_at IS NULL
+WHERE left_cg.deleted_at IS NULL
+  AND right_cg.deleted_at IS NULL
+UNION ALL
+SELECT
+  'campsite'::text                   AS entity_type,
+  cm.id                              AS match_id,
+  cm.campsite_id                     AS left_record_id,
+  left_c.etl_source                  AS left_etl_source,
+  left_c.name                        AS left_name,
+  left_primary_ref.vendor            AS left_primary_vendor,
+  left_primary_ref.external_id       AS left_primary_external_id,
+  cm.matched_campsite_id             AS right_record_id,
+  right_c.etl_source                 AS right_etl_source,
+  right_c.name                       AS right_name,
+  right_primary_ref.vendor           AS right_primary_vendor,
+  right_primary_ref.external_id      AS right_primary_external_id,
+  cm.match_heuristic                 AS match_heuristic,
+  cm.created_at                      AS match_created_at,
+  cm.updated_at                      AS match_updated_at
+FROM campsite_matches cm
+JOIN campsites left_c ON left_c.id = cm.campsite_id
+JOIN campsites right_c ON right_c.id = cm.matched_campsite_id
+LEFT JOIN campsite_vendor_refs left_primary_cvr
+  ON left_primary_cvr.campsite_id = left_c.id
+ AND left_primary_cvr.is_primary
+LEFT JOIN vendor_refs left_primary_ref
+  ON left_primary_ref.id = left_primary_cvr.vendor_ref_id
+ AND left_primary_ref.deleted_at IS NULL
+LEFT JOIN campsite_vendor_refs right_primary_cvr
+  ON right_primary_cvr.campsite_id = right_c.id
+ AND right_primary_cvr.is_primary
+LEFT JOIN vendor_refs right_primary_ref
+  ON right_primary_ref.id = right_primary_cvr.vendor_ref_id
+ AND right_primary_ref.deleted_at IS NULL
+WHERE left_c.deleted_at IS NULL
+  AND right_c.deleted_at IS NULL;
+
+CREATE UNIQUE INDEX catalog_match_rows_uidx
+  ON catalog_match_rows (entity_type, left_record_id, right_record_id);
+
+CREATE INDEX catalog_match_rows_etl_source_idx
+  ON catalog_match_rows (left_etl_source, right_etl_source);

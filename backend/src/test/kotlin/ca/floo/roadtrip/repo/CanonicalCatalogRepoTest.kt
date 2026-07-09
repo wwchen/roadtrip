@@ -154,6 +154,32 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         val heuristicJson = Json.parseToJsonElement(heuristic).jsonObject
         assertEquals("shared_vendor_ref", heuristicJson["kind"]?.jsonPrimitive?.content)
         assertEquals("recgov-232447", heuristicJson["external_id"]?.jsonPrimitive?.content)
+
+        ctx.execute("REFRESH MATERIALIZED VIEW catalog_match_rows")
+        val materializedMatch =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT left_etl_source,
+                           left_primary_vendor,
+                           left_primary_external_id,
+                           right_etl_source,
+                           right_primary_vendor,
+                           right_primary_external_id,
+                           match_heuristic->>'external_id' AS matched_ref
+                    FROM catalog_match_rows
+                    WHERE entity_type = 'campground'
+                    """.trimIndent(),
+                )
+
+        assertNotNull(materializedMatch)
+        assertEquals("federal-campgrounds", materializedMatch.get("left_etl_source", String::class.java))
+        assertEquals("federal-campgrounds", materializedMatch.get("left_primary_vendor", String::class.java))
+        assertEquals("recgov-232447", materializedMatch.get("left_primary_external_id", String::class.java))
+        assertEquals("campflare-campgrounds", materializedMatch.get("right_etl_source", String::class.java))
+        assertEquals("campflare", materializedMatch.get("right_primary_vendor", String::class.java))
+        assertEquals("upper-pines-campground-447", materializedMatch.get("right_primary_external_id", String::class.java))
+        assertEquals("recgov-232447", materializedMatch.get("matched_ref", String::class.java))
     }
 
     @Test
@@ -321,6 +347,32 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         val heuristicJson = Json.parseToJsonElement(heuristic).jsonObject
         assertEquals("shared_vendor_ref", heuristicJson["kind"]?.jsonPrimitive?.content)
         assertEquals("100", heuristicJson["external_id"]?.jsonPrimitive?.content)
+
+        ctx.execute("REFRESH MATERIALIZED VIEW catalog_match_rows")
+        val materializedMatch =
+            ctx
+                .fetchOne(
+                    """
+                    SELECT left_etl_source,
+                           left_primary_vendor,
+                           left_primary_external_id,
+                           right_etl_source,
+                           right_primary_vendor,
+                           right_primary_external_id,
+                           match_heuristic->>'external_id' AS matched_ref
+                    FROM catalog_match_rows
+                    WHERE entity_type = 'campsite'
+                    """.trimIndent(),
+                )
+
+        assertNotNull(materializedMatch)
+        assertEquals("federal-campsites", materializedMatch.get("left_etl_source", String::class.java))
+        assertEquals("recgov", materializedMatch.get("left_primary_vendor", String::class.java))
+        assertEquals("100", materializedMatch.get("left_primary_external_id", String::class.java))
+        assertEquals("campflare-campsites", materializedMatch.get("right_etl_source", String::class.java))
+        assertEquals("campflare", materializedMatch.get("right_primary_vendor", String::class.java))
+        assertEquals("upper-pines-site-100", materializedMatch.get("right_primary_external_id", String::class.java))
+        assertEquals("100", materializedMatch.get("matched_ref", String::class.java))
     }
 
     @Test

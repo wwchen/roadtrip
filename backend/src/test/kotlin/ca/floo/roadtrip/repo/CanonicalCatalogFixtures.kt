@@ -37,6 +37,7 @@ fun DSLContext.cleanCanonicalCatalogFixtures() {
         RESTART IDENTITY CASCADE
         """.trimIndent(),
     )
+    execute("REFRESH MATERIALIZED VIEW catalog_match_rows")
 }
 
 fun DSLContext.seedCatalogPoi(
