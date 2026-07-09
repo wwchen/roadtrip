@@ -35,37 +35,21 @@ services:
       - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
       - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
+      # Read by postgres-init/10-grafana-reader.sh on first init to create the
+      # grafana_reader role. Grafana's datasource provisioning uses the same
+      # env vars with the same defaults; keep both in sync. Grants against
+      # this role are owned by Flyway (R__grafana_reader_grants.sql), so this
+      # only handles the one thing schema migrations can't: the password.
+      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
+      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
     volumes:
       - ${POSTGRES_DATA:-$HOME/.roadtrip-map/postgres}:/var/lib/postgresql/data
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-roadtrip} -d $${POSTGRES_DB:-roadtrip}"]
       interval: 5s
       timeout: 3s
       retries: 10
-
-  grafana-db-setup:
-    profiles: [pois]
-    image: postgis/postgis:16-3.4
-    restart: "no"
-    environment:
-      - POSTGRES_DB=${POSTGRES_DB:-roadtrip}
-      - POSTGRES_USER=${POSTGRES_USER:-roadtrip}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-roadtrip}
-      - GRAFANA_DB_USER=${GRAFANA_DB_USER:-grafana_reader}
-      - GRAFANA_DB_PASSWORD=${GRAFANA_DB_PASSWORD:-roadtrip}
-      - GRAFANA_DB_REPAIR_DROP=${GRAFANA_DB_REPAIR_DROP:-false}
-    depends_on:
-      postgres:
-        condition: service_healthy
-      backend:
-        condition: service_healthy
-    command:
-      - /bin/sh
-      - -c
-      - /docker-entrypoint-initdb.d/create-grafana-reader.sh
-    volumes:
-      - ./grafana/db/create-grafana-reader.sh:/docker-entrypoint-initdb.d/create-grafana-reader.sh:ro
-      - grafana-data:/var/lib/grafana
 
   # Kotlin/Ktor backend. Serves the entire site:
   #   - GET /                       → index.html (map)
@@ -156,8 +140,11 @@ services:
       - ./grafana/dashboards:/etc/grafana/dashboards:ro
       - grafana-data:/var/lib/grafana
     depends_on:
-      grafana-db-setup:
-        condition: service_completed_successfully
+      # Backend healthcheck fires after Flyway migrate completes, which now
+      # includes R__grafana_reader_grants.sql — so grafana can safely connect
+      # as grafana_reader once backend is healthy.
+      backend:
+        condition: service_healthy
 
   # Single-binary Loki for backend log storage/search. Backend logs JSON
   # (see backend/src/main/resources/logback.xml) with MDC run_id; Alloy ships
