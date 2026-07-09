@@ -131,7 +131,7 @@ internal class PoiServingRepo(
                   WHERE cvr.campground_id = cg.id
                     AND vr.entity_type = 'campground'
                     AND vr.deleted_at IS NULL
-                  ORDER BY cvr.is_primary DESC, cvr.vendor_ref_id ASC
+                  ORDER BY cvr.vendor_ref_id ASC
                   LIMIT 1
                 ) primary_gvr ON true
                 LEFT JOIN LATERAL (
@@ -143,7 +143,6 @@ internal class PoiServingRepo(
                     AND vr.deleted_at IS NULL
                   ORDER BY
                     CASE WHEN ${providerRefShapeSql("vr.payload")} THEN 1 ELSE 0 END DESC,
-                    cvr.is_primary DESC,
                     cvr.vendor_ref_id ASC
                   LIMIT 1
                 ) provider_gvr ON true

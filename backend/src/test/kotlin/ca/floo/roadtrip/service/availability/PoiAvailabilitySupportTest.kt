@@ -76,8 +76,8 @@ class PoiAvailabilitySupportTest : SharedDbTest() {
                 .get("id", Long::class.java)
         ctx.execute(
             """
-            INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, is_primary)
-            VALUES (?, ?, false)
+            INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id)
+            VALUES (?, ?)
             """.trimIndent(),
             campgroundId,
             vendorRefId,
