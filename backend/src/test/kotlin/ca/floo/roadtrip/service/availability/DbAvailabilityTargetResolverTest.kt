@@ -43,7 +43,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             ).poiId
 
     /** Seeds one site under [poiId]'s campground. */
-    private fun seedReservable(
+    private fun seedCampsite(
         siteId: String,
         poiId: Long,
     ): Long =
@@ -119,8 +119,8 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val poiA = seedPoi(campgroundId = null)
             val poiB = seedPoi(campgroundId = "232447")
             val campsitesRepo = CampsiteRepo(ctx)
-            val reservableId = seedReservable("100", poiB)
-            val reservable = campsitesRepo.findById(reservableId)!!
+            val campsiteId = seedCampsite("100", poiB)
+            val reservable = campsitesRepo.findById(campsiteId)!!
 
             val resolver = resolverFor(campsitesRepo)
             val t = resolver.resolve(reservable)!!

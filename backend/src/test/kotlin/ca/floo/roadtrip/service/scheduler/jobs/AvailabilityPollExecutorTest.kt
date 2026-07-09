@@ -80,7 +80,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             ).poiId
 
     /** Seeds one child reservable (site) linked to [poiId]. Returns its db id. */
-    private fun seedReservable(
+    private fun seedCampsite(
         poiId: Long,
         siteId: String,
     ): Long =
@@ -134,7 +134,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
      *  so tests can prove the poller polls the full catalog regardless of how
      *  narrowly a watch is scoped. */
     private fun seedReservableWatch(
-        reservableId: Long,
+        campsiteId: Long,
         startDate: String,
         endDate: String,
     ): Long {
@@ -152,7 +152,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     endDate,
                 )!!
                 .get("id", Long::class.java)
-        ctx.execute("INSERT INTO availability_watch_target (watch_id, campsite_id) VALUES (?, ?)", watchId, reservableId)
+        ctx.execute("INSERT INTO availability_watch_target (watch_id, campsite_id) VALUES (?, ?)", watchId, campsiteId)
         return watchId
     }
 
@@ -443,7 +443,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
-            listOf("100", "101", "102").forEach { seedReservable(poiId, it) }
+            listOf("100", "101", "102").forEach { seedCampsite(poiId, it) }
             // Two watches with different, far-future date windows. The poll
             // window is NOT derived from these dates — it's the vendor-max
             // window anchored at today (maxPollWindowDays = 60) — so the watch
@@ -483,10 +483,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
-            val watchedSite = seedReservable(poiId, "100")
+            val watchedSite = seedCampsite(poiId, "100")
             // Two more sites nobody watches — they must still be polled.
-            seedReservable(poiId, "101")
-            seedReservable(poiId, "102")
+            seedCampsite(poiId, "101")
+            seedCampsite(poiId, "102")
             // A watch scoped to a single reservable, not the whole POI.
             val watchId = seedReservableWatch(watchedSite, farStart.toString(), farStart.plusDays(2).toString())
             val poller = linkWatch(provider, watchId)
@@ -509,13 +509,13 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
     /** Records one interval row directly (no poll), so initial-notify tests
      *  can set the current window state without firing the transition path. */
     private fun seedCell(
-        reservableId: Long,
+        campsiteId: Long,
         date: LocalDate,
         status: AvailabilityStatus,
     ) {
         AvailabilityRepo(ctx).recordObservations(
             runId = null,
-            listOf(AvailabilityRepo.Observation(reservableId, date, status, now().toInstant())),
+            listOf(AvailabilityRepo.Observation(campsiteId, date, status, now().toInstant())),
         )
     }
 
@@ -526,7 +526,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // vendor-wide, so pin the fake's observation into the watch window.
             val provider = CountingRecgovProvider(status = AvailabilityStatus.RESERVED, observationDate = farStart)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId =
                 seedWatch(
                     poiId,
@@ -563,7 +563,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId =
                 seedWatch(
                     poiId,
@@ -587,7 +587,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId =
                 seedWatch(
                     poiId,
@@ -608,7 +608,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId =
                 seedWatch(
                     poiId,
@@ -633,10 +633,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
-            val reservableId = seedReservable(poiId, "100")
+            val campsiteId = seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), triggerKinds = listOf("slack_notify"))
             // Site is already bookable when the watch is created — no future edge exists.
-            seedCell(reservableId, farStart, AvailabilityStatus.AVAILABLE)
+            seedCell(campsiteId, farStart, AvailabilityStatus.AVAILABLE)
             val notifier = RecordingSlackNotifications()
 
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
@@ -660,7 +660,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), triggerKinds = listOf("slack_notify"))
             // No cube data: the imminent poll's first observation will be the real edge.
             val notifier = RecordingSlackNotifications()
@@ -678,9 +678,9 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.RESERVED)
             val poiId = seedPoi("232447")
-            val reservableId = seedReservable(poiId, "100")
+            val campsiteId = seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), triggerKinds = listOf("slack_notify"))
-            seedCell(reservableId, farStart, AvailabilityStatus.RESERVED)
+            seedCell(campsiteId, farStart, AvailabilityStatus.RESERVED)
             val notifier = RecordingSlackNotifications()
 
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
@@ -700,7 +700,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
-            val reservableId = seedReservable(poiId, "100")
+            val campsiteId = seedCampsite(poiId, "100")
             val watchId =
                 seedWatch(
                     poiId,
@@ -709,7 +709,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
                     triggerKinds = listOf("slack_notify"),
                     stopWhenTriggered = true,
                 )
-            seedCell(reservableId, farStart, AvailabilityStatus.AVAILABLE)
+            seedCell(campsiteId, farStart, AvailabilityStatus.AVAILABLE)
 
             dispatcherWith(provider, RecordingSlackNotifications(result = true)).dispatchInitial(findWatch(watchId))
 
@@ -721,7 +721,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId =
                 seedWatch(
                     poiId,
@@ -744,10 +744,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
-            val reservableId = seedReservable(poiId, "100")
+            val campsiteId = seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), triggerKinds = listOf("slack_notify"))
             // Even with the site open, a paused watch reports status — not openings.
-            seedCell(reservableId, farStart, AvailabilityStatus.AVAILABLE)
+            seedCell(campsiteId, farStart, AvailabilityStatus.AVAILABLE)
             ctx.execute("UPDATE availability_watch SET status = 'paused' WHERE id = ?", watchId)
             val notifier = RecordingSlackNotifications()
 
@@ -769,10 +769,10 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
-            val reservableId = seedReservable(poiId, "100")
+            val campsiteId = seedCampsite(poiId, "100")
             // Default trigger kind is "atc" — inert for Slack.
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
-            seedCell(reservableId, farStart, AvailabilityStatus.AVAILABLE)
+            seedCell(campsiteId, farStart, AvailabilityStatus.AVAILABLE)
             val notifier = RecordingSlackNotifications()
 
             dispatcherWith(provider, notifier).dispatchInitial(findWatch(watchId))
@@ -785,7 +785,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             // default trigger_kinds = ['atc'] — no slack_notify, so it stays inert.
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
             val poller = linkWatch(provider, watchId)
@@ -806,7 +806,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             val transitionDate = farStart.plusDays(2)
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = transitionDate)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchA =
                 seedWatch(
                     poiId,
@@ -842,7 +842,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId =
                 seedWatch(
                     poiId,
@@ -881,7 +881,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         AvailabilityWatchRepo.Watch(
             id = 0,
             targets = emptyList(),
-            reservableFilters = kotlinx.serialization.json.JsonObject(emptyMap()),
+            campsiteFilters = kotlinx.serialization.json.JsonObject(emptyMap()),
             startDate = farStart,
             endDate = farStart.plusDays(2),
             cadenceSec = cadenceSec,
@@ -921,7 +921,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447", cadenceOverrideSec = 45)
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 30)
             val poller = linkWatch(provider, watchId)
 
@@ -943,7 +943,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // default. Before V34 the column was NOT NULL and this rung was dead.
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447", cadenceOverrideSec = 45)
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = null)
             val poller = linkWatch(provider, watchId)
 
@@ -962,7 +962,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // cadence, it takes precedence over the POI override.
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447", cadenceOverrideSec = 45)
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 20)
             val poller = linkWatch(provider, watchId)
 
@@ -978,7 +978,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchSlow = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 300)
             val watchFast = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 30)
             val poller = linkWatch(provider, watchSlow)
@@ -999,7 +999,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
             val poller = linkWatch(provider, watchId)
             val denyingLimiter = RecordingLimiter(grant = false)
@@ -1024,7 +1024,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
-            listOf("100", "101").forEach { seedReservable(poiId, it) }
+            listOf("100", "101").forEach { seedCampsite(poiId, it) }
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
             val poller = linkWatch(provider, watchId)
             val grantingLimiter = RecordingLimiter(grant = true)
@@ -1053,7 +1053,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
             // limiter must not block this tick.
             val provider = CountingRecgovProvider(maxPollWindowDays = 0)
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 60)
             val poller = linkWatch(provider, watchId)
             val denyingLimiter = RecordingLimiter(grant = false)
@@ -1078,7 +1078,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             // A watch whose window is entirely in the past (not live).
             val watchId = seedWatch(poiId, "2020-01-01", "2020-01-05")
             // Link it directly (liveness is ACTIVE + end>=today, and this end_date
@@ -1111,7 +1111,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = RateLimitedProvider()
             val poiId = seedPoi("232447")
-            seedReservable(poiId, "100")
+            seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString(), cadenceSec = 120)
             val poller = linkWatch(provider, watchId)
             val runsRepo = AvailabilityRunRepo(ctx)
@@ -1138,7 +1138,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider()
             val poiId = seedPoi("232447")
-            listOf("100", "101").forEach { seedReservable(poiId, it) }
+            listOf("100", "101").forEach { seedCampsite(poiId, it) }
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
             val poller = linkWatch(provider, watchId)
 
@@ -1164,19 +1164,19 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE, observationDate = farStart)
             val poiId = seedPoi("232447")
-            val reservableId = seedReservable(poiId, "100")
+            val campsiteId = seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
             val poller = linkWatch(provider, watchId)
             val repo = AvailabilityRepo(ctx)
 
             executorFor(provider).handle(poller)
-            val rowsAfterFirst = repo.listForReservable(reservableId).size
-            val currentAfterFirst = repo.readCurrent(listOf(reservableId), listOf(farStart)).single()
+            val rowsAfterFirst = repo.listForCampsite(campsiteId).size
+            val currentAfterFirst = repo.readCurrent(listOf(campsiteId), listOf(farStart)).single()
 
             Thread.sleep(5)
             executorFor(provider).handle(poller)
-            val rowsAfterSecond = repo.listForReservable(reservableId).size
-            val currentAfterSecond = repo.readCurrent(listOf(reservableId), listOf(farStart)).single()
+            val rowsAfterSecond = repo.listForCampsite(campsiteId).size
+            val currentAfterSecond = repo.readCurrent(listOf(campsiteId), listOf(farStart)).single()
 
             // No new status-run: the status did not change.
             assertEquals(rowsAfterFirst, rowsAfterSecond)
@@ -1190,17 +1190,17 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
-            val reservableId = seedReservable(poiId, "100")
+            val campsiteId = seedCampsite(poiId, "100")
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
             val poller = linkWatch(provider, watchId)
             val repo = AvailabilityRepo(ctx)
 
             executorFor(provider).handle(poller)
-            val before = repo.listForReservable(reservableId).size
+            val before = repo.listForCampsite(campsiteId).size
 
             provider.status = AvailabilityStatus.RESERVED
             executorFor(provider).handle(poller)
-            val after = repo.listForReservable(reservableId).size
+            val after = repo.listForCampsite(campsiteId).size
 
             assertEquals(before + 1, after)
         }
@@ -1210,7 +1210,7 @@ class AvailabilityPollExecutorTest : SharedDbTest() {
         runBlocking {
             val provider = CountingRecgovProvider(status = AvailabilityStatus.AVAILABLE)
             val poiId = seedPoi("232447")
-            listOf("100", "101", "102").forEach { seedReservable(poiId, it) }
+            listOf("100", "101", "102").forEach { seedCampsite(poiId, it) }
             val watchId = seedWatch(poiId, farStart.toString(), farStart.plusDays(2).toString())
             val poller = linkWatch(provider, watchId)
             val runsRepo = AvailabilityRunRepo(ctx)

@@ -247,7 +247,7 @@ internal class AvailabilityPollExecutor(
             batch.observations.mapNotNull { obs ->
                 val dbId = obs.campsiteId?.takeIf { it in campsiteIds } ?: return@mapNotNull null
                 AvailabilityRepo.Observation(
-                    reservableId = dbId,
+                    campsiteId = dbId,
                     targetDate = obs.date,
                     status = obs.status,
                     observedAt = obs.observedAt,

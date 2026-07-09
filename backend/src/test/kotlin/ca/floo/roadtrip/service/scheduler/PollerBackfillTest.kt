@@ -40,7 +40,7 @@ class PollerBackfillTest : SharedDbTest() {
                 providerRefJson = """{"recgov_id": "$campgroundId"}""",
             ).poiId
 
-    private fun seedReservable(
+    private fun seedCampsite(
         poiId: Long,
         siteId: String,
     ): Long =
@@ -87,7 +87,7 @@ class PollerBackfillTest : SharedDbTest() {
     @Test
     fun `links an orphaned active watch and is a no-op on re-run`() {
         val poiId = seedPoi("232447")
-        seedReservable(poiId, "100")
+        seedCampsite(poiId, "100")
         val watchId = seedActiveWatch(poiId)
         val pollers = AvailabilityPollerRepo(ctx)
         // Orphaned: no links yet (V28 dropped the old job; nothing linked it).

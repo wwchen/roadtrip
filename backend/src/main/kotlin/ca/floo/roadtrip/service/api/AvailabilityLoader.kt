@@ -134,7 +134,7 @@ class AvailabilityLoader(
             observations =
                 rows.map { row ->
                     ReservableDayObservation(
-                        campsiteId = row.reservableId,
+                        campsiteId = row.campsiteId,
                         date = row.targetDate,
                         observedAt = row.observedAt.toInstant(),
                         status = row.status,

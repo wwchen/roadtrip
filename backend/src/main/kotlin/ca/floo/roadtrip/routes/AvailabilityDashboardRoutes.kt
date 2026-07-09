@@ -242,7 +242,7 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                         HttpStatusCode.NotFound,
                         "no campsite with id $campsiteId",
                     )
-                availability.listForReservable(campsiteId, limit = limit)
+                availability.listForCampsite(campsiteId, limit = limit)
             } else {
                 availability.listForRun(runId!!, limit = limit)
             }
@@ -337,7 +337,7 @@ private fun AvailabilityRunRepo.Run.toSchema(): AvailabilityRunSchema =
 
 private fun AvailabilityRepo.StatusRun.toSchema(): AvailabilitySnapshotSchema =
     AvailabilitySnapshotSchema(
-        campsiteId = reservableId,
+        campsiteId = campsiteId,
         runId = runId,
         targetDate = targetDate.toString(),
         observedFrom = observedFrom?.toString(),

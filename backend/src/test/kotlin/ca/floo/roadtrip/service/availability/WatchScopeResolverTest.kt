@@ -40,7 +40,7 @@ class WatchScopeResolverTest : SharedDbTest() {
             ).poiId
     }
 
-    private fun insertReservable(
+    private fun insertCampsite(
         poiId: Long,
         vendorId: String,
     ): Long =
@@ -60,7 +60,7 @@ class WatchScopeResolverTest : SharedDbTest() {
         watchRepo.create(
             AvailabilityWatchRepo.CreateInput(
                 targets = targets,
-                reservableFilters = JsonObject(emptyMap()),
+                campsiteFilters = JsonObject(emptyMap()),
                 startDate = LocalDate.parse("2026-07-04"),
                 endDate = LocalDate.parse("2026-07-06"),
                 cadenceSec = 60,
@@ -74,33 +74,33 @@ class WatchScopeResolverTest : SharedDbTest() {
     fun `resolve unions reservables across a poi target and a reservable target`() {
         val poiA = insertPoi()
         val poiB = insertPoi()
-        val reservableInA1 = insertReservable(poiA, "a1")
-        val reservableInA2 = insertReservable(poiA, "a2")
-        val reservableInB = insertReservable(poiB, "b1")
+        val campsiteInA1 = insertCampsite(poiA, "a1")
+        val campsiteInA2 = insertCampsite(poiA, "a2")
+        val campsiteInB = insertCampsite(poiB, "b1")
 
         val watch =
             createWatch(
                 listOf(
-                    AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, reservableId = null),
-                    AvailabilityWatchTargetRepo.TargetInput(poiId = null, reservableId = reservableInB),
+                    AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, campsiteId = null),
+                    AvailabilityWatchTargetRepo.TargetInput(poiId = null, campsiteId = campsiteInB),
                 ),
             )
 
         val resolved = resolver.resolve(watch).map { it.id }.toSet()
 
-        assertEquals(setOf(reservableInA1, reservableInA2, reservableInB), resolved)
+        assertEquals(setOf(campsiteInA1, campsiteInA2, campsiteInB), resolved)
     }
 
     @Test
     fun `resolve de-duplicates a reservable reachable via two targets`() {
         val poi = insertPoi()
-        val reservable = insertReservable(poi, "dup")
+        val reservable = insertCampsite(poi, "dup")
 
         val watch =
             createWatch(
                 listOf(
-                    AvailabilityWatchTargetRepo.TargetInput(poiId = poi, reservableId = null),
-                    AvailabilityWatchTargetRepo.TargetInput(poiId = null, reservableId = reservable),
+                    AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null),
+                    AvailabilityWatchTargetRepo.TargetInput(poiId = null, campsiteId = reservable),
                 ),
             )
 

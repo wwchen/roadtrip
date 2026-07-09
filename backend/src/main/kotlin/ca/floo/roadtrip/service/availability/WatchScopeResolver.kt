@@ -22,8 +22,8 @@ class WatchScopeResolver(
         val seen = LinkedHashMap<Long, Campsite>()
         for (target in watch.targets) {
             val resolved =
-                target.reservableId?.let { id -> campsitesRepo.findById(id)?.let(::listOf) ?: emptyList() }
-                    ?: target.poiId?.let { poiId -> resolvePoi(poiId, watch.reservableFilters) }
+                target.campsiteId?.let { id -> campsitesRepo.findById(id)?.let(::listOf) ?: emptyList() }
+                    ?: target.poiId?.let { poiId -> resolvePoi(poiId, watch.campsiteFilters) }
                     ?: emptyList()
             for (r in resolved) seen.putIfAbsent(r.id, r)
         }

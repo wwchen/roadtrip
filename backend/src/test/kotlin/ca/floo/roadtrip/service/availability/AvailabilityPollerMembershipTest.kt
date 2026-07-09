@@ -59,7 +59,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
     private fun insertActiveWatch(
         poiId: Long? = null,
-        reservableId: Long? = null,
+        campsiteId: Long? = null,
         startDate: String = "2026-07-04",
         endDate: String = "2026-12-31",
     ): Long {
@@ -81,7 +81,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
             "INSERT INTO availability_watch_target (watch_id, poi_id, campsite_id) VALUES (?, ?, ?)",
             watchId,
             poiId,
-            reservableId,
+            campsiteId,
         )
         return watchId
     }
@@ -104,7 +104,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     }
 
     /** Inserts a `reservables` row linked to [poiId] and returns its surrogate id. */
-    private fun insertReservable(
+    private fun insertCampsite(
         poiId: Long,
         vendorId: String,
     ): Long {
@@ -175,19 +175,19 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     @Test
     fun `two watches on same parentRef link to ONE poller`() {
         val poi = insertPoi()
-        val reservableA = insertReservable(poi, "site-a")
-        val reservableB = insertReservable(poi, "site-b")
+        val campsiteA = insertCampsite(poi, "site-a")
+        val campsiteB = insertCampsite(poi, "site-b")
 
         val targets = FakeTargetResolver()
         targets.stub(
-            campsiteRepo.findById(reservableA)!!,
+            campsiteRepo.findById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("232447"),
             poi,
             fakeDateContext,
         )
         targets.stub(
-            campsiteRepo.findById(reservableB)!!,
+            campsiteRepo.findById(campsiteB)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("232447"),
             poi,
@@ -198,7 +198,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
 
         // watchA: POI-scope (expands to both reservables). watchB: reservable-scope under the same campground.
         val watchAId = insertActiveWatch(poiId = poi)
-        val watchBId = insertActiveWatch(reservableId = reservableB)
+        val watchBId = insertActiveWatch(campsiteId = campsiteB)
 
         membership.sync(watch(watchAId), repo, null)
         membership.sync(watch(watchBId), repo, null)
@@ -215,19 +215,19 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         // resolving to the same vendor parentRef must coalesce to one poller.
         val poiX = insertPoi("Site Cluster X")
         val poiY = insertPoi("Site Cluster Y")
-        val reservableX = insertReservable(poiX, "site-x")
-        val reservableY = insertReservable(poiY, "site-y")
+        val campsiteX = insertCampsite(poiX, "site-x")
+        val campsiteY = insertCampsite(poiY, "site-y")
 
         val targets = FakeTargetResolver()
         targets.stub(
-            campsiteRepo.findById(reservableX)!!,
+            campsiteRepo.findById(campsiteX)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("999000"),
             poiX,
             fakeDateContext,
         )
         targets.stub(
-            campsiteRepo.findById(reservableY)!!,
+            campsiteRepo.findById(campsiteY)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("999000"),
             poiY,
@@ -236,8 +236,8 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val membership = AvailabilityPollerMembership(scopeResolver, targets)
         val repo = AvailabilityPollerRepo(ctx)
 
-        val watchXId = insertActiveWatch(reservableId = reservableX)
-        val watchYId = insertActiveWatch(reservableId = reservableY)
+        val watchXId = insertActiveWatch(campsiteId = campsiteX)
+        val watchYId = insertActiveWatch(campsiteId = campsiteY)
 
         membership.sync(watch(watchXId), repo, null)
         membership.sync(watch(watchYId), repo, null)
@@ -251,19 +251,19 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     @Test
     fun `watch spanning two parentRefs links two pollers`() {
         val poi = insertPoi()
-        val reservableA = insertReservable(poi, "site-a")
-        val reservableB = insertReservable(poi, "site-b")
+        val campsiteA = insertCampsite(poi, "site-a")
+        val campsiteB = insertCampsite(poi, "site-b")
 
         val targets = FakeTargetResolver()
         targets.stub(
-            campsiteRepo.findById(reservableA)!!,
+            campsiteRepo.findById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("111111"),
             poi,
             fakeDateContext,
         )
         targets.stub(
-            campsiteRepo.findById(reservableB)!!,
+            campsiteRepo.findById(campsiteB)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("222222"),
             poi,
@@ -283,11 +283,11 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     @Test
     fun `re-sync after target change drops the stale link`() {
         val poi = insertPoi()
-        val reservableA = insertReservable(poi, "site-a")
+        val campsiteA = insertCampsite(poi, "site-a")
 
         val targets = FakeTargetResolver()
         targets.stub(
-            campsiteRepo.findById(reservableA)!!,
+            campsiteRepo.findById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("333333"),
             poi,
@@ -296,7 +296,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val membership = AvailabilityPollerMembership(scopeResolver, targets)
         val repo = AvailabilityPollerRepo(ctx)
 
-        val watchId = insertActiveWatch(reservableId = reservableA)
+        val watchId = insertActiveWatch(campsiteId = campsiteA)
         membership.sync(watch(watchId), repo, null)
         val firstLinks = repo.pollerIdsForWatch(watchId)
         assertEquals(1, firstLinks.size)
@@ -305,7 +305,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         // Target set changes: same reservable now resolves to a different parentRef
         // (e.g. the campground's provider ref was corrected).
         targets.stub(
-            campsiteRepo.findById(reservableA)!!,
+            campsiteRepo.findById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("444444"),
             poi,
@@ -323,11 +323,11 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     @Test
     fun `tighter cadence pull moves next_run_at earlier`() {
         val poi = insertPoi()
-        val reservableA = insertReservable(poi, "site-a")
+        val campsiteA = insertCampsite(poi, "site-a")
 
         val targets = FakeTargetResolver()
         targets.stub(
-            campsiteRepo.findById(reservableA)!!,
+            campsiteRepo.findById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("555555"),
             poi,
@@ -336,7 +336,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val membership = AvailabilityPollerMembership(scopeResolver, targets)
         val repo = AvailabilityPollerRepo(ctx)
 
-        val watchId = insertActiveWatch(reservableId = reservableA)
+        val watchId = insertActiveWatch(campsiteId = campsiteA)
         membership.sync(watch(watchId), repo, null)
         val pollerId = repo.pollerIdsForWatch(watchId).single()
 
@@ -351,11 +351,11 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
     @Test
     fun `non-ACTIVE watch clears its links and reaps the orphaned poller`() {
         val poi = insertPoi()
-        val reservableA = insertReservable(poi, "site-a")
+        val campsiteA = insertCampsite(poi, "site-a")
 
         val targets = FakeTargetResolver()
         targets.stub(
-            campsiteRepo.findById(reservableA)!!,
+            campsiteRepo.findById(campsiteA)!!,
             AvailabilityProviderId.RECGOV,
             ProviderRef.RecGov("666666"),
             poi,
@@ -364,7 +364,7 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
         val membership = AvailabilityPollerMembership(scopeResolver, targets)
         val repo = AvailabilityPollerRepo(ctx)
 
-        val watchId = insertActiveWatch(reservableId = reservableA)
+        val watchId = insertActiveWatch(campsiteId = campsiteA)
         membership.sync(watch(watchId), repo, null)
         val pollerId = repo.pollerIdsForWatch(watchId).single()
 

@@ -68,7 +68,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         return pollerId
     }
 
-    private fun seedReservable(): Long =
+    private fun seedCampsite(): Long =
         ctx.seedCampsite(
             campgroundId = ctx.seedCampground(name = "Dashboard Campground", source = "test", sourceId = "dashboard-cg"),
             vendor = "recgov",
@@ -79,7 +79,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     /** Records one observation into the interval table (bump-or-insert), so the
      *  summary is derived from real status-runs. */
     private fun recordObservation(
-        reservableId: Long,
+        campsiteId: Long,
         targetDate: String,
         observedAt: OffsetDateTime,
         available: Boolean,
@@ -88,7 +88,7 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
             runId = null,
             listOf(
                 AvailabilityRepo.Observation(
-                    reservableId = reservableId,
+                    campsiteId = campsiteId,
                     targetDate = LocalDate.parse(targetDate),
                     status = if (available) AvailabilityStatus.AVAILABLE else AvailabilityStatus.RESERVED,
                     observedAt = observedAt.toInstant(),
@@ -227,17 +227,17 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     fun `GET snapshots summary returns stats per date`() =
         testApplication {
             application { routing { availabilityDashboardRoutes(ctx) } }
-            val reservableId = seedReservable()
+            val campsiteId = seedCampsite()
             val now = OffsetDateTime.now(ZoneOffset.UTC)
             // reserved → available → available. The two availables bump the same
             // status-run in place, so this collapses to two runs (reserved, available).
-            recordObservation(reservableId, "2026-07-04", now.minusMinutes(3), available = false)
-            recordObservation(reservableId, "2026-07-04", now.minusMinutes(2), available = true)
-            recordObservation(reservableId, "2026-07-04", now.minusMinutes(1), available = true)
-            val resp = client.get("/api/availability/snapshots/summary?campsite_id=$reservableId")
+            recordObservation(campsiteId, "2026-07-04", now.minusMinutes(3), available = false)
+            recordObservation(campsiteId, "2026-07-04", now.minusMinutes(2), available = true)
+            recordObservation(campsiteId, "2026-07-04", now.minusMinutes(1), available = true)
+            val resp = client.get("/api/availability/snapshots/summary?campsite_id=$campsiteId")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals(reservableId, body["campsite_id"]!!.jsonPrimitive.long)
+            assertEquals(campsiteId, body["campsite_id"]!!.jsonPrimitive.long)
             val stats = body["stats"]!!.jsonArray
             assertEquals(1, stats.size)
             val row = stats[0].jsonObject

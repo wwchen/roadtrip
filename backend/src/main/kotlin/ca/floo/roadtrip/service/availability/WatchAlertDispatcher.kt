@@ -63,13 +63,13 @@ internal class WatchAlertDispatcher(
 
         for (watch in liveWatches) {
             if (SLACK_NOTIFY_KIND !in watch.triggerKinds) continue
-            val reservablesById = scopeResolver.resolve(watch).associateBy { it.id }
+            val campsitesById = scopeResolver.resolve(watch).associateBy { it.id }
             val covered =
                 bookable.filter { t ->
-                    t.reservableId in reservablesById && t.targetDate.withinWindow(watch)
+                    t.campsiteId in campsitesById && t.targetDate.withinWindow(watch)
                 }
             if (covered.isEmpty()) continue
-            postOpenings(watch, covered, reservablesById)
+            postOpenings(watch, covered, campsitesById)
         }
     }
 
@@ -95,7 +95,7 @@ internal class WatchAlertDispatcher(
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
 
-        val reservables = scopeResolver.resolve(watch)
+        val campsites = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
             val state =
                 when (watch.status) {
@@ -103,18 +103,18 @@ internal class WatchAlertDispatcher(
                     WatchStatus.DONE -> WatchStatusNotice.State.DONE
                     WatchStatus.ACTIVE -> WatchStatusNotice.State.WATCHING // unreachable; guarded above
                 }
-            slack.sendWatchStatus(statusNotice(watch, reservables, state), watch.channelOverride())
+            slack.sendWatchStatus(statusNotice(watch, campsites, state), watch.channelOverride())
             return
         }
-        val reservablesById = reservables.associateBy { it.id }
-        val cells = availability.readCurrent(reservables.map { it.id }, datesInWindow(watch))
+        val campsitesById = campsites.associateBy { it.id }
+        val cells = availability.readCurrent(campsites.map { it.id }, datesInWindow(watch))
         val bookable = cells.filter { it.available }
         if (bookable.isNotEmpty()) {
-            val covered = bookable.map { CellTransition(it.reservableId, it.targetDate, it.status) }
-            postOpenings(watch, covered, reservablesById)
+            val covered = bookable.map { CellTransition(it.campsiteId, it.targetDate, it.status) }
+            postOpenings(watch, covered, campsitesById)
         } else {
             val state = if (cells.isNotEmpty()) WatchStatusNotice.State.WATCHING else WatchStatusNotice.State.UNCHECKED
-            slack.sendWatchStatus(statusNotice(watch, reservables, state), watch.channelOverride())
+            slack.sendWatchStatus(statusNotice(watch, campsites, state), watch.channelOverride())
         }
     }
 
@@ -126,8 +126,8 @@ internal class WatchAlertDispatcher(
      */
     suspend fun dispatchStopped(watch: AvailabilityWatchRepo.Watch) {
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
-        val reservables = scopeResolver.resolve(watch)
-        slack.sendWatchStatus(statusNotice(watch, reservables, WatchStatusNotice.State.STOPPED), watch.channelOverride())
+        val campsites = scopeResolver.resolve(watch)
+        slack.sendWatchStatus(statusNotice(watch, campsites, WatchStatusNotice.State.STOPPED), watch.channelOverride())
     }
 
     /**
@@ -150,9 +150,9 @@ internal class WatchAlertDispatcher(
     private suspend fun postOpenings(
         watch: AvailabilityWatchRepo.Watch,
         covered: List<CellTransition>,
-        reservablesById: Map<Long, Campsite>,
+        campsitesById: Map<Long, Campsite>,
     ) {
-        val openings = hydrateOpenings(covered, reservablesById)
+        val openings = hydrateOpenings(covered, campsitesById)
         val fired =
             slack.sendWatchOpenings(
                 watchId = watch.id,
@@ -172,12 +172,12 @@ internal class WatchAlertDispatcher(
      *  and the provider booking URL — so the notification layer only formats. */
     private fun hydrateOpenings(
         covered: List<CellTransition>,
-        reservablesById: Map<Long, Campsite>,
+        campsitesById: Map<Long, Campsite>,
     ): List<WatchOpening> {
         val poiNames = HashMap<Long, String?>()
         return covered.map { t ->
             // covered was filtered to reservables in this map, so the key exists.
-            val r = reservablesById.getValue(t.reservableId)
+            val r = campsitesById.getValue(t.campsiteId)
             val target = targets.resolve(r)
             WatchOpening(
                 label = r.name ?: "Site #${r.vendorId}",
@@ -204,7 +204,7 @@ internal class WatchAlertDispatcher(
      *  no POI). */
     private fun statusNotice(
         watch: AvailabilityWatchRepo.Watch,
-        reservables: List<Campsite>,
+        campsites: List<Campsite>,
         state: WatchStatusNotice.State,
     ): WatchStatusNotice {
         val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
@@ -212,11 +212,11 @@ internal class WatchAlertDispatcher(
         // site; a reservable-scoped watch names the site. So the scope label
         // keys off the target kind, not the resolved reservable count.
         val siteScoped = poiIds.isEmpty()
-        val single = reservables.singleOrNull().takeIf { siteScoped }
+        val single = campsites.singleOrNull().takeIf { siteScoped }
         return WatchStatusNotice(
             watchId = watch.id,
             state = state,
-            siteCount = reservables.size,
+            siteCount = campsites.size,
             siteName = single?.let { it.name ?: "Site #${it.vendorId}" },
             siteLoop = single?.loop,
             campgroundName = poiIds.singleOrNull()?.let { pois.fetchPoiById(it)?.name },
