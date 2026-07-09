@@ -1,6 +1,6 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.Campsite
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
@@ -9,7 +9,7 @@ import org.jooq.Record
 /**
  * Persistence boundary for canonical campsite catalog reads.
  *
- * Availability services still consume the `Reservable` domain model at the
+ * Availability services still consume the `Campsite` domain model at the
  * provider boundary, so this repo maps canonical `campsites` rows into that
  * internal shape while all persistence stays pointed at the campsite catalog.
  */
@@ -26,20 +26,20 @@ class CampsiteRepo(
         val tagsContainsJson: List<String> = emptyList(),
     )
 
-    fun findById(id: Long): Reservable? =
+    fun findById(id: Long): Campsite? =
         ctx
             .fetchOne(
                 "$BASE_SELECT WHERE c.id = ? AND c.deleted_at IS NULL",
                 id,
             )?.let(::fromRecord)
 
-    fun findAll(): List<Reservable> =
+    fun findAll(): List<Campsite> =
         ctx
             .fetch(
                 "$BASE_SELECT WHERE c.deleted_at IS NULL ORDER BY c.id",
             ).map(::fromRecord)
 
-    fun findByPoi(poiId: Long): List<Reservable> =
+    fun findByPoi(poiId: Long): List<Campsite> =
         ctx
             .fetch(
                 """
@@ -62,7 +62,7 @@ class CampsiteRepo(
         filters: SearchFilters,
         limit: Int,
         offset: Int,
-    ): List<Reservable> =
+    ): List<Campsite> =
         ctx
             .fetch(
                 """
@@ -116,10 +116,10 @@ class CampsiteRepo(
             )
     }
 
-    internal fun fromRecord(r: Record): Reservable {
+    internal fun fromRecord(r: Record): Campsite {
         val vendor = r.get("vendor", String::class.java) ?: CANONICAL_VENDOR
         val externalId = r.get("external_id", String::class.java) ?: r.get("id", Long::class.java).toString()
-        return Reservable(
+        return Campsite(
             id = r.get("id", Long::class.java),
             vendor = vendor,
             vendorId = externalId,

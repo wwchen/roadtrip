@@ -18,7 +18,7 @@ class AvailabilityWatchTargetRepoTest : SharedDbTest() {
         return ctx.seedCatalogPoi(sourceId = sourceId, name = "Upper Pines", lon = -119.56, lat = 37.74).poiId
     }
 
-    private fun insertReservable(vendorId: String): Long =
+    private fun insertCampsite(vendorId: String): Long =
         ctx.seedCampsite(
             campgroundId = ctx.seedCampground(source = "test", sourceId = "cg-$vendorId"),
             vendor = "test",
@@ -46,21 +46,21 @@ class AvailabilityWatchTargetRepoTest : SharedDbTest() {
     fun `replaceForWatch inserts a mixed set of poi and reservable targets`() {
         val watchId = insertWatch()
         val poiId = insertPoi()
-        val reservableId = insertReservable("site-a")
+        val campsiteId = insertCampsite("site-a")
         val repo = AvailabilityWatchTargetRepo(ctx)
 
         repo.replaceForWatch(
             watchId,
             listOf(
-                AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, reservableId = null),
-                AvailabilityWatchTargetRepo.TargetInput(poiId = null, reservableId = reservableId),
+                AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, campsiteId = null),
+                AvailabilityWatchTargetRepo.TargetInput(poiId = null, campsiteId = campsiteId),
             ),
         )
 
         val targets = repo.listForWatch(watchId)
         assertEquals(2, targets.size)
         assertTrue(targets.any { it.poiId == poiId })
-        assertTrue(targets.any { it.reservableId == reservableId })
+        assertTrue(targets.any { it.campsiteId == campsiteId })
     }
 
     @Test
@@ -70,8 +70,8 @@ class AvailabilityWatchTargetRepoTest : SharedDbTest() {
         val poiB = insertPoi()
         val repo = AvailabilityWatchTargetRepo(ctx)
 
-        repo.replaceForWatch(watchId, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, reservableId = null)))
-        repo.replaceForWatch(watchId, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null)))
+        repo.replaceForWatch(watchId, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, campsiteId = null)))
+        repo.replaceForWatch(watchId, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, campsiteId = null)))
 
         val targets = repo.listForWatch(watchId)
         assertEquals(1, targets.size)
@@ -84,8 +84,8 @@ class AvailabilityWatchTargetRepoTest : SharedDbTest() {
         val watchB = insertWatch()
         val poi = insertPoi()
         val repo = AvailabilityWatchTargetRepo(ctx)
-        repo.replaceForWatch(watchA, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, reservableId = null)))
-        repo.replaceForWatch(watchB, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, reservableId = null)))
+        repo.replaceForWatch(watchA, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null)))
+        repo.replaceForWatch(watchB, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null)))
 
         val deleted = repo.deleteForWatch(watchA)
 
@@ -97,15 +97,15 @@ class AvailabilityWatchTargetRepoTest : SharedDbTest() {
     @Test
     fun `deleting the last target's reservable prunes the now-empty watch and its poller link`() {
         val watchId = insertWatch()
-        val reservableId = insertReservable("site-last-target")
+        val campsiteId = insertCampsite("site-last-target")
         val repo = AvailabilityWatchTargetRepo(ctx)
-        repo.replaceForWatch(watchId, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = null, reservableId = reservableId)))
+        repo.replaceForWatch(watchId, listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = null, campsiteId = campsiteId)))
         val poi = insertPoi()
         val pollerRepo = AvailabilityPollerRepo(ctx)
         val pollerId = pollerRepo.upsertActive("test", "parent-last-target", poi, pullNextRunAt = null)
         pollerRepo.linkWatch(watchId, pollerId)
 
-        ctx.execute("DELETE FROM campsites WHERE id = ?", reservableId)
+        ctx.execute("DELETE FROM campsites WHERE id = ?", campsiteId)
 
         assertTrue(repo.listForWatch(watchId).isEmpty())
         assertTrue(!watchExists(watchId))
@@ -121,8 +121,8 @@ class AvailabilityWatchTargetRepoTest : SharedDbTest() {
         repo.replaceForWatch(
             watchId,
             listOf(
-                AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, reservableId = null),
-                AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null),
+                AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, campsiteId = null),
+                AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, campsiteId = null),
             ),
         )
 

@@ -27,7 +27,7 @@ const SORT_OPTIONS = [
 const WATCHABLE_KINDS = new Set(['reserved', 'first-come']);
 export function renderSiteMatrix({
   state,
-  reservables,
+  campsites,
   days,
   error,
   selectedDate,
@@ -60,7 +60,7 @@ export function renderSiteMatrix({
     });
   }
 
-  const allRows = sortedReservables(reservables, visibleDays);
+  const allRows = sortedCampsites(campsites, visibleDays);
   if (allRows.length === 0) {
     return renderSection({
       title: 'Sites by date',
@@ -73,7 +73,7 @@ export function renderSiteMatrix({
   const availabilityByDate = new Map(
     visibleDays.map((day) => [day.date, new Set(availableCampsiteIds(day))]),
   );
-  const rows = sortReservables(filterReservables(allRows, activeFilters), activeFilters.sort, {
+  const rows = sortCampsites(filterCampsites(allRows, activeFilters), activeFilters.sort, {
     availabilityByDate,
     selectedDate,
     visibleDays,
@@ -478,36 +478,36 @@ function cellState(row, day, availableIds) {
 }
 
 function campsiteStatus(day, campsiteId) {
-  const statuses = day?.campsite_statuses ?? day?.campsiteStatuses;
+  const statuses = day?.campsite_statuses;
   if (!statuses || typeof statuses !== 'object') return null;
   if (!Object.prototype.hasOwnProperty.call(statuses, campsiteId)) return null;
   return normalizeAvailabilityStatus(statuses[campsiteId]);
 }
 
 function availableCampsiteIds(day) {
-  const ids = day?.available_campsite_ids ?? day?.availableCampsiteIds;
+  const ids = day?.available_campsite_ids;
   return Array.isArray(ids) ? ids.map(String) : [];
 }
 
-function sortedReservables(reservables, days = []) {
-  const catalogRows = Array.isArray(reservables) ? reservables : [];
-  const rows = catalogRows.length > 0 ? catalogRows : fallbackReservablesFromDays(days);
-  return [...rows].sort(compareReservable);
+function sortedCampsites(campsites, days = []) {
+  const catalogRows = Array.isArray(campsites) ? campsites : [];
+  const rows = catalogRows.length > 0 ? catalogRows : fallbackCampsitesFromDays(days);
+  return [...rows].sort(compareCampsite);
 }
 
-function fallbackReservablesFromDays(days) {
+function fallbackCampsitesFromDays(days) {
   const ids = new Set();
   for (const day of Array.isArray(days) ? days : []) {
-    const statuses = day?.campsite_statuses ?? day?.campsiteStatuses;
+    const statuses = day?.campsite_statuses;
     if (statuses && typeof statuses === 'object') {
       Object.keys(statuses).forEach((id) => ids.add(String(id)));
     }
     availableCampsiteIds(day).forEach((id) => ids.add(String(id)));
   }
-  return [...ids].sort().map(fallbackReservable);
+  return [...ids].sort().map(fallbackCampsite);
 }
 
-function fallbackReservable(id) {
+function fallbackCampsite(id) {
   return {
     id: String(id),
     vendor_id: String(id),
@@ -524,7 +524,7 @@ function normalizeFilters(filters) {
   };
 }
 
-function filterReservables(rows, filters) {
+function filterCampsites(rows, filters) {
   const query = filters.query.trim().toLowerCase();
   return rows.filter((row) => {
     if (filters.loop && row.loop !== filters.loop) return false;
@@ -546,18 +546,18 @@ function filterReservables(rows, filters) {
   });
 }
 
-function sortReservables(rows, sortKey, context) {
+function sortCampsites(rows, sortKey, context) {
   return [...rows].sort((a, b) => {
     if (sortKey === 'available') {
       const ao = availableDateCount(a, context.availabilityByDate, context.visibleDays);
       const bo = availableDateCount(b, context.availabilityByDate, context.visibleDays);
       if (ao !== bo) return bo - ao;
-      return compareReservable(a, b);
+      return compareCampsite(a, b);
     }
     if (sortKey === 'site') return compareBySite(a, b);
-    if (sortKey === 'loop') return compareReservable(a, b);
+    if (sortKey === 'loop') return compareCampsite(a, b);
     if (sortKey === 'type') return compareByType(a, b);
-    return compareReservable(a, b);
+    return compareCampsite(a, b);
   });
 }
 
@@ -587,7 +587,7 @@ function rowId(row) {
   return String(row.id);
 }
 
-function compareReservable(a, b) {
+function compareCampsite(a, b) {
   const al = a.loop || '\uffff';
   const bl = b.loop || '\uffff';
   if (al !== bl) return al.localeCompare(bl);
@@ -604,5 +604,5 @@ function compareByType(a, b) {
   const at = a.site_type || '\uffff';
   const bt = b.site_type || '\uffff';
   if (at !== bt) return at.localeCompare(bt, undefined, { numeric: true });
-  return compareReservable(a, b);
+  return compareCampsite(a, b);
 }

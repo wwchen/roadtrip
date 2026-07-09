@@ -356,8 +356,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p-bad-target", name = "Bad Target")
-            val campsiteId = seedReservable("bad-target-1")
-            linkReservableToPoi(campsiteId, poiId)
+            val campsiteId = seedCampsite("bad-target-1")
+            linkCampsiteToPoi(campsiteId, poiId)
             val body =
                 """
                 {"targets": [{"poi_id": $poiId, "campsite_id": $campsiteId}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
@@ -596,8 +596,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p-patch-bad-target", name = "Patch Bad Target")
-            val campsiteId = seedReservable("patch-bad-target-1")
-            linkReservableToPoi(campsiteId, poiId)
+            val campsiteId = seedCampsite("patch-bad-target-1")
+            linkCampsiteToPoi(campsiteId, poiId)
             val body =
                 """
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
@@ -713,7 +713,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             // POI with a resolvable recgov provider_ref + a child reservable so the
             // watch resolves to exactly one (recgov, 232447) poller.
             val poiId = seedPoi(sourceId = "p99", name = "Atomic", providerRefJson = """{"recgov_id": "232447"}""")
-            linkReservableToPoi(seedReservable(vendorId = "100"), poiId)
+            linkCampsiteToPoi(seedCampsite(vendorId = "100"), poiId)
             val createBody =
                 """
                 {"poi_id": $poiId, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
@@ -763,7 +763,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 providerRefJson = providerRefJson,
             ).poiId
 
-    private fun seedReservable(
+    private fun seedCampsite(
         vendorId: String,
         name: String? = null,
         loop: String? = null,
@@ -778,8 +778,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             loopName = loop,
         )
 
-    private fun linkReservableToPoi(
-        reservableId: Long,
+    private fun linkCampsiteToPoi(
+        campsiteId: Long,
         poiId: Long,
     ) {
         ctx.execute(
@@ -793,14 +793,14 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             WHERE id = ?
             """.trimIndent(),
             poiId,
-            reservableId,
+            campsiteId,
         )
     }
 
     /** Seeds one interval row -- the heatmap's current-state source of truth --
      *  as a single status-run for the cell. */
     private fun insertCell(
-        reservableId: Long,
+        campsiteId: Long,
         targetDate: String,
         observedAt: java.time.OffsetDateTime,
         available: Boolean,
@@ -811,7 +811,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 campsite_id, target_date, status, last_observed_at
             ) VALUES (?::bigint, ?::date, ?::availability_status, ?::timestamptz)
             """.trimIndent(),
-            reservableId,
+            campsiteId,
             targetDate,
             if (available) "available" else "reserved",
             observedAt.toString(),
@@ -849,8 +849,8 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p1", name = "Upper Pines")
-            val campsiteId = seedReservable("100", name = "A12", loop = "Loop A")
-            linkReservableToPoi(campsiteId, poiId)
+            val campsiteId = seedCampsite("100", name = "A12", loop = "Loop A")
+            linkCampsiteToPoi(campsiteId, poiId)
 
             val createBody =
                 """
@@ -902,12 +902,12 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 }
             }
             val poiId = seedPoi(sourceId = "p2", name = "Tunnel Mountain")
-            val rA1 = seedReservable("201", name = "A12", loop = "Loop A")
-            val rA2 = seedReservable("202", name = "A13", loop = "Loop A")
-            val rB1 = seedReservable("203", name = "B05", loop = "Loop B")
-            linkReservableToPoi(rA1, poiId)
-            linkReservableToPoi(rA2, poiId)
-            linkReservableToPoi(rB1, poiId)
+            val rA1 = seedCampsite("201", name = "A12", loop = "Loop A")
+            val rA2 = seedCampsite("202", name = "A13", loop = "Loop A")
+            val rB1 = seedCampsite("203", name = "B05", loop = "Loop B")
+            linkCampsiteToPoi(rA1, poiId)
+            linkCampsiteToPoi(rA2, poiId)
+            linkCampsiteToPoi(rB1, poiId)
 
             val createBody =
                 """

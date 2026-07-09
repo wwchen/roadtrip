@@ -6,7 +6,7 @@ import org.jooq.Record
 import org.jooq.impl.DSL
 
 /**
- * Owns all SQL for `availability_watch_target` — the set of POIs/reservables
+ * Owns all SQL for `availability_watch_target` — the set of POIs/campsites
  * a watch covers. A watch's scope is exactly this set; [AvailabilityWatchRepo]
  * delegates all target reads/writes here rather than embedding the join
  * table's SQL inline, so the two repos can't drift on shape.
@@ -16,11 +16,11 @@ class AvailabilityWatchTargetRepo(
 ) {
     data class TargetInput(
         val poiId: Long?,
-        val reservableId: Long?,
+        val campsiteId: Long?,
     ) {
         init {
-            require((poiId == null) xor (reservableId == null)) {
-                "exactly one of poiId/reservableId must be set per target"
+            require((poiId == null) xor (campsiteId == null)) {
+                "exactly one of poiId/campsiteId must be set per target"
             }
         }
     }
@@ -29,7 +29,7 @@ class AvailabilityWatchTargetRepo(
         val id: Long,
         val watchId: Long,
         val poiId: Long?,
-        val reservableId: Long?,
+        val campsiteId: Long?,
     )
 
     /**
@@ -61,7 +61,7 @@ class AvailabilityWatchTargetRepo(
                     .insertInto(AVAILABILITY_WATCH_TARGET)
                     .set(AVAILABILITY_WATCH_TARGET.WATCH_ID, watchId)
                     .set(AVAILABILITY_WATCH_TARGET.POI_ID, t.poiId)
-                    .set(AVAILABILITY_WATCH_TARGET.CAMPSITE_ID, t.reservableId)
+                    .set(AVAILABILITY_WATCH_TARGET.CAMPSITE_ID, t.campsiteId)
                     .execute()
             }
         }
@@ -85,6 +85,6 @@ class AvailabilityWatchTargetRepo(
             id = r.get(AVAILABILITY_WATCH_TARGET.ID)!!,
             watchId = r.get(AVAILABILITY_WATCH_TARGET.WATCH_ID)!!,
             poiId = r.get(AVAILABILITY_WATCH_TARGET.POI_ID),
-            reservableId = r.get(AVAILABILITY_WATCH_TARGET.CAMPSITE_ID),
+            campsiteId = r.get(AVAILABILITY_WATCH_TARGET.CAMPSITE_ID),
         )
 }

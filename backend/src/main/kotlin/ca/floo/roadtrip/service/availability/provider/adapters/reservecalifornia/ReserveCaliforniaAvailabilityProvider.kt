@@ -6,14 +6,14 @@ import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailabil
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -62,7 +62,7 @@ class ReserveCaliforniaAvailabilityProvider(
 
     override suspend fun catalogAvailability(
         ref: ProviderRef,
-        reservables: List<CatalogReservableRef>,
+        campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -74,7 +74,7 @@ class ReserveCaliforniaAvailabilityProvider(
                 .toMap()
         val dates = dates(startDate, endDate)
         val observations =
-            reservables.flatMap { reservable ->
+            campsites.flatMap { reservable ->
                 val found = byUnit[reservable.vendorId]
                 observationsForReservable(
                     campsiteId = reservable.campsiteId,
@@ -84,31 +84,6 @@ class ReserveCaliforniaAvailabilityProvider(
                 )
             }
         return batch(reserveCaliforniaRef, startDate, endDate, observations)
-    }
-
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val reserveCaliforniaRef = reserveCaliforniaRefOrThrow(ref)
-        val grids = fetchFacilities(reserveCaliforniaRef, startDate, endDate)
-        val found =
-            grids
-                .flatMap { grid -> grid.statuses.map { (unitId, byDate) -> unitId to (grid.observedAt to byDate) } }
-                .toMap()[vendorId]
-        return batch(
-            reserveCaliforniaRef,
-            startDate,
-            endDate,
-            observationsForReservable(
-                campsiteId = null,
-                byDate = found?.second.orEmpty(),
-                dates = dates(startDate, endDate),
-                observedAt = found?.first ?: observedAt(grids),
-            ),
-        )
     }
 
     private suspend fun fetchFacilities(
@@ -138,9 +113,9 @@ class ReserveCaliforniaAvailabilityProvider(
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         observedAt: Instant,
-    ): List<ReservableDayObservation> =
+    ): List<CampsiteDayObservation> =
         dates.map { date ->
-            ReservableDayObservation(
+            CampsiteDayObservation(
                 campsiteId = campsiteId,
                 date = date,
                 observedAt = observedAt,
@@ -152,7 +127,7 @@ class ReserveCaliforniaAvailabilityProvider(
         ref: ProviderRef.ReserveCalifornia,
         startDate: LocalDate,
         endDate: LocalDate,
-        observations: List<ReservableDayObservation>,
+        observations: List<CampsiteDayObservation>,
     ): AvailabilityObservationBatch =
         AvailabilityObservationBatch(
             provider = PROVIDER,

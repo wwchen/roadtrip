@@ -27,7 +27,7 @@ class AvailabilityWatchRepo(
 
     data class CreateInput(
         val targets: List<AvailabilityWatchTargetRepo.TargetInput>,
-        val reservableFilters: JsonObject,
+        val campsiteFilters: JsonObject,
         val startDate: LocalDate,
         val endDate: LocalDate,
         // NULL = no watch-level cadence override (fall through to POI override / default).
@@ -39,7 +39,7 @@ class AvailabilityWatchRepo(
 
     data class UpdateInput(
         val targets: List<AvailabilityWatchTargetRepo.TargetInput>? = null,
-        val reservableFilters: JsonObject? = null,
+        val campsiteFilters: JsonObject? = null,
         val startDate: LocalDate? = null,
         val endDate: LocalDate? = null,
         val cadenceSec: Int? = null,
@@ -52,7 +52,7 @@ class AvailabilityWatchRepo(
     data class Watch(
         val id: Long,
         val targets: List<AvailabilityWatchTargetRepo.WatchTarget>,
-        val reservableFilters: JsonObject,
+        val campsiteFilters: JsonObject,
         val startDate: LocalDate,
         val endDate: LocalDate,
         // NULL = no watch-level cadence override; resolver falls through.
@@ -86,7 +86,7 @@ class AvailabilityWatchRepo(
                 .insertInto(AVAILABILITY_WATCH)
                 .set(
                     AVAILABILITY_WATCH.CAMPSITE_FILTERS,
-                    JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)),
+                    JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.campsiteFilters)),
                 ).set(AVAILABILITY_WATCH.START_DATE, input.startDate)
                 .set(AVAILABILITY_WATCH.END_DATE, input.endDate)
                 .set(AVAILABILITY_WATCH.CADENCE_SEC, input.cadenceSec)
@@ -110,14 +110,14 @@ class AvailabilityWatchRepo(
     fun list(
         status: WatchStatus? = null,
         poiId: Long? = null,
-        reservableId: Long? = null,
+        campsiteId: Long? = null,
         limit: Int = DEFAULT_LIST_LIMIT,
         offset: Int = 0,
     ): List<Watch> {
         val effectiveLimit = limit.coerceIn(1, MAX_LIST_LIMIT)
         val rows =
             baseSelect()
-                .where(scopeConditions(status, poiId, reservableId))
+                .where(scopeConditions(status, poiId, campsiteId))
                 .orderBy(AVAILABILITY_WATCH.CREATED_AT.desc(), AVAILABILITY_WATCH.ID.desc())
                 .limit(effectiveLimit)
                 .offset(offset)
@@ -170,17 +170,17 @@ class AvailabilityWatchRepo(
     fun count(
         status: WatchStatus? = null,
         poiId: Long? = null,
-        reservableId: Long? = null,
+        campsiteId: Long? = null,
     ): Int =
         ctx
             .selectCount()
             .from(AVAILABILITY_WATCH)
-            .where(scopeConditions(status, poiId, reservableId))
+            .where(scopeConditions(status, poiId, campsiteId))
             .fetchOne(0, Int::class.java) ?: 0
 
     /**
-     * `poiId`/`reservableId` filters now match "watch's target set contains
-     * this poi/reservable" rather than a single-column equality, since a
+     * `poiId`/`campsiteId` filters now match "watch's target set contains
+     * this poi/campsite" rather than a single-column equality, since a
      * watch can have multiple targets. Modeled as an EXISTS subquery against
      * `availability_watch_target` rather than a join, so filtering never
      * duplicates a watch row when it has multiple matching targets.
@@ -188,7 +188,7 @@ class AvailabilityWatchRepo(
     private fun scopeConditions(
         status: WatchStatus?,
         poiId: Long?,
-        reservableId: Long?,
+        campsiteId: Long?,
     ): org.jooq.Condition {
         val conds = mutableListOf<org.jooq.Condition>()
         if (status != null) conds += AVAILABILITY_WATCH.STATUS.eq(status.wireValue)
@@ -202,14 +202,14 @@ class AvailabilityWatchRepo(
                         .and(AVAILABILITY_WATCH_TARGET.POI_ID.eq(poiId)),
                 )
         }
-        if (reservableId != null) {
+        if (campsiteId != null) {
             conds +=
                 DSL.exists(
                     DSL
                         .selectOne()
                         .from(AVAILABILITY_WATCH_TARGET)
                         .where(AVAILABILITY_WATCH_TARGET.WATCH_ID.eq(AVAILABILITY_WATCH.ID))
-                        .and(AVAILABILITY_WATCH_TARGET.CAMPSITE_ID.eq(reservableId)),
+                        .and(AVAILABILITY_WATCH_TARGET.CAMPSITE_ID.eq(campsiteId)),
                 )
         }
         return if (conds.isEmpty()) DSL.noCondition() else DSL.and(conds)
@@ -220,11 +220,11 @@ class AvailabilityWatchRepo(
         input: UpdateInput,
     ): Watch? {
         var query = ctx.update(AVAILABILITY_WATCH).set(AVAILABILITY_WATCH.UPDATED_AT, OffsetDateTime.now())
-        if (input.reservableFilters != null) {
+        if (input.campsiteFilters != null) {
             query =
                 query.set(
                     AVAILABILITY_WATCH.CAMPSITE_FILTERS,
-                    JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.reservableFilters)),
+                    JSONB.valueOf(json.encodeToString(JsonObject.serializer(), input.campsiteFilters)),
                 )
         }
         if (input.startDate != null) query = query.set(AVAILABILITY_WATCH.START_DATE, input.startDate)
@@ -262,7 +262,7 @@ class AvailabilityWatchRepo(
         Watch(
             id = r.get(AVAILABILITY_WATCH.ID)!!,
             targets = targetsRepo.listForWatch(r.get(AVAILABILITY_WATCH.ID)!!),
-            reservableFilters = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.CAMPSITE_FILTERS)!!.data()).jsonObject,
+            campsiteFilters = json.parseToJsonElement(r.get(AVAILABILITY_WATCH.CAMPSITE_FILTERS)!!.data()).jsonObject,
             startDate = r.get(AVAILABILITY_WATCH.START_DATE)!!,
             endDate = r.get(AVAILABILITY_WATCH.END_DATE)!!,
             cadenceSec = r.get(AVAILABILITY_WATCH.CADENCE_SEC),

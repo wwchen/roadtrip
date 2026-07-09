@@ -21,14 +21,14 @@ class AvailabilityRepo(
     private val ctx: DSLContext,
 ) {
     data class Observation(
-        val reservableId: Long,
+        val campsiteId: Long,
         val targetDate: LocalDate,
         val status: AvailabilityStatus,
         val observedAt: Instant,
     )
 
     data class CurrentCell(
-        val reservableId: Long,
+        val campsiteId: Long,
         val targetDate: LocalDate,
         val status: AvailabilityStatus,
         val available: Boolean,
@@ -63,7 +63,7 @@ class AvailabilityRepo(
                     txn
                         .select(AVAILABILITY.ID, AVAILABILITY.STATUS)
                         .from(AVAILABILITY)
-                        .where(AVAILABILITY.CAMPSITE_ID.eq(obs.reservableId))
+                        .where(AVAILABILITY.CAMPSITE_ID.eq(obs.campsiteId))
                         .and(AVAILABILITY.TARGET_DATE.eq(obs.targetDate))
                         .orderBy(AVAILABILITY.LAST_OBSERVED_AT.desc(), AVAILABILITY.ID.desc())
                         .limit(1)
@@ -78,14 +78,14 @@ class AvailabilityRepo(
                 } else {
                     txn
                         .insertInto(AVAILABILITY)
-                        .set(AVAILABILITY.CAMPSITE_ID, obs.reservableId)
+                        .set(AVAILABILITY.CAMPSITE_ID, obs.campsiteId)
                         .set(AVAILABILITY.TARGET_DATE, obs.targetDate)
                         .set(AVAILABILITY.STATUS, newStatus)
                         .set(AVAILABILITY.LAST_OBSERVED_AT, observedAt)
                         .set(AVAILABILITY.PREVIOUS_ID, current?.get(AVAILABILITY.ID))
                         .set(AVAILABILITY.RUN_ID, runId)
                         .execute()
-                    transitions += CellTransition(obs.reservableId, obs.targetDate, obs.status)
+                    transitions += CellTransition(obs.campsiteId, obs.targetDate, obs.status)
                 }
             }
             transitions
@@ -104,10 +104,10 @@ class AvailabilityRepo(
      * be idempotent across repeated polls.
      */
     fun markElapsedAsPast(
-        reservableIds: List<Long>,
+        campsiteIds: List<Long>,
         today: LocalDate,
     ): Int {
-        if (reservableIds.isEmpty()) return 0
+        if (campsiteIds.isEmpty()) return 0
         val now = OffsetDateTime.now(ZoneOffset.UTC)
         return ctx.transactionResult { config ->
             val txn = DSL.using(config)
@@ -126,7 +126,7 @@ class AvailabilityRepo(
                         ) cur
                         WHERE cur.status <> 'past'
                         """.trimIndent(),
-                        reservableIds.toTypedArray(),
+                        campsiteIds.toTypedArray(),
                         today,
                     ).fetch { it }
             for (row in elapsed) {
@@ -143,12 +143,12 @@ class AvailabilityRepo(
         }
     }
 
-    /** Current cell per (reservable, date): the row with the greatest last_observed_at. */
+    /** Current cell per (campsite, date): the row with the greatest last_observed_at. */
     fun readCurrent(
-        reservableIds: List<Long>,
+        campsiteIds: List<Long>,
         dates: List<LocalDate>,
     ): List<CurrentCell> {
-        if (reservableIds.isEmpty() || dates.isEmpty()) return emptyList()
+        if (campsiteIds.isEmpty() || dates.isEmpty()) return emptyList()
         return ctx
             .resultQuery(
                 """
@@ -159,12 +159,12 @@ class AvailabilityRepo(
                   AND target_date = ANY(?::date[])
                 ORDER BY campsite_id, target_date, last_observed_at DESC, id DESC
                 """.trimIndent(),
-                reservableIds.toTypedArray(),
+                campsiteIds.toTypedArray(),
                 dates.toTypedArray(),
             ).fetch { r ->
                 val status = AvailabilityStatus.parse(r.get("status", String::class.java))
                 CurrentCell(
-                    reservableId = r.get("campsite_id", Long::class.java),
+                    campsiteId = r.get("campsite_id", Long::class.java),
                     targetDate = r.get("target_date", LocalDate::class.java),
                     status = status,
                     available = status.isOnlineBookable,
@@ -174,7 +174,7 @@ class AvailabilityRepo(
     }
 
     data class StatusRun(
-        val reservableId: Long,
+        val campsiteId: Long,
         val runId: Long?,
         val targetDate: LocalDate,
         val status: AvailabilityStatus,
@@ -195,7 +195,7 @@ class AvailabilityRepo(
     private fun mapStatusRun(r: org.jooq.Record): StatusRun {
         val status = AvailabilityStatus.parse(r.get("status", String::class.java))
         return StatusRun(
-            reservableId = r.get("campsite_id", Long::class.java),
+            campsiteId = r.get("campsite_id", Long::class.java),
             runId = r.get("run_id", Long::class.java),
             targetDate = r.get("target_date", LocalDate::class.java),
             status = status,
@@ -205,15 +205,15 @@ class AvailabilityRepo(
         )
     }
 
-    fun listForReservable(
-        reservableId: Long,
+    fun listForCampsite(
+        campsiteId: Long,
         limit: Int = 200,
     ): List<StatusRun> =
         ctx
             .resultQuery(
                 "SELECT * FROM ($statusRunSelect) t WHERE campsite_id = ? " +
                     "ORDER BY target_date DESC, last_observed_at DESC LIMIT ?",
-                reservableId,
+                campsiteId,
                 limit.coerceIn(1, 1000),
             ).fetch { mapStatusRun(it) }
 
@@ -260,7 +260,7 @@ class AvailabilityRepo(
     )
 
     fun summarize(
-        reservableId: Long,
+        campsiteId: Long,
         dates: List<LocalDate>,
         now: OffsetDateTime = OffsetDateTime.now(),
         windowHours: Int = DEFAULT_SUMMARY_WINDOW_HOURS,
@@ -292,7 +292,7 @@ class AvailabilityRepo(
                     WHERE last_observed_at >= ?::timestamptz OR rn = 1
                     ORDER BY target_date, last_observed_at
                     """.trimIndent(),
-                    reservableId,
+                    campsiteId,
                     dates.toTypedArray(),
                     windowStart,
                 ).fetch { mapStatusRun(it) }

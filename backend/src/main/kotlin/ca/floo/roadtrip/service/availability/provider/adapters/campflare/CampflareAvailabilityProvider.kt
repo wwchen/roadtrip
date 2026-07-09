@@ -6,14 +6,14 @@ import ca.floo.roadtrip.clients.campflare.CampflareException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.coroutines.CancellationException
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -65,11 +65,11 @@ class CampflareAvailabilityProvider(
 
     override suspend fun catalogAvailability(
         ref: ProviderRef,
-        reservables: List<CatalogReservableRef>,
+        campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
-        if (reservables.isEmpty()) {
+        if (campsites.isEmpty()) {
             return availability(ref, startDate, endDate)
         }
         val campflareRef = campflareRefOrThrow(ref)
@@ -82,7 +82,7 @@ class CampflareAvailabilityProvider(
                 .associateBy { it.campsiteId }
         val days = dates(startDate, endDate)
         val observations =
-            reservables.flatMap { reservable ->
+            campsites.flatMap { reservable ->
                 observationsForReservable(
                     campsiteId = reservable.campsiteId,
                     byDate = byCampsiteId[reservable.vendorId]?.availability.orEmpty(),
@@ -95,36 +95,6 @@ class CampflareAvailabilityProvider(
             startDate = startDate,
             endDate = endDate,
             observations = observations,
-        )
-    }
-
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val campflareRef = campflareRefOrThrow(ref)
-        val data = fetch(campflareRef.campgroundId, startDate, endDate)
-        val byDate =
-            data
-                .campgrounds[campflareRef.campgroundId]
-                ?.campsiteAvailability
-                .orEmpty()
-                .firstOrNull { it.campsiteId == vendorId }
-                ?.availability
-                .orEmpty()
-        return batch(
-            campgroundId = campflareRef.campgroundId,
-            startDate = startDate,
-            endDate = endDate,
-            observations =
-                observationsForReservable(
-                    campsiteId = null,
-                    byDate = byDate,
-                    dates = dates(startDate, endDate),
-                    data = data,
-                ),
         )
     }
 
@@ -146,9 +116,9 @@ class CampflareAvailabilityProvider(
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         data: CampflareAvailability,
-    ): List<ReservableDayObservation> =
+    ): List<CampsiteDayObservation> =
         dates.map { date ->
-            ReservableDayObservation(
+            CampsiteDayObservation(
                 campsiteId = campsiteId,
                 date = date,
                 observedAt = data.observedAt,
@@ -160,7 +130,7 @@ class CampflareAvailabilityProvider(
         campgroundId: String,
         startDate: LocalDate,
         endDate: LocalDate,
-        observations: List<ReservableDayObservation>,
+        observations: List<CampsiteDayObservation>,
     ): AvailabilityObservationBatch =
         AvailabilityObservationBatch(
             provider = CAMPFLARE_PROVIDER,

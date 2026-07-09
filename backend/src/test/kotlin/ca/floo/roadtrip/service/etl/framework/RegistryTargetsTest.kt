@@ -2,12 +2,12 @@ package ca.floo.roadtrip.service.etl.framework
 
 import ca.floo.roadtrip.models.metadata.ingest.RunKind
 import ca.floo.roadtrip.models.metadata.registry.CampsiteDataEntry
+import ca.floo.roadtrip.models.metadata.registry.CampsiteParentJoinerEntry
 import ca.floo.roadtrip.models.metadata.registry.DataSourceEntry
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.Fetcher
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.models.metadata.registry.PoiReservableJoinerEntry
 import org.jooq.SQLDialect
 import org.jooq.impl.DSL
 import java.io.File
@@ -110,9 +110,9 @@ class RegistryTargetsTest {
                             etls = listOf(EtlEntry(slug = "legacy-federal-campsites", adapter = "LegacyFederalSitesEtl")),
                         ),
                     ),
-                poiReservableJoiners =
+                campsiteParentJoiners =
                     listOf(
-                        PoiReservableJoinerEntry(
+                        CampsiteParentJoinerEntry(
                             name = "Federal Campsites to Federal Campgrounds",
                             adapter = "LegacyFederalJoiner",
                         ),

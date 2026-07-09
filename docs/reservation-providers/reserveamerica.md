@@ -42,8 +42,8 @@ instance (see `config/poi-registry.yaml`).
   `vendor` is **per-tenant** (`reserveamerica_abpp`, `reserveamerica_ny`), not a
   flat `reserveamerica`, so `vendor_id == siteId` and catalog rows bind to
   availability observations directly.
-- The joiner (`ReserveAmericaPoiReservableJoiner`) links reservable → POI on the
-  `(contract_code, park_id)` pair carried in `reservables.raw`
+- The joiner (`ReserveAmericaCampsiteParentJoiner`) links campsite → POI on the
+  `(contract_code, park_id)` pair carried in `campsites.raw`
   (`_parent_contract_code`, `_parent_park_id`). Both keys must match, so a
   `park_id` that collides across contracts never cross-links.
 
@@ -66,7 +66,7 @@ HTML. Each site is a `siteListLabel` row:
 ```
 
 - Roster fields extracted: `siteId` (253478), `parkId` (489), and the label
-  text ("039") → `reservables.name`.
+  text ("039") → `campsites.name`.
 - Paginated: `startIdx` steps by 25; `<span id='resulttotal_dr_top'>` gives the
   count. `ReserveAmericaAvailabilityParser.siteRows` splits rows; the
   availability parser reads status cells, `ReserveAmericaCatalogParser` reads
@@ -97,9 +97,9 @@ per-site scrape (linked from each calendar row) — not the dead API.
 ## Catalog status
 
 Cataloged from the `campsiteCalendar.do` roster via `ReserveAmericaSitesEtl`
-(per tenant) + `ReserveAmericaPoiReservableJoiner`. `name` = site number;
+(per tenant) + `ReserveAmericaCampsiteParentJoiner`. `name` = site number;
 `loop`/`site_type` = null. A POI only shows availability once its catalog rows
-are linked — POIs without linked `reservables` report an empty window (there is
+are linked — POIs without linked campsites report an empty window (there is
 no live render-only fallback).
 
 ## Adapter design notes

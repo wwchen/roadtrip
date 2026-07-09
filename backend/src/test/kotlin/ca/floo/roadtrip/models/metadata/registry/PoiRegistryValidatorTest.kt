@@ -50,7 +50,7 @@ class PoiRegistryValidatorTest {
                 """.trimIndent(),
             )
         assertEquals(emptyList(), r.campsiteData)
-        assertEquals(emptyList(), r.poiReservableJoiners)
+        assertEquals(emptyList(), r.campsiteParentJoiners)
     }
 
     @Test
@@ -286,20 +286,20 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `poi_reservable_joiner row with adapter loads`() {
+    fun `campsite_parent_joiner row with adapter loads`() {
         val r =
             load(
                 """
                 data_sources: []
                 poi_data: []
                 campsite_data: []
-                poi_reservable_joiner:
+                campsite_parent_joiner:
                   - name: Recgov join
-                    adapter: RecgovPoiReservableJoiner
+                    adapter: RecgovCampsiteParentJoiner
                 """.trimIndent(),
             )
-        assertEquals(1, r.poiReservableJoiners.size)
-        assertEquals("RecgovPoiReservableJoiner", r.poiReservableJoiners[0].adapter)
+        assertEquals(1, r.campsiteParentJoiners.size)
+        assertEquals("RecgovCampsiteParentJoiner", r.campsiteParentJoiners[0].adapter)
     }
 
     @Test
@@ -311,7 +311,7 @@ class PoiRegistryValidatorTest {
                     data_sources: []
                     poi_data: []
                     campsite_data: []
-                    poi_reservable_joiner:
+                    campsite_parent_joiner:
                       - name: Empty
                         adapter: ""
                     """.trimIndent(),
@@ -332,7 +332,7 @@ class PoiRegistryValidatorTest {
                     data_sources: []
                     poi_data: []
                     campsite_data: []
-                    poi_reservable_joiner:
+                    campsite_parent_joiner:
                       - name: Dup
                         adapter: A
                       - name: Dup

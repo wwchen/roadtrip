@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.availability.provider
 
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import java.time.LocalDate
 
 /**
@@ -24,7 +24,7 @@ import java.time.LocalDate
  *   - HTTP response shaping (service/API layer rolls observations into DTOs)
  */
 interface AvailabilityProvider : AvailabilityClient {
-    /** Stable identity. Mapped from `pois.source` + `provider_ref` shape by the registry. */
+    /** Stable identity. Mapped from catalog source slug + `provider_ref` shape by the registry. */
     val id: AvailabilityProviderId
 
     /** Static per adapter; cheap to read and safe to surface to API clients. */
@@ -58,62 +58,44 @@ interface AvailabilityProvider : AvailabilityClient {
      */
     override suspend fun catalogAvailability(
         ref: ProviderRef,
-        reservables: List<CatalogReservableRef>,
+        campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch = availability(ref, startDate, endDate)
 
     /**
-     * Per-day availability for one reservable under a campground. Providers
-     * should share the same upstream cache as [availability]; this endpoint is
-     * a narrower projection of the same inventory window, not a second
-     * independent polling path.
-     *
-     * Default is unsupported so adapters can opt in as their upstream exposes
-     * stable per-resource status.
-     *
-     * @throws AvailabilityProviderError on upstream failure or unsupported provider.
-     */
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch = throw AvailabilityProviderError.Unsupported("reservableAvailability", id)
-
-    /**
-     * User-facing booking URL *template* for [reservable] under a campground
+     * User-facing booking URL *template* for [campsite] under a campground
      * whose parent scope is [parentRef], or null when this provider exposes no
      * stable deep link. The template may embed the
      * [BookingUrlTemplate] placeholders (filled by the caller for a chosen
      * window) or be a static URL. Pure and cheap — no upstream call, no throw.
      *
      * The URL scheme is vendor-specific, so it lives in the adapter — the one
-     * place that knows the vendor's booking-site shape. Both the reservables
+     * place that knows the vendor's booking-site shape. Both the campsites
      * API (which ships the template to the web app) and provider-neutral
      * callers (alert notifications, via [bookingUrl]) read it from here rather
      * than hardcoding vendor URLs. Default null keeps deep links opt-in per
      * adapter — a provider without one is not a gap to fill.
      */
     fun bookingUrlTemplate(
-        reservable: Reservable,
+        campsite: Campsite,
         parentRef: ProviderRef,
     ): String? = null
 
     /**
-     * Concrete booking deep link for [reservable] on the single night beginning
+     * Concrete booking deep link for [campsite] on the single night beginning
      * [date] (check-out the next day), or null when the provider exposes none.
      * Derived from [bookingUrlTemplate] by filling its window placeholders, so
      * an adapter only implements the template once.
      */
     fun bookingUrl(
-        reservable: Reservable,
+        campsite: Campsite,
         parentRef: ProviderRef,
         date: LocalDate,
-    ): String? = bookingUrlTemplate(reservable, parentRef)?.let { BookingUrlTemplate.fill(it, date, date.plusDays(1)) }
+    ): String? = bookingUrlTemplate(campsite, parentRef)?.let { BookingUrlTemplate.fill(it, date, date.plusDays(1)) }
 }
 
-data class CatalogReservableRef(
+data class CatalogCampsiteRef(
     val campsiteId: Long,
     val vendorId: String,
     val mapId: Long? = null,

@@ -35,7 +35,7 @@ import java.time.ZoneOffset
  * derived from watch state: the polling window is vendor-derived and anchored
  * at today (the widest window the upstream exposes per tick), and the target
  * set is the poller's parent campground's **full catalog** — every child
- * reservable under its representative POI, not just the sites a watch happens
+ * campsite under its representative POI, not just the sites a watch happens
  * to reference. It resolves that catalog to
  * [ca.floo.roadtrip.service.availability.ResolvedAvailabilityTarget]s
  * (filtered to this poller's own (provider, parentRef)), and hands them to
@@ -98,10 +98,10 @@ internal class AvailabilityPollExecutor(
         val poiCadenceOverrideSec = pollers.cadenceOverrideForPoller(poller.id)
         val cadenceSec = resolveCadenceSec(liveWatches, poiCadenceOverrideSec)
 
-        // Fetch the parent campground's FULL catalog — every child reservable
+        // Fetch the parent campground's FULL catalog — every child campsite
         // under the poller's representative POI — not just the sites some live
         // watch happens to reference. One catalogAvailability call returns the
-        // whole parent grid regardless of the reservable list (the list is a
+        // whole parent grid regardless of the campsite list (the list is a
         // projection, not a call multiplier), so widening to the full catalog
         // costs no extra upstream calls and maximally widens snapshot history.
         // This is what severs the fetch path from watch state: the poller reads
@@ -116,9 +116,9 @@ internal class AvailabilityPollExecutor(
                         it.provider.id.name
                             .lowercase() == poller.provider
                 }
-                // findByPoi returns distinct reservables, but guard against
+                // findByPoi returns distinct campsites, but guard against
                 // duplicate poi links so a site is fetched once.
-                .distinctBy { it.reservable.id }
+                .distinctBy { it.campsite.id }
 
         // The polling window per date-context: the widest window the vendor
         // exposes for a single tick, anchored at today and independent of the
@@ -176,7 +176,7 @@ internal class AvailabilityPollExecutor(
                         fetch = { parentRef, provider, rows, windows ->
                             provider.catalogAvailability(
                                 ref = parentRef,
-                                reservables = rows.map { it.catalogRef },
+                                campsites = rows.map { it.catalogRef },
                                 startDate = windows.fetch.startDate,
                                 endDate = windows.fetch.endDate,
                             )
@@ -189,7 +189,7 @@ internal class AvailabilityPollExecutor(
                 // their terminal 'past' state here (belt-and-suspenders alongside PR1's
                 // window-clamp retirement, which stops polling but does not flip the cell).
                 val observedCampsiteIds =
-                    results.flatMap { r -> r.reservables.map { it.id } }.distinct()
+                    results.flatMap { r -> r.campsites.map { it.id } }.distinct()
                 availability.markElapsedAsPast(observedCampsiteIds, LocalDate.now(ZoneOffset.UTC))
                 recordFetchCalls(results, runId)
                 val completedAt = OffsetDateTime.now()
@@ -242,12 +242,12 @@ internal class AvailabilityPollExecutor(
         runId: Long,
     ): List<CellTransition> {
         val batch = result.batch ?: return emptyList()
-        val campsiteIds = result.reservables.mapTo(mutableSetOf()) { it.id }
+        val campsiteIds = result.campsites.mapTo(mutableSetOf()) { it.id }
         val observations =
             batch.observations.mapNotNull { obs ->
                 val dbId = obs.campsiteId?.takeIf { it in campsiteIds } ?: return@mapNotNull null
                 AvailabilityRepo.Observation(
-                    reservableId = dbId,
+                    campsiteId = dbId,
                     targetDate = obs.date,
                     status = obs.status,
                     observedAt = obs.observedAt,
@@ -272,7 +272,7 @@ internal class AvailabilityPollExecutor(
                     runId = runId,
                     provider = providerId.lowercase(),
                     parentRef = parentRefKey(r.parentRef),
-                    campsiteCount = r.reservables.size,
+                    campsiteCount = r.campsites.size,
                     windowStart = r.window!!.startDate,
                     windowEnd = r.window.endDate,
                     outcome = r.outcome.name.lowercase(),

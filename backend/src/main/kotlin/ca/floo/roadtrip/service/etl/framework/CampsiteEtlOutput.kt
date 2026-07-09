@@ -6,7 +6,7 @@ import kotlinx.serialization.json.JsonElement
  * Canonical output for vendor campsite catalog ETLs.
  *
  * Vendor adapters emit these DTOs instead of the retired wide `pois` and
- * `reservables` contracts. The orchestrator persists terminal outputs through
+ * the retired reservables-table contracts. The orchestrator persists terminal outputs through
  * typed catalog tables and lean POI wrappers.
  */
 data class CampsiteEtlOutput(

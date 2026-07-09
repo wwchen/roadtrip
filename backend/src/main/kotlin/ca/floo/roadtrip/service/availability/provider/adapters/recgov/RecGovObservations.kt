@@ -7,9 +7,9 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.service.api.availabilityErrorDto
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -48,7 +48,7 @@ internal fun monthsCovering(
 
 /**
  * Fetch every relevant month and translate upstream statuses into atomic
- * reservable-day observations. Throws on upstream failure — caller maps to a
+ * campsite-day observations. Throws on upstream failure — caller maps to a
  * 503.
  *
  * The half-open window `[startDate, endDate)` is classified as independent
@@ -87,13 +87,13 @@ internal suspend fun fetchRecgovAvailabilityObservations(
 
 /**
  * Same upstream fetch as [fetchRecgovAvailabilityObservations], narrowed to a
- * linked reservable catalog. This lets `/api/poi/{id}/availability?site_type=...`
+ * linked campsite catalog. This lets `/api/poi/{id}/availability?site_type=...`
  * classify only the matching POI sites without a per-site upstream loop.
  */
 internal suspend fun fetchRecgovCatalogObservations(
     client: RecGovAvailabilityClient,
     recgovId: String,
-    reservables: List<CatalogReservableRef>,
+    campsites: List<CatalogCampsiteRef>,
     startDate: LocalDate,
     endDate: LocalDate,
 ): AvailabilityObservationBatch =
@@ -107,9 +107,9 @@ internal suspend fun fetchRecgovCatalogObservations(
                 .awaitAll()
 
         val merged = mergeCampsites(payloads)
-        val campsiteIds = reservables.map { it.vendorId }.toSet()
+        val campsiteIds = campsites.map { it.vendorId }.toSet()
         val catalogSites = campsiteIds.associateWith { siteId -> merged[siteId].orEmpty() }
-        val campsiteIdsBySiteId = reservables.associate { it.vendorId to it.campsiteId }
+        val campsiteIdsBySiteId = campsites.associate { it.vendorId to it.campsiteId }
         val observedAtByDate = dates.associateWith { observedAt }
 
         AvailabilityObservationBatch(
@@ -118,42 +118,6 @@ internal suspend fun fetchRecgovCatalogObservations(
             endDate = endDate,
             observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, campsiteIdsBySiteId),
             seasonBlock = inferReopenDate(catalogSites, startDate),
-            cacheBlock = directFetchCacheBlock(),
-            campgroundId = recgovId,
-        )
-    }
-
-/**
- * Same upstream fetch as [fetchRecgovAvailabilityObservations], narrowed to
- * one rec.gov campsite id. This backs the [AvailabilityProvider.reservableAvailability]
- * narrow projection.
- */
-internal suspend fun fetchRecgovReservableObservations(
-    client: RecGovAvailabilityClient,
-    recgovId: String,
-    campsiteId: String,
-    startDate: LocalDate,
-    endDate: LocalDate,
-): AvailabilityObservationBatch =
-    coroutineScope {
-        val dates = datesInWindow(startDate, endDate)
-        val months = monthsCovering(startDate, endDate.minusDays(1))
-        val observedAt = Instant.now()
-        val payloads: List<Map<String, Campsite>> =
-            months
-                .map { month -> async { client.fetchMonth(recgovId, month) } }
-                .awaitAll()
-
-        val merged = mergeCampsites(payloads)
-        val oneSite = mapOf(campsiteId to merged[campsiteId].orEmpty())
-        val observedAtByDate = dates.associateWith { observedAt }
-
-        AvailabilityObservationBatch(
-            provider = "recgov",
-            startDate = startDate,
-            endDate = endDate,
-            observations = observationsFromCampsites(oneSite, dates, observedAtByDate),
-            seasonBlock = inferReopenDate(oneSite, startDate),
             cacheBlock = directFetchCacheBlock(),
             campgroundId = recgovId,
         )
@@ -186,10 +150,10 @@ private fun observationsFromCampsites(
     dates: List<LocalDate>,
     observedAtByDate: Map<LocalDate, Instant>,
     campsiteIdsBySiteId: Map<String, Long> = emptyMap(),
-): List<ReservableDayObservation> =
+): List<CampsiteDayObservation> =
     merged.flatMap { (siteId, byDate) ->
         dates.map { date ->
-            ReservableDayObservation(
+            CampsiteDayObservation(
                 campsiteId = campsiteIdsBySiteId[siteId],
                 date = date,
                 observedAt = observedAtByDate[date] ?: Instant.EPOCH,

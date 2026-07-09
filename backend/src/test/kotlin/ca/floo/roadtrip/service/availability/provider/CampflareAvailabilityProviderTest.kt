@@ -55,9 +55,9 @@ class CampflareAvailabilityProviderTest {
             val batch =
                 provider.catalogAvailability(
                     ref = ProviderRef.Campflare("upper-pines-campground-447"),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(campsiteId = 100, vendorId = "upper-pines-site-100"),
+                            CatalogCampsiteRef(campsiteId = 100, vendorId = "upper-pines-site-100"),
                         ),
                     startDate = LocalDate.parse("2026-06-01"),
                     endDate = LocalDate.parse("2026-06-03"),
@@ -108,9 +108,9 @@ class CampflareAvailabilityProviderTest {
             val batch =
                 provider.catalogAvailability(
                     ref = ProviderRef.Campflare("upper-pines-campground-447"),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(campsiteId = 100, vendorId = "upper-pines-site-100"),
+                            CatalogCampsiteRef(campsiteId = 100, vendorId = "upper-pines-site-100"),
                         ),
                     startDate = LocalDate.parse("2026-06-01"),
                     endDate = LocalDate.parse("2026-06-03"),

@@ -135,7 +135,7 @@ function renderShell(ctx) {
       ${renderDetail(ctx)}
       ${renderSiteList({
         state: ctx.sitesState,
-        reservables: ctx.sites,
+        campsites: ctx.sites,
         error: ctx.sitesError,
         expanded: ctx.sitesExpanded,
         selectedDay: sitesDay,
@@ -177,7 +177,7 @@ function renderAvailabilitySurface(ctx) {
   if (ctx.state !== 'success') return renderBody(ctx);
   return renderSiteMatrix({
     state: ctx.sitesState,
-    reservables: ctx.sites,
+    campsites: ctx.sites,
     days: Array.isArray(ctx.days) ? ctx.days : [],
     error: ctx.sitesError,
     selectedDate: null,
@@ -766,7 +766,7 @@ function fuseDay(date, campsites) {
   // campsite_statuses: { campsite_id → status } across all campsites for that date.
   const statuses = {};
   for (const r of campsites) {
-    const campsiteId = r?.campsite_id ?? r?.campsiteId;
+    const campsiteId = r?.campsite_id;
     if (campsiteId == null) continue;
     const day = (Array.isArray(r.availability) ? r.availability : []).find((d) => d?.date === date);
     statuses[String(campsiteId)] = day?.status || 'unknown';
@@ -795,11 +795,11 @@ function rollupStatus(values) {
   return 'unknown';
 }
 
-function oldestCacheBlock(reservables) {
+function oldestCacheBlock(campsites) {
   // The matrix shows one freshness pill. Pick the staleest age — that's the
   // honest answer when streams have different cache hit times.
   let chosen = null;
-  for (const r of reservables) {
+  for (const r of campsites) {
     const cb = r?.cache;
     if (!cb) continue;
     if (!chosen || (cb.age_seconds ?? 0) > (chosen.age_seconds ?? 0)) chosen = cb;
@@ -902,7 +902,7 @@ async function toggleWatch(ctx, button) {
 function buildWatchPayload(ctx, date, endDate, { stopWhenFound = DEFAULT_STOP_WHEN_FOUND } = {}) {
   return {
     poi_id: Number(ctx.poiId),
-    reservable_filters: {},
+    campsite_filters: {},
     start_date: date,
     end_date: endDate,
     cadence_sec: 60,

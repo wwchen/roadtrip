@@ -19,14 +19,7 @@ interface AvailabilityClient {
 
     suspend fun catalogAvailability(
         ref: ProviderRef,
-        reservables: List<CatalogReservableRef>,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch
-
-    suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
+        campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch

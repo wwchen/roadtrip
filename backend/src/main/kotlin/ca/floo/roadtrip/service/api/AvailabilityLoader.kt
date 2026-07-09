@@ -4,7 +4,7 @@ import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.service.availability.hasFullCoverage
 import ca.floo.roadtrip.service.availability.isFresh
@@ -22,7 +22,7 @@ class AvailabilityLoader(
     private val availability: AvailabilityRepo?,
     private val clock: Clock = Clock.systemUTC(),
 ) {
-    data class TargetReservable(
+    data class CampsiteTarget(
         val dbId: Long,
     )
 
@@ -36,7 +36,7 @@ class AvailabilityLoader(
 
     data class Request(
         val metadata: Metadata,
-        val targets: List<TargetReservable>,
+        val targets: List<CampsiteTarget>,
         val startDate: LocalDate,
         val endDate: LocalDate,
         val ttl: Duration,
@@ -133,8 +133,8 @@ class AvailabilityLoader(
             endDate = request.endDate,
             observations =
                 rows.map { row ->
-                    ReservableDayObservation(
-                        campsiteId = row.reservableId,
+                    CampsiteDayObservation(
+                        campsiteId = row.campsiteId,
                         date = row.targetDate,
                         observedAt = row.observedAt.toInstant(),
                         status = row.status,

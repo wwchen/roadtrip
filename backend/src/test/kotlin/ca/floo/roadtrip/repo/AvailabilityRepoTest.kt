@@ -14,7 +14,7 @@ class AvailabilityRepoTest : SharedDbTest() {
         ctx.cleanCanonicalCatalogFixtures()
     }
 
-    private fun seedReservable(vendorId: String): Long =
+    private fun seedCampsite(vendorId: String): Long =
         ctx.seedCampsite(
             campgroundId =
                 ctx.seedCampground(
@@ -31,7 +31,7 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `unchanged status bumps last_observed_at in place, no new row`() {
-        val campsiteId = seedReservable("100")
+        val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val t1 = Instant.parse("2026-06-18T10:00:00Z")
         val t2 = Instant.parse("2026-06-18T10:05:00Z")
@@ -49,7 +49,7 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `status change inserts a new row linked by previous_id`() {
-        val campsiteId = seedReservable("100")
+        val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val t1 = Instant.parse("2026-06-18T10:00:00Z")
         val t2 = Instant.parse("2026-06-18T10:05:00Z")
@@ -67,7 +67,7 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `markElapsedAsPast adds a past status-run for elapsed cells only`() {
-        val campsiteId = seedReservable("100")
+        val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val past = LocalDate.parse("2026-06-01")
         val future = LocalDate.parse("2026-08-01")
@@ -87,7 +87,7 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `markElapsedAsPast is idempotent - an already-past cell is not re-marked`() {
-        val campsiteId = seedReservable("100")
+        val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val past = LocalDate.parse("2026-06-01")
         val t = Instant.parse("2026-06-18T10:00:00Z")
@@ -101,13 +101,13 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `history walks the previous_id chain, observedFrom derives from previous`() {
-        val campsiteId = seedReservable("100")
+        val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val t1 = Instant.parse("2026-06-18T10:00:00Z")
         val t2 = Instant.parse("2026-06-18T11:00:00Z")
         repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.RESERVED, t1)))
         repo.recordObservations(null, listOf(AvailabilityRepo.Observation(campsiteId, date, AvailabilityStatus.AVAILABLE, t2)))
-        val runs = repo.listForReservable(campsiteId)
+        val runs = repo.listForCampsite(campsiteId)
         assertEquals(2, runs.size)
         val current = runs.first { it.status == AvailabilityStatus.AVAILABLE }
         assertEquals(t1, current.observedFrom!!.toInstant()) // start = prior run's last_observed_at
@@ -115,7 +115,7 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `summarize reports an open window from an available run`() {
-        val campsiteId = seedReservable("100")
+        val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val t0 = Instant.parse("2026-06-18T10:00:00Z") // reserved
         val t1 = Instant.parse("2026-06-18T10:30:00Z") // flips to available
@@ -129,7 +129,7 @@ class AvailabilityRepoTest : SharedDbTest() {
 
     @Test
     fun `summarize keeps a cell's current state even when its last observation predates the window`() {
-        val campsiteId = seedReservable("100")
+        val campsiteId = seedCampsite("100")
         val repo = AvailabilityRepo(ctx)
         val future = LocalDate.parse("2026-09-01")
         // Observed once, long before any reasonable summary window.

@@ -39,7 +39,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 providerRefJson = """{"recgov_id": "$campgroundId"}""",
             ).poiId
 
-    private fun seedReservable(
+    private fun seedCampsite(
         poiId: Long,
         siteId: String,
     ): Long =
@@ -70,8 +70,8 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
 
     private fun poiInput(poiId: Long): AvailabilityWatchRepo.CreateInput =
         AvailabilityWatchRepo.CreateInput(
-            targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, reservableId = null)),
-            reservableFilters = JsonObject(emptyMap()),
+            targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiId, campsiteId = null)),
+            campsiteFilters = JsonObject(emptyMap()),
             startDate = LocalDate.parse("2026-07-04"),
             endDate = LocalDate.parse("2026-07-06"),
             cadenceSec = 60,
@@ -83,9 +83,9 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     @Test
     fun `a watch spanning two campgrounds links to two pollers`() {
         val poiA = seedPoi("232447")
-        seedReservable(poiA, "100")
+        seedCampsite(poiA, "100")
         val poiB = seedPoi("232999")
-        seedReservable(poiB, "200")
+        seedCampsite(poiB, "200")
 
         val svc = service()
         val watch =
@@ -93,10 +93,10 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
                 AvailabilityWatchRepo.CreateInput(
                     targets =
                         listOf(
-                            AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, reservableId = null),
-                            AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null),
+                            AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, campsiteId = null),
+                            AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, campsiteId = null),
                         ),
-                    reservableFilters = JsonObject(emptyMap()),
+                    campsiteFilters = JsonObject(emptyMap()),
                     startDate = LocalDate.parse("2026-07-04"),
                     endDate = LocalDate.parse("2026-07-06"),
                     cadenceSec = 60,
@@ -116,7 +116,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     @Test
     fun `create links an active watch to one poller`() {
         val poiId = seedPoi("232447")
-        seedReservable(poiId, "100")
+        seedCampsite(poiId, "100")
         val watch = service().create(poiInput(poiId))
 
         val pollers = AvailabilityPollerRepo(ctx)
@@ -131,7 +131,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     @Test
     fun `two watches on the same campground coalesce onto one poller`() {
         val poiId = seedPoi("232447")
-        seedReservable(poiId, "100")
+        seedCampsite(poiId, "100")
         val svc = service()
         val w1 = svc.create(poiInput(poiId))
         val w2 = svc.create(poiInput(poiId))
@@ -146,7 +146,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     @Test
     fun `pausing a watch drops its links and deactivates the orphaned poller`() {
         val poiId = seedPoi("232447")
-        seedReservable(poiId, "100")
+        seedCampsite(poiId, "100")
         val svc = service()
         val watch = svc.create(poiInput(poiId))
         val pollers = AvailabilityPollerRepo(ctx)
@@ -161,7 +161,7 @@ class AvailabilityWatchServiceTest : SharedDbTest() {
     @Test
     fun `deleting the last watch deactivates its poller`() {
         val poiId = seedPoi("232447")
-        seedReservable(poiId, "100")
+        seedCampsite(poiId, "100")
         val svc = service()
         val watch = svc.create(poiInput(poiId))
         val pollers = AvailabilityPollerRepo(ctx)

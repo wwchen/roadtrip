@@ -12,7 +12,7 @@ import ca.floo.roadtrip.models.api.AvailabilityWatchSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchTargetSchema
 import ca.floo.roadtrip.models.api.AvailabilityWatchUpdateRequest
 import ca.floo.roadtrip.models.api.CampsiteSummarySchema
-import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo.Watch
@@ -181,7 +181,7 @@ internal fun Route.availabilityWatchRoutes(
             watchService.create(
                 AvailabilityWatchRepo.CreateInput(
                     targets = resolved.targets,
-                    reservableFilters = req.campsiteFilters,
+                    campsiteFilters = req.campsiteFilters,
                     startDate = dateWindow.first,
                     endDate = dateWindow.second,
                     cadenceSec = req.cadenceSec,
@@ -252,7 +252,7 @@ internal fun Route.availabilityWatchRoutes(
                 id,
                 AvailabilityWatchRepo.UpdateInput(
                     targets = updateTargets,
-                    reservableFilters = req.campsiteFilters,
+                    campsiteFilters = req.campsiteFilters,
                     startDate = dateWindow?.first,
                     endDate = dateWindow?.second,
                     cadenceSec = req.cadenceSec,
@@ -316,12 +316,12 @@ internal fun Route.availabilityWatchRoutes(
         val children = scopeResolver.resolve(watch)
         val dates = datesInWindow(watch.startDate, watch.endDate)
         val cells = availability.readCurrent(children.map { it.id }, dates)
-        val cellsByPair = cells.associateBy { it.reservableId to it.targetDate }
+        val cellsByPair = cells.associateBy { it.campsiteId to it.targetDate }
 
         val dateStrings = dates.map { it.toString() }
         val rowsByLoop = LinkedHashMap<String?, MutableList<AvailabilityWatchHeatmapRow>>()
         for (r in children.sortedWith(
-            compareBy<Reservable, String?>(nullsLast()) {
+            compareBy<Campsite, String?>(nullsLast()) {
                 it.loop
             }.thenBy { it.name ?: "" }.thenBy { it.vendorId },
         )) {
@@ -382,7 +382,7 @@ private fun validateTargets(targets: List<AvailabilityWatchTargetSchema>): Resol
         if ((t.poiId == null) == (t.campsiteId == null)) {
             return ResolveResult.Err("invalid_scope", "each target must set exactly one of poi_id/campsite_id")
         }
-        resolved += AvailabilityWatchTargetRepo.TargetInput(poiId = t.poiId, reservableId = t.campsiteId)
+        resolved += AvailabilityWatchTargetRepo.TargetInput(poiId = t.poiId, campsiteId = t.campsiteId)
     }
     return ResolveResult.Ok(resolved)
 }
@@ -404,7 +404,7 @@ private fun resolveCreateScope(req: AvailabilityWatchCreateRequest): ResolveResu
     if (singleScopeKeysSet != 1) {
         return ResolveResult.Err("invalid_scope", "exactly one of targets, poi_id, or campsite_id must be set")
     }
-    return ResolveResult.Ok(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = req.poiId, reservableId = req.campsiteId)))
+    return ResolveResult.Ok(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = req.poiId, campsiteId = req.campsiteId)))
 }
 
 /**
@@ -455,7 +455,7 @@ private fun Watch.toSchema(campsitesRepo: CampsiteRepo): AvailabilityWatchSchema
     val firstTarget = targets.firstOrNull()
     val singleCampsite =
         firstTarget
-            ?.reservableId
+            ?.campsiteId
             ?.takeIf { targets.size == 1 }
             ?.let { campsitesRepo.findById(it) }
             ?.let { r ->
@@ -471,11 +471,11 @@ private fun Watch.toSchema(campsitesRepo: CampsiteRepo): AvailabilityWatchSchema
             }
     return AvailabilityWatchSchema(
         id = id,
-        targets = targets.map { AvailabilityWatchTargetSchema(poiId = it.poiId, campsiteId = it.reservableId) },
+        targets = targets.map { AvailabilityWatchTargetSchema(poiId = it.poiId, campsiteId = it.campsiteId) },
         poiId = firstTarget?.poiId,
-        campsiteId = firstTarget?.reservableId,
+        campsiteId = firstTarget?.campsiteId,
         campsite = singleCampsite,
-        campsiteFilters = reservableFilters,
+        campsiteFilters = campsiteFilters,
         startDate = startDate.toString(),
         endDate = endDate.toString(),
         cadenceSec = cadenceSec,

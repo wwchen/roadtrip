@@ -4,7 +4,7 @@ import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -67,7 +67,7 @@ class RecGovObservationsTest {
                         fetchRecgovCatalogObservations(
                             client = client,
                             recgovId = recgovId,
-                            reservables = catalogSiteIds.map { CatalogReservableRef(campsiteId = it.toLong(), vendorId = it) },
+                            campsites = catalogSiteIds.map { CatalogCampsiteRef(campsiteId = it.toLong(), vendorId = it) },
                             startDate = today,
                             endDate = today.plusDays(days.toLong()),
                         )
@@ -197,10 +197,10 @@ class RecGovObservationsTest {
                         fetchRecgovCatalogObservations(
                             client = clientReturning(emptyMap()),
                             recgovId = "232447",
-                            reservables =
+                            campsites =
                                 listOf(
-                                    CatalogReservableRef(campsiteId = 100, vendorId = "100"),
-                                    CatalogReservableRef(campsiteId = 200, vendorId = "200"),
+                                    CatalogCampsiteRef(campsiteId = 100, vendorId = "100"),
+                                    CatalogCampsiteRef(campsiteId = 200, vendorId = "200"),
                                 ),
                             startDate = today,
                             endDate = today.plusDays(1),
@@ -225,31 +225,6 @@ class RecGovObservationsTest {
                 .jsonObject["200"]!!
                 .jsonPrimitive.content,
         )
-    }
-
-    @Test
-    fun `reservable availability keeps requested site omitted by upstream as unknown`() {
-        val body =
-            encodeAvailabilityJson(
-                availabilityResponseFromObservations(
-                    runBlocking {
-                        fetchRecgovReservableObservations(
-                            client = clientReturning(emptyMap()),
-                            recgovId = "232447",
-                            campsiteId = "100",
-                            startDate = today,
-                            endDate = today.plusDays(1),
-                        )
-                    },
-                ),
-            )
-        val json = parseJson(body)
-        val day = json["availability"]!!.jsonArray.single().jsonObject
-
-        assertEquals(null, json["campsite_id"])
-        assertEquals("unknown", day["status"]!!.jsonPrimitive.content)
-        assertEquals(0, day["available_campsite_ids"]!!.jsonArray.size)
-        assertEquals(0, day["campsite_statuses"]!!.jsonObject.size)
     }
 
     @Test

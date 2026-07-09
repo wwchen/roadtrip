@@ -4,12 +4,12 @@ import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityWindows
 import ca.floo.roadtrip.models.availability.PoiDateContext
 import ca.floo.roadtrip.models.availability.ResolvedDateWindow
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
@@ -25,7 +25,7 @@ internal data class GroupFetchResult(
     val provider: AvailabilityProvider,
     val parentRef: ProviderRef,
     val dateContext: PoiDateContext,
-    val reservables: List<Reservable>,
+    val campsites: List<Campsite>,
     val window: ResolvedDateWindow?,
     val batch: AvailabilityObservationBatch?,
     val outcome: FetchOutcome,
@@ -34,15 +34,15 @@ internal data class GroupFetchResult(
     val providerError: AvailabilityProviderError? = null,
 )
 
-internal fun Reservable.toCatalogReservableRef(): CatalogReservableRef =
-    CatalogReservableRef(
+internal fun Campsite.toCatalogCampsiteRef(): CatalogCampsiteRef =
+    CatalogCampsiteRef(
         campsiteId = id,
         vendorId = vendorId,
         mapId = aspiraProviderRefLong("mapId"),
         resourceLocationId = aspiraProviderRefLong("resourceLocationId"),
     )
 
-private fun Reservable.aspiraProviderRefLong(key: String): Long? = (providerRef as? JsonObject)?.get(key)?.jsonPrimitive?.longOrNull
+private fun Campsite.aspiraProviderRefLong(key: String): Long? = (providerRef as? JsonObject)?.get(key)?.jsonPrimitive?.longOrNull
 
 internal fun AvailabilityProviderError.toFetchOutcome(): FetchOutcome =
     when (this) {
@@ -95,14 +95,14 @@ internal class CatalogAvailabilityBatcher {
         targets
             .groupBy { GroupKey(it.provider, it.parentRef, it.dateContext) }
             .map { (key, groupTargets) ->
-                val reservables = groupTargets.map { it.reservable }
+                val campsites = groupTargets.map { it.campsite }
                 val windows = windowFor(key.dateContext, key.provider.capabilities)
                 if (windows == null) {
                     return@map GroupFetchResult(
                         provider = key.provider,
                         parentRef = key.parentRef,
                         dateContext = key.dateContext,
-                        reservables = reservables,
+                        campsites = campsites,
                         window = null,
                         batch = null,
                         outcome = FetchOutcome.OK,
@@ -117,7 +117,7 @@ internal class CatalogAvailabilityBatcher {
                         provider = key.provider,
                         parentRef = key.parentRef,
                         dateContext = key.dateContext,
-                        reservables = reservables,
+                        campsites = campsites,
                         window = windows.fetch,
                         batch = batch,
                         outcome = FetchOutcome.OK,
@@ -129,7 +129,7 @@ internal class CatalogAvailabilityBatcher {
                         provider = key.provider,
                         parentRef = key.parentRef,
                         dateContext = key.dateContext,
-                        reservables = reservables,
+                        campsites = campsites,
                         window = windows.fetch,
                         batch = null,
                         outcome = e.toFetchOutcome(),

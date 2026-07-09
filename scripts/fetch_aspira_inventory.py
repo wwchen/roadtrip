@@ -2,12 +2,12 @@
 """Capture per-park resource catalog envelopes from Aspira NextGen.
 
 Aspira's `/api/resourcelocation/resources?resourceLocationId={id}` returns
-the *named-site catalog* for one park: every reservable site's short
+the *named-site catalog* for one park: every campsite's short
 label (e.g. "OFC13"), human description ("C13 Phantom RV Pad"), allowed
 equipment, capacity, and attribute IDs. This is the data the booking
 SPA shows in its results table — the layer above per-resource
-availability — and what we need to populate `reservables.name` /
-`reservables.description`.
+availability — and what we need to populate `campsites.name` /
+campsite descriptions.
 
 See `docs/booking-providers/aspira.md` for the full wire shape.
 

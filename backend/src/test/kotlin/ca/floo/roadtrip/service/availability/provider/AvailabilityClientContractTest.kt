@@ -74,21 +74,13 @@ class AvailabilityClientContractTest {
             val catalog =
                 client.catalogAvailability(
                     ref = ProviderRef.RecGov("232447"),
-                    reservables = emptyList(),
-                    startDate = startDate,
-                    endDate = endDate,
-                )
-            val reservable =
-                client.reservableAvailability(
-                    ref = ProviderRef.RecGov("232447"),
-                    vendorId = "330257",
+                    campsites = emptyList(),
                     startDate = startDate,
                     endDate = endDate,
                 )
 
             assertEquals("recgov", availability.provider)
             assertEquals("recgov", catalog.provider)
-            assertEquals(null, reservable.campsiteId)
         }
 
     private fun assertDirectAvailabilityClient(type: Class<*>) {

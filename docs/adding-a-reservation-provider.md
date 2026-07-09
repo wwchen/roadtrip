@@ -1,6 +1,6 @@
 # Adding an availability provider
 
-Use this when a new upstream can answer campsite/reservable booking or
+Use this when a new upstream can answer campsite booking or
 availability questions. If the upstream only adds map pins and has no booking
 surface, use [adding-a-data-source.md](adding-a-data-source.md)
 instead.
@@ -77,10 +77,8 @@ Checklist:
 
 - Implement provider identity and capabilities.
 - Implement provider-level availability if the upstream supports it.
-- Implement catalog availability when linked local reservables should narrow
+- Implement catalog availability when linked local campsites should narrow
   the upstream response.
-- Implement reservable-level availability only if the upstream has a stable
-  per-reservable path.
 - Map upstream errors into typed provider errors.
 - Add adapter tests for availability status mapping, missing upstream cells,
   catalog narrowing, wrong reference type, and error mapping.
@@ -128,7 +126,7 @@ fall back to the generic info URL.
 
 If watches or per-site availability need a local catalog, add ETL/import work.
 Use [adding-a-data-source.md](adding-a-data-source.md) for the fetch and POI
-pipeline details, then add reservable-specific pieces.
+pipeline details, then add campsite-specific pieces.
 
 Checklist:
 
@@ -136,9 +134,9 @@ Checklist:
 - Add fetcher scripts only when raw upstream capture is required.
 - Add ETL code under `service/etl/vendors/<vendor>/`.
 - Write `ProviderRef` payloads on parent POIs.
-- Import reservables with stable vendor ids, types, names, loops, site types,
+- Import campsites with stable vendor ids, types, names, loops, site types,
   and provider metadata.
-- Add a POI/reservable joiner when catalog rows need linking to parent POIs.
+- Add a campsite parent joiner (see `CampsiteParentJoiner`) when campsites need reparenting to the right campground.
 - Add ETL and joiner tests with fixtures.
 
 Catalog import is provider-specific; query and persistence code still belongs

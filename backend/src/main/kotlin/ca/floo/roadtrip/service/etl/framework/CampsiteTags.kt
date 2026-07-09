@@ -2,7 +2,7 @@ package ca.floo.roadtrip.service.etl.framework
 
 private val NON_ALNUM = Regex("[^a-z0-9]+")
 
-fun reservableTagKey(label: String): String =
+fun campsiteTagKey(label: String): String =
     label
         .trim()
         .lowercase()

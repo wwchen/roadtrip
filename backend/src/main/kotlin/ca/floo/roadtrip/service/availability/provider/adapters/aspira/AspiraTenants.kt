@@ -69,7 +69,7 @@ object AspiraTenants {
 
     fun byHost(host: String): AspiraTenant? = BY_HOST[host]
 
-    /** Tenant for a reservable vendor code stamped under that tenant (e.g. `aspira_wa`). */
+    /** Tenant for a campsite vendor code stamped under that tenant (e.g. `aspira_wa`). */
     fun byVendorCode(vendorCode: String): AspiraTenant? = BY_VENDOR_CODE[vendorCode]
 
     fun knownHosts(): Set<String> = BY_HOST.keys

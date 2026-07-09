@@ -9,7 +9,7 @@ import java.time.OffsetDateTime
  * (created, updated, paused/resumed) so poller coalescing happens at
  * watch-write time rather than needing a separate reconciliation pass.
  *
- * Resolves the watch's reservable set to its vendor call units (distinct
+ * Resolves the watch's campsite set to its vendor call units (distinct
  * (provider, parentRefKey) pairs) and reconciles `availability_watch_poller`
  * to exactly that set, creating/reviving pollers as needed via
  * [AvailabilityPollerRepo.upsertActive]. Pollers are the coalesced unit:
@@ -22,7 +22,7 @@ internal class AvailabilityPollerMembership(
     /**
      * Recomputes [watch]'s poller links. A non-ACTIVE watch (paused, done)
      * holds no links — its links are cleared and any poller left without
-     * links is deactivated. An ACTIVE watch's reservable set is resolved to
+     * links is deactivated. An ACTIVE watch's campsite set is resolved to
      * targets, deduped to one representative poi per distinct
      * (provider, parentRefKey), upserted into a poller each, and the
      * watch's links replaced with exactly that set.

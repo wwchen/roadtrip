@@ -20,7 +20,7 @@ import org.jooq.DSLContext
  * facility moves) or when a future cross-vendor merge exposes a better
  * parent than the source-of-truth ETL saw at write time.
  */
-interface PoiReservableJoiner {
+interface CampsiteParentJoiner {
     /** Adapter identifier; matches the YAML `adapter:` field. */
     val adapter: String
 

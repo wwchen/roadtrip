@@ -11,7 +11,7 @@ import ca.floo.roadtrip.service.availability.provider.adapters.reservecalifornia
 
 /**
  * Builds a [AvailabilityProviderRegistry] from boot-time config + clients. One
- * place that knows the mapping from `pois.source` to [AvailabilityProvider];
+ * place that knows the mapping from catalog source slug to [AvailabilityProvider];
  * keeps that knowledge out of [Main] (which would otherwise have to wire
  * each adapter manually) and out of routes.
  *

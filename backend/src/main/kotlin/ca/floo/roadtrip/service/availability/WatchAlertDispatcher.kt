@@ -1,7 +1,7 @@
 package ca.floo.roadtrip.service.availability
 
 import ca.floo.roadtrip.models.availability.CellTransition
-import ca.floo.roadtrip.models.domain.Reservable
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
@@ -27,7 +27,7 @@ private const val CELL_MATRIX_UID = "availability-cell-matrix"
  * watches (both already in the executor's hand).
  *
  * For each live watch it keeps the transitions that fall inside the watch's
- * reservable set and date window, and — if the watch opted into
+ * campsite set and date window, and — if the watch opted into
  * [SLACK_NOTIFY_KIND] — posts one message. A watch with `stopWhenTriggered`
  * goes `DONE` **only after a post actually succeeds**, so a delivery failure
  * never silences a watch we could not notify on.
@@ -63,13 +63,13 @@ internal class WatchAlertDispatcher(
 
         for (watch in liveWatches) {
             if (SLACK_NOTIFY_KIND !in watch.triggerKinds) continue
-            val reservablesById = scopeResolver.resolve(watch).associateBy { it.id }
+            val campsitesById = scopeResolver.resolve(watch).associateBy { it.id }
             val covered =
                 bookable.filter { t ->
-                    t.reservableId in reservablesById && t.targetDate.withinWindow(watch)
+                    t.campsiteId in campsitesById && t.targetDate.withinWindow(watch)
                 }
             if (covered.isEmpty()) continue
-            postOpenings(watch, covered, reservablesById)
+            postOpenings(watch, covered, campsitesById)
         }
     }
 
@@ -95,7 +95,7 @@ internal class WatchAlertDispatcher(
     suspend fun dispatchInitial(watch: AvailabilityWatchRepo.Watch) {
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
 
-        val reservables = scopeResolver.resolve(watch)
+        val campsites = scopeResolver.resolve(watch)
         if (watch.status != WatchStatus.ACTIVE) {
             val state =
                 when (watch.status) {
@@ -103,18 +103,18 @@ internal class WatchAlertDispatcher(
                     WatchStatus.DONE -> WatchStatusNotice.State.DONE
                     WatchStatus.ACTIVE -> WatchStatusNotice.State.WATCHING // unreachable; guarded above
                 }
-            slack.sendWatchStatus(statusNotice(watch, reservables, state), watch.channelOverride())
+            slack.sendWatchStatus(statusNotice(watch, campsites, state), watch.channelOverride())
             return
         }
-        val reservablesById = reservables.associateBy { it.id }
-        val cells = availability.readCurrent(reservables.map { it.id }, datesInWindow(watch))
+        val campsitesById = campsites.associateBy { it.id }
+        val cells = availability.readCurrent(campsites.map { it.id }, datesInWindow(watch))
         val bookable = cells.filter { it.available }
         if (bookable.isNotEmpty()) {
-            val covered = bookable.map { CellTransition(it.reservableId, it.targetDate, it.status) }
-            postOpenings(watch, covered, reservablesById)
+            val covered = bookable.map { CellTransition(it.campsiteId, it.targetDate, it.status) }
+            postOpenings(watch, covered, campsitesById)
         } else {
             val state = if (cells.isNotEmpty()) WatchStatusNotice.State.WATCHING else WatchStatusNotice.State.UNCHECKED
-            slack.sendWatchStatus(statusNotice(watch, reservables, state), watch.channelOverride())
+            slack.sendWatchStatus(statusNotice(watch, campsites, state), watch.channelOverride())
         }
     }
 
@@ -126,8 +126,8 @@ internal class WatchAlertDispatcher(
      */
     suspend fun dispatchStopped(watch: AvailabilityWatchRepo.Watch) {
         if (SLACK_NOTIFY_KIND !in watch.triggerKinds) return
-        val reservables = scopeResolver.resolve(watch)
-        slack.sendWatchStatus(statusNotice(watch, reservables, WatchStatusNotice.State.STOPPED), watch.channelOverride())
+        val campsites = scopeResolver.resolve(watch)
+        slack.sendWatchStatus(statusNotice(watch, campsites, WatchStatusNotice.State.STOPPED), watch.channelOverride())
     }
 
     /**
@@ -150,9 +150,9 @@ internal class WatchAlertDispatcher(
     private suspend fun postOpenings(
         watch: AvailabilityWatchRepo.Watch,
         covered: List<CellTransition>,
-        reservablesById: Map<Long, Reservable>,
+        campsitesById: Map<Long, Campsite>,
     ) {
-        val openings = hydrateOpenings(covered, reservablesById)
+        val openings = hydrateOpenings(covered, campsitesById)
         val fired =
             slack.sendWatchOpenings(
                 watchId = watch.id,
@@ -167,17 +167,17 @@ internal class WatchAlertDispatcher(
         }
     }
 
-    /** Resolves each covered cell to a [WatchOpening] — the reservable's display
+    /** Resolves each covered cell to a [WatchOpening] — the campsite's display
      *  label/loop/type, its parent campground (id + name, each POI fetched once),
      *  and the provider booking URL — so the notification layer only formats. */
     private fun hydrateOpenings(
         covered: List<CellTransition>,
-        reservablesById: Map<Long, Reservable>,
+        campsitesById: Map<Long, Campsite>,
     ): List<WatchOpening> {
         val poiNames = HashMap<Long, String?>()
         return covered.map { t ->
-            // covered was filtered to reservables in this map, so the key exists.
-            val r = reservablesById.getValue(t.reservableId)
+            // covered was filtered to campsites in this map, so the key exists.
+            val r = campsitesById.getValue(t.campsiteId)
             val target = targets.resolve(r)
             WatchOpening(
                 label = r.name ?: "Site #${r.vendorId}",
@@ -186,7 +186,7 @@ internal class WatchAlertDispatcher(
                 date = t.targetDate,
                 campgroundId = target?.parentPoiId,
                 campground = target?.parentPoiId?.let { poiNames.getOrPut(it) { pois.fetchPoiById(it)?.name } },
-                // Booking link, if the reservable's provider exposes one — the URL
+                // Booking link, if the campsite's provider exposes one — the URL
                 // scheme is the adapter's, never this dispatcher's. The parent
                 // ref supplies vendor ids the per-site ref may omit (e.g. Aspira).
                 bookingUrl = target?.let { it.provider.bookingUrl(r, it.parentRef, t.targetDate) },
@@ -198,25 +198,25 @@ internal class WatchAlertDispatcher(
      *  message. Carries the watch id (echoed as every interactive button's
      *  value), scope, window, and deep-link URLs (the Grafana watch dashboard,
      *  and per POI the web-app map page + Grafana grid); the notification
-     *  layer owns the Block Kit rendering. A single-reservable watch reports
+     *  layer owns the Block Kit rendering. A single-campsite watch reports
      *  its site name (+ loop); a broader one reports the count. POI links come
-     *  from the watch's POI-scoped targets (reservable-scoped targets carry
+     *  from the watch's POI-scoped targets (campsite-scoped targets carry
      *  no POI). */
     private fun statusNotice(
         watch: AvailabilityWatchRepo.Watch,
-        reservables: List<Reservable>,
+        campsites: List<Campsite>,
         state: WatchStatusNotice.State,
     ): WatchStatusNotice {
         val poiIds = watch.targets.mapNotNull { it.poiId }.toSet()
         // A POI-scoped watch is "the campground" even when it expands to one
-        // site; a reservable-scoped watch names the site. So the scope label
-        // keys off the target kind, not the resolved reservable count.
+        // site; a campsite-scoped watch names the site. So the scope label
+        // keys off the target kind, not the resolved campsite count.
         val siteScoped = poiIds.isEmpty()
-        val single = reservables.singleOrNull().takeIf { siteScoped }
+        val single = campsites.singleOrNull().takeIf { siteScoped }
         return WatchStatusNotice(
             watchId = watch.id,
             state = state,
-            siteCount = reservables.size,
+            siteCount = campsites.size,
             siteName = single?.let { it.name ?: "Site #${it.vendorId}" },
             siteLoop = single?.loop,
             campgroundName = poiIds.singleOrNull()?.let { pois.fetchPoiById(it)?.name },

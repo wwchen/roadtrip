@@ -6,14 +6,14 @@ import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaException
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.service.availability.provider.AvailabilityClient
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderCapabilities
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderError
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderId
-import ca.floo.roadtrip.service.availability.provider.CatalogReservableRef
+import ca.floo.roadtrip.service.availability.provider.CatalogCampsiteRef
 import kotlinx.coroutines.CancellationException
 import java.time.Instant
 import java.time.LocalDate
@@ -63,7 +63,7 @@ class ReserveAmericaAvailabilityProvider(
                 // Dense fill is intentional for the campground-level matrix:
                 // catalog-less callers still need every visible site/date cell.
                 dates(startDate, endDate).map { date ->
-                    ReservableDayObservation(
+                    CampsiteDayObservation(
                         campsiteId = null,
                         date = date,
                         observedAt = data.observedAt,
@@ -82,7 +82,7 @@ class ReserveAmericaAvailabilityProvider(
 
     override suspend fun catalogAvailability(
         ref: ProviderRef,
-        reservables: List<CatalogReservableRef>,
+        campsites: List<CatalogCampsiteRef>,
         startDate: LocalDate,
         endDate: LocalDate,
     ): AvailabilityObservationBatch {
@@ -90,9 +90,9 @@ class ReserveAmericaAvailabilityProvider(
         val contractCode = contractCode(reserveAmericaRef)
         val data = fetch(contractCode, reserveAmericaRef.parkId, startDate, endDate)
         val observations =
-            reservables.flatMap { reservable ->
+            campsites.flatMap { reservable ->
                 observationsForReservable(
-                    reservable = reservable,
+                    campsite = reservable,
                     byDate = data.statuses[reservable.vendorId].orEmpty(),
                     dates = dates(startDate, endDate),
                     observedAt = data.observedAt,
@@ -104,32 +104,6 @@ class ReserveAmericaAvailabilityProvider(
             startDate = startDate,
             endDate = endDate,
             observations = observations,
-        )
-    }
-
-    override suspend fun reservableAvailability(
-        ref: ProviderRef,
-        vendorId: String,
-        startDate: LocalDate,
-        endDate: LocalDate,
-    ): AvailabilityObservationBatch {
-        val reserveAmericaRef = reserveAmericaRefOrThrow(ref)
-        val contractCode = contractCode(reserveAmericaRef)
-        val data = fetch(contractCode, reserveAmericaRef.parkId, startDate, endDate)
-        val observations =
-            observationsForReservable(
-                campsiteId = null,
-                byDate = data.statuses[vendorId].orEmpty(),
-                dates = dates(startDate, endDate),
-                observedAt = data.observedAt,
-            )
-        return batch(
-            contractCode = contractCode,
-            parkId = reserveAmericaRef.parkId,
-            startDate = startDate,
-            endDate = endDate,
-            observations = observations,
-            campsiteId = null,
         )
     }
 
@@ -150,13 +124,13 @@ class ReserveAmericaAvailabilityProvider(
         }
 
     private fun observationsForReservable(
-        reservable: CatalogReservableRef,
+        campsite: CatalogCampsiteRef,
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         observedAt: Instant,
-    ): List<ReservableDayObservation> =
+    ): List<CampsiteDayObservation> =
         observationsForReservable(
-            campsiteId = reservable.campsiteId,
+            campsiteId = campsite.campsiteId,
             byDate = byDate,
             dates = dates,
             observedAt = observedAt,
@@ -167,9 +141,9 @@ class ReserveAmericaAvailabilityProvider(
         byDate: Map<LocalDate, AvailabilityStatus>,
         dates: List<LocalDate>,
         observedAt: Instant,
-    ): List<ReservableDayObservation> =
+    ): List<CampsiteDayObservation> =
         dates.map { date ->
-            ReservableDayObservation(
+            CampsiteDayObservation(
                 campsiteId = campsiteId,
                 date = date,
                 observedAt = observedAt,
@@ -182,7 +156,7 @@ class ReserveAmericaAvailabilityProvider(
         parkId: String,
         startDate: LocalDate,
         endDate: LocalDate,
-        observations: List<ReservableDayObservation>,
+        observations: List<CampsiteDayObservation>,
         campsiteId: Long? = null,
     ): AvailabilityObservationBatch =
         AvailabilityObservationBatch(

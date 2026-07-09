@@ -3,8 +3,8 @@ package ca.floo.roadtrip.service.api
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.availability.DayClassification
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.boolean
@@ -72,7 +72,7 @@ class AvailabilityResponseTest {
     }
 
     @Test
-    fun `atomic reservable day observations roll up to stable dto shape`() {
+    fun `atomic campsite day observations roll up to stable dto shape`() {
         val olderObservedAt = Instant.parse("2026-06-01T00:00:00Z")
         val observedAt = Instant.parse("2026-06-01T00:05:00Z")
         val dto =
@@ -83,31 +83,31 @@ class AvailabilityResponseTest {
                     endDate = LocalDate.parse("2026-06-12"),
                     observations =
                         listOf(
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 100,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = olderObservedAt,
                                 status = AvailabilityStatus.RESERVED,
                             ),
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 100,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.AVAILABLE,
                             ),
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 200,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.RESERVED,
                             ),
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 100,
                                 date = LocalDate.parse("2026-06-11"),
                                 observedAt = observedAt,
                                 status = AvailabilityStatus.RESERVED,
                             ),
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 200,
                                 date = LocalDate.parse("2026-06-11"),
                                 observedAt = observedAt,
@@ -139,7 +139,7 @@ class AvailabilityResponseTest {
                     endDate = LocalDate.parse("2026-06-12"),
                     observations =
                         listOf(
-                            ReservableDayObservation(
+                            CampsiteDayObservation(
                                 campsiteId = 100,
                                 date = LocalDate.parse("2026-06-10"),
                                 observedAt = observedAt,
@@ -172,7 +172,7 @@ class AvailabilityResponseTest {
     }
 
     @Test
-    fun `unknown reservable status dominates reserved in day rollup`() {
+    fun `unknown campsite status dominates reserved in day rollup`() {
         val day =
             dayClassificationFromCampsiteStatuses(
                 date = "2026-06-10",

@@ -14,8 +14,8 @@ import ca.floo.roadtrip.repo.CampsiteProviderRefRow
  *
  * Key shape note: a single [AvailabilityProviderId] value can map to multiple
  * adapter *instances* (Aspira NextGen runs three tenants — PC/BC/WA — that
- * share a wire shape but have different hosts, caches, and reservable
- * vendor codes). The registry is keyed by `pois.source`, not by id, so
+ * share a wire shape but have different hosts, caches, and campsite
+ * vendor codes). The registry is keyed by the catalog source slug (`vendor_refs.vendor` tenant key), not by id, so
  * each tenant's source resolves to its own adapter while the public
  * provider id stays vendor-shaped.
  *

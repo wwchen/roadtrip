@@ -21,11 +21,11 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 //   - campsite_data: campsite catalogs. Terminal etl emits canonical campsite
 //     rows. Same chain shape as poi_data, minus category/subcategory
 //     (campsites aren't map pins).
-//   - poi_reservable_joiner: N:M-link discovery (RFC 0008). Each entry
-//     names an adapter that reads the current state of `pois` +
-//     canonical campsite catalog rows and writes the POI/campsite link rows
-//     into `reservable_pois`. No etl chain — joiners don't transform raw
-//     data, they query DB tables.
+//   - campsite_parent_joiner: post-import parent reconciliation. Each entry
+//     names an adapter that reads canonical campsite/campground vendor refs
+//     and reparents campsites whose campground_id disagrees with the
+//     vendor-ref lookup. No etl chain — joiners don't transform raw data,
+//     they query DB tables.
 //
 // Etl chain semantics (poi_data + campsite_data):
 //   - Terminal stage = last etls entry. Earlier entries are intermediates.
@@ -45,13 +45,13 @@ private const val CAMPSITE_DATA_SECTION = "campsite_data"
 //      to CampsiteRepo. Also runs joiner adapters.
 //   2. IngestController / RegistryTargets — fetch is per data_source;
 //      import targets cover all three of {poi_data, campsite_data,
-//      poi_reservable_joiner}.
+//      campsite_parent_joiner}.
 //
 // Adding a new POI source: one data_sources row + one poi_data row +
 // one EtlOrchestrator.registry line per ETL slug. No Flyway migration.
 //
 // Adding a new campsite source: same shape but campsite_data row.
-// Then add a poi_reservable_joiner row pointing at the matching joiner
+// Then add a campsite_parent_joiner row pointing at the matching joiner
 // adapter so the catalog rows get linked to their parent POIs.
 @Serializable
 data class PoiRegistry(
@@ -61,8 +61,8 @@ data class PoiRegistry(
     val poiData: List<PoiDataEntry>,
     @kotlinx.serialization.SerialName("campsite_data")
     val campsiteData: List<CampsiteDataEntry> = emptyList(),
-    @kotlinx.serialization.SerialName("poi_reservable_joiner")
-    val poiReservableJoiners: List<PoiReservableJoinerEntry> = emptyList(),
+    @kotlinx.serialization.SerialName("campsite_parent_joiner")
+    val campsiteParentJoiners: List<CampsiteParentJoinerEntry> = emptyList(),
 ) {
     companion object {
         private val yaml =
@@ -141,12 +141,12 @@ data class PoiRegistry(
         // Joiner-row sanity: name uniqueness + non-empty adapter. Joiners
         // don't have etl chains so there's no input/forward-ref check.
         val joinerNames = mutableSetOf<String>()
-        for ((i, j) in poiReservableJoiners.withIndex()) {
+        for ((i, j) in campsiteParentJoiners.withIndex()) {
             if (!joinerNames.add(j.name)) {
-                errs += "poi_reservable_joiner[$i] name='${j.name}' is not unique"
+                errs += "campsite_parent_joiner[$i] name='${j.name}' is not unique"
             }
             if (j.adapter.isBlank()) {
-                errs += "poi_reservable_joiner '${j.name}' has empty adapter"
+                errs += "campsite_parent_joiner '${j.name}' has empty adapter"
             }
         }
 
@@ -293,14 +293,14 @@ data class PoiRegistry(
     /** Look up a campsite_data row by its display name. */
     fun campsiteDataByName(name: String): CampsiteDataEntry? = campsiteData.firstOrNull { it.name == name }
 
-    /** poi_reservable_joiner rows that should run during fan-out import. */
-    fun enabledPoiReservableJoiners(): List<PoiReservableJoinerEntry> = poiReservableJoiners.filter { it.enabled }
+    /** campsite_parent_joiner rows that should run during fan-out import. */
+    fun enabledCampsiteParentJoiners(): List<CampsiteParentJoinerEntry> = campsiteParentJoiners.filter { it.enabled }
 
-    /** Look up a poi_reservable_joiner row by its display name. */
-    fun poiReservableJoinerByName(name: String): PoiReservableJoinerEntry? = poiReservableJoiners.firstOrNull { it.name == name }
+    /** Look up a campsite_parent_joiner row by its display name. */
+    fun campsiteParentJoinerByName(name: String): CampsiteParentJoinerEntry? = campsiteParentJoiners.firstOrNull { it.name == name }
 
     /**
-     * Static subcategory lookup keyed by terminal etl slug (== pois.source).
+     * Static subcategory lookup keyed by terminal etl slug.
      * Returns null when the row has no subcategory (e.g. planet-fitness).
      */
     fun subcategoryByTerminalEtlSlug(): Map<String, String?> {
@@ -322,7 +322,7 @@ data class PoiRegistry(
     }
 
     /**
-     * Aspira upstream host keyed by terminal etl slug (== pois.source).
+     * Aspira upstream host keyed by terminal etl slug.
      * Returns the `host` arg from the terminal AspiraJoinByNameEtl row.
      *
      * Used by [ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry]
@@ -343,7 +343,7 @@ data class PoiRegistry(
 
     /**
      * Sources whose terminal ETL produces rec.gov-keyed campgrounds. Used
-     * by the availability-provider registry to map `pois.source` → `RECGOV`.
+     * by the availability-provider registry to map the terminal etl slug → `RECGOV`.
      */
     fun recgovSources(): Set<String> =
         poiData
@@ -534,17 +534,16 @@ data class CampsiteDataEntry(
 )
 
 /**
- * Row in the `poi_reservable_joiner` section. Names a single adapter
- * (registered in EtlOrchestrator's joiner registry) that reads the
- * current state of `pois` + canonical campsite catalog rows and writes
- * POI/campsite link rows into `reservable_pois`. No etl chain; joiners
- * don't transform raw data, they query DB tables.
+ * Row in the `campsite_parent_joiner` section. Names a single adapter that
+ * recomputes each campsite's campground parent from vendor refs and
+ * reparents rows whose current `campsites.campground_id` disagrees. No etl
+ * chain; joiners don't transform raw data, they query DB tables.
  *
  * `args` follows the same shape as [EtlEntry.args]: free-form
  * adapter-specific config (e.g. which provider source to scope to).
  */
 @Serializable
-data class PoiReservableJoinerEntry(
+data class CampsiteParentJoinerEntry(
     val name: String,
     val enabled: Boolean = true,
     val adapter: String,

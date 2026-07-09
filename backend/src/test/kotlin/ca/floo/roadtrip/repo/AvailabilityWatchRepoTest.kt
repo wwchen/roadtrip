@@ -58,7 +58,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
     private fun createInput(targets: List<AvailabilityWatchTargetRepo.TargetInput>): AvailabilityWatchRepo.CreateInput =
         AvailabilityWatchRepo.CreateInput(
             targets = targets,
-            reservableFilters = JsonObject(emptyMap()),
+            campsiteFilters = JsonObject(emptyMap()),
             startDate = LocalDate.parse("2026-07-04"),
             endDate = LocalDate.parse("2026-07-06"),
             cadenceSec = 60,
@@ -77,8 +77,8 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
             repo.create(
                 createInput(
                     listOf(
-                        AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, reservableId = null),
-                        AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null),
+                        AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, campsiteId = null),
+                        AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, campsiteId = null),
                     ),
                 ),
             )
@@ -91,7 +91,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
     fun `findById reloads the persisted target set`() {
         val poi = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
-        val created = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, reservableId = null))))
+        val created = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null))))
 
         val reloaded = repo.findById(created.id)!!
 
@@ -104,13 +104,13 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
         val poiA = insertPoi()
         val poiB = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
-        val created = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, reservableId = null))))
+        val created = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, campsiteId = null))))
 
         val updated =
             repo.update(
                 created.id,
                 AvailabilityWatchRepo.UpdateInput(
-                    targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null)),
+                    targets = listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, campsiteId = null)),
                 ),
             )!!
 
@@ -122,7 +122,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
     fun `update without targets leaves the existing target set untouched`() {
         val poi = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
-        val created = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, reservableId = null))))
+        val created = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null))))
 
         val updated = repo.update(created.id, AvailabilityWatchRepo.UpdateInput(status = WatchStatus.PAUSED))!!
 
@@ -140,12 +140,12 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
             repo.create(
                 createInput(
                     listOf(
-                        AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, reservableId = null),
-                        AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null),
+                        AvailabilityWatchTargetRepo.TargetInput(poiId = poiA, campsiteId = null),
+                        AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, campsiteId = null),
                     ),
                 ),
             )
-        val watchWithBOnly = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, reservableId = null))))
+        val watchWithBOnly = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poiB, campsiteId = null))))
 
         val filtered = repo.list(poiId = poiA)
 
@@ -157,7 +157,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
     fun `list surfaces the latest run status and error across the watch's pollers`() {
         val poi = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
-        val watch = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, reservableId = null))))
+        val watch = repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null))))
         val poller = insertPoller(poi)
         linkWatchPoller(watch.id, poller)
         // Older successful run, then a newer failed run — the newer one wins.
@@ -177,7 +177,7 @@ class AvailabilityWatchRepoTest : SharedDbTest() {
     fun `list leaves lastRun null when the watch has never polled`() {
         val poi = insertPoi()
         val repo = AvailabilityWatchRepo(ctx)
-        repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, reservableId = null))))
+        repo.create(createInput(listOf(AvailabilityWatchTargetRepo.TargetInput(poiId = poi, campsiteId = null))))
 
         assertNull(repo.list(poiId = poi).single().lastRun)
     }

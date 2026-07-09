@@ -228,7 +228,7 @@ class IngestController(
     //
     // The phase carries a row's display name + which YAML section it
     // came from. poi_data / campsite_data walk an ETL chain and write
-    // canonical rows; poi_reservable_joiner runs a vendor-scoped
+    // canonical rows; campsite_parent_joiner runs a vendor-scoped
     // reconciliation pass that reparents campsites via runJoiner.
     //
     // Each branch writes a section-specific counts DTO so dashboards can
@@ -265,7 +265,7 @@ class IngestController(
                         ),
                     )
                 }
-                Phase.Import.Section.POI_RESERVABLE_JOINER -> {
+                Phase.Import.Section.CAMPSITE_PARENT_JOINER -> {
                     val stats = etl.runJoiner(phase.name)
                     JSONB.valueOf(
                         ingestControllerJson.encodeToString(

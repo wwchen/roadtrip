@@ -5,8 +5,8 @@ import ca.floo.roadtrip.clients.aspira.AspiraAvailabilityClient
 import ca.floo.roadtrip.clients.aspira.AspiraOccupancy
 import ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
+import ca.floo.roadtrip.models.domain.Campsite
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.service.api.availabilityDatesFromObservations
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraAvailabilityProvider
 import ca.floo.roadtrip.service.availability.provider.adapters.aspira.AspiraTenant
@@ -65,15 +65,15 @@ class AspiraAvailabilityProviderTest {
                             mapId = -2147483388,
                             resourceLocationId = -2147483624,
                         ),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 100,
                                 vendorId = "100",
                                 mapId = -2147483615,
                                 resourceLocationId = -2147483624,
                             ),
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 200,
                                 vendorId = "200",
                                 mapId = -2147483615,
@@ -135,15 +135,15 @@ class AspiraAvailabilityProviderTest {
                             mapId = -2147483388,
                             resourceLocationId = -2147483624,
                         ),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 100,
                                 vendorId = "100",
                                 mapId = -2147483615,
                                 resourceLocationId = -2147483624,
                             ),
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 200,
                                 vendorId = "200",
                                 mapId = -2147483615,
@@ -197,9 +197,9 @@ class AspiraAvailabilityProviderTest {
                             mapId = -2147483388,
                             resourceLocationId = null,
                         ),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(
+                            CatalogCampsiteRef(
                                 campsiteId = 100,
                                 vendorId = "100",
                                 mapId = -2147483615,
@@ -213,54 +213,6 @@ class AspiraAvailabilityProviderTest {
             val observation = batch.observations.single()
             assertEquals(100, observation.campsiteId)
             assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
-        }
-
-    @Test
-    fun `reservable availability stays unkeyed without a canonical campsite id`() =
-        runBlocking {
-            val client =
-                fakeAspiraClient(
-                    onFetch = { _, mapId, _, _ ->
-                        AspiraAvailability(
-                            mapId = mapId,
-                            parkRollup = emptyList(),
-                            byMapLink = emptyMap(),
-                            byResource = mapOf("-2147478966" to listOf(0)),
-                        )
-                    },
-                )
-
-            val cases =
-                listOf(
-                    "reservation.pc.gc.ca" to "aspira_pc",
-                    "camping.bcparks.ca" to "aspira_bc",
-                    "washington.goingtocamp.com" to "aspira_wa",
-                )
-            for ((host, vendor) in cases) {
-                val tenant =
-                    AspiraTenant(
-                        host = host,
-                        vendorCode = vendor,
-                        bookingHorizonDays = 365,
-                    )
-                val adapter = AspiraAvailabilityProvider(tenant = tenant, client = client)
-                val batch =
-                    adapter.reservableAvailability(
-                        ref =
-                            ProviderRef.Aspira(
-                                transactionLocationId = -2147483648,
-                                mapId = -2147483516,
-                                resourceLocationId = -2147483515,
-                            ),
-                        vendorId = "-2147478966",
-                        startDate = LocalDate.parse("2026-07-01"),
-                        endDate = LocalDate.parse("2026-07-02"),
-                    )
-
-                assertEquals(null, batch.campsiteId)
-                assertEquals(null, batch.observations.single().campsiteId)
-                assertEquals(AvailabilityStatus.AVAILABLE, batch.observations.single().status)
-            }
         }
 
     @Test
@@ -300,10 +252,10 @@ class AspiraAvailabilityProviderTest {
                             mapId = -2147483388,
                             resourceLocationId = null,
                         ),
-                    reservables =
+                    campsites =
                         listOf(
-                            CatalogReservableRef(campsiteId = 100, vendorId = "100", mapId = -2147483388),
-                            CatalogReservableRef(campsiteId = 101, vendorId = "101", mapId = -2147483388),
+                            CatalogCampsiteRef(campsiteId = 100, vendorId = "100", mapId = -2147483388),
+                            CatalogCampsiteRef(campsiteId = 101, vendorId = "101", mapId = -2147483388),
                         ),
                     startDate = LocalDate.parse("2026-07-01"),
                     endDate = LocalDate.parse("2026-07-03"),
@@ -321,7 +273,7 @@ class AspiraAvailabilityProviderTest {
                 client = fakeAspiraClient(),
             )
         val reservable =
-            Reservable(
+            Campsite(
                 id = 1,
                 vendor = "aspira_wa",
                 vendorId = "-100",

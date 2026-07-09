@@ -30,38 +30,6 @@ class AspiraObservationsTest {
     }
 
     @Test
-    fun `aspira resource availability narrows fetched map response to one resource`() =
-        runBlocking {
-            val client =
-                fakeAspiraClient(
-                    onFetch = { _, mapId, _, _ ->
-                        AspiraAvailability(
-                            mapId = mapId,
-                            parkRollup = emptyList(),
-                            byMapLink = emptyMap(),
-                            byResource = mapOf("-2147478966" to listOf(0, 0, 1)),
-                        )
-                    },
-                )
-
-            val batch =
-                fetchAspiraResourceObservations(
-                    client = client,
-                    host = "camping.bcparks.ca",
-                    mapId = -2147483516,
-                    resourceId = "-2147478966",
-                    reservableVendor = "aspira_bc",
-                    startDate = LocalDate.parse("2026-07-01"),
-                    endDate = LocalDate.parse("2026-07-03"),
-                )
-
-            assertEquals(null, batch.campsiteId)
-            assertEquals(null, batch.observations.first().campsiteId)
-            assertEquals(AvailabilityStatus.AVAILABLE, batch.observations[0].status)
-            assertEquals(AvailabilityStatus.AVAILABLE, batch.observations[1].status)
-        }
-
-    @Test
     fun `aspira campground availability stays unkeyed without catalog campsite ids`() =
         runBlocking {
             val client =
@@ -88,7 +56,7 @@ class AspiraObservationsTest {
                         mapId = -2147483516,
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-02"),
-                        reservableVendor = "aspira_bc",
+                        campsiteVendor = "aspira_bc",
                     ),
                 )
 
@@ -141,12 +109,12 @@ class AspiraObservationsTest {
                         client = client,
                         host = "washington.goingtocamp.com",
                         parentMapId = -999,
-                        reservables =
+                        campsites =
                             listOf(
-                                AspiraCatalogReservable(1, "a", -101),
-                                AspiraCatalogReservable(2, "b", -101),
-                                AspiraCatalogReservable(3, "c", -202),
-                                AspiraCatalogReservable(4, "missing", -202),
+                                AspiraCatalogCampsite(1, "a", -101),
+                                AspiraCatalogCampsite(2, "b", -101),
+                                AspiraCatalogCampsite(3, "c", -202),
+                                AspiraCatalogCampsite(4, "missing", -202),
                             ),
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-03"),
@@ -188,11 +156,11 @@ class AspiraObservationsTest {
                         client = client,
                         host = "reservation.pc.gc.ca",
                         parentMapId = -999,
-                        reservables =
+                        campsites =
                             listOf(
-                                AspiraCatalogReservable(1, "available", -101),
-                                AspiraCatalogReservable(2, "unavailable", -101),
-                                AspiraCatalogReservable(3, "blocked", -101),
+                                AspiraCatalogCampsite(1, "available", -101),
+                                AspiraCatalogCampsite(2, "unavailable", -101),
+                                AspiraCatalogCampsite(3, "blocked", -101),
                             ),
                         startDate = LocalDate.parse("2026-07-09"),
                         endDate = LocalDate.parse("2026-07-10"),
@@ -231,9 +199,9 @@ class AspiraObservationsTest {
                         client = client,
                         host = "reservation.pc.gc.ca",
                         parentMapId = -999,
-                        reservables =
+                        campsites =
                             listOf(
-                                AspiraCatalogReservable(100, "100", -101),
+                                AspiraCatalogCampsite(100, "100", -101),
                             ),
                         startDate = LocalDate.parse("2026-07-01"),
                         endDate = LocalDate.parse("2026-07-02"),
@@ -282,11 +250,11 @@ class AspiraObservationsTest {
                         host = "reservation.pc.gc.ca",
                         parentMapId = -999,
                         resourceLocationId = -123,
-                        reservables =
+                        campsites =
                             listOf(
-                                AspiraCatalogReservable(100, "100", -101),
-                                AspiraCatalogReservable(200, "200", -101),
-                                AspiraCatalogReservable(300, "300", -101),
+                                AspiraCatalogCampsite(100, "100", -101),
+                                AspiraCatalogCampsite(200, "200", -101),
+                                AspiraCatalogCampsite(300, "300", -101),
                             ),
                         today = LocalDate.parse("2026-06-17"),
                         days = 2,

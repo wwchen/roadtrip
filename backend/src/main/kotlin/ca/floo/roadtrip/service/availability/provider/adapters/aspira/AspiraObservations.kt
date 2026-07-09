@@ -7,7 +7,7 @@ import ca.floo.roadtrip.models.api.AvailabilityErrorDto
 import ca.floo.roadtrip.models.availability.AvailabilityCacheBlock
 import ca.floo.roadtrip.models.availability.AvailabilityObservationBatch
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
-import ca.floo.roadtrip.models.availability.ReservableDayObservation
+import ca.floo.roadtrip.models.availability.CampsiteDayObservation
 import ca.floo.roadtrip.models.metadata.aspira.AspiraResourceAvailability
 import ca.floo.roadtrip.models.metadata.aspira.AspiraStatus
 import ca.floo.roadtrip.service.api.availabilityErrorDto
@@ -35,7 +35,7 @@ internal suspend fun fetchAspiraAvailabilityObservations(
     mapId: Int,
     startDate: LocalDate,
     endDate: LocalDate,
-    reservableVendor: String? = null,
+    campsiteVendor: String? = null,
 ): AvailabilityObservationBatch {
     val days = daysBetween(startDate, endDate)
     val observedAt = Instant.now()
@@ -44,7 +44,7 @@ internal suspend fun fetchAspiraAvailabilityObservations(
         provider = "aspira",
         startDate = startDate,
         endDate = endDate,
-        observations = observationsFromAspiraAvailability(data, startDate, days, observedAt, reservableVendor),
+        observations = observationsFromAspiraAvailability(data, startDate, days, observedAt, campsiteVendor),
         cacheBlock = directFetchCacheBlock(),
         host = host,
         mapId = mapId.toString(),
@@ -52,22 +52,22 @@ internal suspend fun fetchAspiraAvailabilityObservations(
 }
 
 /**
- * POI-scoped Aspira availability using the linked reservable catalog instead
+ * POI-scoped Aspira availability using the linked campsite catalog instead
  * of only the POI's parent map. Some Aspira parks can have one visible POI
  * map whose linked sites live under several child maps; this groups by the
- * per-reservable child map and classifies the actual resource ids.
+ * per-campsite child map and classifies the actual resource ids.
  */
 internal suspend fun fetchAspiraCatalogObservations(
     client: AspiraAvailabilityClient,
     host: String,
     parentMapId: Int,
-    reservables: List<AspiraCatalogReservable>,
+    campsites: List<AspiraCatalogCampsite>,
     startDate: LocalDate,
     endDate: LocalDate,
 ): AvailabilityObservationBatch {
     val days = daysBetween(startDate, endDate)
     val targets =
-        reservables
+        campsites
             .distinctBy { it.campsiteId }
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
@@ -110,12 +110,12 @@ internal suspend fun fetchAspiraCatalogOccupancyObservations(
     host: String,
     parentMapId: Int,
     resourceLocationId: Int,
-    reservables: List<AspiraCatalogReservable>,
+    campsites: List<AspiraCatalogCampsite>,
     today: LocalDate,
     days: Int,
 ): AvailabilityObservationBatch {
     val targets =
-        reservables
+        campsites
             .distinctBy { it.campsiteId }
             .map { it.copy(mapId = it.mapId ?: parentMapId) }
     if (targets.isEmpty()) {
@@ -149,34 +149,6 @@ internal suspend fun fetchAspiraCatalogOccupancyObservations(
 }
 
 /**
- * Same Aspira `/api/availability/map` response as the campground rollup,
- * narrowed to one `resourceAvailabilities` key.
- */
-internal suspend fun fetchAspiraResourceObservations(
-    client: AspiraAvailabilityClient,
-    host: String,
-    mapId: Int,
-    resourceId: String,
-    reservableVendor: String,
-    startDate: LocalDate,
-    endDate: LocalDate,
-): AvailabilityObservationBatch {
-    val days = daysBetween(startDate, endDate)
-    val observedAt = Instant.now()
-    val data = client.fetch(host, mapId, startDate, endDate.minusDays(1))
-    val resourceDays = data.byResource[resourceId].orEmpty()
-    return AvailabilityObservationBatch(
-        provider = "aspira",
-        startDate = startDate,
-        endDate = endDate,
-        observations = observationsFromResourceDays(resourceDays, startDate, days, campsiteId = null, observedAt),
-        cacheBlock = directFetchCacheBlock(),
-        host = host,
-        mapId = mapId.toString(),
-    )
-}
-
-/**
  * Convert Aspira's per-day status arrays into the FE's day-status shape.
  *
  * For each date D, a sub-area counts as available only when its canonical
@@ -190,18 +162,18 @@ private fun observationsFromAspiraAvailability(
     start: LocalDate,
     days: Int,
     observedAt: Instant,
-    reservableVendor: String? = null,
-): List<ReservableDayObservation> {
-    if (reservableVendor != null && avail.byResource.isNotEmpty()) {
-        return observationsFromResourceCatalog(avail.byResource, start, days, reservableVendor, observedAt)
+    campsiteVendor: String? = null,
+): List<CampsiteDayObservation> {
+    if (campsiteVendor != null && avail.byResource.isNotEmpty()) {
+        return observationsFromResourceCatalog(avail.byResource, start, days, campsiteVendor, observedAt)
     }
     val sub = avail.byMapLink.values.toList()
     val rollup = avail.parkRollup
     return if (sub.isNotEmpty()) {
-        observationsFromIndexedStatusRows(sub, start, days, reservableVendor ?: "aspira", "__map_link", observedAt)
+        observationsFromIndexedStatusRows(sub, start, days, campsiteVendor ?: "aspira", "__map_link", observedAt)
     } else {
         (0 until days).map { d ->
-            ReservableDayObservation(
+            CampsiteDayObservation(
                 campsiteId = null,
                 date = start.plusDays(d.toLong()),
                 observedAt = observedAt,
@@ -217,9 +189,9 @@ private fun observationsFromResourceDays(
     days: Int,
     campsiteId: Long?,
     observedAt: Instant,
-): List<ReservableDayObservation> =
+): List<CampsiteDayObservation> =
     (0 until days).map { d ->
-        ReservableDayObservation(
+        CampsiteDayObservation(
             campsiteId = campsiteId,
             date = start.plusDays(d.toLong()),
             observedAt = observedAt,
@@ -231,9 +203,9 @@ private fun observationsFromResourceCatalog(
     byResource: Map<String, List<Int>>,
     start: LocalDate,
     days: Int,
-    reservableVendor: String,
+    campsiteVendor: String,
     observedAt: Instant,
-): List<ReservableDayObservation> =
+): List<CampsiteDayObservation> =
     byResource.flatMap { (resourceId, resourceDays) ->
         observationsFromResourceDays(
             resourceDays = resourceDays,
@@ -248,10 +220,10 @@ private fun observationsFromLinkedResourceCatalog(
     resources: List<CatalogResourceDays>,
     start: LocalDate,
     days: Int,
-): List<ReservableDayObservation> =
+): List<CampsiteDayObservation> =
     resources.flatMap { resource ->
         (0 until days).map { d ->
-            ReservableDayObservation(
+            CampsiteDayObservation(
                 campsiteId = resource.campsiteId,
                 date = start.plusDays(d.toLong()),
                 observedAt = resource.observedAt,
@@ -261,11 +233,11 @@ private fun observationsFromLinkedResourceCatalog(
     }
 
 private fun observationsFromOccupancyCatalogArrivalDay(
-    resources: List<AspiraCatalogReservable>,
+    resources: List<AspiraCatalogCampsite>,
     occupancyRows: List<ca.floo.roadtrip.clients.aspira.AspiraResourceOccupancy>,
     arrival: LocalDate,
     observedAt: Instant,
-): List<ReservableDayObservation> {
+): List<CampsiteDayObservation> {
     val occupancyByResourceId = occupancyRows.associateBy { it.resourceId.toString() }
     return resources.map { resource ->
         val occupancy = occupancyByResourceId[resource.resourceId]
@@ -275,7 +247,7 @@ private fun observationsFromOccupancyCatalogArrivalDay(
                 occupancy.filtered -> AvailabilityStatus.RESERVED
                 else -> AspiraResourceAvailability.classify(occupancy.availability)
             }
-        ReservableDayObservation(
+        CampsiteDayObservation(
             campsiteId = resource.campsiteId,
             date = arrival,
             observedAt = observedAt,
@@ -284,7 +256,7 @@ private fun observationsFromOccupancyCatalogArrivalDay(
     }
 }
 
-internal data class AspiraCatalogReservable(
+internal data class AspiraCatalogCampsite(
     val campsiteId: Long,
     val resourceId: String,
     val mapId: Int?,
@@ -301,13 +273,13 @@ private fun observationsFromIndexedStatusRows(
     rows: List<List<Int>>,
     start: LocalDate,
     days: Int,
-    reservableVendor: String,
+    campsiteVendor: String,
     idPrefix: String,
     observedAt: Instant,
-): List<ReservableDayObservation> =
+): List<CampsiteDayObservation> =
     rows.flatMapIndexed { index, statuses ->
         (0 until days).map { d ->
-            ReservableDayObservation(
+            CampsiteDayObservation(
                 campsiteId = null,
                 date = start.plusDays(d.toLong()),
                 observedAt = observedAt,

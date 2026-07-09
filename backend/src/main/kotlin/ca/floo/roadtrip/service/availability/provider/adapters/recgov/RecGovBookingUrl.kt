@@ -7,7 +7,7 @@ import java.nio.charset.StandardCharsets
 /**
  * The rec.gov single-site booking URL scheme — the one place that knows it.
  * Consumed by [RecGovAvailabilityProvider.bookingUrlTemplate] (alerts) and the
- * reservables API (the web app's per-site "Book" link), so the scheme is never
+ * campsites API (the web app's per-site "Book" link), so the scheme is never
  * re-spelled at a call site.
  */
 internal object RecGovBookingUrl {

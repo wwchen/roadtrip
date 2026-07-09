@@ -112,8 +112,8 @@ class SlackInteractivityHandlerTest {
         status: WatchStatus = WatchStatus.ACTIVE,
     ) = AvailabilityWatchRepo.Watch(
         id = id,
-        targets = listOf(AvailabilityWatchTargetRepo.WatchTarget(id = 100, watchId = id, poiId = 7, reservableId = null)),
-        reservableFilters = JsonObject(emptyMap()),
+        targets = listOf(AvailabilityWatchTargetRepo.WatchTarget(id = 100, watchId = id, poiId = 7, campsiteId = null)),
+        campsiteFilters = JsonObject(emptyMap()),
         startDate = LocalDate.of(2026, 7, 11),
         endDate = LocalDate.of(2026, 7, 12),
         cadenceSec = null,
