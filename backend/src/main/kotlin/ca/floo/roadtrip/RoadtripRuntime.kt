@@ -25,13 +25,10 @@ import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
-import ca.floo.roadtrip.service.availability.AvailabilityService
-import ca.floo.roadtrip.service.availability.AvailabilityServiceImpl
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.CatalogAvailabilityBatcher
 import ca.floo.roadtrip.service.availability.CoordinateTimeZones
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
-import ca.floo.roadtrip.service.availability.ReservableAvailabilityComposer
 import ca.floo.roadtrip.service.availability.WatchAlertDispatcher
 import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
@@ -45,7 +42,6 @@ import ca.floo.roadtrip.service.notification.WatchStatusNotice
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimitConfig
 import ca.floo.roadtrip.service.ratelimit.VendorRateLimiter
 import ca.floo.roadtrip.service.reservation.ReservationProviderClients
-import ca.floo.roadtrip.service.reservation.ReservationProviderId
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistry
 import ca.floo.roadtrip.service.reservation.ReservationProviderRegistryFactory
 import ca.floo.roadtrip.service.routing.RouteCache
@@ -88,7 +84,6 @@ internal class RoadtripRuntime(
     val boot: RoadtripBootContext,
     val reservationProviderRegistry: ReservationProviderRegistry,
     val availabilityDateResolver: AvailabilityDateResolver,
-    val availabilityService: AvailabilityService,
     val availabilityWatchService: AvailabilityWatchService,
     val watchAlertDispatcher: WatchAlertDispatcher,
     val schedulerScope: CoroutineScope,
@@ -182,28 +177,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
             reservationProviders = reservationProviderRegistry,
             dateResolver = availabilityDateResolver,
         )
-    val availabilityService =
-        AvailabilityServiceImpl(
-            providerRefs = campsiteProviders,
-            reservablesRepo = reservablesRepo,
-            composer =
-                ReservableAvailabilityComposer(
-                    targets = availabilityTargets,
-                    dateResolver = availabilityDateResolver,
-                    availability = availability,
-                    snapshotFreshnessTtl = { providerId ->
-                        boot.appConfig.cache.ttlFor(
-                            when (providerId) {
-                                ReservationProviderId.RECGOV -> ApiCacheEntity.RECGOV_AVAILABILITY
-                                ReservationProviderId.ASPIRA -> ApiCacheEntity.ASPIRA_AVAILABILITY
-                                ReservationProviderId.RESERVEAMERICA -> ApiCacheEntity.RESERVEAMERICA_AVAILABILITY
-                                ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY
-                            },
-                        )
-                    },
-                ),
-            dateResolver = availabilityDateResolver,
-        )
     val availabilityWatchService = AvailabilityWatchService(boot.ctx, reservablesRepo, availabilityTargets)
 
     val schedulerScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -288,7 +261,6 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         boot = boot,
         reservationProviderRegistry = reservationProviderRegistry,
         availabilityDateResolver = availabilityDateResolver,
-        availabilityService = availabilityService,
         availabilityWatchService = availabilityWatchService,
         watchAlertDispatcher = watchAlertDispatcher,
         schedulerScope = schedulerScope,

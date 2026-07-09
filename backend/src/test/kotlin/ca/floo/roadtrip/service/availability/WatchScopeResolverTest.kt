@@ -1,11 +1,12 @@
 package ca.floo.roadtrip.service.availability
 
-import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.repo.AvailabilityWatchRepo
 import ca.floo.roadtrip.repo.AvailabilityWatchTargetRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampsite
+import ca.floo.roadtrip.repo.seedCatalogPoi
 import kotlinx.serialization.json.JsonObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
@@ -22,11 +23,7 @@ class WatchScopeResolverTest : SharedDbTest() {
         reservableRepo = ReservableRepo(ctx)
         watchRepo = AvailabilityWatchRepo(ctx)
         resolver = WatchScopeResolver(reservableRepo)
-        ctx.execute("DELETE FROM availability_watch_target")
-        ctx.execute("DELETE FROM availability_watch")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     private var poiSeq = 0
@@ -34,39 +31,30 @@ class WatchScopeResolverTest : SharedDbTest() {
     private fun insertPoi(): Long {
         val sourceId = "poi-scope-${poiSeq++}"
         return ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
-                ) VALUES (
-                    'test', ?, 'campground', 'Upper Pines',
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
-                ) RETURNING id
-                """.trimIndent(),
-                sourceId,
-            )!!
-            .get("id", Long::class.java)
+            .seedCatalogPoi(
+                sourceId = sourceId,
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "test",
+            ).poiId
     }
 
     private fun insertReservable(
         poiId: Long,
         vendorId: String,
-    ): Long {
-        val id =
-            reservableRepo.upsert(
-                ReservableRepo.Input(
-                    rid = ReservableId(type = ReservableType.SITE, vendor = "test", vendorId = vendorId),
-                    name = "Site $vendorId",
-                    loop = null,
-                    siteType = null,
-                    raw = null,
-                ),
-            )
-        reservableRepo.linkToPoi(id, poiId)
-        return id
-    }
+    ): Long =
+        ctx.seedCampsite(
+            campgroundId = campgroundIdFor(poiId),
+            vendor = "test",
+            vendorId = vendorId,
+            name = "Site $vendorId",
+        )
+
+    private fun campgroundIdFor(poiId: Long): Long =
+        ctx
+            .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
+            .get("campground_id", Long::class.java)
 
     private fun createWatch(targets: List<AvailabilityWatchTargetRepo.TargetInput>): AvailabilityWatchRepo.Watch =
         watchRepo.create(

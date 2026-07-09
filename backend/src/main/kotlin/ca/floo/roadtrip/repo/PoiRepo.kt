@@ -1,281 +1,36 @@
 package ca.floo.roadtrip.repo
 
-import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.models.domain.Address
 import ca.floo.roadtrip.models.domain.Poi
-import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.categorySql
-import ca.floo.roadtrip.models.domain.propertiesJson
-import kotlinx.serialization.ExperimentalSerializationApi
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.encodeToString
-import kotlinx.serialization.json.Json
 import org.jooq.DSLContext
-import org.jooq.Geometry
-import org.jooq.JSONB
-import org.jooq.impl.DSL
-import org.jooq.impl.SQLDataType
-import org.slf4j.LoggerFactory
-import java.time.OffsetDateTime
-import java.time.ZoneOffset
 
-@OptIn(ExperimentalSerializationApi::class)
-private val poiRepoOmitNullJson =
-    Json {
-        explicitNulls = false
-    }
-
-// Mark-and-sweep upsert into the v2 `pois` table. Same shape as the
-// legacy Importer.kt, generalized over the new sealed Poi types and
-// the v2 columns (provider_ref JSONB; the legacy provider FK was dropped
-// in V8 since the dispatch path it was meant to power never landed).
-//
-// Sweep is scoped to the union of source names this run wrote — a
-// campground-merge run wipes only campground sources, never Tesla
-// (RFC decision #16).
-//
-// Implemented via the jOOQ DSL (not raw SQL) so adding a column to
-// `pois` becomes a compile-time obligation: the generated `POIS`
-// table type changes, and any forgotten `set()` here surfaces as a
-// type mismatch at the next build, not a silent column drop at
-// runtime. The one bit of raw SQL is `ST_SetSRID(ST_GeomFromGeoJSON
-// (?), 4326)` for the PostGIS geometry constructor; jOOQ OSS doesn't
-// have a typed builder for that.
+/**
+ * Retired wide-POI importer.
+ *
+ * The canonical catalog no longer imports every source into one polymorphic
+ * `pois` table. New ETLs write typed catalog rows (`campgrounds`,
+ * `campsites`, `tesla_superchargers`, `planet_fitness_locations`) and then
+ * create lean POI wrapper rows plus typed join rows.
+ */
 class Upsert(
-    private val ctx: DSLContext,
+    @Suppress("UNUSED_PARAMETER") private val ctx: DSLContext,
 ) {
-    private val log = LoggerFactory.getLogger(javaClass)
-    private val importRuns = ImportRunRepo(ctx)
-
     data class Result(
         val runId: Long,
         val seenCount: Int,
         val sweptCount: Int,
     )
 
-    /**
-     * Upsert [pois] into the v2 schema, then mark-and-sweep across [sources].
-     * The tripwire (seen < 0.5 × prior_active) aborts before sweep so a
-     * partial fetch can't wipe the table.
-     */
     fun run(
         sources: Set<String>,
         pois: List<Poi>,
     ): Result {
         require(sources.isNotEmpty()) { "must specify at least one source for sweep scope" }
-
-        // Use the sorted source list as the import_runs.source label.
-        // Sweep scope is `sources` (multi-source merges share one run).
-        val runLabel = sources.sorted().joinToString(",")
-        val runId = importRuns.start(runLabel)
-        log.info("import_runs id={} sources={} started", runId, runLabel)
-
-        try {
-            val existingActive =
-                ctx.fetchCount(
-                    POIS,
-                    POIS.SOURCE.`in`(sources).and(POIS.DELETED_AT.isNull),
-                )
-
-            var seen = 0
-            for (poi in pois) {
-                upsertOne(poi, runId)
-                seen++
-                if (seen % 1000 == 0) log.info("  upserted {} rows", seen)
-            }
-            log.info("staged {} rows from sources={} (existing active={})", seen, runLabel, existingActive)
-
-            // Tripwire: a fetch that silently truncates upstream would
-            // otherwise sweep the whole set. 0.5 is conservative.
-            if (existingActive > 0 && seen < existingActive / 2) {
-                fail(runId, "tripwire: seen=$seen < existing/2=${existingActive / 2}")
-                throw UpsertException(
-                    "Aborted: seen=$seen < existing/2=${existingActive / 2} for sources=$runLabel",
-                )
-            }
-
-            val swept = sweep(sources, runId)
-            log.info("swept {} rows (soft-deleted) from sources={}", swept, runLabel)
-
-            importRuns.complete(runId, seen)
-
-            return Result(runId, seen, swept)
-        } catch (e: Exception) {
-            if (e !is UpsertException) fail(runId, "unhandled: ${e.javaClass.simpleName}: ${e.message}")
-            throw e
-        }
-    }
-
-    private fun upsertOne(
-        poi: Poi,
-        runId: Long,
-    ) {
-        val fetchedAtTs = OffsetDateTime.ofInstant(poi.fetchedAt, ZoneOffset.UTC)
-        val providerRefJson = providerRefJsonFor(poi)
-        val addressJson = poi.address?.let { JSONB.valueOf(addressToJson(it)) }
-        val propertiesJson = JSONB.valueOf(poi.propertiesJson().toString())
-        // Subcategory is currently a Campground-only concept (federal /
-        // state / local / provincial). Promoted to a column in V9 so
-        // POST /api/pois can project it cheaply for the FE legend bucket.
-        val subcategoryValue = (poi as? Poi.Campground)?.subcategory
-        val agency = poi.agency
-
-        // PostGIS geometry constructor — jOOQ OSS has no typed builder for
-        // ST_GeomFromGeoJSON, so this stays as a parameterized DSL field.
-        // SRID 4326 matches the column declaration.
-        val geomField =
-            DSL.field<Geometry>(
-                "ST_SetSRID(ST_GeomFromGeoJSON({0}), 4326)",
-                SQLDataType.GEOMETRY,
-                DSL.value(poi.geomGeoJson),
-            )
-
-        ctx
-            .insertInto(POIS)
-            .set(POIS.SOURCE, poi.source)
-            .set(POIS.SOURCE_ID, poi.sourceId)
-            .set(POIS.CATEGORY, poi.categorySql())
-            .set(POIS.SUBCATEGORY, subcategoryValue)
-            .set(POIS.AGENCY, agency)
-            .set(POIS.NAME, poi.name)
-            .set(POIS.GEOM, geomField)
-            .set(POIS.REGION, poi.region)
-            .set(POIS.COUNTRY, poi.country)
-            // unit_name is transitional; ETL never populates it (parent-of
-            // is derived via ST_Within at query time per RFC decision #18).
-            .set(POIS.UNIT_NAME, null as String?)
-            .set(POIS.PHONE, poi.phone)
-            .set(POIS.ADDRESS, addressJson)
-            .set(POIS.INFO_URL, poi.infoUrl)
-            .set(POIS.PROVIDER_REF, providerRefJson)
-            .set(POIS.PROPERTIES, propertiesJson)
-            .set(POIS.FETCHED_AT, fetchedAtTs)
-            .set(POIS.LAST_VERIFIED, poi.lastVerified)
-            .set(POIS.LAST_SEEN_RUN_ID, runId)
-            .onConflict(POIS.SOURCE, POIS.SOURCE_ID)
-            .doUpdate()
-            // EXCLUDED.* refers to the row that would have been inserted.
-            // jOOQ's onDuplicateKeyUpdate idiom uses DSL.excluded(field).
-            .set(POIS.CATEGORY, DSL.excluded(POIS.CATEGORY))
-            .set(POIS.SUBCATEGORY, DSL.excluded(POIS.SUBCATEGORY))
-            .set(POIS.AGENCY, DSL.excluded(POIS.AGENCY))
-            .set(POIS.NAME, DSL.excluded(POIS.NAME))
-            .set(POIS.GEOM, DSL.excluded(POIS.GEOM))
-            .set(POIS.REGION, DSL.excluded(POIS.REGION))
-            .set(POIS.COUNTRY, DSL.excluded(POIS.COUNTRY))
-            .set(POIS.UNIT_NAME, DSL.excluded(POIS.UNIT_NAME))
-            .set(POIS.PHONE, DSL.excluded(POIS.PHONE))
-            .set(POIS.ADDRESS, DSL.excluded(POIS.ADDRESS))
-            .set(POIS.INFO_URL, DSL.excluded(POIS.INFO_URL))
-            .set(POIS.PROVIDER_REF, DSL.excluded(POIS.PROVIDER_REF))
-            .set(POIS.PROPERTIES, DSL.excluded(POIS.PROPERTIES))
-            .set(POIS.FETCHED_AT, DSL.excluded(POIS.FETCHED_AT))
-            .set(POIS.LAST_VERIFIED, DSL.excluded(POIS.LAST_VERIFIED))
-            .set(POIS.LAST_SEEN_RUN_ID, DSL.excluded(POIS.LAST_SEEN_RUN_ID))
-            // Resurrection: a previously deleted source_id reappears with deleted_at=NULL.
-            .set(POIS.DELETED_AT, null as OffsetDateTime?)
-            .set(POIS.UPDATED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .execute()
-    }
-
-    private fun sweep(
-        sources: Set<String>,
-        runId: Long,
-    ): Int =
-        ctx
-            .update(POIS)
-            .set(POIS.DELETED_AT, OffsetDateTime.now(ZoneOffset.UTC))
-            .where(POIS.SOURCE.`in`(sources))
-            .and(POIS.DELETED_AT.isNull)
-            .and(POIS.LAST_SEEN_RUN_ID.ne(runId).or(POIS.LAST_SEEN_RUN_ID.isNull))
-            .execute()
-
-    private fun fail(
-        runId: Long,
-        notes: String,
-    ) = importRuns.fail(runId, notes)
-
-    /** provider_ref JSONB. Only Campground variants carry it; null otherwise. */
-    private fun providerRefJsonFor(poi: Poi): JSONB? =
-        when (poi) {
-            is Poi.Campground -> poi.providerRef?.let { JSONB.valueOf(providerRefToJson(it)) }
-            else -> null
-        }
-
-    private fun providerRefToJson(ref: ProviderRef): String =
-        when (ref) {
-            is ProviderRef.RecGov ->
-                Json.encodeToString(RecGovProviderRefDto(recgovId = ref.recgovId))
-            is ProviderRef.Aspira ->
-                Json.encodeToString(
-                    AspiraProviderRefDto(
-                        transactionLocationId = ref.transactionLocationId,
-                        mapId = ref.mapId,
-                        resourceLocationId = ref.resourceLocationId,
-                    ),
-                )
-            is ProviderRef.ReserveAmerica ->
-                Json.encodeToString(
-                    ReserveAmericaProviderRefDto(
-                        contractCode = ref.contractCode,
-                        parkId = ref.parkId,
-                    ),
-                )
-            is ProviderRef.ReserveCalifornia ->
-                Json.encodeToString(
-                    ReserveCaliforniaProviderRefDto(
-                        placeId = ref.placeId,
-                        facilityIds = ref.facilityIds,
-                    ),
-                )
-        }
-
-    private fun addressToJson(a: Address): String =
-        poiRepoOmitNullJson.encodeToString(
-            AddressDto(
-                street = a.street,
-                city = a.city,
-                state = a.state,
-                postcode = a.postcode,
-                country = a.country,
-            ),
+        throw UnsupportedOperationException(
+            "wide POI upsert is retired; use canonical catalog ETL outputs and typed POI joins",
         )
+    }
 }
 
 class UpsertException(
     message: String,
 ) : RuntimeException(message)
-
-@Serializable
-private data class RecGovProviderRefDto(
-    @SerialName("recgov_id") val recgovId: String,
-)
-
-@Serializable
-private data class AspiraProviderRefDto(
-    val transactionLocationId: Long,
-    val mapId: Long,
-    val resourceLocationId: Long?,
-)
-
-@Serializable
-private data class ReserveAmericaProviderRefDto(
-    @SerialName("contract_code") val contractCode: String?,
-    @SerialName("park_id") val parkId: String,
-)
-
-@Serializable
-private data class ReserveCaliforniaProviderRefDto(
-    @SerialName("place_id") val placeId: Long,
-    @SerialName("facility_ids") val facilityIds: List<Long>,
-)
-
-@Serializable
-private data class AddressDto(
-    val street: String? = null,
-    val city: String? = null,
-    val state: String? = null,
-    val postcode: String? = null,
-    val country: String? = null,
-)

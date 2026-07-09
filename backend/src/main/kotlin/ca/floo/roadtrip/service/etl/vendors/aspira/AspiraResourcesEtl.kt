@@ -1,12 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.ReservableEtlOutput
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.reservableTagKey
@@ -92,7 +90,7 @@ class AspiraResourcesEtl(
      * vendor, so we use underscore-separated tenant codes.
      */
     val vendor: String,
-) : SourceEtl<AspiraResourcesEtl.Parsed, ReservableEtlOutput> {
+) : SourceEtl<AspiraResourcesEtl.Parsed, CampsiteEtlOutput> {
     override val multiPart: Boolean = true
 
     private val log = LoggerFactory.getLogger(javaClass)
@@ -136,7 +134,7 @@ class AspiraResourcesEtl(
     override fun transform(
         dto: Parsed,
         ctx: TransformCtx,
-    ): ReservableEtlOutput {
+    ): CampsiteEtlOutput {
         // Maps tree → mapId-keyed leaf metadata. Each inventory record
         // carries `mapIds[]`; we look up the first one to label the
         // reservable's `loop`.
@@ -145,7 +143,7 @@ class AspiraResourcesEtl(
                 .walk(dto.maps)
                 .associateBy { it.mapId }
 
-        val out = mutableListOf<ReservableRepo.Input>()
+        val out = mutableListOf<CampsiteEtlRecord>()
         var unmatchedLeaf = 0
         var totalRecords = 0
         for (envelope in dto.inventory) {
@@ -158,19 +156,25 @@ class AspiraResourcesEtl(
                 val leafMapId = inv.firstMapId
                 val leaf = leafMapId?.let { leavesByMapId[it] }
                 if (leafMapId != null && leaf == null) unmatchedLeaf++
+                val providerRef = buildResourceProviderRef(inv = inv, leaf = leaf)
                 out +=
-                    ReservableRepo.Input(
-                        rid = ReservableId(ReservableType.SITE, vendor, resourceId),
+                    CampsiteEtlRecord(
+                        vendor = vendor,
+                        vendorRefId = resourceId,
+                        parentVendor = PARENT_CAMPGROUND_VENDOR_BY_SITE_VENDOR[vendor],
+                        parentVendorRefId = parentVendorRefId(providerRef),
                         // Short label from /api/resourcelocation/resources
                         // (`localizedValues[0].name`) — e.g. "OFC13", "B7".
-                        name = inv.name,
+                        name = inv.name ?: resourceId,
                         // Loop is the parent leaf's name from /api/maps
                         // (PC's "AREA WHITE RIVER" analogue).
-                        loop = leaf?.name,
-                        siteType = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
-                        raw = buildResourceRaw(inv = inv, leaf = leaf, dictionaries = dto.dictionaries),
-                        tags = buildResourceTags(inv = inv, dictionaries = dto.dictionaries),
-                        providerRef = buildResourceProviderRef(inv = inv, leaf = leaf),
+                        loopName = leaf?.name,
+                        kind = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] } ?: "site",
+                        kindListed = inv.resourceCategoryId?.let { dto.dictionaries.resourceCategories[it] },
+                        equipment = inv.allowedEquipment?.let { enrichAllowedEquipment(it, dto.dictionaries) },
+                        maxPeople = inv.maxCapacity,
+                        sourcePayload = buildResourceRaw(inv = inv, leaf = leaf, dictionaries = dto.dictionaries),
+                        vendorRefPayload = providerRef,
                     )
             }
         }
@@ -183,7 +187,17 @@ class AspiraResourcesEtl(
         if (totalRecords != out.size) {
             log.warn("$etlSlug: parsed {} inventory records but emitted {} reservables", totalRecords, out.size)
         }
-        return ReservableEtlOutput(reservables = out)
+        return CampsiteEtlOutput(campsites = out)
+    }
+
+    private fun parentVendorRefId(providerRef: JsonObject?): String? {
+        val transactionLocationId = providerRef?.get(PROVIDER_REF_TXN_LOC_KEY)?.jsonPrimitive?.contentOrNull
+        val mapId = providerRef?.get(PROVIDER_REF_MAP_ID_KEY)?.jsonPrimitive?.contentOrNull
+        return if (transactionLocationId != null && mapId != null) {
+            "$POI_SOURCE_ID_PREFIX$transactionLocationId-$mapId"
+        } else {
+            null
+        }
     }
 
     private fun parseResourceInventory(
@@ -626,6 +640,19 @@ class AspiraResourcesEtl(
         val name: String?,
         val valueLabels: Map<Int, String>,
     )
+
+    private companion object {
+        const val PROVIDER_REF_TXN_LOC_KEY = "transactionLocationId"
+        const val PROVIDER_REF_MAP_ID_KEY = "mapId"
+        const val POI_SOURCE_ID_PREFIX = "aspira-"
+
+        val PARENT_CAMPGROUND_VENDOR_BY_SITE_VENDOR =
+            mapOf(
+                "aspira_wa" to "aspira-wa-pins",
+                "aspira_bc" to "aspira-bc-pins",
+                "aspira_pc" to "aspira-pc-pins",
+            )
+    }
 
     /** A single reservable's catalog row, normalized out of Aspira's wrapping. */
     private data class ResourceInventory(

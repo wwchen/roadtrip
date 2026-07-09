@@ -1,97 +1,66 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
-import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
 import ca.floo.roadtrip.service.etl.framework.PoiReservableJoiner
-import org.jooq.impl.DSL
 
 /**
- * Links rec.gov reservables to their parent federal-campgrounds POI.
+ * Canonicalized rec.gov campsite parent resolver.
  *
- * Match rule:
- *   reservables.raw->>'_parent_facility_id'   (RFC 0008 PR 3a injects this)
- *      ⇄ pois.source_id = "recgov-{FacilityID}"
- *   AND pois.source = federal-campgrounds
- *
- * The synthetic `_parent_facility_id` is the joiner's only handshake
- * with the ETL — by design, the ETL doesn't know how POIs are keyed.
- * If a future ETL stops emitting that field, this joiner finds zero
- * matches and the reservable_pois table just doesn't get populated;
- * we don't want it failing loud across an unrelated keying change.
- *
- * One SQL round-trip: a JOIN between `reservables` (filtered to
- * vendor='recgov') and `pois` (filtered to source='federal-campgrounds')
- * on the synthetic-keyed JSONB extraction. Postgres's `->>` operator
- * applies after the index filter.
+ * The old adapter linked `reservables` to `pois`; with the canonical catalog it
+ * resolves rec.gov campsite rows to campground rows through vendor refs.
  */
 class RecgovPoiReservableJoiner : PoiReservableJoiner {
     override val adapter: String = ADAPTER_NAME
 
-    override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> {
-        // jsonb_extract_path_text is more forgiving than `->>` against
-        // jOOQ's plain-SQL rendering — it accepts an explicit jsonb cast
-        // without ambiguity over the operator's right-hand-type.
-        val parentFacilityId =
-            DSL.field(
-                "jsonb_extract_path_text(({0})::jsonb, {1})",
-                String::class.java,
-                RESERVABLES.RAW,
-                DSL.inline(PARENT_FACILITY_KEY),
-            )
-        val expectedSourceId =
-            DSL.concat(DSL.value(POI_SOURCE_ID_PREFIX), parentFacilityId)
-
-        return ctx.ctx
-            .select(RESERVABLES.ID, POIS.ID)
-            .from(RESERVABLES)
-            .join(POIS)
-            .on(POIS.SOURCE.eq(POI_SOURCE).and(POIS.SOURCE_ID.eq(expectedSourceId)))
-            .where(RESERVABLES.VENDOR.eq(VENDOR))
-            .and(DSL.condition("reservables.deleted_at IS NULL"))
-            .and(POIS.DELETED_AT.isNull)
-            .fetch { record ->
+    override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> =
+        ctx.ctx
+            .fetch(
+                """
+                SELECT c.id AS campsite_id, cg.id AS campground_id
+                FROM campsites c
+                JOIN campsite_vendor_refs cvr
+                  ON cvr.campsite_id = c.id
+                JOIN vendor_refs site_ref
+                  ON site_ref.id = cvr.vendor_ref_id
+                JOIN campground_vendor_refs cgvr
+                  ON cgvr.is_primary
+                JOIN vendor_refs campground_ref
+                  ON campground_ref.id = cgvr.vendor_ref_id
+                JOIN campgrounds cg
+                  ON cg.id = cgvr.campground_id
+                WHERE c.deleted_at IS NULL
+                  AND cg.deleted_at IS NULL
+                  AND site_ref.deleted_at IS NULL
+                  AND campground_ref.deleted_at IS NULL
+                  AND site_ref.entity_type = 'campsite'
+                  AND site_ref.vendor = ?
+                  AND campground_ref.entity_type = 'campground'
+                  AND campground_ref.vendor = ?
+                  AND campground_ref.external_id = concat(
+                    ?,
+                    COALESCE(
+                      jsonb_extract_path_text(c.source_payload, ?),
+                      jsonb_extract_path_text(site_ref.payload, ?)
+                    )
+                  )
+                """.trimIndent(),
+                VENDOR,
+                PARENT_CAMPGROUND_VENDOR,
+                PARENT_CAMPGROUND_REF_PREFIX,
+                PARENT_FACILITY_KEY,
+                PARENT_FACILITY_KEY,
+            ).map { record ->
                 PoiReservableJoiner.Link(
-                    reservableId = record.value1()!!,
-                    poiId = record.value2()!!,
+                    campsiteId = record.get("campsite_id", Long::class.java),
+                    campgroundId = record.get("campground_id", Long::class.java),
                 )
             }
-    }
-
-    override fun sweepStaleLinks(ctx: JoinerCtx): Int =
-        ctx.ctx.execute(
-            """
-            DELETE FROM reservable_pois rp
-            USING reservables r, pois p
-            WHERE rp.reservable_id = r.id
-              AND rp.poi_id = p.id
-              AND r.vendor = ?
-              AND p.source = ?
-              AND (
-                r.deleted_at IS NOT NULL
-                OR p.deleted_at IS NOT NULL
-                OR p.source_id IS DISTINCT FROM concat(?, jsonb_extract_path_text(r.raw::jsonb, ?))
-              )
-            """.trimIndent(),
-            VENDOR,
-            POI_SOURCE,
-            POI_SOURCE_ID_PREFIX,
-            PARENT_FACILITY_KEY,
-        )
 
     private companion object {
         const val ADAPTER_NAME = "RecgovPoiReservableJoiner"
-
-        // Synthetic JSONB key the rec.gov reservable ETL writes; the
-        // joiner's only contract with the ETL.
-        const val PARENT_FACILITY_KEY = "_parent_facility_id"
-
-        // POI keying for federal campgrounds.
-        const val POI_SOURCE = "federal-campgrounds"
-        const val POI_SOURCE_ID_PREFIX = "recgov-"
-
-        // Reservable side filter — bound by RecGovCampsitesEtl's
-        // ReservableId(vendor=this).
         const val VENDOR = "recgov"
+        const val PARENT_CAMPGROUND_VENDOR = "federal-campgrounds"
+        const val PARENT_CAMPGROUND_REF_PREFIX = "recgov-"
+        const val PARENT_FACILITY_KEY = "_parent_facility_id"
     }
 }

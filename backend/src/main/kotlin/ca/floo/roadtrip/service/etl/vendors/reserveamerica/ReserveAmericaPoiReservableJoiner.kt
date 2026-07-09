@@ -1,74 +1,89 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
-import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
 import ca.floo.roadtrip.service.etl.framework.PoiReservableJoiner
-import org.jooq.impl.DSL
 
 /**
- * Links ReserveAmerica reservables to their parent campground POI by the
- * (contract_code, park_id) pair — the reservable carries them in
- * `raw->>'_parent_contract_code'` / `_parent_park_id`; the POI carries them in
- * `provider_ref->>'contract_code'` / `park_id`. Both keys must match, so a
- * parkId that collides across contracts does not cross-link. Spans both
- * tenants (alberta-provincial, new-york-state-parks); vendor is per-tenant
- * (`reserveamerica_%`).
+ * Canonicalized ReserveAmerica campsite parent resolver.
+ *
+ * Matches per-site vendor refs to parent campground vendor refs by
+ * `(contract_code, park_id)`, using the same tenant keys as the availability
+ * adapter.
  */
 class ReserveAmericaPoiReservableJoiner : PoiReservableJoiner {
     override val adapter: String = ADAPTER_NAME
 
-    override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> {
-        fun res(key: String) = DSL.field("jsonb_extract_path_text(({0})::jsonb, {1})", String::class.java, RESERVABLES.RAW, DSL.inline(key))
-
-        fun poi(key: String) =
-            DSL.field("jsonb_extract_path_text(({0})::jsonb, {1})", String::class.java, POIS.PROVIDER_REF, DSL.inline(key))
-
-        return ctx.ctx
-            .select(RESERVABLES.ID, POIS.ID)
-            .from(RESERVABLES)
-            .join(POIS)
-            .on(
-                poi(POI_CONTRACT_KEY)
-                    .eq(res(PARENT_CONTRACT_KEY))
-                    .and(poi(POI_PARK_KEY).eq(res(PARENT_PARK_KEY))),
-            ).where(POIS.SOURCE.`in`(POI_SOURCES))
-            .and(RESERVABLES.VENDOR.like(VENDOR_PREFIX))
-            .and(DSL.condition("reservables.deleted_at IS NULL"))
-            .and(POIS.DELETED_AT.isNull)
-            .fetch { record -> PoiReservableJoiner.Link(reservableId = record.value1()!!, poiId = record.value2()!!) }
-    }
-
-    override fun sweepStaleLinks(ctx: JoinerCtx): Int =
-        ctx.ctx.execute(
-            """
-            DELETE FROM reservable_pois rp
-            USING reservables r, pois p
-            WHERE rp.reservable_id = r.id
-              AND rp.poi_id = p.id
-              AND r.vendor LIKE ?
-              AND p.source IN ('alberta-provincial','new-york-state-parks')
-              AND (
-                r.deleted_at IS NOT NULL
-                OR p.deleted_at IS NOT NULL
-                OR jsonb_extract_path_text(p.provider_ref::jsonb, ?) IS DISTINCT FROM jsonb_extract_path_text(r.raw::jsonb, ?)
-                OR jsonb_extract_path_text(p.provider_ref::jsonb, ?) IS DISTINCT FROM jsonb_extract_path_text(r.raw::jsonb, ?)
-              )
-            """.trimIndent(),
-            VENDOR_PREFIX,
-            POI_CONTRACT_KEY,
-            PARENT_CONTRACT_KEY,
-            POI_PARK_KEY,
-            PARENT_PARK_KEY,
-        )
+    override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> =
+        ctx.ctx
+            .fetch(
+                """
+                SELECT DISTINCT c.id AS campsite_id, cg.id AS campground_id
+                FROM campsites c
+                JOIN campsite_vendor_refs cvr
+                  ON cvr.campsite_id = c.id
+                JOIN vendor_refs site_ref
+                  ON site_ref.id = cvr.vendor_ref_id
+                JOIN campground_vendor_refs cgvr
+                  ON cgvr.is_primary
+                JOIN vendor_refs campground_ref
+                  ON campground_ref.id = cgvr.vendor_ref_id
+                JOIN campgrounds cg
+                  ON cg.id = cgvr.campground_id
+                WHERE c.deleted_at IS NULL
+                  AND cg.deleted_at IS NULL
+                  AND site_ref.deleted_at IS NULL
+                  AND campground_ref.deleted_at IS NULL
+                  AND site_ref.entity_type = 'campsite'
+                  AND site_ref.vendor LIKE ?
+                  AND campground_ref.entity_type = 'campground'
+                  AND campground_ref.vendor IN (?, ?)
+                  AND COALESCE(
+                    jsonb_extract_path_text(site_ref.payload, ?),
+                    jsonb_extract_path_text(c.source_payload, ?)
+                  ) = jsonb_extract_path_text(campground_ref.payload, ?)
+                  AND (
+                    campground_ref.external_id =
+                      concat(
+                        ?,
+                        COALESCE(
+                          jsonb_extract_path_text(site_ref.payload, ?),
+                          jsonb_extract_path_text(c.source_payload, ?)
+                        )
+                      )
+                    OR COALESCE(
+                      jsonb_extract_path_text(site_ref.payload, ?),
+                      jsonb_extract_path_text(c.source_payload, ?)
+                    ) = jsonb_extract_path_text(campground_ref.payload, ?)
+                  )
+                """.trimIndent(),
+                VENDOR_PREFIX,
+                ALBERTA_CAMPGROUND_VENDOR,
+                NEW_YORK_CAMPGROUND_VENDOR,
+                PARENT_CONTRACT_KEY,
+                PARENT_CONTRACT_KEY,
+                PROVIDER_CONTRACT_KEY,
+                PARENT_CAMPGROUND_REF_PREFIX,
+                PARENT_PARK_KEY,
+                PARENT_PARK_KEY,
+                PARENT_PARK_KEY,
+                PARENT_PARK_KEY,
+                PROVIDER_PARK_KEY,
+            ).map { record ->
+                PoiReservableJoiner.Link(
+                    campsiteId = record.get("campsite_id", Long::class.java),
+                    campgroundId = record.get("campground_id", Long::class.java),
+                )
+            }
 
     private companion object {
         const val ADAPTER_NAME = "ReserveAmericaPoiReservableJoiner"
         const val VENDOR_PREFIX = "reserveamerica_%"
-        val POI_SOURCES = listOf("alberta-provincial", "new-york-state-parks")
-        const val POI_CONTRACT_KEY = "contract_code"
-        const val POI_PARK_KEY = "park_id"
+        const val ALBERTA_CAMPGROUND_VENDOR = "alberta-provincial"
+        const val NEW_YORK_CAMPGROUND_VENDOR = "new-york-state-parks"
+        const val PARENT_CAMPGROUND_REF_PREFIX = "ra-"
         const val PARENT_CONTRACT_KEY = "_parent_contract_code"
         const val PARENT_PARK_KEY = "_parent_park_id"
+        const val PROVIDER_CONTRACT_KEY = "contract_code"
+        const val PROVIDER_PARK_KEY = "park_id"
     }
 }

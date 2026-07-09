@@ -6,16 +6,19 @@ import ca.floo.roadtrip.models.metadata.ValidationResult
 import ca.floo.roadtrip.models.metadata.registry.AgencyConfig
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
-import ca.floo.roadtrip.models.metadata.registry.ReservableDataEntry
 import ca.floo.roadtrip.repo.NoCaptureException
 import ca.floo.roadtrip.repo.RawCapture
-import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.Upsert
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import org.jooq.DSLContext
 import org.slf4j.LoggerFactory
 import java.io.File
+
+private const val DISABLED_CAMPING_IMPORT_MESSAGE =
+    "campground/campsite vendor imports are disabled until adapters write through the canonical catalog writer"
+private const val DISABLED_JOINER_IMPORT_MESSAGE =
+    "vendor campsite parent joiners are disabled until canonical campground/campsite reconciliation is wired"
 
 // Orchestrates one poi_data row's ETL chain end-to-end.
 //
@@ -43,16 +46,9 @@ class EtlOrchestrator(
      * registry under [Companion.registry]; overridable for tests.
      */
     private val etlRegistry: Map<String, SourceEtl<*, *>> = registry,
-    /**
-     * Joiner adapter map keyed by YAML `adapter:` string. Defaults to
-     * the production map under [Companion.joinerRegistry]; overridable
-     * for tests.
-     */
-    private val joinerRegistry: Map<String, PoiReservableJoiner> = Companion.joinerRegistry,
 ) {
     private val log = LoggerFactory.getLogger(javaClass)
     private val upsert = Upsert(ctx)
-    private val reservablesRepo = ReservableRepo(ctx)
 
     /**
      * Per-row run summary for `poi_data` rows. Mirrors the shape that
@@ -67,11 +63,6 @@ class EtlOrchestrator(
         val upsertResult: Upsert.Result,
     )
 
-    /**
-     * Per-row run summary for `reservable_data` rows. Counts catalog
-     * upserts and the slug of the terminal etl (== reservable_data
-     * adapter slug).
-     */
     data class ReservableStats(
         val reservableDataName: String,
         val terminalEtlSlug: String,
@@ -81,12 +72,6 @@ class EtlOrchestrator(
         val swept: Int,
     )
 
-    /**
-     * Per-row run summary for `poi_reservable_joiner` rows. Tracks how
-     * many links the joiner discovered + how many actually inserted
-     * (the rest were already present — `linkToPois` is idempotent via
-     * ON CONFLICT DO NOTHING).
-     */
     data class JoinerStats(
         val joinerName: String,
         val adapter: String,
@@ -142,107 +127,9 @@ class EtlOrchestrator(
         return terminalStats!!
     }
 
-    /**
-     * Run a reservable_data row by display name. Same chain shape as
-     * [runPoiData] — list-ordered etl stages, intermediate outputs
-     * threaded in memory — but the terminal stage emits
-     * [ReservableEtlOutput] which the orchestrator unpacks into
-     * `reservables` rows via [ReservableRepo.runImport].
-     *
-     * No POI linking happens here. That's the joiner's job (see
-     * [runJoiner]). A reservable_data run that lands rows but has no
-     * matching joiner run yet is consistent — the catalog exists,
-     * `reservable_pois` just has no entries for it. Run the joiner
-     * later to fill them in.
-     */
-    fun runReservableData(name: String): ReservableStats {
-        val row =
-            poiRegistry.reservableDataByName(name)
-                ?: error("no reservable_data row with name='$name'")
-        require(row.etls.isNotEmpty()) { "reservable_data '$name' has empty etls list" }
+    fun runReservableData(name: String): ReservableStats = throw UnsupportedOperationException("$DISABLED_CAMPING_IMPORT_MESSAGE: $name")
 
-        log.info("etl reservable_data='{}' starting ({} stages)", name, row.etls.size)
-        val transformCtx = TransformCtx.load(rawDir, poiRegistry)
-        val intermediateOutputs = mutableMapOf<String, JsonElement>()
-        var terminalStats: ReservableStats? = null
-
-        for ((index, entry) in row.etls.withIndex()) {
-            val isTerminal = index == row.etls.lastIndex
-            val etl =
-                etlRegistry[entry.slug]
-                    ?: error("no adapter registered for etl slug='${entry.slug}'")
-            log.info(
-                "  stage {}/{} slug={} adapter={} terminal={}",
-                index + 1,
-                row.etls.size,
-                entry.slug,
-                etl::class.simpleName,
-                isTerminal,
-            )
-
-            val bundle = buildBundle(entry.inputs, intermediateOutputs)
-            if (isTerminal) {
-                terminalStats = runReservableTerminal(row, etl, bundle, transformCtx)
-            } else {
-                intermediateOutputs[entry.slug] = runIntermediate(etl, bundle, transformCtx)
-            }
-        }
-
-        return terminalStats!!
-    }
-
-    /**
-     * Run a poi_reservable_joiner row by display name. The adapter
-     * reads the current state of `pois` + `reservables`, emits
-     * (reservable_id, poi_id) pairs, and the orchestrator inserts each
-     * via [ReservableRepo.linkToPois] (idempotent), then lets the
-     * adapter remove stale links in its provider scope.
-     *
-     * Joiners are independent of ETL runs. Re-running creates no
-     * duplicate links; it picks up new pairs whose underlying rows
-     * appeared since the last run and deletes stale provider-scoped links.
-     */
-    fun runJoiner(name: String): JoinerStats {
-        val row =
-            poiRegistry.poiReservableJoinerByName(name)
-                ?: error("no poi_reservable_joiner row with name='$name'")
-        val joiner =
-            joinerRegistry[row.adapter]
-                ?: error("no joiner adapter registered for '${row.adapter}' (poi_reservable_joiner '$name')")
-        log.info("joiner '{}' adapter={} starting", name, row.adapter)
-
-        refreshJoinerPlannerStats(name)
-        val joinerCtx = JoinerCtx(ctx = ctx, reservablesRepo = reservablesRepo, args = row.args)
-        val links = joiner.discoverLinks(joinerCtx)
-
-        val inserted =
-            reservablesRepo.linkToPois(
-                links.map { ReservableRepo.LinkInput(reservableId = it.reservableId, poiId = it.poiId) },
-            )
-        val staleDeleted = joiner.sweepStaleLinks(joinerCtx)
-        log.info(
-            "joiner '{}' adapter={} links_discovered={} links_inserted={} stale_links_deleted={}",
-            name,
-            row.adapter,
-            links.size,
-            inserted,
-            staleDeleted,
-        )
-
-        return JoinerStats(
-            joinerName = name,
-            adapter = row.adapter,
-            linksDiscovered = links.size,
-            linksInserted = inserted,
-            staleLinksDeleted = staleDeleted,
-        )
-    }
-
-    private fun refreshJoinerPlannerStats(name: String) {
-        log.info("joiner '{}' refreshing planner stats for pois/reservables", name)
-        ctx.execute("ANALYZE pois")
-        ctx.execute("ANALYZE reservables")
-    }
+    fun runJoiner(name: String): JoinerStats = throw UnsupportedOperationException("$DISABLED_JOINER_IMPORT_MESSAGE: $name")
 
     @Suppress("UNCHECKED_CAST")
     private fun runTerminal(
@@ -317,58 +204,6 @@ class EtlOrchestrator(
         }
     }
 
-    /**
-     * Terminal stage of a reservable_data row. The etl returns a
-     * [ReservableEtlOutput] (a list of catalog rows); the orchestrator
-     * upserts each through [ReservableRepo].
-     *
-     * Validation failure logs + zeroes out — same behavior as the Pois
-     * terminal — so a bad upstream day doesn't fail the whole import.
-     */
-    @Suppress("UNCHECKED_CAST")
-    private fun runReservableTerminal(
-        row: ReservableDataEntry,
-        etl: SourceEtl<*, *>,
-        bundle: InputBundle,
-        transformCtx: TransformCtx,
-    ): ReservableStats {
-        val concrete = etl as SourceEtl<Any, ReservableEtlOutput>
-        val dto = concrete.parse(bundle)
-        val validated =
-            when (val v = concrete.validate(dto)) {
-                is ValidationResult.Ok -> v.dto
-                is ValidationResult.Bad -> {
-                    log.warn("reservable_data '{}' terminal validation failed: {}", row.name, v.errors)
-                    return ReservableStats(
-                        reservableDataName = row.name,
-                        terminalEtlSlug = concrete.etlSlug,
-                        runId = -1L,
-                        parsed = 0,
-                        upserted = 0,
-                        swept = 0,
-                    )
-                }
-            }
-        val output = concrete.transform(validated, transformCtx)
-        val importResult = reservablesRepo.runImport(concrete.etlSlug, output.reservables)
-        log.info(
-            "reservable_data '{}' terminal slug={} parsed={} upserted={} swept={}",
-            row.name,
-            concrete.etlSlug,
-            output.reservables.size,
-            importResult.seenCount,
-            importResult.sweptCount,
-        )
-        return ReservableStats(
-            reservableDataName = row.name,
-            terminalEtlSlug = concrete.etlSlug,
-            runId = importResult.runId,
-            parsed = output.reservables.size,
-            upserted = importResult.seenCount,
-            swept = importResult.sweptCount,
-        )
-    }
-
     @Suppress("UNCHECKED_CAST")
     private fun runIntermediate(
         etl: SourceEtl<*, *>,
@@ -438,9 +273,16 @@ class EtlOrchestrator(
     }
 
     companion object {
-        // Map of etl slug → adapter. Adding a new ETL = appending one line.
-        // Map keys MUST match the YAML poi_data.etls[*].slug exactly.
-        val registry: Map<String, SourceEtl<*, *>> =
+        // Runnable ETLs. Old wide-POI and reservable imports are intentionally
+        // not exposed here: admin import targets use this map to decide what
+        // can run. Keep vendor adapters in [disabledVendorRegistry] until
+        // their outputs are persisted through the canonical catalog writer.
+        val registry: Map<String, SourceEtl<*, *>> = emptyMap()
+
+        // Retained vendor adapters. This keeps the parsing/transform code in
+        // tree while making it explicit that the old registry rows are no-op
+        // until canonical campgrounds/campsites upsert support lands.
+        val disabledVendorRegistry: Map<String, SourceEtl<*, *>> =
             mapOf(
                 "planet-fitness" to
                     ca.floo.roadtrip.service.etl.vendors.osmpf
@@ -467,13 +309,6 @@ class EtlOrchestrator(
                 "federal-campgrounds" to
                     ca.floo.roadtrip.service.etl.vendors.recgov
                         .RecGovCampgroundsEtl("federal-campgrounds"),
-                // Reservable catalog terminal (RFC 0008). Emits one row
-                // per campsite into `reservables`; the recgov joiner
-                // (PR 4) links them to their parent federal-campgrounds
-                // POIs.
-                "federal-campsites" to
-                    ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecGovCampsitesEtl("federal-campsites"),
                 // Aspira NextGen — one leaf-walker + one join-by-name
                 // emitter per tenant. Both classes take the slug as a
                 // constructor arg so a fourth tenant is two YAML rows +
@@ -496,9 +331,9 @@ class EtlOrchestrator(
                 "aspira-pc-pins" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraJoinByNameEtl("aspira-pc-pins"),
-                // Reservable catalog terminals (RFC 0008). One row per
-                // tenant; vendor strings use underscore (`aspira_wa`)
-                // because ReservableId disallows ':' in the vendor field.
+                "federal-campsites" to
+                    ca.floo.roadtrip.service.etl.vendors.recgov
+                        .RecGovCampsitesEtl("federal-campsites"),
                 "aspira-wa-resources" to
                     ca.floo.roadtrip.service.etl.vendors.aspira
                         .AspiraResourcesEtl(
@@ -526,37 +361,12 @@ class EtlOrchestrator(
                             dictionariesInputSlug = "aspira-dictionaries-pc",
                             vendor = "aspira_pc",
                         ),
-                "california-state-park-sites" to
-                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
-                        .ReserveCaliforniaSitesEtl("california-state-park-sites"),
                 "alberta-provincial-park-sites" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaSitesEtl(etlSlug = "alberta-provincial-park-sites", contractCode = "ABPP"),
+                        .ReserveAmericaSitesEtl("alberta-provincial-park-sites", "ABPP"),
                 "new-york-state-park-sites" to
                     ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaSitesEtl(etlSlug = "new-york-state-park-sites", contractCode = "NY"),
-            )
-
-        /**
-         * Map of joiner adapter name → adapter instance. Keys MUST match
-         * the YAML `poi_reservable_joiner.adapter` value exactly. One
-         * entry per adapter class — multiple YAML rows can share the
-         * same adapter (Aspira's three tenants do).
-         */
-        val joinerRegistry: Map<String, PoiReservableJoiner> =
-            mapOf(
-                "RecgovPoiReservableJoiner" to
-                    ca.floo.roadtrip.service.etl.vendors.recgov
-                        .RecgovPoiReservableJoiner(),
-                "AspiraPoiReservableJoiner" to
-                    ca.floo.roadtrip.service.etl.vendors.aspira
-                        .AspiraPoiReservableJoiner(),
-                "ReserveCaliforniaPoiReservableJoiner" to
-                    ca.floo.roadtrip.service.etl.vendors.reservecalifornia
-                        .ReserveCaliforniaPoiReservableJoiner(),
-                "ReserveAmericaPoiReservableJoiner" to
-                    ca.floo.roadtrip.service.etl.vendors.reserveamerica
-                        .ReserveAmericaPoiReservableJoiner(),
+                        .ReserveAmericaSitesEtl("new-york-state-park-sites", "NY"),
             )
     }
 }

@@ -21,13 +21,13 @@ def panel_by_title(dashboard_doc: dict[str, Any], title: str) -> dict[str, Any]:
     raise AssertionError(f"panel not found: {title}")
 
 
-class GrafanaReservableDetailTest(unittest.TestCase):
-    def reservable_detail_dashboard(self) -> dict[str, Any]:
-        return dashboard("reservable-detail.json")
+class GrafanaCampsiteDetailTest(unittest.TestCase):
+    def campsite_detail_dashboard(self) -> dict[str, Any]:
+        return dashboard("campsite-detail.json")
 
     def test_latest_availability_by_target_date_plots_status_values(self) -> None:
         panel = panel_by_title(
-            self.reservable_detail_dashboard(),
+            self.campsite_detail_dashboard(),
             "Latest availability by target date",
         )
         raw_sql = panel["targets"][0]["rawSql"]
@@ -46,7 +46,7 @@ class GrafanaReservableDetailTest(unittest.TestCase):
 
     def test_recent_availability_snapshots_do_not_use_hidden_time_filter(self) -> None:
         panel = panel_by_title(
-            self.reservable_detail_dashboard(),
+            self.campsite_detail_dashboard(),
             "Recent availability snapshots",
         )
         raw_sql = panel["targets"][0]["rawSql"]

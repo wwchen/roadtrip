@@ -7,6 +7,10 @@ import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampground
+import ca.floo.roadtrip.repo.seedCampsite
+import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
 import ca.floo.roadtrip.service.availability.DbAvailabilityTargetResolver
@@ -41,14 +45,7 @@ import kotlin.test.assertTrue
 class AvailabilityWatchRoutesTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability")
-        ctx.execute("DELETE FROM availability_watch_target")
-        ctx.execute("DELETE FROM availability_watch_poller")
-        ctx.execute("DELETE FROM availability_poller")
-        ctx.execute("DELETE FROM availability_watch")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     /**
@@ -132,7 +129,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
                 """
                 {
                   "poi_id": $poiId,
-                  "reservable_filters": {"loop": ["A"]},
+                  "campsite_filters": {"loop": ["A"]},
                   "start_date": "2026-07-04",
                   "end_date": "2026-07-06",
                   "cadence_sec": 60,
@@ -346,7 +343,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `POST rejects a target with both poi_id and reservable_id set`() =
+    fun `POST rejects a target with both poi_id and campsite_id set`() =
         testApplication {
             application {
                 routing {
@@ -363,7 +360,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             linkReservableToPoi(rid, poiId)
             val body =
                 """
-                {"targets": [{"poi_id": $poiId, "reservable_id": $rid}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"targets": [{"poi_id": $poiId, "campsite_id": $rid}], "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val resp =
                 client.post("/api/availability/watches") {
@@ -586,7 +583,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `PATCH rejects a target with both poi_id and reservable_id set`() =
+    fun `PATCH rejects a target with both poi_id and campsite_id set`() =
         testApplication {
             application {
                 routing {
@@ -620,7 +617,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             val resp =
                 client.patch("/api/availability/watches/$id") {
                     contentType(ContentType.Application.Json)
-                    setBody("""{"targets": [{"poi_id": $poiId, "reservable_id": $rid}]}""")
+                    setBody("""{"targets": [{"poi_id": $poiId, "campsite_id": $rid}]}""")
                 }
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val obj = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
@@ -757,23 +754,14 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         providerRefJson: String? = null,
     ): Long =
         ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom,
-                    region, properties, provider_ref, fetched_at
-                ) VALUES (
-                    'test', ?, 'campground', ?,
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
-                )
-                RETURNING id
-                """.trimIndent(),
-                sourceId,
-                name,
-                providerRefJson,
-            )!!
-            .get("id", Long::class.java)
+            .seedCatalogPoi(
+                sourceId = sourceId,
+                name = name,
+                lon = -119.56,
+                lat = 37.74,
+                source = "test",
+                providerRefJson = providerRefJson,
+            ).poiId
 
     private fun seedReservable(
         vendorId: String,
@@ -781,30 +769,31 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         loop: String? = null,
         siteType: String? = null,
     ): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO reservables (
-                    type, vendor, vendor_id, source, name, loop, site_type
-                ) VALUES (
-                    'site', 'recgov', ?, 'federal-campsites', ?, ?, ?
-                ) RETURNING id
-                """.trimIndent(),
-                vendorId,
-                name,
-                loop,
-                siteType,
-            )!!
-            .get("id", Long::class.java)
+        ctx.seedCampsite(
+            campgroundId = ctx.seedCampground(name = "Route Watch Campground", source = "test", sourceId = "route-watch-$vendorId"),
+            vendor = "recgov",
+            vendorId = vendorId,
+            name = name ?: "Site $vendorId",
+            kind = siteType ?: "site",
+            loopName = loop,
+        )
 
     private fun linkReservableToPoi(
         reservableId: Long,
         poiId: Long,
     ) {
         ctx.execute(
-            "INSERT INTO reservable_pois (reservable_id, poi_id) VALUES (?, ?)",
-            reservableId,
+            """
+            UPDATE campsites
+            SET campground_id = (
+              SELECT campground_id
+              FROM poi_campgrounds
+              WHERE poi_id = ?
+            )
+            WHERE id = ?
+            """.trimIndent(),
             poiId,
+            reservableId,
         )
     }
 
@@ -819,7 +808,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         ctx.execute(
             """
             INSERT INTO availability (
-                reservable_id, target_date, status, last_observed_at
+                campsite_id, target_date, status, last_observed_at
             ) VALUES (?::bigint, ?::date, ?::availability_status, ?::timestamptz)
             """.trimIndent(),
             reservableId,
@@ -847,7 +836,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `GET watch heatmap for reservable-scoped watch returns one row`() =
+    fun `GET watch heatmap for campsite-scoped watch returns one row`() =
         testApplication {
             application {
                 routing {
@@ -865,7 +854,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val createBody =
                 """
-                {"reservable_rid": "site:recgov:100", "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"campsite_id": $rid, "start_date": "2026-07-04", "end_date": "2026-07-06", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {
@@ -922,7 +911,7 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
 
             val createBody =
                 """
-                {"poi_id": $poiId, "reservable_filters": {"loop": ["Loop A"]}, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
+                {"poi_id": $poiId, "campsite_filters": {"loop": ["Loop A"]}, "start_date": "2026-07-04", "end_date": "2026-07-05", "cadence_sec": 60, "trigger_kinds": ["atc"]}
                 """.trimIndent()
             val created =
                 client.post("/api/availability/watches") {
@@ -944,10 +933,10 @@ class AvailabilityWatchRoutesTest : SharedDbTest() {
             assertEquals("Loop A", groups[0].jsonObject["loop"]!!.jsonPrimitive.content)
             val rows = groups[0].jsonObject["rows"]!!.jsonArray
             assertEquals(2, rows.size)
-            val ridsInResponse = rows.map { it.jsonObject["reservable_rid"]!!.jsonPrimitive.content }
-            assertEquals(true, ridsInResponse.contains("site:recgov:201"))
-            assertEquals(true, ridsInResponse.contains("site:recgov:202"))
-            assertEquals(false, ridsInResponse.contains("site:recgov:203"))
+            val campsiteIdsInResponse = rows.map { it.jsonObject["campsite_id"]!!.jsonPrimitive.long }
+            assertEquals(true, campsiteIdsInResponse.contains(rA1))
+            assertEquals(true, campsiteIdsInResponse.contains(rA2))
+            assertEquals(false, campsiteIdsInResponse.contains(rB1))
         }
 }
 

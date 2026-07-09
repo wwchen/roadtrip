@@ -1,70 +1,60 @@
 package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
-import ca.floo.roadtrip.db.generated.tables.Pois.Companion.POIS
-import ca.floo.roadtrip.db.generated.tables.Reservables.Companion.RESERVABLES
 import ca.floo.roadtrip.service.etl.framework.JoinerCtx
 import ca.floo.roadtrip.service.etl.framework.PoiReservableJoiner
-import org.jooq.impl.DSL
 
+/**
+ * Canonicalized ReserveCalifornia campsite parent resolver.
+ */
 class ReserveCaliforniaPoiReservableJoiner : PoiReservableJoiner {
     override val adapter: String = ADAPTER_NAME
 
-    override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> {
-        val parentPlaceId =
-            DSL.field(
-                "jsonb_extract_path_text(({0})::jsonb, {1})",
-                String::class.java,
-                RESERVABLES.RAW,
-                DSL.inline(PARENT_PLACE_KEY),
-            )
-        val poiPlaceId =
-            DSL.field(
-                "jsonb_extract_path_text(({0})::jsonb, {1})",
-                String::class.java,
-                POIS.PROVIDER_REF,
-                DSL.inline(POI_PLACE_KEY),
-            )
-        return ctx.ctx
-            .select(RESERVABLES.ID, POIS.ID)
-            .from(RESERVABLES)
-            .join(POIS)
-            .on(POIS.SOURCE.eq(POI_SOURCE).and(poiPlaceId.eq(parentPlaceId)))
-            .where(RESERVABLES.VENDOR.eq(VENDOR))
-            .and(DSL.condition("reservables.deleted_at IS NULL"))
-            .and(POIS.DELETED_AT.isNull)
-            .fetch { record ->
+    override fun discoverLinks(ctx: JoinerCtx): List<PoiReservableJoiner.Link> =
+        ctx.ctx
+            .fetch(
+                """
+                SELECT DISTINCT c.id AS campsite_id, cg.id AS campground_id
+                FROM campsites c
+                JOIN campsite_vendor_refs cvr
+                  ON cvr.campsite_id = c.id
+                JOIN vendor_refs site_ref
+                  ON site_ref.id = cvr.vendor_ref_id
+                JOIN campground_vendor_refs cgvr
+                  ON cgvr.is_primary
+                JOIN vendor_refs campground_ref
+                  ON campground_ref.id = cgvr.vendor_ref_id
+                JOIN campgrounds cg
+                  ON cg.id = cgvr.campground_id
+                WHERE c.deleted_at IS NULL
+                  AND cg.deleted_at IS NULL
+                  AND site_ref.deleted_at IS NULL
+                  AND campground_ref.deleted_at IS NULL
+                  AND site_ref.entity_type = 'campsite'
+                  AND site_ref.vendor = ?
+                  AND campground_ref.entity_type = 'campground'
+                  AND campground_ref.vendor = ?
+                  AND jsonb_extract_path_text(campground_ref.payload, ?) =
+                    COALESCE(
+                      jsonb_extract_path_text(site_ref.payload, ?),
+                      jsonb_extract_path_text(c.source_payload, ?)
+                    )
+                """.trimIndent(),
+                VENDOR,
+                PARENT_CAMPGROUND_VENDOR,
+                POI_PLACE_KEY,
+                PARENT_PLACE_KEY,
+                PARENT_PLACE_KEY,
+            ).map { record ->
                 PoiReservableJoiner.Link(
-                    reservableId = record.value1()!!,
-                    poiId = record.value2()!!,
+                    campsiteId = record.get("campsite_id", Long::class.java),
+                    campgroundId = record.get("campground_id", Long::class.java),
                 )
             }
-    }
-
-    override fun sweepStaleLinks(ctx: JoinerCtx): Int =
-        ctx.ctx.execute(
-            """
-            DELETE FROM reservable_pois rp
-            USING reservables r, pois p
-            WHERE rp.reservable_id = r.id
-              AND rp.poi_id = p.id
-              AND r.vendor = ?
-              AND p.source = ?
-              AND (
-                r.deleted_at IS NOT NULL
-                OR p.deleted_at IS NOT NULL
-                OR jsonb_extract_path_text(p.provider_ref::jsonb, ?) IS DISTINCT FROM jsonb_extract_path_text(r.raw::jsonb, ?)
-              )
-            """.trimIndent(),
-            VENDOR,
-            POI_SOURCE,
-            POI_PLACE_KEY,
-            PARENT_PLACE_KEY,
-        )
 
     private companion object {
         const val ADAPTER_NAME = "ReserveCaliforniaPoiReservableJoiner"
         const val VENDOR = "reservecalifornia"
-        const val POI_SOURCE = "california-state-parks"
+        const val PARENT_CAMPGROUND_VENDOR = "california-state-parks"
         const val PARENT_PLACE_KEY = "_parent_place_id"
         const val POI_PLACE_KEY = "place_id"
     }

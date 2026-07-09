@@ -1,12 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaCatalogParser
-import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.ReservableEtlOutput
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.buildJsonObject
@@ -27,7 +25,7 @@ import kotlinx.serialization.json.put
 class ReserveAmericaSitesEtl(
     override val etlSlug: String,
     private val contractCode: String,
-) : SourceEtl<ReserveAmericaSitesEtl.Parsed, ReservableEtlOutput> {
+) : SourceEtl<ReserveAmericaSitesEtl.Parsed, CampsiteEtlOutput> {
     override val multiPart: Boolean = true
 
     data class Parsed(
@@ -51,31 +49,46 @@ class ReserveAmericaSitesEtl(
     override fun transform(
         dto: Parsed,
         ctx: TransformCtx,
-    ): ReservableEtlOutput {
+    ): CampsiteEtlOutput {
         val vendor = "reserveamerica_${contractCode.lowercase()}"
-        val reservables =
+        val campsites =
             dto.sites
                 .distinctBy { it.siteId }
                 .map { site ->
-                    ReservableRepo.Input(
-                        rid = ReservableId(ReservableType.SITE, vendor, site.siteId),
+                    CampsiteEtlRecord(
+                        vendor = vendor,
+                        vendorRefId = site.siteId,
+                        parentVendor = parentCampgroundVendor(contractCode),
+                        parentVendorRefId = "$PARENT_CAMPGROUND_REF_PREFIX${site.parkId}",
                         name = site.name,
-                        loop = null,
-                        siteType = null,
-                        raw =
+                        sourcePayload =
                             buildJsonObject {
                                 put("site_id", site.siteId)
                                 put("name", site.name)
                                 put(PARENT_CONTRACT_KEY, contractCode)
                                 put(PARENT_PARK_KEY, site.parkId)
                             },
+                        vendorRefPayload =
+                            buildJsonObject {
+                                put("site_id", site.siteId)
+                                put(PARENT_CONTRACT_KEY, contractCode)
+                                put(PARENT_PARK_KEY, site.parkId)
+                            },
                     )
                 }
-        return ReservableEtlOutput(reservables = reservables)
+        return CampsiteEtlOutput(campsites = campsites)
     }
 
     companion object {
         const val PARENT_CONTRACT_KEY = "_parent_contract_code"
         const val PARENT_PARK_KEY = "_parent_park_id"
+        const val PARENT_CAMPGROUND_REF_PREFIX = "ra-"
+
+        fun parentCampgroundVendor(contractCode: String): String? =
+            when (contractCode.uppercase()) {
+                "ABPP" -> "alberta-provincial"
+                "NY" -> "new-york-state-parks"
+                else -> null
+            }
     }
 }

@@ -45,6 +45,7 @@ const val POI_LIMIT: Int = 2000
 // in the categories list. ~12k rows nationwide — not useful at continental
 // zoom and they crowd out the per-category limit budget.
 private const val CG_MIN_ZOOM: Int = 6
+private val DEFAULT_POI_TYPES = listOf("campground", "tesla_supercharger", "planet_fitness_location")
 
 @OptIn(ExperimentalSerializationApi::class)
 private val poiRoutesJson =
@@ -81,14 +82,8 @@ internal fun Route.poiRoutes(
     dateResolver: AvailabilityDateResolver = AvailabilityDateResolver(),
     availabilitySupport: (PoiDetailRow) -> Boolean = ::providerRefShapeSupportsAvailability,
 ) {
-    // Default category list derives from the YAML registry so a new
-    // poi_data category surfaces without code changes.
-    val defaultCategories: List<String> =
-        registry
-            .enabledPoiData()
-            .map { it.category }
-            .toSet()
-            .toList()
+    // Canonical POI wrappers expose their typed domain through poi_type.
+    val defaultCategories: List<String> = DEFAULT_POI_TYPES
     val poiRepo = PoiServingRepo(ctx)
     post("/api/pois", {
         tags = listOf("poi")

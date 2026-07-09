@@ -49,7 +49,7 @@
           "showLineNumbers": false,
           "showMiniMap": false
         },
-        "content": "## 🔎 Logs / Search\nBackend logs as a **Datadog-style stream** — columns: **Date · Level · Logger · Message · Context**. Filter by **class** (`$logger`, regex on `loggerName`), **level** (`$level`), and a free-text / regex **line filter** (`$search`). Click a class in *Top classes* (or a **Logger** cell) to scope the whole page to it. Non-JSON JVM boot warnings are dropped via `| __error__=\"\"`, so the level panels no longer show a pipeline error.",
+        "content": "## \ud83d\udd0e Logs / Search\nBackend logs as a **Datadog-style stream** \u2014 columns: **Date \u00b7 Level \u00b7 Logger \u00b7 Message \u00b7 Context**. Filter by **class** (`$logger`, regex on `loggerName`), **level** (`$level`), and a free-text / regex **line filter** (`$search`). Click a class in *Top classes* (or a **Logger** cell) to scope the whole page to it. Non-JSON JVM boot warnings are dropped via `| __error__=\"\"`, so the level panels no longer show a pipeline error.",
         "mode": "markdown"
       },
       "pluginVersion": "13.1.0",
@@ -868,7 +868,8 @@
         "name": "container",
         "query": "roadtrip-backend.*",
         "skipUrlSync": false,
-        "type": "textbox"
+        "type": "textbox",
+        "allowCustomValue": true
       },
       {
         "allValue": ".+",
@@ -881,7 +882,7 @@
             "$__all"
           ]
         },
-        "description": "Log level(s) — matches level=~ after | json.",
+        "description": "Log level(s) \u2014 matches level=~ after | json.",
         "hide": 0,
         "includeAll": true,
         "label": "Level",
@@ -935,7 +936,8 @@
         "name": "logger",
         "query": "",
         "skipUrlSync": false,
-        "type": "textbox"
+        "type": "textbox",
+        "allowCustomValue": true
       },
       {
         "current": {
@@ -948,7 +950,8 @@
         "name": "search",
         "query": "",
         "skipUrlSync": false,
-        "type": "textbox"
+        "type": "textbox",
+        "allowCustomValue": true
       }
     ]
   },
@@ -971,7 +974,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "✔︎ Logs / Search",
+  "title": "\u2714\ufe0e Logs / Search",
   "uid": "logs-explorer",
   "version": 1
 }

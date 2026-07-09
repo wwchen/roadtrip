@@ -209,12 +209,9 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
 
     get("/api/availability/snapshots", {
         tags = listOf("availability")
-        summary = "Snapshot rows filtered by reservable rid or run id"
+        summary = "Snapshot rows filtered by campsite id or run id"
         request {
-            queryParameter<String>("reservable_rid") {
-                description =
-                    "Snapshots for this reservable (e.g. site:recgov:330257), newest first."
-            }
+            queryParameter<Long>("campsite_id") { description = "Snapshots for this campsite, newest first." }
             queryParameter<Long>("run_id") { description = "Snapshots produced by this run." }
             queryParameter<Int>("limit") { description = "Page size, default 200, max 1000." }
         }
@@ -226,36 +223,27 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
-        val rid = call.request.queryParameters["reservable_rid"]?.takeIf { it.isNotBlank() }
+        val campsiteId = call.request.queryParameters["campsite_id"]?.toLongOrNull()
         val runId = call.request.queryParameters["run_id"]?.toLongOrNull()
-        if ((rid == null) == (runId == null)) {
+        if ((campsiteId == null) == (runId == null)) {
             return@get call.respondError(
                 "invalid_filter",
                 HttpStatusCode.BadRequest,
-                "exactly one of reservable_rid or run_id must be set",
+                "exactly one of campsite_id or run_id must be set",
             )
         }
         val limit =
             (call.request.queryParameters["limit"]?.toIntOrNull() ?: SNAPSHOT_DEFAULT_LIMIT)
                 .coerceIn(1, SNAPSHOT_MAX_LIMIT)
         val rows =
-            if (rid != null) {
-                val parsed =
-                    ca.floo.roadtrip.models.domain.ReservableId
-                        .parse(rid)
-                        ?: return@get call.respondError(
-                            "invalid_reservable_rid",
-                            HttpStatusCode.BadRequest,
-                            "could not parse reservable_rid '$rid'",
-                        )
-                val reservable =
-                    reservablesRepo.findByRid(parsed)
-                        ?: return@get call.respondError(
-                            "reservable_not_found",
-                            HttpStatusCode.NotFound,
-                            "no reservable with rid $rid",
-                        )
-                availability.listForReservable(reservable.id, limit = limit)
+            if (campsiteId != null) {
+                reservablesRepo.findById(campsiteId)
+                    ?: return@get call.respondError(
+                        "campsite_not_found",
+                        HttpStatusCode.NotFound,
+                        "no campsite with id $campsiteId",
+                    )
+                availability.listForReservable(campsiteId, limit = limit)
             } else {
                 availability.listForRun(runId!!, limit = limit)
             }
@@ -264,9 +252,9 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
 
     get("/api/availability/snapshots/summary", {
         tags = listOf("availability")
-        summary = "Per-date stats for one reservable's snapshot history"
+        summary = "Per-date stats for one campsite's snapshot history"
         request {
-            queryParameter<String>("reservable_rid") { description = "Reservable composite id (e.g. site:recgov:330257)." }
+            queryParameter<Long>("campsite_id") { description = "Campsite id." }
             queryParameter<String>("dates") {
                 description = "Comma-separated YYYY-MM-DD list. If omitted, every date with snapshots in the window is returned."
             }
@@ -280,28 +268,19 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
             code(HttpStatusCode.NotFound) { body<ApiErrorSchema> { mediaTypes(ContentType.Application.Json) } }
         }
     }) {
-        val rid =
-            call.request.queryParameters["reservable_rid"]?.takeIf { it.isNotBlank() }
+        val campsiteId =
+            call.request.queryParameters["campsite_id"]?.toLongOrNull()
                 ?: return@get call.respondError(
-                    "missing_reservable_rid",
+                    "missing_campsite_id",
                     HttpStatusCode.BadRequest,
-                    "reservable_rid is required",
+                    "campsite_id is required",
                 )
-        val parsed =
-            ca.floo.roadtrip.models.domain.ReservableId
-                .parse(rid)
-                ?: return@get call.respondError(
-                    "invalid_reservable_rid",
-                    HttpStatusCode.BadRequest,
-                    "could not parse reservable_rid '$rid'",
-                )
-        val reservable =
-            reservablesRepo.findByRid(parsed)
-                ?: return@get call.respondError(
-                    "reservable_not_found",
-                    HttpStatusCode.NotFound,
-                    "no reservable with rid $rid",
-                )
+        reservablesRepo.findById(campsiteId)
+            ?: return@get call.respondError(
+                "campsite_not_found",
+                HttpStatusCode.NotFound,
+                "no campsite with id $campsiteId",
+            )
         val windowHours =
             call.request.queryParameters["window_hours"]
                 ?.toIntOrNull()
@@ -320,14 +299,14 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                     java.time.OffsetDateTime
                         .now()
                         .minusHours(windowHours.toLong())
-                // Interval rows for this reservable that were either observed within
+                // Interval rows for this campsite that were either observed within
                 // the window, or track a current/future date. One table now, so no
                 // union: the OR keeps stable-but-recent dates and upcoming dates in
                 // the summary even when their last status-run predates the window.
                 ctx
                     .selectDistinct(avail.TARGET_DATE)
                     .from(avail)
-                    .where(avail.RESERVABLE_ID.eq(reservable.id))
+                    .where(avail.CAMPSITE_ID.eq(campsiteId))
                     .and(
                         avail.LAST_OBSERVED_AT
                             .ge(windowStart)
@@ -336,10 +315,10 @@ fun Route.availabilityDashboardRoutes(ctx: DSLContext) {
                     .filterNotNull()
                     .sorted()
             }
-        val stats = availability.summarize(reservable.id, dates, windowHours = windowHours)
+        val stats = availability.summarize(campsiteId, dates, windowHours = windowHours)
         call.respondJson(
             AvailabilitySnapshotsSummaryResponse(
-                reservableRid = rid,
+                campsiteId = campsiteId,
                 stats = stats.map { it.toSchema() },
             ),
         )
@@ -375,7 +354,7 @@ private fun AvailabilityRunRepo.Run.toSchema(): AvailabilityRunSchema =
 
 private fun AvailabilityRepo.StatusRun.toSchema(): AvailabilitySnapshotSchema =
     AvailabilitySnapshotSchema(
-        reservableId = reservableId,
+        campsiteId = reservableId,
         runId = runId,
         targetDate = targetDate.toString(),
         observedFrom = observedFrom?.toString(),

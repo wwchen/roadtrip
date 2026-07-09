@@ -1,19 +1,6 @@
 {
   "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": {
-          "type": "grafana",
-          "uid": "-- Grafana --"
-        },
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "type": "dashboard"
-      }
-    ]
+    "list": []
   },
   "editable": true,
   "fiscalYearStartMonth": 0,
@@ -31,448 +18,153 @@
       "title": "All dashboards",
       "tooltip": "",
       "type": "dashboards"
-    },
-    {
-      "asDropdown": false,
-      "icon": "external link",
-      "includeVars": false,
-      "keepTime": false,
-      "tags": [],
-      "targetBlank": false,
-      "title": "Poller / Run Detail",
-      "tooltip": "",
-      "type": "link",
-      "url": "/d/poller-run-detail/poller-run-detail"
     }
   ],
   "liveNow": false,
   "panels": [
     {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
       "gridPos": {
-        "h": 3,
+        "h": 6,
         "w": 24,
         "x": 0,
         "y": 0
       },
       "id": 1,
       "options": {
-        "code": {
-          "language": "plaintext",
-          "showLineNumbers": false,
-          "showMiniMap": false
-        },
-        "content": "## 🚦 Status Overview\nOne landing page for **what the backend has been doing** — data ingests, availability polls, and watches — newest first. Click a row's linked cell to **drill into the detail dashboards**, or use a run's **Logs** link to scope the backend log panel at the bottom (sets the `log_filter` variable to that run id).",
-        "mode": "markdown"
-      },
-      "pluginVersion": "13.1.0",
-      "targets": [],
-      "title": "",
-      "type": "text"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 3
-      },
-      "id": 37,
-      "title": "① HTTP API — requests, status & routes",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "roadtrip-loki"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "A"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "Requests"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "B"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "2xx"
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "C"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "4xx"
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": 0
-                    },
-                    {
-                      "color": "yellow",
-                      "value": 1
-                    }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byFrameRefID",
-              "options": "D"
-            },
-            "properties": [
-              {
-                "id": "displayName",
-                "value": "5xx"
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "green",
-                      "value": 0
-                    },
-                    {
-                      "color": "red",
-                      "value": 1
-                    }
-                  ]
-                }
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 4,
-        "w": 12,
-        "x": 0,
-        "y": 4
-      },
-      "id": 33,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "percentChangeColorMode": "standard",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "showPercentChange": false,
-        "textMode": "value_and_name",
-        "wideLayout": true
-      },
-      "pluginVersion": "13.1.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" [$__range])) or vector(0)",
-          "instant": true,
-          "legendFormat": "requests",
-          "queryType": "instant",
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"2[0-9][0-9]\" [$__range])) or vector(0)",
-          "instant": true,
-          "legendFormat": "2xx",
-          "queryType": "instant",
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"4[0-9][0-9]\" [$__range])) or vector(0)",
-          "instant": true,
-          "legendFormat": "4xx",
-          "queryType": "instant",
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" | status=~\"5[0-9][0-9]\" [$__range])) or vector(0)",
-          "instant": true,
-          "legendFormat": "5xx",
-          "queryType": "instant",
-          "refId": "D"
-        }
-      ],
-      "title": "HTTP API traffic",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "loki",
-        "uid": "roadtrip-loki"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "filterable": true,
-            "footer": {
-              "reducers": []
-            },
-            "inspect": false
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "path"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 340
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "status"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 90
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "method"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 90
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 4
-      },
-      "id": 35,
-      "options": {
-        "cellHeight": "sm",
         "showHeader": true
       },
       "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
           },
           "editorMode": "code",
-          "expr": "topk(15, sum by (method, path, status) (count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" [$__range])))",
           "format": "table",
-          "instant": true,
-          "queryType": "instant",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  (SELECT count(*) FROM availability_run WHERE $__timeFilter(started_at)) AS runs,\n  (SELECT count(*) FROM availability_run WHERE $__timeFilter(started_at) AND status = 'failed') AS failed_runs,\n  (SELECT COALESCE(sum(snapshot_count),0) FROM availability_run WHERE $__timeFilter(started_at)) AS snapshots,\n  (SELECT count(DISTINCT a.campsite_id) FROM availability a WHERE $__timeFilter(a.last_observed_at)) AS campsites_updated,\n  (SELECT count(*) FROM availability WHERE $__timeFilter(last_observed_at)) AS total_db_updates;",
           "refId": "A"
         }
       ],
-      "title": "Top HTTP API paths",
-      "transformations": [
-        {
-          "id": "labelsToFields",
-          "options": {}
-        },
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "renameByName": {
-              "Value": "Calls",
-              "Value #A": "Calls"
-            }
-          }
-        }
-      ],
+      "title": "Availability run summary",
       "type": "table"
     },
     {
       "datasource": {
-        "type": "loki",
-        "uid": "roadtrip-loki"
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
       },
       "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisBorderShow": false,
-            "axisCenteredZero": false,
-            "axisColorMode": "text",
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "barWidthFactor": 0.6,
-            "drawStyle": "line",
-            "fillOpacity": 8,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "insertNulls": false,
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "never",
-            "showValues": false,
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": 0
-              }
-            ]
-          }
-        }
+        "defaults": {},
+        "overrides": []
       },
       "gridPos": {
-        "h": 8,
-        "w": 12,
+        "h": 10,
+        "w": 24,
         "x": 0,
-        "y": 8
+        "y": 6
       },
-      "id": 34,
+      "id": 2,
       "options": {
-        "annotations": {
-          "clustering": -1,
-          "multiLane": false
-        },
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "enableFacetedFilter": false,
-          "overflow": "ellipsis",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "hideZeros": false,
-          "mode": "multi",
-          "sort": "none"
-        }
+        "showHeader": true
       },
       "pluginVersion": "13.1.0",
       "targets": [
         {
           "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
           },
           "editorMode": "code",
-          "expr": "sum by (status) (count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\" [$__interval]))",
-          "legendFormat": "{{status}}",
-          "queryType": "range",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  a.last_observed_at AS transitioned_at,\n  a.campsite_id,\n  cs.loop_name || ' / ' || cs.name AS campsite_name,\n  a.target_date::text AS date,\n  prev.status AS from_status,\n  a.status AS to_status,\n  a.run_id\nFROM availability a\nLEFT JOIN availability prev ON prev.id = a.previous_id\nJOIN campsites cs ON cs.id = a.campsite_id\nWHERE $__timeFilter(a.last_observed_at)\n  AND a.previous_id IS NOT NULL\nORDER BY a.last_observed_at DESC, a.id DESC\nLIMIT 100;",
           "refId": "A"
         }
       ],
-      "title": "HTTP API calls by status",
-      "type": "timeseries"
+      "title": "Recent campsite transitions",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  w.id AS watch_id,\n  w.status AS watch_status,\n  CASE\n    WHEN count(DISTINCT wt.id) = 0 THEN NULL\n    WHEN count(DISTINCT wt.id) FILTER (WHERE wt.poi_id IS NOT NULL) > 0\n     AND count(DISTINCT wt.id) FILTER (WHERE wt.campsite_id IS NOT NULL) > 0 THEN 'mixed'\n    WHEN count(DISTINCT wt.id) FILTER (WHERE wt.poi_id IS NOT NULL) > 0 THEN 'poi'\n    ELSE 'campsite'\n  END AS scope,\n  count(DISTINCT wt.id) AS target_count,\n  array_agg(\n    DISTINCT CASE\n      WHEN wt.poi_id IS NOT NULL THEN 'poi:' || wt.poi_id::text\n      WHEN wt.campsite_id IS NOT NULL THEN 'campsite:' || wt.campsite_id::text\n    END\n  ) FILTER (WHERE wt.id IS NOT NULL) AS scope_ids,\n  w.campsite_filters,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec,\n  w.trigger_kinds,\n  w.stop_when_triggered,\n  count(DISTINCT p.id) AS pollers,\n  min(p.next_run_at) FILTER (WHERE p.active) AS next_run_at,\n  max(p.last_run_at) AS last_run_at,\n  w.created_at\nFROM availability_watch w\nLEFT JOIN availability_watch_poller wp ON wp.watch_id = w.id\nLEFT JOIN availability_poller p ON p.id = wp.poller_id\nLEFT JOIN availability_watch_target wt ON wt.watch_id = w.id\nGROUP BY w.id, w.status, w.campsite_filters, w.start_date, w.end_date, w.cadence_sec, w.trigger_kinds, w.stop_when_triggered, w.created_at\nORDER BY (w.status = 'active') DESC, next_run_at ASC NULLS LAST;",
+          "refId": "A"
+        }
+      ],
+      "title": "Active watches",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 26
+      },
+      "id": 4,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  coalesce(parent.id, phase.id) AS run_id,\n  phase.target,\n  phase.phase,\n  phase.phase_kind,\n  phase.status,\n  phase.started_at,\n  phase.completed_at,\n  phase.exit_code,\n  phase.notes\nFROM ingest_runs phase\nLEFT JOIN ingest_runs parent ON parent.id = phase.parent_run_id\nWHERE phase.status IN ('failed', 'started')\n  AND phase.phase_kind <> 'target'\nORDER BY phase.started_at DESC\nLIMIT 100;",
+          "refId": "A"
+        }
+      ],
+      "title": "Failed or stuck ingest phases",
+      "type": "table"
     },
     {
       "datasource": {
@@ -499,6 +191,10 @@
               {
                 "color": "green",
                 "value": 0
+              },
+              {
+                "color": "red",
+                "value": 80
               }
             ]
           }
@@ -519,60 +215,161 @@
           {
             "matcher": {
               "id": "byName",
-              "options": "method"
+              "options": "level"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 80
+                "value": 70
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "options": {
+                      "DEBUG": {
+                        "color": "#8E8E8E",
+                        "index": 3,
+                        "text": "DEBUG"
+                      },
+                      "ERROR": {
+                        "color": "#F2495C",
+                        "index": 0,
+                        "text": "ERROR"
+                      },
+                      "INFO": {
+                        "color": "#5794F2",
+                        "index": 2,
+                        "text": "INFO"
+                      },
+                      "TRACE": {
+                        "color": "#B877D9",
+                        "index": 4,
+                        "text": "TRACE"
+                      },
+                      "WARN": {
+                        "color": "#FF9830",
+                        "index": 1,
+                        "text": "WARN"
+                      }
+                    },
+                    "type": "value"
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "status"
+              "options": "logger"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 80
+                "value": 260
+              },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": false,
+                    "title": "Filter logs to this class",
+                    "url": "/d/logs-explorer/logs-explorer?${__url_time_range}&var-container=roadtrip-backend.*&var-level=$__all&var-logger=${__data.fields.loggerName}&var-search=$log_filter"
+                  }
+                ]
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "duration_ms"
+              "options": "loggerName"
             },
             "properties": [
               {
-                "id": "custom.width",
-                "value": 100
+                "id": "custom.hideFrom.viz",
+                "value": true
               }
             ]
           },
           {
             "matcher": {
               "id": "byName",
-              "options": "path"
+              "options": "message"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "auto"
+                }
+              },
+              {
+                "id": "custom.wrapText",
+                "value": false
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "context"
             },
             "properties": [
               {
                 "id": "custom.width",
-                "value": 340
+                "value": 300
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "json"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Logger",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 184
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Message",
+              "scope": "series"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 702
               }
             ]
           }
         ]
       },
       "gridPos": {
-        "h": 6,
-        "w": 12,
-        "x": 12,
-        "y": 10
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 34
       },
-      "id": 36,
+      "id": 5,
       "options": {
         "cellHeight": "sm",
         "showHeader": true,
@@ -592,12 +389,12 @@
           },
           "direction": "backward",
           "editorMode": "code",
-          "expr": "{container=~\"roadtrip-backend.*\"} | json | __error__=\"\" | line_format \"{{.message}}\" | logfmt | __error__=\"\" | path=~\"/api/.*\" | path!=\"/api/health\"",
+          "expr": "{container=~\"roadtrip-backend.*\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` |~ \"$log_filter\"",
           "queryType": "range",
           "refId": "A"
         }
       ],
-      "title": "Recent HTTP API calls",
+      "title": "Backend logs (filter with $log_filter \u2014 e.g. a run id)",
       "transformations": [
         {
           "id": "extractFields",
@@ -609,7 +406,7 @@
           "id": "filterFieldsByName",
           "options": {
             "include": {
-              "pattern": "^(Time|method|path|status|duration_ms|remote)$"
+              "pattern": "^(Time|level|logger|loggerName|message|context)$"
             }
           }
         },
@@ -620,3037 +417,52 @@
             "includeByName": {},
             "indexByName": {
               "Time": 0,
-              "duration_ms": 4,
-              "method": 1,
-              "path": 2,
-              "remote": 5,
-              "status": 3
+              "context": 4,
+              "level": 1,
+              "logger": 2,
+              "loggerName": 5,
+              "message": 3
             },
             "renameByName": {
               "Time": "Date",
-              "duration_ms": "Duration ms",
-              "method": "Method",
-              "path": "Path",
-              "remote": "Remote",
-              "status": "Status"
+              "context": "Context",
+              "level": "Level",
+              "logger": "Logger",
+              "message": "Message"
             }
           }
         }
       ],
       "type": "table"
-    },
-    {
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 16
-      },
-      "id": 38,
-      "panels": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  }
-                ]
-              }
-            }
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 12,
-            "x": 0,
-            "y": 17
-          },
-          "id": 6,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "SELECT\n  count(*) FILTER (WHERE p.active) AS active_pollers,\n  count(*) FILTER (WHERE NOT p.active) AS dormant_pollers,\n  count(*) FILTER (WHERE p.active AND p.next_run_at <= now()\n    AND (p.claimed_until IS NULL OR p.claimed_until < now())) AS due_now,\n  count(*) FILTER (WHERE p.claimed_until IS NOT NULL\n    AND p.claimed_until >= now()) AS in_flight\nFROM availability_poller p;",
-              "refId": "A"
-            }
-          ],
-          "title": "Poller queue",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "poller_status"
-                },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "dormant": {
-                            "color": "text",
-                            "index": 3
-                          },
-                          "due_now": {
-                            "color": "yellow",
-                            "index": 1
-                          },
-                          "in_flight": {
-                            "color": "blue",
-                            "index": 0
-                          },
-                          "waiting": {
-                            "color": "green",
-                            "index": 2
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "poller_id"
-                },
-                "properties": [
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "targetBlank": false,
-                        "title": "Open Poller Detail",
-                        "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(_at|_until)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeFromNow"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 6,
-            "w": 24,
-            "x": 0,
-            "y": 21
-          },
-          "id": 19,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "\nSELECT\n  p.id AS poller_id,\n  CASE\n    WHEN NOT p.active THEN 'dormant'\n    WHEN p.claimed_until IS NOT NULL AND p.claimed_until >= now() THEN 'in_flight'\n    WHEN p.next_run_at <= now() THEN 'due_now'\n    ELSE 'waiting'\n  END AS poller_status,\n  count(DISTINCT wp.watch_id) AS watches,\n  p.provider,\n  p.parent_ref,\n  p.poi_id,\n  p.next_run_at,\n  p.claimed_until,\n  p.last_run_at,\n  p.last_force_pull_at\nFROM availability_poller p\nLEFT JOIN availability_watch_poller wp ON wp.poller_id = p.id\nGROUP BY\n  p.id,\n  p.active,\n  p.claimed_until,\n  p.next_run_at,\n  p.provider,\n  p.parent_ref,\n  p.poi_id,\n  p.last_run_at,\n  p.last_force_pull_at\nORDER BY\n  (p.active AND p.claimed_until IS NOT NULL AND p.claimed_until >= now()) DESC,\n  (p.active AND p.next_run_at <= now()\n    AND (p.claimed_until IS NULL OR p.claimed_until < now())) DESC,\n  p.active DESC,\n  p.next_run_at ASC NULLS LAST,\n  p.id DESC\nLIMIT 300;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Pollers",
-          "type": "table"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "failed_runs"
-                },
-                "properties": [
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "rate_limited"
-                },
-                "properties": [
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 24,
-            "x": 0,
-            "y": 27
-          },
-          "id": 7,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "SELECT\n  (SELECT count(*) FROM availability_run WHERE $__timeFilter(started_at)) AS runs,\n  (SELECT count(*) FROM availability_run\n     WHERE $__timeFilter(started_at) AND status = 'failed') AS failed_runs,\n  (SELECT count(*) FROM availability_fetch_call\n     WHERE $__timeFilter(created_at) AND outcome = 'rate_limited') AS rate_limited,\n  (SELECT COALESCE(sum(snapshot_count),0) FROM availability_run\n     WHERE $__timeFilter(started_at)) AS snapshots,\n  (SELECT count(DISTINCT rp.poi_id)\n     FROM availability a\n     JOIN reservable_pois rp ON rp.reservable_id = a.reservable_id\n     WHERE $__timeFilter(a.last_observed_at)) AS \"poi updated\",\n  (SELECT count(DISTINCT a.reservable_id)\n     FROM availability a\n     WHERE $__timeFilter(a.last_observed_at)) AS \"reservables updated\",\n  (SELECT count(*) FROM availability \n     WHERE $__timeFilter(last_observed_at) AND previous_id > 0) AS db_updates,\n  (SELECT count(*) FROM availability \n     WHERE $__timeFilter(last_observed_at)) AS total_db_updates;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Runs & fetches (dashboard time range)",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "run_status"
-                },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "aborted": {
-                            "color": "red",
-                            "index": 4
-                          },
-                          "active": {
-                            "color": "green",
-                            "index": 2
-                          },
-                          "blocked": {
-                            "color": "red",
-                            "index": 5
-                          },
-                          "completed": {
-                            "color": "green",
-                            "index": 0
-                          },
-                          "done": {
-                            "color": "blue",
-                            "index": 9
-                          },
-                          "failed": {
-                            "color": "red",
-                            "index": 3
-                          },
-                          "noop": {
-                            "color": "text",
-                            "index": 10
-                          },
-                          "ok": {
-                            "color": "green",
-                            "index": 1
-                          },
-                          "paused": {
-                            "color": "yellow",
-                            "index": 7
-                          },
-                          "rate_limited": {
-                            "color": "yellow",
-                            "index": 8
-                          },
-                          "started": {
-                            "color": "yellow",
-                            "index": 6
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "run_id"
-                },
-                "properties": [
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "targetBlank": false,
-                        "title": "Open Poller / Run Detail",
-                        "url": "/d/poller-run-detail/poller-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
-                      },
-                      {
-                        "targetBlank": false,
-                        "title": "↓ Logs for this run (scope panel below)",
-                        "url": "/d/status-overview/status-overview?${__url_time_range}&var-log_filter=${__data.fields.run_id}"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "poller_id"
-                },
-                "properties": [
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "targetBlank": false,
-                        "title": "Open Poller Detail",
-                        "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/duration/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "ms"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/_at/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeFromNow"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 10,
-            "w": 12,
-            "x": 0,
-            "y": 31
-          },
-          "id": 8,
-          "options": {
-            "cellHeight": "sm",
-            "enablePagination": true,
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "\nSELECT\n  r.id AS run_id,\n  r.poller_id,\n  r.status AS run_status,\n  r.snapshot_count,\n  count(fc.id) AS fetch_calls,\n  count(fc.id) FILTER (WHERE fc.outcome = 'rate_limited') AS rate_limited,\n  r.duration_ms AS duration,\n  r.error,\n  r.started_at,\n  r.completed_at\nFROM availability_run r\nLEFT JOIN availability_fetch_call fc ON fc.run_id = r.id\nWHERE $__timeFilter(r.started_at)\nGROUP BY\n  r.id,\n  r.poller_id,\n  r.status,\n  r.snapshot_count,\n  r.duration_ms,\n  r.error,\n  r.started_at,\n  r.completed_at\nORDER BY r.started_at DESC, r.id DESC\nLIMIT 300;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Recent availability runs",
-          "type": "table"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "from_status"
-                },
-                "properties": [
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-background"
-                    }
-                  },
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "available": {
-                            "color": "green",
-                            "index": 0,
-                            "text": "available"
-                          },
-                          "closed": {
-                            "color": "dark-gray",
-                            "index": 3,
-                            "text": "closed"
-                          },
-                          "first_come": {
-                            "color": "orange",
-                            "index": 1,
-                            "text": "first_come"
-                          },
-                          "past": {
-                            "color": "blue",
-                            "index": 5,
-                            "text": "past"
-                          },
-                          "reserved": {
-                            "color": "red",
-                            "index": 2,
-                            "text": "reserved"
-                          },
-                          "unknown": {
-                            "color": "gray",
-                            "index": 4,
-                            "text": "unknown"
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "to_status"
-                },
-                "properties": [
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-background"
-                    }
-                  },
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "available": {
-                            "color": "green",
-                            "index": 0,
-                            "text": "available"
-                          },
-                          "closed": {
-                            "color": "dark-gray",
-                            "index": 3,
-                            "text": "closed"
-                          },
-                          "first_come": {
-                            "color": "orange",
-                            "index": 1,
-                            "text": "first_come"
-                          },
-                          "past": {
-                            "color": "blue",
-                            "index": 5,
-                            "text": "past"
-                          },
-                          "reserved": {
-                            "color": "red",
-                            "index": 2,
-                            "text": "reserved"
-                          },
-                          "unknown": {
-                            "color": "gray",
-                            "index": 4,
-                            "text": "unknown"
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "run_status"
-                },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "aborted": {
-                            "color": "red",
-                            "index": 4
-                          },
-                          "active": {
-                            "color": "green",
-                            "index": 2
-                          },
-                          "blocked": {
-                            "color": "red",
-                            "index": 5
-                          },
-                          "completed": {
-                            "color": "green",
-                            "index": 0
-                          },
-                          "done": {
-                            "color": "blue",
-                            "index": 9
-                          },
-                          "failed": {
-                            "color": "red",
-                            "index": 3
-                          },
-                          "noop": {
-                            "color": "text",
-                            "index": 10
-                          },
-                          "ok": {
-                            "color": "green",
-                            "index": 1
-                          },
-                          "paused": {
-                            "color": "yellow",
-                            "index": 7
-                          },
-                          "rate_limited": {
-                            "color": "yellow",
-                            "index": 8
-                          },
-                          "started": {
-                            "color": "yellow",
-                            "index": 6
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "run_id"
-                },
-                "properties": [
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "targetBlank": false,
-                        "title": "Open Poller / Run Detail",
-                        "url": "/d/poller-run-detail/poller-run-detail?${__url_time_range}&var-run_id=${__data.fields.run_id}"
-                      },
-                      {
-                        "targetBlank": false,
-                        "title": "↓ Logs for this run (scope panel below)",
-                        "url": "/d/status-overview/status-overview?${__url_time_range}&var-log_filter=${__data.fields.run_id}"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "poller_id"
-                },
-                "properties": [
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "targetBlank": false,
-                        "title": "Open Poller Detail",
-                        "url": "/d/poller-detail/poller-detail?${__url_time_range}&var-poller_id=${__data.fields.poller_id}"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/duration/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "ms"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/_at/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeFromNow"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 10,
-            "w": 12,
-            "x": 12,
-            "y": 31
-          },
-          "id": 21,
-          "options": {
-            "cellHeight": "sm",
-            "enablePagination": true,
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "SELECT\n  a.last_observed_at AS transitioned_at,\n  r.loop || ' / ' || r.name AS reservable_name,\n  a.target_date::text AS date,\n  prev.status AS from_status,\n  a.status AS to_status,\n  a.run_id\nFROM availability a\nLEFT JOIN availability prev ON prev.id = a.previous_id\nJOIN reservables r ON r.id = a.reservable_id\nWHERE $__timeFilter(a.last_observed_at)\n  AND a.previous_id IS NOT NULL\nORDER BY a.last_observed_at DESC, a.id DESC\nLIMIT 100;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Recent availability transitions",
-          "type": "table"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "palette-classic"
-              },
-              "custom": {
-                "axisBorderShow": false,
-                "axisCenteredZero": false,
-                "axisColorMode": "text",
-                "axisLabel": "",
-                "axisPlacement": "auto",
-                "axisSoftMin": 0,
-                "barAlignment": 0,
-                "barWidthFactor": 0.6,
-                "drawStyle": "bars",
-                "fillOpacity": 40,
-                "gradientMode": "none",
-                "hideFrom": {
-                  "legend": false,
-                  "tooltip": false,
-                  "viz": false
-                },
-                "insertNulls": false,
-                "lineInterpolation": "linear",
-                "lineWidth": 1,
-                "pointSize": 5,
-                "scaleDistribution": {
-                  "type": "linear"
-                },
-                "showPoints": "auto",
-                "showValues": false,
-                "spanNulls": false,
-                "stacking": {
-                  "group": "A",
-                  "mode": "normal"
-                },
-                "thresholdsStyle": {
-                  "mode": "off"
-                }
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            }
-          },
-          "gridPos": {
-            "h": 7,
-            "w": 24,
-            "x": 0,
-            "y": 41
-          },
-          "id": 9,
-          "options": {
-            "annotations": {
-              "clustering": -1,
-              "multiLane": false
-            },
-            "legend": {
-              "calcs": [],
-              "displayMode": "list",
-              "enableFacetedFilter": false,
-              "overflow": "ellipsis",
-              "placement": "bottom",
-              "showLegend": true
-            },
-            "tooltip": {
-              "hideZeros": false,
-              "mode": "multi",
-              "sort": "desc"
-            }
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "format": "time_series",
-              "rawQuery": true,
-              "rawSql": "SELECT $__timeGroup(created_at, '$__interval') AS time,\n       provider || ':' || parent_ref AS metric,\n       count(*)::double precision AS value\nFROM availability_fetch_call\nWHERE $__timeFilter(created_at) AND outcome = 'rate_limited'\nGROUP BY 1, 2 ORDER BY 1;",
-              "refId": "A"
-            }
-          ],
-          "title": "Rate-limited upstream fetches (per provider:target)",
-          "type": "timeseries"
-        }
-      ],
-      "title": "② Availability polling — what got fetched",
-      "type": "row"
-    },
-    {
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 17
-      },
-      "id": 39,
-      "panels": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  }
-                ]
-              }
-            }
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 24,
-            "x": 0,
-            "y": 18
-          },
-          "id": 11,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "SELECT\n  count(*) FILTER (WHERE status = 'active') AS active,\n  count(*) FILTER (WHERE status = 'paused') AS paused,\n  count(*) FILTER (WHERE status = 'done')   AS done\nFROM availability_watch;",
-              "refId": "A"
-            }
-          ],
-          "title": "Watches by status",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "watch_status"
-                },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "aborted": {
-                            "color": "red",
-                            "index": 4
-                          },
-                          "active": {
-                            "color": "green",
-                            "index": 2
-                          },
-                          "blocked": {
-                            "color": "red",
-                            "index": 5
-                          },
-                          "completed": {
-                            "color": "green",
-                            "index": 0
-                          },
-                          "done": {
-                            "color": "blue",
-                            "index": 9
-                          },
-                          "failed": {
-                            "color": "red",
-                            "index": 3
-                          },
-                          "noop": {
-                            "color": "text",
-                            "index": 10
-                          },
-                          "ok": {
-                            "color": "green",
-                            "index": 1
-                          },
-                          "paused": {
-                            "color": "yellow",
-                            "index": 7
-                          },
-                          "rate_limited": {
-                            "color": "yellow",
-                            "index": 8
-                          },
-                          "started": {
-                            "color": "yellow",
-                            "index": 6
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(date|_at)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeAsIso"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 24,
-            "x": 0,
-            "y": 22
-          },
-          "id": 12,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "\nSELECT\n  w.id AS watch_id,\n  w.status AS watch_status,\n  CASE\n    WHEN count(DISTINCT wt.id) = 0 THEN NULL\n    WHEN count(DISTINCT wt.id) FILTER (WHERE wt.poi_id IS NOT NULL) > 0\n     AND count(DISTINCT wt.id) FILTER (WHERE wt.reservable_id IS NOT NULL) > 0 THEN 'mixed'\n    WHEN count(DISTINCT wt.id) FILTER (WHERE wt.poi_id IS NOT NULL) > 0 THEN 'poi'\n    ELSE 'reservable'\n  END AS scope,\n  count(DISTINCT wt.id) AS target_count,\n  array_agg(\n    DISTINCT CASE\n      WHEN wt.poi_id IS NOT NULL THEN 'poi:' || wt.poi_id::text\n      WHEN wt.reservable_id IS NOT NULL THEN 'reservable:' || wt.reservable_id::text\n    END\n  ) FILTER (WHERE wt.id IS NOT NULL) AS scope_ids,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec,\n  w.trigger_kinds,\n  w.stop_when_triggered,\n  count(DISTINCT p.id) AS pollers,\n  min(p.next_run_at) FILTER (WHERE p.active) AS next_run_at,\n  max(p.last_run_at) AS last_run_at,\n  w.created_at\nFROM availability_watch w\nLEFT JOIN availability_watch_poller wp ON wp.watch_id = w.id\nLEFT JOIN availability_poller p ON p.id = wp.poller_id\nLEFT JOIN availability_watch_target wt ON wt.watch_id = w.id\nGROUP BY\n  w.id,\n  w.status,\n  w.start_date,\n  w.end_date,\n  w.cadence_sec,\n  w.trigger_kinds,\n  w.stop_when_triggered,\n  w.created_at\nORDER BY\n  (w.status = 'active') DESC,\n  next_run_at ASC NULLS LAST;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Watches",
-          "type": "table"
-        }
-      ],
-      "title": "③ Watches — what's being watched",
-      "type": "row"
-    },
-    {
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 18
-      },
-      "id": 40,
-      "panels": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "A"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "POSTs"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "B"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "200s"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "C"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "400s"
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "D"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "401s"
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "E"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Handler fails"
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 12,
-            "x": 0,
-            "y": 19
-          },
-          "id": 30,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity POST:\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "http_posts",
-              "queryType": "instant",
-              "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity → 200, dispatching\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "http_200",
-              "queryType": "instant",
-              "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity → 400\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "http_400",
-              "queryType": "instant",
-              "refId": "C"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity → 401\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "http_401",
-              "queryType": "instant",
-              "refId": "D"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity handler failed\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "handler_failures",
-              "queryType": "instant",
-              "refId": "E"
-            }
-          ],
-          "title": "Slack HTTP endpoint",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "A"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Updates"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "B"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Stale cards"
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "yellow",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "C"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Failures"
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "D"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "URL acks"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "E"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Unknown actions"
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 12,
-            "x": 12,
-            "y": 19
-          },
-          "id": 27,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"response_url update ok=true\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "response_updates",
-              "queryType": "instant",
-              "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"stale response_url update ok=\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "stale_cards",
-              "queryType": "instant",
-              "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"response_url update ok=false|Slack response_url post failed|Slack response_url returned\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "response_failures",
-              "queryType": "instant",
-              "refId": "C"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"URL button .*silent ack\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "url_button_acks",
-              "queryType": "instant",
-              "refId": "D"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"unknown action_id\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "unknown_actions",
-              "queryType": "instant",
-              "refId": "E"
-            }
-          ],
-          "title": "Slack card update health",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "A"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "response_url ok"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "B"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "response_url fail"
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "C"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "postMessage fail"
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byFrameRefID",
-                  "options": "D"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Slack disabled"
-                  },
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "yellow",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 12,
-            "x": 0,
-            "y": 23
-          },
-          "id": 31,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "value_and_name",
-            "wideLayout": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"response_url update ok=true\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "response_url_successes",
-              "queryType": "instant",
-              "refId": "A"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"response_url update ok=false|Slack response_url post failed|Slack response_url returned\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "response_url_failures",
-              "queryType": "instant",
-              "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack chat.postMessage .* not ok|Slack postMessage to .* failed\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "chat_post_failures",
-              "queryType": "instant",
-              "refId": "C"
-            },
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "sum(count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack disabled\" [$__range])) or vector(0)",
-              "instant": true,
-              "legendFormat": "slack_disabled_skips",
-              "queryType": "instant",
-              "refId": "D"
-            }
-          ],
-          "title": "Slack external client calls",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": true,
-                "wrapText": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Time"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 180
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "level"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 70
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  },
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "DEBUG": {
-                            "color": "#8E8E8E",
-                            "index": 3,
-                            "text": "DEBUG"
-                          },
-                          "ERROR": {
-                            "color": "#F2495C",
-                            "index": 0,
-                            "text": "ERROR"
-                          },
-                          "INFO": {
-                            "color": "#5794F2",
-                            "index": 2,
-                            "text": "INFO"
-                          },
-                          "TRACE": {
-                            "color": "#B877D9",
-                            "index": 4,
-                            "text": "TRACE"
-                          },
-                          "WARN": {
-                            "color": "#FF9830",
-                            "index": 1,
-                            "text": "WARN"
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "logger"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 260
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "loggerName"
-                },
-                "properties": [
-                  {
-                    "id": "custom.hideFrom.viz",
-                    "value": true
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "message"
-                },
-                "properties": [
-                  {
-                    "id": "custom.wrapText",
-                    "value": false
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 12,
-            "x": 12,
-            "y": 23
-          },
-          "id": 29,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true,
-            "sortBy": [
-              {
-                "desc": true,
-                "displayName": "Date"
-              }
-            ]
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "direction": "backward",
-              "editorMode": "code",
-              "expr": "{container=~\"roadtrip-backend.*\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` |~ \"Slack interactivity|Slack signature verify|Slack response_url\"",
-              "queryType": "range",
-              "refId": "A"
-            }
-          ],
-          "title": "Recent Slack interactivity events",
-          "transformations": [
-            {
-              "id": "extractFields",
-              "options": {
-                "source": "labels"
-              }
-            },
-            {
-              "id": "filterFieldsByName",
-              "options": {
-                "include": {
-                  "pattern": "^(Time|level|logger|loggerName|message)$"
-                }
-              }
-            },
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {},
-                "includeByName": {},
-                "indexByName": {
-                  "Time": 0,
-                  "level": 1,
-                  "logger": 2,
-                  "loggerName": 4,
-                  "message": 3
-                },
-                "renameByName": {
-                  "Time": "Date",
-                  "level": "Level",
-                  "logger": "Logger",
-                  "message": "Message"
-                }
-              }
-            }
-          ],
-          "type": "table"
-        },
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            }
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 12,
-            "x": 0,
-            "y": 27
-          },
-          "id": 28,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "expr": "topk(10, sum by (action) (count_over_time({container=~\"roadtrip-backend.*\"} | json | __error__=\"\" |~ \"Slack interactivity → 200, dispatching\" | regexp \"actions=[[](?P<action>[^]]+)[]]\" [$__range])))",
-              "format": "table",
-              "instant": true,
-              "queryType": "instant",
-              "refId": "A"
-            }
-          ],
-          "title": "Slack actions clicked",
-          "transformations": [
-            {
-              "id": "labelsToFields",
-              "options": {}
-            },
-            {
-              "id": "merge",
-              "options": {}
-            },
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true
-                }
-              }
-            }
-          ],
-          "type": "table"
-        }
-      ],
-      "title": "④ Slack interactivity — buttons & response_url",
-      "type": "row"
-    },
-    {
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 19
-      },
-      "id": 41,
-      "panels": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "fixedColor": "#ad46ff",
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "failed runs",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "stuck runs",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "thresholds",
-                    "value": {
-                      "mode": "absolute",
-                      "steps": [
-                        {
-                          "color": "green",
-                          "value": 0
-                        },
-                        {
-                          "color": "red",
-                          "value": 1
-                        }
-                      ]
-                    }
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 4,
-            "w": 24,
-            "x": 0,
-            "y": 20
-          },
-          "id": 3,
-          "options": {
-            "colorMode": "value",
-            "graphMode": "none",
-            "justifyMode": "auto",
-            "orientation": "auto",
-            "percentChangeColorMode": "standard",
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ],
-              "fields": "",
-              "values": false
-            },
-            "showPercentChange": false,
-            "textMode": "auto",
-            "wideLayout": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "SELECT\n(\n  SELECT count(DISTINCT target)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND $__timeFilter(started_at)\n) AS targets,\n\n(\n  SELECT count(*)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status = 'completed'\n    AND $__timeFilter(started_at)\n) AS \"completed runs\",\n\n(\n  SELECT count(*)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status IN ('failed', 'aborted')\n    AND $__timeFilter(started_at)\n) AS \"failed runs\",\n\n(\n  SELECT count(*)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status = 'started'\n    AND $__timeFilter(started_at)\n) AS \"stuck runs\",\n\n(\n  SELECT max(completed_at)\n  FROM ingest_runs\n  WHERE phase_kind = 'target'\n    AND status = 'completed'\n) AS \"Last Completed\";",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Ingest health",
-          "type": "stat"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "status"
-                },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "aborted": {
-                            "color": "red",
-                            "index": 4
-                          },
-                          "active": {
-                            "color": "green",
-                            "index": 2
-                          },
-                          "blocked": {
-                            "color": "red",
-                            "index": 5
-                          },
-                          "completed": {
-                            "color": "green",
-                            "index": 0
-                          },
-                          "done": {
-                            "color": "blue",
-                            "index": 9
-                          },
-                          "failed": {
-                            "color": "red",
-                            "index": 3
-                          },
-                          "noop": {
-                            "color": "text",
-                            "index": 10
-                          },
-                          "ok": {
-                            "color": "green",
-                            "index": 1
-                          },
-                          "paused": {
-                            "color": "yellow",
-                            "index": 7
-                          },
-                          "rate_limited": {
-                            "color": "yellow",
-                            "index": 8
-                          },
-                          "started": {
-                            "color": "yellow",
-                            "index": 6
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 520
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "target"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 393
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(duration|age)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "ms"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(_at|age)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeFromNow"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 9,
-            "w": 24,
-            "x": 0,
-            "y": 24
-          },
-          "id": 4,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "WITH ranked AS (\n  SELECT ir.*, row_number() OVER (\n    PARTITION BY ir.target, ir.phase\n    ORDER BY ir.started_at DESC, ir.id DESC) AS rn\n  FROM ingest_runs ir\n  WHERE ir.phase_kind = 'import'\n)\nSELECT target, --phase AS run_kind,\n       started_at as age, -- completed_at,\n       extract(epoch FROM completed_at - started_at) * 1000 AS duration,\n       (counts::jsonb ->> 'seen')::int AS count,\n       notes,\n       status\nFROM ranked WHERE rn = 1\nORDER BY started_at DESC;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Latest fetch / import by target",
-          "type": "table"
-        },
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "roadtrip-postgres"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "auto",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "status"
-                },
-                "properties": [
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "aborted": {
-                            "color": "red",
-                            "index": 4
-                          },
-                          "active": {
-                            "color": "green",
-                            "index": 2
-                          },
-                          "blocked": {
-                            "color": "red",
-                            "index": 5
-                          },
-                          "completed": {
-                            "color": "green",
-                            "index": 0
-                          },
-                          "done": {
-                            "color": "blue",
-                            "index": 9
-                          },
-                          "failed": {
-                            "color": "red",
-                            "index": 3
-                          },
-                          "noop": {
-                            "color": "text",
-                            "index": 10
-                          },
-                          "ok": {
-                            "color": "green",
-                            "index": 1
-                          },
-                          "paused": {
-                            "color": "yellow",
-                            "index": 7
-                          },
-                          "rate_limited": {
-                            "color": "yellow",
-                            "index": 8
-                          },
-                          "started": {
-                            "color": "yellow",
-                            "index": 6
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 520
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "target"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 393
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(duration|age)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "ms"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byRegexp",
-                  "options": "/(_at|age)/",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "unit",
-                    "value": "dateTimeFromNow"
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 8,
-            "w": 24,
-            "x": 0,
-            "y": 33
-          },
-          "id": 20,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "postgres",
-                "uid": "roadtrip-postgres"
-              },
-              "editorMode": "code",
-              "format": "table",
-              "rawQuery": true,
-              "rawSql": "SELECT\n  child.id,\n  child.parent_run_id,\n  parent.target,\n  parent.phase AS run_kind,\n  child.phase,\n  child.phase_kind,\n  child.status,\n  child.started_at,\n  child.completed_at,\n  EXTRACT(EPOCH FROM (COALESCE(child.completed_at, now()) - child.started_at)) * 1000 AS duration,\n  child.exit_code,\n  child.counts,\n  child.notes\nFROM ingest_runs child\nLEFT JOIN ingest_runs parent ON parent.id = child.parent_run_id\nWHERE $__timeFilter(child.started_at)\n  AND child.phase_kind <> 'target'\n  AND (\n    child.status IN ('failed', 'aborted')\n    OR (child.status = 'started' AND child.started_at < now() - interval '30 minutes')\n  )\nORDER BY child.started_at DESC, child.id DESC\nLIMIT 300;",
-              "refId": "A",
-              "sql": {
-                "columns": [
-                  {
-                    "parameters": [],
-                    "type": "function"
-                  }
-                ],
-                "groupBy": [
-                  {
-                    "property": {
-                      "type": "string"
-                    },
-                    "type": "groupBy"
-                  }
-                ],
-                "limit": 50
-              }
-            }
-          ],
-          "title": "Failed or stuck ingest phases",
-          "type": "table"
-        }
-      ],
-      "title": "⑤ Data ingest (ETL) — when & what was fetched",
-      "type": "row"
-    },
-    {
-      "collapsed": true,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 20
-      },
-      "id": 42,
-      "panels": [
-        {
-          "datasource": {
-            "type": "loki",
-            "uid": "roadtrip-loki"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "cellOptions": {
-                  "type": "auto"
-                },
-                "filterable": true,
-                "footer": {
-                  "reducers": []
-                },
-                "inspect": true,
-                "wrapText": false
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": 0
-                  },
-                  {
-                    "color": "red",
-                    "value": 80
-                  }
-                ]
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Time"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 180
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "level"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 70
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "color-text"
-                    }
-                  },
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "options": {
-                          "DEBUG": {
-                            "color": "#8E8E8E",
-                            "index": 3,
-                            "text": "DEBUG"
-                          },
-                          "ERROR": {
-                            "color": "#F2495C",
-                            "index": 0,
-                            "text": "ERROR"
-                          },
-                          "INFO": {
-                            "color": "#5794F2",
-                            "index": 2,
-                            "text": "INFO"
-                          },
-                          "TRACE": {
-                            "color": "#B877D9",
-                            "index": 4,
-                            "text": "TRACE"
-                          },
-                          "WARN": {
-                            "color": "#FF9830",
-                            "index": 1,
-                            "text": "WARN"
-                          }
-                        },
-                        "type": "value"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "logger"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 260
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "targetBlank": false,
-                        "title": "Filter logs to this class",
-                        "url": "/d/logs-explorer/logs-explorer?${__url_time_range}&var-container=roadtrip-backend.*&var-level=$__all&var-logger=${__data.fields.loggerName}&var-search=$log_filter"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "loggerName"
-                },
-                "properties": [
-                  {
-                    "id": "custom.hideFrom.viz",
-                    "value": true
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "message"
-                },
-                "properties": [
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "auto"
-                    }
-                  },
-                  {
-                    "id": "custom.wrapText",
-                    "value": false
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "context"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 300
-                  },
-                  {
-                    "id": "custom.cellOptions",
-                    "value": {
-                      "type": "json"
-                    }
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Logger",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 184
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Message",
-                  "scope": "series"
-                },
-                "properties": [
-                  {
-                    "id": "custom.width",
-                    "value": 702
-                  }
-                ]
-              }
-            ]
-          },
-          "gridPos": {
-            "h": 12,
-            "w": 24,
-            "x": 0,
-            "y": 21
-          },
-          "id": 14,
-          "options": {
-            "cellHeight": "sm",
-            "showHeader": true,
-            "sortBy": [
-              {
-                "desc": true,
-                "displayName": "Date"
-              }
-            ]
-          },
-          "pluginVersion": "13.1.0",
-          "targets": [
-            {
-              "datasource": {
-                "type": "loki",
-                "uid": "roadtrip-loki"
-              },
-              "direction": "backward",
-              "editorMode": "code",
-              "expr": "{container=~\"roadtrip-backend.*\"} | json level=\"level\", loggerName=\"loggerName\", message=\"message\", context=\"mdc\" | __error__=\"\" | label_format logger=`{{ regexReplaceAll \"([a-zA-Z])[a-zA-Z0-9_]*\\\\.\" .loggerName \"${1}.\" }}` |~ \"$log_filter\"",
-              "queryType": "range",
-              "refId": "A"
-            }
-          ],
-          "title": "Backend logs (filter with $log_filter — e.g. a run id)",
-          "transformations": [
-            {
-              "id": "extractFields",
-              "options": {
-                "source": "labels"
-              }
-            },
-            {
-              "id": "filterFieldsByName",
-              "options": {
-                "include": {
-                  "pattern": "^(Time|level|logger|loggerName|message|context)$"
-                }
-              }
-            },
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {},
-                "includeByName": {},
-                "indexByName": {
-                  "Time": 0,
-                  "context": 4,
-                  "level": 1,
-                  "logger": 2,
-                  "loggerName": 5,
-                  "message": 3
-                },
-                "renameByName": {
-                  "Time": "Date",
-                  "context": "Context",
-                  "level": "Level",
-                  "logger": "Logger",
-                  "message": "Message"
-                }
-              }
-            }
-          ],
-          "type": "table"
-        }
-      ],
-      "title": "⑥ Logs — drill in",
-      "type": "row"
     }
   ],
-  "preload": false,
-  "refresh": "30s",
-  "schemaVersion": 42,
+  "refresh": false,
+  "schemaVersion": 41,
   "tags": [
     "roadtrip",
-    "status",
-    "overview"
+    "ops",
+    "availability"
   ],
   "templating": {
-    "list": [
-      {
-        "current": {
-          "text": "",
-          "value": ""
-        },
-        "hide": 0,
-        "label": "Log filter (LogQL)",
-        "name": "log_filter",
-        "query": "",
-        "skipUrlSync": false,
-        "type": "textbox"
-      }
-    ]
+    "list": []
   },
   "time": {
-    "from": "now-24h",
+    "from": "now-30d",
     "to": "now"
   },
   "timepicker": {
+    "hidden": false,
     "refresh_intervals": [
-      "5s",
-      "10s",
       "30s",
       "1m",
       "5m",
       "15m",
-      "30m",
       "1h",
-      "2h",
       "1d"
     ]
   },
   "timezone": "browser",
-  "title": "🚦 Status Overview",
+  "title": "Roadtrip Status Overview",
   "uid": "status-overview",
   "version": 1
 }

@@ -2,13 +2,9 @@ package ca.floo.roadtrip.service.etl.vendors.reservecalifornia
 
 import ca.floo.roadtrip.models.domain.Poi
 import ca.floo.roadtrip.models.domain.ProviderRef
-import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.ReservableEtlOutput
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.pointGeoJson
@@ -77,58 +73,6 @@ class ReserveCaliforniaEtl(
                     extras = place.raw,
                 )
             }
-    }
-}
-
-class ReserveCaliforniaSitesEtl(
-    override val etlSlug: String = "california-state-park-sites",
-) : SourceEtl<ReserveCaliforniaCatalog, ReservableEtlOutput> {
-    override val multiPart: Boolean = true
-
-    override fun parse(inputs: InputBundle): ReserveCaliforniaCatalog = parseCatalog(inputs.soleEnvelopes(), etlSlug)
-
-    override fun validate(dto: ReserveCaliforniaCatalog): ValidationResult<ReserveCaliforniaCatalog> =
-        if (dto.grids.isEmpty()) {
-            ValidationResult.Bad(null, listOf("$etlSlug: no ReserveCalifornia grid payloads parsed"))
-        } else {
-            ValidationResult.Ok(dto)
-        }
-
-    override fun transform(
-        dto: ReserveCaliforniaCatalog,
-        ctx: TransformCtx,
-    ): ReservableEtlOutput {
-        val reservables = mutableListOf<ReservableRepo.Input>()
-        for (grid in dto.grids.values) {
-            val facility = dto.facilities[grid.facilityId]
-            if (facility != null && !facility.isStandardBookable) continue
-            val placeId = facility?.placeId ?: grid.placeId ?: continue
-            val facilityName = facility?.name ?: grid.facilityName
-            val siteType = dto.places[placeId]?.unitTypeByFacilityId?.get(grid.facilityId)
-            for (unit in grid.units) {
-                reservables +=
-                    ReservableRepo.Input(
-                        rid = ReservableId(ReservableType.SITE, VENDOR, unit.unitId.toString()),
-                        name = unit.name,
-                        loop = facilityName,
-                        siteType = siteType,
-                        raw =
-                            withSynthetic(
-                                unit.raw,
-                                mapOf(
-                                    "_parent_place_id" to placeId.toString(),
-                                    "_parent_facility_id" to grid.facilityId.toString(),
-                                    "_parent_facility_name" to facilityName.orEmpty(),
-                                ),
-                            ),
-                    )
-            }
-        }
-        return ReservableEtlOutput(reservables = reservables)
-    }
-
-    private companion object {
-        const val VENDOR = "reservecalifornia"
     }
 }
 

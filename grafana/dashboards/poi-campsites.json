@@ -1,0 +1,451 @@
+{
+  "annotations": {
+    "list": []
+  },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "links": [
+    {
+      "asDropdown": true,
+      "icon": "dashboard",
+      "includeVars": false,
+      "keepTime": false,
+      "tags": [
+        "roadtrip"
+      ],
+      "targetBlank": false,
+      "title": "All dashboards",
+      "tooltip": "",
+      "type": "dashboards"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {},
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH canonical_pois AS (\n  SELECT\n    p.id AS poi_id,\n    p.poi_type,\n    COALESCE(cg.name, ts.common_site_name, pf.name) AS name,\n    COALESCE(cg.location->>'region', ts.region, pf.region) AS region,\n    COALESCE(cg.location->>'country', ts.country::text, pf.country::text) AS country,\n    ST_X(ST_Centroid(p.geom)) AS lng,\n    ST_Y(ST_Centroid(p.geom)) AS lat,\n    pc.campground_id,\n    pts.tesla_supercharger_id,\n    ppf.planet_fitness_location_id,\n    cg.status AS campground_status,\n    ts.site_status AS tesla_site_status,\n    ts.stall_count,\n    ts.max_power_kw,\n    count(DISTINCT cs.id) AS campsite_count,\n    max(a.last_observed_at) AS latest_availability_observed_at\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\n  LEFT JOIN availability a ON a.campsite_id = cs.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  WHERE p.deleted_at IS NULL\n  GROUP BY p.id, p.poi_type, cg.id, ts.id, pf.id, pc.campground_id, pts.tesla_supercharger_id, ppf.planet_fitness_location_id\n)\nSELECT *\nFROM canonical_pois\nWHERE (${poi_name:sqlstring} = '' OR name ILIKE '%' || ${poi_name:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id:sqlstring} = '' THEN true\n    WHEN ${poi_id:sqlstring} ~ '^[0-9]+$' THEN poi_id::text = ${poi_id:sqlstring}\n    ELSE false\n  END\n  AND (${poi_type:sqlstring} IN ('', '__all') OR poi_type IN (${poi_type:sqlstring}))\nORDER BY name ASC NULLS LAST, poi_id ASC\nLIMIT 1000;",
+          "refId": "A"
+        }
+      ],
+      "title": "POIs With Campsites Map",
+      "type": "geomap"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 10
+      },
+      "id": 2,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH canonical_pois AS (\n  SELECT\n    p.id AS poi_id,\n    p.poi_type,\n    COALESCE(cg.name, ts.common_site_name, pf.name) AS name,\n    COALESCE(cg.location->>'region', ts.region, pf.region) AS region,\n    COALESCE(cg.location->>'country', ts.country::text, pf.country::text) AS country,\n    ST_X(ST_Centroid(p.geom)) AS lng,\n    ST_Y(ST_Centroid(p.geom)) AS lat,\n    pc.campground_id,\n    pts.tesla_supercharger_id,\n    ppf.planet_fitness_location_id,\n    cg.status AS campground_status,\n    ts.site_status AS tesla_site_status,\n    ts.stall_count,\n    ts.max_power_kw,\n    count(DISTINCT cs.id) AS campsite_count,\n    max(a.last_observed_at) AS latest_availability_observed_at\n  FROM pois p\n  LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id\n  LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL\n  LEFT JOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\n  LEFT JOIN availability a ON a.campsite_id = cs.id\n  LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id\n  LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL\n  LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id\n  LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL\n  WHERE p.deleted_at IS NULL\n  GROUP BY p.id, p.poi_type, cg.id, ts.id, pf.id, pc.campground_id, pts.tesla_supercharger_id, ppf.planet_fitness_location_id\n)\nSELECT *\nFROM canonical_pois\nWHERE (${poi_name:sqlstring} = '' OR name ILIKE '%' || ${poi_name:sqlstring} || '%')\n  AND CASE\n    WHEN ${poi_id:sqlstring} = '' THEN true\n    WHEN ${poi_id:sqlstring} ~ '^[0-9]+$' THEN poi_id::text = ${poi_id:sqlstring}\n    ELSE false\n  END\n  AND (${poi_type:sqlstring} IN ('', '__all') OR poi_type IN (${poi_type:sqlstring}))\nORDER BY name ASC NULLS LAST, poi_id ASC\nLIMIT 1000;",
+          "refId": "A"
+        }
+      ],
+      "title": "POI data",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 3,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  cs.id AS campsite_id,\n  cs.campground_id,\n  cg.name AS campground_name,\n  cs.loop_name,\n  cs.name,\n  cs.kind,\n  cs.kind_listed,\n  cs.max_people,\n  cs.max_rv_length,\n  cs.max_trailer_length,\n  vr.vendor,\n  vr.external_id AS vendor_ref_id,\n  max(a.last_observed_at) AS latest_availability_observed_at,\n  bool_or(a.status = 'available') FILTER (WHERE a.last_observed_at >= now() - interval '7 days') AS any_available_last_7d\nFROM poi_campgrounds pc\nJOIN campgrounds cg ON cg.id = pc.campground_id\nJOIN campsites cs ON cs.campground_id = cg.id AND cs.deleted_at IS NULL\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nLEFT JOIN availability a ON a.campsite_id = cs.id\nWHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n  AND pc.poi_id::text = ${poi_id:sqlstring}\nGROUP BY cs.id, cg.id, vr.id\nORDER BY cs.loop_name NULLS LAST, cs.name NULLS LAST, cs.id ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Selected POI Campsite Summary",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "available"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#2CA02C"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "reserved"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#D62728"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "closed"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "mode": "fixed",
+                  "fixedColor": "#7F7F7F"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 30
+      },
+      "id": 10,
+      "options": {},
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH target AS (\n  SELECT NULLIF(${target_date:sqlstring}, '')::date AS target_date\n), observations AS (\n  SELECT\n    s.last_observed_at,\n    s.status::text AS status,\n    lag(s.last_observed_at) OVER (ORDER BY s.last_observed_at, s.id) AS observed_from\n  FROM availability s\n  JOIN target ON target.target_date = s.target_date\n  WHERE ${campsite_id:sqlstring} ~ '^[0-9]+$'\n    AND s.campsite_id::text = ${campsite_id:sqlstring}\n), bounds AS (\n  SELECT\n    min(last_observed_at) AS first_observed_at,\n    least((target.target_date + interval '1 day')::timestamptz, now()) AS last_axis_at\n  FROM observations\n  CROSS JOIN target\n  GROUP BY target.target_date\n)\nSELECT\n  o.last_observed_at AS time,\n  o.status AS metric,\n  CASE o.status\n    WHEN 'available' THEN 4\n    WHEN 'first_come' THEN 3\n    WHEN 'reserved' THEN 2\n    WHEN 'booked' THEN 1\n    WHEN 'closed' THEN 0\n    ELSE -1\n  END::double precision AS value,\n  b.first_observed_at,\n  b.last_axis_at\nFROM observations o\nCROSS JOIN bounds b\nORDER BY o.last_observed_at ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Availability history for target date",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "roadtrip-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "available": {
+                  "text": "A"
+                },
+                "first_come": {
+                  "text": "FC"
+                },
+                "reserved": {
+                  "text": "R"
+                },
+                "booked": {
+                  "text": "B"
+                },
+                "closed": {
+                  "text": "C"
+                },
+                "unknown": {
+                  "text": "?"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "site / day"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Open Campsite / Detail",
+                    "url": "/d/campsite-detail/campsite-detail?var-campsite_id=${__data.fields.campsite_id}"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "^\\d{4}-\\d{2}-\\d{2}$"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Show history for this date",
+                    "url": "/d/poi-campsites/poi-campsites?var-poi_name=${poi_name}&var-poi_id=${poi_id}&var-target_date=${__field.name}&var-poi_type=${poi_type}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 12,
+        "w": 24,
+        "x": 0,
+        "y": 18
+      },
+      "id": 9,
+      "options": {
+        "showHeader": true
+      },
+      "pluginVersion": "13.1.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "roadtrip-postgres"
+          },
+          "editorMode": "code",
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH selected_campsites AS (\n  SELECT cs.id AS campsite_id, cs.loop_name, cs.name\n  FROM poi_campgrounds pc\n  JOIN campsites cs ON cs.campground_id = pc.campground_id AND cs.deleted_at IS NULL\n  WHERE ${poi_id:sqlstring} ~ '^[0-9]+$'\n    AND pc.poi_id::text = ${poi_id:sqlstring}\n), target_dates AS (\n  SELECT generate_series(current_date, current_date + interval '29 days', interval '1 day')::date AS target_date\n), latest AS (\n  SELECT DISTINCT ON (s.campsite_id, s.target_date)\n    s.campsite_id,\n    s.target_date,\n    s.status::text AS status\n  FROM availability s\n  JOIN selected_campsites sc ON sc.campsite_id = s.campsite_id\n  ORDER BY s.campsite_id, s.target_date, s.last_observed_at DESC, s.id DESC\n)\nSELECT\n  sc.campsite_id,\n  coalesce(sc.loop_name || ' / ', '') || sc.name AS \"site / day\",\n  to_char(d.target_date, 'YYYY-MM-DD') AS target_date,\n  coalesce(l.status, 'unknown') AS status_key\nFROM selected_campsites sc\nCROSS JOIN target_dates d\nLEFT JOIN latest l ON l.campsite_id = sc.campsite_id AND l.target_date = d.target_date\nWHERE (${loop_name:sqlstring} = '' OR sc.loop_name = ${loop_name:sqlstring})\nORDER BY sc.loop_name NULLS LAST, sc.name NULLS LAST, d.target_date ASC;",
+          "refId": "A"
+        }
+      ],
+      "title": "Availability grid (next 30 days)",
+      "type": "table",
+      "description": "Status key: A = available, FC = first come, R = reserved, B = booked, C = closed, ? = unknown",
+      "transformations": [
+        {
+          "id": "extractFields",
+          "options": {
+            "format": "regexp",
+            "source": "status_key",
+            "regexp": "(?<status>.*)"
+          }
+        }
+      ]
+    }
+  ],
+  "refresh": false,
+  "schemaVersion": 41,
+  "tags": [
+    "roadtrip",
+    "availability",
+    "catalog"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "POI name",
+        "name": "poi_name",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox",
+        "allowCustomValue": true
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "POI id",
+        "name": "poi_id",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox",
+        "allowCustomValue": true
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Campsite id",
+        "name": "campsite_id",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox",
+        "allowCustomValue": true
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Target date",
+        "name": "target_date",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox",
+        "allowCustomValue": true
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "hide": 0,
+        "label": "Loop",
+        "name": "loop_name",
+        "options": [],
+        "query": "",
+        "skipUrlSync": false,
+        "type": "textbox",
+        "allowCustomValue": true
+      },
+      {
+        "allowCustomValue": true,
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "datasource": {
+          "type": "postgres",
+          "uid": "roadtrip-postgres"
+        },
+        "definition": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
+        "hide": 0,
+        "includeAll": true,
+        "label": "POI type",
+        "multi": false,
+        "name": "poi_type",
+        "options": [],
+        "query": {
+          "query": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
+          "rawQuery": true,
+          "rawSql": "SELECT DISTINCT poi_type AS __text, poi_type AS __value FROM pois WHERE deleted_at IS NULL ORDER BY poi_type",
+          "refId": "SQLVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "regexApplyTo": "value",
+        "skipUrlSync": false,
+        "sort": 0,
+        "type": "query",
+        "allValue": "'__all'"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-30d",
+    "to": "now"
+  },
+  "timepicker": {
+    "hidden": false,
+    "refresh_intervals": [
+      "30s",
+      "1m",
+      "5m",
+      "15m",
+      "1h",
+      "1d"
+    ]
+  },
+  "timezone": "browser",
+  "title": "POI with Campsites / Details",
+  "uid": "poi-campsites",
+  "version": 1
+}

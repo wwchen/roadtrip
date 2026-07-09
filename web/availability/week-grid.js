@@ -18,7 +18,7 @@ const WEEK_DAYS = 7;
  * Render the 7-cell grid as a string.
  *
  * @param {object} args
- * @param {Array}  args.days           Per-day classifications fused from /api/poi/{id}/reservables/availability.
+ * @param {Array}  args.days           Per-day classifications from the retired drawer availability module.
  * @param {string} args.todayIso       Today as local YYYY-MM-DD.
  * @param {string|null} args.selectedDate
  * @param {Set<string>} args.watchedDates  Dates the user has watches on.

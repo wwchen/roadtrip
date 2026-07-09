@@ -98,41 +98,35 @@ internal class PoiServingRepo(
         val r =
             ctx.fetchOne(
                 """
-                SELECT p.id, p.source, p.source_id, p.category, p.subcategory, p.agency, p.name,
-                       p.region, p.country,
+                SELECT p.id,
+                       p.poi_type AS source,
+                       COALESCE(gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
+                       p.poi_type AS category,
+                       cg.kind AS subcategory,
+                       cg.management->>'agency' AS agency,
+                       COALESCE(cg.name, ts.common_site_name, pf.name) AS name,
+                       COALESCE(cg.location->>'region', ts.region, pf.region) AS region,
+                       COALESCE(cg.location->>'country', ts.country, pf.country) AS country,
                        ST_X(ST_PointOnSurface(p.geom)) AS lng,
                        ST_Y(ST_PointOnSurface(p.geom)) AS lat,
-                       p.unit_name, p.reserve_url, p.phone, p.info_url,
-                       p.address::text AS address_text,
-                       p.provider_ref::text AS provider_ref_text,
-                       COALESCE(
-                           NULLIF(p.properties->'upstream'->'booking_cta_provider_ref', 'null'::jsonb),
-                           cta.provider_ref
-                       )::text AS cta_provider_ref_text,
+                       NULL::text AS unit_name,
+                       cg.reservation_url AS reserve_url,
+                       COALESCE(cg.contact->>'phone', pf.phone) AS phone,
+                       COALESCE(ts.info_url, pf.info_url) AS info_url,
+                       COALESCE(cg.location, ts.address, pf.address, '{}'::jsonb)::text AS address_text,
+                       gvr.payload::text AS provider_ref_text,
+                       NULL::text AS cta_provider_ref_text,
                        ST_AsGeoJSON(p.geom) AS geom_json,
-                       p.properties::text AS properties_text
+                       COALESCE(to_jsonb(cg), to_jsonb(ts), to_jsonb(pf), '{}'::jsonb)::text AS properties_text
                 FROM pois p
-                LEFT JOIN LATERAL (
-                    SELECT jsonb_build_object(
-                        'transactionLocationId', p.provider_ref->'transactionLocationId',
-                        'mapId', child.map_id,
-                        'resourceLocationId', COALESCE(child.resource_location_id, p.provider_ref->'resourceLocationId')
-                    ) AS provider_ref
-                    FROM (
-                        SELECT r.provider_ref->'mapId' AS map_id,
-                               r.provider_ref->'resourceLocationId' AS resource_location_id,
-                               (r.provider_ref->>'mapId')::bigint AS sort_map_id
-                        FROM reservable_pois rp
-                        JOIN reservables r ON r.id = rp.reservable_id
-                        WHERE rp.poi_id = p.id
-                          AND r.type = 'site'
-                          AND r.vendor LIKE 'aspira\_%' ESCAPE '\'
-                          AND r.provider_ref->>'mapId' IS NOT NULL
-                        ORDER BY sort_map_id ASC, r.name ASC
-                        LIMIT 1
-                    ) child
-                    WHERE jsonb_exists(p.provider_ref, 'transactionLocationId')
-                ) cta ON NULLIF(p.properties->'upstream'->'booking_cta_provider_ref', 'null'::jsonb) IS NULL
+                LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+                LEFT JOIN campgrounds cg ON cg.id = pc.campground_id
+                LEFT JOIN campground_vendor_refs cgvr ON cgvr.campground_id = cg.id AND cgvr.is_primary
+                LEFT JOIN vendor_refs gvr ON gvr.id = cgvr.vendor_ref_id AND gvr.deleted_at IS NULL
+                LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
+                LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
+                LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
+                LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id
                 WHERE p.id = ?
                   AND p.deleted_at IS NULL
                 """.trimIndent(),
@@ -192,9 +186,22 @@ internal class PoiServingRepo(
                 """
                 SELECT id, name, category, region,
                        ST_X(geom) AS lng, ST_Y(geom) AS lat
-                FROM pois
-                WHERE deleted_at IS NULL
-                  AND $termPredicate
+                FROM (
+                    SELECT p.id,
+                           p.geom,
+                           p.poi_type AS category,
+                           COALESCE(cg.name, ts.common_site_name, pf.name) AS name,
+                           COALESCE(cg.location->>'region', ts.region, pf.region) AS region
+                    FROM pois p
+                    LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+                    LEFT JOIN campgrounds cg ON cg.id = pc.campground_id
+                    LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
+                    LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id
+                    LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
+                    LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id
+                    WHERE p.deleted_at IS NULL
+                ) catalog
+                WHERE $termPredicate
                   $categoryPredicate
                 ORDER BY (name ILIKE ? ESCAPE '\') DESC, length(name) ASC, name ASC
                 LIMIT ?
@@ -220,12 +227,12 @@ internal class PoiServingRepo(
         val placeholders = cats.joinToString(",") { "?" }
         val sql =
             """
-            SELECT category, COUNT(*) AS n
+            SELECT poi_type AS category, COUNT(*) AS n
             FROM pois
             WHERE deleted_at IS NULL
-              AND category IN ($placeholders)
+              AND poi_type IN ($placeholders)
               AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
-            GROUP BY category
+            GROUP BY poi_type
             """.trimIndent()
         val args = mutableListOf<Any>()
         args.addAll(cats)
@@ -280,19 +287,24 @@ internal class PoiServingRepo(
                     append("(SELECT id, category, subcategory, agency, lng, lat FROM (")
                     append(
                         """
-                        SELECT id, category, subcategory, agency,
-                               ST_X(ST_Centroid(geom)) AS lng,
-                               ST_Y(ST_Centroid(geom)) AS lat,
+                        SELECT p.id,
+                               p.poi_type AS category,
+                               cg.kind AS subcategory,
+                               cg.management->>'agency' AS agency,
+                               ST_X(ST_Centroid(p.geom)) AS lng,
+                               ST_Y(ST_Centroid(p.geom)) AS lat,
                                row_number() OVER (
                                  PARTITION BY
-                                   floor((ST_X(ST_Centroid(geom)) - ?) / ?)::int,
-                                   floor((ST_Y(ST_Centroid(geom)) - ?) / ?)::int
-                                 ORDER BY id
+                                   floor((ST_X(ST_Centroid(p.geom)) - ?) / ?)::int,
+                                   floor((ST_Y(ST_Centroid(p.geom)) - ?) / ?)::int
+                                 ORDER BY p.id
                                ) AS rn
-                        FROM pois
-                        WHERE deleted_at IS NULL
-                          AND category = ?
-                          AND geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
+                        FROM pois p
+                        LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+                        LEFT JOIN campgrounds cg ON cg.id = pc.campground_id
+                        WHERE p.deleted_at IS NULL
+                          AND p.poi_type = ?
+                          AND p.geom && ST_MakeEnvelope(?, ?, ?, ?, 4326)
                         """.trimIndent(),
                     )
                     append("\n) sub ORDER BY rn ASC, id ASC LIMIT ?)")

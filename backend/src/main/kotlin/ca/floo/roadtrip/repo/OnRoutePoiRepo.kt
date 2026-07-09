@@ -53,8 +53,28 @@ internal class OnRoutePoiRepo(
                             THEN 'reserveamerica:' || source || ':' || (provider_ref ->> 'facility_id')
                           ELSE source || ':' || source_id
                         END AS poi_key
-                      FROM pois, corridor
-                      WHERE deleted_at IS NULL
+                      FROM (
+                        SELECT
+                          p.id,
+                          p.geom,
+                          p.poi_type AS category,
+                          cg.kind AS subcategory,
+                          cg.management->>'agency' AS agency,
+                          COALESCE(gvr.vendor, p.poi_type) AS source,
+                          COALESCE(gvr.external_id, ts.location_slug, pf.location_id, p.id::text) AS source_id,
+                          COALESCE(gvr.payload, '{}'::jsonb) AS provider_ref
+                        FROM pois p
+                        LEFT JOIN poi_campgrounds pc ON pc.poi_id = p.id
+                        LEFT JOIN campgrounds cg ON cg.id = pc.campground_id AND cg.deleted_at IS NULL
+                        LEFT JOIN campground_vendor_refs cgvr ON cgvr.campground_id = cg.id AND cgvr.is_primary
+                        LEFT JOIN vendor_refs gvr ON gvr.id = cgvr.vendor_ref_id AND gvr.deleted_at IS NULL
+                        LEFT JOIN poi_tesla_superchargers pts ON pts.poi_id = p.id
+                        LEFT JOIN tesla_superchargers ts ON ts.id = pts.tesla_supercharger_id AND ts.deleted_at IS NULL
+                        LEFT JOIN poi_planet_fitness_locations ppf ON ppf.poi_id = p.id
+                        LEFT JOIN planet_fitness_locations pf ON pf.id = ppf.planet_fitness_location_id AND pf.deleted_at IS NULL
+                        WHERE p.deleted_at IS NULL
+                      ) catalog, corridor
+                      WHERE TRUE
                         AND category IN ($placeholders)
                         AND ST_Within(ST_Centroid(geom), corridor.poly)
                     ),

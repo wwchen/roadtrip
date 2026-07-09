@@ -51,11 +51,11 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT *\nFROM (\n  VALUES\n    ('pois',                         (SELECT count(*)::bigint FROM pois)),\n    ('active_pois',                  (SELECT count(*)::bigint FROM pois WHERE deleted_at IS NULL)),\n    ('campgrounds',                  (SELECT count(*)::bigint FROM campgrounds)),\n    ('active_campgrounds',           (SELECT count(*)::bigint FROM campgrounds WHERE deleted_at IS NULL)),\n    ('campsites',                    (SELECT count(*)::bigint FROM campsites)),\n    ('active_campsites',             (SELECT count(*)::bigint FROM campsites WHERE deleted_at IS NULL)),\n    ('vendor_refs',                  (SELECT count(*)::bigint FROM vendor_refs)),\n    ('campground_vendor_refs',       (SELECT count(*)::bigint FROM campground_vendor_refs)),\n    ('campsite_vendor_refs',         (SELECT count(*)::bigint FROM campsite_vendor_refs)),\n    ('tesla_superchargers',          (SELECT count(*)::bigint FROM tesla_superchargers)),\n    ('planet_fitness_locations',     (SELECT count(*)::bigint FROM planet_fitness_locations)),\n    ('availability',                 (SELECT count(*)::bigint FROM availability)),\n    ('availability_watch',           (SELECT count(*)::bigint FROM availability_watch)),\n    ('availability_poller',          (SELECT count(*)::bigint FROM availability_poller)),\n    ('availability_run',             (SELECT count(*)::bigint FROM availability_run)),\n    ('ingest_runs',                  (SELECT count(*)::bigint FROM ingest_runs)),\n    ('import_runs',                  (SELECT count(*)::bigint FROM import_runs)),\n    ('api_cache_metadata',           (SELECT count(*)::bigint FROM grafana_api_cache_metadata))\n) AS counts(table_name, exact_rows)\nORDER BY exact_rows DESC;",
+          "rawSql": "SELECT\n  coalesce(vr.vendor, '(missing primary ref)') AS vendor,\n  count(*) AS campsites,\n  count(*) FILTER (WHERE cs.deleted_at IS NULL) AS active_campsites,\n  count(*) FILTER (WHERE cs.latitude IS NOT NULL AND cs.longitude IS NOT NULL) AS with_coordinates,\n  count(*) FILTER (WHERE cs.max_people IS NOT NULL) AS with_capacity,\n  count(*) FILTER (WHERE cs.equipment <> '[]'::jsonb) AS with_equipment,\n  count(*) FILTER (WHERE cs.price <> '{}'::jsonb) AS with_price,\n  max(cs.updated_at) AS latest_catalog_update\nFROM campsites cs\nLEFT JOIN campsite_vendor_refs cvr ON cvr.campsite_id = cs.id AND cvr.is_primary\nLEFT JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id\nGROUP BY 1\nORDER BY campsites DESC;",
           "refId": "A"
         }
       ],
-      "title": "Table row counts",
+      "title": "Campsite catalog completeness by vendor",
       "type": "table"
     },
     {
@@ -87,11 +87,11 @@
           "editorMode": "code",
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT namespace, status, count(*) AS entries, max(fetched_at) AS latest_fetch, max(expires_at) AS latest_expiry\nFROM grafana_api_cache_metadata\nGROUP BY namespace, status\nORDER BY entries DESC;",
+          "rawSql": "SELECT kind, count(*) AS campsites, count(*) FILTER (WHERE deleted_at IS NULL) AS active_campsites\nFROM campsites\nGROUP BY kind\nORDER BY campsites DESC;",
           "refId": "A"
         }
       ],
-      "title": "API cache by namespace",
+      "title": "Campsite counts by kind",
       "type": "table"
     }
   ],
@@ -99,7 +99,7 @@
   "schemaVersion": 41,
   "tags": [
     "roadtrip",
-    "ops"
+    "catalog"
   ],
   "templating": {
     "list": []
@@ -120,7 +120,7 @@
     ]
   },
   "timezone": "browser",
-  "title": "DB Stats",
-  "uid": "db-stats",
+  "title": "Campsite / Stats",
+  "uid": "campsite-stats",
   "version": 1
 }

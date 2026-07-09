@@ -5,6 +5,10 @@ import ca.floo.roadtrip.repo.AvailabilityPollerRepo
 import ca.floo.roadtrip.repo.AvailabilityRepo
 import ca.floo.roadtrip.repo.AvailabilityRunRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampground
+import ca.floo.roadtrip.repo.seedCampsite
+import ca.floo.roadtrip.repo.seedCatalogPoi
 import io.ktor.client.request.get
 import io.ktor.client.request.post
 import io.ktor.client.statement.bodyAsText
@@ -28,33 +32,18 @@ import kotlin.test.assertEquals
 class AvailabilityDashboardRoutesTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM availability")
-        ctx.execute("DELETE FROM availability_run")
-        ctx.execute("DELETE FROM availability_watch_target")
-        ctx.execute("DELETE FROM availability_watch_poller")
-        ctx.execute("DELETE FROM availability_poller")
-        ctx.execute("DELETE FROM availability_watch")
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     private fun seedPoi(sourceId: String = "p1"): Long =
         ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
-                ) VALUES (
-                    'test', ?, 'campground', 'Upper Pines',
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, NULL, '2026-06-01 00:00:00+00'::timestamptz
-                ) RETURNING id
-                """.trimIndent(),
-                sourceId,
-            )!!
-            .get("id", Long::class.java)
+            .seedCatalogPoi(
+                sourceId = sourceId,
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "test",
+            ).poiId
 
     /** Seeds an active poller for (recgov, [parentRef]) with one attached watch. */
     private fun seedPoller(parentRef: String = "232447"): Long {
@@ -80,17 +69,12 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
     }
 
     private fun seedReservable(): Long =
-        ctx
-            .fetchOne(
-                """
-                INSERT INTO reservables (
-                    type, vendor, vendor_id, source, name
-                ) VALUES (
-                    'site', 'recgov', '330257', 'federal-campsites', 'A12'
-                ) RETURNING id
-                """.trimIndent(),
-            )!!
-            .get("id", Long::class.java)
+        ctx.seedCampsite(
+            campgroundId = ctx.seedCampground(name = "Dashboard Campground", source = "test", sourceId = "dashboard-cg"),
+            vendor = "recgov",
+            vendorId = "330257",
+            name = "A12",
+        )
 
     /** Records one observation into the interval table (bump-or-insert), so the
      *  summary is derived from real status-runs. */
@@ -250,10 +234,10 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
             recordObservation(reservableId, "2026-07-04", now.minusMinutes(3), available = false)
             recordObservation(reservableId, "2026-07-04", now.minusMinutes(2), available = true)
             recordObservation(reservableId, "2026-07-04", now.minusMinutes(1), available = true)
-            val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:330257")
+            val resp = client.get("/api/availability/snapshots/summary?campsite_id=$reservableId")
             assertEquals(HttpStatusCode.OK, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("site:recgov:330257", body["reservable_rid"]!!.jsonPrimitive.content)
+            assertEquals(reservableId, body["campsite_id"]!!.jsonPrimitive.long)
             val stats = body["stats"]!!.jsonArray
             assertEquals(1, stats.size)
             val row = stats[0].jsonObject
@@ -264,20 +248,20 @@ class AvailabilityDashboardRoutesTest : SharedDbTest() {
         }
 
     @Test
-    fun `GET snapshots summary requires rid`() =
+    fun `GET snapshots summary requires campsite id`() =
         testApplication {
             application { routing { availabilityDashboardRoutes(ctx) } }
             val resp = client.get("/api/availability/snapshots/summary")
             assertEquals(HttpStatusCode.BadRequest, resp.status)
             val body = Json.parseToJsonElement(resp.bodyAsText()).jsonObject
-            assertEquals("missing_reservable_rid", body["error"]!!.jsonPrimitive.content)
+            assertEquals("missing_campsite_id", body["error"]!!.jsonPrimitive.content)
         }
 
     @Test
-    fun `GET snapshots summary returns 404 on unknown rid`() =
+    fun `GET snapshots summary returns 404 on unknown campsite id`() =
         testApplication {
             application { routing { availabilityDashboardRoutes(ctx) } }
-            val resp = client.get("/api/availability/snapshots/summary?reservable_rid=site:recgov:999999")
+            val resp = client.get("/api/availability/snapshots/summary?campsite_id=999999")
             assertEquals(HttpStatusCode.NotFound, resp.status)
         }
 }

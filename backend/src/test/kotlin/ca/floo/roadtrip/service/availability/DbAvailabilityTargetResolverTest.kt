@@ -5,6 +5,9 @@ import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRepo
 import ca.floo.roadtrip.repo.ReservableRepo
 import ca.floo.roadtrip.repo.SharedDbTest
+import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampsite
+import ca.floo.roadtrip.repo.seedCatalogPoi
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
@@ -23,57 +26,38 @@ import kotlin.test.assertEquals
 class DbAvailabilityTargetResolverTest : SharedDbTest() {
     @BeforeEach
     fun cleanup() {
-        ctx.execute("DELETE FROM reservable_pois")
-        ctx.execute("DELETE FROM reservables")
-        ctx.execute("DELETE FROM pois")
+        ctx.cleanCanonicalCatalogFixtures()
     }
 
     /** Seeds a POI. When [campgroundId] is null, provider_ref is left NULL (no
      *  resolvable provider) — otherwise it resolves to ProviderRef.RecGov. */
     private fun seedPoi(campgroundId: String?): Long =
         ctx
-            .fetchOne(
-                """
-                INSERT INTO pois (
-                    source, source_id, category, name, geom, region,
-                    properties, provider_ref, fetched_at
-                ) VALUES (
-                    'test', ?, 'campground', 'Upper Pines',
-                    ST_SetSRID(ST_MakePoint(-119.56, 37.74), 4326),
-                    'CA', '{}'::jsonb, ?::jsonb, '2026-06-01 00:00:00+00'::timestamptz
-                ) RETURNING id
-                """.trimIndent(),
-                "poi-${campgroundId ?: "none"}-${System.nanoTime()}",
-                campgroundId?.let { """{"recgov_id": "$it"}""" },
-            )!!
-            .get("id", Long::class.java)
+            .seedCatalogPoi(
+                sourceId = "poi-${campgroundId ?: "none"}-${System.nanoTime()}",
+                name = "Upper Pines",
+                lon = -119.56,
+                lat = 37.74,
+                source = "test",
+                providerRefJson = campgroundId?.let { """{"recgov_id": "$it"}""" },
+            ).poiId
 
-    /** Seeds one reservable (site) and links it to every poi id given. */
+    /** Seeds one site under [poiId]'s campground. */
     private fun seedReservable(
         siteId: String,
-        poiIds: List<Long>,
-    ): Long {
-        val reservableId =
-            ctx
-                .fetchOne(
-                    """
-                    INSERT INTO reservables (type, vendor, vendor_id, name, source)
-                    VALUES ('site', 'recgov', ?, ?, 'test')
-                    RETURNING id
-                    """.trimIndent(),
-                    siteId,
-                    "Site $siteId",
-                )!!
-                .get("id", Long::class.java)
-        poiIds.forEach { poiId ->
-            ctx.execute(
-                "INSERT INTO reservable_pois (reservable_id, poi_id) VALUES (?, ?)",
-                reservableId,
-                poiId,
-            )
-        }
-        return reservableId
-    }
+        poiId: Long,
+    ): Long =
+        ctx.seedCampsite(
+            campgroundId = campgroundIdFor(poiId),
+            vendor = "recgov",
+            vendorId = siteId,
+            name = "Site $siteId",
+        )
+
+    private fun campgroundIdFor(poiId: Long): Long =
+        ctx
+            .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
+            .get("campground_id", Long::class.java)
 
     private class NoopRecgovProvider : ReservationProvider {
         override val id: ReservationProviderId = ReservationProviderId.RECGOV
@@ -106,7 +90,7 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             val poiA = seedPoi(campgroundId = null)
             val poiB = seedPoi(campgroundId = "232447")
             val reservablesRepo = ReservableRepo(ctx)
-            val reservableId = seedReservable("100", listOf(poiA, poiB))
+            val reservableId = seedReservable("100", poiB)
             val reservable = reservablesRepo.findById(reservableId)!!
 
             val resolver = resolverFor(reservablesRepo)

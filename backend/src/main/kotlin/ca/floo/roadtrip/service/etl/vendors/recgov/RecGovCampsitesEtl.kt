@@ -1,12 +1,10 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
-import ca.floo.roadtrip.models.domain.ReservableId
-import ca.floo.roadtrip.models.domain.ReservableType
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.ValidationResult
-import ca.floo.roadtrip.repo.ReservableRepo
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtlOutput
+import ca.floo.roadtrip.service.etl.framework.CampsiteEtlRecord
 import ca.floo.roadtrip.service.etl.framework.InputBundle
-import ca.floo.roadtrip.service.etl.framework.ReservableEtlOutput
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import ca.floo.roadtrip.service.etl.framework.reservableTagKey
@@ -41,7 +39,7 @@ import kotlinx.serialization.json.put
  */
 class RecGovCampsitesEtl(
     override val etlSlug: String,
-) : SourceEtl<List<Envelope>, ReservableEtlOutput> {
+) : SourceEtl<List<Envelope>, CampsiteEtlOutput> {
     override val multiPart: Boolean = true
 
     override fun parse(inputs: InputBundle): List<Envelope> {
@@ -58,8 +56,8 @@ class RecGovCampsitesEtl(
     override fun transform(
         dto: List<Envelope>,
         ctx: TransformCtx,
-    ): ReservableEtlOutput {
-        val reservables = mutableListOf<ReservableRepo.Input>()
+    ): CampsiteEtlOutput {
+        val campsites = mutableListOf<CampsiteEtlRecord>()
         for (envelope in dto) {
             // FacilityID lives in the captured request URL path. The
             // upstream campsite blob doesn't carry it; we need it for the
@@ -68,28 +66,39 @@ class RecGovCampsitesEtl(
             // a stable place to read it.
             val facilityId = parseFacilityIdFromUrl(envelope.request.url) ?: continue
             val payload = envelope.payload as? JsonObject ?: continue
-            val campsites = payload["campsites"] as? JsonObject ?: continue
-            for ((campsiteId, element) in campsites) {
+            val rawCampsites = payload["campsites"] as? JsonObject ?: continue
+            for ((campsiteId, element) in rawCampsites) {
                 val raw = element as? JsonObject ?: continue
-                val rid = ReservableId(ReservableType.SITE, "recgov", campsiteId)
-                reservables +=
-                    ReservableRepo.Input(
-                        rid = rid,
-                        name = (raw["site"] as? JsonPrimitive)?.contentOrNull,
-                        loop = (raw["loop"] as? JsonPrimitive)?.contentOrNull,
-                        siteType = (raw["campsite_type"] as? JsonPrimitive)?.contentOrNull,
-                        // Preserve the full upstream campsite blob — equipment
-                        // types, attributes, max_num_people, the lot — and
-                        // tack on a synthetic `_parent_facility_id` so the
-                        // joiner has a place to read it. Underscore prefix
-                        // signals "synthetic, not from upstream"; we don't
-                        // expect rec.gov to ever ship a field with that name.
-                        raw = withSynthetic(raw, "_parent_facility_id", facilityId),
-                        tags = buildCampsiteTags(raw),
+                val tags = buildCampsiteTags(raw)
+                campsites +=
+                    CampsiteEtlRecord(
+                        vendor = VENDOR,
+                        vendorRefId = campsiteId,
+                        parentVendor = PARENT_CAMPGROUND_VENDOR,
+                        parentVendorRefId = "$PARENT_CAMPGROUND_REF_PREFIX$facilityId",
+                        name = (raw["site"] as? JsonPrimitive)?.contentOrNull ?: campsiteId,
+                        loopName = (raw["loop"] as? JsonPrimitive)?.contentOrNull,
+                        kind = (raw["campsite_type"] as? JsonPrimitive)?.contentOrNull ?: "site",
+                        kindListed = (raw["campsite_type"] as? JsonPrimitive)?.contentOrNull,
+                        equipment = raw["equipment_types"] as? JsonArray,
+                        maxPeople = raw["max_num_people"]?.jsonPrimitive?.intOrNull,
+                        sourcePayload =
+                            withSynthetic(
+                                raw,
+                                mapOf(
+                                    "_parent_facility_id" to JsonPrimitive(facilityId),
+                                    "_roadtrip_tags" to tags,
+                                ),
+                            ),
+                        vendorRefPayload =
+                            buildJsonObject {
+                                put("recgov_id", campsiteId)
+                                put("_parent_facility_id", facilityId)
+                            },
                     )
             }
         }
-        return ReservableEtlOutput(reservables = reservables)
+        return CampsiteEtlOutput(campsites = campsites)
     }
 
     private fun buildCampsiteTags(raw: JsonObject): JsonObject =
@@ -147,14 +156,19 @@ class RecGovCampsitesEtl(
         return raw.takeIf { it.isNotEmpty() }
     }
 
-    /** Return a copy of [obj] with [key] set to [value]. */
+    /** Return a copy of [obj] with synthetic key/value pairs added. */
     private fun withSynthetic(
         obj: JsonObject,
-        key: String,
-        value: String,
+        values: Map<String, kotlinx.serialization.json.JsonElement>,
     ): JsonObject =
         buildJsonObject {
             for ((k, v) in obj) put(k, v)
-            put(key, value)
+            for ((k, v) in values) put(k, v)
         }
+
+    private companion object {
+        const val VENDOR = "recgov"
+        const val PARENT_CAMPGROUND_VENDOR = "federal-campgrounds"
+        const val PARENT_CAMPGROUND_REF_PREFIX = "recgov-"
+    }
 }
