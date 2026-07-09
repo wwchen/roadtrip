@@ -140,9 +140,9 @@ class CanonicalCatalogRepo(
                 updateCampground(campgroundId, record)
                 campgroundId
             }
-        linkCampgroundVendorRef(persistedCampgroundId, vendorRefId, primary = true)
+        linkCampgroundVendorRef(persistedCampgroundId, vendorRefId)
         for (secondaryVendorRefId in additionalVendorRefIds) {
-            linkCampgroundVendorRef(persistedCampgroundId, secondaryVendorRefId, primary = false)
+            linkCampgroundVendorRef(persistedCampgroundId, secondaryVendorRefId)
         }
         upsertCampgroundPoi(persistedCampgroundId, record.longitude, record.latitude)
         return true
@@ -182,9 +182,9 @@ class CanonicalCatalogRepo(
                 updateCampsite(campsiteId, campgroundId, record)
                 campsiteId
             }
-        linkCampsiteVendorRef(persistedCampsiteId, vendorRefId, primary = true)
+        linkCampsiteVendorRef(persistedCampsiteId, vendorRefId)
         for (secondaryVendorRefId in additionalVendorRefIds) {
-            linkCampsiteVendorRef(persistedCampsiteId, secondaryVendorRefId, primary = false)
+            linkCampsiteVendorRef(persistedCampsiteId, secondaryVendorRefId)
         }
         return true
     }
@@ -308,6 +308,7 @@ class CanonicalCatalogRepo(
             .fetchOne(
                 """
                 INSERT INTO campgrounds (
+                  etl_source,
                   name, status, status_description, kind,
                   short_description, medium_description, long_description,
                   location, default_campsite_schedule, amenities,
@@ -315,6 +316,7 @@ class CanonicalCatalogRepo(
                   reservation_url, links, photos, alerts, price, cell_service,
                   management, contact, connections, metadata, source_payload
                 ) VALUES (
+                  ?,
                   ?, ?, ?, ?,
                   ?, ?, ?,
                   ?::jsonb, ?::jsonb, ?::jsonb,
@@ -324,6 +326,7 @@ class CanonicalCatalogRepo(
                 )
                 RETURNING id
                 """.trimIndent(),
+                record.vendor,
                 record.name,
                 record.status,
                 record.statusDescription,
@@ -360,7 +363,8 @@ class CanonicalCatalogRepo(
             .execute(
                 """
                 UPDATE campgrounds
-                SET name = ?,
+                SET etl_source = ?,
+                    name = ?,
                     status = ?,
                     status_description = ?,
                     kind = ?,
@@ -389,6 +393,7 @@ class CanonicalCatalogRepo(
                     deleted_at = NULL
                 WHERE id = ?
                 """.trimIndent(),
+                record.vendor,
                 record.name,
                 record.status,
                 record.statusDescription,
@@ -421,28 +426,17 @@ class CanonicalCatalogRepo(
     private fun linkCampgroundVendorRef(
         campgroundId: Long,
         vendorRefId: Long,
-        primary: Boolean,
     ) {
-        if (primary) {
-            ctx.execute(
-                "UPDATE campground_vendor_refs SET is_primary = false, updated_at = now() WHERE campground_id = ? AND vendor_ref_id <> ?",
-                campgroundId,
-                vendorRefId,
-            )
-        }
         ctx.execute(
             """
-            INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, is_primary, updated_at)
-            VALUES (?, ?, ?, now())
+            INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, updated_at)
+            VALUES (?, ?, now())
             ON CONFLICT (campground_id, vendor_ref_id)
             DO UPDATE SET
-              is_primary = CASE WHEN ? THEN true ELSE campground_vendor_refs.is_primary END,
               updated_at = now()
             """.trimIndent(),
             campgroundId,
             vendorRefId,
-            primary,
-            primary,
         )
     }
 
@@ -726,6 +720,7 @@ class CanonicalCatalogRepo(
             .fetchOne(
                 """
                 INSERT INTO campsites (
+                  etl_source,
                   campground_id, name, kind, loop_name, latitude, longitude, reservation_url,
                   equipment, kind_listed, schedule, price,
                   firepit, picnic_table, ada_accessible,
@@ -733,6 +728,7 @@ class CanonicalCatalogRepo(
                   max_people, max_cars, pull_through, driveway_length,
                   max_rv_length, max_trailer_length, photos, source_payload
                 ) VALUES (
+                  ?,
                   ?, ?, ?, ?, ?, ?, ?,
                   ?::jsonb, ?, ?::jsonb, ?::jsonb,
                   ?, ?, ?,
@@ -742,6 +738,7 @@ class CanonicalCatalogRepo(
                 )
                 RETURNING id
                 """.trimIndent(),
+                record.vendor,
                 campgroundId,
                 record.name,
                 record.kind,
@@ -778,7 +775,8 @@ class CanonicalCatalogRepo(
         ctx.execute(
             """
             UPDATE campsites
-            SET campground_id = ?,
+            SET etl_source = ?,
+                campground_id = ?,
                 name = ?,
                 kind = ?,
                 loop_name = ?,
@@ -807,6 +805,7 @@ class CanonicalCatalogRepo(
                 deleted_at = NULL
             WHERE id = ?
             """.trimIndent(),
+            record.vendor,
             campgroundId,
             record.name,
             record.kind,
@@ -839,28 +838,17 @@ class CanonicalCatalogRepo(
     private fun linkCampsiteVendorRef(
         campsiteId: Long,
         vendorRefId: Long,
-        primary: Boolean,
     ) {
-        if (primary) {
-            ctx.execute(
-                "UPDATE campsite_vendor_refs SET is_primary = false, updated_at = now() WHERE campsite_id = ? AND vendor_ref_id <> ?",
-                campsiteId,
-                vendorRefId,
-            )
-        }
         ctx.execute(
             """
-            INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id, is_primary, updated_at)
-            VALUES (?, ?, ?, now())
+            INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id, updated_at)
+            VALUES (?, ?, now())
             ON CONFLICT (campsite_id, vendor_ref_id)
             DO UPDATE SET
-              is_primary = CASE WHEN ? THEN true ELSE campsite_vendor_refs.is_primary END,
               updated_at = now()
             """.trimIndent(),
             campsiteId,
             vendorRefId,
-            primary,
-            primary,
         )
     }
 
