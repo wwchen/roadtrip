@@ -105,6 +105,7 @@ internal fun Application.registerRoadtripRoutes(runtime: RoadtripRuntime) {
             registry = runtime.poiRegistry,
             dateResolver = runtime.availabilityDateResolver,
             availabilitySupport = poiAvailabilitySupport::supports,
+            availabilityProvider = { row -> poiAvailabilitySupport.preferredAvailabilityProvider(row.id) },
         )
         availabilityWatchRoutes(
             runtime.ctx,
