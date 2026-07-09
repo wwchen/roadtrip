@@ -61,9 +61,9 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "connections",
                 "contact",
                 "created_at",
+                "data_source",
                 "default_campsite_schedule",
                 "deleted_at",
-                "etl_source",
                 "has_pull_through_sites",
                 "id",
                 "kind",
@@ -100,11 +100,11 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                 "ada_accessible",
                 "campground_id",
                 "created_at",
+                "data_source",
                 "deleted_at",
                 "driveway_length",
                 "electric_hookups",
                 "equipment",
-                "etl_source",
                 "firepit",
                 "id",
                 "kind",
@@ -417,15 +417,15 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
     }
 
     @Test
-    fun `etl_source columns are non-null with non-blank check`() {
-        val etlSourceRows =
+    fun `data_source columns are non-null with non-blank check`() {
+        val dataSourceRows =
             ctx
                 .fetch(
                     """
                     SELECT table_name || ':' || is_nullable AS ref
                     FROM information_schema.columns
                     WHERE table_schema = 'public'
-                      AND column_name = 'etl_source'
+                      AND column_name = 'data_source'
                       AND table_name IN ('campgrounds', 'campsites')
                     ORDER BY table_name
                     """.trimIndent(),
@@ -433,10 +433,10 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
 
         assertEquals(
             listOf("campgrounds:NO", "campsites:NO"),
-            etlSourceRows,
+            dataSourceRows,
         )
 
-        val etlSourceChecks =
+        val dataSourceChecks =
             ctx
                 .fetch(
                     """
@@ -445,8 +445,8 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
                     WHERE table_schema = 'public'
                       AND constraint_type = 'CHECK'
                       AND constraint_name IN (
-                        'campgrounds_etl_source_check',
-                        'campsites_etl_source_check'
+                        'campgrounds_data_source_check',
+                        'campsites_data_source_check'
                       )
                     ORDER BY ref
                     """.trimIndent(),
@@ -454,10 +454,10 @@ class CanonicalCatalogSchemaTest : SharedDbTest() {
 
         assertEquals(
             listOf(
-                "campgrounds.campgrounds_etl_source_check",
-                "campsites.campsites_etl_source_check",
+                "campgrounds.campgrounds_data_source_check",
+                "campsites.campsites_data_source_check",
             ),
-            etlSourceChecks,
+            dataSourceChecks,
         )
     }
 

@@ -135,7 +135,7 @@ class PoiServingRepoTest : SharedDbTest() {
         val publicRef = Json.parseToJsonElement(row.providerRefJson!!).jsonObject
         assertEquals("232869", publicRef["recgov_id"]!!.jsonPrimitive.content)
         // Ungrouped seed row (match_group_id NULL) is its own group; canonical
-        // view returns a single-element member_sources equal to etl_source.
+        // view returns a single-element member_sources equal to data_source.
         assertEquals(listOf("federal-campgrounds"), row.memberSources)
     }
 

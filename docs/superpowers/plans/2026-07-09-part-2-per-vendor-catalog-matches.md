@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stop merging campgrounds/campsites across vendors at write time; give every ETL source its own rows (`etl_source`), record cross-vendor identity in `campground_matches`/`campsite_matches` with heuristic receipts, and serve the richest record per match group through materialized views refreshed as a terminal ETL stage.
+**Goal:** Stop merging campgrounds/campsites across vendors at write time; give every ETL source its own rows (`data_source`), record cross-vendor identity in `campground_matches`/`campsite_matches` with heuristic receipts, and serve the richest record per match group through materialized views refreshed as a terminal ETL stage.
 
 **Architecture:** Catalog tables become the raw per-vendor layer. A `CatalogMatcherService` (deterministic shared-vendor-ref pass, then geo+name heuristic pass) writes pairwise match rows. Materialized views `campground_canonical`/`campsite_canonical` pick a row-level winner per match group and expose sibling ids/sources. POIs, watches, and availability key on the representative (winning) row; a re-pointing step migrates them transactionally when the winner changes. Merge happens at `REFRESH ... CONCURRENTLY` time inside the ETL pipeline — serving queries are plain selects.
 
@@ -15,7 +15,7 @@
 - Graphite local-only: `gt track` / `gt restack` only, never `gt sync`.
 - Git commits: multiple `-m` flags for multiline, never heredocs.
 - No inline magic constants: matcher thresholds are named consts with env overrides.
-- Migration is **non-destructive**: backfill `etl_source` from each row's primary vendor ref before dropping `is_primary`.
+- Migration is **non-destructive**: backfill `data_source` from each row's primary vendor ref before dropping `is_primary`.
 - SQL lives in `repo/` classes only; matcher policy lives in `service/`; routes stay thin.
 - Grafana regression must pass: `python3 scripts/test_grafana_canonical_catalog_dashboards.py`. Grep `grafana/dashboards/` for `is_primary` before dropping it and update any dashboard SQL + regression expectations in the same task.
 
@@ -38,7 +38,7 @@
 - Create: `backend/src/main/kotlin/ca/floo/roadtrip/repo/CanonicalViewRepo.kt` (refresh + representative re-point queries)
 - Create: `backend/src/test/kotlin/ca/floo/roadtrip/repo/CatalogMatchRepoTest.kt`
 - Create: `backend/src/test/kotlin/ca/floo/roadtrip/service/catalog/CatalogMatcherServiceTest.kt`
-- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/repo/CanonicalCatalogRepo.kt` (write `etl_source`, stop writing `is_primary`)
+- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/repo/CanonicalCatalogRepo.kt` (write `data_source`, stop writing `is_primary`)
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/repo/CampsiteProviderRepo.kt` (interim ordering without `is_primary`)
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/repo/PoiServingRepo.kt`, `repo/OnRoutePoiRepo.kt` (read through views)
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/service/etl/framework/EtlOrchestrator.kt` + ingest/admin route (matcher + refresh stage)
@@ -49,14 +49,14 @@
 
 ---
 
-### Task 1: V39 migration — etl_source, matches, drop is_primary, views
+### Task 1: V39 migration — data_source, matches, drop is_primary, views
 
 **Files:**
 - Create: `backend/src/main/resources/db/migration/V39__per_vendor_catalog_matches.sql`
 - Modify: `backend/src/test/kotlin/ca/floo/roadtrip/repo/CanonicalCatalogSchemaTest.kt`
 
 **Interfaces:**
-- Produces: tables `campground_matches(campground_a_id, campground_b_id, heuristic, created_at, updated_at)`, `campsite_matches(campsite_a_id, campsite_b_id, heuristic, ...)`; columns `campgrounds.etl_source`, `campgrounds.match_group_id`, `campgrounds.preferred_availability_source`, `campsites.etl_source`, `campsites.match_group_id`; matviews `campground_canonical`, `campsite_canonical`; **removed**: `campground_vendor_refs.is_primary`, `campsite_vendor_refs.is_primary` and their partial unique indexes.
+- Produces: tables `campground_matches(campground_a_id, campground_b_id, heuristic, created_at, updated_at)`, `campsite_matches(campsite_a_id, campsite_b_id, heuristic, ...)`; columns `campgrounds.data_source`, `campgrounds.match_group_id`, `campgrounds.preferred_availability_source`, `campsites.data_source`, `campsites.match_group_id`; matviews `campground_canonical`, `campsite_canonical`; **removed**: `campground_vendor_refs.is_primary`, `campsite_vendor_refs.is_primary` and their partial unique indexes.
 
 - [ ] **Step 1: Extend `CanonicalCatalogSchemaTest` with failing assertions** — new tables/columns/views exist; `is_primary` columns do NOT exist. Follow the existing assertion helpers in that test (`assertTableExists`, column checks via `information_schema`).
 - [ ] **Step 2: Run** `./gradlew test --tests "ca.floo.roadtrip.repo.CanonicalCatalogSchemaTest"` — expect FAIL (missing tables).
@@ -69,47 +69,47 @@
 -- match tables + canonical materialized views (row-level winner per group).
 
 ALTER TABLE campgrounds
-  ADD COLUMN etl_source TEXT,
+  ADD COLUMN data_source TEXT,
   ADD COLUMN match_group_id BIGINT,
   ADD COLUMN preferred_availability_source TEXT;
 ALTER TABLE campsites
-  ADD COLUMN etl_source TEXT,
+  ADD COLUMN data_source TEXT,
   ADD COLUMN match_group_id BIGINT;
 
--- Backfill etl_source from the current primary vendor ref (pre-drop).
-UPDATE campgrounds cg SET etl_source = vr.vendor
+-- Backfill data_source from the current primary vendor ref (pre-drop).
+UPDATE campgrounds cg SET data_source = vr.vendor
 FROM campground_vendor_refs cvr
 JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
 WHERE cvr.campground_id = cg.id AND cvr.is_primary;
 
-UPDATE campsites cs SET etl_source = vr.vendor
+UPDATE campsites cs SET data_source = vr.vendor
 FROM campsite_vendor_refs cvr
 JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
 WHERE cvr.campsite_id = cs.id AND cvr.is_primary;
 
 -- Rows without a primary ref inherit their only ref's vendor; anything still
 -- null gets 'unknown' so NOT NULL can hold (rebuildable data, V38 precedent).
-UPDATE campgrounds cg SET etl_source = (
+UPDATE campgrounds cg SET data_source = (
   SELECT vr.vendor FROM campground_vendor_refs cvr
   JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
   WHERE cvr.campground_id = cg.id
   ORDER BY cvr.vendor_ref_id LIMIT 1
-) WHERE etl_source IS NULL;
-UPDATE campsites cs SET etl_source = (
+) WHERE data_source IS NULL;
+UPDATE campsites cs SET data_source = (
   SELECT vr.vendor FROM campsite_vendor_refs cvr
   JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
   WHERE cvr.campsite_id = cs.id
   ORDER BY cvr.vendor_ref_id LIMIT 1
-) WHERE etl_source IS NULL;
-UPDATE campgrounds SET etl_source = 'unknown' WHERE etl_source IS NULL;
-UPDATE campsites SET etl_source = 'unknown' WHERE etl_source IS NULL;
+) WHERE data_source IS NULL;
+UPDATE campgrounds SET data_source = 'unknown' WHERE data_source IS NULL;
+UPDATE campsites SET data_source = 'unknown' WHERE data_source IS NULL;
 
-ALTER TABLE campgrounds ALTER COLUMN etl_source SET NOT NULL;
-ALTER TABLE campsites ALTER COLUMN etl_source SET NOT NULL;
+ALTER TABLE campgrounds ALTER COLUMN data_source SET NOT NULL;
+ALTER TABLE campsites ALTER COLUMN data_source SET NOT NULL;
 ALTER TABLE campgrounds
-  ADD CONSTRAINT campgrounds_etl_source_check CHECK (length(btrim(etl_source)) > 0);
+  ADD CONSTRAINT campgrounds_data_source_check CHECK (length(btrim(data_source)) > 0);
 ALTER TABLE campsites
-  ADD CONSTRAINT campsites_etl_source_check CHECK (length(btrim(etl_source)) > 0);
+  ADD CONSTRAINT campsites_data_source_check CHECK (length(btrim(data_source)) > 0);
 
 CREATE INDEX campgrounds_match_group_idx ON campgrounds (match_group_id) WHERE match_group_id IS NOT NULL;
 CREATE INDEX campsites_match_group_idx ON campsites (match_group_id) WHERE match_group_id IS NOT NULL;
@@ -176,7 +176,7 @@ winners AS (
 )
 SELECT w.*,
        ARRAY(SELECT s.id FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_ids,
-       ARRAY(SELECT s.etl_source FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_sources
+       ARRAY(SELECT s.data_source FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_sources
 FROM winners w;
 
 CREATE UNIQUE INDEX campground_canonical_id_uidx ON campground_canonical (id);
@@ -209,7 +209,7 @@ winners AS (
 )
 SELECT w.*,
        ARRAY(SELECT s.id FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_ids,
-       ARRAY(SELECT s.etl_source FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_sources
+       ARRAY(SELECT s.data_source FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_sources
 FROM winners w;
 
 CREATE UNIQUE INDEX campsite_canonical_id_uidx ON campsite_canonical (id);
@@ -221,7 +221,7 @@ CREATE INDEX campsite_canonical_campground_idx ON campsite_canonical (campground
 - [ ] **Step 5:** Grep `grafana/dashboards/ -e is_primary` — update any dashboard SQL + `scripts/test_grafana_canonical_catalog_dashboards.py` expectations; run the script.
 - [ ] **Step 6: Commit** `git commit -m "feat: V39 per-vendor catalog rows, match tables, canonical views" -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"`
 
-### Task 2: Write path — CanonicalCatalogRepo writes etl_source, drops is_primary
+### Task 2: Write path — CanonicalCatalogRepo writes data_source, drops is_primary
 
 **Files:**
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/repo/CanonicalCatalogRepo.kt` (upsertCampground ~:114, upsertCampsite ~:151, vendor-ref link SQL ~:428-439 and ~:846-857)
@@ -230,12 +230,12 @@ CREATE INDEX campsite_canonical_campground_idx ON campsite_canonical (campground
 
 **Interfaces:**
 - Consumes: `CampgroundEtlRecord.vendor`, `CampsiteEtlRecord` vendor (service/etl/framework/CampsiteEtlOutput.kt).
-- Produces: campground/campsite INSERT/UPDATE sets include `etl_source = record.vendor`; link-table SQL no longer references `is_primary`; **row identity for upsert becomes (vendor, external ref) per source** — a Campflare record never updates a recgov row. Verify the current upsert resolves rows via vendor_refs lookup (it does — keep that, it's already per-vendor keyed).
+- Produces: campground/campsite INSERT/UPDATE sets include `data_source = record.vendor`; link-table SQL no longer references `is_primary`; **row identity for upsert becomes (vendor, external ref) per source** — a Campflare record never updates a recgov row. Verify the current upsert resolves rows via vendor_refs lookup (it does — keep that, it's already per-vendor keyed).
 
-- [ ] **Step 1:** Extend an existing upsert idempotency test: two records for the same real-world campground from different vendors produce **two rows** with distinct `etl_source`, each with its own vendor refs; re-running either updates its own row only. Run → FAIL.
-- [ ] **Step 2:** Implement: add `etl_source` to insert/update column lists (value = record vendor); delete the two `is_primary` UPDATE statements and the `is_primary` column/CASE from both link INSERTs.
+- [ ] **Step 1:** Extend an existing upsert idempotency test: two records for the same real-world campground from different vendors produce **two rows** with distinct `data_source`, each with its own vendor refs; re-running either updates its own row only. Run → FAIL.
+- [ ] **Step 2:** Implement: add `data_source` to insert/update column lists (value = record vendor); delete the two `is_primary` UPDATE statements and the `is_primary` column/CASE from both link INSERTs.
 - [ ] **Step 3:** In `CampsiteProviderRepo`, replace the two `cvr.is_primary DESC` ORDER BY terms (4 query sites) with interim ordering: shape-match first (existing `providerRefShapeSql`), then `vendor_ref_id ASC`. (The provider-seams plan replaces this wholesale.)
-- [ ] **Step 4:** `./gradlew build` → PASS. **Commit** `git commit -m "feat: per-vendor catalog writes (etl_source, no is_primary)" -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"`
+- [ ] **Step 4:** `./gradlew build` → PASS. **Commit** `git commit -m "feat: per-vendor catalog writes (data_source, no is_primary)" -m "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>"`
 
 ### Task 3: CatalogMatchRepo + CatalogMatcherService
 
@@ -255,7 +255,7 @@ class CatalogMatchRepo(private val ctx: DSLContext) {
     fun sharedVendorRefCampgroundPairs(): List<MatchPair>      // SQL self-join on vendor_refs (vendor, entity_type, external_id)
     fun sharedVendorRefCampsitePairs(): List<MatchPair>
     fun geoNameCampgroundCandidates(maxDistanceM: Double): List<GeoNameCandidate>
-        // pairs within distance, different etl_source, not already matched; returns names for scoring in Kotlin
+        // pairs within distance, different data_source, not already matched; returns names for scoring in Kotlin
     fun campsiteNameCandidates(): List<CampsiteNameCandidate>  // campsites under matched campgrounds, grouped
     fun recomputeMatchGroups(): Int
         // UPDATE campgrounds/campsites match_group_id = MIN(id) over connected components
@@ -334,7 +334,7 @@ class CanonicalViewRepo(private val ctx: DSLContext) {
 **Files:**
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/repo/PoiServingRepo.kt`, `repo/OnRoutePoiRepo.kt` — `FROM campgrounds` → `FROM campground_canonical` (join key unchanged: `poi_campgrounds.campground_id = campground_canonical.id`; representative invariant makes this exact), campsite serving reads `campsite_canonical`; select `member_sources`.
 - Modify: `backend/src/main/kotlin/ca/floo/roadtrip/models/api/PoiSchemas.kt` — delete `dataSource` field; add `val sources: List<String> = emptyList()`.
-- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/routes/PoiRoutes.kt` (~:366-380) — delete `dataSource = r.source`; populate `sources = r.memberSources`; `source`/`sourceId` now come from the winner row's `etl_source` + its vendor ref.
+- Modify: `backend/src/main/kotlin/ca/floo/roadtrip/routes/PoiRoutes.kt` (~:366-380) — delete `dataSource = r.source`; populate `sources = r.memberSources`; `source`/`sourceId` now come from the winner row's `data_source` + its vendor ref.
 - Modify: `web/campground-card.js` (drop the `data_source` read added in #404), `web/campground-detail.test.mjs`, `backend/src/test/.../PoiServingRepoTest.kt`, `FeatureCollectionContractTest.kt`.
 
 - [ ] **Step 1:** Update `PoiServingRepoTest` + contract test: response has `sources` array listing all member vendors, no `data_source`. Run → FAIL.
@@ -349,7 +349,7 @@ class CanonicalViewRepo(private val ctx: DSLContext) {
 - [ ] **Step 1:** Update the docs.
 - [ ] **Step 2: E2E** against the local tilt stack (compose project "roadtrip", backend :8765):
   - Run the Campflare and recgov imports (existing admin ETL routes), then `POST /api/admin/etl/catalog-match`.
-  - `SELECT id, etl_source, match_group_id FROM campgrounds WHERE name ILIKE '%upper pines%';` → two rows, same `match_group_id`.
+  - `SELECT id, data_source, match_group_id FROM campgrounds WHERE name ILIKE '%upper pines%';` → two rows, same `match_group_id`.
   - `SELECT member_sources FROM campground_canonical WHERE 'campflare' = ANY(member_sources) AND name ILIKE '%upper pines%';` → one row, both vendors listed.
   - One POI on the map for Upper Pines; drawer shows the richer record; `GET /api/pois/{id}` has `sources: ["campflare","recgov"]` (order by member id).
   - `python3 scripts/test_grafana_canonical_catalog_dashboards.py` passes.

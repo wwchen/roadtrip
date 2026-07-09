@@ -308,7 +308,7 @@ class CanonicalCatalogRepo(
             .fetchOne(
                 """
                 INSERT INTO campgrounds (
-                  etl_source,
+                  data_source,
                   name, status, status_description, kind,
                   short_description, medium_description, long_description,
                   location, default_campsite_schedule, amenities,
@@ -363,7 +363,7 @@ class CanonicalCatalogRepo(
             .execute(
                 """
                 UPDATE campgrounds
-                SET etl_source = ?,
+                SET data_source = ?,
                     name = ?,
                     status = ?,
                     status_description = ?,
@@ -720,7 +720,7 @@ class CanonicalCatalogRepo(
             .fetchOne(
                 """
                 INSERT INTO campsites (
-                  etl_source,
+                  data_source,
                   campground_id, name, kind, loop_name, latitude, longitude, reservation_url,
                   equipment, kind_listed, schedule, price,
                   firepit, picnic_table, ada_accessible,
@@ -775,7 +775,7 @@ class CanonicalCatalogRepo(
         ctx.execute(
             """
             UPDATE campsites
-            SET etl_source = ?,
+            SET data_source = ?,
                 campground_id = ?,
                 name = ?,
                 kind = ?,

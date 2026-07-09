@@ -46,7 +46,7 @@ class CatalogMatcherService(
         // 2) Recompute groups so the geo+name pass reads coherent match groups.
         matches.recomputeMatchGroups()
 
-        // 3) Heuristic pass: near + similar-name across etl_sources.
+        // 3) Heuristic pass: near + similar-name across data_sources.
         val geoNamePairs =
             matches
                 .geoNameCampgroundCandidates(config.maxDistanceM)

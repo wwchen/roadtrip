@@ -149,7 +149,7 @@ The ETL framework owns orchestration and run lifecycle. Vendor ETLs parse,
 validate, and transform their upstream inputs. Persistence stays in repos.
 
 Each vendor ETL writes its own per-vendor campground/campsite rows keyed on
-`etl_source`; nothing merges across vendors at write time. Cross-vendor
+`data_source`; nothing merges across vendors at write time. Cross-vendor
 identity lives in the `campground_matches` and `campsite_matches` tables,
 written by the matcher after all vendor imports and joiners complete. The
 matcher runs a deterministic shared-vendor-ref pass first, then a geo+name

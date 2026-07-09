@@ -26,8 +26,8 @@ class CanonicalViewRepoTest : SharedDbTest() {
     fun `refresh + repoint moves POI and watch target off non-winners and is idempotent`() {
         // A is the recgov row and is seeded rich (more populated columns +
         // more child campsites) so it wins the canonical group.
-        val recgovCg = seedRichCampgroundRow(name = "Upper Pines", etlSource = "recgov")
-        val campflareCg = seedLeanCampgroundRow(name = "Upper Pines", etlSource = "campflare")
+        val recgovCg = seedRichCampgroundRow(name = "Upper Pines", dataSource = "recgov")
+        val campflareCg = seedLeanCampgroundRow(name = "Upper Pines", dataSource = "campflare")
         matchAndGroupCampgrounds(recgovCg, campflareCg)
 
         // Give recgov an extra campsite so its "richness" beats campflare's.
@@ -78,8 +78,8 @@ class CanonicalViewRepoTest : SharedDbTest() {
         // Both members are seeded lean, so richness ties and the LOWER
         // campground id wins the tiebreak (DISTINCT ON group_key ORDER BY
         // richness DESC, id ASC).
-        val cgA = seedLeanCampgroundRow(name = "Collision Cove", etlSource = "recgov")
-        val cgB = seedLeanCampgroundRow(name = "Collision Cove", etlSource = "campflare")
+        val cgA = seedLeanCampgroundRow(name = "Collision Cove", dataSource = "recgov")
+        val cgB = seedLeanCampgroundRow(name = "Collision Cove", dataSource = "campflare")
         matchAndGroupCampgrounds(cgA, cgB)
         val winnerCg = minOf(cgA, cgB)
         val loserCg = maxOf(cgA, cgB)
@@ -100,7 +100,8 @@ class CanonicalViewRepoTest : SharedDbTest() {
 
         // Exactly one poi_campgrounds row remains: (poiOnLoser, winnerCg).
         val remainingLinks =
-            ctx.fetch("SELECT poi_id, campground_id FROM poi_campgrounds")
+            ctx
+                .fetch("SELECT poi_id, campground_id FROM poi_campgrounds")
                 .map { it.get("poi_id", Long::class.java) to it.get("campground_id", Long::class.java) }
         assertEquals(listOf(poiOnLoser to winnerCg), remainingLinks)
 
@@ -119,46 +120,50 @@ class CanonicalViewRepoTest : SharedDbTest() {
 
     private fun seedRichCampgroundRow(
         name: String,
-        etlSource: String,
+        dataSource: String,
     ): Long =
-        ctx.fetchOne(
-            """
-            INSERT INTO campgrounds (
-              name, kind, etl_source, status, short_description, medium_description,
-              long_description, reservation_url,
-              location, amenities, links, photos, price, cell_service, management, contact, connections
-            ) VALUES (
-              ?, 'campground', ?, 'open', 'Short', 'Medium', 'Long',
-              'https://example.test/reserve',
-              '{"latitude":37.74,"longitude":-119.56}'::jsonb,
-              '{"toilets":true}'::jsonb,
-              '[{"kind":"info","url":"https://example.test"}]'::jsonb,
-              '[{"url":"https://example.test/photo.jpg"}]'::jsonb,
-              '{"currency":"USD"}'::jsonb,
-              '{"verizon":"good"}'::jsonb,
-              '{"agency":"NPS"}'::jsonb,
-              '{"phone":"555-0100"}'::jsonb,
-              '{"ridb_facility_id":"232447"}'::jsonb
-            )
-            RETURNING id
-            """.trimIndent(),
-            name,
-            etlSource,
-        )!!.get("id", Long::class.java)
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO campgrounds (
+                  name, kind, data_source, status, short_description, medium_description,
+                  long_description, reservation_url,
+                  location, amenities, links, photos, price, cell_service, management, contact, connections
+                ) VALUES (
+                  ?, 'campground', ?, 'open', 'Short', 'Medium', 'Long',
+                  'https://example.test/reserve',
+                  '{"latitude":37.74,"longitude":-119.56}'::jsonb,
+                  '{"toilets":true}'::jsonb,
+                  '[{"kind":"info","url":"https://example.test"}]'::jsonb,
+                  '[{"url":"https://example.test/photo.jpg"}]'::jsonb,
+                  '{"currency":"USD"}'::jsonb,
+                  '{"verizon":"good"}'::jsonb,
+                  '{"agency":"NPS"}'::jsonb,
+                  '{"phone":"555-0100"}'::jsonb,
+                  '{"ridb_facility_id":"232447"}'::jsonb
+                )
+                RETURNING id
+                """.trimIndent(),
+                name,
+                dataSource,
+            )!!
+            .get("id", Long::class.java)
 
     private fun seedLeanCampgroundRow(
         name: String,
-        etlSource: String,
+        dataSource: String,
     ): Long =
-        ctx.fetchOne(
-            """
-            INSERT INTO campgrounds (name, kind, etl_source)
-            VALUES (?, 'campground', ?)
-            RETURNING id
-            """.trimIndent(),
-            name,
-            etlSource,
-        )!!.get("id", Long::class.java)
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO campgrounds (name, kind, data_source)
+                VALUES (?, 'campground', ?)
+                RETURNING id
+                """.trimIndent(),
+                name,
+                dataSource,
+            )!!
+            .get("id", Long::class.java)
 
     private fun matchAndGroupCampgrounds(
         aId: Long,
@@ -195,14 +200,16 @@ class CanonicalViewRepoTest : SharedDbTest() {
     }
 
     private fun insertPoi(): Long =
-        ctx.fetchOne(
-            """
-            INSERT INTO pois (poi_type, geom)
-            VALUES ('campground', ST_SetSRID(ST_GeomFromGeoJSON(?), 4326))
-            RETURNING id
-            """.trimIndent(),
-            defaultPoiGeom,
-        )!!.get("id", Long::class.java)
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO pois (poi_type, geom)
+                VALUES ('campground', ST_SetSRID(ST_GeomFromGeoJSON(?), 4326))
+                RETURNING id
+                """.trimIndent(),
+                defaultPoiGeom,
+            )!!
+            .get("id", Long::class.java)
 
     private fun linkPoiToCampground(
         poiId: Long,
@@ -216,57 +223,66 @@ class CanonicalViewRepoTest : SharedDbTest() {
     }
 
     private fun insertWatch(): Long =
-        ctx.fetchOne(
-            """
-            INSERT INTO availability_watch (start_date, end_date, cadence_sec, trigger_kinds)
-            VALUES ('2026-07-04'::date, '2026-07-06'::date, 60, ARRAY['atc'])
-            RETURNING id
-            """.trimIndent(),
-        )!!.get("id", Long::class.java)
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO availability_watch (start_date, end_date, cadence_sec, trigger_kinds)
+                VALUES ('2026-07-04'::date, '2026-07-06'::date, 60, ARRAY['atc'])
+                RETURNING id
+                """.trimIndent(),
+            )!!
+            .get("id", Long::class.java)
 
     private fun insertWatchTarget(
         watchId: Long,
         campsiteId: Long,
     ): Long =
-        ctx.fetchOne(
-            """
-            INSERT INTO availability_watch_target (watch_id, poi_id, campsite_id)
-            VALUES (?, NULL, ?)
-            RETURNING id
-            """.trimIndent(),
-            watchId,
-            campsiteId,
-        )!!.get("id", Long::class.java)
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO availability_watch_target (watch_id, poi_id, campsite_id)
+                VALUES (?, NULL, ?)
+                RETURNING id
+                """.trimIndent(),
+                watchId,
+                campsiteId,
+            )!!
+            .get("id", Long::class.java)
 
     private fun insertAvailability(campsiteId: Long): Long =
-        ctx.fetchOne(
-            """
-            INSERT INTO availability (campsite_id, target_date, status, last_observed_at)
-            VALUES (?, '2026-07-04'::date, 'available'::availability_status, now())
-            RETURNING id
-            """.trimIndent(),
-            campsiteId,
-        )!!.get("id", Long::class.java)
+        ctx
+            .fetchOne(
+                """
+                INSERT INTO availability (campsite_id, target_date, status, last_observed_at)
+                VALUES (?, '2026-07-04'::date, 'available'::availability_status, now())
+                RETURNING id
+                """.trimIndent(),
+                campsiteId,
+            )!!
+            .get("id", Long::class.java)
 
     private fun canonicalWinnerId(
         view: String,
         groupKey: Long,
     ): Long =
-        ctx.fetchOne("SELECT id FROM $view WHERE group_key = ?", groupKey)!!
+        ctx
+            .fetchOne("SELECT id FROM $view WHERE group_key = ?", groupKey)!!
             .get("id", Long::class.java)
 
     private fun poiCampgroundId(poiId: Long): Long =
-        ctx.fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
+        ctx
+            .fetchOne("SELECT campground_id FROM poi_campgrounds WHERE poi_id = ?", poiId)!!
             .get("campground_id", Long::class.java)
 
     private fun watchTargetCampsiteId(id: Long): Long =
-        ctx.fetchOne("SELECT campsite_id FROM availability_watch_target WHERE id = ?", id)!!
+        ctx
+            .fetchOne("SELECT campsite_id FROM availability_watch_target WHERE id = ?", id)!!
             .get("campsite_id", Long::class.java)
 
     private fun availabilityCampsiteId(id: Long): Long =
-        ctx.fetchOne("SELECT campsite_id FROM availability WHERE id = ?", id)!!
+        ctx
+            .fetchOne("SELECT campsite_id FROM availability WHERE id = ?", id)!!
             .get("campsite_id", Long::class.java)
 
-    private fun poiDeletedAt(id: Long): Any? =
-        ctx.fetchOne("SELECT deleted_at FROM pois WHERE id = ?", id)?.get("deleted_at")
+    private fun poiDeletedAt(id: Long): Any? = ctx.fetchOne("SELECT deleted_at FROM pois WHERE id = ?", id)?.get("deleted_at")
 }

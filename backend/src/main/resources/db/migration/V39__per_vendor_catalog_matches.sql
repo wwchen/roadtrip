@@ -1,50 +1,50 @@
 -- V39__per_vendor_catalog_matches.sql
--- Per-vendor catalog rows: each ETL source owns its campground/campsite rows.
+-- Per-vendor catalog rows: each data source owns its campground/campsite rows.
 -- Cross-vendor identity moves from is_primary vendor-ref aliasing to explicit
 -- match tables + canonical materialized views (row-level winner per group).
 
 ALTER TABLE campgrounds
-  ADD COLUMN etl_source TEXT,
+  ADD COLUMN data_source TEXT,
   ADD COLUMN match_group_id BIGINT,
   ADD COLUMN preferred_availability_source TEXT;
 ALTER TABLE campsites
-  ADD COLUMN etl_source TEXT,
+  ADD COLUMN data_source TEXT,
   ADD COLUMN match_group_id BIGINT;
 
--- Backfill etl_source from the current primary vendor ref (pre-drop).
-UPDATE campgrounds cg SET etl_source = vr.vendor
+-- Backfill data_source from the current primary vendor ref (pre-drop).
+UPDATE campgrounds cg SET data_source = vr.vendor
 FROM campground_vendor_refs cvr
 JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
 WHERE cvr.campground_id = cg.id AND cvr.is_primary;
 
-UPDATE campsites cs SET etl_source = vr.vendor
+UPDATE campsites cs SET data_source = vr.vendor
 FROM campsite_vendor_refs cvr
 JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
 WHERE cvr.campsite_id = cs.id AND cvr.is_primary;
 
 -- Rows without a primary ref inherit their only ref's vendor; anything still
 -- null gets 'unknown' so NOT NULL can hold (rebuildable data, V38 precedent).
-UPDATE campgrounds cg SET etl_source = (
+UPDATE campgrounds cg SET data_source = (
   SELECT vr.vendor FROM campground_vendor_refs cvr
   JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
   WHERE cvr.campground_id = cg.id
   ORDER BY cvr.vendor_ref_id LIMIT 1
-) WHERE etl_source IS NULL;
-UPDATE campsites cs SET etl_source = (
+) WHERE data_source IS NULL;
+UPDATE campsites cs SET data_source = (
   SELECT vr.vendor FROM campsite_vendor_refs cvr
   JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
   WHERE cvr.campsite_id = cs.id
   ORDER BY cvr.vendor_ref_id LIMIT 1
-) WHERE etl_source IS NULL;
-UPDATE campgrounds SET etl_source = 'unknown' WHERE etl_source IS NULL;
-UPDATE campsites SET etl_source = 'unknown' WHERE etl_source IS NULL;
+) WHERE data_source IS NULL;
+UPDATE campgrounds SET data_source = 'unknown' WHERE data_source IS NULL;
+UPDATE campsites SET data_source = 'unknown' WHERE data_source IS NULL;
 
-ALTER TABLE campgrounds ALTER COLUMN etl_source SET NOT NULL;
-ALTER TABLE campsites ALTER COLUMN etl_source SET NOT NULL;
+ALTER TABLE campgrounds ALTER COLUMN data_source SET NOT NULL;
+ALTER TABLE campsites ALTER COLUMN data_source SET NOT NULL;
 ALTER TABLE campgrounds
-  ADD CONSTRAINT campgrounds_etl_source_check CHECK (length(btrim(etl_source)) > 0);
+  ADD CONSTRAINT campgrounds_data_source_check CHECK (length(btrim(data_source)) > 0);
 ALTER TABLE campsites
-  ADD CONSTRAINT campsites_etl_source_check CHECK (length(btrim(etl_source)) > 0);
+  ADD CONSTRAINT campsites_data_source_check CHECK (length(btrim(data_source)) > 0);
 
 CREATE INDEX campgrounds_match_group_idx ON campgrounds (match_group_id) WHERE match_group_id IS NOT NULL;
 CREATE INDEX campsites_match_group_idx ON campsites (match_group_id) WHERE match_group_id IS NOT NULL;
@@ -111,7 +111,7 @@ winners AS (
 )
 SELECT w.*,
        ARRAY(SELECT s.id FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_ids,
-       ARRAY(SELECT s.etl_source FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_sources
+       ARRAY(SELECT s.data_source FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_sources
 FROM winners w;
 
 CREATE UNIQUE INDEX campground_canonical_id_uidx ON campground_canonical (id);
@@ -144,7 +144,7 @@ winners AS (
 )
 SELECT w.*,
        ARRAY(SELECT s.id FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_ids,
-       ARRAY(SELECT s.etl_source FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_sources
+       ARRAY(SELECT s.data_source FROM scored s WHERE s.group_key = w.group_key ORDER BY s.id) AS member_sources
 FROM winners w;
 
 CREATE UNIQUE INDEX campsite_canonical_id_uidx ON campsite_canonical (id);

@@ -73,7 +73,8 @@ class CanonicalViewRepo(
             // have already re-pointed a sibling non-winner's POI at this
             // winner, so the plan's snapshot value can be stale.
             val existingWinnerPoiId: Long? =
-                txn.fetchOne(POI_WINNER_POI_ID_SQL, winnerCampgroundId)
+                txn
+                    .fetchOne(POI_WINNER_POI_ID_SQL, winnerCampgroundId)
                     ?.get("poi_id", Long::class.java)
             val isCollapse = existingWinnerPoiId != null
             log.info(
@@ -114,12 +115,14 @@ class CanonicalViewRepo(
             // about (two targets both pointing at S_B collapse to one on
             // winner S_A after the first UPDATE).
             val winnerAlreadyCovered =
-                txn.fetchOne(
-                    WATCH_TARGET_WINNER_COVERED_SQL,
-                    id,
-                    watchId,
-                    winnerCampsiteId,
-                )!!.get("covered", Boolean::class.java)
+                txn
+                    .fetchOne(
+                        WATCH_TARGET_WINNER_COVERED_SQL,
+                        id,
+                        watchId,
+                        winnerCampsiteId,
+                    )!!
+                    .get("covered", Boolean::class.java)
             log.info(
                 "re-point watch_target: id={} watch_id={} campsite {} -> {} (collapse={})",
                 id,

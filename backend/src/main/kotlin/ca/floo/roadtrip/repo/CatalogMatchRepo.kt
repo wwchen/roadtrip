@@ -164,7 +164,7 @@ open class CatalogMatchRepo(
                   SELECT
                     cg.id,
                     cg.name,
-                    cg.etl_source,
+                    cg.data_source,
                     (cg.location->>'latitude')::double precision  AS lat,
                     (cg.location->>'longitude')::double precision AS lng
                   FROM campgrounds cg
@@ -184,7 +184,7 @@ open class CatalogMatchRepo(
                 FROM candidates a
                 JOIN candidates b
                   ON a.id < b.id
-                 AND a.etl_source <> b.etl_source
+                 AND a.data_source <> b.data_source
                 WHERE ST_DWithin(
                         ST_MakePoint(a.lng, a.lat)::geography,
                         ST_MakePoint(b.lng, b.lat)::geography,
@@ -227,7 +227,7 @@ open class CatalogMatchRepo(
                   AND b.deleted_at IS NULL
                   AND cga.deleted_at IS NULL
                   AND cgb.deleted_at IS NULL
-                  AND a.etl_source <> b.etl_source
+                  AND a.data_source <> b.data_source
                   AND cga.match_group_id IS NOT NULL
                   AND cgb.match_group_id IS NOT NULL
                   AND cga.match_group_id = cgb.match_group_id
@@ -260,20 +260,22 @@ open class CatalogMatchRepo(
         ctx.transactionResult { cfg ->
             val txn = DSL.using(cfg)
             var totalUpdated = 0
-            totalUpdated += propagate(
-                txn = txn,
-                catalogTable = "campgrounds",
-                matchesTable = "campground_matches",
-                aColumn = "campground_a_id",
-                bColumn = "campground_b_id",
-            )
-            totalUpdated += propagate(
-                txn = txn,
-                catalogTable = "campsites",
-                matchesTable = "campsite_matches",
-                aColumn = "campsite_a_id",
-                bColumn = "campsite_b_id",
-            )
+            totalUpdated +=
+                propagate(
+                    txn = txn,
+                    catalogTable = "campgrounds",
+                    matchesTable = "campground_matches",
+                    aColumn = "campground_a_id",
+                    bColumn = "campground_b_id",
+                )
+            totalUpdated +=
+                propagate(
+                    txn = txn,
+                    catalogTable = "campsites",
+                    matchesTable = "campsite_matches",
+                    aColumn = "campsite_a_id",
+                    bColumn = "campsite_b_id",
+                )
             totalUpdated
         }
 

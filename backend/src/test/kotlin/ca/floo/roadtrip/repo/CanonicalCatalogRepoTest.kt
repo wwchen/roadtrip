@@ -163,7 +163,7 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         repo.upsertCampgrounds(listOf(recgovRecord), source = "recgov-campgrounds")
         repo.upsertCampgrounds(listOf(campflareRecord), source = "campflare-campgrounds")
 
-        // Two campground rows, each tagged with its own etl_source.
+        // Two campground rows, each tagged with its own data_source.
         assertEquals(2, tableCount("campgrounds"))
         assertEquals(2, tableCount("vendor_refs"))
         assertEquals(2, tableCount("campground_vendor_refs"))
@@ -172,14 +172,14 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             ctx
                 .fetch(
                     """
-                    SELECT cg.etl_source, vr.vendor AS ref_vendor, vr.external_id
+                    SELECT cg.data_source, vr.vendor AS ref_vendor, vr.external_id
                     FROM campgrounds cg
                     JOIN campground_vendor_refs cvr ON cvr.campground_id = cg.id
                     JOIN vendor_refs vr ON vr.id = cvr.vendor_ref_id
-                    ORDER BY cg.etl_source
+                    ORDER BY cg.data_source
                     """.trimIndent(),
                 ).map {
-                    "${it.get("etl_source")}|${it.get("ref_vendor")}:${it.get("external_id")}"
+                    "${it.get("data_source")}|${it.get("ref_vendor")}:${it.get("external_id")}"
                 }
 
         // Each canonical row has exactly one vendor_ref pointing at its own vendor.
@@ -202,11 +202,11 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
             ctx
                 .fetch(
                     """
-                    SELECT cg.etl_source, cg.name
+                    SELECT cg.data_source, cg.name
                     FROM campgrounds cg
-                    ORDER BY cg.etl_source
+                    ORDER BY cg.data_source
                     """.trimIndent(),
-                ).map { "${it.get("etl_source")}|${it.get("name")}" }
+                ).map { "${it.get("data_source")}|${it.get("name")}" }
 
         assertEquals(
             listOf(

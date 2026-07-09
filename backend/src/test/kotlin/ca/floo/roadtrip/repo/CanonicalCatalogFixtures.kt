@@ -161,7 +161,7 @@ fun DSLContext.seedCampground(
         fetchOne(
             """
             INSERT INTO campgrounds (
-              name, kind, etl_source, location, management, source_payload
+              name, kind, data_source, location, management, source_payload
             ) VALUES (
               ?, ?, ?, jsonb_strip_nulls(jsonb_build_object('region', ?::text, 'country', ?::text)),
               jsonb_strip_nulls(jsonb_build_object('agency', ?::text)),
@@ -209,7 +209,7 @@ fun DSLContext.seedCampsite(
         fetchOne(
             """
             INSERT INTO campsites (
-              campground_id, name, kind, etl_source, loop_name, source_payload
+              campground_id, name, kind, data_source, loop_name, source_payload
             ) VALUES (
               ?, ?, ?, ?, ?, ?::jsonb
             )

@@ -26,7 +26,6 @@ import ca.floo.roadtrip.repo.PoiServingRepo
 import ca.floo.roadtrip.repo.dataSourceFor
 import ca.floo.roadtrip.repo.dsl
 import ca.floo.roadtrip.repo.migrate
-import ca.floo.roadtrip.service.catalog.CatalogMatcherService
 import ca.floo.roadtrip.service.availability.AvailabilityDateResolver
 import ca.floo.roadtrip.service.availability.AvailabilityPollerMembership
 import ca.floo.roadtrip.service.availability.AvailabilityWatchService
@@ -38,6 +37,7 @@ import ca.floo.roadtrip.service.availability.WatchScopeResolver
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderClients
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistry
 import ca.floo.roadtrip.service.availability.provider.AvailabilityProviderRegistryFactory
+import ca.floo.roadtrip.service.catalog.CatalogMatcherService
 import ca.floo.roadtrip.service.etl.framework.EtlOrchestrator
 import ca.floo.roadtrip.service.etl.framework.IngestController
 import ca.floo.roadtrip.service.etl.framework.fetchTargetsFromRegistry

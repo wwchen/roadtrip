@@ -4,14 +4,14 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
-import OffsetDateTime
+import java.time.OffsetDateTime
 import kotlin.test.assertEquals
 import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 /**
  * Repo-level tests for CatalogMatchRepo. Seeds catalog rows directly (skipping
- * the fixture helper because it doesn't yet set etl_source) so we can exercise
+ * the fixture helper because it doesn't yet set data_source) so we can exercise
  * shared-vendor-ref detection, upsert idempotence, and label propagation.
  */
 class CatalogMatchRepoTest : SharedDbTest() {
@@ -22,8 +22,8 @@ class CatalogMatchRepoTest : SharedDbTest() {
 
     @Test
     fun `sharedVendorRefCampgroundPairs returns normalized pair when two campgrounds share vendor ref by triple`() {
-        val recgovId = seedCampgroundRow(name = "Upper Pines", etlSource = "recgov")
-        val campflareId = seedCampgroundRow(name = "Upper Pines", etlSource = "campflare")
+        val recgovId = seedCampgroundRow(name = "Upper Pines", dataSource = "recgov")
+        val campflareId = seedCampgroundRow(name = "Upper Pines", dataSource = "campflare")
         val vendorRefId =
             seedVendorRefRow(
                 vendor = "recgov",
@@ -52,8 +52,8 @@ class CatalogMatchRepoTest : SharedDbTest() {
 
     @Test
     fun `upsertCampgroundMatches is idempotent and updates heuristic on conflict`() {
-        val aId = seedCampgroundRow(name = "A", etlSource = "recgov")
-        val bId = seedCampgroundRow(name = "B", etlSource = "campflare")
+        val aId = seedCampgroundRow(name = "A", dataSource = "recgov")
+        val bId = seedCampgroundRow(name = "B", dataSource = "campflare")
         val (lo, hi) = minOf(aId, bId) to maxOf(aId, bId)
         val repo = CatalogMatchRepo(ctx)
 
@@ -87,10 +87,10 @@ class CatalogMatchRepoTest : SharedDbTest() {
 
     @Test
     fun `recomputeMatchGroups collapses transitive matches to component minimum`() {
-        val aId = seedCampgroundRow(name = "A", etlSource = "recgov")
-        val bId = seedCampgroundRow(name = "B", etlSource = "campflare")
-        val cId = seedCampgroundRow(name = "C", etlSource = "aspira")
-        val dId = seedCampgroundRow(name = "D", etlSource = "recgov")
+        val aId = seedCampgroundRow(name = "A", dataSource = "recgov")
+        val bId = seedCampgroundRow(name = "B", dataSource = "campflare")
+        val cId = seedCampgroundRow(name = "C", dataSource = "aspira")
+        val dId = seedCampgroundRow(name = "D", dataSource = "recgov")
         insertCampgroundMatch(aId, bId, method = "shared_vendor_ref")
         insertCampgroundMatch(bId, cId, method = "shared_vendor_ref")
         val repo = CatalogMatchRepo(ctx)
@@ -116,17 +116,17 @@ class CatalogMatchRepoTest : SharedDbTest() {
 
     private fun seedCampgroundRow(
         name: String,
-        etlSource: String,
+        dataSource: String,
     ): Long =
         ctx
             .fetchOne(
                 """
-                INSERT INTO campgrounds (name, kind, etl_source)
+                INSERT INTO campgrounds (name, kind, data_source)
                 VALUES (?, 'campground', ?)
                 RETURNING id
                 """.trimIndent(),
                 name,
-                etlSource,
+                dataSource,
             )!!
             .get("id", Long::class.java)
 
