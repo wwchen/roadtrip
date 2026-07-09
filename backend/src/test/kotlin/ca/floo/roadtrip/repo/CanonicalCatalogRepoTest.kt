@@ -155,7 +155,6 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         assertEquals("shared_vendor_ref", heuristicJson["kind"]?.jsonPrimitive?.content)
         assertEquals("recgov-232447", heuristicJson["external_id"]?.jsonPrimitive?.content)
 
-        ctx.execute("REFRESH MATERIALIZED VIEW catalog_match_rows")
         val materializedMatch =
             ctx
                 .fetchOne(
@@ -348,7 +347,6 @@ class CanonicalCatalogRepoTest : SharedDbTest() {
         assertEquals("shared_vendor_ref", heuristicJson["kind"]?.jsonPrimitive?.content)
         assertEquals("100", heuristicJson["external_id"]?.jsonPrimitive?.content)
 
-        ctx.execute("REFRESH MATERIALIZED VIEW catalog_match_rows")
         val materializedMatch =
             ctx
                 .fetchOne(

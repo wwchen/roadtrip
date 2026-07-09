@@ -32,7 +32,11 @@ class CanonicalCatalogRepo(
             val upserted =
                 ctx.transactionResult { cfg ->
                     val tx = CanonicalCatalogRepo(DSL.using(cfg))
-                    records.sumOf { record -> if (tx.upsertCampground(record, source)) 1 else 0 }
+                    val upserted = records.sumOf { record -> if (tx.upsertCampground(record, source)) 1 else 0 }
+                    if (upserted > 0) {
+                        tx.refreshCatalogMatchRows()
+                    }
+                    upserted
                 }
             importRuns.complete(runId, records.size)
             return Result(runId = runId, seenCount = records.size, upsertedCount = upserted)
@@ -60,6 +64,9 @@ class CanonicalCatalogRepo(
                             skipped += 1
                         }
                     }
+                    if (upserted > 0) {
+                        tx.refreshCatalogMatchRows()
+                    }
                     upserted to skipped
                 }
             importRuns.complete(runId, records.size)
@@ -73,6 +80,10 @@ class CanonicalCatalogRepo(
             importRuns.fail(runId, e.message ?: e.javaClass.simpleName)
             throw e
         }
+    }
+
+    fun refreshCatalogMatchRows() {
+        ctx.execute("REFRESH MATERIALIZED VIEW $CATALOG_MATCH_ROWS_VIEW")
     }
 
     fun upsertTeslaSuperchargers(
@@ -1032,6 +1043,7 @@ class CanonicalCatalogRepo(
         private const val PLANET_FITNESS_LOCATION_POI_TYPE = "planet_fitness_location"
         private const val EMPTY_JSON_OBJECT = "{}"
         private const val EMPTY_JSON_ARRAY = "[]"
+        private const val CATALOG_MATCH_ROWS_VIEW = "catalog_match_rows"
         private const val PRIMARY_REF_ROLE = "primary"
         private const val ADDITIONAL_REF_ROLE = "additional"
     }

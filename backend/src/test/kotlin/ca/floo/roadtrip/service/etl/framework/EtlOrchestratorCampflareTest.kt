@@ -8,6 +8,8 @@ import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
+import ca.floo.roadtrip.repo.seedCampground
+import ca.floo.roadtrip.repo.seedCampsite
 import org.junit.jupiter.api.BeforeEach
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.io.TempDir
@@ -68,6 +70,81 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
         assertEquals(2, tableCount("vendor_refs"))
         assertEquals(1, tableCount("pois"))
         assertEquals(1, tableCount("poi_campgrounds"))
+    }
+
+    @Test
+    fun `campflare etl leaves catalog match materialized view current`() {
+        val federalCampgroundId =
+            ctx.seedCampground(
+                name = "Camp One Federal",
+                source = "federal-campgrounds",
+                sourceId = "recgov-232447",
+            )
+        ctx.seedCampsite(
+            campgroundId = federalCampgroundId,
+            vendor = "recgov",
+            source = "federal-campsites",
+            vendorId = "001",
+            name = "Site 001 Federal",
+        )
+        writeRaw(
+            slug = "campflare-campgrounds-export",
+            payload =
+                """
+                [
+                  {
+                    "id":"cg-1",
+                    "name":"Camp One",
+                    "kind":"established",
+                    "location":{"latitude":37.1,"longitude":-119.1},
+                    "connections":{"ridb_facility_id":"232447"}
+                  }
+                ]
+                """.trimIndent(),
+        )
+        writeRaw(
+            slug = "campflare-campsites-export",
+            payload =
+                """
+                [
+                  {
+                    "id":"site-1",
+                    "campground_id":"cg-1",
+                    "name":"Site 1",
+                    "kind":"standard",
+                    "reservation_url":"https://www.recreation.gov/camping/campgrounds/232447/campsites/001"
+                  }
+                ]
+                """.trimIndent(),
+        )
+
+        val orchestrator = EtlOrchestrator(ctx, rawDir, registry())
+
+        orchestrator.runPoiData("Campflare Campgrounds")
+        assertEquals(1, materializedMatchCount("campground"))
+
+        orchestrator.runCampsiteData("Campflare Campsites")
+        assertEquals(1, materializedMatchCount("campsite"))
+        assertEquals(2, tableCount("catalog_match_rows"))
+        assertEquals(
+            listOf(
+                "campground:federal-campgrounds->campflare-campgrounds:recgov-232447",
+                "campsite:federal-campsites->campflare-campsites:001",
+            ),
+            ctx
+                .fetch(
+                    """
+                    SELECT entity_type,
+                           left_etl_source,
+                           right_etl_source,
+                           match_heuristic->>'external_id' AS matched_ref
+                    FROM catalog_match_rows
+                    ORDER BY entity_type
+                    """.trimIndent(),
+                ).map {
+                    "${it.get("entity_type")}:${it.get("left_etl_source")}->${it.get("right_etl_source")}:${it.get("matched_ref")}"
+                },
+        )
     }
 
     private fun writeRaw(
@@ -145,6 +222,12 @@ class EtlOrchestratorCampflareTest : SharedDbTest() {
     private fun tableCount(table: String): Int =
         ctx
             .fetchOne("SELECT COUNT(*) AS n FROM $table")!!
+            .get("n", Number::class.java)
+            .toInt()
+
+    private fun materializedMatchCount(entityType: String): Int =
+        ctx
+            .fetchOne("SELECT COUNT(*) AS n FROM catalog_match_rows WHERE entity_type = ?", entityType)!!
             .get("n", Number::class.java)
             .toInt()
 }
