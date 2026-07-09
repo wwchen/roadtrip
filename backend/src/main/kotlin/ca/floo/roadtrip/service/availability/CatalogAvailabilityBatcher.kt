@@ -88,7 +88,7 @@ internal class CatalogAvailabilityBatcher {
         fetch: suspend (
             parentRef: ProviderRef,
             provider: ReservationProvider,
-            reservables: List<Reservable>,
+            targets: List<ResolvedAvailabilityTarget>,
             windows: AvailabilityWindows,
         ) -> AvailabilityObservationBatch,
     ): List<GroupFetchResult> =
@@ -112,7 +112,7 @@ internal class CatalogAvailabilityBatcher {
                 }
                 val startedNanos = System.nanoTime()
                 try {
-                    val batch = fetch(key.parentRef, key.provider, reservables, windows)
+                    val batch = fetch(key.parentRef, key.provider, groupTargets, windows)
                     GroupFetchResult(
                         provider = key.provider,
                         parentRef = key.parentRef,

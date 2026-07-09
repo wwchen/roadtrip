@@ -12,6 +12,7 @@ import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailability
 import ca.floo.roadtrip.clients.reserveamerica.ReserveAmericaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaAvailabilityClient
 import ca.floo.roadtrip.clients.reservecalifornia.ReserveCaliforniaGridAvailability
+import ca.floo.roadtrip.config.CampflareAvailabilityMode
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.metadata.registry.EtlEntry
 import ca.floo.roadtrip.models.metadata.registry.PoiDataEntry
@@ -23,6 +24,7 @@ import java.time.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
+import kotlin.test.assertNull
 
 class ReservationProviderRegistryFactoryTest {
     @Test
@@ -169,6 +171,55 @@ class ReservationProviderRegistryFactoryTest {
                 observedCall,
             )
         }
+
+    @Test
+    fun `disabled campflare availability omits campflare dispatch keys so recgov aliases can be fallback`() {
+        val registry =
+            ReservationProviderRegistryFactory.build(
+                registry =
+                    PoiRegistry(
+                        dataSources = emptyList(),
+                        poiData =
+                            listOf(
+                                PoiDataEntry(
+                                    name = "Campflare Campgrounds",
+                                    category = "campground",
+                                    etls =
+                                        listOf(
+                                            EtlEntry(
+                                                slug = "campflare-campgrounds",
+                                                adapter = "CampflareCampgroundsEtl",
+                                            ),
+                                        ),
+                                ),
+                                PoiDataEntry(
+                                    name = "Federal Campgrounds",
+                                    category = "campground",
+                                    etls =
+                                        listOf(
+                                            EtlEntry(
+                                                slug = "federal-campgrounds",
+                                                adapter = "RecGovCampgroundsEtl",
+                                            ),
+                                        ),
+                                ),
+                            ),
+                    ),
+                clients =
+                    ReservationProviderClients(
+                        recgovClient = stubRecgovClient(),
+                        aspiraClient = stubAspiraClient(),
+                        reserveAmericaClient = stubReserveAmericaClient(),
+                        reserveCaliforniaClient = stubReserveCaliforniaClient(),
+                        campflareClient = stubCampflareClient(),
+                    ),
+                campflareAvailabilityMode = CampflareAvailabilityMode.RECGOV,
+            )
+
+        assertNull(registry.forPoi(row("campflare")))
+        assertNull(registry.forPoi(row("campflare-campgrounds")))
+        assertEquals(ReservationProviderId.RECGOV, registry.forPoi(row("federal-campgrounds"))?.id)
+    }
 
     @Test
     fun `reservation provider clients close every vendor client through one lifecycle hook`() {

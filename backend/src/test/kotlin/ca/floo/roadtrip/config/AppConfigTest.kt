@@ -44,6 +44,8 @@ class AppConfigTest {
     fun `campflare config trims api key and base url with default fallback`() {
         assertEquals(null, AppConfig.fromEnv(emptyMap()).campflare.apiKey)
         assertEquals("https://api.campflare.com/v2", AppConfig.fromEnv(emptyMap()).campflare.apiBaseUrl)
+        assertEquals(CampflareAvailabilityMode.AUTO, AppConfig.fromEnv(emptyMap()).campflare.availabilityMode)
+        assertEquals(false, AppConfig.fromEnv(emptyMap()).campflare.usesCampflareAvailability)
 
         val config =
             AppConfig.fromEnv(
@@ -55,6 +57,43 @@ class AppConfigTest {
 
         assertEquals("key-123", config.campflare.apiKey)
         assertEquals("https://campflare.test/v2", config.campflare.apiBaseUrl)
+        assertEquals(CampflareAvailabilityMode.AUTO, config.campflare.availabilityMode)
+        assertEquals(true, config.campflare.usesCampflareAvailability)
+    }
+
+    @Test
+    fun `campflare availability mode toggles live provider use`() {
+        assertEquals(
+            false,
+            AppConfig
+                .fromEnv(mapOf("CAMPFLARE_API_KEY" to "key-123", "CAMPFLARE_AVAILABILITY_MODE" to "recgov"))
+                .campflare
+                .usesCampflareAvailability,
+        )
+        assertEquals(
+            true,
+            AppConfig
+                .fromEnv(mapOf("CAMPFLARE_AVAILABILITY_MODE" to "campflare"))
+                .campflare
+                .usesCampflareAvailability,
+        )
+        assertEquals(
+            false,
+            AppConfig
+                .fromEnv(mapOf("CAMPFLARE_AVAILABILITY_MODE" to "auto"))
+                .campflare
+                .usesCampflareAvailability,
+        )
+    }
+
+    @Test
+    fun `campflare availability mode rejects unknown values`() {
+        val err =
+            assertFailsWith<IllegalArgumentException> {
+                AppConfig.fromEnv(mapOf("CAMPFLARE_AVAILABILITY_MODE" to "sometimes"))
+            }
+
+        assertEquals("CAMPFLARE_AVAILABILITY_MODE must be one of auto, campflare, recgov", err.message)
     }
 
     @Test

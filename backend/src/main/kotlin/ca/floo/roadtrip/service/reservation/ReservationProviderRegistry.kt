@@ -1,5 +1,6 @@
 package ca.floo.roadtrip.service.reservation
 
+import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.repo.CampsiteProviderRefRow
 
 /**
@@ -34,6 +35,13 @@ class ReservationProviderRegistry(
      * or a brand-new ETL whose registry entry forgot to set a provider).
      */
     fun forPoi(row: CampsiteProviderRefRow): ReservationProvider? = adaptersBySource[row.source]
+
+    fun forPoi(
+        row: CampsiteProviderRefRow,
+        ref: ProviderRef,
+    ): ReservationProvider? =
+        adaptersBySource[row.source]
+            ?.takeIf { it.id == ref.reservationProviderId() }
 
     /**
      * Source-only lookup for call sites that only need static adapter

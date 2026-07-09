@@ -12,6 +12,7 @@ import ca.floo.roadtrip.repo.SharedDbTest
 import ca.floo.roadtrip.repo.cleanCanonicalCatalogFixtures
 import ca.floo.roadtrip.repo.seedCampsite
 import ca.floo.roadtrip.repo.seedCatalogPoi
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderId
@@ -159,12 +160,17 @@ class AvailabilityPollerMembershipTest : SharedDbTest() {
                     reservable = reservable,
                     provider = FakeProvider(provider),
                     parentRef = parentRef,
+                    catalogRef =
+                        CatalogReservableRef(
+                            rid = reservable.rid.encode(),
+                            vendorId = reservable.rid.vendorId,
+                        ),
                     parentPoiId = parentPoiId,
                     dateContext = dateContext,
                 )
         }
 
-        override fun requireByRid(rid: ca.floo.roadtrip.models.domain.ReservableId): ResolvedAvailabilityTarget =
+        override fun requireByRid(rid: ReservableId): ResolvedAvailabilityTarget =
             throw UnsupportedOperationException("not used by AvailabilityPollerMembershipTest")
 
         override fun resolve(reservable: Reservable): ResolvedAvailabilityTarget? = byReservableId[reservable.id]

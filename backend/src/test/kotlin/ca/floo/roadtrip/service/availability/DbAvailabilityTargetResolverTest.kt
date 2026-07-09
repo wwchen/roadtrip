@@ -93,18 +93,19 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         ): AvailabilityObservationBatch = throw UnsupportedOperationException("not used")
     }
 
-    private fun resolverFor(campsitesRepo: CampsiteRepo): DbAvailabilityTargetResolver =
+    private fun resolverFor(
+        campsitesRepo: CampsiteRepo,
+        providers: Map<String, ReservationProvider> =
+            mapOf(
+                "test" to NoopRecgovProvider(),
+                "federal-campgrounds" to NoopRecgovProvider(),
+                "campflare" to NoopCampflareProvider(),
+            ),
+    ): DbAvailabilityTargetResolver =
         DbAvailabilityTargetResolver(
             providerRefs = CampsiteProviderRepo(ctx),
             campsitesRepo = campsitesRepo,
-            reservationProviders =
-                ReservationProviderRegistry(
-                    mapOf(
-                        "test" to NoopRecgovProvider(),
-                        "federal-campgrounds" to NoopRecgovProvider(),
-                        "campflare" to NoopCampflareProvider(),
-                    ),
-                ),
+            reservationProviders = ReservationProviderRegistry(providers),
             dateResolver = AvailabilityDateResolver(),
         )
 
@@ -167,6 +168,56 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(poi, target.parentPoiId)
             assertEquals(ReservationProviderId.CAMPFLARE, target.provider.id)
             assertEquals("upper-pines-campground-447", parentRefKey(target.parentRef))
+        }
+
+    @Test
+    fun `resolve falls back to recgov aliases when campflare availability is disabled`() =
+        runBlocking {
+            val poi =
+                ctx
+                    .seedCatalogPoi(
+                        sourceId = "upper-pines-campflare-fallback",
+                        name = "Upper Pines",
+                        lon = -119.56,
+                        lat = 37.74,
+                        source = "campflare",
+                        providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
+                    ).poiId
+            val campgroundId = campgroundIdFor(poi)
+            linkCampgroundRef(
+                campgroundId = campgroundId,
+                vendor = "federal-campgrounds",
+                externalId = "recgov-232447",
+                payloadJson = """{"recgov_id":"232447"}""",
+            )
+            val campsiteId =
+                ctx.seedCampsite(
+                    campgroundId = campgroundId,
+                    vendor = "campflare",
+                    vendorId = "upper-pines-site-100",
+                    name = "Campflare Site 100",
+                    providerRefJson = """{"campflare_id":"upper-pines-site-100"}""",
+                )
+            linkCampsiteRef(
+                campsiteId = campsiteId,
+                vendor = "recgov",
+                externalId = "100",
+                payloadJson = """{"recgov_id":"100"}""",
+            )
+
+            val campsitesRepo = CampsiteRepo(ctx)
+            val reservable = campsitesRepo.findById(campsiteId)!!
+            val target =
+                resolverFor(
+                    campsitesRepo = campsitesRepo,
+                    providers = mapOf("federal-campgrounds" to NoopRecgovProvider()),
+                ).resolve(reservable)!!
+
+            assertEquals("site:campflare:upper-pines-site-100", reservable.rid.encode())
+            assertEquals(ReservationProviderId.RECGOV, target.provider.id)
+            assertEquals("232447", parentRefKey(target.parentRef))
+            assertEquals("site:campflare:upper-pines-site-100", target.catalogRef.rid)
+            assertEquals("100", target.catalogRef.vendorId)
         }
 
     private fun linkCampgroundRef(

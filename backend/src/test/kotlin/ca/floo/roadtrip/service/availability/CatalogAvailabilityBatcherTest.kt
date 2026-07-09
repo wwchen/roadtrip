@@ -8,6 +8,7 @@ import ca.floo.roadtrip.models.availability.ResolvedDateWindow
 import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.domain.Reservable
 import ca.floo.roadtrip.models.domain.ReservableId
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import ca.floo.roadtrip.service.reservation.ReservationProvider
 import ca.floo.roadtrip.service.reservation.ReservationProviderCapabilities
 import ca.floo.roadtrip.service.reservation.ReservationProviderError
@@ -41,9 +42,9 @@ class CatalogAvailabilityBatcherTest {
                 CatalogAvailabilityBatcher().fetchByGroup(
                     targets = targets,
                     windowFor = { _, _ -> windows },
-                    fetch = { _, _, reservables, ws ->
+                    fetch = { _, _, targets, ws ->
                         calls++
-                        assertEquals(2, reservables.size)
+                        assertEquals(2, targets.size)
                         emptyBatch(ws.fetch)
                     },
                 )
@@ -125,6 +126,37 @@ class CatalogAvailabilityBatcherTest {
             assertEquals(fetch, results[0].window)
         }
 
+    @Test
+    fun `passes provider-specific catalog refs to grouped fetch`() =
+        runBlocking {
+            val provider = fakeProvider()
+            val catalogRef =
+                CatalogReservableRef(
+                    rid = "site:campflare:upper-pines-site-100",
+                    vendorId = "100",
+                )
+            val targets =
+                listOf(
+                    resolvedTarget(
+                        reservableRid = "site:campflare:upper-pines-site-100",
+                        provider = provider,
+                        parentRef = ProviderRef.RecGov("232447"),
+                        catalogRef = catalogRef,
+                    ),
+                )
+
+            val results =
+                CatalogAvailabilityBatcher().fetchByGroup(
+                    targets = targets,
+                    windowFor = { _, _ -> windows },
+                    fetch = { _, _, targets, ws ->
+                        assertEquals(listOf(catalogRef), targets.map { it.catalogRef })
+                        emptyBatch(ws.fetch)
+                    },
+                )
+            assertEquals(1, results.size)
+        }
+
     // --- fixtures ---
 
     private fun fakeProvider(): ReservationProvider =
@@ -160,11 +192,17 @@ class CatalogAvailabilityBatcherTest {
         provider: ReservationProvider,
         parentRef: ProviderRef,
         parentPoiId: Long = 1L,
+        catalogRef: CatalogReservableRef =
+            CatalogReservableRef(
+                rid = reservableRid,
+                vendorId = ReservableId.parse(reservableRid)!!.vendorId,
+            ),
     ): ResolvedAvailabilityTarget =
         ResolvedAvailabilityTarget(
             reservable = reservable(reservableRid),
             provider = provider,
             parentRef = parentRef,
+            catalogRef = catalogRef,
             parentPoiId = parentPoiId,
             dateContext = PoiDateContext(timeZone = ZoneOffset.UTC, earliestDate = window.startDate),
         )

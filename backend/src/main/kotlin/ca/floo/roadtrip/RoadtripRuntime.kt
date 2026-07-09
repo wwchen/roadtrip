@@ -84,6 +84,7 @@ internal data class RoadtripBootContext(
 internal class RoadtripRuntime(
     val boot: RoadtripBootContext,
     val reservationProviderRegistry: ReservationProviderRegistry,
+    val campsiteProviders: CampsiteProviderRepo,
     val availabilityDateResolver: AvailabilityDateResolver,
     val availabilityWatchService: AvailabilityWatchService,
     val watchAlertDispatcher: WatchAlertDispatcher,
@@ -169,6 +170,8 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
         ReservationProviderRegistryFactory.build(
             registry = boot.poiRegistry,
             clients = boot.reservationProviderClients,
+            campflareAvailabilityMode = boot.appConfig.campflare.availabilityMode,
+            campflareApiKeyConfigured = boot.appConfig.campflare.apiKey != null,
         )
 
     val campsitesRepo = CampsiteRepo(boot.ctx)
@@ -266,6 +269,7 @@ internal fun startRoadtripRuntime(boot: RoadtripBootContext): RoadtripRuntime {
     return RoadtripRuntime(
         boot = boot,
         reservationProviderRegistry = reservationProviderRegistry,
+        campsiteProviders = campsiteProviders,
         availabilityDateResolver = availabilityDateResolver,
         availabilityWatchService = availabilityWatchService,
         watchAlertDispatcher = watchAlertDispatcher,

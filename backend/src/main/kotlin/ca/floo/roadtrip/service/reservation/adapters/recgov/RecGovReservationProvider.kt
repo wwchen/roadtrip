@@ -63,7 +63,7 @@ class RecGovReservationProvider(
             fetchRecgovCatalogObservations(
                 client = client,
                 recgovId = recgovId,
-                campsiteIds = reservables.map { it.vendorId }.toSet(),
+                reservables = reservables,
                 startDate = startDate,
                 endDate = endDate,
             )

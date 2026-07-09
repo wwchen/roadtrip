@@ -4,6 +4,7 @@ import ca.floo.roadtrip.clients.recgov.Campsite
 import ca.floo.roadtrip.clients.recgov.RecGovAvailabilityClient
 import ca.floo.roadtrip.service.api.availabilityResponseFromObservations
 import ca.floo.roadtrip.service.api.encodeAvailabilityJson
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -173,7 +174,11 @@ class RecGovObservationsTest {
                         fetchRecgovCatalogObservations(
                             client = clientReturning(emptyMap()),
                             recgovId = "232447",
-                            campsiteIds = setOf("100", "200"),
+                            reservables =
+                                listOf(
+                                    CatalogReservableRef(rid = "site:recgov:100", vendorId = "100"),
+                                    CatalogReservableRef(rid = "site:recgov:200", vendorId = "200"),
+                                ),
                             startDate = today,
                             endDate = today.plusDays(1),
                         )

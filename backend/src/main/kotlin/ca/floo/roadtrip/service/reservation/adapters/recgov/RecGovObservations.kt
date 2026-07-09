@@ -9,6 +9,7 @@ import ca.floo.roadtrip.models.availability.AvailabilitySeasonBlock
 import ca.floo.roadtrip.models.availability.AvailabilityStatus
 import ca.floo.roadtrip.models.availability.ReservableDayObservation
 import ca.floo.roadtrip.service.api.availabilityErrorDto
+import ca.floo.roadtrip.service.reservation.CatalogReservableRef
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -92,7 +93,7 @@ internal suspend fun fetchRecgovAvailabilityObservations(
 internal suspend fun fetchRecgovCatalogObservations(
     client: RecGovAvailabilityClient,
     recgovId: String,
-    campsiteIds: Set<String>,
+    reservables: List<CatalogReservableRef>,
     startDate: LocalDate,
     endDate: LocalDate,
 ): AvailabilityObservationBatch =
@@ -106,14 +107,16 @@ internal suspend fun fetchRecgovCatalogObservations(
                 .awaitAll()
 
         val merged = mergeCampsites(payloads)
+        val campsiteIds = reservables.map { it.vendorId }.toSet()
         val catalogSites = campsiteIds.associateWith { siteId -> merged[siteId].orEmpty() }
+        val reservableIdsBySiteId = reservables.associate { it.vendorId to it.rid }
         val observedAtByDate = dates.associateWith { observedAt }
 
         AvailabilityObservationBatch(
             provider = "recgov",
             startDate = startDate,
             endDate = endDate,
-            observations = observationsFromCampsites(catalogSites, dates, observedAtByDate),
+            observations = observationsFromCampsites(catalogSites, dates, observedAtByDate, reservableIdsBySiteId),
             seasonBlock = inferReopenDate(catalogSites, startDate),
             cacheBlock = directFetchCacheBlock(),
             campgroundId = recgovId,
@@ -184,11 +187,12 @@ private fun observationsFromCampsites(
     merged: Map<String, Map<String, String>>,
     dates: List<LocalDate>,
     observedAtByDate: Map<LocalDate, Instant>,
+    reservableIdsBySiteId: Map<String, String> = emptyMap(),
 ): List<ReservableDayObservation> =
     merged.flatMap { (siteId, byDate) ->
         dates.map { date ->
             ReservableDayObservation(
-                reservableId = recgovReservableId(siteId),
+                reservableId = reservableIdsBySiteId[siteId] ?: recgovReservableId(siteId),
                 date = date,
                 observedAt = observedAtByDate[date] ?: Instant.EPOCH,
                 status = classifyRecgovStatus(byDate[date.toString()]),

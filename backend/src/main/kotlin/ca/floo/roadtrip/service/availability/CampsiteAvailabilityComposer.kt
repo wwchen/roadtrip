@@ -68,7 +68,7 @@ internal class CampsiteAvailabilityComposer(
                     ) {
                         provider.catalogAvailability(
                             ref = parentRef,
-                            reservables = rows.map { it.toCatalogReservableRef() },
+                            reservables = rows.map { it.catalogRef },
                             startDate = windows.fetch.startDate,
                             endDate = windows.fetch.endDate,
                         )
@@ -109,10 +109,10 @@ internal fun defaultSnapshotFreshnessTtl(providerId: ReservationProviderId): Dur
         ReservationProviderId.RESERVECALIFORNIA -> ApiCacheEntity.RESERVECALIFORNIA_AVAILABILITY.defaultTtl
     }
 
-private fun Reservable.toAvailabilityTarget(): AvailabilityLoader.TargetReservable =
+private fun ResolvedAvailabilityTarget.toAvailabilityTarget(): AvailabilityLoader.TargetReservable =
     AvailabilityLoader.TargetReservable(
-        dbId = id,
-        rid = rid.encode(),
+        dbId = reservable.id,
+        rid = catalogRef.rid,
     )
 
 private fun availabilityMetadata(

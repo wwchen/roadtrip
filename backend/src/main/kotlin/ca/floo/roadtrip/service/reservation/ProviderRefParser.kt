@@ -69,3 +69,12 @@ object ProviderRefParser {
         return null
     }
 }
+
+internal fun ProviderRef.reservationProviderId(): ReservationProviderId =
+    when (this) {
+        is ProviderRef.RecGov -> ReservationProviderId.RECGOV
+        is ProviderRef.Campflare -> ReservationProviderId.CAMPFLARE
+        is ProviderRef.Aspira -> ReservationProviderId.ASPIRA
+        is ProviderRef.ReserveAmerica -> ReservationProviderId.RESERVEAMERICA
+        is ProviderRef.ReserveCalifornia -> ReservationProviderId.RESERVECALIFORNIA
+    }

@@ -66,6 +66,46 @@ class RecGovReservationProviderTest {
         }
 
     @Test
+    fun `catalog availability preserves caller rid when vendor id is a recgov alias`() =
+        runBlocking {
+            val client =
+                fakeRecgovClient { campgroundId, _ ->
+                    assertEquals("232447", campgroundId)
+                    mapOf(
+                        "100" to
+                            Campsite(
+                                id = "100",
+                                site = "A12",
+                                loop = "A",
+                                campsiteType = "STANDARD",
+                                maxNumPeople = 6,
+                                equipmentTypes = emptyList(),
+                                availabilities = mapOf("2026-07-01" to "Available"),
+                            ),
+                    )
+                }
+            val adapter = RecGovReservationProvider(client)
+
+            val batch =
+                adapter.catalogAvailability(
+                    ref = ProviderRef.RecGov("232447"),
+                    reservables =
+                        listOf(
+                            CatalogReservableRef(
+                                rid = "site:campflare:upper-pines-site-100",
+                                vendorId = "100",
+                            ),
+                        ),
+                    startDate = LocalDate.parse("2026-07-01"),
+                    endDate = LocalDate.parse("2026-07-02"),
+                )
+
+            val observation = batch.observations.single()
+            assertEquals("site:campflare:upper-pines-site-100", observation.reservableId)
+            assertEquals(AvailabilityStatus.AVAILABLE, observation.status)
+        }
+
+    @Test
     fun `reservable availability narrows fetched campground data to one campsite`() =
         runBlocking {
             val client =
