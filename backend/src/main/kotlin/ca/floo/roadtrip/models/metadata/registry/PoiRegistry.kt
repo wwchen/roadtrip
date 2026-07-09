@@ -8,6 +8,8 @@ import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import java.io.File
 
+private const val CAMPSITE_DATA_SECTION = "campsite_data"
+
 // In-memory representation of config/poi-registry.yaml.
 //
 // Four sections:
@@ -16,16 +18,16 @@ import java.io.File
 //   - poi_data: POI datasets. Terminal etl emits Poi.* rows into `pois`.
 //     Each row carries name, optional enabled (default true), category,
 //     optional subcategory, and an ordered etls: list. (Existing flow.)
-//   - reservable_data: reservable catalogs (RFC 0008). Terminal etl emits
-//     reservable rows into `reservables`. Same chain shape as poi_data,
-//     minus category/subcategory (reservables aren't map pins).
+//   - campsite_data: campsite catalogs. Terminal etl emits canonical campsite
+//     rows. Same chain shape as poi_data, minus category/subcategory
+//     (campsites aren't map pins).
 //   - poi_reservable_joiner: N:M-link discovery (RFC 0008). Each entry
 //     names an adapter that reads the current state of `pois` +
 //     `reservables` and writes the (reservable_id, poi_id) link rows
 //     into `reservable_pois`. No etl chain — joiners don't transform raw
 //     data, they query DB tables.
 //
-// Etl chain semantics (poi_data + reservable_data):
+// Etl chain semantics (poi_data + campsite_data):
 //   - Terminal stage = last etls entry. Earlier entries are intermediates.
 //   - List order = dependency order. Entry N may only reference
 //     data_source slugs OR earlier siblings via inputs.
@@ -34,21 +36,21 @@ import java.io.File
 //
 // All sections share the slug namespace because `inputs:` resolves to
 // either a data_source or an earlier sibling etl. Etl slugs across
-// poi_data + reservable_data must not collide; data_source slugs must
+// poi_data + campsite_data must not collide; data_source slugs must
 // not collide with any etl slug.
 //
 // Loaded once at boot. Used by:
 //   1. EtlOrchestrator — runs etl chains in declared order, dispatching
-//      poi_data terminals to Pois Upsert and reservable_data terminals
+//      poi_data terminals to Pois Upsert and campsite_data terminals
 //      to CampsiteRepo. Also runs joiner adapters.
 //   2. IngestController / RegistryTargets — fetch is per data_source;
-//      import targets cover all three of {poi_data, reservable_data,
+//      import targets cover all three of {poi_data, campsite_data,
 //      poi_reservable_joiner}.
 //
 // Adding a new POI source: one data_sources row + one poi_data row +
 // one EtlOrchestrator.registry line per ETL slug. No Flyway migration.
 //
-// Adding a new reservable source: same shape but reservable_data row.
+// Adding a new campsite source: same shape but campsite_data row.
 // Then add a poi_reservable_joiner row pointing at the matching joiner
 // adapter so the catalog rows get linked to their parent POIs.
 @Serializable
@@ -57,8 +59,8 @@ data class PoiRegistry(
     val dataSources: List<DataSourceEntry>,
     @kotlinx.serialization.SerialName("poi_data")
     val poiData: List<PoiDataEntry>,
-    @kotlinx.serialization.SerialName("reservable_data")
-    val reservableData: List<ReservableDataEntry> = emptyList(),
+    @kotlinx.serialization.SerialName("campsite_data")
+    val campsiteData: List<CampsiteDataEntry> = emptyList(),
     @kotlinx.serialization.SerialName("poi_reservable_joiner")
     val poiReservableJoiners: List<PoiReservableJoinerEntry> = emptyList(),
 ) {
@@ -108,10 +110,10 @@ data class PoiRegistry(
 
         // Etl slugs share a namespace with data_source slugs because
         // inputs: resolves to either. Detect collisions across both
-        // poi_data and reservable_data — an etl in either section can be
+        // poi_data and campsite_data — an etl in either section can be
         // an input to an etl in the same section's row, but not across
         // sections (the orchestrator hands intermediates over in memory
-        // within one runPoiData / runReservableData invocation, not
+        // within one runPoiData / runCampsiteData invocation, not
         // between them).
         val etlSlugs = mutableSetOf<String>()
         for (row in poiData) {
@@ -129,8 +131,8 @@ data class PoiRegistry(
             errs = errs,
         )
         validateEtlSection(
-            label = "reservable_data",
-            rows = reservableData.map { EtlRowRef(it.name, it.etls, it) },
+            label = CAMPSITE_DATA_SECTION,
+            rows = campsiteData.map { EtlRowRef(it.name, it.etls, it) },
             dsSlugs = dsSlugs,
             allEtlSlugs = etlSlugs,
             errs = errs,
@@ -168,7 +170,7 @@ data class PoiRegistry(
                     for (input in e.inputs) edge(input, e.slug)
                 }
             }
-            for (row in reservableData) {
+            for (row in campsiteData) {
                 for (e in row.etls) {
                     for (input in e.inputs) edge(input, e.slug)
                 }
@@ -198,7 +200,7 @@ data class PoiRegistry(
      * at an etl in a different section (or a different row in this
      * section), it gets the "neither a data_source nor a prior sibling"
      * error. The orchestrator hands intermediates in-memory within one
-     * runPoiData/runReservableData call, so cross-row state never exists.
+     * runPoiData/runCampsiteData call, so cross-row state never exists.
      */
     private fun validateEtlSection(
         label: String,
@@ -261,7 +263,7 @@ data class PoiRegistry(
         slug: String,
     ): Boolean {
         if (exclude != "poi_data" && poiData.any { row -> row.etls.any { it.slug == slug } }) return true
-        if (exclude != "reservable_data" && reservableData.any { row -> row.etls.any { it.slug == slug } }) return true
+        if (exclude != CAMPSITE_DATA_SECTION && campsiteData.any { row -> row.etls.any { it.slug == slug } }) return true
         return false
     }
 
@@ -285,11 +287,11 @@ data class PoiRegistry(
     /** Look up a poi_data row by its display name. Names are unique by convention. */
     fun poiDataByName(name: String): PoiDataEntry? = poiData.firstOrNull { it.name == name }
 
-    /** reservable_data rows that should run during fan-out import. */
-    fun enabledReservableData(): List<ReservableDataEntry> = reservableData.filter { it.enabled }
+    /** campsite_data rows that should run during fan-out import. */
+    fun enabledCampsiteData(): List<CampsiteDataEntry> = campsiteData.filter { it.enabled }
 
-    /** Look up a reservable_data row by its display name. */
-    fun reservableDataByName(name: String): ReservableDataEntry? = reservableData.firstOrNull { it.name == name }
+    /** Look up a campsite_data row by its display name. */
+    fun campsiteDataByName(name: String): CampsiteDataEntry? = campsiteData.firstOrNull { it.name == name }
 
     /** poi_reservable_joiner rows that should run during fan-out import. */
     fun enabledPoiReservableJoiners(): List<PoiReservableJoinerEntry> = poiReservableJoiners.filter { it.enabled }
@@ -511,14 +513,14 @@ data class EtlEntry(
 )
 
 /**
- * Row in the `reservable_data` section. Same shape as [PoiDataEntry] minus
- * `category` / `subcategory` — reservables aren't map pins, so the FE
- * legend metadata doesn't apply. The terminal etl emits reservable rows
+ * Row in the `campsite_data` section. Same shape as [PoiDataEntry] minus
+ * `category` / `subcategory` — campsites aren't map pins, so the FE
+ * legend metadata doesn't apply. The terminal etl emits campsite rows
  * via [ca.floo.roadtrip.repo.CampsiteRepo]; the orchestrator dispatches
  * by section, not by etl marker interface.
  */
 @Serializable
-data class ReservableDataEntry(
+data class CampsiteDataEntry(
     val name: String,
     val enabled: Boolean = true,
     val etls: List<EtlEntry>,

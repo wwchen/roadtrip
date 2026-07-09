@@ -10,11 +10,11 @@ import kotlin.test.assertTrue
 /**
  * Validator tests for the three-section registry shape (RFC 0008 PR 2).
  * Asserts:
- *   - empty reservable_data + poi_reservable_joiner sections (the v0
+ *   - empty campsite_data + poi_reservable_joiner sections (the v0
  *     defaults) load fine on existing single-poi_data YAML.
- *   - reservable_data rows enforce the same etl-chain constraints as
+ *   - campsite_data rows enforce the same etl-chain constraints as
  *     poi_data (slug uniqueness, no cross-row refs).
- *   - etl slugs across poi_data and reservable_data share one
+ *   - etl slugs across poi_data and campsite_data share one
  *     namespace; collisions across sections fail validation.
  *   - data_source slugs colliding with etl slugs in either section fail.
  *   - poi_reservable_joiner rows reject blank adapters and duplicate
@@ -28,7 +28,7 @@ class PoiRegistryValidatorTest {
 
     @Test
     fun `legacy single-poi_data YAML still loads`() {
-        // No reservable_data or poi_reservable_joiner sections — should
+        // No campsite_data or poi_reservable_joiner sections — should
         // default to empty lists and pass the validator unchanged.
         val r =
             load(
@@ -49,7 +49,7 @@ class PoiRegistryValidatorTest {
                         inputs: [src-a]
                 """.trimIndent(),
             )
-        assertEquals(emptyList(), r.reservableData)
+        assertEquals(emptyList(), r.campsiteData)
         assertEquals(emptyList(), r.poiReservableJoiners)
     }
 
@@ -126,7 +126,7 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `reservable_data row with valid etl chain loads`() {
+    fun `campsite_data row with valid etl chain loads`() {
         val r =
             load(
                 """
@@ -138,7 +138,7 @@ class PoiRegistryValidatorTest {
                       filename: scripts/x.py
                       output_dir_prefix: data/raw/src-a
                 poi_data: []
-                reservable_data:
+                campsite_data:
                   - name: Federal Campsites
                     etls:
                       - slug: federal-campsites
@@ -146,12 +146,12 @@ class PoiRegistryValidatorTest {
                         inputs: [src-a]
                 """.trimIndent(),
             )
-        assertEquals(1, r.reservableData.size)
-        assertEquals("Federal Campsites", r.reservableData[0].name)
+        assertEquals(1, r.campsiteData.size)
+        assertEquals("Federal Campsites", r.campsiteData[0].name)
     }
 
     @Test
-    fun `etl slugs across poi_data and reservable_data share one namespace`() {
+    fun `etl slugs across poi_data and campsite_data share one namespace`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
@@ -170,7 +170,7 @@ class PoiRegistryValidatorTest {
                           - slug: shared-slug
                             adapter: AdapterA
                             inputs: [src-a]
-                    reservable_data:
+                    campsite_data:
                       - name: B
                         etls:
                           - slug: shared-slug
@@ -186,7 +186,7 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `data_source slug colliding with reservable_data etl slug fails`() {
+    fun `data_source slug colliding with campsite_data etl slug fails`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
@@ -199,7 +199,7 @@ class PoiRegistryValidatorTest {
                           filename: scripts/x.py
                           output_dir_prefix: data/raw/my-thing
                     poi_data: []
-                    reservable_data:
+                    campsite_data:
                       - name: B
                         etls:
                           - slug: my-thing
@@ -215,9 +215,9 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `cross-row refs rejected within reservable_data section`() {
+    fun `cross-row refs rejected within campsite_data section`() {
         // The same constraint poi_data already enforced — two
-        // reservable_data rows can't share intermediate etl outputs.
+        // campsite_data rows can't share intermediate etl outputs.
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
@@ -230,7 +230,7 @@ class PoiRegistryValidatorTest {
                           filename: scripts/x.py
                           output_dir_prefix: data/raw/src-a
                     poi_data: []
-                    reservable_data:
+                    campsite_data:
                       - name: First
                         etls:
                           - slug: shared-intermediate
@@ -251,7 +251,7 @@ class PoiRegistryValidatorTest {
     }
 
     @Test
-    fun `cross-section refs rejected (reservable_data inputs cannot reference poi_data etls)`() {
+    fun `cross-section refs rejected (campsite_data inputs cannot reference poi_data etls)`() {
         val ex =
             assertFailsWith<IllegalArgumentException> {
                 load(
@@ -270,8 +270,8 @@ class PoiRegistryValidatorTest {
                           - slug: poi-etl
                             adapter: A
                             inputs: [src-a]
-                    reservable_data:
-                      - name: ReservableRow
+                    campsite_data:
+                      - name: CampsiteRow
                         etls:
                           - slug: rsv-etl
                             adapter: B
@@ -292,7 +292,7 @@ class PoiRegistryValidatorTest {
                 """
                 data_sources: []
                 poi_data: []
-                reservable_data: []
+                campsite_data: []
                 poi_reservable_joiner:
                   - name: Recgov join
                     adapter: RecgovPoiReservableJoiner
@@ -310,7 +310,7 @@ class PoiRegistryValidatorTest {
                     """
                     data_sources: []
                     poi_data: []
-                    reservable_data: []
+                    campsite_data: []
                     poi_reservable_joiner:
                       - name: Empty
                         adapter: ""
@@ -331,7 +331,7 @@ class PoiRegistryValidatorTest {
                     """
                     data_sources: []
                     poi_data: []
-                    reservable_data: []
+                    campsite_data: []
                     poi_reservable_joiner:
                       - name: Dup
                         adapter: A

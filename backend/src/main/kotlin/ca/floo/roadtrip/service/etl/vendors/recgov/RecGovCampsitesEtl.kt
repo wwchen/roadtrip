@@ -19,7 +19,7 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.put
 
 /**
- * Terminal ETL for the `reservable_data` section. Reads per-facility
+ * Terminal ETL for the `campsite_data` section. Reads per-facility
  * envelopes captured by `scripts/fetch_recgov_campsites.py` and emits one
  * reservable per campsite.
  *

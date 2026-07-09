@@ -18,7 +18,7 @@ import org.jooq.impl.DSL
 import org.slf4j.LoggerFactory
 import java.io.File
 
-// Orchestrates one poi_data/reservable_data row's ETL chain end-to-end.
+// Orchestrates one poi_data/campsite_data row's ETL chain end-to-end.
 //
 // Per-row sequence (declared etls: list, in order):
 //   1. Resolve each etls entry's `inputs:` slug into either:
@@ -58,7 +58,7 @@ class EtlOrchestrator(
     private val catalogRepo = CanonicalCatalogRepo(ctx)
 
     /**
-     * Per-row run summary for import rows. `poi_data` and `reservable_data`
+     * Per-row run summary for import rows. `poi_data` and `campsite_data`
      * both flow through the same chain runner; only terminal persistence
      * differs by output type.
      */
@@ -70,8 +70,8 @@ class EtlOrchestrator(
         val upsertResult: CanonicalCatalogRepo.Result,
     )
 
-    data class ReservableStats(
-        val reservableDataName: String,
+    data class CampsiteStats(
+        val campsiteDataName: String,
         val terminalEtlSlug: String,
         val runId: Long,
         val parsed: Int,
@@ -108,21 +108,21 @@ class EtlOrchestrator(
         )
     }
 
-    fun runReservableData(name: String): ReservableStats {
+    fun runCampsiteData(name: String): CampsiteStats {
         val row =
-            poiRegistry.reservableDataByName(name)
-                ?: error("no reservable_data row with name='$name'")
-        require(row.etls.isNotEmpty()) { "reservable_data '$name' has empty etls list" }
+            poiRegistry.campsiteDataByName(name)
+                ?: error("no campsite_data row with name='$name'")
+        require(row.etls.isNotEmpty()) { "campsite_data '$name' has empty etls list" }
 
-        log.info("etl reservable_data='{}' starting ({} stages)", name, row.etls.size)
+        log.info("etl campsite_data='{}' starting ({} stages)", name, row.etls.size)
         val stats =
             runEtlChain(
                 rowName = row.name,
-                sectionLabel = "reservable_data",
+                sectionLabel = "campsite_data",
                 etls = row.etls,
             )
-        return ReservableStats(
-            reservableDataName = row.name,
+        return CampsiteStats(
+            campsiteDataName = row.name,
             terminalEtlSlug = stats.terminalEtlSlug,
             runId = stats.upsertResult.runId,
             parsed = stats.parsed,
