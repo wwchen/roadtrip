@@ -21,7 +21,7 @@ sealed interface Phase {
      * orchestrator which dispatch path to take:
      *   - POI_DATA          → runPoiData(name)
      *   - RESERVABLE_DATA   → runReservableData(name)
-     *   - POI_RESERVABLE_JOINER → runJoiner(name)
+     *   - POI_RESERVABLE_JOINER → retired; runJoiner(name) rejects it
      *
      * [name] is the row's display name from the YAML (unique per
      * section, but slugs share a namespace across sections so the
@@ -45,7 +45,8 @@ sealed interface Phase {
 
 // A unit of refresh.
 //   - Fetch targets: one per data_sources row. Target.name = data_source slug.
-//   - Import targets: one per poi_data row. Target.name = poi_data display name.
+//   - Import targets: one per runnable poi_data/reservable_data row.
+//     Target.name = row display name.
 // Per-target mutex serializes concurrent runs of the same target.
 data class Target(
     val name: String,

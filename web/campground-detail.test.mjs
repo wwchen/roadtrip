@@ -3,6 +3,7 @@ import test from 'node:test';
 
 import { flattenHydratedPoi } from './core.js';
 import {
+  campgroundParentParkName,
   cellCoveragePillsHTML,
   parseAmenities,
   parseCellCoverage,
@@ -94,6 +95,10 @@ const campflareDetail = {
       metadata: {
         last_updated: '2026-05-16T06:40:02Z',
       },
+      source_payload: {
+        long_description: 'Cold Creek Campground is located on Highway 89.\n\nLake Tahoe is only 35 minutes away.',
+        status_description: 'Open May through October',
+      },
     },
   },
 };
@@ -101,7 +106,7 @@ const campflareDetail = {
 test('flattenHydratedPoi promotes canonical Campflare fields for the drawer', () => {
   const p = flattenHydratedPoi(campflareDetail).properties;
 
-  assert.equal(p.description, campflareDetail.properties.raw.long_description);
+  assert.equal(p.description, '');
   assert.equal(p.photo_url, 'https://cdn.campflare.com/photo/large.jpg');
   assert.equal(p.agency, 'USDA Forest Service');
   assert.equal(p.phone, '+1 (530) 994-3401');
@@ -110,7 +115,7 @@ test('flattenHydratedPoi promotes canonical Campflare fields for the drawer', ()
   assert.equal(p.state, 'CA');
   assert.equal(p.country, 'US');
   assert.equal(p.status, 'open');
-  assert.equal(p.status_description, 'Open May through October');
+  assert.equal(p.status_description, '');
   assert.deepEqual(p.price, campflareDetail.properties.raw.price);
   assert.deepEqual(p.schedule, campflareDetail.properties.raw.default_campsite_schedule);
   assert.equal(p.has_pull_through_sites, true);
@@ -133,12 +138,38 @@ test('campground drawer helpers accept canonical amenities and cell service', ()
   assert.match(reserveButtonHTML(p, 'cg-btn'), /View on recreation\.gov/);
 });
 
+test('campgroundParentParkName derives specific parent park labels from links', () => {
+  assert.equal(campgroundParentParkName({
+    name: 'Cranberry Lake Campground',
+    links: [
+      { title: 'Deception Pass State Park', url: 'https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park' },
+      { title: 'Washington State Parks Reservations', url: 'https://parks.wa.gov/passes-permits/reservations' },
+    ],
+  }), 'Deception Pass State Park');
+
+  assert.equal(campgroundParentParkName({
+    name: 'Cold Creek',
+    links: [
+      { title: 'Official page', url: 'https://example.test/cold-creek' },
+      { title: 'Map', url: 'https://example.test/cold-creek-map' },
+    ],
+  }), '');
+
+  assert.equal(campgroundParentParkName({
+    name: 'Deception Pass State Park',
+    links: [
+      { title: 'Deception Pass State Park', url: 'https://parks.wa.gov/find-parks/state-parks/deception-pass-state-park' },
+    ],
+  }), '');
+});
+
 test('structuredCampgroundDetailsHTML renders Campflare campground fields', () => {
   const p = flattenHydratedPoi(campflareDetail).properties;
   const html = structuredCampgroundDetailsHTML(p);
 
   assert.match(html, /Stay details/);
-  assert.match(html, /Open May through October/);
+  assert.match(html, /Open/);
+  assert.doesNotMatch(html, /Open May through October/);
   assert.match(html, /\$24-\$32/);
   assert.match(html, /Check-in/);
   assert.match(html, /2:00 PM/);

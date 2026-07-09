@@ -13,6 +13,7 @@ import org.jooq.impl.DSL
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 
 class RegistryTargetsTest {
     @Test
@@ -123,6 +124,44 @@ class RegistryTargetsTest {
             listOf("Runnable Campgrounds", "Runnable Campsites"),
             importTargetsFromRegistry(registry).keys.toList(),
         )
+    }
+
+    @Test
+    fun `production import fan-out includes every configured canonical catalog source`() {
+        val registry =
+            PoiRegistry.load(
+                File(System.getProperty("user.dir"))
+                    .resolve("../config/poi-registry.yaml")
+                    .canonicalFile,
+            )
+
+        assertEquals(
+            listOf(
+                "Campflare Campgrounds",
+                "Federal Campgrounds",
+                "Washington State Parks",
+                "BC Provincial Parks",
+                "Parks Canada",
+                "Alberta Provincial Parks",
+                "New York State Parks",
+                "California State Parks",
+                "Planet Fitness",
+                "Tesla Superchargers",
+                "Campflare Campsites",
+                "Federal Campsites",
+                "Washington Aspira Resources",
+                "BC Aspira Resources",
+                "Parks Canada Aspira Resources",
+                "California State Park Sites",
+                "Alberta Provincial Park Sites",
+                "New York State Park Sites",
+            ),
+            importTargetsFromRegistry(registry).keys.toList(),
+        )
+        assertFalse("Federal Campsites → Federal Campgrounds" in importTargetsFromRegistry(registry).keys)
+        assertFalse("Aspira Resources → Aspira Pins" in importTargetsFromRegistry(registry).keys)
+        assertFalse("ReserveCalifornia Sites → California State Parks" in importTargetsFromRegistry(registry).keys)
+        assertFalse("ReserveAmerica Sites → Alberta + NY Parks" in importTargetsFromRegistry(registry).keys)
     }
 
     private fun source(

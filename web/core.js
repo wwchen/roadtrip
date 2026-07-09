@@ -189,12 +189,43 @@ export function flattenHydratedPoi(f) {
     flat.opening_hours = raw.opening_hours || '';
   }
   if (p.category === 'tesla_supercharger' || p.category === 'supercharger') {
-    flat.locationId = p.source_id;
+    const detailPayload = objectValue(raw.detail_payload, raw.detailPayload, flat.detail_payload, flat.detailPayload);
+    const indexPayload = objectValue(raw.index_payload, raw.indexPayload, flat.index_payload, flat.indexPayload);
+    const availabilityProfile = objectValue(
+      raw.availability_profile,
+      raw.availabilityProfile,
+      flat.availability_profile,
+      flat.availabilityProfile,
+      detailPayload?.availabilityProfile,
+    );
+    const amenities = arrayValue(raw.amenities, flat.amenities, detailPayload?.amenities);
+    const upstreamDetail = { ...(detailPayload || {}) };
+    if (availabilityProfile) upstreamDetail.availabilityProfile = availabilityProfile;
+    const timeZone = firstText(raw.time_zone, raw.timeZone, flat.time_zone, flat.timeZone, detailPayload?.timeZone);
+    if (timeZone) upstreamDetail.timeZone = timeZone;
+    if (amenities) upstreamDetail.amenities = amenities;
+    const accessHours = objectValue(upstreamDetail.accessHours) || {};
+    const twentyFourSeven = firstPresent(raw.twenty_four_seven, flat.twenty_four_seven, detailPayload?.accessHours?.twentyFourSeven);
+    if (twentyFourSeven !== undefined) upstreamDetail.accessHours = { ...accessHours, twentyFourSeven };
+    const openToNonTeslas = firstPresent(raw.open_to_non_teslas, flat.open_to_non_teslas, detailPayload?.openToNonTeslas);
+    if (openToNonTeslas !== undefined) upstreamDetail.openToNonTeslas = openToNonTeslas;
+    const trailerFriendly = firstPresent(raw.trailer_friendly, flat.trailer_friendly, detailPayload?.isTrailerFriendly);
+    if (trailerFriendly !== undefined) upstreamDetail.isTrailerFriendly = trailerFriendly;
+
+    flat.locationId = p.source_id || raw.location_slug || flat.location_slug;
     flat.stallCount = raw.stall_count ?? 0;
     flat.powerKilowatt = raw.max_power_kw ?? 0;
     flat.color = raw.color || '#e82127';
-    flat.status = raw.status || 'OPEN';
+    flat.status = firstText(raw.status, raw.site_status, indexPayload?.supercharger_function?.site_status) || 'OPEN';
     flat.pricebooks = raw.pricebooks || [];
+    flat.timeZone = timeZone;
+    flat.availabilityProfile = availabilityProfile || null;
+    flat.detailPayload = detailPayload || {};
+    flat.upstream = {
+      ...(objectValue(p.upstream, flat.upstream) || {}),
+      ...(indexPayload ? { index: indexPayload } : {}),
+      detail: upstreamDetail,
+    };
   }
   flat.name = p.name || raw.name || flat.name;
   return { ...f, properties: flat };
@@ -209,10 +240,6 @@ function promoteCanonicalCampgroundFields(flat, p, raw) {
   flat.description = firstText(
     p.description,
     raw.description,
-    raw.long_description,
-    raw.medium_description,
-    raw.short_description,
-    raw.status_description,
   );
   flat.photo_url = firstText(p.photo_url, campgroundPhotoUrl(raw.photos));
   flat.agency = firstText(p.agency, management.agency_name, management.agency, management.name);
@@ -220,7 +247,7 @@ function promoteCanonicalCampgroundFields(flat, p, raw) {
   flat.email = firstText(p.email, contact.email, contact.primary_email);
   flat.reserve_url = firstText(p.reserve_url, raw.reservation_url);
   flat.status = firstText(p.status, raw.status, flat.status);
-  flat.status_description = firstText(p.status_description, raw.status_description, flat.status_description);
+  flat.status_description = firstText(p.status_description, flat.status_description);
   flat.kind = firstText(p.kind, raw.kind, flat.kind);
   flat.price = p.price ?? raw.price ?? flat.price;
   flat.schedule = p.schedule ?? raw.default_campsite_schedule ?? flat.schedule;
@@ -281,4 +308,25 @@ function firstText(...values) {
     if (trimmed) return trimmed;
   }
   return '';
+}
+
+function firstPresent(...values) {
+  for (const value of values) {
+    if (value !== undefined && value !== null) return value;
+  }
+  return undefined;
+}
+
+function objectValue(...values) {
+  for (const value of values) {
+    if (value && typeof value === 'object' && !Array.isArray(value)) return value;
+  }
+  return null;
+}
+
+function arrayValue(...values) {
+  for (const value of values) {
+    if (Array.isArray(value)) return value;
+  }
+  return null;
 }

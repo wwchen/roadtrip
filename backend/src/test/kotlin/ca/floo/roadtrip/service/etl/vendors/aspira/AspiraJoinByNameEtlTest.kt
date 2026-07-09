@@ -1,8 +1,8 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -88,6 +88,11 @@ class AspiraJoinByNameEtlTest {
             fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
         )
 
+    private fun campgrounds(dto: AspiraJoinDto): List<CampgroundEtlRecord> =
+        AspiraJoinByNameEtl(slug)
+            .transform(dto, ctx)
+            .campgrounds
+
     /** DTO variant carrying an inventory envelope + category dictionary for the non-bookable filter. */
     private fun dtoWith(
         leaf: AspiraLeaf,
@@ -170,43 +175,44 @@ class AspiraJoinByNameEtlTest {
 
     @Test
     fun `drops park-container leaves even when their name matches geometry`() {
-        val pois = AspiraJoinByNameEtl(slug).transform(dtoOf(parkContainer, campground), ctx)
+        val campgrounds = campgrounds(dtoOf(parkContainer, campground))
 
-        assertEquals(1, pois.size, "only the campground node should become a POI")
-        val poi = pois.single()
-        assertEquals("Two Jack Lakeside", poi.name)
-        val ref = poi.providerRef as ProviderRef.Aspira
-        assertEquals(9002L, ref.resourceLocationId)
+        assertEquals(1, campgrounds.size, "only the campground node should become a campground")
+        val campground = campgrounds.single()
+        assertEquals("Two Jack Lakeside", campground.name)
+        val ref = campground.vendorRefPayload!!.jsonObject
+        assertEquals("9002", ref["resourceLocationId"]!!.jsonPrimitive.content)
     }
 
     @Test
     fun `emits nothing when every leaf is a park container`() {
-        val pois = AspiraJoinByNameEtl(slug).transform(dtoOf(parkContainer), ctx)
-        assertTrue(pois.isEmpty(), "a park with no campground children yields no POI")
+        val campgrounds = campgrounds(dtoOf(parkContainer))
+        assertTrue(campgrounds.isEmpty(), "a park with no campground children yields no campground")
     }
 
     @Test
     fun `keeps campground POIs keyed by transactionLocationId and mapId`() {
-        val poi = AspiraJoinByNameEtl(slug).transform(dtoOf(campground), ctx).single()
+        val campground = campgrounds(dtoOf(campground)).single()
 
-        // Joiner rule (A) matches pois.source_id = "aspira-{txn}-{map}".
-        assertEquals("aspira-1002--2147483641", poi.sourceId)
-        assertEquals("federal", poi.subcategory)
-        assertEquals("Parks Canada", poi.agency)
+        // Campsite parent resolution matches vendor_refs.external_id = "aspira-{txn}-{map}".
+        assertEquals("aspira-1002--2147483641", campground.vendorRefId)
+        assertEquals("federal", campground.kind)
+        val management = campground.management!!.jsonObject
+        assertEquals("Parks Canada", management["agency"]!!.jsonPrimitive.content)
     }
 
     @Test
-    fun `resourceLocationId is carried into provider_ref for the joiner`() {
-        val poi = AspiraJoinByNameEtl(slug).transform(dtoOf(campground), ctx).single()
+    fun `resourceLocationId is carried into provider ref payload`() {
+        val campground = campgrounds(dtoOf(campground)).single()
 
-        val extras = poi.extras!!.jsonObject
-        assertEquals("9002", extras["resource_location_id"]!!.jsonPrimitive.content)
+        val providerRef = campground.vendorRefPayload!!.jsonObject
+        assertEquals("9002", providerRef["resourceLocationId"]!!.jsonPrimitive.content)
     }
 
     @Test
     fun `extras record match provenance and host`() {
-        val poi = AspiraJoinByNameEtl(slug).transform(dtoOf(campground), ctx).single()
-        val extras = poi.extras!!.jsonObject
+        val campground = campgrounds(dtoOf(campground)).single()
+        val extras = campground.metadata!!.jsonObject
         assertEquals("reservation.pc.gc.ca", extras["host"]!!.jsonPrimitive.content)
         assertEquals("exact", extras["match_kind"]!!.jsonPrimitive.content)
     }
@@ -229,9 +235,9 @@ class AspiraJoinByNameEtlTest {
             }
             """.trimIndent()
 
-        val poi = AspiraJoinByNameEtl(slug).transform(dtoWith(leaf, inventory, categoryDict), ctx).single()
+        val campground = campgrounds(dtoWith(leaf, inventory, categoryDict)).single()
 
-        val bookingRef = poi.extras!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
+        val bookingRef = campground.metadata!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
         assertEquals("1005", bookingRef["transactionLocationId"]!!.jsonPrimitive.content)
         assertEquals("-2147483645", bookingRef["mapId"]!!.jsonPrimitive.content)
         assertEquals("9002", bookingRef["resourceLocationId"]!!.jsonPrimitive.content)
@@ -255,9 +261,9 @@ class AspiraJoinByNameEtlTest {
             }
             """.trimIndent()
 
-        val poi = AspiraJoinByNameEtl(slug).transform(dtoWith(leaf, inventory, categoryDict), ctx).single()
+        val campground = campgrounds(dtoWith(leaf, inventory, categoryDict)).single()
 
-        val bookingRef = poi.extras!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
+        val bookingRef = campground.metadata!!.jsonObject["booking_cta_provider_ref"]!!.jsonObject
         assertEquals("-2147483645", bookingRef["mapId"]!!.jsonPrimitive.content)
     }
 
@@ -278,20 +284,18 @@ class AspiraJoinByNameEtlTest {
 
     @Test
     fun `campground leaf that misses its own name falls back to the parent park centroid`() {
-        val poi = AspiraJoinByNameEtl(slug).transform(dtoOf(campgroundMissingOwnName), ctx).single()
+        val campground = campgrounds(dtoOf(campgroundMissingOwnName)).single()
 
-        assertEquals("Backcountry Site With No Geometry", poi.name)
+        assertEquals("Backcountry Site With No Geometry", campground.name)
         assertEquals(
             "parent",
-            poi.extras!!
+            campground.metadata!!
                 .jsonObject["match_kind"]!!
                 .jsonPrimitive.content,
         )
         // Located at Banff's seeded centroid (lon -115.57, lat 51.18), not its own.
-        assertTrue(
-            poi.geomGeoJson.contains("-115.57") && poi.geomGeoJson.contains("51.18"),
-            "expected parent-park centroid coordinates, got ${poi.geomGeoJson}",
-        )
+        assertEquals(-115.57, campground.longitude)
+        assertEquals(51.18, campground.latitude)
     }
 
     @Test
@@ -308,7 +312,7 @@ class AspiraJoinByNameEtlTest {
                 resourceLocationId = 9004L,
                 parentName = "Nowhere National Park",
             )
-        assertTrue(AspiraJoinByNameEtl(slug).transform(dtoOf(orphan), ctx).isEmpty())
+        assertTrue(campgrounds(dtoOf(orphan)).isEmpty())
     }
 
     @Test
@@ -316,15 +320,15 @@ class AspiraJoinByNameEtlTest {
         // resLoc 555's inventory is all category 200 (showResourceCapacityOnline
         // =false) → not a campground, even though the leaf name matches geometry.
         val inventory = """{"r1":{"resourceLocationId":555,"resourceCategoryId":200}}"""
-        val pois = AspiraJoinByNameEtl(slug).transform(dtoWith(nameMatchingLeaf(555L), inventory, categoryDict), ctx)
-        assertTrue(pois.isEmpty(), "a resourceLocationId with only non-bookable inventory must be dropped")
+        val campgrounds = campgrounds(dtoWith(nameMatchingLeaf(555L), inventory, categoryDict))
+        assertTrue(campgrounds.isEmpty(), "a resourceLocationId with only non-bookable inventory must be dropped")
     }
 
     @Test
     fun `keeps a leaf whose inventory includes a bookable category`() {
         val inventory = """{"r1":{"resourceLocationId":666,"resourceCategoryId":100}}"""
-        val pois = AspiraJoinByNameEtl(slug).transform(dtoWith(nameMatchingLeaf(666L), inventory, categoryDict), ctx)
-        assertEquals(1, pois.size, "a resourceLocationId with a bookable category is a campground")
+        val campgrounds = campgrounds(dtoWith(nameMatchingLeaf(666L), inventory, categoryDict))
+        assertEquals(1, campgrounds.size, "a resourceLocationId with a bookable category is a campground")
     }
 
     @Test
@@ -333,8 +337,8 @@ class AspiraJoinByNameEtlTest {
         // filter only drops resLocs that are ENTIRELY non-bookable.
         val inventory =
             """{"a":{"resourceLocationId":777,"resourceCategoryId":100},"b":{"resourceLocationId":777,"resourceCategoryId":200}}"""
-        val pois = AspiraJoinByNameEtl(slug).transform(dtoWith(nameMatchingLeaf(777L), inventory, categoryDict), ctx)
-        assertEquals(1, pois.size, "a resLoc mixing a bookable category with a non-bookable one is kept")
+        val campgrounds = campgrounds(dtoWith(nameMatchingLeaf(777L), inventory, categoryDict))
+        assertEquals(1, campgrounds.size, "a resLoc mixing a bookable category with a non-bookable one is kept")
     }
 
     @Test
@@ -343,8 +347,8 @@ class AspiraJoinByNameEtlTest {
         // category bookable. Nothing is dropped — the ETL reflects that this
         // tenant's data marks nothing as non-bookable.
         val inventory = """{"r1":{"resourceLocationId":555,"resourceCategoryId":200}}"""
-        val pois = AspiraJoinByNameEtl(slug).transform(dtoWith(nameMatchingLeaf(555L), inventory, allBookableDict), ctx)
-        assertEquals(1, pois.size, "an all-bookable dictionary drops nothing")
+        val campgrounds = campgrounds(dtoWith(nameMatchingLeaf(555L), inventory, allBookableDict))
+        assertEquals(1, campgrounds.size, "an all-bookable dictionary drops nothing")
     }
 
     @Test
@@ -358,6 +362,6 @@ class AspiraJoinByNameEtlTest {
                 dictionaryPayload = null,
                 fetchedAt = Instant.parse("2026-07-05T00:00:00Z"),
             )
-        assertEquals(1, AspiraJoinByNameEtl(slug).transform(dto, ctx).size, "no dictionary → no filtering")
+        assertEquals(1, campgrounds(dto).size, "no dictionary → no filtering")
     }
 }

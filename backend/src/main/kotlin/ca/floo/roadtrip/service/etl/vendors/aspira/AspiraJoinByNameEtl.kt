@@ -1,28 +1,31 @@
 package ca.floo.roadtrip.service.etl.vendors.aspira
 
-import ca.floo.roadtrip.models.domain.Poi
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.metadata.ValidationResult
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlOutput
+import ca.floo.roadtrip.service.etl.framework.CampgroundEtlRecord
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.SourceEtl
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
-import ca.floo.roadtrip.service.etl.framework.pointGeoJson
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
+import kotlinx.serialization.json.put
 import org.slf4j.LoggerFactory
 import java.time.Instant
 
-// Aspira leaves + heterogeneous geometry sources → Poi.Campground.
+// Aspira leaves + heterogeneous geometry sources → canonical campgrounds.
 //
 // `/api/maps` carries booking IDs but no lat/lng (the SPA renders against
 // pixel-coord image maps, not geographic). To put a pin on the map we
@@ -50,7 +53,7 @@ import java.time.Instant
 // doesn't earn a pin on the map.
 class AspiraJoinByNameEtl(
     override val etlSlug: String,
-) : SourceEtl<AspiraJoinDto, List<Poi.Campground>> {
+) : SourceEtl<AspiraJoinDto, CampgroundEtlOutput> {
     private val log = LoggerFactory.getLogger(javaClass)
     override val multiPart: Boolean = true
 
@@ -99,7 +102,7 @@ class AspiraJoinByNameEtl(
     override fun transform(
         dto: AspiraJoinDto,
         ctx: TransformCtx,
-    ): List<Poi.Campground> {
+    ): CampgroundEtlOutput {
         val host = ctx.argFor(etlSlug, "host") ?: error("$etlSlug: missing args.host")
         val subcategory = ctx.subcategoryFor(etlSlug)
         val agency = ctx.requiredConstantAgency(etlSlug)
@@ -141,7 +144,7 @@ class AspiraJoinByNameEtl(
         val tokenIndex: List<Pair<Set<String>, Pair<Double, Double>>> =
             byName.entries.map { (k, v) -> k.split(' ').toSet() to v }
 
-        val pois = mutableListOf<Poi.Campground>()
+        val campgrounds = mutableListOf<CampgroundEtlRecord>()
         var exact = 0
         var fuzzy = 0
         var viaParent = 0
@@ -165,9 +168,8 @@ class AspiraJoinByNameEtl(
             // Tenant-wide (WA/BC/PC share this ETL). Verified against all
             // three /api/maps captures that the only null-resourceLocationId
             // leaves are park containers (Camano Island WA, Wells Gray BC,
-            // 23 PC parks), and that none of them link a reservable via the
-            // joiner's source_id (Rule A) or resourceLocationId (Rule B)
-            // rules — so dropping them orphans nothing.
+            // 23 PC parks), and that resources carry parent refs through real
+            // campground leaves — so dropping containers orphans nothing.
             if (leaf.resourceLocationId == null) {
                 skippedContainer++
                 continue
@@ -213,42 +215,30 @@ class AspiraJoinByNameEtl(
             }
 
             val (lat, lon) = coords
-            pois +=
-                Poi.Campground(
-                    source = etlSlug,
-                    sourceId = "aspira-${leaf.transactionLocationId}-${leaf.mapId}",
+            val vendorRefId = aspiraVendorRefId(leaf)
+            val bookingCtaRef = leaf.resourceLocationId?.let { bookingCtaRefsByResourceLocationId[it] }
+            campgrounds +=
+                CampgroundEtlRecord(
+                    vendor = etlSlug,
+                    vendorRefId = vendorRefId,
                     name = leaf.name,
-                    geomGeoJson = pointGeoJson(lon, lat),
-                    region = null,
-                    country = null,
-                    phone = null,
-                    address = null,
-                    infoUrl = "https://$host/",
-                    fetchedAt = dto.fetchedAt,
-                    lastVerified = null,
-                    providerRef =
-                        ProviderRef.Aspira(
-                            transactionLocationId = leaf.transactionLocationId,
-                            mapId = leaf.mapId,
-                            resourceLocationId = leaf.resourceLocationId,
-                        ),
-                    amenities = emptyList(),
-                    activities = emptyList(),
-                    sites = null,
-                    season = null,
-                    near = null,
-                    photoUrl = null,
-                    cellCoverage = null,
-                    ratingReviews = null,
-                    subcategory = subcategory,
-                    agency = agency,
-                    extras =
+                    latitude = lat,
+                    longitude = lon,
+                    kind = subcategory,
+                    location = locationPayload(latitude = lat, longitude = lon),
+                    reservationUrl = "https://$host/",
+                    links = linksPayload("https://$host/"),
+                    management = managementPayload(agency),
+                    metadata =
                         leafExtras(
                             leaf = leaf,
                             host = host,
                             matchKind = matchKind,
-                            bookingCtaRef = leaf.resourceLocationId?.let { bookingCtaRefsByResourceLocationId[it] },
+                            bookingCtaRef = bookingCtaRef,
                         ),
+                    sourceUrl = "https://$host/",
+                    sourcePayload = aspiraSourcePayload(leaf, matchKind, bookingCtaRef),
+                    vendorRefPayload = aspiraProviderRefPayload(leaf),
                 )
         }
 
@@ -256,7 +246,7 @@ class AspiraJoinByNameEtl(
             "$etlSlug: {} leaves → {} pois " +
                 "(exact={} fuzzy={} parent={} miss={} skippedContainer={} skippedNonBookable={}; sample misses: {})",
             dto.leaves.leaves.size,
-            pois.size,
+            campgrounds.size,
             exact,
             fuzzy,
             viaParent,
@@ -265,8 +255,65 @@ class AspiraJoinByNameEtl(
             skippedNonBookable,
             missSamples.take(5),
         )
-        return pois
+        return CampgroundEtlOutput(campgrounds = campgrounds)
     }
+
+    private fun aspiraVendorRefId(leaf: AspiraLeaf): String = "$ASPIRA_VENDOR_REF_PREFIX${leaf.transactionLocationId}-${leaf.mapId}"
+
+    private fun aspiraProviderRefPayload(leaf: AspiraLeaf): JsonObject =
+        buildJsonObject {
+            put(ASPIRA_TRANSACTION_LOCATION_ID_KEY, leaf.transactionLocationId)
+            put(ASPIRA_MAP_ID_KEY, leaf.mapId)
+            leaf.resourceLocationId?.let { put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it) }
+        }
+
+    private fun aspiraSourcePayload(
+        leaf: AspiraLeaf,
+        matchKind: String,
+        bookingCtaRef: AspiraBookingCtaRef?,
+    ): JsonObject =
+        buildJsonObject {
+            put("name", leaf.name)
+            put(ASPIRA_TRANSACTION_LOCATION_ID_KEY, leaf.transactionLocationId)
+            put(ASPIRA_MAP_ID_KEY, leaf.mapId)
+            leaf.resourceLocationId?.let { put(ASPIRA_RESOURCE_LOCATION_ID_KEY, it) }
+            leaf.parentName?.let { put("parent_name", it) }
+            put("match_kind", matchKind)
+            bookingCtaRef?.let { put("booking_cta_provider_ref", aspiraBookingCtaProviderRefPayload(leaf, it)) }
+        }
+
+    private fun aspiraBookingCtaProviderRefPayload(
+        leaf: AspiraLeaf,
+        bookingCtaRef: AspiraBookingCtaRef,
+    ): JsonObject =
+        buildJsonObject {
+            put(ASPIRA_TRANSACTION_LOCATION_ID_KEY, leaf.transactionLocationId)
+            put(ASPIRA_MAP_ID_KEY, bookingCtaRef.mapId)
+            put(ASPIRA_RESOURCE_LOCATION_ID_KEY, bookingCtaRef.resourceLocationId)
+        }
+
+    private fun locationPayload(
+        latitude: Double,
+        longitude: Double,
+    ): JsonObject =
+        buildJsonObject {
+            put("latitude", latitude)
+            put("longitude", longitude)
+        }
+
+    private fun linksPayload(url: String): JsonElement =
+        buildJsonArray {
+            add(
+                buildJsonObject {
+                    put("url", url)
+                },
+            )
+        }
+
+    private fun managementPayload(agency: String): JsonObject =
+        buildJsonObject {
+            put("agency", agency)
+        }
 
     private fun leafExtras(
         leaf: AspiraLeaf,
@@ -347,6 +394,10 @@ class AspiraJoinByNameEtl(
                 coerceInputValues = true
             }
         private const val FUZZY_THRESHOLD = 0.5
+        private const val ASPIRA_VENDOR_REF_PREFIX = "aspira-"
+        private const val ASPIRA_TRANSACTION_LOCATION_ID_KEY = "transactionLocationId"
+        private const val ASPIRA_MAP_ID_KEY = "mapId"
+        private const val ASPIRA_RESOURCE_LOCATION_ID_KEY = "resourceLocationId"
     }
 }
 

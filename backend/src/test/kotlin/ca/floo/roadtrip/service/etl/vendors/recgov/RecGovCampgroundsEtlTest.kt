@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.etl.vendors.recgov
 
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.RequestMeta
 import ca.floo.roadtrip.models.metadata.ResponseMeta
@@ -8,12 +7,14 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonArray
+import kotlinx.serialization.json.jsonObject
+import kotlinx.serialization.json.jsonPrimitive
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.Test
 import org.junit.jupiter.api.TestInstance
 import java.io.File
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 
@@ -33,39 +34,53 @@ class RecGovCampgroundsEtlTest {
     @Test
     fun `transform treats nonreservable RIDB facilities as agency info pages, not RecGov booking targets`() {
         val etl = RecGovCampgroundsEtl("federal-campgrounds")
-        val pois = etl.transform(etl.parse(bundle()), transformCtx).associateBy { it.sourceId }
+        val campgrounds = etl.transform(etl.parse(bundle()), transformCtx).campgrounds.associateBy { it.vendorRefId }
 
-        val reservable = pois.getValue("recgov-232447")
-        val reservableRef = assertIs<ProviderRef.RecGov>(reservable.providerRef)
-        assertEquals("232447", reservableRef.recgovId)
-        assertEquals("https://www.recreation.gov/camping/campgrounds/232447", reservable.infoUrl)
+        val reservable = campgrounds.getValue("recgov-232447")
+        assertEquals("federal-campgrounds", reservable.vendor)
+        assertEquals("https://www.recreation.gov/camping/campgrounds/232447", reservable.reservationUrl)
+        val reservableRef = reservable.vendorRefPayload!!.jsonObject
+        assertEquals("232447", reservableRef["recgov_id"]!!.jsonPrimitive.content)
 
-        val nonReservable = pois.getValue("recgov-248965")
-        assertNull(nonReservable.providerRef)
-        assertEquals("https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276", nonReservable.infoUrl)
+        val nonReservable = campgrounds.getValue("recgov-248965")
+        assertNull(nonReservable.vendorRefPayload)
+        assertEquals("https://www.fs.usda.gov/recarea/lassen/recarea/?recid=11276", nonReservable.reservationUrl)
     }
 
     @Test
     fun `transform promotes RIDB description media activities and recgov rating cell enrichment`() {
         val etl = RecGovCampgroundsEtl("federal-campgrounds")
-        val pois = etl.transform(etl.parse(bundle(withEnrichment = true)), transformCtx).associateBy { it.sourceId }
+        val campgrounds = etl.transform(etl.parse(bundle(withEnrichment = true)), transformCtx).campgrounds.associateBy { it.vendorRefId }
 
-        val upperPines = pois.getValue("recgov-232447")
+        val upperPines = campgrounds.getValue("recgov-232447")
 
-        assertEquals("National Park Service", upperPines.agency)
-        assertEquals("<p>Upper Pines is a Yosemite campground.</p>", upperPines.description)
-        assertEquals("https://cdn.example/primary.webp", upperPines.photoUrl)
-        assertEquals(listOf("Camping", "Hiking"), upperPines.activities)
+        val management = upperPines.management!!.jsonObject
+        assertEquals("National Park Service", management["agency"]!!.jsonPrimitive.content)
+        assertEquals("<p>Upper Pines is a Yosemite campground.</p>", upperPines.mediumDescription)
+        assertEquals(
+            "https://cdn.example/primary.webp",
+            upperPines.photos!!
+                .jsonArray
+                .first()
+                .jsonObject["url"]!!
+                .jsonPrimitive
+                .content,
+        )
+        val metadata = upperPines.metadata!!.jsonObject
+        assertEquals("Camping", metadata["activities"]!!.jsonArray[0].jsonPrimitive.content)
+        assertEquals("Hiking", metadata["activities"]!!.jsonArray[1].jsonPrimitive.content)
 
-        val rating = assertNotNull(upperPines.ratingReviews)
-        assertEquals(4.25f, rating.avg)
-        assertEquals(8, rating.count)
+        val rating = assertNotNull(metadata["rating_reviews"]).jsonObject
+        assertEquals("4.25", rating["avg"]!!.jsonPrimitive.content)
+        assertEquals("8", rating["count"]!!.jsonPrimitive.content)
 
-        val cell = assertNotNull(upperPines.cellCoverage)
-        assertEquals(3.5f, cell.getValue("verizon").avg)
-        assertEquals(4, cell.getValue("verizon").count)
-        assertEquals(1.25f, cell.getValue("att").avg)
-        assertEquals(2, cell.getValue("att").count)
+        val cell = assertNotNull(upperPines.cellService).jsonObject
+        val verizon = cell.getValue("verizon").jsonObject
+        assertEquals("3.5", verizon["avg"]!!.jsonPrimitive.content)
+        assertEquals("4", verizon["count"]!!.jsonPrimitive.content)
+        val att = cell.getValue("att").jsonObject
+        assertEquals("1.25", att["avg"]!!.jsonPrimitive.content)
+        assertEquals("2", att["count"]!!.jsonPrimitive.content)
     }
 
     @Test
@@ -103,9 +118,9 @@ class RecGovCampgroundsEtlTest {
                     ),
             )
 
-        val pois = etl.transform(etl.parse(bundle()), ctx)
+        val campgrounds = etl.transform(etl.parse(bundle()), ctx).campgrounds
 
-        assertNull(pois.first { it.sourceId == "recgov-232447" }.agency)
+        assertNull(campgrounds.first { it.vendorRefId == "recgov-232447" }.management)
     }
 
     private fun bundle(withEnrichment: Boolean = false): InputBundle =

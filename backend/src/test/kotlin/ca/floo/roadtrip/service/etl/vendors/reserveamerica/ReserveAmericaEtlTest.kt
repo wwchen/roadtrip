@@ -1,6 +1,5 @@
 package ca.floo.roadtrip.service.etl.vendors.reserveamerica
 
-import ca.floo.roadtrip.models.domain.ProviderRef
 import ca.floo.roadtrip.models.metadata.Envelope
 import ca.floo.roadtrip.models.metadata.RequestMeta
 import ca.floo.roadtrip.models.metadata.ResponseMeta
@@ -8,6 +7,7 @@ import ca.floo.roadtrip.models.metadata.registry.PoiRegistry
 import ca.floo.roadtrip.service.etl.framework.InputBundle
 import ca.floo.roadtrip.service.etl.framework.TransformCtx
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
@@ -22,26 +22,28 @@ class ReserveAmericaEtlTest {
         val dto = etl.parse(bundle("reserveamerica-ny", nyParkEnvelope()))
         assertEquals("ALGER ISLAND, NY", dto.parks.single().name)
 
-        val poi = etl.transform(dto, transformCtx()).single()
+        val campground = etl.transform(dto, transformCtx()).campgrounds.single()
 
-        assertEquals("new-york-state-parks", poi.source)
-        assertEquals("ra-695", poi.sourceId)
-        assertEquals("ALGER ISLAND", poi.name)
-        assertEquals("NY", poi.region)
-        assertEquals("US", poi.country)
-        assertEquals("state", poi.subcategory)
-        assertEquals("New York State Parks", poi.agency)
-        val ref = poi.providerRef as ProviderRef.ReserveAmerica
+        assertEquals("new-york-state-parks", campground.vendor)
+        assertEquals("ra-695", campground.vendorRefId)
+        assertEquals("ALGER ISLAND", campground.name)
+        val location = campground.location!!.jsonObject
+        assertEquals("NY", location["region"]!!.jsonPrimitive.content)
+        assertEquals("US", location["country"]!!.jsonPrimitive.content)
+        assertEquals("state", campground.kind)
+        val management = campground.management!!.jsonObject
+        assertEquals("New York State Parks", management["agency"]!!.jsonPrimitive.content)
+        val ref = campground.vendorRefPayload!!.jsonObject
         assertEquals("NY", ref.contractCode)
         assertEquals("695", ref.parkId)
         assertEquals(
             "https://newyorkstateparks.reserveamerica.com/camping/alger-island/r/campgroundDetails.do?contractCode=NY&parkId=695",
-            poi.infoUrl,
+            campground.reservationUrl,
         )
-        assertEquals("Island campground on Fourth Lake.", poi.description)
-        assertEquals("https://newyorkstateparks.reserveamerica.com/photo.jpg", poi.photoUrl)
+        assertEquals("Island campground on Fourth Lake.", campground.mediumDescription)
+        assertEquals("https://newyorkstateparks.reserveamerica.com/photo.jpg", campground.photos!!.jsonObjectArrayFirstUrl())
 
-        val extras = poi.extras!!.jsonObject
+        val extras = campground.metadata!!.jsonObject
         assertEquals("NY", extras["contract"]!!.jsonPrimitive.content)
         assertEquals("ALGER ISLAND", extras["name"]!!.jsonPrimitive.content)
         assertEquals("Island campground on Fourth Lake.", extras["description"]!!.jsonPrimitive.content)
@@ -49,7 +51,7 @@ class ReserveAmericaEtlTest {
 
     @Test
     fun `alberta defaults preserve existing source shape and reserveamerica provider ref`() {
-        val poi =
+        val campground =
             ReserveAmericaEtl()
                 .transform(
                     ReserveAmericaDto(
@@ -69,21 +71,37 @@ class ReserveAmericaEtlTest {
                         fetchedAt = FETCHED_AT,
                     ),
                     transformCtx(),
-                ).single()
+                ).campgrounds
+                .single()
 
-        assertEquals("alberta-provincial", poi.source)
-        assertEquals("ra-123", poi.sourceId)
-        assertEquals("Writing-on-Stone Provincial Park", poi.name)
-        assertEquals("AB", poi.region)
-        assertEquals("CA", poi.country)
-        assertEquals("provincial", poi.subcategory)
-        assertEquals("Alberta Parks", poi.agency)
-        val ref = poi.providerRef as ProviderRef.ReserveAmerica
-        val extras = poi.extras!!.jsonObject
+        assertEquals("alberta-provincial", campground.vendor)
+        assertEquals("ra-123", campground.vendorRefId)
+        assertEquals("Writing-on-Stone Provincial Park", campground.name)
+        val location = campground.location!!.jsonObject
+        assertEquals("AB", location["region"]!!.jsonPrimitive.content)
+        assertEquals("CA", location["country"]!!.jsonPrimitive.content)
+        assertEquals("provincial", campground.kind)
+        val management = campground.management!!.jsonObject
+        assertEquals("Alberta Parks", management["agency"]!!.jsonPrimitive.content)
+        val ref = campground.vendorRefPayload!!.jsonObject
+        val extras = campground.metadata!!.jsonObject
         assertEquals("ABPP", ref.contractCode)
         assertEquals("123", ref.parkId)
         assertEquals("ABPP", extras["contract"]!!.jsonPrimitive.content)
     }
+
+    private val kotlinx.serialization.json.JsonObject.contractCode: String
+        get() = this["contract_code"]!!.jsonPrimitive.content
+
+    private val kotlinx.serialization.json.JsonObject.parkId: String
+        get() = this["park_id"]!!.jsonPrimitive.content
+
+    private fun kotlinx.serialization.json.JsonElement.jsonObjectArrayFirstUrl(): String =
+        this
+            .jsonArray
+            .first()
+            .jsonObject["url"]!!
+            .jsonPrimitive.content
 
     private fun nyParkEnvelope(): Envelope {
         val url =

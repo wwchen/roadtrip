@@ -80,7 +80,13 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
         DbAvailabilityTargetResolver(
             providerRefs = CampsiteProviderRepo(ctx),
             reservablesRepo = reservablesRepo,
-            reservationProviders = ReservationProviderRegistry(mapOf("test" to NoopRecgovProvider())),
+            reservationProviders =
+                ReservationProviderRegistry(
+                    mapOf(
+                        "test" to NoopRecgovProvider(),
+                        "federal-campgrounds" to NoopRecgovProvider(),
+                    ),
+                ),
             dateResolver = AvailabilityDateResolver(),
         )
 
@@ -99,4 +105,106 @@ class DbAvailabilityTargetResolverTest : SharedDbTest() {
             assertEquals(poiB, t.parentPoiId)
             assertEquals("232447", parentRefKey(t.parentRef))
         }
+
+    @Test
+    fun `resolve prefers provider-shaped secondary refs for campflare catalog rows`() =
+        runBlocking {
+            val poi =
+                ctx
+                    .seedCatalogPoi(
+                        sourceId = "upper-pines-campflare",
+                        name = "Upper Pines",
+                        lon = -119.56,
+                        lat = 37.74,
+                        source = "campflare",
+                        providerRefJson = """{"campflare_id":"upper-pines-campground-447"}""",
+                    ).poiId
+            val campgroundId = campgroundIdFor(poi)
+            linkCampgroundRef(
+                campgroundId = campgroundId,
+                vendor = "federal-campgrounds",
+                externalId = "recgov-232447",
+                payloadJson = """{"recgov_id":"232447"}""",
+            )
+            val campsiteId =
+                ctx.seedCampsite(
+                    campgroundId = campgroundId,
+                    vendor = "campflare",
+                    vendorId = "upper-pines-site-100",
+                    name = "Campflare Site 100",
+                    providerRefJson = """{"campflare_id":"upper-pines-site-100"}""",
+                )
+            linkCampsiteRef(
+                campsiteId = campsiteId,
+                vendor = "recgov",
+                externalId = "100",
+                payloadJson = """{"recgov_id":"100"}""",
+            )
+
+            val reservablesRepo = ReservableRepo(ctx)
+            val reservable = reservablesRepo.findById(campsiteId)!!
+            val target = resolverFor(reservablesRepo).resolve(reservable)!!
+
+            assertEquals("site:recgov:100", reservable.rid.encode())
+            assertEquals(poi, target.parentPoiId)
+            assertEquals("232447", parentRefKey(target.parentRef))
+        }
+
+    private fun linkCampgroundRef(
+        campgroundId: Long,
+        vendor: String,
+        externalId: String,
+        payloadJson: String,
+    ) {
+        val vendorRefId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO vendor_refs (vendor, entity_type, external_id, payload)
+                    VALUES (?, 'campground', ?, ?::jsonb)
+                    RETURNING id
+                    """.trimIndent(),
+                    vendor,
+                    externalId,
+                    payloadJson,
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute(
+            """
+            INSERT INTO campground_vendor_refs (campground_id, vendor_ref_id, is_primary)
+            VALUES (?, ?, false)
+            """.trimIndent(),
+            campgroundId,
+            vendorRefId,
+        )
+    }
+
+    private fun linkCampsiteRef(
+        campsiteId: Long,
+        vendor: String,
+        externalId: String,
+        payloadJson: String,
+    ) {
+        val vendorRefId =
+            ctx
+                .fetchOne(
+                    """
+                    INSERT INTO vendor_refs (vendor, entity_type, external_id, payload)
+                    VALUES (?, 'campsite', ?, ?::jsonb)
+                    RETURNING id
+                    """.trimIndent(),
+                    vendor,
+                    externalId,
+                    payloadJson,
+                )!!
+                .get("id", Long::class.java)
+        ctx.execute(
+            """
+            INSERT INTO campsite_vendor_refs (campsite_id, vendor_ref_id, is_primary)
+            VALUES (?, ?, false)
+            """.trimIndent(),
+            campsiteId,
+            vendorRefId,
+        )
+    }
 }

@@ -120,6 +120,21 @@ export function bookingSystemFooterHTML(p) {
   return `<div class="footer cg-booking-sys">Booking via ${escapeHtml(sys)}</div>`;
 }
 
+export function campgroundParentParkName(p) {
+  const campgroundName = normalizeLinkTitle(firstText(p?.name));
+  if (!Array.isArray(p?.links)) return '';
+  for (const link of p.links) {
+    if (!link || typeof link !== 'object') continue;
+    const title = firstText(link.title, link.label, link.name);
+    if (!title) continue;
+    const normalized = normalizeLinkTitle(title);
+    if (!normalized || normalized === campgroundName) continue;
+    if (GENERIC_LINK_TITLE_RE.test(title) || NON_PARENT_LINK_TITLE_RE.test(title)) continue;
+    if (PARENT_PARK_LINK_TITLE_RE.test(title)) return title;
+  }
+  return '';
+}
+
 export function structuredCampgroundDetailsHTML(p) {
   const stayRows = [
     detailRow('Status', firstText(p.status_description, titleCase(p.status))),
@@ -284,6 +299,9 @@ const NEGATIVE_AMENITY_LABELS = {
   water: 'No water',
   water_hookups: 'No water hookups',
 };
+const PARENT_PARK_LINK_TITLE_RE = /\b(park|preserve|forest|recreation area|recreation site|conservation area|wilderness|monument|seashore|lakeshore|reserve)\b/i;
+const GENERIC_LINK_TITLE_RE = /^(official\s+(page|site|website)|website|home|homepage|map|directions?)$/i;
+const NON_PARENT_LINK_TITLE_RE = /\b(reservations?|booking|fees?|passes?|permits?|map|directions?|calendar|alerts?|brochure|guide)\b/i;
 
 function amenityLabel(key, value) {
   if (value === null || value === undefined) return '';
@@ -489,6 +507,14 @@ function urlHost(url) {
   } catch {
     return '';
   }
+}
+
+function normalizeLinkTitle(value) {
+  return String(value || '')
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
 }
 
 function titleCase(value) {

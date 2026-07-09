@@ -24,9 +24,11 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.double
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import java.io.File
+import java.nio.file.Files
 import java.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -35,7 +37,7 @@ import kotlin.test.assertNull
 class EtlExtrasDtoTest {
     @Test
     fun `reserve america extras serialize through dto with sparse optional fields`() {
-        val poi =
+        val campground =
             ReserveAmericaEtl()
                 .transform(
                     ReserveAmericaDto(
@@ -55,9 +57,10 @@ class EtlExtrasDtoTest {
                         fetchedAt = FETCHED_AT,
                     ),
                     transformCtx(),
-                ).single()
+                ).campgrounds
+                .single()
 
-        val extras = poi.extras!!.jsonObject
+        val extras = campground.metadata!!.jsonObject
         assertEquals(123, extras["park_id"]!!.jsonPrimitive.int)
         assertEquals("Writing-on-Stone Provincial Park", extras["name"]!!.jsonPrimitive.content)
         assertEquals(49.083, extras["latitude"]!!.jsonPrimitive.double)
@@ -105,6 +108,138 @@ class EtlExtrasDtoTest {
     }
 
     @Test
+    fun `tesla canonical output promotes enriched detail fields`() {
+        val rawDir = Files.createTempDirectory("tesla-detail-etl-test").toFile()
+        val slug = "test-slug"
+        val slugDir = rawDir.resolve("tesla-locations").resolve(slug)
+        slugDir.mkdirs()
+        slugDir.resolve("2026-01-01T00-00-00Z.json").writeText(
+            Json.encodeToString(
+                Envelope.serializer(),
+                Envelope(
+                    fetcher = "fixture",
+                    fetcherVersion = "1",
+                    fetchedAt = FETCHED_AT.toString(),
+                    request = RequestMeta(url = "https://example.test/tesla/$slug", method = "GET"),
+                    response = ResponseMeta(status = 200),
+                    payload =
+                        Json.parseToJsonElement(
+                            """
+                            {
+                              "data": {
+                                "data": {
+                                  "name": "Test Supercharger",
+                                  "commonSiteName": "Lot B",
+                                  "locationGUID": "guid-123",
+                                  "timeZone": "America/Vancouver",
+                                  "openToPublic": true,
+                                  "openToNonTeslas": false,
+                                  "isTrailerFriendly": true,
+                                  "accessHours": { "twentyFourSeven": true },
+                                  "publicStallCount": 12,
+                                  "maxPowerKw": 250,
+                                  "address": {
+                                    "streetNumber": "100",
+                                    "street": "Main St",
+                                    "city": "Vancouver",
+                                    "state": "BC",
+                                    "postalCode": "V6B 1A1",
+                                    "countryCode": "CA"
+                                  },
+                                  "amenities": ["AMENITIES_RESTROOMS"],
+                                  "availabilityProfile": {
+                                    "availabilityProfile": {
+                                      "sunday": { "congestionValue": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0] }
+                                    }
+                                  },
+                                  "effectivePricebooks": [
+                                    {
+                                      "feeType": "CHARGING",
+                                      "rateBase": 0.42,
+                                      "currencyCode": "CAD",
+                                      "uom": "kwh",
+                                      "isTou": false,
+                                      "vehicleMakeType": "TSLA"
+                                    }
+                                  ]
+                                }
+                              }
+                            }
+                            """.trimIndent(),
+                        ),
+                ),
+            ),
+        )
+
+        val rawIndex = Json.parseToJsonElement("""{"location_url_slug":"$slug","title":"locations"}""").jsonObject
+        val record =
+            TeslaIndexEtl()
+                .transform(
+                    TeslaIndexDto(
+                        rows =
+                            listOf(
+                                TeslaIndexRow(
+                                    latitude = 49.0,
+                                    longitude = -123.0,
+                                    title = "locations",
+                                    locationUrlSlug = slug,
+                                    superchargerFunction = TeslaSuperchargerFunction(showOnFindUs = "1"),
+                                ),
+                            ),
+                        rawBySlug = mapOf(slug to rawIndex),
+                        fetchedAt = FETCHED_AT,
+                    ),
+                    transformCtx(rawDir),
+                ).superchargers
+                .single()
+
+        assertEquals("guid-123", record.locationGuid)
+        assertEquals("Test Supercharger", record.commonSiteName)
+        assertEquals("America/Vancouver", record.timeZone)
+        assertEquals(true, record.openToPublic)
+        assertEquals(false, record.openToNonTeslas)
+        assertEquals(true, record.trailerFriendly)
+        assertEquals(true, record.twentyFourSeven)
+        assertEquals(
+            "AMENITIES_RESTROOMS",
+            record
+                .amenities!!
+                .jsonArray
+                .single()
+                .jsonPrimitive
+                .content,
+        )
+        assertEquals(
+            24,
+            record
+                .availabilityProfile!!
+                .jsonObject["availabilityProfile"]!!
+                .jsonObject["sunday"]!!
+                .jsonObject["congestionValue"]!!
+                .jsonArray
+                .size,
+        )
+        assertEquals(
+            "CAD",
+            record
+                .pricebooks!!
+                .jsonArray
+                .single()
+                .jsonObject["currencyCode"]!!
+                .jsonPrimitive
+                .content,
+        )
+        assertEquals(
+            "guid-123",
+            record
+                .detailPayload!!
+                .jsonObject["locationGUID"]!!
+                .jsonPrimitive
+                .content,
+        )
+    }
+
+    @Test
     fun `planet fitness extras serialize center and tags through sparse dto`() {
         val record =
             PlanetFitnessEtl()
@@ -145,7 +280,7 @@ class EtlExtrasDtoTest {
         // (leaves without one are park containers, dropped by
         // AspiraJoinByNameEtl before emission). parent_name stays nullable, so
         // it is the field that exercises explicitNulls serialization here.
-        val poi =
+        val campground =
             AspiraJoinByNameEtl("aspira-bc-pins")
                 .transform(
                     AspiraJoinDto(
@@ -167,9 +302,10 @@ class EtlExtrasDtoTest {
                         fetchedAt = FETCHED_AT,
                     ),
                     transformCtx(),
-                ).single()
+                ).campgrounds
+                .single()
 
-        val extras = poi.extras!!.jsonObject
+        val extras = campground.metadata!!.jsonObject
         assertEquals("camping.bcparks.ca", extras["host"]!!.jsonPrimitive.content)
         assertEquals(11, extras["transaction_location_id"]!!.jsonPrimitive.int)
         assertEquals(22, extras["map_id"]!!.jsonPrimitive.int)
@@ -202,12 +338,12 @@ class EtlExtrasDtoTest {
                 ),
         )
 
-    private fun transformCtx(): TransformCtx {
+    private fun transformCtx(rawDir: File = File("build/tmp/etl-extras-dto-test-raw")): TransformCtx {
         val yamlPath =
             File(System.getProperty("user.dir"))
                 .resolve("../config/poi-registry.yaml")
                 .canonicalFile
-        return TransformCtx.load(File("build/tmp/etl-extras-dto-test-raw"), PoiRegistry.load(yamlPath))
+        return TransformCtx.load(rawDir, PoiRegistry.load(yamlPath))
     }
 
     private companion object {

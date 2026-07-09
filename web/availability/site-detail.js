@@ -1,6 +1,6 @@
-// Site detail panel for reservable rows. This is intentionally read-only:
-// it normalizes fields already present on the reservable catalog payload
-// and does not fetch extra provider data.
+// Site detail panel for canonical campsite rows. This is intentionally
+// read-only: it normalizes fields already present on the campsite catalog
+// payload and does not fetch extra provider data.
 
 import { escapeHtml } from '../core.js';
 import { reservationUrlFromTemplate, bookingLabel } from './booking-links.js';

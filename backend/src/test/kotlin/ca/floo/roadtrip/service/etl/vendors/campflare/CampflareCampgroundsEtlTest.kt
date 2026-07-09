@@ -25,6 +25,10 @@ class CampflareCampgroundsEtlTest {
         assertEquals("upper-pines-campground-447", row.vendorRefId)
         assertEquals("Upper Pines", row.name)
         assertEquals("open", row.status)
+        assertNull(row.statusDescription)
+        assertNull(row.shortDescription)
+        assertNull(row.mediumDescription)
+        assertNull(row.longDescription)
         assertEquals("established", row.kind)
         assertEquals(37.739, row.latitude)
         assertEquals(-119.565, row.longitude)
@@ -50,10 +54,19 @@ class CampflareCampgroundsEtlTest {
                 .jsonObject["campflare_id"]!!
                 .jsonPrimitive
                 .content
+        val recgovRef = row.additionalVendorRefs.single()
         assertEquals("232447", ridbFacilityId)
         assertEquals(true, hasToilets)
-        assertEquals("Upper Pines", sourceName)
+        assertEquals(" Upper Pines ", sourceName)
         assertEquals("upper-pines-campground-447", campflareId)
+        assertEquals("federal-campgrounds", recgovRef.vendor)
+        assertEquals("recgov-232447", recgovRef.vendorRefId)
+        assertEquals(
+            "232447",
+            recgovRef.payload!!
+                .jsonObject["recgov_id"]!!
+                .jsonPrimitive.content,
+        )
     }
 
     @Test
@@ -131,11 +144,13 @@ class CampflareCampgroundsEtlTest {
         [
           {
             "id": "upper-pines-campground-447",
-            "name": "Upper Pines",
+            "name": " Upper Pines ",
             "status": "open",
             "status_description": "Open for the season",
             "kind": "established",
             "short_description": "A Yosemite campground.",
+            "medium_description": "A longer Yosemite campground summary.",
+            "long_description": "A generated Yosemite campground narrative.",
             "location": {
               "latitude": 37.739,
               "longitude": -119.565,
